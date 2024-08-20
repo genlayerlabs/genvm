@@ -1,0 +1,9 @@
+[package]
+name = "genvm-python"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rustpython = { path = "../third-party/RustPython", default-features = false, features = ["stdlib", "freeze-stdlib"] }
+rustpython-vm = { path = "../third-party/RustPython/vm", default-features = false }
+genvm-sdk-rust = { path = "../sdk-rust", default-features = false }

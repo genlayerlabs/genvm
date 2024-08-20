@@ -1,0 +1,20 @@
+(use "genlayer_sdk_types.witx")
+
+(module $genlayer_sdk
+;; TYPES_IN_MODULE
+
+    (@interface func (export "rollback")
+        (param $message string)
+        (@witx noreturn)
+    )
+
+    (@interface func (export "get_calldata")
+        (result $error (expected $bytes_len (error $errno)))
+    )
+
+    (@interface func (export "read_result")
+        (param $buf (@witx pointer u8))
+        (param $len u32)
+        (result $error (expected $bytes_len (error $errno)))
+    )
+)

@@ -1,0 +1,14 @@
+{
+	"repos": {
+		"third-party/wasmtime": {
+			"url": "https://github.com/bytecodealliance/wasmtime.git",
+			"commit": "a2f0f2fd03c7a376ee4676f009e3cc8b8fc82e25",
+			"patches": 1
+		},
+		"third-party/RustPython": {
+			"url": "https://github.com/RustPython/RustPython.git",
+			"commit": "a13b99642b0bc13ca89d01768a7ddbec18fe8219",
+			"patches": 1
+		}
+	}
+}

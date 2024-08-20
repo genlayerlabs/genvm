@@ -1,0 +1,14 @@
+(typename $errno
+    (enum (@witx tag u32)
+        ;;; Success
+        $success
+        $deterministic_violation
+        $overflow
+        $inval
+        $fault
+        $ilseq
+    )
+)
+
+(typename $bytes_len u32)
+(typename $none u32)
