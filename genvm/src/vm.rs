@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, ops::Deref, path::Path, rc::Rc};
+use std::{collections::HashMap, path::Path};
 
 use wasmtime::{Module, Engine, Store, Linker};
 
@@ -44,12 +44,12 @@ pub struct Supervisor {
 pub struct VM {
     pub store: Store<Host>,
     pub linker: Linker<Host>,
+    pub config_copy: wasi::base::Config,
 }
 
 impl VM {
     pub fn is_det(&self) -> bool {
-        let guard = self.store.data().genlayer_ctx.deref().lock().unwrap();
-        guard.genlayer_sdk.data.conf.is_deterministic
+        self.config_copy.is_deterministic
     }
 }
 
@@ -61,19 +61,18 @@ impl Supervisor {
         base_conf.wasm_tail_call(true);
         base_conf.wasm_relaxed_simd(false);
         base_conf.cache_config_load_default()?;
+        base_conf.consume_fuel(true);
         //det_conf.wasm_threads(false);
         //base_conf.wasm_reference_types(false);
 
         let mut det_conf = base_conf.clone();
         det_conf.async_support(false);
-        det_conf.consume_fuel(false);
         det_conf.wasm_simd(false);
         det_conf.relaxed_simd_deterministic(true);
-        det_conf.wasm_floats_enabled(false);
+        //det_conf.wasm_floats_enabled(false);
 
         let mut non_det_conf = base_conf.clone();
         non_det_conf.async_support(false);
-        non_det_conf.consume_fuel(false);
         non_det_conf.wasm_simd(false);
         non_det_conf.relaxed_simd_deterministic(false);
         non_det_conf.wasm_floats_enabled(true);
@@ -99,11 +98,11 @@ impl Supervisor {
                 self.det_validator.validate_all(&module_bytes[..])?;
                 self.non_det_validator.validate_all(&module_bytes[..])?;
                 let module_det = wasmtime::CodeBuilder::new(&self.det_engine)
-                    .wasm(&module_bytes[..], path)?
+                    .wasm_binary(&module_bytes[..], path)?
                     .compile_module()?;
 
                 let module_non_det = wasmtime::CodeBuilder::new(&self.non_det_engine)
-                .wasm(&module_bytes[..], path)?
+                .wasm_binary(&module_bytes[..], path)?
                 .compile_module()?;
                 let ret = PrecompiledModule {
                     det: module_det,
@@ -115,8 +114,13 @@ impl Supervisor {
     }
 
     pub fn spawn(&mut self, data: crate::wasi::genlayer_sdk::EssentialGenlayerSdkData) -> Result<VM> {
+        let config_copy = data.conf.clone();
+
         let engine = if data.conf.is_deterministic { &self.det_engine } else { &self.non_det_engine };
-        let store = Store::new(&engine, Host::new(data));
+
+        let init_gas = data.message_data.initial_gas;
+        let mut store = Store::new(&engine, Host::new(data));
+        store.set_fuel(init_gas)?;
 
         let mut linker = Linker::new(engine);
         linker.allow_unknown_exports(false);
@@ -129,6 +133,7 @@ impl Supervisor {
         Ok(VM {
             store,
             linker,
+            config_copy,
         })
     }
 }

@@ -1,14 +1,14 @@
 (use "genlayer_sdk_types.witx")
 
+;;; @PASS_STORE@
 (module $genlayer_sdk
-;; TYPES_IN_MODULE
 
     (@interface func (export "rollback")
         (param $message string)
         (@witx noreturn)
     )
 
-    (@interface func (export "get_calldata")
+    (@interface func (export "get_message_data")
         (result $error (expected $bytes_len (error $errno)))
     )
 

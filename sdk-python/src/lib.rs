@@ -21,4 +21,18 @@ pub mod genlayer_sdk {
         unsafe { genvm_sdk_rust::rollback(s.as_ref()) };
         Ok(())
     }
+
+    fn read_result(vm: &VirtualMachine, len: u32) -> PyResult<String> {
+        let mut ret = Vec::<u8>::new();
+        ret.resize(len as usize, 0);
+        map_error(vm, unsafe { genvm_sdk_rust::read_result(ret.as_mut_ptr(), len) })?;
+        map_error(vm, String::from_utf8(ret).map_err(|_e| genvm_sdk_rust::ERRNO_ILSEQ))
+    }
+
+    #[pyfunction]
+    fn get_message_data(vm: &VirtualMachine) -> PyResult<String> {
+        let len = map_error(vm, unsafe { genvm_sdk_rust::get_message_data() })?;
+
+        read_result(vm, len)
+    }
 }

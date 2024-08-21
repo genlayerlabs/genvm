@@ -2,20 +2,18 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, base64::Base64};
 
 pub struct StoragePartDesc {
     account: Address,
     desc: u32
 }
 
+#[serde_as]
 #[derive(Serialize, Deserialize, PartialEq)]
-pub struct Address {
-    pub address: [u8; 32]
-}
+pub struct Address(#[serde_as(as = "Base64")] pub [u8; 32]);
 
-pub struct Gas {
-    pub gas: u64
-}
+pub struct Gas(pub u64);
 
 #[derive(Serialize, Deserialize)]
 pub struct Calldata {
@@ -25,7 +23,7 @@ pub struct Calldata {
 
 #[derive(Serialize, Deserialize)]
 pub struct MessageData {
-    pub gas: u64,
+    pub initial_gas: u64,
     pub account: Address,
     pub value: Option<u64>,
     pub calldata: String, // See "Calldata"

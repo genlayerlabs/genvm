@@ -51,6 +51,7 @@ pub(crate) mod generated {
     wiggle::from_witx!({
         witx: ["$CARGO_MANIFEST_DIR/src/wasi/preview/stub_wasi.witx"],
         errors: { errno => trappable Error },
+        wasmtime: false,
     });
 
     wiggle::wasmtime_integration!({
@@ -190,7 +191,7 @@ impl Context {
     }
 }
 
-pub(super) fn add_to_linker_sync<T: Send>(
+pub(super) fn add_to_linker_sync<T: Send + 'static>(
     linker: &mut wasmtime::Linker<T>,
     f: impl Fn(&mut T) -> &mut Context + Copy + Send + Sync + 'static,
 ) -> anyhow::Result<()> {
@@ -830,8 +831,10 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
         let fdi: u32 = dirfd.into();
         let path = super::common::read_string(memory, path)?;
         let Some(FileDescriptor::Dir { path: dir_path }) = self.fds.get(&fdi) else { return Err(generated::types::Errno::Badf.into()); };
-        let cur_trie = Self::dir_fd_follow_trie(dir_path, &self.fs)?;
-        let cur_trie = Self::dir_fd_get_trie(&path, cur_trie)?;
+        let mut cur_trie = Self::dir_fd_follow_trie(dir_path, &self.fs)?;
+        for fname in path.split("/") {
+            cur_trie = Self::dir_fd_get_trie(fname, cur_trie)?;
+        }
         match cur_trie.borrow() {
             FilesTrie::File { data } => {
                 Ok(generated::types::Filestat{
@@ -911,8 +914,10 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
         let new_fd = self.alloc_fd();
         {
             let Some(FileDescriptor::Dir { path: dir_path }) = self.fds.get(&fdi) else { return Err(generated::types::Errno::Badf.into()); };
-            let cur_trie = Self::dir_fd_follow_trie(dir_path, &self.fs)?;
-            let cur_trie = Self::dir_fd_get_trie(&file_path, cur_trie)?;
+            let mut cur_trie = Self::dir_fd_follow_trie(dir_path, &self.fs)?;
+            for fname in file_path.split("/") {
+                cur_trie = Self::dir_fd_get_trie(fname, cur_trie)?;
+            }
             match &**cur_trie {
                 FilesTrie::File { data } => {
                     let f = FileDescriptor::File { contents: data.clone(), pos: 0 };
@@ -1093,7 +1098,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
 }
 
 impl Context {
-    fn dir_fd_get_trie<'a>(dir_path: &String, cur_trie: &'a Box<FilesTrie>) -> Result<&'a Box<FilesTrie>, generated::types::Error> {
+    fn dir_fd_get_trie<'a>(dir_path: &str, cur_trie: &'a Box<FilesTrie>) -> Result<&'a Box<FilesTrie>, generated::types::Error> {
         if dir_path == "." {
             return Ok(cur_trie);
         }

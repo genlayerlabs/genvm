@@ -2,5 +2,8 @@
 
 import genlayer.sdk as gsdk
 
-gsdk.rollback("reason")
-#print(json.loads('{"val": 123}'))
+def init():
+    print(gsdk.message)
+    print('init!')
+
+gsdk.run(__import__(__name__))

@@ -7,6 +7,7 @@
         $inval
         $fault
         $ilseq
+        $io
     )
 )
 

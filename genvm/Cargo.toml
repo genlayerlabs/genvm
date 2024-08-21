@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-wasmtime = { path = "third-party/wasmtime/crates/wasmtime", default-features = false, features = ["cranelift", "std", "parallel-compilation", "cache"] }
-wiggle = { path = "third-party/wasmtime/crates/wiggle" }
+wasmtime = { path = "../third-party/wasmtime/crates/wasmtime", default-features = false, features = ["cranelift", "std", "parallel-compilation", "cache"] }
+wiggle = { path = "../third-party/wasmtime/crates/wiggle" }
 anyhow = { version = "1.0.22", default-features = false }
 wasmparser = { version = "0.215.0", default-features = false }
 tracing = "0.1.26"
@@ -13,3 +13,4 @@ zip = "2.1.6"
 serde = "1.0.204"
 serde_json = "1.0.122"
 clap = { version = "4.5.16", features = ["derive"] }
+serde_with = { version = "3.9.0", features = ["base64"] }

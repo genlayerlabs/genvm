@@ -5,19 +5,19 @@ pub(self) mod common;
 
 pub struct Context {
     pub preview1: preview1::Context,
-    pub genlayer_sdk: genlayer_sdk::Context,
+    pub genlayer_sdk: genlayer_sdk::ContextData,
 }
 
 impl Context {
     pub fn new(data: genlayer_sdk::EssentialGenlayerSdkData) -> Self {
         Self {
             preview1: preview1::Context::new(),
-            genlayer_sdk: genlayer_sdk::Context::new(data),
+            genlayer_sdk: genlayer_sdk::ContextData::new(data),
         }
     }
 }
 
-pub(super) fn add_to_linker_sync<T: Send>(
+pub(super) fn add_to_linker_sync<T: Send + 'static>(
     linker: &mut wasmtime::Linker<T>,
     f: impl Fn(&mut T) -> &mut Context + Copy + Send + Sync + 'static,
 ) -> anyhow::Result<()> {

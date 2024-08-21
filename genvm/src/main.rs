@@ -5,11 +5,16 @@ pub(crate) mod wasi;
 pub(crate) mod node_iface;
 
 use core::str;
-use std::{io::Read, path::Path, sync::{Arc, Mutex}};
+use std::{borrow::BorrowMut, io::Read, ops::DerefMut, path::Path, sync::{Arc, Mutex}};
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use wasmtime::*;
+
+
+pub trait Oao<T: 'static, U>: Send + Sync + Clone + 'static {
+    fn build<'a>(&self) -> impl Fn(wasmtime::StoreContextMut<'a, T>) -> U;
+}
 
 mod test_node_iface_impl {
     use std::sync::Arc;
@@ -17,10 +22,10 @@ mod test_node_iface_impl {
     use crate::node_iface::{self, Address};
     use anyhow::Result;
 
-    fn make_addr_from_byte(b: u8) -> Address {
+    pub fn make_addr_from_byte(b: u8) -> Address {
         let mut r = [0;32];
         r[0] = b;
-        Address { address: r }
+        Address(r)
     }
 
     pub struct TestApi {}
@@ -46,7 +51,7 @@ mod test_node_iface_impl {
     impl node_iface::InitApi for TestApi {
         fn get_initial_data(&mut self) -> Result<node_iface::MessageData> {
             Ok(node_iface::MessageData {
-                gas: u64::max_value(),
+                initial_gas: u64::max_value(),
                 account: make_addr_from_byte(1),
                 value: None,
                 calldata: String::from(r#"{"method": "init", "args": []}"#),
@@ -99,6 +104,7 @@ fn instantiate_from_text(supervisor: &mut vm::Supervisor, api: &mut dyn mock_api
     let runner_desc = serde_json::from_str(&code_comment)?;
     let runner = api.get_runner(runner_desc)?;
     let mut env = Vec::new();
+
     for act in runner {
         match act {
             node_iface::InitAction::MapFile { to, contents } => ret_vm.store.data_mut().genlayer_ctx_mut().preview1.map_file(&to, Arc::new(contents))?,
@@ -109,11 +115,16 @@ fn instantiate_from_text(supervisor: &mut vm::Supervisor, api: &mut dyn mock_api
             node_iface::InitAction::StartWasm { contents, debug_path } => {
                 ret_vm.store.data_mut().genlayer_ctx_mut().preview1.set_env(&env[..])?;
                 let module = link_wasm_into(supervisor, ret_vm, Arc::new(contents), debug_path)?;
-                return ret_vm.linker.instantiate(&mut ret_vm.store, &module);
+                return ret_vm.linker.instantiate(ret_vm.store.borrow_mut() as &mut Store<_>, &module);
             },
         }
     }
     Err(anyhow::anyhow!("actions returned by runner do not have a start instruction"))
+}
+
+fn with_state<R, T>(data: Arc<Mutex<T>>, f: impl FnOnce(&mut T) -> R) -> R {
+    let state = &mut data.lock().expect("Could not lock mutex");
+    f(state)
 }
 
 fn create_and_run_vm_for(supervisor: &mut vm::Supervisor, api: &mut dyn mock_apis, code: Arc<Vec<u8>>, data: wasi::genlayer_sdk::EssentialGenlayerSdkData) -> Result<()> {
@@ -133,6 +144,8 @@ fn create_and_run_vm_for(supervisor: &mut vm::Supervisor, api: &mut dyn mock_api
             .or_else(|_| instance.get_typed_func::<(), ()>(&mut ret_vm.store, "_start"))
             .with_context(|| "can't find entrypoint")?;
     func.call(&mut ret_vm.store, ())?;
+
+    eprintln!("remaining fuel: {}", ret_vm.store.get_fuel().map(|s| s.to_string()).unwrap_or_else(|e| format!("<error> {}", e)));
 
     Ok(())
 }

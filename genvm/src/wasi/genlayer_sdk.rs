@@ -1,3 +1,6 @@
+use std::{borrow::BorrowMut, sync::Arc};
+
+use wasmtime::{Store, StoreContextMut};
 use wiggle::GuestError;
 
 use super::base;
@@ -7,7 +10,7 @@ pub struct EssentialGenlayerSdkData {
     pub message_data: crate::node_iface::MessageData,
 }
 
-pub struct Context {
+pub struct ContextData {
     pub data: EssentialGenlayerSdkData,
 
     result: Vec<u8>,
@@ -18,6 +21,7 @@ pub(crate) mod generated {
     wiggle::from_witx!({
         witx: ["$CARGO_MANIFEST_DIR/src/wasi/witx/genlayer_sdk.witx"],
         errors: { errno => trappable Error },
+        wasmtime: false,
     });
 
     wiggle::wasmtime_integration!({
@@ -27,7 +31,7 @@ pub(crate) mod generated {
     });
 }
 
-impl Context {
+impl ContextData {
     pub fn new(data: EssentialGenlayerSdkData) -> Self {
         Self {
             data,
@@ -43,11 +47,71 @@ impl wiggle::GuestErrorType for generated::types::Errno {
     }
 }
 
-pub(super) fn add_to_linker_sync<T: Send>(
+trait MappedVtable<T> {
+    fn get_data_mut<'a, 'b>(&self, store: &'b mut StoreContextMut<'a, T>) -> &'b mut ContextData;
+}
+
+struct Mapped<'a, T> {
+    stor: StoreContextMut<'a, T>,
+    vtable: Arc<dyn MappedVtable<T>>,
+}
+
+impl<'a, T> Mapped<'a, T> {
+    fn data_mut<'loc>(&'loc mut self) -> &'loc mut ContextData {
+        self.vtable.get_data_mut(&mut self.stor)
+    }
+
+    fn read<'loc, R>(&'loc mut self, f: impl Fn(&ContextData) -> R) -> R {
+        let data: &ContextData = self.vtable.get_data_mut(&mut self.stor);
+        f(data)
+    }
+}
+
+pub(super) fn add_to_linker_sync<'a, T: Send + 'static, F: Fn(&mut T) -> &mut ContextData + Copy + Send + Sync + 'static>(
     linker: &mut wasmtime::Linker<T>,
-    f: impl Fn(&mut T) -> &mut Context + Copy + Send + Sync + 'static,
+    f: F,
 ) -> anyhow::Result<()> {
-    generated::add_genlayer_sdk_to_linker(linker, f)?;
+    struct A<F: Send + Sync> {
+        f: F,
+    }
+    impl<T, F: Fn(&mut T) -> &mut ContextData + Copy + Send + Sync + 'static> MappedVtable<T> for A<F> {
+        fn get_data_mut<'a, 'b>(&self, store: &'b mut StoreContextMut<'a, T>) -> &'b mut ContextData {
+            let fc = &self.f;
+            fc(store.data_mut())
+        }
+    }
+
+    let vtable = Arc::new(A::<F> {
+        f,
+    });
+
+    //#[derive(Send, Sync)]
+    struct FnBuilderImpl<T> {
+        vtable: Arc<dyn MappedVtable<T> + Send + Sync + 'static>
+    }
+    impl<T> Clone for FnBuilderImpl<T> {
+        fn clone(&self) -> Self {
+            Self { vtable: self.vtable.clone() }
+        }
+    }
+    impl<T: 'static> generated::FnBuilderGenlayerSdk<T> for FnBuilderImpl<T> {
+        type MappedTo<'a> = Mapped<'a, T>;
+
+        fn build<'a>(&self) -> impl Fn(wasmtime::StoreContextMut<'a,T>) -> Self::MappedTo<'a> {
+            |x| {
+                Mapped {
+                    stor: x,
+                    vtable: self.vtable.clone(),
+                }
+            }
+        }
+    }
+
+    let fn_bilder = FnBuilderImpl {
+        vtable: vtable,
+    };
+
+    generated::add_genlayer_sdk_to_linker(linker, fn_bilder)?;
     Ok(())
 }
 
@@ -62,7 +126,7 @@ impl std::fmt::Display for Rollback {
     }
 }
 
-impl Context {
+impl ContextData {
     fn ensure_det(&self) -> Result<(), generated::types::Error> {
         if self.data.conf.is_deterministic {
             Err(generated::types::Errno::DeterministicViolation.into())
@@ -109,32 +173,71 @@ impl From<std::num::TryFromIntError> for generated::types::Error {
     }
 }
 
-#[allow(unused_variables)]
-impl generated::genlayer_sdk::GenlayerSdk for Context {
-    fn get_calldata(&mut self,mem: &mut wiggle::GuestMemory<'_>) -> Result<generated::types::BytesLen, generated::types::Error> {
-        self.result = Vec::from(self.data.message_data.calldata.as_str());
-        self.result_cursor = 0;
-        let res = self.result.len().try_into()?;
-        Ok(res)
+impl From<serde_json::Error> for generated::types::Error {
+    fn from(err: serde_json::Error) -> Self {
+        match err {
+            _ => generated::types::Errno::Io.into(),
+        }
+    }
+}
+
+impl<'a, T> Mapped<'a, T> {
+    fn consume_fuel(&mut self, gas_consumed: u64) -> Result<(), generated::types::Error> {
+        let old_fuel = self.stor.get_fuel().map_err(|_e| generated::types::Errno::Io)?;
+        let gas_consumed = gas_consumed.min(old_fuel).max(1);
+        self.stor.set_fuel(old_fuel - gas_consumed).map_err(|_e| generated::types::Errno::Io)?;
+        Ok(())
     }
 
-    fn read_result(&mut self,mem: &mut wiggle::GuestMemory<'_> ,buf:wiggle::GuestPtr<u8> ,len:u32) -> Result<generated::types::BytesLen,generated::types::Error> {
-        self.ensure_det()?;
+    fn set_result(&mut self, data: Vec<u8>) -> Result<generated::types::BytesLen, generated::types::Error> {
+        self.data_mut().result = data;
+        self.data_mut().result_cursor = 0;
+        let res: u32 = self.data_mut().result.len().try_into()?;
+        let mut gas_consumed: u64 = res.into();
+        gas_consumed /= 32;
+        self.consume_fuel(gas_consumed)?;
+        Ok(res)
+    }
+}
 
-        let len_left = self.result.len() - self.result_cursor;
+#[allow(unused_variables)]
+impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
+    fn get_message_data(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+    ) -> Result<generated::types::BytesLen, generated::types::Error> {
+        let res = serde_json::to_string(&self.data_mut().data.message_data)?;
+        self.set_result(Vec::from(res))
+    }
+
+    fn read_result(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        buf: wiggle::GuestPtr<u8>,
+        len: u32,
+    ) -> Result<generated::types::BytesLen, generated::types::Error> {
+        let cursor = self.read(|x| x.result_cursor);
+        let len_left = self.data_mut().result.len() - cursor;
         let len_left = len_left.min(len as usize);
-        let len_left_u32  = len_left.try_into()?;
+        let len_left_u32 = len_left.try_into()?;
 
-        mem.copy_from_slice(&self.result[self.result_cursor..self.result_cursor+len_left], buf.as_array(len_left_u32))?;
-        self.result_cursor += len_left;
+        mem.copy_from_slice(
+            &self.data_mut().result[cursor..cursor + len_left],
+            buf.as_array(len_left_u32),
+        )?;
+        self.data_mut().result_cursor += len_left;
 
         Ok(len_left_u32)
     }
 
-    fn rollback(&mut self,mem: &mut wiggle::GuestMemory<'_> ,message:wiggle::GuestPtr<str>) -> anyhow::Error {
+    fn rollback(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        message: wiggle::GuestPtr<str>,
+    ) -> anyhow::Error {
         match super::common::read_string(mem, message) {
             Err(e) => e.into(),
-            Ok(str) => Rollback(str).into()
+            Ok(str) => Rollback(str).into(),
         }
     }
 }

@@ -14,6 +14,7 @@ pub const ERRNO_OVERFLOW: Errno = Errno(2);
 pub const ERRNO_INVAL: Errno = Errno(3);
 pub const ERRNO_FAULT: Errno = Errno(4);
 pub const ERRNO_ILSEQ: Errno = Errno(5);
+pub const ERRNO_IO: Errno = Errno(6);
 impl Errno {
     pub const fn raw(&self) -> u32 {
         self.0
@@ -27,6 +28,7 @@ impl Errno {
             3 => "INVAL",
             4 => "FAULT",
             5 => "ILSEQ",
+            6 => "IO",
             _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }
@@ -38,6 +40,7 @@ impl Errno {
             3 => "",
             4 => "",
             5 => "",
+            6 => "",
             _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }
@@ -68,9 +71,9 @@ pub unsafe fn rollback(message: &str) {
     genlayer_sdk::rollback(message.as_ptr() as i32, message.len() as i32);
 }
 
-pub unsafe fn get_calldata() -> Result<BytesLen, Errno> {
+pub unsafe fn get_message_data() -> Result<BytesLen, Errno> {
     let mut rp0 = MaybeUninit::<BytesLen>::uninit();
-    let ret = genlayer_sdk::get_calldata(rp0.as_mut_ptr() as i32);
+    let ret = genlayer_sdk::get_message_data(rp0.as_mut_ptr() as i32);
     match ret {
         0 => Ok(core::ptr::read(rp0.as_mut_ptr() as i32 as *const BytesLen)),
         _ => Err(Errno(ret as u32)),
@@ -90,7 +93,7 @@ pub mod genlayer_sdk {
     #[link(wasm_import_module = "genlayer_sdk")]
     extern "C" {
         pub fn rollback(arg0: i32, arg1: i32) -> !;
-        pub fn get_calldata(arg0: i32) -> i32;
+        pub fn get_message_data(arg0: i32) -> i32;
         pub fn read_result(arg0: i32, arg1: i32, arg2: i32) -> i32;
     }
 }

@@ -1,0 +1,121 @@
+From 55b4035eb18daa42cc6d3eb1906799a0b5aa8b5e Mon Sep 17 00:00:00 2001
+From: kp2pml30 <kp2pml30@gmail.com>
+Date: Wed, 21 Aug 2024 11:28:12 +0400
+Subject: [PATCH] add ability to pass storage context to component, which is
+ safe as long as it doesn't access memory
+
+---
+ crates/wiggle/generate/src/wasmtime.rs | 58 ++++++++++++++++++++++++++
+ 1 file changed, 58 insertions(+)
+
+diff --git a/crates/wiggle/generate/src/wasmtime.rs b/crates/wiggle/generate/src/wasmtime.rs
+index cb488f9..feefb5e 100644
+--- a/crates/wiggle/generate/src/wasmtime.rs
++++ b/crates/wiggle/generate/src/wasmtime.rs
+@@ -2,6 +2,7 @@ use crate::config::Asyncness;
+ use crate::funcs::func_bounds;
+ use crate::names;
+ use crate::CodegenSettings;
++use heck::ToPascalCase;
+ use proc_macro2::{Ident, Span, TokenStream};
+ use quote::{format_ident, quote};
+ use std::collections::HashSet;
+@@ -46,6 +47,31 @@ pub fn link_module(
+         format_ident!("add_{}_to_linker", module_ident)
+     };
+ 
++
++    let has_store = module.docs.contains("@PASS_STORE@");
++    if has_store {
++        let func_builder_name = if target_path.is_none() {
++            format_ident!("FnBuilder")
++        } else {
++            format_ident!("FnBuilder{}", module_ident.to_string().to_pascal_case())
++        };
++        return quote! {
++            pub trait #func_builder_name<T: 'static>: Send + Sync + Clone + 'static {
++                type MappedTo<'a>: #ctx_bound;
++
++                fn build<'a>(&self) -> impl Fn(wasmtime::StoreContextMut<'a, T>) -> Self::MappedTo<'a>;
++            }
++
++            /// Adds all instance items to the specified `Linker`.
++            pub fn #func_name<T: 'static, B: #func_builder_name<T>>(
++                linker: &mut wiggle::wasmtime_crate::Linker<T>,
++                get_cx0: B,
++            ) -> wiggle::anyhow::Result<()> {
++                #(#bodies)*
++                Ok(())
++            }
++        };
++    }
+     let u = if settings.mutable {
+         quote!(&mut U)
+     } else {
+@@ -60,6 +86,7 @@ pub fn link_module(
+             where
+                 U: #ctx_bound #send_bound
+         {
++            let get_cx0 = get_cx;
+             #(#bodies)*
+             Ok(())
+         }
+@@ -130,10 +157,39 @@ fn generate_func(
+         Ok(<#ret_ty>::from(#abi_func(ctx, &mut mem #(, #arg_names)*) #await_ ?))
+     };
+ 
++    let has_store = module.docs.contains("@PASS_STORE@");
++
++    let body =
++        if !has_store {
++            body
++        } else {
++            quote! {
++                use wasmtime::AsContextMut;
++                let export = caller.get_export("memory");
++                let (mut mem, mut ctx) = match &export {
++                    Some(wiggle::wasmtime_crate::Extern::Memory(m)) => {
++                        unsafe {
++                            let ca: &mut wiggle::wasmtime_crate::Caller<'_, T> = &mut *(&mut caller as *mut wiggle::wasmtime_crate::Caller<'_, T>);
++                            let mem = m.data_mut(&mut caller);
++                            let ctx = get_cx.build()(ca.as_context_mut());
++                            (wiggle::GuestMemory::Unshared(mem), ctx)
++                        }
++                    }
++                    Some(wiggle::wasmtime_crate::Extern::SharedMemory(m)) => {
++                        let ctx = get_cx.build()(caller.as_context_mut());
++                        (wiggle::GuestMemory::Shared(m.data()), ctx)
++                    }
++                    _ => wiggle::anyhow::bail!("missing required memory export"),
++                };
++                Ok(<#ret_ty>::from(#abi_func(&mut ctx, &mut mem #(, #arg_names)*) #await_ ?))
++            }
++        };
++
+     match asyncness {
+         Asyncness::Async => {
+             let arg_decls = quote! { ( #(#arg_names,)* ) : ( #(#arg_tys,)* ) };
+             quote! {
++                let get_cx = get_cx0.clone();
+                 linker.func_wrap_async(
+                     #module_str,
+                     #field_str,
+@@ -146,6 +202,7 @@ fn generate_func(
+ 
+         Asyncness::Blocking { block_with } => {
+             quote! {
++                let get_cx = get_cx0.clone();
+                 linker.func_wrap(
+                     #module_str,
+                     #field_str,
+@@ -159,6 +216,7 @@ fn generate_func(
+ 
+         Asyncness::Sync => {
+             quote! {
++                let get_cx = get_cx0.clone();
+                 linker.func_wrap(
+                     #module_str,
+                     #field_str,
+-- 
+2.34.1
+
