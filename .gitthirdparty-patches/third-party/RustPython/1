@@ -1,4 +1,4 @@
-From 84e3b336ede29579fc7a843080bd703aa6c95c17 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: kp2pml30 <kp2pml30@gmail.com>
 Date: Tue, 20 Aug 2024 09:39:51 +0400
 Subject: [PATCH] remove floats to the extent of working `import json`

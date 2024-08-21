@@ -1,4 +1,4 @@
 target
 .vscode
-/third-party
+/third-party/*
 !/third-party/.gitkeep

@@ -1,4 +1,4 @@
-From 55b4035eb18daa42cc6d3eb1906799a0b5aa8b5e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: kp2pml30 <kp2pml30@gmail.com>
 Date: Wed, 21 Aug 2024 11:28:12 +0400
 Subject: [PATCH] add ability to pass storage context to component, which is

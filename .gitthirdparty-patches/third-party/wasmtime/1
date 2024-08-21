@@ -1,4 +1,4 @@
-From 1437e7acbcf6302968c3faf89f86b24e8bc7921f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: kp2pml30 <kp2pml30@gmail.com>
 Date: Tue, 20 Aug 2024 09:15:57 +0400
 Subject: [PATCH] add deterministic mode
