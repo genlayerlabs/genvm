@@ -34,7 +34,7 @@ pub struct RunnerDescription {
     pub lang: String
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum InitAction {
     MapFile { to: String, contents: Vec<u8> },
     MapCode { to: String },

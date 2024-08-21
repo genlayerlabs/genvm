@@ -36,12 +36,10 @@ mod test_node_iface_impl {
                 return Err(anyhow::anyhow!("unsupported language"));
             }
             let rp = std::fs::read("testdata/genvm-python.wasm")?;
-            let gen_sdk = std::fs::read("../sdk-python/py/genlayer/sdk.py")?;
             Ok(Vec::from([
                 node_iface::InitAction::AddEnv { name: "pwd".into(), val: "/".into() },
                 node_iface::InitAction::MapCode { to: "/contract.py".into() },
-                node_iface::InitAction::MapFile { to: "/genlayer/sdk.py".into(), contents: gen_sdk },
-                node_iface::InitAction::SetArgs { args: Vec::from(["py".into(), "-c".into(), "import contract".into()]) },
+                node_iface::InitAction::SetArgs { args: Vec::from(["py".into(), "contract.py".into()]) },
                 node_iface::InitAction::StartWasm { contents: rp, debug_path: Some("genvm-python.wasm".into()) }
             ]))
         }
