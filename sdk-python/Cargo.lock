@@ -458,8 +458,10 @@ dependencies = [
 name = "genvm-python"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "genvm-sdk-rust",
  "rustpython",
+ "rustpython-compiler",
  "rustpython-compiler-core",
  "rustpython-derive",
  "rustpython-vm",

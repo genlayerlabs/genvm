@@ -62,19 +62,17 @@ impl Supervisor {
         base_conf.wasm_relaxed_simd(false);
         base_conf.cache_config_load_default()?;
         base_conf.consume_fuel(true);
-        //det_conf.wasm_threads(false);
+        //base_conf.wasm_threads(false);
         //base_conf.wasm_reference_types(false);
+        base_conf.wasm_simd(false);
+        base_conf.relaxed_simd_deterministic(false);
 
         let mut det_conf = base_conf.clone();
         det_conf.async_support(false);
-        det_conf.wasm_simd(false);
-        det_conf.relaxed_simd_deterministic(true);
-        //det_conf.wasm_floats_enabled(false);
+        //det_conf.wasm_floats_enabled(false); // FIXME
 
         let mut non_det_conf = base_conf.clone();
         non_det_conf.async_support(false);
-        non_det_conf.wasm_simd(false);
-        non_det_conf.relaxed_simd_deterministic(false);
         non_det_conf.wasm_floats_enabled(true);
 
         let det_engine = Engine::new(&det_conf)?;
@@ -118,7 +116,7 @@ impl Supervisor {
 
         let engine = if data.conf.is_deterministic { &self.det_engine } else { &self.non_det_engine };
 
-        let init_gas = data.message_data.initial_gas;
+        let init_gas = data.message_data.gas;
         let mut store = Store::new(&engine, Host::new(data));
         store.set_fuel(init_gas)?;
 

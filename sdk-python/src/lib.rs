@@ -6,7 +6,7 @@ pub fn make_gensdk_module(vm: &::rustpython_vm::VirtualMachine) -> rustpython_vm
 
 #[pymodule]
 pub mod genlayer_sdk {
-    use rustpython::vm::{builtins::{PyBaseException, PyBaseExceptionRef, PyException, PyStrRef}, pymodule, PyRef, PyResult, VirtualMachine};
+    use rustpython::vm::{builtins::PyStrRef, PyResult, VirtualMachine};
 
     fn map_error<T>(vm: &VirtualMachine, res: Result<T, genvm_sdk_rust::Errno>) -> PyResult<T> {
         res.map_err(
@@ -16,7 +16,7 @@ pub mod genlayer_sdk {
     }
 
     #[pyfunction]
-    fn rollback(s: PyStrRef, vm: &VirtualMachine) -> PyResult<()> {
+    fn rollback(s: PyStrRef) -> PyResult<()> {
         let s = s.as_str();
         unsafe { genvm_sdk_rust::rollback(s.as_ref()) };
         Ok(())

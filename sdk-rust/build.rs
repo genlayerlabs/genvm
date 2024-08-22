@@ -14,6 +14,8 @@ fn main() -> anyhow::Result<()> {
     let mut file = std::path::PathBuf::from(repo_dir);
     file.extend("genvm/src/wasi/witx/genlayer_sdk.witx".split("/"));
 
+    println!("cargo::rerun-if-changed={}", file.display());
+
     let out =
         Command::new(std::env::var("CARGO")?)
             .current_dir(cwd)

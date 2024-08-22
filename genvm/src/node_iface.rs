@@ -1,32 +1,47 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, base64::Base64};
 
 pub struct StoragePartDesc {
-    account: Address,
-    desc: u32
+    pub account: Address,
+    pub desc: u32
 }
 
 #[serde_as]
-#[derive(Serialize, Deserialize, PartialEq)]
+#[derive(Serialize, Deserialize, PartialEq, Clone)]
 pub struct Address(#[serde_as(as = "Base64")] pub [u8; 32]);
+
+impl Address {
+    pub fn raw(&self) -> [u8; 32] {
+        let Address(r) = self;
+        *r
+    }
+}
 
 pub struct Gas(pub u64);
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Calldata {
     pub method: String,
     pub args: Vec<serde_json::Value>
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
+pub enum Entrypoint {
+    /// See [Calldata]
+    Call(String),
+    Nondet { eq_principe: String, data: Vec<u8> },
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct MessageData {
-    pub initial_gas: u64,
-    pub account: Address,
+    pub gas: u64,
+    pub contract_account: Address,
+    pub sender_account: Address,
     pub value: Option<u64>,
-    pub calldata: String, // See "Calldata"
+    pub entrypoint: Entrypoint,
 }
 
 #[derive(Serialize, Deserialize)]

@@ -1,0 +1,28 @@
+{
+    "runners": {
+        "python": [
+            { "AddEnv": { "name": "pwd", "val": "/" } },
+            { "MapCode": { "to": "/contract.py" } },
+            { "MapFile": { "file": "${jsonDir}/sdk.frozen", "to": "/sdk.frozen" } },
+            { "SetArgs": { "args": ["py", "contract.py"] } },
+            { "StartWasm": { "file": "${jsonDir}/genvm-python.wasm", "debug_path": "genvm-python.wasm" } }
+        ]
+    },
+
+    "accounts": {
+        "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=": {
+            "code": "${jsonDir}/0.py"
+        },
+        "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=": {
+            "code": null
+        }
+    },
+
+    "message": {
+        "gas": 18446744073709551615,
+        "contract_account": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "sender_account": "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "value": null,
+        "entrypoint": { "Call": "{\"method\": \"init\", \"args\": []}" }
+    }
+}

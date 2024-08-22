@@ -49,13 +49,13 @@ impl std::error::Error for I32Exit {}
 
 pub(crate) mod generated {
     wiggle::from_witx!({
-        witx: ["$CARGO_MANIFEST_DIR/src/wasi/preview/stub_wasi.witx"],
+        witx: ["$CARGO_MANIFEST_DIR/src/wasi/witx/wasi_snapshot_preview1.witx"],
         errors: { errno => trappable Error },
         wasmtime: false,
     });
 
     wiggle::wasmtime_integration!({
-        witx: ["$CARGO_MANIFEST_DIR/src/wasi/preview/stub_wasi.witx"],
+        witx: ["$CARGO_MANIFEST_DIR/src/wasi/witx/wasi_snapshot_preview1.witx"],
         target: super::generated,
         errors: { errno => trappable Error },
     });
@@ -168,7 +168,7 @@ impl Context {
                         },
                     }
                 },
-                FilesTrie::File { data } => return Err(anyhow::anyhow!("super path is already mapped as a file {}", location_patched)),
+                FilesTrie::File { data: _ } => return Err(anyhow::anyhow!("super path is already mapped as a file {}", location_patched)),
             }?;
         }
 
@@ -177,14 +177,14 @@ impl Context {
         match cur_trie.borrow_mut() {
             FilesTrie::Dir { children } => {
                 match children.entry(String::from(fname)) {
-                    std::collections::btree_map::Entry::Occupied(entry) => Err(anyhow::anyhow!("duplicate file mapping {}", location_patched)),
+                    std::collections::btree_map::Entry::Occupied(_entry) => Err(anyhow::anyhow!("duplicate file mapping {}", location_patched)),
                     std::collections::btree_map::Entry::Vacant(entry) => {
                         entry.insert(Box::new(FilesTrie::File { data: contents }));
                         Ok(())
                     },
                 }
             },
-            FilesTrie::File { data } => return Err(anyhow::anyhow!("super path is already mapped as a file")),
+            FilesTrie::File { data: _ } => return Err(anyhow::anyhow!("super path is already mapped as a file")),
         }?;
 
         Ok(())
@@ -660,7 +660,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
         &mut self,
         _memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
-        mut offset: generated::types::Filedelta,
+        offset: generated::types::Filedelta,
         whence: generated::types::Whence,
     ) -> Result<generated::types::Filesize, generated::types::Error> {
         match self.get_fd_desc_mut(fd)? {

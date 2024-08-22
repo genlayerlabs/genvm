@@ -1,6 +1,6 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::sync::Arc;
 
-use wasmtime::{Store, StoreContextMut};
+use wasmtime::StoreContextMut;
 use wiggle::GuestError;
 
 use super::base;

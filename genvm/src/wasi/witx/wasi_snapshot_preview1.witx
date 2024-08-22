@@ -1,4 +1,4 @@
-(use "typenames.witx")
+(use "wasi_snapshot_preview1_types.witx")
 
 (module $wasi_snapshot_preview1
   ;;; Linear memory to be accessed by WASI functions that need it.
