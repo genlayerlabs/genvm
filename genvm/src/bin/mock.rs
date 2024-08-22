@@ -73,7 +73,11 @@ mod test_node_iface_impl {
         }
 
         fn get_code(&mut self, account: &node_iface::Address) -> Result<Arc<Vec<u8>>> {
-            let acc = base64::encode(account.raw());
+            let mut acc: String = serde_json::to_string(account)?;
+            // remove ""
+            acc.pop();
+            acc.remove(0);
+
             let acc = self.conf.accounts.get(&acc).ok_or(anyhow::anyhow!("no account"))?;
             let Some(ref code) = acc.code else { return Err(anyhow::anyhow!("no account")) };
             let code = std::fs::read(code)?;

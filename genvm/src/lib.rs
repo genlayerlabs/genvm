@@ -5,6 +5,7 @@ pub mod wasi;
 pub mod node_iface;
 
 use anyhow::{Context as _, Result};
+use wasi::preview1;
 use core::str;
 use std::{borrow::BorrowMut, path::Path, sync::Arc};
 
@@ -63,6 +64,8 @@ fn instantiate_from_text(supervisor: &mut vm::Supervisor, api: &mut dyn Required
 fn create_and_run_vm_for(supervisor: &mut vm::Supervisor, api: &mut dyn RequiredApis, code: Arc<Vec<u8>>, data: wasi::genlayer_sdk::EssentialGenlayerSdkData) -> Result<()> {
     let mut ret_vm = supervisor.spawn(data)?;
 
+    let init_fuel = ret_vm.store.get_fuel().unwrap_or(0);
+
     let instance =
         if wasmparser::Parser::is_core_wasm(&code[..]) {
             let prec = supervisor.cache_module(code, Some(Path::new("/contract.wasm")))?;
@@ -74,11 +77,19 @@ fn create_and_run_vm_for(supervisor: &mut vm::Supervisor, api: &mut dyn Required
     let func =
         instance.
             get_typed_func::<(), ()>(&mut ret_vm.store, "")
-            .or_else(|_| instance.get_typed_func::<(), ()>(&mut ret_vm.store, "_start"))
-            .with_context(|| "can't find entrypoint")?;
-    func.call(&mut ret_vm.store, ())?;
+                .or_else(|_| instance.get_typed_func::<(), ()>(&mut ret_vm.store, "_start"))
+                .with_context(|| "can't find entrypoint")?;
+    let res = func.call(&mut ret_vm.store, ());
+    let res = match res {
+        Ok(f) => Ok(f),
+        Err(e) => match e.downcast_ref::<preview1::I32Exit>().map(|e| e.0) {
+            Some(0) => Ok(()),
+            _ => Err(e),
+        },
+    }?;
 
-    eprintln!("remaining fuel: {}", ret_vm.store.get_fuel().map(|s| s.to_string()).unwrap_or_else(|e| format!("<error> {}", e)));
+    let remaining_fuel = ret_vm.store.get_fuel().unwrap_or(0);
+    eprintln!("remaining fuel: {remaining_fuel}\nconsumed fuel: {}", u64::wrapping_sub(init_fuel, remaining_fuel));
 
     Ok(())
 }
