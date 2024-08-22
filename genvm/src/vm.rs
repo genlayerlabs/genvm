@@ -69,7 +69,7 @@ impl Supervisor {
 
         let mut det_conf = base_conf.clone();
         det_conf.async_support(false);
-        //det_conf.wasm_floats_enabled(false); // FIXME
+        det_conf.wasm_floats_enabled(false);
 
         let mut non_det_conf = base_conf.clone();
         non_det_conf.async_support(false);

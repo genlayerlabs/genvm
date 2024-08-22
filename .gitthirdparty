@@ -3,7 +3,7 @@
 		"third-party/wasmtime": {
 			"url": "https://github.com/bytecodealliance/wasmtime.git",
 			"commit": "a2f0f2fd03c7a376ee4676f009e3cc8b8fc82e25",
-			"patches": 2
+			"patches": 3
 		},
 		"third-party/RustPython": {
 			"url": "https://github.com/RustPython/RustPython.git",

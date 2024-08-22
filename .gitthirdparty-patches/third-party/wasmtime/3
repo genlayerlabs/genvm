@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: kp2pml30 <kp2pml30@gmail.com>
+Date: Thu, 22 Aug 2024 13:09:30 +0400
+Subject: [PATCH] fix bug with runtime-disallowed floats and fuel consumption
+
+---
+ cranelift/wasm/src/code_translator.rs | 1 +
+ cranelift/wasm/src/environ/spec.rs    | 3 +++
+ crates/cranelift/src/func_environ.rs  | 5 +++++
+ 3 files changed, 9 insertions(+)
+
+diff --git a/cranelift/wasm/src/code_translator.rs b/cranelift/wasm/src/code_translator.rs
+index 8fa0e68..3630916 100644
+--- a/cranelift/wasm/src/code_translator.rs
++++ b/cranelift/wasm/src/code_translator.rs
+@@ -3803,6 +3803,7 @@ fn float_op_unreachable_check<FE: FuncEnvironment + ?Sized>(environ: &mut FE, bu
+     if environ.are_floats_enabled() {
+         return false;
+     }
++    environ.fuel_before_unreachable(builder);
+     builder.ins().trap(ir::TrapCode::DeterministicMode);
+     state.reachable = false;
+     return true;
+diff --git a/cranelift/wasm/src/environ/spec.rs b/cranelift/wasm/src/environ/spec.rs
+index 1c2af70..668edc8 100644
+--- a/cranelift/wasm/src/environ/spec.rs
++++ b/cranelift/wasm/src/environ/spec.rs
+@@ -92,6 +92,9 @@ pub trait FuncEnvironment: TargetEnvironment {
+     /// Does the given result require inclusion in stack maps?
+     fn sig_ref_result_needs_stack_map(&self, sig_ref: ir::SigRef, index: usize) -> bool;
+ 
++    /// Updates fuel right before reaching unreachable state
++    fn fuel_before_unreachable(&mut self, builder: &mut FunctionBuilder);
++
+     /// Does the given result require inclusion in stack maps?
+     fn func_ref_result_needs_stack_map(
+         &self,
+diff --git a/crates/cranelift/src/func_environ.rs b/crates/cranelift/src/func_environ.rs
+index 565d925..fa13361 100644
+--- a/crates/cranelift/src/func_environ.rs
++++ b/crates/cranelift/src/func_environ.rs
+@@ -2753,6 +2753,11 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
+         }
+     }
+ 
++    fn fuel_before_unreachable(&mut self, builder: &mut FunctionBuilder) {
++        self.fuel_increment_var(builder);
++        self.fuel_save_from_var(builder);
++    }
++
+     fn are_floats_enabled(&self) -> bool {
+         return self.tunables.floats_enabled;
+     }
+-- 
+2.34.1
+
