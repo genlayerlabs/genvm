@@ -5,7 +5,7 @@ use wiggle::GuestError;
 
 use crate::vm::InitActions;
 
-use super::base;
+use super::{base, common::read_string};
 
 pub struct EssentialGenlayerSdkData {
     pub conf: base::Config,
@@ -138,7 +138,7 @@ impl std::fmt::Display for Rollback {
 }
 
 #[derive(Debug)]
-pub struct ContractReturn(pub Vec<u8>);
+pub struct ContractReturn(pub String);
 
 impl std::error::Error for ContractReturn {}
 
@@ -274,9 +274,9 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
     fn contract_return(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        message: &generated::types::Bytes,
+        message: wiggle::GuestPtr<str>,
     ) -> anyhow::Error {
-        let res = message.read_owned(mem);
+        let res = read_string(mem, message);
         let Ok(res) = res else { return res.unwrap_err().into(); };
         ContractReturn(res).into()
     }
@@ -324,7 +324,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
 
         match res? {
             crate::vm::VMRunResult::Return(r) => {
-                self.set_result(r)
+                self.set_result(r.into_bytes())
             },
             crate::vm::VMRunResult::Rollback(r) => Err(generated::types::Error::trap(Rollback(r).into())),
             crate::vm::VMRunResult::Error(e) => Err(generated::types::Error::trap(Rollback(format!("subvm failed {}", e)).into())),

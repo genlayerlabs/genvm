@@ -1,4 +1,6 @@
 target
 .vscode
+/build
+/build-config.json
 /third-party/*
 !/third-party/.gitkeep

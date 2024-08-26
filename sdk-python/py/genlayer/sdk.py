@@ -34,7 +34,7 @@ def _give_result(res):
 	elif isinstance(res, AlreadySerializedResult):
 		wasi.contract_return(res)
 	else:
-		wasi.contract_return(json.dumps(res).encode())
+		wasi.contract_return(json.dumps(res))
 
 def run(mod):
 	entrypoint: bytes = wasi.get_entrypoint()
@@ -49,10 +49,9 @@ def run(mod):
 		_give_result(res)
 	elif entrypoint.startswith(NONDET):
 		import pickle
-		res = pickle.loads(entrypoint[len(NONDET):]).run()
-		if res is None:
-			exit(0)
-		wasi.contract_return(base64.b64encode(pickle.dumps(res)))
+		res = pickle.loads(entrypoint[len(NONDET):])
+		res = res.run()
+		wasi.contract_return(base64.b64encode(pickle.dumps(res)).decode('ascii'))
 	else:
 		raise Exception(f"unknown entrypoint {entrypoint}")
 

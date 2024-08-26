@@ -55,7 +55,7 @@ pub struct VM {
 
 #[derive(Debug)]
 pub enum VMRunResult {
-    Return(Vec<u8>),
+    Return(String),
     Rollback(String),
     Error(String),
 }
@@ -72,10 +72,10 @@ impl VM {
                     .or_else(|_| instance.get_typed_func::<(), ()>(&mut self.store, "_start"))
                     .with_context(|| "can't find entrypoint")?;
         let res: VMRunResult = match func.call(&mut self.store, ()) {
-            Ok(()) => VMRunResult::Return(Vec::new()),
+            Ok(()) => VMRunResult::Return("".into()),
             Err(e) => {
                 let res: Option<VMRunResult> = [
-                    e.downcast_ref::<crate::wasi::preview1::I32Exit>().and_then(|v| if v.0 == 0 { Some(VMRunResult::Return(Vec::new())) } else { None }),
+                    e.downcast_ref::<crate::wasi::preview1::I32Exit>().and_then(|v| if v.0 == 0 { Some(VMRunResult::Return("".into())) } else { None }),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::Rollback>().map(|v| VMRunResult::Rollback(v.0.clone()) ),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::ContractReturn>().map(|v| VMRunResult::Return(v.0.clone())),
                 ].into_iter().fold(None, |x, y| if x.is_some() { x } else { y });

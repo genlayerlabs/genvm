@@ -158,9 +158,11 @@ fn main() -> Result<()> {
     let conf: serde_json::Value = serde_json::from_str(&conf)?;
 
     let json_dir: String = std::path::Path::new(&args.config).parent().ok_or(anyhow::anyhow!("no parent"))?.to_str().ok_or(anyhow::anyhow!("to str"))?.into();
+    let artifacts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../build/out").to_str().ok_or(anyhow::anyhow!("to str"))?.into();
     let unfolder = JsonUnfolder {
         vars: HashMap::from([
-            ("jsonDir".into(), json_dir)
+            ("jsonDir".into(), json_dir),
+            ("artifacts".into(), artifacts)
         ]),
     };
     let conf = unfolder.run(conf)?;
@@ -168,12 +170,6 @@ fn main() -> Result<()> {
 
     let node_api = Box::new(test_node_iface_impl::TestApi::new(conf));
     let res = genvm::run_with_api(node_api)?;
-    println!("executed with {res:?}");
-    match res {
-        genvm::vm::VMRunResult::Return(r) => {
-            println!("\tas utf8: {}", String::from_utf8_lossy(&r[..]));
-        }
-        _ => {},
-    }
+    println!("executed with `{res:?}`");
     Ok(())
 }

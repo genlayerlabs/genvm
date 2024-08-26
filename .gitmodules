@@ -1,3 +1,6 @@
 [submodule "tools/git-third-party"]
 	path = tools/git-third-party
 	url = https://github.com/kp2pml30/git-third-party.git
+[submodule "tools/ya-build"]
+	path = tools/ya-build
+	url = https://github.com/kp2pml30/ya-build.git

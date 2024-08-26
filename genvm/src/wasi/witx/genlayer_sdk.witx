@@ -9,7 +9,7 @@
     )
 
     (@interface func (export "contract_return")
-        (param $result $bytes)
+        (param $result string)
         (@witx noreturn)
     )
 

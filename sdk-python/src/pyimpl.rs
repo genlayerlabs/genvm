@@ -24,13 +24,8 @@ pub mod genlayer_sdk {
     }
 
     #[pyfunction]
-    fn contract_return(s: PyBytesRef) -> PyResult<()> {
-        unsafe { genvm_sdk_rust::contract_return(
-            genvm_sdk_rust::Bytes {
-                buf: s.as_ptr(),
-                buf_len: s.len() as u32,
-            }
-        ) };
+    fn contract_return(s: PyStrRef) -> PyResult<()> {
+        unsafe { genvm_sdk_rust::contract_return(s.as_ref()) };
         Ok(())
     }
 
