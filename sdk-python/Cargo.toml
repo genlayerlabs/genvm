@@ -13,11 +13,11 @@ path = "src/build_debug_sdk.rs"
 required-features = ["sdk-debug"]
 
 [dependencies]
-rustpython = { path = "third-party/RustPython", default-features = false, features = ["stdlib", "freeze-stdlib"] }
-rustpython-vm = { path = "third-party/RustPython/vm", default-features = false }
-rustpython-derive = { path = "third-party/RustPython/derive", default-features = false }
-rustpython-compiler-core = { path = "third-party/RustPython/compiler/core", default-features = false }
-rustpython-compiler = { path = "third-party/RustPython/compiler", default-features = false }
+rustpython = { version = "0.4.0", default-features = false, features = ["stdlib", "freeze-stdlib"] }
+rustpython-vm = { version = "0.4.0", default-features = false }
+rustpython-derive = { version = "0.4.0", default-features = false }
+rustpython-compiler-core = { version = "0.4.0", default-features = false }
+rustpython-compiler = { version = "0.4.0", default-features = false }
 
 genvm-sdk-rust = { path = "../sdk-rust", default-features = false }
 anyhow = "1.0.86"
