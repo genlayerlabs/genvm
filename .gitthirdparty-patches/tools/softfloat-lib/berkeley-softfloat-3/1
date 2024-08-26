@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: kp2pml30 <kp2pml30@gmail.com>
+Date: Mon, 26 Aug 2024 12:00:47 +0400
+Subject: [PATCH] make abi compatible
+
+---
+ source/include/softfloat_types.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/source/include/softfloat_types.h b/source/include/softfloat_types.h
+index 25039b5..19028c6 100644
+--- a/source/include/softfloat_types.h
++++ b/source/include/softfloat_types.h
+@@ -49,8 +49,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *----------------------------------------------------------------------------*/
+ typedef struct { uint16_t v; } float16_t;
+ typedef struct { uint16_t v; } bfloat16_t;
+-typedef struct { uint32_t v; } float32_t;
+-typedef struct { uint64_t v; } float64_t;
++typedef float float32_t;
++typedef double float64_t;
+ typedef struct { uint64_t v[2]; } float128_t;
+ 
+ /*----------------------------------------------------------------------------
+-- 
+2.34.1
+

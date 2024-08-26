@@ -5,6 +5,7 @@
             { "MapCode": { "to": "/contract.py" } },
             { "MapFile": { "file": "${jsonDir}/sdk.frozen", "to": "/sdk.frozen" } },
             { "SetArgs": { "args": ["py", "contract.py"] } },
+            { "LinkWasm": { "file": "${jsonDir}/softfloat.wasm" } },
             { "StartWasm": { "file": "${jsonDir}/genvm-python.wasm", "debug_path": "genvm-python.wasm" } }
         ]
     },

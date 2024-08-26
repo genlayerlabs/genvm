@@ -5,6 +5,10 @@ import json
 from types import SimpleNamespace
 import base64
 
+class AlreadySerializedResult(str):
+	def __new__(cls, *args, **kwargs):
+		return str.__new__(cls, *args, **kwargs)
+
 def account_from_b64(x: str) -> bytes:
 	return base64.b64decode(x)
 
@@ -25,6 +29,12 @@ def run(mod):
 	if 'Call' in entrypoint:
 		calldata = json.loads(entrypoint['Call'])
 		meth = getattr(mod, calldata['method'])
-		meth(*calldata['args'])
+		res = meth(*calldata['args'])
+		if res is None:
+			exit(0)
+		elif isinstance(res, AlreadySerializedResult):
+			wasi.contract_return(res)
+		else:
+			wasi.contract_return(json.dumps(res))
 	else:
 		raise Exception(f"unknown entrypoint {entrypoint}")

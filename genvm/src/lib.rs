@@ -5,7 +5,7 @@ pub mod wasi;
 pub mod node_iface;
 
 use anyhow::{Context as _, Result};
-use wasi::preview1;
+use wasi::{genlayer_sdk, preview1};
 use core::str;
 use std::{borrow::BorrowMut, path::Path, sync::Arc};
 
@@ -50,7 +50,12 @@ fn instantiate_from_text(supervisor: &mut vm::Supervisor, api: &mut dyn Required
             node_iface::InitAction::MapCode { to } => ret_vm.store.data_mut().genlayer_ctx_mut().preview1.map_file(&to, code.clone())?,
             node_iface::InitAction::AddEnv { name, val } => env.push((name, val)),
             node_iface::InitAction::SetArgs { args } => ret_vm.store.data_mut().genlayer_ctx_mut().preview1.set_args(&args[..])?,
-            node_iface::InitAction::LinkWasm { contents, debug_path } => { link_wasm_into(supervisor, ret_vm, Arc::new(contents), debug_path)?; },
+            node_iface::InitAction::LinkWasm { contents, debug_path } => {
+                let module = link_wasm_into(supervisor, ret_vm, Arc::new(contents), debug_path.clone())?;
+                let instance = ret_vm.linker.instantiate(&mut ret_vm.store, &module)?;
+                let name = module.name().ok_or(anyhow::anyhow!("can't link unnamed module {:?}", &debug_path))?;
+                ret_vm.linker.instance(&mut ret_vm.store, name, instance)?;
+            },
             node_iface::InitAction::StartWasm { contents, debug_path } => {
                 ret_vm.store.data_mut().genlayer_ctx_mut().preview1.set_env(&env[..])?;
                 let module = link_wasm_into(supervisor, ret_vm, Arc::new(contents), debug_path)?;
@@ -61,7 +66,15 @@ fn instantiate_from_text(supervisor: &mut vm::Supervisor, api: &mut dyn Required
     Err(anyhow::anyhow!("actions returned by runner do not have a start instruction"))
 }
 
-fn create_and_run_vm_for(supervisor: &mut vm::Supervisor, api: &mut dyn RequiredApis, code: Arc<Vec<u8>>, data: wasi::genlayer_sdk::EssentialGenlayerSdkData) -> Result<()> {
+#[derive(Debug)]
+pub enum VMRunResult {
+    Void,
+    Return(String),
+    Rollback(String),
+    Error(String),
+}
+
+fn create_and_run_vm_for(supervisor: &mut vm::Supervisor, api: &mut dyn RequiredApis, code: Arc<Vec<u8>>, data: wasi::genlayer_sdk::EssentialGenlayerSdkData) -> Result<VMRunResult> {
     let mut ret_vm = supervisor.spawn(data)?;
 
     let init_fuel = ret_vm.store.get_fuel().unwrap_or(0);
@@ -79,22 +92,25 @@ fn create_and_run_vm_for(supervisor: &mut vm::Supervisor, api: &mut dyn Required
             get_typed_func::<(), ()>(&mut ret_vm.store, "")
                 .or_else(|_| instance.get_typed_func::<(), ()>(&mut ret_vm.store, "_start"))
                 .with_context(|| "can't find entrypoint")?;
-    let res = func.call(&mut ret_vm.store, ());
-    let res = match res {
-        Ok(f) => Ok(f),
-        Err(e) => match e.downcast_ref::<preview1::I32Exit>().map(|e| e.0) {
-            Some(0) => Ok(()),
-            _ => Err(e),
+    let res: VMRunResult = match func.call(&mut ret_vm.store, ()) {
+        Ok(()) => VMRunResult::Void,
+        Err(e) => {
+            let res: Option<VMRunResult> = [
+                e.downcast_ref::<preview1::I32Exit>().and_then(|v| if v.0 == 0 { Some(VMRunResult::Void) } else { None }),
+                e.downcast_ref::<genlayer_sdk::Rollback>().map(|v| VMRunResult::Rollback(v.0.clone()) ),
+                e.downcast_ref::<genlayer_sdk::ContractReturn>().map(|v| VMRunResult::Return(v.0.clone())),
+            ].into_iter().fold(None, |x, y| if x.is_some() { x } else { y });
+            res.unwrap_or(VMRunResult::Error(format!("{}", e)))
         },
-    }?;
+    };
 
     let remaining_fuel = ret_vm.store.get_fuel().unwrap_or(0);
     eprintln!("remaining fuel: {remaining_fuel}\nconsumed fuel: {}", u64::wrapping_sub(init_fuel, remaining_fuel));
 
-    Ok(())
+    Ok(res)
 }
 
-pub fn run_with_api(api: &mut dyn RequiredApis) -> Result<()> {
+pub fn run_with_api(api: &mut dyn RequiredApis) -> Result<VMRunResult> {
     let mut supervisor = vm::Supervisor::new()?;
 
     let init_data = api.get_initial_data()?;
@@ -110,7 +126,5 @@ pub fn run_with_api(api: &mut dyn RequiredApis) -> Result<()> {
         message_data: init_data,
     };
 
-    create_and_run_vm_for(&mut supervisor, api, code, data)?;
-
-    Ok(())
+    create_and_run_vm_for(&mut supervisor, api, code, data)
 }

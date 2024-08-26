@@ -12,4 +12,14 @@
 )
 
 (typename $bytes_len u32)
+
+(typename $bytes
+    (record
+        ;;; The address of the buffer to be written.
+        (field $buf (@witx const_pointer u8))
+        ;;; The length of the buffer to be written.
+        (field $buf_len $bytes_len)
+    )
+)
+
 (typename $none u32)

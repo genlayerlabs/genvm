@@ -126,6 +126,17 @@ impl std::fmt::Display for Rollback {
     }
 }
 
+#[derive(Debug)]
+pub struct ContractReturn(pub String);
+
+impl std::error::Error for ContractReturn {}
+
+impl std::fmt::Display for ContractReturn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Rolled back with {}", self.0)
+    }
+}
+
 impl ContextData {
     fn ensure_det(&self) -> Result<(), generated::types::Error> {
         if self.data.conf.is_deterministic {
@@ -239,5 +250,25 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             Err(e) => e.into(),
             Ok(str) => Rollback(str).into(),
         }
+    }
+
+    fn contract_return(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        message: wiggle::GuestPtr<str>,
+    ) -> anyhow::Error {
+        match super::common::read_string(mem, message) {
+            Err(e) => e.into(),
+            Ok(str) => ContractReturn(str).into(),
+        }
+    }
+
+    fn run_nondet(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        eq_principle: wiggle::GuestPtr<str>,
+        data: &generated::types::Bytes,
+    ) -> Result<generated::types::BytesLen, generated::types::Error> {
+        todo!()
     }
 }

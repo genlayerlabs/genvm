@@ -460,11 +460,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "genvm-sdk-rust",
+ "glob",
  "rustpython",
  "rustpython-compiler",
  "rustpython-compiler-core",
  "rustpython-derive",
  "rustpython-vm",
+ "softfloat",
 ]
 
 [[package]]
@@ -1751,6 +1753,12 @@ dependencies = [
  "libc",
  "windows-sys 0.52.0",
 ]
+
+[[package]]
+name = "softfloat"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "359a2aa2309eed307acc397678f7fbb43989db6ee417a11752248fc98451e696"
 
 [[package]]
 name = "static_assertions"

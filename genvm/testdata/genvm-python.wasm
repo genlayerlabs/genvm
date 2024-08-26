@@ -1,1 +1,1 @@
-../../sdk-python/target/wasm32-wasi/release/genvm-python.wasm
+../../sdk-python/target/wasm32-wasi/release/genvm-python.nof.wasm

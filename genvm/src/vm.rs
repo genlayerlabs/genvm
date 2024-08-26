@@ -35,9 +35,7 @@ pub struct PrecompiledModule {
 
 pub struct Supervisor {
     det_engine: Engine,
-    det_validator: wasmparser::Validator,
     non_det_engine: Engine,
-    non_det_validator: wasmparser::Validator,
     cached_modules: HashMap<Arc<Vec<u8>>, Arc<PrecompiledModule>>,
 }
 
@@ -77,13 +75,9 @@ impl Supervisor {
 
         let det_engine = Engine::new(&det_conf)?;
         let non_det_engine= Engine::new(&non_det_conf)?;
-        let det_validator = wasmparser::Validator::new_with_features(*det_engine.config().get_features());
-        let non_det_validator = wasmparser::Validator::new_with_features(*det_engine.config().get_features());
         Ok(Self {
             det_engine,
-            det_validator,
             non_det_engine,
-            non_det_validator,
             cached_modules: HashMap::new(),
         })
     }
@@ -93,15 +87,17 @@ impl Supervisor {
         match entry {
             std::collections::hash_map::Entry::Occupied(entry) => Ok(entry.get().clone()),
             std::collections::hash_map::Entry::Vacant(entry) => {
-                self.det_validator.validate_all(&module_bytes[..])?;
-                self.non_det_validator.validate_all(&module_bytes[..])?;
+                let mut det_validator = wasmparser::Validator::new_with_features(*self.det_engine.config().get_features());
+                let mut non_det_validator = wasmparser::Validator::new_with_features(*self.det_engine.config().get_features());
+                det_validator.validate_all(&module_bytes[..])?;
+                non_det_validator.validate_all(&module_bytes[..])?;
                 let module_det = wasmtime::CodeBuilder::new(&self.det_engine)
                     .wasm_binary(&module_bytes[..], path)?
                     .compile_module()?;
 
                 let module_non_det = wasmtime::CodeBuilder::new(&self.non_det_engine)
-                .wasm_binary(&module_bytes[..], path)?
-                .compile_module()?;
+                    .wasm_binary(&module_bytes[..], path)?
+                    .compile_module()?;
                 let ret = PrecompiledModule {
                     det: module_det,
                     non_det: module_non_det,

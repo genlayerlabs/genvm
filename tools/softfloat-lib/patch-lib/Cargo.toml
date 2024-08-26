@@ -1,0 +1,9 @@
+[package]
+name = "genvm-softfloat-lib-patcher"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.86"
+wasm-encoder = { version = "0.216.0", features = ["wasmparser"]}
+wasmparser = "0.216.0"

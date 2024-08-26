@@ -7,7 +7,7 @@ mod test_node_iface_impl {
     use std::{collections::HashMap, sync::Arc};
     use genvm::*;
 
-    use node_iface::{self, Address};
+    use node_iface::{self};
     use anyhow::Result;
     use serde::{Deserialize, Serialize};
 
@@ -17,8 +17,8 @@ mod test_node_iface_impl {
         MapCode { to: String },
         AddEnv { name: String, val: String },
         SetArgs { args: Vec<String> },
-        LinkWasm { file: String, debug_path: Option<String> },
-        StartWasm { file: String, debug_path: Option<String> },
+        LinkWasm { file: String },
+        StartWasm { file: String },
     }
 
     #[derive(Serialize, Deserialize, Clone)]
@@ -42,8 +42,8 @@ mod test_node_iface_impl {
                 FakeInitAction::MapCode { to } => node_iface::InitAction::MapCode { to },
                 FakeInitAction::AddEnv { name, val } => node_iface::InitAction::AddEnv { name, val },
                 FakeInitAction::SetArgs { args } => node_iface::InitAction::SetArgs { args },
-                FakeInitAction::LinkWasm { file, debug_path } => node_iface::InitAction::LinkWasm { contents: std::fs::read(file)?, debug_path },
-                FakeInitAction::StartWasm { file, debug_path } => node_iface::InitAction::StartWasm { contents: std::fs::read(file)?, debug_path },
+                FakeInitAction::LinkWasm { file } => node_iface::InitAction::LinkWasm { contents: std::fs::read(&file)?, debug_path: Some(file), },
+                FakeInitAction::StartWasm { file } => node_iface::InitAction::StartWasm { contents: std::fs::read(&file)?, debug_path: Some(file), },
             })
         }
     }
@@ -162,6 +162,7 @@ fn main() -> Result<()> {
     let conf = serde_json::from_value(conf)?;
 
     let mut node_api = test_node_iface_impl::TestApi::new(conf);
-    genvm::run_with_api(&mut node_api)?;
+    let res = genvm::run_with_api(&mut node_api)?;
+    println!("executed with {res:?}");
     Ok(())
 }

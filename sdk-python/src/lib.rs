@@ -7,11 +7,12 @@ pub fn make_gensdk_module(vm: &::rustpython_vm::VirtualMachine) -> rustpython_vm
 #[pymodule]
 pub mod genlayer_sdk {
     use rustpython::vm::{builtins::PyStrRef, PyResult, VirtualMachine};
+    use rustpython_vm::builtins::{PyBytes, PyBytesRef};
 
     fn map_error<T>(vm: &VirtualMachine, res: Result<T, genvm_sdk_rust::Errno>) -> PyResult<T> {
         res.map_err(
             |e|
-                vm.new_errno_error(e.raw() as i32, "sdk internal error".into())
+                vm.new_errno_error(e.raw() as i32, "sdk error".into())
         )
     }
 
@@ -22,17 +23,49 @@ pub mod genlayer_sdk {
         Ok(())
     }
 
-    fn read_result(vm: &VirtualMachine, len: u32) -> PyResult<String> {
+    #[pyfunction]
+    fn contract_return(s: PyStrRef) -> PyResult<()> {
+        let s = s.as_str();
+        unsafe { genvm_sdk_rust::contract_return(s.as_ref()) };
+        Ok(())
+    }
+
+    #[pyfunction]
+    fn run_nondet(eq_principle: PyStrRef, calldata: PyBytesRef, vm: &VirtualMachine) -> PyResult<PyBytes> {
+        let eq_principle = eq_principle.as_str();
+        let calldata: &[u8] = calldata.as_bytes();
+        let len = map_error(vm, unsafe {
+            genvm_sdk_rust::run_nondet(
+                eq_principle.as_ref(),
+                genvm_sdk_rust::Bytes {
+                    buf: calldata.as_ptr(),
+                    buf_len: calldata.len() as u32,
+                }
+            )
+        })?;
+        read_result_bytes(vm, len)
+    }
+
+    fn read_result_str(vm: &VirtualMachine, len: u32) -> PyResult<String> {
         let mut ret = Vec::<u8>::new();
         ret.resize(len as usize, 0);
         map_error(vm, unsafe { genvm_sdk_rust::read_result(ret.as_mut_ptr(), len) })?;
-        map_error(vm, String::from_utf8(ret).map_err(|_e| genvm_sdk_rust::ERRNO_ILSEQ))
+        String::from_utf8(ret).map_err(|_e| {
+            vm.new_buffer_error(String::from("invalid utf8 seq"))
+        })
+    }
+
+    fn read_result_bytes(vm: &VirtualMachine, len: u32) -> PyResult<PyBytes> {
+        let mut ret = Vec::<u8>::new();
+        ret.resize(len as usize, 0);
+        map_error(vm, unsafe { genvm_sdk_rust::read_result(ret.as_mut_ptr(), len) })?;
+        Ok(PyBytes::from(ret))
     }
 
     #[pyfunction]
     fn get_message_data(vm: &VirtualMachine) -> PyResult<String> {
         let len = map_error(vm, unsafe { genvm_sdk_rust::get_message_data() })?;
 
-        read_result(vm, len)
+        read_result_str(vm, len)
     }
 }

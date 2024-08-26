@@ -8,7 +8,18 @@
         (@witx noreturn)
     )
 
+    (@interface func (export "contract_return")
+        (param $message string)
+        (@witx noreturn)
+    )
+
     (@interface func (export "get_message_data")
+        (result $error (expected $bytes_len (error $errno)))
+    )
+
+    (@interface func (export "run_nondet")
+        (param $eq_principle string)
+        (param $calldata $bytes)
         (result $error (expected $bytes_len (error $errno)))
     )
 
