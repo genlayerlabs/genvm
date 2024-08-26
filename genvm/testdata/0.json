@@ -23,7 +23,8 @@
         "gas": 18446744073709551615,
         "contract_account": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         "sender_account": "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-        "value": null,
-        "entrypoint": { "Call": "{\"method\": \"init\", \"args\": []}" }
-    }
+        "value": null
+    },
+
+    "calldata": "{\"method\": \"init\", \"args\": []}"
 }

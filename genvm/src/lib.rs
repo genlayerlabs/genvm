@@ -5,126 +5,82 @@ pub mod wasi;
 pub mod node_iface;
 
 use anyhow::{Context as _, Result};
+use node_iface::{InitAction, MessageData};
+use vm::InitActions;
 use wasi::{genlayer_sdk, preview1};
 use core::str;
-use std::{borrow::BorrowMut, path::Path, sync::Arc};
+use std::{borrow::BorrowMut, path::Path, sync::{Arc, Mutex}};
 
-pub trait RequiredApis: node_iface::InitApi + node_iface::RunnerApi {}
+pub trait RequiredApis: node_iface::InitApi + node_iface::RunnerApi + Send + Sync {}
 
-fn link_wasm_into(supervisor: &mut vm::Supervisor, ret_vm: &mut vm::VM, contents: Arc<Vec<u8>>, debug_path: Option<String>) -> Result<wasmtime::Module> {
-    let is_some = debug_path.is_some();
-    let v = debug_path.unwrap_or_default();
-    let debug_path = if is_some { Some(Path::new(&v[..])) } else { None };
-    let prec = supervisor.cache_module(contents, debug_path)?;
-    if ret_vm.is_det() {
-        Ok(prec.det.clone())
-    } else {
-        Ok(prec.non_det.clone())
-    }
-}
-
-fn instantiate_from_text(supervisor: &mut vm::Supervisor, api: &mut dyn RequiredApis, code: Arc<Vec<u8>>, ret_vm: &mut vm::VM) -> Result<wasmtime::Instance> {
-    let code_str = str::from_utf8(&code[..])?;
-    let code_start = (|| {
-        for c in ["//", "#", "--"] {
-            if code_str.starts_with(c) {
-                return Ok(c)
-            }
-        }
-        return Err(anyhow::anyhow!("can't detect comment in text contract {}", &code_str[..10]));
-    })()?;
-    let mut code_comment = String::new();
-    for l in code_str.lines() {
-        if !l.starts_with(code_start) {
-            break;
-        }
-        code_comment.push_str(&l[code_start.len()..])
-    }
-    let runner_desc = serde_json::from_str(&code_comment)?;
-    let runner = api.get_runner(runner_desc)?;
-    let mut env = Vec::new();
-
-    for act in runner {
-        match act {
-            node_iface::InitAction::MapFile { to, contents } => ret_vm.store.data_mut().genlayer_ctx_mut().preview1.map_file(&to, Arc::new(contents))?,
-            node_iface::InitAction::MapCode { to } => ret_vm.store.data_mut().genlayer_ctx_mut().preview1.map_file(&to, code.clone())?,
-            node_iface::InitAction::AddEnv { name, val } => env.push((name, val)),
-            node_iface::InitAction::SetArgs { args } => ret_vm.store.data_mut().genlayer_ctx_mut().preview1.set_args(&args[..])?,
-            node_iface::InitAction::LinkWasm { contents, debug_path } => {
-                let module = link_wasm_into(supervisor, ret_vm, Arc::new(contents), debug_path.clone())?;
-                let instance = ret_vm.linker.instantiate(&mut ret_vm.store, &module)?;
-                let name = module.name().ok_or(anyhow::anyhow!("can't link unnamed module {:?}", &debug_path))?;
-                ret_vm.linker.instance(&mut ret_vm.store, name, instance)?;
-            },
-            node_iface::InitAction::StartWasm { contents, debug_path } => {
-                ret_vm.store.data_mut().genlayer_ctx_mut().preview1.set_env(&env[..])?;
-                let module = link_wasm_into(supervisor, ret_vm, Arc::new(contents), debug_path)?;
-                return ret_vm.linker.instantiate(ret_vm.store.borrow_mut() as &mut wasmtime::Store<_>, &module);
-            },
-        }
-    }
-    Err(anyhow::anyhow!("actions returned by runner do not have a start instruction"))
-}
-
-#[derive(Debug)]
-pub enum VMRunResult {
-    Void,
-    Return(String),
-    Rollback(String),
-    Error(String),
-}
-
-fn create_and_run_vm_for(supervisor: &mut vm::Supervisor, api: &mut dyn RequiredApis, code: Arc<Vec<u8>>, data: wasi::genlayer_sdk::EssentialGenlayerSdkData) -> Result<VMRunResult> {
-    let mut ret_vm = supervisor.spawn(data)?;
-
-    let init_fuel = ret_vm.store.get_fuel().unwrap_or(0);
-
-    let instance =
+pub fn get_actions(supervisor: &mut vm::Supervisor, message_data: &MessageData) -> Result<InitActions> {
+    let code: Arc<Vec<u8>> = supervisor.api.get_code(&message_data.contract_account)?;
+    let actions =
         if wasmparser::Parser::is_core_wasm(&code[..]) {
-            let prec = supervisor.cache_module(code, Some(Path::new("/contract.wasm")))?;
-            ret_vm.linker.instantiate(&mut ret_vm.store, &prec.det)
+            Vec::from([InitAction::StartWasm { contents: code.clone(), debug_path: Some("<contract>".into()) }])
         } else {
-            instantiate_from_text(supervisor, api, code, &mut ret_vm)
-        }?;
+            let code_str = str::from_utf8(&code[..])?;
+            let code_start = (|| {
+                for c in ["//", "#", "--"] {
+                    if code_str.starts_with(c) {
+                        return Ok(c)
+                    }
+                }
+                return Err(anyhow::anyhow!("can't detect comment in text contract {}", &code_str[..10]));
+            })()?;
+            let mut code_comment = String::new();
+            for l in code_str.lines() {
+                if !l.starts_with(code_start) {
+                    break;
+                }
+                code_comment.push_str(&l[code_start.len()..])
+            }
+            let runner_desc = serde_json::from_str(&code_comment)?;
+            supervisor.api.get_runner(runner_desc)?
+        };
 
-    let func =
-        instance.
-            get_typed_func::<(), ()>(&mut ret_vm.store, "")
-                .or_else(|_| instance.get_typed_func::<(), ()>(&mut ret_vm.store, "_start"))
-                .with_context(|| "can't find entrypoint")?;
-    let res: VMRunResult = match func.call(&mut ret_vm.store, ()) {
-        Ok(()) => VMRunResult::Void,
-        Err(e) => {
-            let res: Option<VMRunResult> = [
-                e.downcast_ref::<preview1::I32Exit>().and_then(|v| if v.0 == 0 { Some(VMRunResult::Void) } else { None }),
-                e.downcast_ref::<genlayer_sdk::Rollback>().map(|v| VMRunResult::Rollback(v.0.clone()) ),
-                e.downcast_ref::<genlayer_sdk::ContractReturn>().map(|v| VMRunResult::Return(v.0.clone())),
-            ].into_iter().fold(None, |x, y| if x.is_some() { x } else { y });
-            res.unwrap_or(VMRunResult::Error(format!("{}", e)))
-        },
-    };
-
-    let remaining_fuel = ret_vm.store.get_fuel().unwrap_or(0);
-    eprintln!("remaining fuel: {remaining_fuel}\nconsumed fuel: {}", u64::wrapping_sub(init_fuel, remaining_fuel));
-
-    Ok(res)
+    Ok(InitActions {
+        code: code,
+        actions: Arc::new(actions),
+    })
 }
 
-pub fn run_with_api(api: &mut dyn RequiredApis) -> Result<VMRunResult> {
-    let mut supervisor = vm::Supervisor::new()?;
+pub fn run_with_api(mut api: Box<dyn RequiredApis>) -> Result<crate::vm::VMRunResult> {
+
+    let mut entrypoint = b"call!".to_vec();
+    let calldata = api.get_calldata()?;
+    entrypoint.extend_from_slice(calldata.as_bytes());
 
     let init_data = api.get_initial_data()?;
 
-    let code = api.get_code(&init_data.contract_account)?;
+    let supervisor = Arc::new(Mutex::new(vm::Supervisor::new(api)?));
 
-    let data = wasi::genlayer_sdk::EssentialGenlayerSdkData {
-        conf: wasi::base::Config {
-            is_deterministic: true,
-            can_read_storage: true,
-            can_write_storage: true
-        },
-        message_data: init_data,
+    let (mut vm, instance) = {
+        let supervisor_clone = supervisor.clone();
+        let Ok(mut supervisor) = supervisor.lock() else { return Err(anyhow::anyhow!("can't lock supervisor")); };
+        let init_actions = get_actions(&mut supervisor, &init_data)?;
+
+        let essential_data = wasi::genlayer_sdk::EssentialGenlayerSdkData {
+            conf: wasi::base::Config {
+                is_deterministic: true,
+                can_read_storage: true,
+                can_write_storage: true
+            },
+            message_data: init_data,
+            entrypoint,
+            supervisor: supervisor_clone,
+            init_actions,
+        };
+
+        let mut vm = supervisor.spawn(essential_data)?;
+        let instance = supervisor.apply_actions(&mut vm)?;
+        (vm, instance)
     };
 
-    create_and_run_vm_for(&mut supervisor, api, code, data)
+    let init_fuel = vm.store.get_fuel().unwrap_or(0);
+    let res = vm.run(&instance)?;
+    let remaining_fuel = vm.store.get_fuel().unwrap_or(0);
+    eprintln!("remaining fuel: {remaining_fuel}\nconsumed fuel: {}", u64::wrapping_sub(init_fuel, remaining_fuel));
+
+    Ok(res)
 }

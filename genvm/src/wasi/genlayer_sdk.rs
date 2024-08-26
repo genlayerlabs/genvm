@@ -1,13 +1,18 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use wasmtime::StoreContextMut;
 use wiggle::GuestError;
+
+use crate::vm::InitActions;
 
 use super::base;
 
 pub struct EssentialGenlayerSdkData {
     pub conf: base::Config,
     pub message_data: crate::node_iface::MessageData,
+    pub entrypoint: Vec<u8>,
+    pub supervisor: Arc<Mutex<crate::vm::Supervisor>>,
+    pub init_actions: InitActions,
 }
 
 pub struct ContextData {
@@ -29,6 +34,12 @@ pub(crate) mod generated {
         errors: { errno => trappable Error },
         target: self,
     });
+}
+
+impl generated::types::Bytes {
+    fn read_owned(&self, mem: &mut wiggle::GuestMemory<'_>) -> Result<Vec<u8>, generated::types::Error> {
+        Ok(mem.as_cow(self.buf.as_array(self.buf_len))?.into_owned())
+    }
 }
 
 impl ContextData {
@@ -127,22 +138,22 @@ impl std::fmt::Display for Rollback {
 }
 
 #[derive(Debug)]
-pub struct ContractReturn(pub String);
+pub struct ContractReturn(pub Vec<u8>);
 
 impl std::error::Error for ContractReturn {}
 
 impl std::fmt::Display for ContractReturn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Rolled back with {}", self.0)
+        write!(f, "Returned {:?}", self.0)
     }
 }
 
 impl ContextData {
     fn ensure_det(&self) -> Result<(), generated::types::Error> {
         if self.data.conf.is_deterministic {
-            Err(generated::types::Errno::DeterministicViolation.into())
-        } else {
             Ok(())
+        } else {
+            Err(generated::types::Errno::DeterministicViolation.into())
         }
     }
 }
@@ -221,6 +232,14 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         self.set_result(Vec::from(res))
     }
 
+    fn get_entrypoint(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+    ) -> Result<generated::types::BytesLen, generated::types::Error> {
+        let ep = self.data_mut().data.entrypoint.clone();
+        self.set_result(ep)
+    }
+
     fn read_result(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
@@ -255,12 +274,11 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
     fn contract_return(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        message: wiggle::GuestPtr<str>,
+        message: &generated::types::Bytes,
     ) -> anyhow::Error {
-        match super::common::read_string(mem, message) {
-            Err(e) => e.into(),
-            Ok(str) => ContractReturn(str).into(),
-        }
+        let res = message.read_owned(mem);
+        let Ok(res) = res else { return res.unwrap_err().into(); };
+        ContractReturn(res).into()
     }
 
     fn run_nondet(
@@ -269,6 +287,47 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         eq_principle: wiggle::GuestPtr<str>,
         data: &generated::types::Bytes,
     ) -> Result<generated::types::BytesLen, generated::types::Error> {
-        todo!()
+        self.data_mut().ensure_det()?;
+
+        let cow = mem.as_cow(data.buf.as_array(data.buf_len))?;
+        let mut entrypoint = Vec::from(b"nondet!");
+        entrypoint.extend(cow.iter());
+
+        let supervisor = self.data_mut().data.supervisor.clone();
+
+        let essential_data = EssentialGenlayerSdkData {
+            conf: base::Config {
+                is_deterministic: false,
+                can_read_storage: false,
+                can_write_storage: false
+            },
+            message_data: self.data_mut().data.message_data.clone(),
+            entrypoint,
+            supervisor: supervisor.clone(),
+            init_actions: self.data_mut().data.init_actions.clone(),
+        };
+
+        let (mut vm, instance) = {
+            let Ok(mut supervisor) = supervisor.lock() else { return Err(generated::types::Errno::Io.into()); };
+            let mut vm = supervisor.spawn(essential_data).map_err(|_e| generated::types::Errno::Io)?;
+            let instance = supervisor.apply_actions(&mut vm).map_err(|_e| generated::types::Errno::Io)?;
+            (vm, instance)
+        };
+
+        let pre_fuel = self.stor.get_fuel().map_err(|_e| generated::types::Errno::Io)?;
+        vm.store.set_fuel(pre_fuel).map_err(|_e| generated::types::Errno::Io)?;
+
+        let res = vm.run(&instance).map_err(|_e| generated::types::Errno::Io);
+
+        let remaining_fuel = vm.store.get_fuel().unwrap_or(0);
+        let _ = self.stor.set_fuel(remaining_fuel);
+
+        match res? {
+            crate::vm::VMRunResult::Return(r) => {
+                self.set_result(r)
+            },
+            crate::vm::VMRunResult::Rollback(r) => Err(generated::types::Error::trap(Rollback(r).into())),
+            crate::vm::VMRunResult::Error(e) => Err(generated::types::Error::trap(Rollback(format!("subvm failed {}", e)).into())),
+        }
     }
 }

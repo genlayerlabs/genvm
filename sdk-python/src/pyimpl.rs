@@ -24,9 +24,13 @@ pub mod genlayer_sdk {
     }
 
     #[pyfunction]
-    fn contract_return(s: PyStrRef) -> PyResult<()> {
-        let s = s.as_str();
-        unsafe { genvm_sdk_rust::contract_return(s.as_ref()) };
+    fn contract_return(s: PyBytesRef) -> PyResult<()> {
+        unsafe { genvm_sdk_rust::contract_return(
+            genvm_sdk_rust::Bytes {
+                buf: s.as_ptr(),
+                buf_len: s.len() as u32,
+            }
+        ) };
         Ok(())
     }
 
@@ -67,5 +71,12 @@ pub mod genlayer_sdk {
         let len = map_error(vm, unsafe { genvm_sdk_rust::get_message_data() })?;
 
         read_result_str(vm, len)
+    }
+
+    #[pyfunction]
+    fn get_entrypoint(vm: &VirtualMachine) -> PyResult<PyBytes> {
+        let len = map_error(vm, unsafe { genvm_sdk_rust::get_entrypoint() })?;
+
+        read_result_bytes(vm, len)
     }
 }

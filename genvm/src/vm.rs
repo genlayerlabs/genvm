@@ -1,10 +1,10 @@
-use std::{collections::HashMap, path::Path};
+use std::{borrow::Borrow, collections::HashMap, path::Path};
 
 use wasmtime::{Module, Engine, Store, Linker};
 
 use std::sync::{Arc, Mutex};
-use crate::wasi;
-use anyhow::Result;
+use crate::{node_iface::InitAction, wasi};
+use anyhow::{Context, Result};
 
 #[derive(Clone)]
 pub struct Host {
@@ -37,22 +37,57 @@ pub struct Supervisor {
     det_engine: Engine,
     non_det_engine: Engine,
     cached_modules: HashMap<Arc<Vec<u8>>, Arc<PrecompiledModule>>,
+    pub api: Box<dyn crate::RequiredApis>,
+}
+
+#[derive(Clone)]
+pub struct InitActions {
+    pub code: Arc<Vec<u8>>,
+    pub actions: Arc<Vec<InitAction>>,
 }
 
 pub struct VM {
     pub store: Store<Host>,
     pub linker: Linker<Host>,
     pub config_copy: wasi::base::Config,
+    pub init_actions: InitActions
+}
+
+#[derive(Debug)]
+pub enum VMRunResult {
+    Return(Vec<u8>),
+    Rollback(String),
+    Error(String),
 }
 
 impl VM {
     pub fn is_det(&self) -> bool {
         self.config_copy.is_deterministic
     }
+
+    pub fn run(&mut self, instance: &wasmtime::Instance) -> Result<VMRunResult> {
+        let func =
+            instance.
+                get_typed_func::<(), ()>(&mut self.store, "")
+                    .or_else(|_| instance.get_typed_func::<(), ()>(&mut self.store, "_start"))
+                    .with_context(|| "can't find entrypoint")?;
+        let res: VMRunResult = match func.call(&mut self.store, ()) {
+            Ok(()) => VMRunResult::Return(Vec::new()),
+            Err(e) => {
+                let res: Option<VMRunResult> = [
+                    e.downcast_ref::<crate::wasi::preview1::I32Exit>().and_then(|v| if v.0 == 0 { Some(VMRunResult::Return(Vec::new())) } else { None }),
+                    e.downcast_ref::<crate::wasi::genlayer_sdk::Rollback>().map(|v| VMRunResult::Rollback(v.0.clone()) ),
+                    e.downcast_ref::<crate::wasi::genlayer_sdk::ContractReturn>().map(|v| VMRunResult::Return(v.0.clone())),
+                ].into_iter().fold(None, |x, y| if x.is_some() { x } else { y });
+                res.unwrap_or(VMRunResult::Error(format!("{}", e)))
+            },
+        };
+        Ok(res)
+    }
 }
 
 impl Supervisor {
-    pub fn new() -> Result<Self> {
+    pub fn new(api: Box<dyn crate::RequiredApis>) -> Result<Self> {
         let mut base_conf = wasmtime::Config::default();
         base_conf.cranelift_opt_level(wasmtime::OptLevel::None);
         //base_conf.cranelift_opt_level(wasmtime::OptLevel::Speed);
@@ -79,6 +114,7 @@ impl Supervisor {
             det_engine,
             non_det_engine,
             cached_modules: HashMap::new(),
+            api,
         })
     }
 
@@ -109,6 +145,7 @@ impl Supervisor {
 
     pub fn spawn(&mut self, data: crate::wasi::genlayer_sdk::EssentialGenlayerSdkData) -> Result<VM> {
         let config_copy = data.conf.clone();
+        let init_actions = data.init_actions.clone();
 
         let engine = if data.conf.is_deterministic { &self.det_engine } else { &self.non_det_engine };
 
@@ -128,6 +165,44 @@ impl Supervisor {
             store,
             linker,
             config_copy,
+            init_actions,
         })
+    }
+
+    fn link_wasm_into(&mut self, ret_vm: &mut VM, contents: Arc<Vec<u8>>, debug_path: &Option<String>) -> Result<wasmtime::Module> {
+        let is_some = debug_path.is_some();
+        let v = debug_path.clone().unwrap_or_default();
+        let debug_path = if is_some { Some(Path::new(&v[..])) } else { None };
+        let prec = self.cache_module(contents, debug_path)?;
+        if ret_vm.is_det() {
+            Ok(prec.det.clone())
+        } else {
+            Ok(prec.non_det.clone())
+        }
+    }
+
+    pub fn apply_actions(&mut self, vm: &mut VM) -> Result<wasmtime::Instance> {
+        let mut env = Vec::new();
+
+        for act in vm.init_actions.actions.clone().iter() {
+            match act {
+                crate::node_iface::InitAction::MapFile { to, contents } => vm.store.data_mut().genlayer_ctx_mut().preview1.map_file(&to, contents.clone())?,
+                crate::node_iface::InitAction::MapCode { to } => vm.store.data_mut().genlayer_ctx_mut().preview1.map_file(&to, vm.init_actions.code.clone())?,
+                crate::node_iface::InitAction::AddEnv { name, val } => env.push((name.clone(), val.clone())),
+                crate::node_iface::InitAction::SetArgs { args } => vm.store.data_mut().genlayer_ctx_mut().preview1.set_args(&args[..])?,
+                crate::node_iface::InitAction::LinkWasm { contents, debug_path } => {
+                    let module = self.link_wasm_into(vm, contents.clone(), debug_path)?;
+                    let instance = vm.linker.instantiate(&mut vm.store, &module)?;
+                    let name = module.name().ok_or(anyhow::anyhow!("can't link unnamed module {:?}", &debug_path))?;
+                    vm.linker.instance(&mut vm.store, name, instance)?;
+                },
+                crate::node_iface::InitAction::StartWasm { contents, debug_path } => {
+                    vm.store.data_mut().genlayer_ctx_mut().preview1.set_env(&env[..])?;
+                    let module = self.link_wasm_into(vm, contents.clone(), debug_path)?;
+                    return vm.linker.instantiate(&mut vm.store, &module);
+                },
+            }
+        }
+        Err(anyhow::anyhow!("actions returned by runner do not have a start instruction"))
     }
 }

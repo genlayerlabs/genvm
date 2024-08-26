@@ -9,11 +9,15 @@
     )
 
     (@interface func (export "contract_return")
-        (param $message string)
+        (param $result $bytes)
         (@witx noreturn)
     )
 
     (@interface func (export "get_message_data")
+        (result $error (expected $bytes_len (error $errno)))
+    )
+
+    (@interface func (export "get_entrypoint")
         (result $error (expected $bytes_len (error $errno)))
     )
 

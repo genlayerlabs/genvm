@@ -29,19 +29,11 @@ pub struct Calldata {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub enum Entrypoint {
-    /// See [Calldata]
-    Call(String),
-    Nondet { eq_principe: String, data: Vec<u8> },
-}
-
-#[derive(Serialize, Deserialize, Clone)]
 pub struct MessageData {
     pub gas: u64,
     pub contract_account: Address,
     pub sender_account: Address,
     pub value: Option<u64>,
-    pub entrypoint: Entrypoint,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -51,16 +43,18 @@ pub struct RunnerDescription {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub enum InitAction {
-    MapFile { to: String, contents: Vec<u8> },
+    MapFile { to: String, contents: Arc<Vec<u8>> },
     MapCode { to: String },
     AddEnv { name: String, val: String },
     SetArgs { args: Vec<String> },
-    LinkWasm { contents: Vec<u8>, debug_path: Option<String> },
-    StartWasm { contents: Vec<u8>, debug_path: Option<String> },
+    LinkWasm { contents: Arc<Vec<u8>>, debug_path: Option<String> },
+    StartWasm { contents: Arc<Vec<u8>>, debug_path: Option<String> },
 }
 
 pub trait InitApi {
     fn get_initial_data(&mut self) -> Result<MessageData>;
+
+    fn get_calldata(&mut self) -> Result<String>;
 
     fn get_code(&mut self, account: &Address) -> Result<Arc<Vec<u8>>>;
 }

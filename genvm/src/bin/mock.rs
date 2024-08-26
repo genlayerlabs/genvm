@@ -31,6 +31,7 @@ mod test_node_iface_impl {
         accounts: HashMap<String, FakeAccount>,
         runners: HashMap<String, Vec<FakeInitAction>>,
         message: node_iface::MessageData,
+        calldata: String
     }
 
     impl TryFrom<FakeInitAction> for node_iface::InitAction {
@@ -38,12 +39,12 @@ mod test_node_iface_impl {
 
         fn try_from(value: FakeInitAction) -> Result<Self> {
             Ok(match value {
-                FakeInitAction::MapFile { to, file } => node_iface::InitAction::MapFile { to, contents: std::fs::read(file)? },
+                FakeInitAction::MapFile { to, file } => node_iface::InitAction::MapFile { to, contents: Arc::new(std::fs::read(file)?) },
                 FakeInitAction::MapCode { to } => node_iface::InitAction::MapCode { to },
                 FakeInitAction::AddEnv { name, val } => node_iface::InitAction::AddEnv { name, val },
                 FakeInitAction::SetArgs { args } => node_iface::InitAction::SetArgs { args },
-                FakeInitAction::LinkWasm { file } => node_iface::InitAction::LinkWasm { contents: std::fs::read(&file)?, debug_path: Some(file), },
-                FakeInitAction::StartWasm { file } => node_iface::InitAction::StartWasm { contents: std::fs::read(&file)?, debug_path: Some(file), },
+                FakeInitAction::LinkWasm { file } => node_iface::InitAction::LinkWasm { contents: Arc::new(std::fs::read(&file)?), debug_path: Some(file), },
+                FakeInitAction::StartWasm { file } => node_iface::InitAction::StartWasm { contents: Arc::new(std::fs::read(&file)?), debug_path: Some(file), },
             })
         }
     }
@@ -70,6 +71,10 @@ mod test_node_iface_impl {
     impl node_iface::InitApi for TestApi {
         fn get_initial_data(&mut self) -> Result<node_iface::MessageData> {
             Ok(self.conf.message.clone())
+        }
+
+        fn get_calldata(&mut self) -> Result<String> {
+            Ok(self.conf.calldata.clone())
         }
 
         fn get_code(&mut self, account: &node_iface::Address) -> Result<Arc<Vec<u8>>> {
@@ -161,8 +166,14 @@ fn main() -> Result<()> {
     let conf = unfolder.run(conf)?;
     let conf = serde_json::from_value(conf)?;
 
-    let mut node_api = test_node_iface_impl::TestApi::new(conf);
-    let res = genvm::run_with_api(&mut node_api)?;
+    let node_api = Box::new(test_node_iface_impl::TestApi::new(conf));
+    let res = genvm::run_with_api(node_api)?;
     println!("executed with {res:?}");
+    match res {
+        genvm::vm::VMRunResult::Return(r) => {
+            println!("\tas utf8: {}", String::from_utf8_lossy(&r[..]));
+        }
+        _ => {},
+    }
     Ok(())
 }
