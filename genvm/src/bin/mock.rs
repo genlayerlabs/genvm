@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use anyhow::Result;
 use clap::Parser;
+use genvm::vm::VMRunResult;
 
 mod test_node_iface_impl {
     use std::{collections::HashMap, sync::Arc};
@@ -97,6 +98,8 @@ impl genvm::RequiredApis for test_node_iface_impl::TestApi {}
 struct CliArgs {
     #[arg(long)]
     config: std::path::PathBuf,
+    #[arg(long, default_value_t = false)]
+    shrink_error: bool,
 }
 
 struct JsonUnfolder {
@@ -159,17 +162,27 @@ fn main() -> Result<()> {
 
     let json_dir: String = std::path::Path::new(&args.config).parent().ok_or(anyhow::anyhow!("no parent"))?.to_str().ok_or(anyhow::anyhow!("to str"))?.into();
     let artifacts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../build/out").to_str().ok_or(anyhow::anyhow!("to str"))?.into();
-    let unfolder = JsonUnfolder {
+    let mut unfolder = JsonUnfolder {
         vars: HashMap::from([
             ("jsonDir".into(), json_dir),
             ("artifacts".into(), artifacts)
         ]),
     };
+     conf.get("vars").and_then(|x| x.as_object()).map(|x| -> Result<()> {
+        for (k, v) in x{
+            unfolder.vars.insert(k.clone(), String::from(v.as_str().ok_or(anyhow::anyhow!("invalid var value for {}", k))?));
+        }
+        Ok(())
+    }).unwrap_or(Ok(()))?;
     let conf = unfolder.run(conf)?;
     let conf = serde_json::from_value(conf)?;
 
     let node_api = Box::new(test_node_iface_impl::TestApi::new(conf));
     let res = genvm::run_with_api(node_api)?;
+    let res = match (res, args.shrink_error) {
+        (VMRunResult::Error(_), true) => VMRunResult::Error("".into()),
+        (res, _) => res,
+    };
     println!("executed with `{res:?}`");
     Ok(())
 }

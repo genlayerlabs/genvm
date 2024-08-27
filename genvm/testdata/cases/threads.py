@@ -11,7 +11,7 @@ for i in range(5):
     thread = Thread(target=foo, args=(i,))
     thread.start()
     threads.append(thread)
-for i in range(10):
+for i in range(5):
     print("!!!")
 for thread in threads:
     thread.join()
