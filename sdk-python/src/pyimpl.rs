@@ -30,7 +30,7 @@ pub mod genlayer_sdk {
     }
 
     #[pyfunction]
-    fn run_nondet(eq_principle: PyStrRef, calldata: PyBytesRef, vm: &VirtualMachine) -> PyResult<PyBytes> {
+    fn run_nondet(eq_principle: PyStrRef, calldata: PyBytesRef, vm: &VirtualMachine) -> PyResult<String> {
         let eq_principle = eq_principle.as_str();
         let calldata: &[u8] = calldata.as_bytes();
         let len = map_error(vm, unsafe {
@@ -42,7 +42,21 @@ pub mod genlayer_sdk {
                 }
             )
         })?;
-        read_result_bytes(vm, len)
+        read_result_str(vm, len)
+    }
+
+    #[pyfunction]
+    fn call_contract(address: PyBytesRef, calldata: PyStrRef, vm: &VirtualMachine) -> PyResult<String> {
+        let len = map_error(vm, unsafe {
+            genvm_sdk_rust::call_contract(
+                genvm_sdk_rust::Bytes {
+                    buf: address.as_ptr(),
+                    buf_len: address.len() as u32,
+                },
+                calldata.as_str(),
+            )
+        })?;
+        read_result_str(vm, len)
     }
 
     fn read_result_str(vm: &VirtualMachine, len: u32) -> PyResult<String> {

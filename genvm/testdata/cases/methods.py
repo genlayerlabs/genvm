@@ -5,6 +5,10 @@ import genlayer.sdk as gsdk
 def pub():
     eval("print('init from pub!')")
 
+@gsdk.public
+def rback():
+    gsdk.rollback("nah, I won't execute")
+
 def priv():
     eval("print('init from priv!')")
 

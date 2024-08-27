@@ -27,6 +27,12 @@
         (result $error (expected $bytes_len (error $errno)))
     )
 
+    (@interface func (export "call_contract")
+        (param $account $bytes)
+        (param $calldata string)
+        (result $error (expected $bytes_len (error $errno)))
+    )
+
     (@interface func (export "read_result")
         (param $buf (@witx pointer u8))
         (param $len u32)

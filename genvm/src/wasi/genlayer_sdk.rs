@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use wasmtime::StoreContextMut;
 use wiggle::GuestError;
 
-use crate::vm::InitActions;
+use crate::{node_iface::{self, MessageData}, vm::InitActions};
 
 use super::{base, common::read_string};
 
@@ -287,7 +287,9 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         eq_principle: wiggle::GuestPtr<str>,
         data: &generated::types::Bytes,
     ) -> Result<generated::types::BytesLen, generated::types::Error> {
-        self.data_mut().ensure_det()?;
+        if !self.data_mut().data.conf.can_spawn_nondet {
+            return Err(generated::types::Errno::DeterministicViolation.into());
+        }
 
         let cow = mem.as_cow(data.buf.as_array(data.buf_len))?;
         let mut entrypoint = Vec::from(b"nondet!");
@@ -299,7 +301,8 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             conf: base::Config {
                 is_deterministic: false,
                 can_read_storage: false,
-                can_write_storage: false
+                can_write_storage: false,
+                can_spawn_nondet: false,
             },
             message_data: self.data_mut().data.message_data.clone(),
             entrypoint,
@@ -307,20 +310,10 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             init_actions: self.data_mut().data.init_actions.clone(),
         };
 
-        let (mut vm, instance) = {
-            let Ok(mut supervisor) = supervisor.lock() else { return Err(generated::types::Errno::Io.into()); };
-            let mut vm = supervisor.spawn(essential_data).map_err(|_e| generated::types::Errno::Io)?;
-            let instance = supervisor.apply_actions(&mut vm).map_err(|_e| generated::types::Errno::Io)?;
-            (vm, instance)
-        };
+        let res = self.spaw_and_run(supervisor, essential_data);
 
-        let pre_fuel = self.stor.get_fuel().map_err(|_e| generated::types::Errno::Io)?;
-        vm.store.set_fuel(pre_fuel).map_err(|_e| generated::types::Errno::Io)?;
-
-        let res = vm.run(&instance).map_err(|_e| generated::types::Errno::Io);
-
-        let remaining_fuel = vm.store.get_fuel().unwrap_or(0);
-        let _ = self.stor.set_fuel(remaining_fuel);
+        //let res = eq_principle
+        let res = res.map_err(|_e| generated::types::Errno::Io);
 
         match res? {
             crate::vm::VMRunResult::Return(r) => {
@@ -330,4 +323,85 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             crate::vm::VMRunResult::Error(e) => Err(generated::types::Error::trap(Rollback(format!("subvm failed {}", e)).into())),
         }
     }
+
+    fn call_contract(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        account: &generated::types::Bytes,
+        calldata: wiggle::GuestPtr<str>,
+    ) -> Result<generated::types::BytesLen, generated::types::Error> {
+        self.data_mut().ensure_det()?;
+        let mut called_contract_account = node_iface::Address::new();
+        if account.buf_len as usize != called_contract_account.raw().len() {
+            return Err(generated::types::Errno::Inval.into());
+        }
+        let cow = mem.as_cow(account.buf.as_array(account.buf_len))?;
+        for (to, from) in called_contract_account.0.iter_mut().zip(cow.iter()) {
+            *to = *from;
+        }
+        let mut res_calldata = b"call!".to_vec();
+        res_calldata.extend(mem.as_cow_str(calldata).iter().flat_map(|x| x.bytes()));
+
+        let supervisor = self.data_mut().data.supervisor.clone();
+        let init_actions = {
+            let Ok(mut supervisor) = supervisor.lock() else { return Err(generated::types::Errno::Io.into()); };
+            supervisor.get_actions_for(&called_contract_account).map_err(|_e| generated::types::Errno::Inval)
+        }?;
+
+        let my_conf = self.data_mut().data.conf;
+
+        let my_data = self.data_mut().data.message_data.clone();
+
+        let essential_data = EssentialGenlayerSdkData {
+            conf: base::Config {
+                is_deterministic: true,
+                can_read_storage: my_conf.can_read_storage,
+                can_write_storage: false,
+                can_spawn_nondet: my_conf.can_spawn_nondet,
+            },
+            message_data: MessageData {
+                contract_account: called_contract_account,
+                sender_account: my_data.sender_account, // FIXME: is that true?
+                gas: my_data.gas, // FIXME: is that true?
+                value: None,
+            },
+            entrypoint: res_calldata,
+            supervisor: supervisor.clone(),
+            init_actions,
+        };
+
+        let res = self.spaw_and_run(supervisor, essential_data);
+        let res = res.map_err(|_e| generated::types::Errno::Io);
+
+        match res? {
+            crate::vm::VMRunResult::Return(r) => {
+                self.set_result(r.into_bytes())
+            },
+            crate::vm::VMRunResult::Rollback(r) => Err(generated::types::Error::trap(Rollback(r).into())),
+            crate::vm::VMRunResult::Error(e) => Err(generated::types::Error::trap(Rollback(format!("subvm failed {}", e)).into())),
+        }
+    }
+}
+
+impl<T> Mapped<'_, T> {
+    fn spaw_and_run(&mut self, supervisor: Arc<Mutex<crate::vm::Supervisor>>, essential_data: EssentialGenlayerSdkData) -> Result<crate::vm::VMRunResult, ()> {
+        fn dummy_error<E>(_e: E) -> () { () }
+        let (mut vm, instance) = {
+            let mut supervisor = supervisor.lock().map_err(dummy_error)?;
+            let mut vm = supervisor.spawn(essential_data).map_err(dummy_error)?;
+            let instance = supervisor.apply_actions(&mut vm).map_err(dummy_error)?;
+            (vm, instance)
+        };
+
+        let pre_fuel = self.stor.get_fuel().map_err(dummy_error)?;
+        vm.store.set_fuel(pre_fuel).map_err(dummy_error)?;
+
+        let res = vm.run(&instance).map_err(dummy_error);
+
+        let remaining_fuel = vm.store.get_fuel().unwrap_or(0);
+        let _ = self.stor.set_fuel(remaining_fuel);
+
+        res
+    }
+    //EssentialGenlayerSdkData
 }

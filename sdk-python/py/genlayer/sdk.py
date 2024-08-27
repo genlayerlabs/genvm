@@ -16,12 +16,42 @@ class AlreadySerializedResult(str):
 def account_from_b64(x: str) -> bytes:
 	return base64.b64decode(x)
 
+class Address(bytes):
+	def __new__(cls, val: str | bytes):
+		if isinstance(val, str) or len(val) > 32:
+			val = base64.b64decode(val)
+		if len(val) != 32:
+			raise Exception("invalid address")
+		return bytes.__new__(cls, val)
+
+class ContractMethod:
+	def __init__(self, addr: Address, name: str):
+		self.addr = addr
+		self.name = name
+	def __call__(self, *args):
+		obj = {
+			"method": self.name,
+			"args": args,
+		}
+		calldata = json.dumps(obj)
+		res = wasi.call_contract(self.addr, calldata)
+		return json.loads(res)
+
+class Contract:
+	def __init__(self, addr: Address):
+		if not isinstance(addr, Address):
+			raise Exception("address expected")
+		self.addr = addr
+	def __getattr__(self, name):
+		return ContractMethod(self.addr, name)
+
+
 message_raw = json.loads(wasi.get_message_data())
 
 message = SimpleNamespace(
 	gas=message_raw["gas"],
-	contract_account=base64.b64decode(message_raw["contract_account"]),
-	sender_account=base64.b64decode(message_raw["sender_account"]),
+	contract_account=Address(message_raw["contract_account"]),
+	sender_account=Address(message_raw["sender_account"]),
 	value=message_raw.get("value", None),
 )
 

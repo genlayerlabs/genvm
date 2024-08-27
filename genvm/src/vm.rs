@@ -1,3 +1,4 @@
+use core::str;
 use std::{borrow::Borrow, collections::HashMap, path::Path};
 
 use wasmtime::{Module, Engine, Store, Linker};
@@ -204,5 +205,37 @@ impl Supervisor {
             }
         }
         Err(anyhow::anyhow!("actions returned by runner do not have a start instruction"))
+    }
+
+    pub fn get_actions_for(&mut self, contract_account: &crate::node_iface::Address) -> Result<InitActions> {
+        let code: Arc<Vec<u8>> = self.api.get_code(contract_account)?;
+        let actions =
+            if wasmparser::Parser::is_core_wasm(&code[..]) {
+                Vec::from([InitAction::StartWasm { contents: code.clone(), debug_path: Some("<contract>".into()) }])
+            } else {
+                let code_str = str::from_utf8(&code[..])?;
+                let code_start = (|| {
+                    for c in ["//", "#", "--"] {
+                        if code_str.starts_with(c) {
+                            return Ok(c)
+                        }
+                    }
+                    return Err(anyhow::anyhow!("can't detect comment in text contract {}", &code_str[..10]));
+                })()?;
+                let mut code_comment = String::new();
+                for l in code_str.lines() {
+                    if !l.starts_with(code_start) {
+                        break;
+                    }
+                    code_comment.push_str(&l[code_start.len()..])
+                }
+                let runner_desc = serde_json::from_str(&code_comment)?;
+                self.api.get_runner(runner_desc)?
+            };
+
+        Ok(InitActions {
+            code,
+            actions: Arc::new(actions),
+        })
     }
 }

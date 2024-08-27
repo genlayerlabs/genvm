@@ -18,6 +18,10 @@ impl Address {
         let Address(r) = self;
         *r
     }
+
+    pub fn new() -> Self {
+        Self([0; 32])
+    }
 }
 
 pub struct Gas(pub u64);

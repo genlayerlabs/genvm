@@ -13,38 +13,6 @@ use std::{borrow::BorrowMut, path::Path, sync::{Arc, Mutex}};
 
 pub trait RequiredApis: node_iface::InitApi + node_iface::RunnerApi + Send + Sync {}
 
-pub fn get_actions(supervisor: &mut vm::Supervisor, message_data: &MessageData) -> Result<InitActions> {
-    let code: Arc<Vec<u8>> = supervisor.api.get_code(&message_data.contract_account)?;
-    let actions =
-        if wasmparser::Parser::is_core_wasm(&code[..]) {
-            Vec::from([InitAction::StartWasm { contents: code.clone(), debug_path: Some("<contract>".into()) }])
-        } else {
-            let code_str = str::from_utf8(&code[..])?;
-            let code_start = (|| {
-                for c in ["//", "#", "--"] {
-                    if code_str.starts_with(c) {
-                        return Ok(c)
-                    }
-                }
-                return Err(anyhow::anyhow!("can't detect comment in text contract {}", &code_str[..10]));
-            })()?;
-            let mut code_comment = String::new();
-            for l in code_str.lines() {
-                if !l.starts_with(code_start) {
-                    break;
-                }
-                code_comment.push_str(&l[code_start.len()..])
-            }
-            let runner_desc = serde_json::from_str(&code_comment)?;
-            supervisor.api.get_runner(runner_desc)?
-        };
-
-    Ok(InitActions {
-        code: code,
-        actions: Arc::new(actions),
-    })
-}
-
 pub fn run_with_api(mut api: Box<dyn RequiredApis>) -> Result<crate::vm::VMRunResult> {
 
     let mut entrypoint = b"call!".to_vec();
@@ -58,13 +26,14 @@ pub fn run_with_api(mut api: Box<dyn RequiredApis>) -> Result<crate::vm::VMRunRe
     let (mut vm, instance) = {
         let supervisor_clone = supervisor.clone();
         let Ok(mut supervisor) = supervisor.lock() else { return Err(anyhow::anyhow!("can't lock supervisor")); };
-        let init_actions = get_actions(&mut supervisor, &init_data)?;
+        let init_actions = supervisor.get_actions_for(&init_data.contract_account)?;
 
         let essential_data = wasi::genlayer_sdk::EssentialGenlayerSdkData {
             conf: wasi::base::Config {
                 is_deterministic: true,
                 can_read_storage: true,
-                can_write_storage: true
+                can_write_storage: true,
+                can_spawn_nondet: true,
             },
             message_data: init_data,
             entrypoint,
