@@ -4,9 +4,9 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, base64::Base64};
 
-pub struct StoragePartDesc {
+pub struct StorageSlot {
     pub account: Address,
-    pub desc: u32
+    pub desc: Address,
 }
 
 #[serde_as]
@@ -25,6 +25,14 @@ impl Address {
 }
 
 pub struct Gas(pub u64);
+
+#[derive(Debug)]
+pub enum VMRunResult {
+    Return(String),
+    Rollback(String),
+    /// TODO: should there be an error or should it be merged with rollback?
+    Error(String),
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Calldata {
@@ -45,6 +53,14 @@ pub struct RunnerDescription {
     pub lang: String
 }
 
+pub trait InitApi {
+    fn get_initial_data(&mut self) -> Result<MessageData>;
+
+    fn get_calldata(&mut self) -> Result<String>;
+
+    fn get_code(&mut self, account: &Address) -> Result<Arc<Vec<u8>>>;
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub enum InitAction {
     MapFile { to: String, contents: Arc<Vec<u8>> },
@@ -55,34 +71,22 @@ pub enum InitAction {
     StartWasm { contents: Arc<Vec<u8>>, debug_path: Option<String> },
 }
 
-pub trait InitApi {
-    fn get_initial_data(&mut self) -> Result<MessageData>;
-
-    fn get_calldata(&mut self) -> Result<String>;
-
-    fn get_code(&mut self, account: &Address) -> Result<Arc<Vec<u8>>>;
-}
-
 pub trait RunnerApi {
     fn get_runner(&mut self, desc: RunnerDescription) -> Result<Vec<InitAction>>;
 }
 
 #[allow(dead_code)]
 pub trait StorageApi {
-    fn storage_part_get_size(&mut self, remaing_gas: &mut Gas, part: StoragePartDesc) -> Result<u32>;
+    fn storage_read(&mut self, remaing_gas: &mut Gas, slot: StorageSlot, index: u32, buf: &mut [u8]) -> Result<()>;
 
-    fn storage_part_resize(&mut self, remaing_gas: &mut Gas, part: StoragePartDesc, new_size: u32) -> Result<()>;
-
-    fn storage_part_read(&mut self, remaing_gas: &mut Gas, part: StoragePartDesc, index: u32, size: u32, buf: &mut Vec<u8>) -> Result<()>;
-
-    fn storage_part_write(&mut self, remaing_gas: &mut Gas, part: StoragePartDesc, index: u32, size: u32, buf: &mut Vec<u8>) -> Result<()>;
+    fn storage_write(&mut self, remaing_gas: &mut Gas, slot: StorageSlot, index: u32, buf: &[u8]) -> Result<()>;
 }
 
 #[allow(dead_code)]
 pub trait NondetSupportApi {
-    fn equivalence_principle_fast_return(&mut self, remaing_gas: &mut Gas, call_no: u32) -> Result<Option<Vec<u8>>>;
+    fn equivalence_principle_fast_return(&mut self, remaing_gas: &mut Gas, call_no: u32) -> Result<Option<VMRunResult>>;
 
-    fn equivalence_principle(&mut self, remaing_gas: &mut Gas, call_no: u32, context: &str, current_result: Vec<u8>) -> Result<Vec<u8>>;
+    fn equivalence_principle(&mut self, remaing_gas: &mut Gas, call_no: u32, context: &str, current_result: Vec<u8>) -> Result<VMRunResult>;
 }
 
 #[allow(dead_code)]

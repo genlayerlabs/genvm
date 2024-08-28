@@ -2,17 +2,7 @@
 	run(scriptfile)::
 		{
 			"vars": {},
-			"runners": {
-				"python": [
-					{ "AddEnv": { "name": "pwd", "val": "/" } },
-					{ "MapCode": { "to": "/contract.py" } },
-					{ "MapFile": { "file": "${artifacts}/genvm-python-sdk.frozen", "to": "/sdk.frozen" } },
-					{ "SetArgs": { "args": ["py", "contract.py"] } },
-					{ "LinkWasm": { "file": "${artifacts}/softfloat.wasm" } },
-					{ "StartWasm": { "file": "${artifacts}/genvm-python.wasm", "debug_path": "genvm-python.wasm" } }
-				]
-			},
-
+			"runners": import './runners.jsonnet',
 			"accounts": {
 				"AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=": {
 					"code": scriptfile

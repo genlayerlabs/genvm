@@ -54,12 +54,7 @@ pub struct VM {
     pub init_actions: InitActions
 }
 
-#[derive(Debug)]
-pub enum VMRunResult {
-    Return(String),
-    Rollback(String),
-    Error(String),
-}
+pub use crate::node_iface::VMRunResult;
 
 impl VM {
     pub fn is_det(&self) -> bool {

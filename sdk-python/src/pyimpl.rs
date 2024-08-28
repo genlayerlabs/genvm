@@ -16,21 +16,29 @@ pub mod genlayer_sdk {
         )
     }
 
+    fn flush_everything(vm: &VirtualMachine) {
+        let _ = rustpython_vm::stdlib::sys::get_stdout(vm).and_then(|f| vm.call_method(&f, "flush", ()));
+        let _ = rustpython_vm::stdlib::sys::get_stderr(vm).and_then(|f| vm.call_method(&f, "flush", ()));
+    }
+
     #[pyfunction]
-    fn rollback(s: PyStrRef) -> PyResult<()> {
+    fn rollback(s: PyStrRef, vm: &VirtualMachine) -> PyResult<()> {
+        flush_everything(vm);
         let s = s.as_str();
         unsafe { genvm_sdk_rust::rollback(s.as_ref()) };
         Ok(())
     }
 
     #[pyfunction]
-    fn contract_return(s: PyStrRef) -> PyResult<()> {
+    fn contract_return(s: PyStrRef, vm: &VirtualMachine) -> PyResult<()> {
+        flush_everything(vm);
         unsafe { genvm_sdk_rust::contract_return(s.as_ref()) };
         Ok(())
     }
 
     #[pyfunction]
     fn run_nondet(eq_principle: PyStrRef, calldata: PyBytesRef, vm: &VirtualMachine) -> PyResult<String> {
+        flush_everything(vm);
         let eq_principle = eq_principle.as_str();
         let calldata: &[u8] = calldata.as_bytes();
         let len = map_error(vm, unsafe {
@@ -47,6 +55,7 @@ pub mod genlayer_sdk {
 
     #[pyfunction]
     fn call_contract(address: PyBytesRef, calldata: PyStrRef, vm: &VirtualMachine) -> PyResult<String> {
+        flush_everything(vm);
         let len = map_error(vm, unsafe {
             genvm_sdk_rust::call_contract(
                 genvm_sdk_rust::Bytes {

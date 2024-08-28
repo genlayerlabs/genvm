@@ -2,6 +2,8 @@
 
 from threading import Thread
 
+__gsdk_self_run__ = True
+
 def foo(x):
     for i in range(5):
         print('foo' + str(x))

@@ -19,5 +19,3 @@ def retn():
 @gsdk.public
 def retn_ser():
     return gsdk.AlreadySerializedResult("123")
-
-gsdk.run(__import__(__name__))

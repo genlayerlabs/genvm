@@ -351,7 +351,14 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
         _memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
     ) -> Result<(), generated::types::Error> {
-        Ok(())
+        let fdi: u32 = fd.into();
+        match self.fds.remove(&fdi) {
+            Some(_) => {
+                self.free_fd(fdi);
+                Ok(())
+            },
+            None => Err(generated::types::Errno::Badf.into()),
+        }
     }
 
     /// Synchronize the data of a file to disk.
@@ -559,8 +566,8 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
         ciovs: generated::types::CiovecArray,
     ) -> Result<generated::types::Size, generated::types::Error> {
         let mut stream: Box<dyn Write> = match self.get_fd_desc(fd)? {
-            FileDescriptor::Stdout => Box::new(std::io::stdout()),
-            FileDescriptor::Stderr => Box::new(std::io::stderr()),
+            FileDescriptor::Stdout => Box::new(std::io::stdout().lock()),
+            FileDescriptor::Stderr => Box::new(std::io::stderr().lock()),
             FileDescriptor::Stdin => return Err(generated::types::Errno::Notsup.into()),
             _ => return Err(generated::types::Errno::Rofs.into()),
         };

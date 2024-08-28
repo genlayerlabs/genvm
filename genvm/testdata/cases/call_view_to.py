@@ -7,5 +7,3 @@ def foo(a, b):
     import json
     json.loads = 11 # evil!
     return a + b
-
-gsdk.run(__import__(__name__))

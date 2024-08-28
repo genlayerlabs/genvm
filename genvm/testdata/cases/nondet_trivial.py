@@ -10,8 +10,5 @@ class NonDetInit(gsdk.Runner):
 
 @gsdk.public
 def init():
-    print(gsdk.message)
     eval("print('init from eval!')")
     return gsdk.run_nondet({}, NonDetInit())
-
-gsdk.run(__import__(__name__))
