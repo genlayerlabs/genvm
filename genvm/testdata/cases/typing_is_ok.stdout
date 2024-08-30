@@ -1,0 +1,14 @@
+=== Foo
+<class 'type'>
+<class 'contract.Foo'>
+	a: T
+=== list
+<class 'types.GenericAlias'>
+list[str]
+origin=<class 'list'>
+args=(<class 'str'>,)
+=== Test
+<class 'type'>
+<class 'contract.Test'>
+	foo: contract.Foo[str]
+executed with `Return("")`

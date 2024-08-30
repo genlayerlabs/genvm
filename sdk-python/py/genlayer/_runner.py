@@ -18,7 +18,8 @@ def run(mod):
 	if entrypoint.startswith(CALL):
 		calldata = json.loads(entrypoint[len(CALL):].decode())
 		meth = getattr(mod, calldata['method'])
-		if not getattr(meth, '__public__', False):
+		from .sdk import message
+		if not message.is_init and not getattr(meth, '__public__', False):
 			raise Exception(f"can't call non-public methods")
 		res = meth(*calldata['args'])
 		_give_result(res)

@@ -364,6 +364,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
                 sender_account: my_data.sender_account, // FIXME: is that true?
                 gas: my_data.gas, // FIXME: is that true?
                 value: None,
+                is_init: false,
             },
             entrypoint: res_calldata,
             supervisor: supervisor.clone(),

@@ -47,6 +47,7 @@ message = SimpleNamespace(
 	contract_account=Address(message_raw["contract_account"]),
 	sender_account=Address(message_raw["sender_account"]),
 	value=message_raw.get("value", None),
+	is_init=message_raw.get("is_init", None),
 )
 
 def rollback(reason: str) -> typing.NoReturn:

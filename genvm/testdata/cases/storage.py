@@ -20,7 +20,7 @@ class Composite:
     a: Test
     b: Test
 
-tst = Composite()
+tst = Composite.init_at()
 
 stor_man = tst._storage_slot.manager
 

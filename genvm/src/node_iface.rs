@@ -46,6 +46,7 @@ pub struct MessageData {
     pub contract_account: Address,
     pub sender_account: Address,
     pub value: Option<u64>,
+    pub is_init: bool,
 }
 
 #[derive(Serialize, Deserialize)]
