@@ -3,15 +3,12 @@ mod driver;
 pub mod vm;
 pub mod wasi;
 pub mod node_iface;
+pub mod plugin_loader;
 
-use anyhow::{Context as _, Result};
-use node_iface::{InitAction, MessageData};
-use vm::InitActions;
-use wasi::{genlayer_sdk, preview1};
-use core::str;
-use std::{borrow::BorrowMut, path::Path, sync::{Arc, Mutex}};
+use anyhow::Result;
+use std::sync::{Arc, Mutex};
 
-pub trait RequiredApis: node_iface::InitApi + node_iface::RunnerApi + Send + Sync {}
+pub trait RequiredApis: node_iface::InitApi + node_iface::RunnerApi + Send + Sync + genvm_modules_common::interfaces::nondet_functions_api::Trait {}
 
 pub fn run_with_api(mut api: Box<dyn RequiredApis>) -> Result<crate::vm::VMRunResult> {
 

@@ -1,5 +1,5 @@
 use core::str;
-use std::{borrow::Borrow, collections::HashMap, path::Path};
+use std::{collections::HashMap, path::Path};
 
 use wasmtime::{Module, Engine, Store, Linker};
 

@@ -24,7 +24,7 @@ project('sdk-python') {
 		cwd: cur_src
 	)
 
-	out = config.out_dir.join('genvm-python.wasm')
+	out = config.wasm_out_dir.join('genvm-python.wasm')
 
 	py_targets = []
 
@@ -38,7 +38,7 @@ project('sdk-python') {
 		cwd: cur_src.parent.join('tools', 'softfloat-lib', 'patch-floats')
 	)
 
-	py_libs_file = config.out_dir.join('genvm-python-sdk.frozen')
+	py_libs_file = config.wasm_out_dir.join('genvm-python-sdk.frozen')
 	py_sdk_debug = target_command(
 		output_file: py_libs_file,
 		dependencies: py_deps + [cur_src.join('src', 'build_debug_sdk.rs')],
@@ -52,8 +52,11 @@ project('sdk-python') {
 		py_targets << py_sdk_debug
 	end
 
-	target_alias(
-		name: 'all',
-		dependencies: py_targets + [config.out_dir.join('softfloat.wasm')]
+	all.add_deps(
+		target_alias(
+			'all',
+			config.wasm_out_dir.join('softfloat.wasm'),
+			*py_targets
+		)
 	)
 }

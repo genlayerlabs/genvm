@@ -21,15 +21,16 @@ Getting the source
 3. `./tools/git-third-party/git-third-party update --all`
   This command will clone all third-party repositories and then apply patches to them
 
-Actually building became way to complex really fast (patching floats for software ones and so on), for convenience small generator script was introduced
-1. create at root a file named `build-config.json` with following contents
-    ```json
-    {
-      "wasiSdk": "/path/to/wasi-sdk/21/sdk-Linux",
-      "sdkPython": {
-        "debugSdk": true
-      }
-    }
-    ```
-2. `./tools/ya-build/ya-build config --config build-config.json`
-3. `ninja -C build genvm/sdk-python/all`
+Download WASI sdk
+```bash
+mkdir -p build
+cd build
+wget https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-linux.tar.gz
+# ^ note that your link may be different
+tar -xvf wasi-sdk-24.0-x86_64-linux.tar.gz
+mv wasi-sdk-24.0-x86_64-linux wasi-sdk-24
+```
+
+Actually building became way too complex really fast (patching floats for software ones and so on), for convenience small generator script was introduced
+1. `./tools/ya-build/ya-build config`
+2. `ninja -C build`

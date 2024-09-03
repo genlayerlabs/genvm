@@ -24,7 +24,23 @@ impl Address {
     }
 }
 
+#[derive(Debug)]
+#[repr(C)]
 pub struct Gas(pub u64);
+
+impl Gas {
+    pub fn raw(&self) -> u64 {
+        self.0
+    }
+
+    pub fn decrement_by(&mut self, by: u64) {
+        if by >= self.0 {
+            self.0 = 0
+        } else {
+            self.0 -= by
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum VMRunResult {
@@ -85,14 +101,7 @@ pub trait StorageApi {
 
 #[allow(dead_code)]
 pub trait NondetSupportApi {
-    fn equivalence_principle_fast_return(&mut self, remaing_gas: &mut Gas, call_no: u32) -> Result<Option<VMRunResult>>;
-
-    fn equivalence_principle(&mut self, remaing_gas: &mut Gas, call_no: u32, context: &str, current_result: Vec<u8>) -> Result<VMRunResult>;
-}
-
-#[allow(dead_code)]
-pub trait NondetFunctionsApi {
-    fn get_webpage(&mut self, remaing_gas: &mut Gas, url: &str) -> Result<String>;
+    fn get_leader_result(&mut self, call_no: u32) -> Result<Option<VMRunResult>>;
 }
 
 #[allow(dead_code)]

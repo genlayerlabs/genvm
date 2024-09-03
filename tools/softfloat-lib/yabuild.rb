@@ -145,7 +145,7 @@ project('softfloat') {
 		]
 	)
 
-	out = config.out_dir.join('softfloat.wasm')
+	out = config.wasm_out_dir.join('softfloat.wasm')
 	target_command(
 		output_file: out,
 		dependencies: [raw],

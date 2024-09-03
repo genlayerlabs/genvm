@@ -13,7 +13,7 @@ dir = Path(__file__).parent.parent.joinpath('cases')
 tmp_dir = Path(__file__).parent.parent.parent.joinpath('target', 'testdata-out')
 
 arg_parser = argparse.ArgumentParser("genvm-test-runner")
-arg_parser.add_argument('--mock-gen-vm', metavar='EXE', default=str(Path(os.getenv("GENVM", Path(__file__).parent.parent.parent.joinpath('target', 'debug', 'genvm-mock')))))
+arg_parser.add_argument('--mock-gen-vm', metavar='EXE', default=str(Path(os.getenv("GENVM", Path(__file__).parent.parent.parent.parent.joinpath('build', 'out', 'bin', 'genvm-mock')))))
 arg_parser.add_argument('--filter', metavar='REGEX', default='.*')
 args_parsed = arg_parser.parse_args()
 GENVM = Path(args_parsed.mock_gen_vm)

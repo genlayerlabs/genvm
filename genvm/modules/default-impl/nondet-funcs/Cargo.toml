@@ -1,0 +1,13 @@
+[package]
+name = "genvm-modules-default-nondet-func"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type=["cdylib"]
+
+[dependencies]
+anyhow = "1.0.86"
+genvm-modules-common ={ path = "../../common" }
+libc = "0.2.158"
+ureq = "2.10.1"

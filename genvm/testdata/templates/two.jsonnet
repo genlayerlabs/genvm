@@ -22,7 +22,8 @@
 				"gas": 9007199254740991,
 				"contract_account": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
 				"sender_account": "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-				"value": null
+				"value": null,
+				"is_init": false,
 			},
 
 			"calldata": "{}"

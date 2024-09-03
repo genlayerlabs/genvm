@@ -1,10 +1,13 @@
 use std::{collections::HashMap, sync::LazyLock};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use genvm::vm::VMRunResult;
 
 mod test_node_iface_impl {
+    use genvm::plugin_loader::nondet_functions_api::Loader;
+    use genvm_modules_common::interfaces::nondet_functions_api;
+
     use std::{collections::HashMap, sync::Arc};
     use genvm::*;
 
@@ -51,13 +54,17 @@ mod test_node_iface_impl {
     }
     pub struct TestApi {
         conf: Config,
+        nondet_meths: Box<dyn nondet_functions_api::Trait>
     }
 
     impl TestApi {
-        pub fn new(conf: Config) -> Self {
-            Self {
+        pub fn new(conf: Config) -> Result<Self> {
+            let dflt_path = genvm::plugin_loader::default_plugin_path()?;
+            let nondet_meths = nondet_functions_api::Methods::load_from_lib(&dflt_path, "nondet-funcs")?;
+            Ok(Self {
                 conf,
-            }
+                nondet_meths,
+            })
         }
     }
 
@@ -88,6 +95,16 @@ mod test_node_iface_impl {
             let Some(ref code) = acc.code else { return Err(anyhow::anyhow!("no account")) };
             let code = std::fs::read(code)?;
             Ok(Arc::new(code))
+        }
+    }
+
+    impl nondet_functions_api::Trait for TestApi {
+        fn get_webpage(&mut self,gas: &mut u64,url: *const u8) -> genvm_modules_common::interfaces::CStrResult {
+            return self.nondet_meths.get_webpage(gas, url);
+        }
+
+        fn call_llm(&mut self,gas: &mut u64,data: *const u8) -> genvm_modules_common::interfaces::CStrResult {
+            return self.nondet_meths.get_webpage(gas, data);
         }
     }
 }
@@ -158,7 +175,7 @@ fn main() -> Result<()> {
     let args = CliArgs::parse();
     let conf = std::fs::read(&args.config)?;
     let conf = String::from_utf8(conf)?;
-    let conf: serde_json::Value = serde_json::from_str(&conf)?;
+    let conf: serde_json::Value = serde_json::from_str(&conf).with_context(|| "parsing config to raw json")?;
 
     let json_dir: String = std::path::Path::new(&args.config).parent().ok_or(anyhow::anyhow!("no parent"))?.to_str().ok_or(anyhow::anyhow!("to str"))?.into();
     let artifacts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../build/out").to_str().ok_or(anyhow::anyhow!("to str"))?.into();
@@ -175,9 +192,9 @@ fn main() -> Result<()> {
         Ok(())
     }).unwrap_or(Ok(()))?;
     let conf = unfolder.run(conf)?;
-    let conf = serde_json::from_value(conf)?;
+    let conf = serde_json::from_value(conf).with_context(|| "parsing config")?;
 
-    let node_api = Box::new(test_node_iface_impl::TestApi::new(conf));
+    let node_api = Box::new(test_node_iface_impl::TestApi::new(conf)?);
     let res = genvm::run_with_api(node_api)?;
     let res = match (res, args.shrink_error) {
         (VMRunResult::Error(_), true) => VMRunResult::Error("".into()),

@@ -26,6 +26,8 @@ def tst(x):
     for k, v in typing.get_type_hints(x).items():
         if isinstance(v, typing.TypeVar):
             v = v.__name__
+        if 'TypeVar' in str(v):
+            v = '~T'
         print(f"\t{k}: {v}")
 
 tst(Foo)

@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::{ffi::{CStr, CString}, sync::{Arc, Mutex}};
 
 use wasmtime::StoreContextMut;
 use wiggle::GuestError;
@@ -37,6 +37,7 @@ pub(crate) mod generated {
 }
 
 impl generated::types::Bytes {
+    #[allow(dead_code)]
     fn read_owned(&self, mem: &mut wiggle::GuestMemory<'_>) -> Result<Vec<u8>, generated::types::Error> {
         Ok(mem.as_cow(self.buf.as_array(self.buf_len))?.into_owned())
     }
@@ -281,6 +282,50 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         ContractReturn(res).into()
     }
 
+    fn get_webpage(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        url: wiggle::GuestPtr<str>,
+    ) -> Result<generated::types::BytesLen, generated::types::Error> {
+        if self.data_mut().data.conf.is_deterministic {
+            return Err(generated::types::Errno::DeterministicViolation.into());
+        }
+        let url_str = read_string(mem, url)?;
+        let url_str = CString::new(url_str).map_err(|e| generated::types::Errno::Inval)?;
+
+        let supervisor = self.data_mut().data.supervisor.clone();
+        let Ok(mut supervisor) = supervisor.lock() else { return Err(generated::types::Errno::Io.into()); };
+        let mut fuel = self.stor.get_fuel().map_err(|_e| generated::types::Errno::Io)?;
+        let res = supervisor.api.get_webpage(&mut fuel, url_str.as_bytes().as_ptr());
+        self.stor.set_fuel(fuel).map_err(|_e| generated::types::Errno::Io)?;
+        if res.err != 0 {
+            return Err(generated::types::Errno::Io.into());
+        }
+        self.set_result(vec_from_cstr_libc(res.str))
+    }
+
+    fn call_llm(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        prompt: wiggle::GuestPtr<str>,
+    ) -> Result<generated::types::BytesLen, generated::types::Error> {
+        if self.data_mut().data.conf.is_deterministic {
+            return Err(generated::types::Errno::DeterministicViolation.into());
+        }
+        let prompt_str = read_string(mem, prompt)?;
+        let prompt_str = CString::new(prompt_str).map_err(|e| generated::types::Errno::Inval)?;
+
+        let supervisor = self.data_mut().data.supervisor.clone();
+        let Ok(mut supervisor) = supervisor.lock() else { return Err(generated::types::Errno::Io.into()); };
+        let mut fuel = self.stor.get_fuel().map_err(|_e| generated::types::Errno::Io)?;
+        let res = supervisor.api.call_llm(&mut fuel, prompt_str.as_bytes().as_ptr());
+        self.stor.set_fuel(fuel).map_err(|_e| generated::types::Errno::Io)?;
+        if res.err != 0 {
+            return Err(generated::types::Errno::Io.into());
+        }
+        self.set_result(vec_from_cstr_libc(res.str))
+    }
+
     fn run_nondet(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
@@ -405,4 +450,10 @@ impl<T> Mapped<'_, T> {
         res
     }
     //EssentialGenlayerSdkData
+}
+
+fn vec_from_cstr_libc(str: *const u8) -> Vec<u8> {
+    let res = Vec::from(unsafe  { CStr::from_ptr(str as *const i8) }.to_bytes());
+    unsafe { libc::free(str as *mut std::ffi::c_void); }
+    res
 }
