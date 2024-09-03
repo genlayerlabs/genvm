@@ -109,7 +109,7 @@ pub(super) fn add_to_linker_sync<'a, T: Send + 'static, F: Fn(&mut T) -> &mut Co
     impl<T: 'static> generated::FnBuilderGenlayerSdk<T> for FnBuilderImpl<T> {
         type MappedTo<'a> = Mapped<'a, T>;
 
-        fn build<'a>(&self) -> impl Fn(wasmtime::StoreContextMut<'a,T>) -> Self::MappedTo<'a> {
+        fn build<'a>(&self) -> impl Fn(wasmtime::StoreContextMut<'a,T>) -> Mapped<'a, T> {
             |x| {
                 Mapped {
                     stor: x,

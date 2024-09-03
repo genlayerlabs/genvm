@@ -23,7 +23,7 @@ def dump(v, x, ind=0):
     dump(v, p.right, ind + 1)
     print(f'\n{" "*ind}}}',end='')
 
-def test_invariants(v: TreeMap[str, u32]):
+def verify_invariants(v: TreeMap[str, u32]):
     def check(idx):
         if idx == 0:
             return { "depth": 0 }
@@ -61,12 +61,12 @@ def test_insert():
         op(lambda x: x.get(str(it), None))
         op(lambda x: x.__setitem__(str(it), iteration), void=True)
         same_iter()
-        test_invariants(stor.m)
+        verify_invariants(stor.m)
 
     try:
         op(lambda x: x.__delitem__('-1'), void=True)
         same_iter()
-        test_invariants(stor.m)
+        verify_invariants(stor.m)
     except Exception:
         print("====")
         for l, r in itertools.zip_longest(stor.m.items(), sorted(dic.items())):
@@ -82,7 +82,7 @@ def test_insert():
         try:
             op(lambda x: x.__delitem__(str(it)), void=True)
             same_iter()
-            test_invariants(stor.m)
+            verify_invariants(stor.m)
         except Exception:
             print("====")
             for l, r in itertools.zip_longest(stor.m.items(), sorted(dic.items())):

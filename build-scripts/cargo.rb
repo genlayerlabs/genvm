@@ -1,7 +1,9 @@
 class CargoBuildTarget < Target
 	attr_reader :output_file
-	def initialize(dir, name, target, release)
+	def initialize(dir, name, target, release, features)
+		@features = features
 		cargo_out_dir = dir.join('target')
+		@target = target
 		if not target.nil?
 			cargo_out_dir = cargo_out_dir.join(target)
 		end
@@ -27,7 +29,11 @@ class CargoBuildTarget < Target
 			suff = NATIVE_LIB_EXT
 		else
 			@name = name
-			suff = ""
+			if @target =~ /wasm/
+				suff = ".wasm"
+			else
+				suff = ""
+			end
 		end
 		@output_file = @cargo_out_dir.join(@name + suff)
 		super(@output_file, [])
@@ -42,6 +48,12 @@ class CargoBuildTarget < Target
 		end
 		if @release
 			buf << " --release"
+		end
+		if @target
+			buf << " --target #{@target}"
+		end
+		if @features.size > 0
+			buf << " --features #{@features.join(',')}"
 		end
 		buf << "\n"
 		buf << "  depfile = #{@cargo_out_dir.join(@name)}.d\n"
@@ -79,16 +91,19 @@ rule CARGO_BUILD
 EOF
 )
 
-self.define_singleton_method(:target_cargo_build) do |out_file:, dir: nil, name:, target: nil, release: false, &blk|
+self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, name:, target: nil, release: false, features: [], &blk|
 	if dir.nil?
 		dir = cur_src
 	end
 
-	trg = CargoBuildTarget.new(dir, name, target, release)
-	trg_copy = CargoCopyTarget.new(out_file, trg.output_file, trg)
+	trg = CargoBuildTarget.new(dir, name, target, release, features)
 
 	@targets.push(trg)
+	if out_file.nil?
+		return return_target(trg, &blk)
+	end
+
+	trg_copy = CargoCopyTarget.new(out_file, trg.output_file, trg)
 	@targets.push(trg_copy)
 	return_target(trg_copy, &blk)
-	trg_copy
 end

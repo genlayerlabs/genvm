@@ -5,23 +5,17 @@ project('sdk-python') {
 		debug_sdk = false
 	end
 
-	out_raw = cur_src.join('target', 'wasm32-wasi', 'release', 'genvm-python.wasm')
 	deps = ['src/main.rs', 'src/pyimpl.rs']
 	py_deps = Dir.glob(cur_src.join('py').to_s + "/**/*.py") + Dir.glob(cur_src.join('lib').to_s + "/**/*.py")
 	if not debug_sdk
 		deps += py_deps
 	end
 	deps = deps.map { |f| cur_src.join(f) }
-	target_command(
-		output_file: out_raw,
-		dependencies: deps,
-		command: [
-			'cargo', 'build',
-			'--release', '--bin', 'genvm-python',
-			'--target=wasm32-wasi',
-			'--features', if debug_sdk then 'sdk-debug' else '' end
-		],
-		cwd: cur_src
+	out_raw = target_cargo_build(
+		name: 'genvm-python',
+		target: 'wasm32-wasi',
+		release: true,
+		features: if debug_sdk then ['sdk-debug'] else [] end
 	)
 
 	out = config.wasm_out_dir.join('genvm-python.wasm')
@@ -33,7 +27,7 @@ project('sdk-python') {
 		dependencies: [out_raw],
 		command: [
 			'cargo', 'run',
-			out_raw, out
+			out_raw.output_file, out
 		],
 		cwd: cur_src.parent.join('tools', 'softfloat-lib', 'patch-floats')
 	)

@@ -10,7 +10,7 @@ import argparse
 import re
 
 dir = Path(__file__).parent.parent.joinpath('cases')
-tmp_dir = Path(__file__).parent.parent.parent.joinpath('target', 'testdata-out')
+tmp_dir = Path(__file__).parent.parent.parent.parent.joinpath('build', 'genvm-testdata-out')
 
 arg_parser = argparse.ArgumentParser("genvm-test-runner")
 arg_parser.add_argument('--mock-gen-vm', metavar='EXE', default=str(Path(os.getenv("GENVM", Path(__file__).parent.parent.parent.parent.joinpath('build', 'out', 'bin', 'genvm-mock')))))
@@ -34,6 +34,7 @@ def run(path0):
 	conf = json.loads(conf)
 	conf["vars"]["jsonnetDir"] = str(path.parent)
 	conf_path = tmp_dir.joinpath(path0).with_suffix('.json')
+	conf_path.parent.mkdir(parents=True, exist_ok=True)
 	with open(conf_path, 'wt') as f:
 		json.dump(conf, f)
 	cmd = [GENVM, '--config', conf_path, '--shrink-error']
@@ -93,7 +94,6 @@ def prnt(path, res):
 			print(f"\t{' '.join(map(str, res['cmd']))}")
 
 with cfutures.ThreadPoolExecutor(max_workers=8) as executor:
-	future2path = {executor.submit(run, path): path for path in files}
 	categories = {
 		"skip": 0,
 		"pass": 0,
@@ -104,10 +104,9 @@ with cfutures.ThreadPoolExecutor(max_workers=8) as executor:
 		"pass": f"{COLORS.OKGREEN}✓{COLORS.ENDC}",
 		"fail": f"{COLORS.FAIL}✗{COLORS.ENDC}",
 	}
-	for future in cfutures.as_completed(future2path):
-		path = future2path[future]
+	def process_result(path, res_getter):
 		try:
-			res = future.result()
+			res = res_getter()
 		except Exception as e:
 			res = {
 				"category": "fail",
@@ -118,6 +117,14 @@ with cfutures.ThreadPoolExecutor(max_workers=8) as executor:
 		else:
 			categories[res["category"]] += 1
 		prnt(path, res)
+	if len(files) > 0:
+		# NOTE this is needed to cache wasm compilation result
+		first, *files = files
+		process_result(first, lambda: run(first))
+		future2path = {executor.submit(run, path): path for path in files}
+		for future in cfutures.as_completed(future2path):
+			path = future2path[future]
+			process_result(future2path[future], lambda: future.result())
 	import json
 	print(json.dumps(categories))
 	if len(categories["fail"]) != 0:
