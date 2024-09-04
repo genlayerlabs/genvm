@@ -5,9 +5,25 @@ import os
 import subprocess
 import _jsonnet
 import json
+import threading
 from threading import Lock
 import argparse
 import re
+
+import http.server as httpserv
+
+http_dir = str(Path(__file__).parent.parent.joinpath('http').absolute())
+
+class MyHTTPHandler(httpserv.SimpleHTTPRequestHandler):
+	def __init__(self, *args, **kwargs):
+		httpserv.SimpleHTTPRequestHandler.__init__(self, *args, **kwargs, directory=http_dir)
+
+def run_serv():
+	serv = httpserv.HTTPServer(('127.0.0.1', 4242), MyHTTPHandler)
+	serv.serve_forever()
+
+http_thread = threading.Thread(target=run_serv, daemon=True)
+http_thread.start()
 
 dir = Path(__file__).parent.parent.joinpath('cases')
 tmp_dir = Path(__file__).parent.parent.parent.parent.joinpath('build', 'genvm-testdata-out')
@@ -129,3 +145,4 @@ with cfutures.ThreadPoolExecutor(max_workers=8) as executor:
 	print(json.dumps(categories))
 	if len(categories["fail"]) != 0:
 		exit(1)
+	exit(0)

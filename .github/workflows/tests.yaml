@@ -41,7 +41,7 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE" && \
             ninja -v -C build && \
-            pushd "$GITHUB_WORKSPACE/build" && zip -r out.zip out && popd
+            pushd "$GITHUB_WORKSPACE/build" && zip -r out.zip out config.json && popd
       - name: publish
         uses: actions/upload-artifact@v4
         with:

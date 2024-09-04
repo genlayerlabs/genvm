@@ -6,8 +6,7 @@ pub fn make_gensdk_module(vm: &::rustpython_vm::VirtualMachine) -> rustpython_vm
 
 #[pymodule]
 pub mod genlayer_sdk {
-    use rustpython::vm::{builtins::PyStrRef, PyResult, VirtualMachine};
-    use rustpython_vm::builtins::{PyBytes, PyBytesRef};
+    use rustpython::vm::{builtins::{PyStrRef, PyBytesRef, PyBytes}, PyResult, VirtualMachine};
 
     fn map_error<T>(vm: &VirtualMachine, res: Result<T, genvm_sdk_rust::Errno>) -> PyResult<T> {
         res.map_err(
@@ -96,5 +95,19 @@ pub mod genlayer_sdk {
         let len = map_error(vm, unsafe { genvm_sdk_rust::get_entrypoint() })?;
 
         read_result_bytes(vm, len)
+    }
+
+    #[pyfunction]
+    fn get_webpage(url: PyStrRef, vm: &VirtualMachine) -> PyResult<String> {
+        let len = map_error(vm, unsafe { genvm_sdk_rust::get_webpage(url.as_str()) })?;
+
+        read_result_str(vm, len)
+    }
+
+    #[pyfunction]
+    fn call_llm(prompt: PyStrRef, vm: &VirtualMachine) -> PyResult<String> {
+        let len = map_error(vm, unsafe { genvm_sdk_rust::call_llm(prompt.as_str()) })?;
+
+        read_result_str(vm, len)
     }
 }
