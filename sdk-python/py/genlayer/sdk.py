@@ -28,7 +28,7 @@ class ContractMethod:
 			"args": args,
 		}
 		calldata = json.dumps(obj)
-		res = wasi.call_contract(self.addr, calldata)
+		res = wasi.call_contract(self.addr.as_bytes, calldata)
 		return json.loads(res)
 
 class Contract:

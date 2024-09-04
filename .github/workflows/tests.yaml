@@ -36,7 +36,7 @@ jobs:
             mv wasi-sdk-24.0-x86_64-linux wasi-sdk-24 && \
             popd
       - name: configure
-        run: cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config
+        run: cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config --config ./.ci/release-conf.rb
       - name: build
         run: |
           cd "$GITHUB_WORKSPACE" && \

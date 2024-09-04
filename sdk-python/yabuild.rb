@@ -1,22 +1,20 @@
 project('sdk-python') {
 
-	debug_sdk = config.sdkPython&.debugSdk
-	if debug_sdk.nil?
-		debug_sdk = false
+	debug_sdk = false
+	if config&.profile == "debug"
+		debug_sdk = true
 	end
 
-	deps = ['src/main.rs', 'src/pyimpl.rs']
 	py_deps = Dir.glob(cur_src.join('py').to_s + "/**/*.py") + Dir.glob(cur_src.join('lib').to_s + "/**/*.py")
-	if not debug_sdk
-		deps += py_deps
-	end
-	deps = deps.map { |f| cur_src.join(f) }
 	out_raw = target_cargo_build(
 		name: 'genvm-python',
 		target: 'wasm32-wasi',
-		release: true,
+		profile: "release",
 		features: if debug_sdk then ['sdk-debug'] else [] end
 	)
+	if not debug_sdk
+		out_raw.add_deps(*py_deps)
+	end
 
 	out = config.wasm_out_dir.join('genvm-python.wasm')
 

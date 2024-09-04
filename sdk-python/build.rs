@@ -1,6 +1,6 @@
 fn main() {
-    process_python_libs("./py/*");
-    process_python_libs("./libs/*");
+    process_python_libs("./py/**/*");
+    process_python_libs("./libs/**/*");
 }
 
 // remove *.pyc files and add *.py to watch list

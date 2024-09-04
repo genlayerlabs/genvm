@@ -278,7 +278,7 @@ class _FakeStorageMan(Storage):
 	def debug(self):
 		print("=== fake storage ===")
 		for k, v in self._parts.items():
-			print(f'{hex(int.from_bytes(k, byteorder="little"))}\n\t{v._mem}')
+			print(f'{hex(k.as_int)}\n\t{v._mem}')
 
 ROOT_STORAGE_ADDRESS = Address(bytes([0] * 32))
 

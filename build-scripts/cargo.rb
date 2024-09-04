@@ -1,18 +1,14 @@
 class CargoBuildTarget < Target
 	attr_reader :output_file
-	def initialize(dir, name, target, release, features)
+	def initialize(dir, name, target, profile, features)
 		@features = features
 		cargo_out_dir = dir.join('target')
 		@target = target
 		if not target.nil?
 			cargo_out_dir = cargo_out_dir.join(target)
 		end
-		@release = release
-		if release
-			cargo_out_dir = cargo_out_dir.join('release')
-		else
-			cargo_out_dir = cargo_out_dir.join('debug')
-		end
+		@profile = profile
+		cargo_out_dir = cargo_out_dir.join(profile)
 		@cargo_out_dir = cargo_out_dir
 		@dir = dir
 		@is_lib = name == "lib"
@@ -46,8 +42,8 @@ class CargoBuildTarget < Target
 		else
 			buf << "  FLAGS = --bin #{@name}"
 		end
-		if @release
-			buf << " --release"
+		if @profile != "debug"
+			buf << " --profile=#{@profile}"
 		end
 		if @target
 			buf << " --target #{@target}"
@@ -91,12 +87,12 @@ rule CARGO_BUILD
 EOF
 )
 
-self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, name:, target: nil, release: false, features: [], &blk|
+self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, name:, target: nil, profile: "debug", features: [], &blk|
 	if dir.nil?
 		dir = cur_src
 	end
 
-	trg = CargoBuildTarget.new(dir, name, target, release, features)
+	trg = CargoBuildTarget.new(dir, name, target, profile, features)
 
 	@targets.push(trg)
 	if out_file.nil?

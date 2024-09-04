@@ -4,7 +4,7 @@ project('genvm') {
 	modules = [
 		target_cargo_build(
 			name: "lib",
-			release: true,
+			profile: "release",
 			out_file: modules_dir.join('libnondet-funcs.so'),
 			dir: cur_src.join('modules', 'default-impl', 'nondet-funcs')
 		)
@@ -12,7 +12,7 @@ project('genvm') {
 
 	mock = target_cargo_build(
 		name: "genvm-mock",
-		release: false,
+		profile: config.profile,
 		out_file: config.bin_dir.join('genvm-mock')
 	)
 
