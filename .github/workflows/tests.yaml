@@ -71,7 +71,7 @@ jobs:
       - name: genvm mock tests
         run: |
           ./genvm/testdata/runner/run.py
-  test-avl:
+  test-python:
     needs: [build]
     runs-on: ubuntu-latest
     steps:

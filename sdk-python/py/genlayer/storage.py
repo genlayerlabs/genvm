@@ -77,7 +77,7 @@ class _AddrDesc(_TypeDesc):
 		return Address(slot.read(off, self.size))
 
 	def set(self, slot: StorageSlot, off: int, val: Address):
-		slot.write(off, memoryview(val))
+		slot.write(off, memoryview(val.as_bytes))
 
 _u32_desc = _IntDesc(4, signed=False)
 
