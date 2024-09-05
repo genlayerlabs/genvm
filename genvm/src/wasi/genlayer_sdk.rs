@@ -285,18 +285,21 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
     fn get_webpage(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
+        config: wiggle::GuestPtr<str>,
         url: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::BytesLen, generated::types::Error> {
         if self.data_mut().data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
+        let config_str = read_string(mem, config)?;
+        let config_str = CString::new(config_str).map_err(|e| generated::types::Errno::Inval)?;
         let url_str = read_string(mem, url)?;
         let url_str = CString::new(url_str).map_err(|e| generated::types::Errno::Inval)?;
 
         let supervisor = self.data_mut().data.supervisor.clone();
         let Ok(mut supervisor) = supervisor.lock() else { return Err(generated::types::Errno::Io.into()); };
         let mut fuel = self.stor.get_fuel().map_err(|_e| generated::types::Errno::Io)?;
-        let res = supervisor.api.get_webpage(&mut fuel, url_str.as_bytes().as_ptr());
+        let res = supervisor.api.get_webpage(&mut fuel, config_str.as_bytes().as_ptr(), url_str.as_bytes().as_ptr());
         self.stor.set_fuel(fuel).map_err(|_e| generated::types::Errno::Io)?;
         if res.err != 0 {
             return Err(generated::types::Errno::Io.into());
@@ -307,18 +310,21 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
     fn call_llm(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
+        config: wiggle::GuestPtr<str>,
         prompt: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::BytesLen, generated::types::Error> {
         if self.data_mut().data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
+        let config_str = read_string(mem, config)?;
+        let config_str = CString::new(config_str).map_err(|e| generated::types::Errno::Inval)?;
         let prompt_str = read_string(mem, prompt)?;
         let prompt_str = CString::new(prompt_str).map_err(|e| generated::types::Errno::Inval)?;
 
         let supervisor = self.data_mut().data.supervisor.clone();
         let Ok(mut supervisor) = supervisor.lock() else { return Err(generated::types::Errno::Io.into()); };
         let mut fuel = self.stor.get_fuel().map_err(|_e| generated::types::Errno::Io)?;
-        let res = supervisor.api.call_llm(&mut fuel, prompt_str.as_bytes().as_ptr());
+        let res = supervisor.api.call_llm(&mut fuel, config_str.as_bytes().as_ptr(), prompt_str.as_bytes().as_ptr());
         self.stor.set_fuel(fuel).map_err(|_e| generated::types::Errno::Io)?;
         if res.err != 0 {
             return Err(generated::types::Errno::Io.into());

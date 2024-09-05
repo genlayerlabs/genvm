@@ -38,13 +38,14 @@ impl Drop for Impl {
 }
 
 impl Impl {
-    fn get_webpage(&mut self, url: &CStr) -> anyhow::Result<String> {
+    fn get_webpage(&mut self, config: &CStr, url: &CStr) -> anyhow::Result<String> {
+        let config = config.to_str()?;
         let url = url.to_str()?;
         let body = ureq::get(url).call()?.into_string()?;
         Ok(body)
     }
 
-    fn call_llm(&mut self, _prompt: &CStr) -> anyhow::Result<String> {
+    fn call_llm(&mut self, _config: &CStr, _prompt: &CStr) -> anyhow::Result<String> {
         todo!()
     }
 }
@@ -60,11 +61,13 @@ fn errored_res(code: i32) -> interfaces::CStrResult {
 pub extern "C" fn get_webpage(
     ctx: *const (),
     gas: &mut u64,
+    config: *const u8,
     url: *const u8,
 ) -> interfaces::CStrResult {
     let ctx = get_ptr(ctx);
+    let config = unsafe { CStr::from_ptr(config as *const i8) };
     let url = unsafe { CStr::from_ptr(url as *const i8) };
-    match ctx.get_webpage(url) {
+    match ctx.get_webpage(config, url) {
         Err(_) => errored_res(1),
         Ok(s) => ok_str_result(&s),
     }
@@ -74,11 +77,14 @@ pub extern "C" fn get_webpage(
 pub extern "C" fn call_llm(
     ctx: *const (),
     gas: &mut u64,
+    config: *const u8,
+    url: *const u8,
     prompt: *const u8,
 ) -> interfaces::CStrResult {
     let ctx = get_ptr(ctx);
+    let config = unsafe { CStr::from_ptr(config as *const i8) };
     let prompt = unsafe { CStr::from_ptr(prompt as *const i8) };
-    match ctx.call_llm(prompt) {
+    match ctx.call_llm(config, prompt) {
         Err(_) => errored_res(1),
         Ok(s) => ok_str_result(&s),
     }

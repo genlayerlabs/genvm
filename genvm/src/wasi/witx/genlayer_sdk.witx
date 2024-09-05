@@ -28,11 +28,13 @@
     )
 
     (@interface func (export "get_webpage")
+        (param $config string)
         (param $url string)
         (result $error (expected $bytes_len (error $errno)))
     )
 
     (@interface func (export "call_llm")
+        (param $config string)
         (param $prompt string)
         (result $error (expected $bytes_len (error $errno)))
     )

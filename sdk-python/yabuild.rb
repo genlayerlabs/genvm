@@ -20,14 +20,18 @@ project('sdk-python') {
 
 	py_targets = []
 
+	build_patcher = target_cargo_build(
+		name: 'genvm-softfloat-patcher',
+		dir: cur_src.parent.join('tools', 'softfloat-lib', 'patch-floats')
+	)
+
 	py_targets << target_command(
 		output_file: out,
-		dependencies: [out_raw],
+		dependencies: [out_raw, build_patcher],
 		command: [
-			'cargo', 'run',
+			build_patcher.output_file,
 			out_raw.output_file, out
-		],
-		cwd: cur_src.parent.join('tools', 'softfloat-lib', 'patch-floats')
+		]
 	)
 
 	py_libs_file = config.wasm_out_dir.join('genvm-python-sdk.frozen')

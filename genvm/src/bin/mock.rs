@@ -102,12 +102,12 @@ mod test_node_iface_impl {
     }
 
     impl nondet_functions_api::Trait for TestApi {
-        fn get_webpage(&mut self,gas: &mut u64,url: *const u8) -> genvm_modules_common::interfaces::CStrResult {
-            return self.nondet_meths.get_webpage(gas, url);
+        fn get_webpage(&mut self,gas: &mut u64,config: *const u8,url: *const u8) -> genvm_modules_common::interfaces::CStrResult {
+            return self.nondet_meths.get_webpage(gas, config, url);
         }
 
-        fn call_llm(&mut self,gas: &mut u64,data: *const u8) -> genvm_modules_common::interfaces::CStrResult {
-            return self.nondet_meths.get_webpage(gas, data);
+        fn call_llm(&mut self,gas: &mut u64,config: *const u8,data: *const u8) -> genvm_modules_common::interfaces::CStrResult {
+            return self.nondet_meths.get_webpage(gas, config, data);
         }
     }
 }

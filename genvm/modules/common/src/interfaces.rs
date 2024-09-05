@@ -31,8 +31,8 @@ pub struct CStrResult {
 macro_rules! NondetFunctionsApiFns {
     ($cb:path[$($args:tt),*]) => {
         $cb!(($($args),*) {
-            get_webpage: fn(gas: &mut u64, url: *const u8) -> ($crate::interfaces::CStrResult);
-            call_llm: fn(gas: &mut u64, data: *const u8) -> ($crate::interfaces::CStrResult);
+            get_webpage: fn(gas: &mut u64, config: *const u8, url: *const u8) -> ($crate::interfaces::CStrResult);
+            call_llm: fn(gas: &mut u64, config: *const u8, prompt: *const u8) -> ($crate::interfaces::CStrResult);
         });
     };
 }

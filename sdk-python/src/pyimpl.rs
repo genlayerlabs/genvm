@@ -105,15 +105,15 @@ pub mod genlayer_sdk {
     }
 
     #[pyfunction]
-    fn get_webpage(url: PyStrRef, vm: &VirtualMachine) -> PyResult<String> {
-        let len = map_error(vm, unsafe { genvm_sdk_rust::get_webpage(url.as_str()) })?;
+    fn get_webpage(config: PyStrRef, url: PyStrRef, vm: &VirtualMachine) -> PyResult<String> {
+        let len = map_error(vm, unsafe { genvm_sdk_rust::get_webpage(config.as_str(), url.as_str()) })?;
 
         read_result_str(vm, len)
     }
 
     #[pyfunction]
-    fn call_llm(prompt: PyStrRef, vm: &VirtualMachine) -> PyResult<String> {
-        let len = map_error(vm, unsafe { genvm_sdk_rust::call_llm(prompt.as_str()) })?;
+    fn call_llm(config: PyStrRef, prompt: PyStrRef, vm: &VirtualMachine) -> PyResult<String> {
+        let len = map_error(vm, unsafe { genvm_sdk_rust::call_llm(config.as_str(), prompt.as_str()) })?;
 
         read_result_str(vm, len)
     }
