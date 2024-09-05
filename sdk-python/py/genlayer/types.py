@@ -6,7 +6,9 @@ class Address:
 	SIZE = 32
 	_as_bytes: bytes
 
-	def __init__(self, val: str | bytes):
+	def __init__(self, val: str | bytes | memoryview):
+		if isinstance(val, memoryview):
+			val = bytes(val)
 		if isinstance(val, str) or len(val) > Address.SIZE:
 			val = base64.b64decode(val)
 		if len(val) != Address.SIZE:

@@ -1,4 +1,5 @@
 import genlayer.wasi as wasi
+import genlayer.calldata
 
 from .types import *
 
@@ -11,9 +12,9 @@ def public(f):
 	setattr(f, '__public__', True)
 	return f
 
-class AlreadySerializedResult(str):
+class AlreadySerializedResult(bytes):
 	def __new__(cls, *args, **kwargs):
-		return str.__new__(cls, *args, **kwargs)
+		return bytes.__new__(cls, *args, **kwargs)
 
 def account_from_b64(x: str) -> bytes:
 	return base64.b64decode(x)
@@ -27,9 +28,9 @@ class ContractMethod:
 			"method": self.name,
 			"args": args,
 		}
-		calldata = json.dumps(obj)
+		calldata = genlayer.calldata.encode(obj)
 		res = wasi.call_contract(self.addr.as_bytes, calldata)
-		return json.loads(res)
+		return genlayer.calldata.decode(res)
 
 class Contract:
 	def __init__(self, addr: Address):
@@ -60,5 +61,4 @@ class Runner:
 def run_nondet(eq_principle, runner: Runner) -> typing.Any:
 	import pickle
 	res = wasi.run_nondet(json.dumps(eq_principle), pickle.dumps(runner))
-	res = base64.b64decode(res)
 	return pickle.loads(res)

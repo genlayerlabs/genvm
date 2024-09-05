@@ -6,11 +6,16 @@ jupyter: python3
 
 ```{python}
 from pathlib import Path
-import sys
 import os
 import inspect
-gsdk_path = Path(os.path.abspath("__file__")).parent.parent.parent.joinpath('sdk-python', 'py')
-sys.path.append(str(gsdk_path))
+
+script_dir = Path("__file__").parent.absolute()
+root_dir = script_dir
+while not root_dir.joinpath('.genvm-monorepo-root').exists():
+	root_dir = root_dir.parent
+
+import sys
+sys.path.append(str(root_dir.joinpath('sdk-python', 'py')))
 import genlayer.calldata as calldata
 import rlp
 

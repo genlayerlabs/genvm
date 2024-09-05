@@ -18,4 +18,4 @@ def retn():
 
 @gsdk.public
 def retn_ser():
-    return gsdk.AlreadySerializedResult("123")
+    return gsdk.AlreadySerializedResult(b"123")

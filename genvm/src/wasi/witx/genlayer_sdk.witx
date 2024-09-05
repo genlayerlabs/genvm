@@ -9,7 +9,7 @@
     )
 
     (@interface func (export "contract_return")
-        (param $result string)
+        (param $result $bytes)
         (@witx noreturn)
     )
 
@@ -39,7 +39,7 @@
 
     (@interface func (export "call_contract")
         (param $account $bytes)
-        (param $calldata string)
+        (param $calldata $bytes)
         (result $error (expected $bytes_len (error $errno)))
     )
 

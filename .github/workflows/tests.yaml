@@ -7,7 +7,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - run: sudo apt-get update -y && sudo apt-get install -y ninja-build ruby curl git python3 zip wget tar
+      - name: basic setup
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y ninja-build ruby curl git python3 zip wget tar && \
+          echo "CARGO_INCREMENTAL=1" >> $GITHUB_ENV && \
+          export CARGO_INCREMENTAL=1
       - uses: actions/checkout@v4
       - name: checkout submodules
         run: |
@@ -55,19 +59,19 @@ jobs:
         with:
           sparse-checkout: |
             genvm/testdata
-      - run: |
-          mkdir -p build
-          python3 -m pip install -r genvm/testdata/runner/requirements.txt
+            sdk-python/py
+            .genvm-monorepo-root
       - uses: actions/download-artifact@v4
         with:
           name: all
       - run: |
-          mkdir -p build && \
-            mkdir -p genvm/target && \
+          python3 -m pip install -r genvm/testdata/runner/requirements.txt && \
+            mkdir -p build && \
             mv out.zip build/out.zip && \
             pushd build && \
             unzip out.zip && \
-            popd
+            popd && \
+            ls -la . build \
       - name: genvm mock tests
         run: |
           ./genvm/testdata/runner/run.py
@@ -82,20 +86,19 @@ jobs:
         with:
           sparse-checkout: |
             sdk-python
-      - run: |
-          python3.12 -m pip install poetry && \
-            pushd sdk-python && \
-            poetry install && \
-            popd
+            .genvm-monorepo-root
       - uses: actions/download-artifact@v4
         with:
           name: all
       - run: |
-          mkdir -p build && \
+          python3.12 -m pip install poetry && \
+            pushd sdk-python && \
+            poetry install && \
+            popd && \
+            mkdir -p build && \
             mv out.zip build/out.zip && \
             pushd build && \
             unzip out.zip && \
-            ls -lhR . && \
             popd
       - name: avl tree tests
         run: |

@@ -71,7 +71,7 @@ def encode(x: Any) -> bytes:
 	impl(x)
 	return bytes(mem)
 
-def decode(mem: bytes) -> Any:
+def decode(mem: bytes | memoryview) -> Any:
 	mem: memoryview = memoryview(mem)
 	def read_uleb128() -> int:
 		nonlocal mem

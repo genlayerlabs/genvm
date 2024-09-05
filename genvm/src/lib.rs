@@ -14,7 +14,7 @@ pub fn run_with_api(mut api: Box<dyn RequiredApis>) -> Result<crate::vm::VMRunRe
 
     let mut entrypoint = b"call!".to_vec();
     let calldata = api.get_calldata()?;
-    entrypoint.extend_from_slice(calldata.as_bytes());
+    entrypoint.extend_from_slice(&calldata);
 
     let init_data = api.get_initial_data()?;
 

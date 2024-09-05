@@ -1,4 +1,5 @@
 import genlayer.wasi as wasi
+import genlayer.calldata
 import json
 
 def _give_result(res):
@@ -9,14 +10,15 @@ def _give_result(res):
 	if isinstance(res, AlreadySerializedResult):
 		wasi.contract_return(res)
 	else:
-		wasi.contract_return(json.dumps(res))
+		wasi.contract_return(genlayer.calldata.encode(res))
 
 def run(mod):
 	entrypoint: bytes = wasi.get_entrypoint()
 	CALL = b'call!'
 	NONDET = b'nondet!'
 	if entrypoint.startswith(CALL):
-		calldata = json.loads(entrypoint[len(CALL):].decode())
+		calldata = memoryview(entrypoint)[len(CALL):]
+		calldata = genlayer.calldata.decode(calldata)
 		meth = getattr(mod, calldata['method'])
 		from .sdk import message
 		if not message.is_init and not getattr(meth, '__public__', False):
@@ -28,6 +30,6 @@ def run(mod):
 		import base64
 		res = pickle.loads(entrypoint[len(NONDET):])
 		res = res.run()
-		wasi.contract_return(base64.b64encode(pickle.dumps(res)).decode('ascii'))
+		wasi.contract_return(pickle.dumps(res))
 	else:
 		raise Exception(f"unknown entrypoint {entrypoint}")

@@ -139,7 +139,7 @@ impl std::fmt::Display for Rollback {
 }
 
 #[derive(Debug)]
-pub struct ContractReturn(pub String);
+pub struct ContractReturn(pub Vec<u8>);
 
 impl std::error::Error for ContractReturn {}
 
@@ -275,9 +275,9 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
     fn contract_return(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        message: wiggle::GuestPtr<str>,
+        message: &generated::types::Bytes,
     ) -> anyhow::Error {
-        let res = read_string(mem, message);
+        let res = message.read_owned(mem);
         let Ok(res) = res else { return res.unwrap_err().into(); };
         ContractReturn(res).into()
     }
@@ -362,7 +362,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
 
         match res? {
             crate::vm::VMRunResult::Return(r) => {
-                self.set_result(r.into_bytes())
+                self.set_result(r)
             },
             crate::vm::VMRunResult::Rollback(r) => Err(generated::types::Error::trap(Rollback(r).into())),
             crate::vm::VMRunResult::Error(e) => Err(generated::types::Error::trap(Rollback(format!("subvm failed {}", e)).into())),
@@ -373,7 +373,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         account: &generated::types::Bytes,
-        calldata: wiggle::GuestPtr<str>,
+        calldata: &generated::types::Bytes,
     ) -> Result<generated::types::BytesLen, generated::types::Error> {
         self.data_mut().ensure_det()?;
         let mut called_contract_account = node_iface::Address::new();
@@ -385,7 +385,8 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             *to = *from;
         }
         let mut res_calldata = b"call!".to_vec();
-        res_calldata.extend(mem.as_cow_str(calldata).iter().flat_map(|x| x.bytes()));
+        let calldata = calldata.buf.as_array(calldata.buf_len);
+        res_calldata.extend(mem.as_cow(calldata)?.iter());
 
         let supervisor = self.data_mut().data.supervisor.clone();
         let init_actions = {
@@ -421,7 +422,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
 
         match res? {
             crate::vm::VMRunResult::Return(r) => {
-                self.set_result(r.into_bytes())
+                self.set_result(r)
             },
             crate::vm::VMRunResult::Rollback(r) => Err(generated::types::Error::trap(Rollback(r).into())),
             crate::vm::VMRunResult::Error(e) => Err(generated::types::Error::trap(Rollback(format!("subvm failed {}", e)).into())),

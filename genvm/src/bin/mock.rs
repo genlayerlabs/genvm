@@ -7,6 +7,7 @@ use genvm::vm::VMRunResult;
 mod test_node_iface_impl {
     use genvm::plugin_loader::nondet_functions_api::Loader;
     use genvm_modules_common::interfaces::nondet_functions_api;
+    use serde_with::{serde_as, base64::Base64};
 
     use std::{collections::HashMap, sync::Arc};
     use genvm::*;
@@ -30,12 +31,14 @@ mod test_node_iface_impl {
         code: Option<String>,
     }
 
+    #[serde_as]
     #[derive(Serialize, Deserialize, Clone)]
     pub struct Config {
         accounts: HashMap<String, FakeAccount>,
         runners: HashMap<String, Vec<FakeInitAction>>,
         message: node_iface::MessageData,
-        calldata: String
+        #[serde_as(as = "Base64")]
+        calldata: Vec<u8>,
     }
 
     impl TryFrom<FakeInitAction> for node_iface::InitAction {
@@ -81,7 +84,7 @@ mod test_node_iface_impl {
             Ok(self.conf.message.clone())
         }
 
-        fn get_calldata(&mut self) -> Result<String> {
+        fn get_calldata(&mut self) -> Result<Vec<u8>> {
             Ok(self.conf.calldata.clone())
         }
 

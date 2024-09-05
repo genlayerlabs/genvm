@@ -29,14 +29,18 @@ pub mod genlayer_sdk {
     }
 
     #[pyfunction]
-    fn contract_return(s: PyStrRef, vm: &VirtualMachine) -> PyResult<()> {
+    fn contract_return(s: PyBytesRef, vm: &VirtualMachine) -> PyResult<()> {
         flush_everything(vm);
-        unsafe { genvm_sdk_rust::contract_return(s.as_ref()) };
+        let s = genvm_sdk_rust::Bytes {
+            buf: s.as_ptr(),
+            buf_len: s.len() as u32,
+        };
+        unsafe { genvm_sdk_rust::contract_return(s) };
         Ok(())
     }
 
     #[pyfunction]
-    fn run_nondet(eq_principle: PyStrRef, calldata: PyBytesRef, vm: &VirtualMachine) -> PyResult<String> {
+    fn run_nondet(eq_principle: PyStrRef, calldata: PyBytesRef, vm: &VirtualMachine) -> PyResult<PyBytes> {
         flush_everything(vm);
         let eq_principle = eq_principle.as_str();
         let calldata: &[u8] = calldata.as_bytes();
@@ -49,11 +53,11 @@ pub mod genlayer_sdk {
                 }
             )
         })?;
-        read_result_str(vm, len)
+        read_result_bytes(vm, len)
     }
 
     #[pyfunction]
-    fn call_contract(address: PyBytesRef, calldata: PyStrRef, vm: &VirtualMachine) -> PyResult<String> {
+    fn call_contract(address: PyBytesRef, calldata: PyBytesRef, vm: &VirtualMachine) -> PyResult<PyBytes> {
         flush_everything(vm);
         let len = map_error(vm, unsafe {
             genvm_sdk_rust::call_contract(
@@ -61,10 +65,13 @@ pub mod genlayer_sdk {
                     buf: address.as_ptr(),
                     buf_len: address.len() as u32,
                 },
-                calldata.as_str(),
+                genvm_sdk_rust::Bytes {
+                    buf: calldata.as_ptr(),
+                    buf_len: calldata.len() as u32,
+                },
             )
         })?;
-        read_result_str(vm, len)
+        read_result_bytes(vm, len)
     }
 
     fn read_result_str(vm: &VirtualMachine, len: u32) -> PyResult<String> {

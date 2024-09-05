@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, base64::Base64};
 
@@ -42,18 +43,77 @@ impl Gas {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
+pub struct DecodeUtf8<I: Iterator<Item = u8>>(std::iter::Peekable<I>);
+
+pub fn decode_utf8<I: IntoIterator<Item = u8>>(i: I) -> DecodeUtf8<I::IntoIter> {
+    DecodeUtf8(i.into_iter().peekable())
+}
+
+#[derive(PartialEq, Debug)]
+pub struct InvalidSequence(pub Vec<u8>);
+
+impl<I: Iterator<Item = u8>> Iterator for DecodeUtf8<I> {
+    type Item = Result<char, InvalidSequence>;
+    #[inline]
+    fn next(&mut self) -> Option<Result<char, InvalidSequence>> {
+        let mut on_err: Vec<u8> = Vec::new();
+        self.0.next().map(|b| {
+            on_err.push(b);
+            if b & 0x80 == 0 { Ok(b as char) } else {
+                let l = (!b).leading_zeros() as usize; // number of bytes in UTF-8 representation
+                if l < 2 || l > 6 { return Err(InvalidSequence(on_err)) };
+                let mut x = (b as u32) & (0x7F >> l);
+                for _ in 0..l-1 {
+                    match self.0.peek() {
+                        Some(&b) if b & 0xC0 == 0x80 => {
+                            on_err.push(b);
+                            self.0.next();
+                            x = (x << 6) | (b as u32) & 0x3F;
+                        },
+                        _ => return Err(InvalidSequence(on_err)),
+                    }
+                }
+                match char::from_u32(x) {
+                    Some(x) if l == x.len_utf8() => Ok(x),
+                    _ => Err(InvalidSequence(on_err)),
+                }
+            }
+        })
+    }
+}
+
 pub enum VMRunResult {
-    Return(String),
+    Return(Vec<u8>),
     Rollback(String),
     /// TODO: should there be an error or should it be merged with rollback?
     Error(String),
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct Calldata {
-    pub method: String,
-    pub args: Vec<serde_json::Value>
+impl std::fmt::Debug for VMRunResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Return(r) => {
+                let str = decode_utf8(r.iter().cloned()).map(|r|
+                    match r {
+                        Ok('\\') => "\\\\".into(),
+                        Ok(c) if c.is_control() || c == '\n' || c == '\x07' => {
+                            if c as u32 <= 255 {
+                                format!("\\x{:02x}", c as u32)
+                            } else {
+                                format!("\\u{:04x}", c as u32)
+                            }
+                        },
+                        Ok(c) => c.to_string(),
+                        Err(InvalidSequence(seq)) => seq.iter().map(|c| format!("\\{:02x}", *c as u32)).join(""),
+                    }
+                ).join("");
+                f.write_fmt(format_args!("Return(\"{}\")", str))
+            }
+            Self::Rollback(r) => f.debug_tuple("Rollback").field(r).finish(),
+            Self::Error(r) => f.debug_tuple("Error").field(r).finish(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -73,7 +133,7 @@ pub struct RunnerDescription {
 pub trait InitApi {
     fn get_initial_data(&mut self) -> Result<MessageData>;
 
-    fn get_calldata(&mut self) -> Result<String>;
+    fn get_calldata(&mut self) -> Result<Vec<u8>>;
 
     fn get_code(&mut self, account: &Address) -> Result<Arc<Vec<u8>>>;
 }
@@ -106,6 +166,5 @@ pub trait NondetSupportApi {
 
 #[allow(dead_code)]
 pub trait ContractsApi {
-    //fn run_external_view(&mut self, remaing_gas: &mut Gas, target: Address, calldata: Calldata) -> Result<String>;
     fn post_message(&mut self, remaing_gas: &mut Gas, data: MessageData, when: ()) -> Result<()>;
 }

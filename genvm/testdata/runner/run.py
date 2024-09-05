@@ -9,10 +9,22 @@ import threading
 from threading import Lock
 import argparse
 import re
+import sys
+import base64
 
 import http.server as httpserv
 
-http_dir = str(Path(__file__).parent.parent.joinpath('http').absolute())
+script_dir = Path(__file__).parent.absolute()
+root_dir = script_dir
+while not root_dir.joinpath('.genvm-monorepo-root').exists():
+	root_dir = root_dir.parent
+
+http_dir = str(script_dir.parent.joinpath('http').absolute())
+
+sys.path.append(str(root_dir.joinpath('sdk-python', 'py')))
+
+import genlayer.calldata as calldata
+from genlayer.types import Address
 
 class MyHTTPHandler(httpserv.SimpleHTTPRequestHandler):
 	def __init__(self, *args, **kwargs):
@@ -25,11 +37,11 @@ def run_serv():
 http_thread = threading.Thread(target=run_serv, daemon=True)
 http_thread.start()
 
-dir = Path(__file__).parent.parent.joinpath('cases')
-tmp_dir = Path(__file__).parent.parent.parent.parent.joinpath('build', 'genvm-testdata-out')
+dir = script_dir.parent.joinpath('cases')
+tmp_dir = root_dir.joinpath('build', 'genvm-testdata-out')
 
 arg_parser = argparse.ArgumentParser("genvm-test-runner")
-arg_parser.add_argument('--mock-gen-vm', metavar='EXE', default=str(Path(os.getenv("GENVM", Path(__file__).parent.parent.parent.parent.joinpath('build', 'out', 'bin', 'genvm-mock')))))
+arg_parser.add_argument('--mock-gen-vm', metavar='EXE', default=str(Path(os.getenv("GENVM", root_dir.joinpath('build', 'out', 'bin', 'genvm-mock')))))
 arg_parser.add_argument('--filter', metavar='REGEX', default='.*')
 args_parsed = arg_parser.parse_args()
 GENVM = Path(args_parsed.mock_gen_vm)
@@ -49,6 +61,9 @@ def run(path0):
 	conf = _jsonnet.evaluate_file(str(path))
 	conf = json.loads(conf)
 	conf["vars"]["jsonnetDir"] = str(path.parent)
+	eval_vars = conf["vars"].copy()
+	new_calldata_obj = eval(conf["calldata"], globals(), eval_vars)
+	conf["calldata"] = str(base64.b64encode(calldata.encode(new_calldata_obj)), 'ascii')
 	conf_path = tmp_dir.joinpath(path0).with_suffix('.json')
 	conf_path.parent.mkdir(parents=True, exist_ok=True)
 	with open(conf_path, 'wt') as f:
