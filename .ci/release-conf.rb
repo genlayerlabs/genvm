@@ -1,1 +1,3 @@
-config.profile = "release"
+extend_config({
+	:profile => "release"
+})

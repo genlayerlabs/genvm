@@ -4,7 +4,7 @@ project('genvm') {
 	modules = [
 		target_cargo_build(
 			name: "lib",
-			profile: "release",
+			profile: config.profile,
 			out_file: modules_dir.join('libnondet-funcs.so'),
 			dir: cur_src.join('modules', 'default-impl', 'nondet-funcs')
 		)
