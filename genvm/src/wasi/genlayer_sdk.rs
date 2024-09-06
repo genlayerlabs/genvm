@@ -1,9 +1,15 @@
-use std::{ffi::{CStr, CString}, sync::{Arc, Mutex}};
+use std::{
+    ffi::{CStr, CString},
+    sync::{Arc, Mutex},
+};
 
 use wasmtime::StoreContextMut;
 use wiggle::GuestError;
 
-use crate::{node_iface::{self, Address, MessageData, StorageSlot}, vm::InitActions};
+use crate::{
+    node_iface::{self, Address, MessageData, StorageSlot},
+    vm::InitActions,
+};
 
 use super::{base, common::read_string};
 
@@ -37,8 +43,14 @@ pub(crate) mod generated {
 }
 
 impl node_iface::Address {
-    fn read_from_mem(addr: &generated::types::Addr, mem: &mut wiggle::GuestMemory<'_>) -> Result<Self, generated::types::Error> {
-        let cow = mem.as_cow(addr.ptr.as_array(node_iface::Address::len().try_into().unwrap()))?;
+    fn read_from_mem(
+        addr: &generated::types::Addr,
+        mem: &mut wiggle::GuestMemory<'_>,
+    ) -> Result<Self, generated::types::Error> {
+        let cow = mem.as_cow(
+            addr.ptr
+                .as_array(node_iface::Address::len().try_into().unwrap()),
+        )?;
         let mut ret = Address::new();
         for (x, y) in ret.0.iter_mut().zip(cow.iter()) {
             *x = *y;
@@ -49,7 +61,10 @@ impl node_iface::Address {
 
 impl generated::types::Bytes {
     #[allow(dead_code)]
-    fn read_owned(&self, mem: &mut wiggle::GuestMemory<'_>) -> Result<Vec<u8>, generated::types::Error> {
+    fn read_owned(
+        &self,
+        mem: &mut wiggle::GuestMemory<'_>,
+    ) -> Result<Vec<u8>, generated::types::Error> {
         Ok(mem.as_cow(self.buf.as_array(self.buf_len))?.into_owned())
     }
 }
@@ -90,7 +105,11 @@ impl<'a, T> Mapped<'a, T> {
     }
 }
 
-pub(super) fn add_to_linker_sync<'a, T: Send + 'static, F: Fn(&mut T) -> &mut ContextData + Copy + Send + Sync + 'static>(
+pub(super) fn add_to_linker_sync<
+    'a,
+    T: Send + 'static,
+    F: Fn(&mut T) -> &mut ContextData + Copy + Send + Sync + 'static,
+>(
     linker: &mut wasmtime::Linker<T>,
     f: F,
 ) -> anyhow::Result<()> {
@@ -98,41 +117,40 @@ pub(super) fn add_to_linker_sync<'a, T: Send + 'static, F: Fn(&mut T) -> &mut Co
         f: F,
     }
     impl<T, F: Fn(&mut T) -> &mut ContextData + Copy + Send + Sync + 'static> MappedVtable<T> for A<F> {
-        fn get_data_mut<'a, 'b>(&self, store: &'b mut StoreContextMut<'a, T>) -> &'b mut ContextData {
+        fn get_data_mut<'a, 'b>(
+            &self,
+            store: &'b mut StoreContextMut<'a, T>,
+        ) -> &'b mut ContextData {
             let fc = &self.f;
             fc(store.data_mut())
         }
     }
 
-    let vtable = Arc::new(A::<F> {
-        f,
-    });
+    let vtable = Arc::new(A::<F> { f });
 
     //#[derive(Send, Sync)]
     struct FnBuilderImpl<T> {
-        vtable: Arc<dyn MappedVtable<T> + Send + Sync + 'static>
+        vtable: Arc<dyn MappedVtable<T> + Send + Sync + 'static>,
     }
     impl<T> Clone for FnBuilderImpl<T> {
         fn clone(&self) -> Self {
-            Self { vtable: self.vtable.clone() }
+            Self {
+                vtable: self.vtable.clone(),
+            }
         }
     }
     impl<T: 'static> generated::FnBuilderGenlayerSdk<T> for FnBuilderImpl<T> {
         type MappedTo<'a> = Mapped<'a, T>;
 
-        fn build<'a>(&self) -> impl Fn(wasmtime::StoreContextMut<'a,T>) -> Mapped<'a, T> {
-            |x| {
-                Mapped {
-                    stor: x,
-                    vtable: self.vtable.clone(),
-                }
+        fn build<'a>(&self) -> impl Fn(wasmtime::StoreContextMut<'a, T>) -> Mapped<'a, T> {
+            |x| Mapped {
+                stor: x,
+                vtable: self.vtable.clone(),
             }
         }
     }
 
-    let fn_bilder = FnBuilderImpl {
-        vtable: vtable,
-    };
+    let fn_bilder = FnBuilderImpl { vtable: vtable };
 
     generated::add_genlayer_sdk_to_linker(linker, fn_bilder)?;
     Ok(())
@@ -217,13 +235,21 @@ impl From<serde_json::Error> for generated::types::Error {
 
 impl<'a, T> Mapped<'a, T> {
     fn consume_fuel(&mut self, gas_consumed: u64) -> Result<(), generated::types::Error> {
-        let old_fuel = self.stor.get_fuel().map_err(|_e| generated::types::Errno::Io)?;
+        let old_fuel = self
+            .stor
+            .get_fuel()
+            .map_err(|_e| generated::types::Errno::Io)?;
         let gas_consumed = gas_consumed.min(old_fuel).max(1);
-        self.stor.set_fuel(old_fuel - gas_consumed).map_err(|_e| generated::types::Errno::Io)?;
+        self.stor
+            .set_fuel(old_fuel - gas_consumed)
+            .map_err(|_e| generated::types::Errno::Io)?;
         Ok(())
     }
 
-    fn set_result(&mut self, data: Vec<u8>) -> Result<generated::types::BytesLen, generated::types::Error> {
+    fn set_result(
+        &mut self,
+        data: Vec<u8>,
+    ) -> Result<generated::types::BytesLen, generated::types::Error> {
         self.data_mut().result = data;
         self.data_mut().result_cursor = 0;
         let res: u32 = self.data_mut().result.len().try_into()?;
@@ -289,7 +315,9 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         message: &generated::types::Bytes,
     ) -> anyhow::Error {
         let res = message.read_owned(mem);
-        let Ok(res) = res else { return res.unwrap_err().into(); };
+        let Ok(res) = res else {
+            return res.unwrap_err().into();
+        };
         ContractReturn(res).into()
     }
 
@@ -308,10 +336,21 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let url_str = CString::new(url_str).map_err(|e| generated::types::Errno::Inval)?;
 
         let supervisor = self.data_mut().data.supervisor.clone();
-        let Ok(mut supervisor) = supervisor.lock() else { return Err(generated::types::Errno::Io.into()); };
-        let mut fuel = self.stor.get_fuel().map_err(|_e| generated::types::Errno::Io)?;
-        let res = supervisor.api.get_webpage(&mut fuel, config_str.as_bytes().as_ptr(), url_str.as_bytes().as_ptr());
-        self.stor.set_fuel(fuel).map_err(|_e| generated::types::Errno::Io)?;
+        let Ok(mut supervisor) = supervisor.lock() else {
+            return Err(generated::types::Errno::Io.into());
+        };
+        let mut fuel = self
+            .stor
+            .get_fuel()
+            .map_err(|_e| generated::types::Errno::Io)?;
+        let res = supervisor.api.get_webpage(
+            &mut fuel,
+            config_str.as_bytes().as_ptr(),
+            url_str.as_bytes().as_ptr(),
+        );
+        self.stor
+            .set_fuel(fuel)
+            .map_err(|_e| generated::types::Errno::Io)?;
         if res.err != 0 {
             return Err(generated::types::Errno::Io.into());
         }
@@ -333,10 +372,21 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let prompt_str = CString::new(prompt_str).map_err(|e| generated::types::Errno::Inval)?;
 
         let supervisor = self.data_mut().data.supervisor.clone();
-        let Ok(mut supervisor) = supervisor.lock() else { return Err(generated::types::Errno::Io.into()); };
-        let mut fuel = self.stor.get_fuel().map_err(|_e| generated::types::Errno::Io)?;
-        let res = supervisor.api.call_llm(&mut fuel, config_str.as_bytes().as_ptr(), prompt_str.as_bytes().as_ptr());
-        self.stor.set_fuel(fuel).map_err(|_e| generated::types::Errno::Io)?;
+        let Ok(mut supervisor) = supervisor.lock() else {
+            return Err(generated::types::Errno::Io.into());
+        };
+        let mut fuel = self
+            .stor
+            .get_fuel()
+            .map_err(|_e| generated::types::Errno::Io)?;
+        let res = supervisor.api.call_llm(
+            &mut fuel,
+            config_str.as_bytes().as_ptr(),
+            prompt_str.as_bytes().as_ptr(),
+        );
+        self.stor
+            .set_fuel(fuel)
+            .map_err(|_e| generated::types::Errno::Io)?;
         if res.err != 0 {
             return Err(generated::types::Errno::Io.into());
         }
@@ -378,11 +428,13 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let res = res.map_err(|_e| generated::types::Errno::Io);
 
         match res? {
-            crate::vm::VMRunResult::Return(r) => {
-                self.set_result(r)
-            },
-            crate::vm::VMRunResult::Rollback(r) => Err(generated::types::Error::trap(Rollback(r).into())),
-            crate::vm::VMRunResult::Error(e) => Err(generated::types::Error::trap(Rollback(format!("subvm failed {}", e)).into())),
+            crate::vm::VMRunResult::Return(r) => self.set_result(r),
+            crate::vm::VMRunResult::Rollback(r) => {
+                Err(generated::types::Error::trap(Rollback(r).into()))
+            }
+            crate::vm::VMRunResult::Error(e) => Err(generated::types::Error::trap(
+                Rollback(format!("subvm failed {}", e)).into(),
+            )),
         }
     }
 
@@ -400,8 +452,12 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
 
         let supervisor = self.data_mut().data.supervisor.clone();
         let init_actions = {
-            let Ok(mut supervisor) = supervisor.lock() else { return Err(generated::types::Errno::Io.into()); };
-            supervisor.get_actions_for(&called_contract_account).map_err(|_e| generated::types::Errno::Inval)
+            let Ok(mut supervisor) = supervisor.lock() else {
+                return Err(generated::types::Errno::Io.into());
+            };
+            supervisor
+                .get_actions_for(&called_contract_account)
+                .map_err(|_e| generated::types::Errno::Inval)
         }?;
 
         let my_conf = self.data_mut().data.conf;
@@ -418,7 +474,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             message_data: MessageData {
                 contract_account: called_contract_account,
                 sender_account: my_data.sender_account, // FIXME: is that true?
-                gas: my_data.gas, // FIXME: is that true?
+                gas: my_data.gas,                       // FIXME: is that true?
                 value: None,
                 is_init: false,
             },
@@ -431,15 +487,23 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let res = res.map_err(|_e| generated::types::Errno::Io);
 
         match res? {
-            crate::vm::VMRunResult::Return(r) => {
-                self.set_result(r)
-            },
-            crate::vm::VMRunResult::Rollback(r) => Err(generated::types::Error::trap(Rollback(r).into())),
-            crate::vm::VMRunResult::Error(e) => Err(generated::types::Error::trap(Rollback(format!("subvm failed {}", e)).into())),
+            crate::vm::VMRunResult::Return(r) => self.set_result(r),
+            crate::vm::VMRunResult::Rollback(r) => {
+                Err(generated::types::Error::trap(Rollback(r).into()))
+            }
+            crate::vm::VMRunResult::Error(e) => Err(generated::types::Error::trap(
+                Rollback(format!("subvm failed {}", e)).into(),
+            )),
         }
     }
 
-    fn storage_read(&mut self,mem: &mut wiggle::GuestMemory<'_> , slot: &generated::types::Addr,index: u32, buf: &generated::types::MutBytes) -> Result<(), generated::types::Error>  {
+    fn storage_read(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        slot: &generated::types::Addr,
+        index: u32,
+        buf: &generated::types::MutBytes,
+    ) -> Result<(), generated::types::Error> {
         if !self.data_mut().data.conf.can_read_storage {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
@@ -452,16 +516,33 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let mut vec = Vec::with_capacity(mem_size);
         unsafe { vec.set_len(mem_size) };
         let supervisor = self.data_mut().data.supervisor.clone();
-        let Ok(mut supervisor) = supervisor.lock() else { return Err(generated::types::Errno::Io.into()); };
-        let mut rem_gas = node_iface::Gas(self.stor.get_fuel().map_err(|_e| generated::types::Errno::Io)?);
-        let res = supervisor.api.storage_read(&mut rem_gas, StorageSlot {account, slot}, index, &mut vec);
+        let Ok(mut supervisor) = supervisor.lock() else {
+            return Err(generated::types::Errno::Io.into());
+        };
+        let mut rem_gas = node_iface::Gas(
+            self.stor
+                .get_fuel()
+                .map_err(|_e| generated::types::Errno::Io)?,
+        );
+        let res = supervisor.api.storage_read(
+            &mut rem_gas,
+            StorageSlot { account, slot },
+            index,
+            &mut vec,
+        );
         let _ = self.stor.set_fuel(rem_gas.raw());
         res.map_err(|_e| generated::types::Errno::Io)?;
         mem.copy_from_slice(&vec, dest_buf)?;
         Ok(())
     }
 
-    fn storage_write(&mut self,mem: &mut wiggle::GuestMemory<'_>, slot:&generated::types::Addr,index: u32, buf: &generated::types::Bytes) -> Result<(), generated::types::Error>  {
+    fn storage_write(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        slot: &generated::types::Addr,
+        index: u32,
+        buf: &generated::types::Bytes,
+    ) -> Result<(), generated::types::Error> {
         if !self.data_mut().data.conf.can_write_storage {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
@@ -475,9 +556,18 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let slot = Address::read_from_mem(&slot, mem)?;
 
         let supervisor = self.data_mut().data.supervisor.clone();
-        let Ok(mut supervisor) = supervisor.lock() else { return Err(generated::types::Errno::Io.into()); };
-        let mut rem_gas = node_iface::Gas(self.stor.get_fuel().map_err(|_e| generated::types::Errno::Io)?);
-        let res = supervisor.api.storage_write(&mut rem_gas, StorageSlot {account, slot}, index, &buf);
+        let Ok(mut supervisor) = supervisor.lock() else {
+            return Err(generated::types::Errno::Io.into());
+        };
+        let mut rem_gas = node_iface::Gas(
+            self.stor
+                .get_fuel()
+                .map_err(|_e| generated::types::Errno::Io)?,
+        );
+        let res =
+            supervisor
+                .api
+                .storage_write(&mut rem_gas, StorageSlot { account, slot }, index, &buf);
         let _ = self.stor.set_fuel(rem_gas.raw());
         res.map_err(|_e| generated::types::Errno::Io)?;
         Ok(())
@@ -485,8 +575,14 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
 }
 
 impl<T> Mapped<'_, T> {
-    fn spaw_and_run(&mut self, supervisor: Arc<Mutex<crate::vm::Supervisor>>, essential_data: EssentialGenlayerSdkData) -> Result<crate::vm::VMRunResult, ()> {
-        fn dummy_error<E>(_e: E) -> () { () }
+    fn spaw_and_run(
+        &mut self,
+        supervisor: Arc<Mutex<crate::vm::Supervisor>>,
+        essential_data: EssentialGenlayerSdkData,
+    ) -> Result<crate::vm::VMRunResult, ()> {
+        fn dummy_error<E>(_e: E) -> () {
+            ()
+        }
         let (mut vm, instance) = {
             let mut supervisor = supervisor.lock().map_err(dummy_error)?;
             let mut vm = supervisor.spawn(essential_data).map_err(dummy_error)?;
@@ -508,7 +604,9 @@ impl<T> Mapped<'_, T> {
 }
 
 fn vec_from_cstr_libc(str: *const u8) -> Vec<u8> {
-    let res = Vec::from(unsafe  { CStr::from_ptr(str as *const i8) }.to_bytes());
-    unsafe { libc::free(str as *mut std::ffi::c_void); }
+    let res = Vec::from(unsafe { CStr::from_ptr(str as *const i8) }.to_bytes());
+    unsafe {
+        libc::free(str as *mut std::ffi::c_void);
+    }
     res
 }

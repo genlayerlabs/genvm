@@ -7,13 +7,17 @@ use genvm::vm::VMRunResult;
 mod test_node_iface_impl {
     use genvm::plugin_loader::nondet_functions_api::Loader;
     use genvm_modules_common::interfaces::nondet_functions_api;
-    use serde_with::{serde_as, base64::Base64};
+    use serde_with::{base64::Base64, serde_as};
 
-    use std::{collections::HashMap, io::{stderr, Write}, sync::Arc};
     use genvm::*;
+    use std::{
+        collections::HashMap,
+        io::{stderr, Write},
+        sync::Arc,
+    };
 
-    use node_iface::{self};
     use anyhow::Result;
+    use node_iface::{self};
     use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize, Clone)]
@@ -47,19 +51,30 @@ mod test_node_iface_impl {
 
         fn try_from(value: FakeInitAction) -> Result<Self> {
             Ok(match value {
-                FakeInitAction::MapFile { to, file } => node_iface::InitAction::MapFile { to, contents: Arc::new(std::fs::read(file)?) },
+                FakeInitAction::MapFile { to, file } => node_iface::InitAction::MapFile {
+                    to,
+                    contents: Arc::new(std::fs::read(file)?),
+                },
                 FakeInitAction::MapCode { to } => node_iface::InitAction::MapCode { to },
-                FakeInitAction::AddEnv { name, val } => node_iface::InitAction::AddEnv { name, val },
+                FakeInitAction::AddEnv { name, val } => {
+                    node_iface::InitAction::AddEnv { name, val }
+                }
                 FakeInitAction::SetArgs { args } => node_iface::InitAction::SetArgs { args },
-                FakeInitAction::LinkWasm { file } => node_iface::InitAction::LinkWasm { contents: Arc::new(std::fs::read(&file)?), debug_path: Some(file), },
-                FakeInitAction::StartWasm { file } => node_iface::InitAction::StartWasm { contents: Arc::new(std::fs::read(&file)?), debug_path: Some(file), },
+                FakeInitAction::LinkWasm { file } => node_iface::InitAction::LinkWasm {
+                    contents: Arc::new(std::fs::read(&file)?),
+                    debug_path: Some(file),
+                },
+                FakeInitAction::StartWasm { file } => node_iface::InitAction::StartWasm {
+                    contents: Arc::new(std::fs::read(&file)?),
+                    debug_path: Some(file),
+                },
             })
         }
     }
     pub struct TestApi {
         conf: Config,
         nondet_meths: Box<dyn nondet_functions_api::Trait>,
-        fake_storage: FakeStorage
+        fake_storage: FakeStorage,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -72,22 +87,24 @@ mod test_node_iface_impl {
             let mut ent0 = ($stor).slots.entry($slot.account.clone());
             let by_acc = match ent0 {
                 std::collections::hash_map::Entry::Occupied(ref mut v) => v.get_mut(),
-                std::collections::hash_map::Entry::Vacant(v) => {
-                    v.insert(HashMap::new())
-                }
+                std::collections::hash_map::Entry::Vacant(v) => v.insert(HashMap::new()),
             };
             let mut ent2 = by_acc.entry($slot.slot.clone());
             let $to = match ent2 {
-                std::collections::hash_map::Entry::Occupied(ref mut  v) => v.get_mut(),
-                std::collections::hash_map::Entry::Vacant(v) => {
-                    v.insert(Vec::new())
-                }
+                std::collections::hash_map::Entry::Occupied(ref mut v) => v.get_mut(),
+                std::collections::hash_map::Entry::Vacant(v) => v.insert(Vec::new()),
             };
-        }
+        };
     }
 
     impl node_iface::StorageApi for TestApi {
-        fn storage_read(&mut self, _remaing_gas: &mut node_iface::Gas, slot: node_iface::StorageSlot, index: u32, buf: &mut [u8]) -> Result<()> {
+        fn storage_read(
+            &mut self,
+            _remaing_gas: &mut node_iface::Gas,
+            slot: node_iface::StorageSlot,
+            index: u32,
+            buf: &mut [u8],
+        ) -> Result<()> {
             let index = index as usize;
             get_slot!(slot, self.fake_storage, slot);
             if index + buf.len() > slot.len() {
@@ -97,7 +114,13 @@ mod test_node_iface_impl {
             Ok(())
         }
 
-        fn storage_write(&mut self, _remaing_gas: &mut node_iface::Gas, slot: node_iface::StorageSlot, index: u32, buf: &[u8]) -> Result<()> {
+        fn storage_write(
+            &mut self,
+            _remaing_gas: &mut node_iface::Gas,
+            slot: node_iface::StorageSlot,
+            index: u32,
+            buf: &[u8],
+        ) -> Result<()> {
             let index = index as usize;
             get_slot!(slot, self.fake_storage, slot);
             if index + buf.len() > slot.len() {
@@ -111,14 +134,16 @@ mod test_node_iface_impl {
     impl Drop for TestApi {
         fn drop(&mut self) {
             let path = std::path::Path::new(&self.conf.storage_file_path);
-            let res = serde_json::to_string(&self.fake_storage).map_err(|e| anyhow::Error::from(e)).and_then(|x| {
-                std::fs::write(path, x).map_err(Into::into)
-            });
+            let res = serde_json::to_string(&self.fake_storage)
+                .map_err(|e| anyhow::Error::from(e))
+                .and_then(|x| std::fs::write(path, x).map_err(Into::into));
             match res {
                 Err(e) => {
-                    let _ = stderr().lock().write_fmt(format_args!("Writing storage to {:#?} failed {}", path, e));
-                },
-                _ => {},
+                    let _ = stderr()
+                        .lock()
+                        .write_fmt(format_args!("Writing storage to {:#?} failed {}", path, e));
+                }
+                _ => {}
             }
         }
     }
@@ -131,11 +156,12 @@ mod test_node_iface_impl {
                 serde_json::from_str(&storage_str)?
             } else {
                 FakeStorage {
-                    slots: HashMap::new()
+                    slots: HashMap::new(),
                 }
             };
             let dflt_path = genvm::plugin_loader::default_plugin_path()?;
-            let nondet_meths = nondet_functions_api::Methods::load_from_lib(&dflt_path, "nondet-funcs")?;
+            let nondet_meths =
+                nondet_functions_api::Methods::load_from_lib(&dflt_path, "nondet-funcs")?;
             Ok(Self {
                 conf,
                 nondet_meths,
@@ -145,9 +171,18 @@ mod test_node_iface_impl {
     }
 
     impl node_iface::RunnerApi for TestApi {
-        fn get_runner(&mut self, desc: node_iface::RunnerDescription) -> anyhow::Result<Vec<node_iface::InitAction>> {
-            let run = self.conf.runners.get(&desc.lang).ok_or(anyhow::anyhow!("no runner"))?;
-            run.iter().map(|f| f.clone().try_into() as Result<node_iface::InitAction, _>).collect()
+        fn get_runner(
+            &mut self,
+            desc: node_iface::RunnerDescription,
+        ) -> anyhow::Result<Vec<node_iface::InitAction>> {
+            let run = self
+                .conf
+                .runners
+                .get(&desc.lang)
+                .ok_or(anyhow::anyhow!("no runner"))?;
+            run.iter()
+                .map(|f| f.clone().try_into() as Result<node_iface::InitAction, _>)
+                .collect()
         }
     }
 
@@ -167,19 +202,35 @@ mod test_node_iface_impl {
             acc.pop();
             acc.remove(0);
 
-            let acc = self.conf.accounts.get(&acc).ok_or(anyhow::anyhow!("no account"))?;
-            let Some(ref code) = acc.code else { return Err(anyhow::anyhow!("no account")) };
+            let acc = self
+                .conf
+                .accounts
+                .get(&acc)
+                .ok_or(anyhow::anyhow!("no account"))?;
+            let Some(ref code) = acc.code else {
+                return Err(anyhow::anyhow!("no account"));
+            };
             let code = std::fs::read(code)?;
             Ok(Arc::new(code))
         }
     }
 
     impl nondet_functions_api::Trait for TestApi {
-        fn get_webpage(&mut self,gas: &mut u64,config: *const u8,url: *const u8) -> genvm_modules_common::interfaces::CStrResult {
+        fn get_webpage(
+            &mut self,
+            gas: &mut u64,
+            config: *const u8,
+            url: *const u8,
+        ) -> genvm_modules_common::interfaces::CStrResult {
             return self.nondet_meths.get_webpage(gas, config, url);
         }
 
-        fn call_llm(&mut self,gas: &mut u64,config: *const u8,data: *const u8) -> genvm_modules_common::interfaces::CStrResult {
+        fn call_llm(
+            &mut self,
+            gas: &mut u64,
+            config: *const u8,
+            data: *const u8,
+        ) -> genvm_modules_common::interfaces::CStrResult {
             return self.nondet_meths.get_webpage(gas, config, data);
         }
     }
@@ -216,32 +267,34 @@ fn replace_all<E>(
     Ok(new)
 }
 
-static JSON_UNFOLDER_RE: LazyLock<regex::Regex> = LazyLock::new(|| regex::Regex::new(r#"\$\{([a-zA-Z0-9_]*)\}"#).unwrap() );
+static JSON_UNFOLDER_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r#"\$\{([a-zA-Z0-9_]*)\}"#).unwrap());
 
 impl JsonUnfolder {
     fn patch(&self, s: String) -> Result<String> {
         replace_all(&JSON_UNFOLDER_RE, &s, |r: &regex::Captures| {
             let r: &str = &r[1];
-            self.vars.get(r).ok_or(anyhow::anyhow!("error")).map(|x| x.clone())
+            self.vars
+                .get(r)
+                .ok_or(anyhow::anyhow!("error"))
+                .map(|x| x.clone())
         })
     }
     fn run(&self, v: serde_json::Value) -> Result<serde_json::Value> {
         Ok(match v {
             serde_json::Value::String(s) => serde_json::Value::String(self.patch(s)?),
             serde_json::Value::Array(a) => {
-                let res: Result<Vec<serde_json::Value>, _> = a.into_iter().map(|a| self.run(a)).collect();
+                let res: Result<Vec<serde_json::Value>, _> =
+                    a.into_iter().map(|a| self.run(a)).collect();
                 serde_json::Value::Array(res?)
-            },
+            }
             serde_json::Value::Object(ob) => {
-                let res: Result<Vec<(String, serde_json::Value)>, _> =
-                    ob
-                        .into_iter()
-                            .map(|(k, v)| -> Result<(String, serde_json::Value)> {
-                                Ok((k, self.run(v)?))
-                            })
-                            .collect();
+                let res: Result<Vec<(String, serde_json::Value)>, _> = ob
+                    .into_iter()
+                    .map(|(k, v)| -> Result<(String, serde_json::Value)> { Ok((k, self.run(v)?)) })
+                    .collect();
                 serde_json::Value::Object(serde_json::Map::from_iter(res?.into_iter()))
-            },
+            }
             x => x,
         })
     }
@@ -251,22 +304,41 @@ fn main() -> Result<()> {
     let args = CliArgs::parse();
     let conf = std::fs::read(&args.config)?;
     let conf = String::from_utf8(conf)?;
-    let conf: serde_json::Value = serde_json::from_str(&conf).with_context(|| "parsing config to raw json")?;
+    let conf: serde_json::Value =
+        serde_json::from_str(&conf).with_context(|| "parsing config to raw json")?;
 
-    let json_dir: String = std::path::Path::new(&args.config).parent().ok_or(anyhow::anyhow!("no parent"))?.to_str().ok_or(anyhow::anyhow!("to str"))?.into();
-    let artifacts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../build/out").to_str().ok_or(anyhow::anyhow!("to str"))?.into();
+    let json_dir: String = std::path::Path::new(&args.config)
+        .parent()
+        .ok_or(anyhow::anyhow!("no parent"))?
+        .to_str()
+        .ok_or(anyhow::anyhow!("to str"))?
+        .into();
+    let artifacts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../build/out")
+        .to_str()
+        .ok_or(anyhow::anyhow!("to str"))?
+        .into();
     let mut unfolder = JsonUnfolder {
         vars: HashMap::from([
             ("jsonDir".into(), json_dir),
-            ("artifacts".into(), artifacts)
+            ("artifacts".into(), artifacts),
         ]),
     };
-     conf.get("vars").and_then(|x| x.as_object()).map(|x| -> Result<()> {
-        for (k, v) in x{
-            unfolder.vars.insert(k.clone(), String::from(v.as_str().ok_or(anyhow::anyhow!("invalid var value for {}", k))?));
-        }
-        Ok(())
-    }).unwrap_or(Ok(()))?;
+    conf.get("vars")
+        .and_then(|x| x.as_object())
+        .map(|x| -> Result<()> {
+            for (k, v) in x {
+                unfolder.vars.insert(
+                    k.clone(),
+                    String::from(
+                        v.as_str()
+                            .ok_or(anyhow::anyhow!("invalid var value for {}", k))?,
+                    ),
+                );
+            }
+            Ok(())
+        })
+        .unwrap_or(Ok(()))?;
     let conf = unfolder.run(conf)?;
     let conf = serde_json::from_value(conf).with_context(|| "parsing config")?;
 

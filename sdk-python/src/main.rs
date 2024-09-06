@@ -18,11 +18,10 @@ static FROZEN_SDK_DEBUG_BYTES: std::sync::LazyLock<Vec<u8>> = std::sync::LazyLoc
 });
 
 #[cfg(feature = "sdk-debug")]
-static FROZEN_SDK_DEBUG: std::sync::LazyLock<frozen::FrozenLib<&[u8]>> = std::sync::LazyLock::new(|| {
-    frozen::FrozenLib {
+static FROZEN_SDK_DEBUG: std::sync::LazyLock<frozen::FrozenLib<&[u8]>> =
+    std::sync::LazyLock::new(|| frozen::FrozenLib {
         bytes: FROZEN_SDK_DEBUG_BYTES.as_slice(),
-    }
-});
+    });
 
 #[cfg(feature = "sdk-debug")]
 pub fn add_frozen_sdk(vm: &mut rustpython_vm::VirtualMachine) {
@@ -39,7 +38,7 @@ pub const FROZEN_LIBS: &frozen::FrozenLib =
 
 pub fn main() -> std::process::ExitCode {
     rustpython::run(|vm| {
-        vm.add_native_module("genlayer.wasi",  Box::new(pyimpl::make_gensdk_module));
+        vm.add_native_module("genlayer.wasi", Box::new(pyimpl::make_gensdk_module));
         vm.add_frozen(FROZEN_LIBS);
         add_frozen_sdk(vm);
     })

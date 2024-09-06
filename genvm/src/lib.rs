@@ -1,23 +1,24 @@
 mod driver;
 
-pub mod vm;
-pub mod wasi;
 pub mod node_iface;
 pub mod plugin_loader;
+pub mod vm;
+pub mod wasi;
 
 use anyhow::Result;
 use std::sync::{Arc, Mutex};
 
-pub trait RequiredApis :
-    node_iface::InitApi +
-    node_iface::RunnerApi +
-    node_iface::StorageApi +
-    genvm_modules_common::interfaces::nondet_functions_api::Trait  +
-    Send + Sync
-{}
+pub trait RequiredApis:
+    node_iface::InitApi
+    + node_iface::RunnerApi
+    + node_iface::StorageApi
+    + genvm_modules_common::interfaces::nondet_functions_api::Trait
+    + Send
+    + Sync
+{
+}
 
 pub fn run_with_api(mut api: Box<dyn RequiredApis>) -> Result<crate::vm::VMRunResult> {
-
     let mut entrypoint = b"call!".to_vec();
     let calldata = api.get_calldata()?;
     entrypoint.extend_from_slice(&calldata);
@@ -28,7 +29,9 @@ pub fn run_with_api(mut api: Box<dyn RequiredApis>) -> Result<crate::vm::VMRunRe
 
     let (mut vm, instance) = {
         let supervisor_clone = supervisor.clone();
-        let Ok(mut supervisor) = supervisor.lock() else { return Err(anyhow::anyhow!("can't lock supervisor")); };
+        let Ok(mut supervisor) = supervisor.lock() else {
+            return Err(anyhow::anyhow!("can't lock supervisor"));
+        };
         let init_actions = supervisor.get_actions_for(&init_data.contract_account)?;
 
         let essential_data = wasi::genlayer_sdk::EssentialGenlayerSdkData {
@@ -52,7 +55,10 @@ pub fn run_with_api(mut api: Box<dyn RequiredApis>) -> Result<crate::vm::VMRunRe
     let init_fuel = vm.store.get_fuel().unwrap_or(0);
     let res = vm.run(&instance)?;
     let remaining_fuel = vm.store.get_fuel().unwrap_or(0);
-    eprintln!("remaining fuel: {remaining_fuel}\nconsumed fuel: {}", u64::wrapping_sub(init_fuel, remaining_fuel));
+    eprintln!(
+        "remaining fuel: {remaining_fuel}\nconsumed fuel: {}",
+        u64::wrapping_sub(init_fuel, remaining_fuel)
+    );
 
     Ok(res)
 }
