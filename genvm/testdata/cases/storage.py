@@ -2,11 +2,9 @@
 
 import genlayer.sdk as gsdk
 from genlayer.types import *
-from genlayer.storage import storage
 
 __gsdk_self_run__ = True
 
-@storage
 class Test:
     foo: i64
     bar: i64
@@ -15,12 +13,12 @@ class Test:
     def abc(self):
         return self.foo
 
-@storage
+@gsdk.storage
 class Composite:
     a: Test
     b: Test
 
-tst = Composite.init_at()
+tst = Composite()
 
 stor_man = tst._storage_slot.manager
 

@@ -108,5 +108,5 @@ jobs:
       - name: pytest
         run: |
           pushd sdk-python && \
-          poetry run pytest && \
+          poetry run pytest -n auto && \
           popd

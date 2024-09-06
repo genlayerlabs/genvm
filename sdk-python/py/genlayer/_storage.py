@@ -374,17 +374,13 @@ def _storage_build_struct(cls: type, generics_map: dict[str, _TypeDesc]) -> _Typ
 		return slf
 	def view_at_root(man: StorageMan):
 		return view_at( man.get_store_slot(ROOT_STORAGE_ADDRESS), 0)
-	def init_at(*args, **kwargs):
-		if "gsdk_storage" in kwargs:
-			storage = kwargs.pop("gsdk_storage")
-			off = kwargs.pop("gsdk_offset")
-		else:
-			storage = _FakeStorageMan().get_store_slot(ROOT_STORAGE_ADDRESS)
-			off = 0
-		slf = view_at(storage, off)
-		slf.__init__(*args, **kwargs)
-		return slf
-	cls.init_at = staticmethod(init_at)
+	old_init = cls.__init__
+	def new_init(self, *args, **kwargs):
+		if not hasattr(self, '_storage_slot'):
+			self._storage_slot = _FakeStorageMan().get_store_slot(ROOT_STORAGE_ADDRESS)
+			self._off = 0
+		old_init(self, *args, **kwargs)
+	cls.__init__ = new_init
 	cls.view_at = staticmethod(view_at)
 	cls.view_at_root = staticmethod(view_at_root)
 	description = _RecordDesc(view_at, size, copy_actions)

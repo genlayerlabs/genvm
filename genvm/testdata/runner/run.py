@@ -148,7 +148,7 @@ def prnt(path, res):
 			for line in res["steps"]:
 				print(f"\t\t{' '.join(map(lambda x: shlex.quote(str(x)), line))}")
 
-with cfutures.ThreadPoolExecutor(max_workers=8) as executor:
+with cfutures.ThreadPoolExecutor(max_workers=(os.cpu_count() or 1)) as executor:
 	categories = {
 		"skip": 0,
 		"pass": 0,

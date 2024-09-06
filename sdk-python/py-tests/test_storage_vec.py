@@ -11,7 +11,7 @@ def same_iter(li, ri):
 		assert l == r
 
 def test_len():
-	l = StorVec.init_at()
+	l = StorVec()
 	r: list[str] = []
 	op = common.SameOp(l.x, r)
 	same_iter(l.x, r)

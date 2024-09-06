@@ -41,7 +41,7 @@ def verify_invariants(v: TreeMap[str, u32]):
 	check(v.root)
 
 def test_insert():
-	stor = UserStorage.init_at()
+	stor = UserStorage()
 	dic = {}
 	def same_iter():
 		for (lk, lv), (rk, rv) in itertools.zip_longest(stor.m.items(), sorted(dic.items())):
