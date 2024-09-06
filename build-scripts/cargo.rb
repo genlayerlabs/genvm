@@ -32,7 +32,7 @@ class CargoBuildTarget < Target
 			end
 		end
 		@output_file = @cargo_out_dir.join(@name + suff)
-		super(@output_file, [])
+		super(@output_file, [dir.join('Cargo.toml')])
 	end
 
 	protected def dump_rules_impl(buf)

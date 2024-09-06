@@ -3,7 +3,7 @@ use std::{ffi::{CStr, CString}, sync::{Arc, Mutex}};
 use wasmtime::StoreContextMut;
 use wiggle::GuestError;
 
-use crate::{node_iface::{self, MessageData}, vm::InitActions};
+use crate::{node_iface::{self, Address, MessageData, StorageSlot}, vm::InitActions};
 
 use super::{base, common::read_string};
 
@@ -34,6 +34,17 @@ pub(crate) mod generated {
         errors: { errno => trappable Error },
         target: self,
     });
+}
+
+impl node_iface::Address {
+    fn read_from_mem(addr: &generated::types::Addr, mem: &mut wiggle::GuestMemory<'_>) -> Result<Self, generated::types::Error> {
+        let cow = mem.as_cow(addr.ptr.as_array(node_iface::Address::len().try_into().unwrap()))?;
+        let mut ret = Address::new();
+        for (x, y) in ret.0.iter_mut().zip(cow.iter()) {
+            *x = *y;
+        }
+        Ok(ret)
+    }
 }
 
 impl generated::types::Bytes {
@@ -378,18 +389,11 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
     fn call_contract(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        account: &generated::types::Bytes,
+        account: &generated::types::Addr,
         calldata: &generated::types::Bytes,
     ) -> Result<generated::types::BytesLen, generated::types::Error> {
         self.data_mut().ensure_det()?;
-        let mut called_contract_account = node_iface::Address::new();
-        if account.buf_len as usize != called_contract_account.raw().len() {
-            return Err(generated::types::Errno::Inval.into());
-        }
-        let cow = mem.as_cow(account.buf.as_array(account.buf_len))?;
-        for (to, from) in called_contract_account.0.iter_mut().zip(cow.iter()) {
-            *to = *from;
-        }
+        let called_contract_account = Address::read_from_mem(account, mem)?;
         let mut res_calldata = b"call!".to_vec();
         let calldata = calldata.buf.as_array(calldata.buf_len);
         res_calldata.extend(mem.as_cow(calldata)?.iter());
@@ -433,6 +437,50 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             crate::vm::VMRunResult::Rollback(r) => Err(generated::types::Error::trap(Rollback(r).into())),
             crate::vm::VMRunResult::Error(e) => Err(generated::types::Error::trap(Rollback(format!("subvm failed {}", e)).into())),
         }
+    }
+
+    fn storage_read(&mut self,mem: &mut wiggle::GuestMemory<'_> , slot: &generated::types::Addr,index: u32, buf: &generated::types::MutBytes) -> Result<(), generated::types::Error>  {
+        if !self.data_mut().data.conf.can_read_storage {
+            return Err(generated::types::Errno::DeterministicViolation.into());
+        }
+        let dest_buf = buf.buf.as_array(buf.buf_len);
+
+        let account = self.data_mut().data.message_data.contract_account;
+
+        let slot = Address::read_from_mem(&slot, mem)?;
+        let mem_size = buf.buf_len as usize;
+        let mut vec = Vec::with_capacity(mem_size);
+        unsafe { vec.set_len(mem_size) };
+        let supervisor = self.data_mut().data.supervisor.clone();
+        let Ok(mut supervisor) = supervisor.lock() else { return Err(generated::types::Errno::Io.into()); };
+        let mut rem_gas = node_iface::Gas(self.stor.get_fuel().map_err(|_e| generated::types::Errno::Io)?);
+        let res = supervisor.api.storage_read(&mut rem_gas, StorageSlot {account, slot}, index, &mut vec);
+        let _ = self.stor.set_fuel(rem_gas.raw());
+        res.map_err(|_e| generated::types::Errno::Io)?;
+        mem.copy_from_slice(&vec, dest_buf)?;
+        Ok(())
+    }
+
+    fn storage_write(&mut self,mem: &mut wiggle::GuestMemory<'_>, slot:&generated::types::Addr,index: u32, buf: &generated::types::Bytes) -> Result<(), generated::types::Error>  {
+        if !self.data_mut().data.conf.can_write_storage {
+            return Err(generated::types::Errno::DeterministicViolation.into());
+        }
+        if !self.data_mut().data.conf.can_read_storage {
+            return Err(generated::types::Errno::DeterministicViolation.into());
+        }
+
+        let buf: Vec<u8> = buf.read_owned(mem)?;
+
+        let account = self.data_mut().data.message_data.contract_account;
+        let slot = Address::read_from_mem(&slot, mem)?;
+
+        let supervisor = self.data_mut().data.supervisor.clone();
+        let Ok(mut supervisor) = supervisor.lock() else { return Err(generated::types::Errno::Io.into()); };
+        let mut rem_gas = node_iface::Gas(self.stor.get_fuel().map_err(|_e| generated::types::Errno::Io)?);
+        let res = supervisor.api.storage_write(&mut rem_gas, StorageSlot {account, slot}, index, &buf);
+        let _ = self.stor.set_fuel(rem_gas.raw());
+        res.map_err(|_e| generated::types::Errno::Io)?;
+        Ok(())
     }
 }
 

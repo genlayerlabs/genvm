@@ -8,7 +8,13 @@ pub mod plugin_loader;
 use anyhow::Result;
 use std::sync::{Arc, Mutex};
 
-pub trait RequiredApis: node_iface::InitApi + node_iface::RunnerApi + Send + Sync + genvm_modules_common::interfaces::nondet_functions_api::Trait {}
+pub trait RequiredApis :
+    node_iface::InitApi +
+    node_iface::RunnerApi +
+    node_iface::StorageApi +
+    genvm_modules_common::interfaces::nondet_functions_api::Trait  +
+    Send + Sync
+{}
 
 pub fn run_with_api(mut api: Box<dyn RequiredApis>) -> Result<crate::vm::VMRunResult> {
 

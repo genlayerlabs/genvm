@@ -14,6 +14,11 @@
 			"url": "https://github.com/ucb-bar/berkeley-softfloat-3.git",
 			"commit": "3b70b5d8147675932c38b36cd09af6df4eedd919",
 			"patches": 1
+		},
+		"sdk-python/third-party/RustPython": {
+			"url": "https://github.com/RustPython/RustPython.git",
+			"commit": "8bc59441789868cc3da216703f743cd33b03752b",
+			"patches": 1
 		}
 	}
 }

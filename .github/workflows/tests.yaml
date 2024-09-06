@@ -100,7 +100,7 @@ jobs:
             pushd build && \
             unzip out.zip && \
             popd
-      - name: avl tree tests
+      - name: pytest
         run: |
           pushd sdk-python && \
           poetry run pytest && \

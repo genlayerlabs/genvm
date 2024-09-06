@@ -40,7 +40,7 @@
     )
 
     (@interface func (export "call_contract")
-        (param $account $bytes)
+        (param $account $addr)
         (param $calldata $bytes)
         (result $error (expected $bytes_len (error $errno)))
     )
@@ -49,5 +49,19 @@
         (param $buf (@witx pointer u8))
         (param $len u32)
         (result $error (expected $bytes_len (error $errno)))
+    )
+
+    (@interface func (export "storage_read")
+        (param $slot $addr)
+        (param $index u32)
+        (param $buf $mut_bytes)
+        (result $error (expected (error $errno)))
+    )
+
+    (@interface func (export "storage_write")
+        (param $slot $addr)
+        (param $index u32)
+        (param $buf $bytes)
+        (result $error (expected (error $errno)))
     )
 )

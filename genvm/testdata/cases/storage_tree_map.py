@@ -13,7 +13,7 @@ class UserStorage:
 
 tst = UserStorage.init_at()
 
-tst['1'] = 12
-tst['2'] = 13
-del tst['1']
-print('1' in tst, tst['2'])
+tst.m['1'] = 12
+tst.m['2'] = 13
+del tst.m['1']
+print('1' in tst.m, tst.m['2'])

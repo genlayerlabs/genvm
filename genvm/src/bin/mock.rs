@@ -9,7 +9,7 @@ mod test_node_iface_impl {
     use genvm_modules_common::interfaces::nondet_functions_api;
     use serde_with::{serde_as, base64::Base64};
 
-    use std::{collections::HashMap, sync::Arc};
+    use std::{collections::HashMap, io::{stderr, Write}, sync::Arc};
     use genvm::*;
 
     use node_iface::{self};
@@ -34,6 +34,7 @@ mod test_node_iface_impl {
     #[serde_as]
     #[derive(Serialize, Deserialize, Clone)]
     pub struct Config {
+        storage_file_path: String,
         accounts: HashMap<String, FakeAccount>,
         runners: HashMap<String, Vec<FakeInitAction>>,
         message: node_iface::MessageData,
@@ -57,16 +58,88 @@ mod test_node_iface_impl {
     }
     pub struct TestApi {
         conf: Config,
-        nondet_meths: Box<dyn nondet_functions_api::Trait>
+        nondet_meths: Box<dyn nondet_functions_api::Trait>,
+        fake_storage: FakeStorage
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct FakeStorage {
+        slots: HashMap<node_iface::Address, HashMap<node_iface::Address, Vec<u8>>>,
+    }
+
+    macro_rules! get_slot {
+        ($to: ident, $stor:expr, $slot:ident) => {
+            let mut ent0 = ($stor).slots.entry($slot.account.clone());
+            let by_acc = match ent0 {
+                std::collections::hash_map::Entry::Occupied(ref mut v) => v.get_mut(),
+                std::collections::hash_map::Entry::Vacant(v) => {
+                    v.insert(HashMap::new())
+                }
+            };
+            let mut ent2 = by_acc.entry($slot.slot.clone());
+            let $to = match ent2 {
+                std::collections::hash_map::Entry::Occupied(ref mut  v) => v.get_mut(),
+                std::collections::hash_map::Entry::Vacant(v) => {
+                    v.insert(Vec::new())
+                }
+            };
+        }
+    }
+
+    impl node_iface::StorageApi for TestApi {
+        fn storage_read(&mut self, _remaing_gas: &mut node_iface::Gas, slot: node_iface::StorageSlot, index: u32, buf: &mut [u8]) -> Result<()> {
+            let index = index as usize;
+            get_slot!(slot, self.fake_storage, slot);
+            if index + buf.len() > slot.len() {
+                slot.resize(index + buf.len(), 0);
+            }
+            buf.copy_from_slice(&slot[index..index + buf.len()]);
+            Ok(())
+        }
+
+        fn storage_write(&mut self, _remaing_gas: &mut node_iface::Gas, slot: node_iface::StorageSlot, index: u32, buf: &[u8]) -> Result<()> {
+            let index = index as usize;
+            get_slot!(slot, self.fake_storage, slot);
+            if index + buf.len() > slot.len() {
+                slot.resize(index + buf.len(), 0);
+            }
+            slot[index..index + buf.len()].copy_from_slice(buf);
+            Ok(())
+        }
+    }
+
+    impl Drop for TestApi {
+        fn drop(&mut self) {
+            let path = std::path::Path::new(&self.conf.storage_file_path);
+            let res = serde_json::to_string(&self.fake_storage).map_err(|e| anyhow::Error::from(e)).and_then(|x| {
+                std::fs::write(path, x).map_err(Into::into)
+            });
+            match res {
+                Err(e) => {
+                    let _ = stderr().lock().write_fmt(format_args!("Writing storage to {:#?} failed {}", path, e));
+                },
+                _ => {},
+            }
+        }
     }
 
     impl TestApi {
         pub fn new(conf: Config) -> Result<Self> {
+            let path = std::path::Path::new(&conf.storage_file_path);
+            let fake_storage = if path.exists() {
+                let storage_str = String::from_utf8(std::fs::read(path)?)?;
+                serde_json::from_str(&storage_str)?
+            } else {
+                FakeStorage {
+                    slots: HashMap::new()
+                }
+            };
             let dflt_path = genvm::plugin_loader::default_plugin_path()?;
             let nondet_meths = nondet_functions_api::Methods::load_from_lib(&dflt_path, "nondet-funcs")?;
             Ok(Self {
                 conf,
                 nondet_meths,
+                fake_storage,
             })
         }
     }

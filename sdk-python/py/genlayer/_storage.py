@@ -1,5 +1,6 @@
 from .types import *
 import abc
+import collections.abc
 
 import typing
 import types
@@ -13,15 +14,15 @@ def hash_combine(l: Address, r: int) -> Address:
 	btes = hsh.to_bytes(32)
 	return Address(btes)
 
-class Storage(typing.Protocol):
+class StorageMan(typing.Protocol):
 	@abc.abstractmethod
 	def get_store_slot(self, addr: Address) -> 'StorageSlot':
 		pass
 
 class StorageSlot:
-	manager: Storage
+	manager: StorageMan
 
-	def __init__(self, addr: Address, manager: Storage):
+	def __init__(self, addr: Address, manager: StorageMan):
 		self.addr = addr
 		self.manager = manager
 
@@ -30,13 +31,10 @@ class StorageSlot:
 		return self.manager.get_store_slot(addr)
 
 	@abc.abstractmethod
-	def read(self, addr: int, len: int) -> memoryview: ...
+	def read(self, addr: int, len: int) -> bytes: ...
 
 	@abc.abstractmethod
-	def write(self, addr: int, what: memoryview) -> None: ...
-
-class FakeStorage:
-	mem = memoryview(bytearray(64))
+	def write(self, addr: int, what: collections.abc.Buffer) -> None: ...
 
 class _ComplexCopyAction(typing.Protocol):
 	@abc.abstractmethod
@@ -89,7 +87,6 @@ class _CopyStrBytesAction(_ComplexCopyAction):
 		to_stor = to.indirect(to_off)
 		le = _u32_desc.get(frm_stor, 0)
 
-		# TODO: cow?
 		to_stor.write(0, frm_stor.read(0, _u32_desc.size + le))
 
 		return self.size
@@ -100,7 +97,7 @@ class _StrBytesDescr[T](_TypeDesc):
 		_TypeDesc.__init__(self, size, [_CopyStrBytesAction(size)])
 
 	@abc.abstractmethod
-	def decode(self, val: memoryview) -> T: ...
+	def decode(self, val: collections.abc.Buffer) -> T: ...
 
 	@abc.abstractmethod
 	def encode(self, val: T) -> memoryview: ...
@@ -121,7 +118,7 @@ class _StrDescr(_StrBytesDescr):
 		_StrBytesDescr.__init__(self)
 
 	@abc.abstractmethod
-	def decode(self, val: memoryview) -> str:
+	def decode(self, val: collections.abc.Buffer) -> str:
 		return str(val, encoding='utf-8')
 
 	@abc.abstractmethod
@@ -133,7 +130,7 @@ class _BytesDescr(_StrBytesDescr):
 		_StrBytesDescr.__init__(self)
 
 	@abc.abstractmethod
-	def decode(self, val: memoryview) -> bytes:
+	def decode(self, val: collections.abc.Buffer) -> bytes:
 		return bytes(val)
 
 	@abc.abstractmethod
@@ -149,6 +146,8 @@ class WithItemStorageSlot(WithStorageSlot):
 	_item_desc: _TypeDesc
 
 class Vec[T](WithItemStorageSlot):
+	__type_params__ = (typing.TypeVar('T'),)
+
 	def __init__(self):
 		raise Exception("this class can't be instantiated")
 
@@ -255,21 +254,20 @@ _default_extension = b"\x00" * 64
 
 class _FakeStorageSlot(StorageSlot):
 	_mem: bytearray
-	def __init__(self, addr: Address, manager: Storage):
+	def __init__(self, addr: Address, manager: StorageMan):
 		StorageSlot.__init__(self, addr, manager)
 		self._mem = bytearray()
 
-	def read(self, addr: int, len: int) -> memoryview:
-		return memoryview(self._mem[addr:addr+len])
+	def read(self, addr: int, len: int) -> bytes:
+		return bytes(memoryview(self._mem)[addr:addr+len])
 
-	@abc.abstractmethod
 	def write(self, addr: int, what: memoryview) -> None:
 		l = len(what)
 		while addr + l > len(self._mem):
 			self._mem.extend(_default_extension)
 		memoryview(self._mem)[addr:addr+l] = what
 
-class _FakeStorageMan(Storage):
+class _FakeStorageMan(StorageMan):
 	_parts: dict[Address, _FakeStorageSlot] = {}
 
 	def get_store_slot(self, addr: Address) -> StorageSlot:
@@ -321,9 +319,9 @@ class _VecDescription(_TypeDesc):
 			raise Exception("incompatible vector type")
 		self._cop.copy(val._storage_slot, val._off, slot, off)
 
-def _storage_build(cls: type | _Instantiation, generics_map: dict[typing.TypeVar, _TypeDesc]) -> _TypeDesc:
-	if isinstance(cls, typing.TypeVar):
-		return generics_map[cls]
+def _storage_build(cls: type | _Instantiation, generics_map: dict[str, _TypeDesc]) -> _TypeDesc:
+	if type(cls).__name__.endswith('TypeVar'):
+		return generics_map[cls.__name__]
 	if isinstance(cls, typing._GenericAlias):
 		args = [_storage_build(c, generics_map) for c in cls.__args__]
 		cls = _Instantiation(cls.__origin__, tuple(args))
@@ -337,7 +335,7 @@ def _storage_build(cls: type | _Instantiation, generics_map: dict[typing.TypeVar
 	_known_descs[cls] = description
 	return description
 
-def _storage_build_generic(cls: _Instantiation, generics_map: dict[typing.TypeVar, _TypeDesc]) -> _TypeDesc:
+def _storage_build_generic(cls: _Instantiation, generics_map: dict[str, _TypeDesc]) -> _TypeDesc:
 	# here args are resolved but not instantiated
 	tpars: tuple[typing.TypeVar, ...] = cls.origin.__type_params__
 	if len(tpars) != len(cls.args):
@@ -345,10 +343,10 @@ def _storage_build_generic(cls: _Instantiation, generics_map: dict[typing.TypeVa
 	if cls.origin is Vec:
 		return _VecDescription(cls.args[0])
 	else:
-		gen = {k: v for k, v in zip(tpars, cls.args)}
+		gen = {k.__name__: v for k, v in zip(tpars, cls.args)}
 		return _storage_build_struct(cls.origin, gen)
 
-def _storage_build_struct(cls: type, generics_map: dict[typing.TypeVar, _TypeDesc]) -> _TypeDesc:
+def _storage_build_struct(cls: type, generics_map: dict[str, _TypeDesc]) -> _TypeDesc:
 	if cls is Vec:
 		raise Exception("invalid builder")
 	size: int = 0
@@ -369,25 +367,26 @@ def _storage_build_struct(cls: type, generics_map: dict[typing.TypeVar, _TypeDes
 		_append_actions(copy_actions, desc.copy_actions)
 	import sys
 	print(f'calculated size for {cls.__name__}[{generics_map}] is {size} actions are {copy_actions}', file=sys.stderr)
-	def init_at(*args, **kwargs):
+	def view_at(slot: StorageSlot, off: int):
 		slf = cls.__new__(cls)
+		slf._storage_slot = slot
+		slf._off = off
+		return slf
+	def view_at_root(man: StorageMan):
+		return view_at( man.get_store_slot(ROOT_STORAGE_ADDRESS), 0)
+	def init_at(*args, **kwargs):
 		if "gsdk_storage" in kwargs:
 			storage = kwargs.pop("gsdk_storage")
 			off = kwargs.pop("gsdk_offset")
 		else:
 			storage = _FakeStorageMan().get_store_slot(ROOT_STORAGE_ADDRESS)
 			off = 0
-		slf._storage_slot = storage
-		slf._off = off
+		slf = view_at(storage, off)
 		slf.__init__(*args, **kwargs)
-		return slf
-	def view_at(slot: StorageSlot, off: int):
-		slf = cls.__new__(cls)
-		slf._storage_slot = slot
-		slf._off = off
 		return slf
 	cls.init_at = staticmethod(init_at)
 	cls.view_at = staticmethod(view_at)
+	cls.view_at_root = staticmethod(view_at_root)
 	description = _RecordDesc(view_at, size, copy_actions)
 	cls.__description__ = description
 	return description

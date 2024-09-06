@@ -1,12 +1,17 @@
 import genlayer.wasi as wasi
 import genlayer.calldata
-
-from .types import *
+import genlayer._storage as _storage
+import collections.abc
 
 import typing
 import json
 from types import SimpleNamespace
 import base64
+
+# reexports
+from ._storage import storage, ROOT_STORAGE_ADDRESS
+from ._storage_tree_map import TreeMap
+from .types import *
 
 def public(f):
 	setattr(f, '__public__', True)
@@ -62,3 +67,28 @@ def run_nondet(eq_principle, runner: Runner) -> typing.Any:
 	import pickle
 	res = wasi.run_nondet(json.dumps(eq_principle), pickle.dumps(runner))
 	return pickle.loads(res)
+
+class _ActualStorageMan(_storage.StorageMan):
+	_slots: dict[Address, '_ActualStorageSlot']
+	def __init__(self):
+		self._slots = {}
+
+	def get_store_slot(self, addr: Address) -> '_ActualStorageSlot':
+		ret = self._slots.get(addr, None)
+		if ret is None:
+			ret = _ActualStorageSlot(addr, self)
+			self._slots[addr] = ret
+		return ret
+
+class _ActualStorageSlot(_storage.StorageSlot):
+	def __init__(self, addr: Address, manager: _storage.StorageMan):
+		_storage.StorageSlot.__init__(self, addr, manager)
+
+	def read(self, addr: int, len: int) -> bytes:
+		return wasi.storage_read(self.addr.as_bytes, addr, len)
+
+	@abc.abstractmethod
+	def write(self, addr: int, what: collections.abc.Buffer) -> None:
+		wasi.storage_write(self.addr.as_bytes, addr, what)
+
+STORAGE_MAN = _ActualStorageMan()

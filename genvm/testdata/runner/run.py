@@ -11,6 +11,7 @@ import argparse
 import re
 import sys
 import base64
+import pickle
 
 import http.server as httpserv
 
@@ -60,39 +61,59 @@ def run(path0):
 		}
 	conf = _jsonnet.evaluate_file(str(path))
 	conf = json.loads(conf)
-	conf["vars"]["jsonnetDir"] = str(path.parent)
-	eval_vars = conf["vars"].copy()
-	new_calldata_obj = eval(conf["calldata"], globals(), eval_vars)
-	conf["calldata"] = str(base64.b64encode(calldata.encode(new_calldata_obj)), 'ascii')
-	conf_path = tmp_dir.joinpath(path0).with_suffix('.json')
-	conf_path.parent.mkdir(parents=True, exist_ok=True)
-	with open(conf_path, 'wt') as f:
-		json.dump(conf, f)
-	cmd = [GENVM, '--config', conf_path, '--shrink-error']
-	res = subprocess.run(cmd, check=False, text=True, capture_output=True)
-	base = {
-		"cmd": cmd
-	}
-	if res.returncode != 0:
-		return {
-			"category": "fail",
-			"reason": f"return code is {res.returncode}\n=== stdout ===\n{res.stdout}\n=== stderr ===\n{res.stderr}",
-			**base
+	if not isinstance(conf, list):
+		conf = [conf]
+	storage_path = tmp_dir.joinpath(path0).with_suffix(f'.storage')
+	storage_path.unlink(missing_ok=True)
+	steps = [
+		["rm", str(storage_path)]
+	]
+	def map_conf(i, conf, total_conf):
+		if total_conf == 1:
+			suff = ''
+		else:
+			suff = f'.{i}'
+		conf["vars"]["jsonnetDir"] = str(path.parent)
+		eval_vars = conf["vars"].copy()
+		new_calldata_obj = eval(conf["calldata"], globals(), eval_vars)
+		conf["calldata"] = str(base64.b64encode(calldata.encode(new_calldata_obj)), 'ascii')
+		conf["storage_file_path"] = str(storage_path)
+		conf_path = tmp_dir.joinpath(path0).with_suffix(f'{suff}.json')
+		conf_path.parent.mkdir(parents=True, exist_ok=True)
+		with open(conf_path, 'wt') as f:
+			json.dump(conf, f)
+		return conf_path
+	conf_paths = [
+		map_conf(i, conf_i, len(conf))
+		for i, conf_i in enumerate(conf)
+	]
+	for conf_path in conf_paths:
+		cmd = [GENVM, '--config', conf_path, '--shrink-error']
+		steps.append(cmd)
+		res = subprocess.run(cmd, check=False, text=True, capture_output=True)
+		base = {
+			"steps": pickle.loads(pickle.dumps(steps))
 		}
-	stdout = path.with_suffix('.stdout')
-	if stdout.exists():
-		res_path = tmp_dir.joinpath(path0).with_suffix('.stdout')
-		res_path.parent.mkdir(parents=True, exist_ok=True)
-		res_path.write_text(res.stdout)
-
-		if stdout.read_text() != res.stdout:
+		if res.returncode != 0:
 			return {
 				"category": "fail",
-				"reason": f"stdout mismatch, see\ndiff {str(stdout)} {str(res_path)}",
+				"reason": f"return code is {res.returncode}\n=== stdout ===\n{res.stdout}\n=== stderr ===\n{res.stderr}",
 				**base
 			}
-	else:
-		stdout.write_text(res.stdout)
+		res_path = conf_path.with_suffix('.stdout')
+		stdout = path.parent.joinpath(res_path.name)
+		if stdout.exists():
+			res_path.parent.mkdir(parents=True, exist_ok=True)
+			res_path.write_text(res.stdout)
+
+			if stdout.read_text() != res.stdout:
+				return {
+					"category": "fail",
+					"reason": f"stdout mismatch, see\ndiff {str(stdout)} {str(res_path)}",
+					**base
+				}
+		else:
+			stdout.write_text(res.stdout)
 	return {
 		"category": "pass",
 		**base
@@ -121,8 +142,11 @@ def prnt(path, res):
 		if "reason" in res:
 			for l in map(lambda x: '\t' + x, res["reason"].split('\n')):
 				print(l)
-		if res['category'] == "fail" and "cmd" in res:
-			print(f"\t{' '.join(map(str, res['cmd']))}")
+		if res['category'] == "fail" and "steps" in res:
+			import shlex
+			print("\tsteps to reproduce:")
+			for line in res["steps"]:
+				print(f"\t\t{' '.join(map(lambda x: shlex.quote(str(x)), line))}")
 
 with cfutures.ThreadPoolExecutor(max_workers=8) as executor:
 	categories = {

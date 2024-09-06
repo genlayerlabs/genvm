@@ -502,10 +502,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4567c8db10ae91089c99af84c68c38da3ec2f087c3f82960bcdbf3656b6f4d7"
 dependencies = [
  "cfg-if",
- "js-sys",
  "libc",
  "wasi",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -1285,8 +1283,6 @@ dependencies = [
 [[package]]
 name = "rustpython"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ef4653f77eb5866c7ba903bd0480bcfa9f6d41f73156895b1813687f8dbd026"
 dependencies = [
  "atty",
  "cfg-if",
@@ -1319,8 +1315,6 @@ dependencies = [
 [[package]]
 name = "rustpython-codegen"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41f101783403a69155ba7b52d8365d796c772a0bfca7df0a5f16d267f3443986"
 dependencies = [
  "ahash",
  "bitflags 2.6.0",
@@ -1337,8 +1331,6 @@ dependencies = [
 [[package]]
 name = "rustpython-common"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d22a5c520662f0ff98d717e2c4e52d8ba35eb1d99ee771dbdba7f09908b75bbb"
 dependencies = [
  "ascii",
  "bitflags 2.6.0",
@@ -1365,8 +1357,6 @@ dependencies = [
 [[package]]
 name = "rustpython-compiler"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1c0ad9d5b948970d41b113cfc9ffe2337b10fdd41e0c92a859b9ed33c218efe"
 dependencies = [
  "rustpython-codegen",
  "rustpython-compiler-core",
@@ -1376,8 +1366,6 @@ dependencies = [
 [[package]]
 name = "rustpython-compiler-core"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bd4e0c9fb7b3c70eb27b38d533edc0aa4875ea38cb06e12d76e234d00ef9766"
 dependencies = [
  "bitflags 2.6.0",
  "itertools",
@@ -1390,8 +1378,6 @@ dependencies = [
 [[package]]
 name = "rustpython-derive"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71c39620497116ce2996bcc679f9be4f47c1e8915c7ff9a9f0324e9584280660"
 dependencies = [
  "rustpython-compiler",
  "rustpython-derive-impl",
@@ -1401,8 +1387,6 @@ dependencies = [
 [[package]]
 name = "rustpython-derive-impl"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dd18fa95c71a08ecc9cce739a608f5bff38805963152e671b66f5f266f0e58d"
 dependencies = [
  "itertools",
  "maplit",
@@ -1420,8 +1404,7 @@ dependencies = [
 [[package]]
 name = "rustpython-doc"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1885d19895d9d29656a8a2b33e967a482b92f3d891b4fd923e40849714051bcd"
+source = "git+https://github.com/RustPython/__doc__?tag=0.3.0#8b62ce5d796d68a091969c9fa5406276cb483f79"
 dependencies = [
  "once_cell",
 ]
@@ -1500,8 +1483,6 @@ dependencies = [
 [[package]]
 name = "rustpython-pylib"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "852d8eb34fce6cbce4eab3b42a87ef996197230168c7fca9d98173057ce27050"
 dependencies = [
  "glob",
  "rustpython-compiler-core",
@@ -1511,8 +1492,6 @@ dependencies = [
 [[package]]
 name = "rustpython-sre_engine"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39367be5d48e1e5caaa146904ea8d35fe43928168fbeb5c1ab295a0031b179c6"
 dependencies = [
  "bitflags 2.6.0",
  "num_enum",
@@ -1522,8 +1501,6 @@ dependencies = [
 [[package]]
 name = "rustpython-stdlib"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "014cb19d897ca26566dd91104f446c6c396091d99561aa32fcc1e461000192b4"
 dependencies = [
  "adler32",
  "ahash",
@@ -1593,8 +1570,6 @@ dependencies = [
 [[package]]
 name = "rustpython-vm"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2878cc4b5679f35fa762891d812ca7e011ae7cd41b5c532eb0ad13959b522493"
 dependencies = [
  "ahash",
  "ascii",
@@ -1657,7 +1632,6 @@ dependencies = [
  "unic-ucd-ident",
  "unicode-casing",
  "unicode_names2",
- "wasm-bindgen",
  "which",
  "widestring",
  "windows",

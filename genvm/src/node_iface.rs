@@ -7,11 +7,11 @@ use serde_with::{serde_as, base64::Base64};
 
 pub struct StorageSlot {
     pub account: Address,
-    pub desc: Address,
+    pub slot: Address,
 }
 
 #[serde_as]
-#[derive(Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash, Copy)]
 pub struct Address(#[serde_as(as = "Base64")] pub [u8; 32]);
 
 impl Address {
@@ -22,6 +22,10 @@ impl Address {
 
     pub fn new() -> Self {
         Self([0; 32])
+    }
+
+    pub const fn len() -> usize {
+        return 32;
     }
 }
 

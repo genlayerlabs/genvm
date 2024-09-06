@@ -1,9 +1,12 @@
 import collections.abc
 
-from .storage import Vec
+from ._storage import Vec
 from .types import *
 
 class Node[K, V]:
+	# rustpython workaround
+	__type_params__ = (typing.TypeVar('K'), typing.TypeVar('V'))
+
 	key: K
 	value: V
 	left: u32
@@ -30,6 +33,9 @@ class Comparable(typing.Protocol):
 		pass
 
 class TreeMap[K: Comparable, V]:
+	# rustpython workaround
+	__type_params__ = (typing.TypeVar('K'), typing.TypeVar('V'))
+
 	root: u32
 	slots: Vec[Node[K, V]]
 	free_slots: Vec[u32]

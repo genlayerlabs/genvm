@@ -1,12 +1,20 @@
 use rustpython::vm::pymodule;
+use rustpython_vm::{builtins::PyBytes, PyResult, VirtualMachine};
 
 pub fn make_gensdk_module(vm: &::rustpython_vm::VirtualMachine) -> rustpython_vm::PyRef<rustpython_vm::builtins::PyModule> {
     genlayer_sdk::make_module(vm)
 }
 
+fn get_addr(x: &PyBytes, vm: &VirtualMachine) -> PyResult<genvm_sdk_rust::Addr> {
+    if x.len() != 32 {
+        return Err(vm.new_value_error("invalid size".into()))
+    }
+    Ok(genvm_sdk_rust::Addr { ptr: x.as_ptr() })
+}
+
 #[pymodule]
 pub mod genlayer_sdk {
-    use rustpython::vm::{builtins::{PyStrRef, PyBytesRef, PyBytes}, PyResult, VirtualMachine};
+    use rustpython::vm::{builtins::{PyStrRef, PyBytesRef, PyBytes}, PyResult, VirtualMachine, protocol::PyBuffer};
 
     fn map_error<T>(vm: &VirtualMachine, res: Result<T, genvm_sdk_rust::Errno>) -> PyResult<T> {
         res.map_err(
@@ -59,12 +67,10 @@ pub mod genlayer_sdk {
     #[pyfunction]
     fn call_contract(address: PyBytesRef, calldata: PyBytesRef, vm: &VirtualMachine) -> PyResult<PyBytes> {
         flush_everything(vm);
+        let address = super::get_addr(&address, vm)?;
         let len = map_error(vm, unsafe {
             genvm_sdk_rust::call_contract(
-                genvm_sdk_rust::Bytes {
-                    buf: address.as_ptr(),
-                    buf_len: address.len() as u32,
-                },
+                address,
                 genvm_sdk_rust::Bytes {
                     buf: calldata.as_ptr(),
                     buf_len: calldata.len() as u32,
@@ -116,5 +122,35 @@ pub mod genlayer_sdk {
         let len = map_error(vm, unsafe { genvm_sdk_rust::call_llm(config.as_str(), prompt.as_str()) })?;
 
         read_result_str(vm, len)
+    }
+
+
+    #[pyfunction]
+    fn storage_read(addr: PyBytesRef, off: u32, len: u32, vm: &VirtualMachine) -> PyResult<PyBytes> {
+        let dbg = &addr;
+        let addr = super::get_addr(&addr, vm)?;
+        let mut v = Vec::with_capacity(len as usize);
+        let res = unsafe {
+            v.set_len(len as usize);
+            genvm_sdk_rust::storage_read(addr, off, genvm_sdk_rust::MutBytes {
+                buf: v.as_mut_ptr(),
+                buf_len: len,
+            })
+        };
+        map_error(vm, res)?;
+        Ok(PyBytes::from(v))
+    }
+
+    #[pyfunction]
+    fn storage_write(addr: PyBytesRef, off: u32, buf: PyBuffer, vm: &VirtualMachine) -> PyResult<()> {
+        let addr = super::get_addr(&addr, vm)?;
+        let buf = buf.as_contiguous().unwrap();
+        let res = unsafe {
+            genvm_sdk_rust::storage_write(addr, off, genvm_sdk_rust::Bytes {
+                buf: buf.as_ptr(),
+                buf_len: buf.len() as u32,
+            })
+        };
+        map_error(vm, res)
     }
 }
