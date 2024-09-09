@@ -15,7 +15,7 @@ Required tools:
 - python3
 - ruby (tested with 3.0)
 - ninja-build (or just ninja)
-- cargo and rust of version 1.80; please, refer to [rustup docs](https://www.rust-lang.org/tools/install) for installation
+- cargo and rust of version 1.80; please, refer to [rustup docs](https://www.rust-lang.org/tools/install) for installation. Target wasm32-wasi and "host" are required. `rustup target add wasm32-wasi`
 
 Getting the source
 1. clone the repositopry
@@ -44,12 +44,7 @@ Actually building became way too complex really fast (patching floats for softwa
 As of now there are two test suites
 
 ### genvm/testdata
-For `get_webpage` tests to work, one needs
-- `chrome`
-- `chromedriver`
-- running chrome driver `PATH="/path/to/chrome/bin:$PATH" chromedriver --port=4444 &`
-
-In case of getting issues during installation it, refer to [ci job](./.github/workflows/tests.yaml) that does it. Note, that this driver can be ran within docker
+For `get_webpage` tests to work, one needs a compatible webdriver. There is a docker image for simplification: `bash -c 'docker run --network host $(docker build -q genvm/modules/default-impl/nondet-funcs/)' &`
 
 Generic steps:
 ```bash

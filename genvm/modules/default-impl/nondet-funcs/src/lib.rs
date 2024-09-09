@@ -18,7 +18,7 @@ pub extern "C" fn ctor() -> *const () {
                 "alwaysMatch": {
                     "browserName": "chrome",
                     "goog:chromeOptions": {
-                        "args": ["--headless"]
+                        "args": ["--headless", "--no-sandbox", "--disable-dev-shm-usage"]
                     }
                 }
             }
