@@ -1,7 +1,10 @@
-use genvm_modules_common::*;
 use anyhow::Result;
+use genvm_modules_common::*;
 
-use std::{ffi::CStr, io::{stderr, Read, Write}};
+use std::{
+    ffi::CStr,
+    io::{stderr, Read, Write},
+};
 
 #[no_mangle]
 pub extern "C" fn check_version(v: *const Version) -> bool {
@@ -13,7 +16,8 @@ pub extern "C" fn ctor() -> *const () {
     unsafe fn imp() -> Result<*const ()> {
         let layout = std::alloc::Layout::new::<std::mem::MaybeUninit<Impl>>();
         let res: *mut std::mem::MaybeUninit<Impl> = std::alloc::alloc(layout).cast();
-        let opened_session_res = ureq::post("http://127.0.0.1:4444/session").send_bytes(br#"{
+        let opened_session_res = ureq::post("http://127.0.0.1:4444/session").send_bytes(
+            br#"{
             "capabilities": {
                 "alwaysMatch": {
                     "browserName": "chrome",
@@ -22,14 +26,18 @@ pub extern "C" fn ctor() -> *const () {
                     }
                 }
             }
-        }"#)?;
+        }"#,
+        )?;
         let status = opened_session_res.status();
-        let body = opened_session_res.into_string().unwrap_or(r#"{"value":{"error":"can't read body from genvm"}}"#.into());
+        let body = opened_session_res
+            .into_string()
+            .unwrap_or(r#"{"value":{"error":"can't read body from genvm"}}"#.into());
         if status != 200 {
             return Err(anyhow::anyhow!("couldn't initialize {}", body));
         }
         let val: serde_json::Value = serde_json::from_str(&body)?;
-        let session_id = val.as_object()
+        let session_id = val
+            .as_object()
             .and_then(|o| o.get_key_value("value"))
             .and_then(|val| val.1.as_object())
             .and_then(|o| o.get_key_value("sessionId"))
@@ -70,7 +78,11 @@ struct Impl {
 
 impl Drop for Impl {
     fn drop(&mut self) {
-        let _ = ureq::delete(&format!("http://127.0.0.1:4444/session/{}", self.session_id)).call();
+        let _ = ureq::delete(&format!(
+            "http://127.0.0.1:4444/session/{}",
+            self.session_id
+        ))
+        .call();
     }
 }
 
@@ -78,22 +90,26 @@ impl Impl {
     fn get_webpage(&mut self, _config: &CStr, url: &CStr) -> Result<String> {
         let url = url::Url::parse(url.to_str()?)?;
 
-        let req = serde_json::Value::Object(
-            serde_json::Map::from_iter(
-                [
-                    ("url".into(), url.as_str().into()),
-                ].into_iter()
-            )
-        );
+        let req = serde_json::Value::Object(serde_json::Map::from_iter(
+            [("url".into(), url.as_str().into())].into_iter(),
+        ));
         let req = serde_json::to_string(&req)?;
-        let res = ureq::post(&format!("http://127.0.0.1:4444/session/{}/url", &self.session_id)).send_bytes(req.as_bytes())?;
+        let res = ureq::post(&format!(
+            "http://127.0.0.1:4444/session/{}/url",
+            &self.session_id
+        ))
+        .send_bytes(req.as_bytes())?;
         if res.status() != 200 {
             return Err(anyhow::anyhow!("can't get webpage {:?}", res));
         }
 
         let script = r#"{ "script": "return document.body.innerText.replace(/[\\s\\n]+/g, ' ')", "args": [] }"#;
 
-        let res = ureq::post(&format!("http://127.0.0.1:4444/session/{}/execute/sync", &self.session_id)).send_bytes(script.as_bytes())?;
+        let res = ureq::post(&format!(
+            "http://127.0.0.1:4444/session/{}/execute/sync",
+            &self.session_id
+        ))
+        .send_bytes(script.as_bytes())?;
         if res.status() != 200 {
             return Err(anyhow::anyhow!("can't get webpage contents {:?}", res));
         }
@@ -103,11 +119,14 @@ impl Impl {
 
         let mut res_buf = String::new();
         let res_reader = res.into_reader();
-        let mut res_reader = encoding_rs_io::DecodeReaderBytesBuilder::new().encoding(Some(encoding)).build(res_reader);
+        let mut res_reader = encoding_rs_io::DecodeReaderBytesBuilder::new()
+            .encoding(Some(encoding))
+            .build(res_reader);
         let _ = res_reader.read_to_string(&mut res_buf)?;
 
         let val: serde_json::Value = serde_json::from_str(&res_buf)?;
-        let val = val.as_object()
+        let val = val
+            .as_object()
             .and_then(|x| x.get_key_value("value"))
             .and_then(|x| x.1.as_str())
             .ok_or(anyhow::anyhow!("invalid json {}", val))?;
@@ -121,11 +140,13 @@ impl Impl {
 }
 
 fn errored_res(code: i32, err: anyhow::Error) -> interfaces::CStrResult {
-    let _ = stderr().lock().write_fmt(format_args!("{} err: {:?}", env!("CARGO_PKG_NAME"), err));
+    let _ = stderr()
+        .lock()
+        .write_fmt(format_args!("{} err: {:?}", env!("CARGO_PKG_NAME"), err));
     return interfaces::CStrResult {
         str: std::ptr::null(),
         err: code,
-    }
+    };
 }
 
 #[no_mangle]
@@ -164,7 +185,11 @@ fn ok_str_result(s: &str) -> interfaces::CStrResult {
     unsafe {
         let res = libc::malloc(s.len() + 1) as *mut u8;
         *res.add(s.len()) = 0;
-        libc::memcpy(res as *mut std::ffi::c_void, s.as_ptr() as *const std::ffi::c_void, s.len());
+        libc::memcpy(
+            res as *mut std::ffi::c_void,
+            s.as_ptr() as *const std::ffi::c_void,
+            s.len(),
+        );
         interfaces::CStrResult {
             str: res as *const u8,
             err: 0,

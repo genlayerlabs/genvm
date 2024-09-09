@@ -4,7 +4,10 @@ use std::{collections::HashMap, path::Path};
 use serde::{Deserialize, Serialize};
 use wasmtime::{Engine, Linker, Module, Store};
 
-use crate::{runner::{self, InitAction}, wasi};
+use crate::{
+    runner::{self, InitAction},
+    wasi,
+};
 use anyhow::{Context, Result};
 use std::sync::{Arc, Mutex};
 

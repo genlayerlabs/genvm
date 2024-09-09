@@ -1,6 +1,5 @@
 pub mod interfaces;
 
-
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq)]
 pub struct Version {
