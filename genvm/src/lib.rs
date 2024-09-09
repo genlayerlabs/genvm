@@ -2,9 +2,9 @@ mod driver;
 
 pub mod node_iface;
 pub mod plugin_loader;
+pub mod runner;
 pub mod vm;
 pub mod wasi;
-pub mod runner;
 
 use anyhow::Result;
 use std::sync::{Arc, Mutex};

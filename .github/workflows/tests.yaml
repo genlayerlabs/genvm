@@ -27,8 +27,7 @@ jobs:
             tools/softfloat-lib/patch-floats -> target
       - name: check format
         run: |
-          pushd genvm && cargo fmt && popd && \
-          pushd sdk-python && cargo fmt && popd && \
+          ./build-scripts/cargo-fmt.sh && \
           git diff -U1 --exit-code
       - name: checkout submodules
         run: |

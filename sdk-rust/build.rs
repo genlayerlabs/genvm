@@ -11,16 +11,21 @@ fn main() -> anyhow::Result<()> {
     let mut file = std::path::PathBuf::from(repo_dir);
     file.extend("genvm/src/wasi/witx/genlayer_sdk.witx".split("/"));
 
-    let out =
-        Command::new(std::env::var("CARGO")?)
-            .current_dir(cwd)
-            .args(["run", file.to_str().ok_or(anyhow::anyhow!("file isn't path"))?])
-            .output()?;
+    let out = Command::new(std::env::var("CARGO")?)
+        .current_dir(cwd)
+        .args([
+            "run",
+            file.to_str().ok_or(anyhow::anyhow!("file isn't path"))?,
+        ])
+        .output()?;
 
     if !out.status.success() {
-        String::from_utf8(out.stderr).iter().chain(String::from_utf8(out.stdout).iter()).for_each(|x| {
-            eprintln!("{}", x);
-        });
+        String::from_utf8(out.stderr)
+            .iter()
+            .chain(String::from_utf8(out.stdout).iter())
+            .for_each(|x| {
+                eprintln!("{}", x);
+            });
 
         return Err(anyhow::anyhow!("couldn't compile"));
     }
