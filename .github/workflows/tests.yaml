@@ -10,7 +10,7 @@ jobs:
       - name: basic setup
         run: |
           sudo apt-get update -y && \
-          sudo apt-get install -y --no-install-recommends ninja-build ruby curl git python3 zip wget tar openjdk-11-jre-headless && \
+          sudo apt-get install -y --no-install-recommends ninja-build ruby curl git python3 zip wget tar && \
           git lfs install && \
           echo "CARGO_INCREMENTAL=1" >> $GITHUB_ENV && \
           export CARGO_INCREMENTAL=1
