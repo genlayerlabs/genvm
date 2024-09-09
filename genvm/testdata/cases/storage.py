@@ -1,4 +1,4 @@
-# { "lang": "python" }
+# { "runner": ["genvm-rustpython:test"] }
 
 import genlayer.sdk as gsdk
 from genlayer.types import *

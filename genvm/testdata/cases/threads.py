@@ -1,4 +1,4 @@
-# { "lang": "python" }
+# { "runner": ["genvm-rustpython:test"] }
 
 from threading import Thread
 

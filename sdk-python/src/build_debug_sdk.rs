@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::LazyLock};
+use std::{collections::BTreeMap, sync::LazyLock};
 
 use anyhow::{anyhow, Result};
 use rustpython_vm::{bytecode::CodeObject, frozen};
@@ -29,8 +29,8 @@ fn compile_string<D: std::fmt::Display, F: FnOnce() -> D>(
         .map_err(|err| anyhow!("Python compile error from {}: {}", origin(), err))
 }
 
-fn compile_dir(path: &std::path::Path, parent: String) -> Result<HashMap<String, CompiledModule>> {
-    let mut code_map = HashMap::new();
+fn compile_dir(path: &std::path::Path, parent: String) -> Result<BTreeMap<String, CompiledModule>> {
+    let mut code_map = BTreeMap::new();
     let paths = std::fs::read_dir(path)
         .or_else(|e| {
             if cfg!(windows) {
@@ -41,8 +41,9 @@ fn compile_dir(path: &std::path::Path, parent: String) -> Result<HashMap<String,
             Err(e)
         })
         .map_err(|err| anyhow!("Error listing dir {path:?}: {err}"))?;
+    let mut paths: Vec<std::fs::DirEntry> = paths.flat_map(|x| x.into_iter()).collect();
+    paths.sort_by_key(|d| d.file_name());
     for path in paths {
-        let path = path.map_err(|err| anyhow!("Failed to list file: {err}"))?;
         let path = path.path();
         let file_name = path
             .file_name()

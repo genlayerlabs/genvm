@@ -5,7 +5,6 @@
 				"fromAddr": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
 				"toAddr": "AwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
 			},
-			"runners": import './runners.jsonnet',
 			"accounts": {
 				"AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=": {
 					"code": scriptfilefrom

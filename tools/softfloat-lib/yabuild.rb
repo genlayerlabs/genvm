@@ -145,16 +145,21 @@ project('softfloat') {
 		]
 	)
 
-	out = config.wasm_out_dir.join('softfloat.wasm')
-	target_command(
-		output_file: out,
-		dependencies: [raw],
-		command: [
-			'cargo',
-			'run',
-			raw.output_file,
-			out
-		],
-		cwd: cur_src.join('patch-lib')
-	)
+	out = cur_build.join('softfloat.wasm')
+	target_alias(
+		"lib",
+		target_command(
+			output_file: out,
+			dependencies: [raw],
+			command: [
+				'cargo',
+				'run',
+				raw.output_file,
+				out
+			],
+			cwd: cur_src.join('patch-lib')
+		)
+	) {
+		meta.output_file = out
+	}
 }

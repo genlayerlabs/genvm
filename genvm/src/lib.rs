@@ -4,13 +4,13 @@ pub mod node_iface;
 pub mod plugin_loader;
 pub mod vm;
 pub mod wasi;
+pub mod runner;
 
 use anyhow::Result;
 use std::sync::{Arc, Mutex};
 
 pub trait RequiredApis:
     node_iface::InitApi
-    + node_iface::RunnerApi
     + node_iface::StorageApi
     + genvm_modules_common::interfaces::nondet_functions_api::Trait
     + Send
