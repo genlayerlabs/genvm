@@ -21,16 +21,6 @@ mod test_node_iface_impl {
     use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize, Clone)]
-    pub enum FakeInitAction {
-        MapFile { to: String, file: String },
-        MapCode { to: String },
-        AddEnv { name: String, val: String },
-        SetArgs { args: Vec<String> },
-        LinkWasm { file: String },
-        StartWasm { file: String },
-    }
-
-    #[derive(Serialize, Deserialize, Clone)]
     pub struct FakeAccount {
         code: Option<String>,
     }
@@ -40,37 +30,11 @@ mod test_node_iface_impl {
     pub struct Config {
         storage_file_path: String,
         accounts: HashMap<String, FakeAccount>,
-        runners: HashMap<String, Vec<FakeInitAction>>,
         message: node_iface::MessageData,
         #[serde_as(as = "Base64")]
         calldata: Vec<u8>,
     }
 
-    impl TryFrom<FakeInitAction> for node_iface::InitAction {
-        type Error = anyhow::Error;
-
-        fn try_from(value: FakeInitAction) -> Result<Self> {
-            Ok(match value {
-                FakeInitAction::MapFile { to, file } => node_iface::InitAction::MapFile {
-                    to,
-                    contents: Arc::new(std::fs::read(file)?),
-                },
-                FakeInitAction::MapCode { to } => node_iface::InitAction::MapCode { to },
-                FakeInitAction::AddEnv { name, val } => {
-                    node_iface::InitAction::AddEnv { name, val }
-                }
-                FakeInitAction::SetArgs { args } => node_iface::InitAction::SetArgs { args },
-                FakeInitAction::LinkWasm { file } => node_iface::InitAction::LinkWasm {
-                    contents: Arc::new(std::fs::read(&file)?),
-                    debug_path: Some(file),
-                },
-                FakeInitAction::StartWasm { file } => node_iface::InitAction::StartWasm {
-                    contents: Arc::new(std::fs::read(&file)?),
-                    debug_path: Some(file),
-                },
-            })
-        }
-    }
     pub struct TestApi {
         conf: Config,
         nondet_meths: Box<dyn nondet_functions_api::Trait>,
@@ -170,22 +134,6 @@ mod test_node_iface_impl {
         }
     }
 
-    impl node_iface::RunnerApi for TestApi {
-        fn get_runner(
-            &mut self,
-            desc: node_iface::RunnerDescription,
-        ) -> anyhow::Result<Vec<node_iface::InitAction>> {
-            let run = self
-                .conf
-                .runners
-                .get(&desc.lang)
-                .ok_or(anyhow::anyhow!("no runner"))?;
-            run.iter()
-                .map(|f| f.clone().try_into() as Result<node_iface::InitAction, _>)
-                .collect()
-        }
-    }
-
     #[allow(unused_variables)]
     impl node_iface::InitApi for TestApi {
         fn get_initial_data(&mut self) -> Result<node_iface::MessageData> {
@@ -196,7 +144,7 @@ mod test_node_iface_impl {
             Ok(self.conf.calldata.clone())
         }
 
-        fn get_code(&mut self, account: &node_iface::Address) -> Result<Arc<Vec<u8>>> {
+        fn get_code(&mut self, account: &node_iface::Address) -> Result<Arc<[u8]>> {
             let mut acc: String = serde_json::to_string(account)?;
             // remove ""
             acc.pop();
@@ -211,7 +159,7 @@ mod test_node_iface_impl {
                 return Err(anyhow::anyhow!("no account"));
             };
             let code = std::fs::read(code)?;
-            Ok(Arc::new(code))
+            Ok(Arc::from(code))
         }
     }
 

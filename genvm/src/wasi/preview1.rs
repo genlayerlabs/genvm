@@ -113,7 +113,7 @@ enum FileDescriptor {
     Stdin,
     Stdout,
     Stderr,
-    File { contents: Arc<Vec<u8>>, pos: usize },
+    File { contents: Arc<[u8]>, pos: usize },
     Dir { path: Vec<String> },
 }
 
@@ -122,7 +122,7 @@ enum FilesTrie {
         children: BTreeMap<String, Box<FilesTrie>>,
     },
     File {
-        data: Arc<Vec<u8>>,
+        data: Arc<[u8]>,
     },
 }
 
@@ -157,8 +157,7 @@ impl Context {
         Ok(())
     }
 
-    pub fn map_file(&mut self, location: &String, contents: Arc<Vec<u8>>) -> anyhow::Result<()> {
-        //let cur
+    pub fn map_file(&mut self, location: &String, contents: Arc<[u8]>) -> anyhow::Result<()> {
         let mut location_patched = String::new();
         let mut last_slash = true;
         for c in location.chars() {

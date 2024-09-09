@@ -80,7 +80,7 @@ end
 
 add_rule(<<-EOF
 rule CARGO_BUILD
-  command = cd $WD && cargo build $FLAGS
+  command = cd $WD && cargo build $FLAGS && touch $out
   pool = console
   description = $DESC
 
@@ -94,12 +94,12 @@ self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, n
 
 	trg = CargoBuildTarget.new(dir, name, target, profile, features)
 
-	@targets.push(trg)
 	if out_file.nil?
 		return return_target(trg, &blk)
 	end
 
+	register_target(trg)
+
 	trg_copy = CargoCopyTarget.new(out_file, trg.output_file, trg)
-	@targets.push(trg_copy)
 	return_target(trg_copy, &blk)
 end

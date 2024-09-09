@@ -2,7 +2,6 @@
 	run(scriptfile)::
 		{
 			"vars": {},
-			"runners": import './runners.jsonnet',
 			"accounts": {
 				"AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=": {
 					"code": scriptfile

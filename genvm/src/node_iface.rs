@@ -145,37 +145,7 @@ pub trait InitApi {
 
     fn get_calldata(&mut self) -> Result<Vec<u8>>;
 
-    fn get_code(&mut self, account: &Address) -> Result<Arc<Vec<u8>>>;
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub enum InitAction {
-    MapFile {
-        to: String,
-        contents: Arc<Vec<u8>>,
-    },
-    MapCode {
-        to: String,
-    },
-    AddEnv {
-        name: String,
-        val: String,
-    },
-    SetArgs {
-        args: Vec<String>,
-    },
-    LinkWasm {
-        contents: Arc<Vec<u8>>,
-        debug_path: Option<String>,
-    },
-    StartWasm {
-        contents: Arc<Vec<u8>>,
-        debug_path: Option<String>,
-    },
-}
-
-pub trait RunnerApi {
-    fn get_runner(&mut self, desc: RunnerDescription) -> Result<Vec<InitAction>>;
+    fn get_code(&mut self, account: &Address) -> Result<Arc<[u8]>>;
 }
 
 #[allow(dead_code)]

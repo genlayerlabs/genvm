@@ -1,4 +1,4 @@
-# { "lang": "python" }
+# { "runner": ["genvm-rustpython:test"] }
 
 #from __future__ import annotations
 

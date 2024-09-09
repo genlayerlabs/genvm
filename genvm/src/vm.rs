@@ -1,11 +1,17 @@
 use core::str;
 use std::{collections::HashMap, path::Path};
 
+use serde::{Deserialize, Serialize};
 use wasmtime::{Engine, Linker, Module, Store};
 
-use crate::{node_iface::InitAction, wasi};
+use crate::{runner::{self, InitAction}, wasi};
 use anyhow::{Context, Result};
 use std::sync::{Arc, Mutex};
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct RunnerComment {
+    pub runner: Vec<String>,
+}
 
 #[derive(Clone)]
 pub struct Host {
@@ -37,13 +43,14 @@ pub struct PrecompiledModule {
 pub struct Supervisor {
     det_engine: Engine,
     non_det_engine: Engine,
-    cached_modules: HashMap<Arc<Vec<u8>>, Arc<PrecompiledModule>>,
+    cached_modules: HashMap<Arc<[u8]>, Arc<PrecompiledModule>>,
     pub api: Box<dyn crate::RequiredApis>,
+    runner_cache: runner::RunnerReaderCache,
 }
 
 #[derive(Clone)]
 pub struct InitActions {
-    pub code: Arc<Vec<u8>>,
+    pub code: Arc<[u8]>,
     pub actions: Arc<Vec<InitAction>>,
 }
 
@@ -121,12 +128,13 @@ impl Supervisor {
             non_det_engine,
             cached_modules: HashMap::new(),
             api,
+            runner_cache: runner::RunnerReaderCache::new(),
         })
     }
 
     pub fn cache_module(
         &mut self,
-        module_bytes: Arc<Vec<u8>>,
+        module_bytes: Arc<[u8]>,
         path: Option<&Path>,
     ) -> Result<Arc<PrecompiledModule>> {
         let entry = self.cached_modules.entry(module_bytes.clone());
@@ -191,8 +199,8 @@ impl Supervisor {
     fn link_wasm_into(
         &mut self,
         ret_vm: &mut VM,
-        contents: Arc<Vec<u8>>,
-        debug_path: &Option<String>,
+        contents: Arc<[u8]>,
+        debug_path: Option<&str>,
     ) -> Result<wasmtime::Module> {
         let is_some = debug_path.is_some();
         let v = debug_path.clone().unwrap_or_default();
@@ -214,32 +222,32 @@ impl Supervisor {
 
         for act in vm.init_actions.actions.clone().iter() {
             match act {
-                crate::node_iface::InitAction::MapFile { to, contents } => vm
+                crate::runner::InitAction::MapFile { to, contents } => vm
                     .store
                     .data_mut()
                     .genlayer_ctx_mut()
                     .preview1
                     .map_file(&to, contents.clone())?,
-                crate::node_iface::InitAction::MapCode { to } => vm
+                crate::runner::InitAction::MapCode { to } => vm
                     .store
                     .data_mut()
                     .genlayer_ctx_mut()
                     .preview1
                     .map_file(&to, vm.init_actions.code.clone())?,
-                crate::node_iface::InitAction::AddEnv { name, val } => {
+                crate::runner::InitAction::AddEnv { name, val } => {
                     env.push((name.clone(), val.clone()))
                 }
-                crate::node_iface::InitAction::SetArgs { args } => vm
+                crate::runner::InitAction::SetArgs { args } => vm
                     .store
                     .data_mut()
                     .genlayer_ctx_mut()
                     .preview1
                     .set_args(&args[..])?,
-                crate::node_iface::InitAction::LinkWasm {
+                crate::runner::InitAction::LinkWasm {
                     contents,
                     debug_path,
                 } => {
-                    let module = self.link_wasm_into(vm, contents.clone(), debug_path)?;
+                    let module = self.link_wasm_into(vm, contents.clone(), Some(debug_path))?;
                     let instance = vm.linker.instantiate(&mut vm.store, &module)?;
                     let name = module.name().ok_or(anyhow::anyhow!(
                         "can't link unnamed module {:?}",
@@ -247,7 +255,7 @@ impl Supervisor {
                     ))?;
                     vm.linker.instance(&mut vm.store, name, instance)?;
                 }
-                crate::node_iface::InitAction::StartWasm {
+                crate::runner::InitAction::StartWasm {
                     contents,
                     debug_path,
                 } => {
@@ -256,7 +264,7 @@ impl Supervisor {
                         .genlayer_ctx_mut()
                         .preview1
                         .set_env(&env[..])?;
-                    let module = self.link_wasm_into(vm, contents.clone(), debug_path)?;
+                    let module = self.link_wasm_into(vm, contents.clone(), Some(debug_path))?;
                     return vm.linker.instantiate(&mut vm.store, &module);
                 }
             }
@@ -270,11 +278,11 @@ impl Supervisor {
         &mut self,
         contract_account: &crate::node_iface::Address,
     ) -> Result<InitActions> {
-        let code: Arc<Vec<u8>> = self.api.get_code(contract_account)?;
+        let code = self.api.get_code(contract_account)?;
         let actions = if wasmparser::Parser::is_core_wasm(&code[..]) {
             Vec::from([InitAction::StartWasm {
                 contents: code.clone(),
-                debug_path: Some("<contract>".into()),
+                debug_path: "<contract>".into(),
             }])
         } else {
             let code_str = str::from_utf8(&code[..])?;
@@ -296,8 +304,14 @@ impl Supervisor {
                 }
                 code_comment.push_str(&l[code_start.len()..])
             }
-            let runner_desc = serde_json::from_str(&code_comment)?;
-            self.api.get_runner(runner_desc)?
+            let runner_desc: RunnerComment = serde_json::from_str(&code_comment)?;
+
+            let mut runner = runner::RunnerReader::new()?;
+            for c in &runner_desc.runner {
+                runner.append(Arc::from(&c[..]), &mut self.runner_cache)?;
+            }
+
+            runner.get()?
         };
 
         Ok(InitActions {
