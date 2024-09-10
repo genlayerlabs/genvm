@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{io::Read, sync::Arc};
 
@@ -79,7 +79,7 @@ impl RunnerReaderCacheEntry {
         let mut fname = res[1].to_owned();
         fname.push_str(".zip");
         path.push(fname);
-        let file = std::fs::File::open(path)?;
+        let file = std::fs::File::open(&path).with_context(|| format!("reading {:?}", path))?;
         let mut zip_file = zip::ZipArchive::new(file)?;
 
         let runner = std::io::read_to_string(zip_file.by_name("runner.json")?)?;
@@ -200,7 +200,7 @@ impl RunnerReader {
         Ok(())
     }
 
-    pub fn get(self) -> Result<Vec<InitAction>> {
+    pub(crate) fn get(self) -> Result<Vec<InitAction>> {
         Ok(self.actions)
     }
 }

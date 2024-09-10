@@ -114,19 +114,23 @@ project('softfloat') {
 	clang = Pathname.new(config.wasiSdk).join('bin', 'clang')
 	sysroot = Pathname.new(config.wasiSdk).join('share', 'wasi-sysroot')
 
-	c_file_targets = c_files.map { |cf|
-		cf = Pathname.new(cf)
+	c_file_targets = c_files.map.with_index { |cf, i|
+		cf = cur_src.join(cf)
+		cf_rel = cf.relative_path_from(cur_src)
 		target_c(
-			output_file: cur_build.join(cf.sub_ext('.o').basename),
+			output_file: cur_build.join(cf_rel.sub_ext('.o')),
 			mode: "compile",
-			file: cur_src.join(cf),
+			file: cf,
 			cc: clang,
 			flags: [
 				'--target=wasm32-wasi', "--sysroot=#{sysroot}",
 				'-flto', '-O3',
 				'-DINLINE_LEVEL=9', '-DSOFTFLOAT_FAST_INT64',
-				"-I#{cur_src.join("spec")}",
-				"-I#{cur_src.join("berkeley-softfloat-3", "source", "include")}"
+				'-no-canonical-prefixes',
+				'-Wno-builtin-macro-redefined', '-D__TIME__=0:42:42', '-D__DATE__=Jan 24 2024',
+				"-frandom-seed=#{i}",
+				"-Ispec",
+				"-Iberkeley-softfloat-3/source/include"
 			]
 		)
 	}
@@ -139,21 +143,25 @@ project('softfloat') {
 		flags: [
 			'--target=wasm32-wasi', "--sysroot=#{sysroot}",
 			'-flto', '-O3',
+			'-frandom-seed=0',
 			'-Wl,--no-entry,--export-all',
 			'-static',
 			'-lc'
 		]
 	)
 
+	lib_patcher_build = target_cargo_build(
+		name: 'genvm-softfloat-lib-patcher',
+		dir: cur_src.join('patch-lib')
+	)
 	out = cur_build.join('softfloat.wasm')
-	target_alias(
+	softfloat_lib = target_alias(
 		"lib",
 		target_command(
 			output_file: out,
-			dependencies: [raw],
+			dependencies: [raw, lib_patcher_build],
 			command: [
-				'cargo',
-				'run',
+				lib_patcher_build.output_file,
 				raw.output_file,
 				out
 			],
@@ -162,4 +170,26 @@ project('softfloat') {
 	) {
 		meta.output_file = out
 	}
+
+	runner_target = target_publish_runner(
+		name_base: 'softfloat',
+		out_dir: config.runners_dir,
+		create_test_runner: false,
+		files: [
+			{ path: 'softfloat.wasm', read_from: softfloat_lib.meta.output_file }
+		],
+		runner_dict: {
+			"depends": [],
+			"actions": [
+				{ "LinkWasm": { "file": "softfloat.wasm" } }
+			]
+		}
+	)
+
+	all.add_deps(
+		target_alias(
+			'all',
+			runner_target
+		)
+	)
 }

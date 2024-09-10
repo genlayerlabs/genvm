@@ -54,7 +54,7 @@ pub struct Supervisor {
 #[derive(Clone)]
 pub struct InitActions {
     pub code: Arc<[u8]>,
-    pub actions: Arc<Vec<InitAction>>,
+    pub(crate) actions: Arc<Vec<InitAction>>,
 }
 
 pub struct VM {
