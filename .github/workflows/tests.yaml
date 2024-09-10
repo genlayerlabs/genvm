@@ -107,7 +107,8 @@ jobs:
         with:
           name: all
       - run: |
-          python3.12 -m pip install poetry && \
+          sudo apt-get install -y wabt && \
+            python3.12 -m pip install poetry && \
             pushd sdk-python && \
             poetry install && \
             popd && \

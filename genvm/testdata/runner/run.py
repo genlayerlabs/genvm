@@ -52,6 +52,16 @@ if not GENVM.exists():
 	print(f'genvm executable {GENVM} does not exist')
 	exit(1)
 
+import typing
+def unfold_conf(x: typing.Any, vars: dict[str, str]) -> typing.Any:
+	if isinstance(x, str):
+		return re.sub(r"\$\{[a-zA-Z\-_]+\}", lambda x: vars[x.group()[2:-1]], x)
+	if isinstance(x, list):
+		return [unfold_conf(x, vars) for x in x]
+	if isinstance(x, dict):
+		return {k: unfold_conf(v, vars) for k, v in x.items()}
+	return x
+
 def run(path0):
 	path = dir.joinpath(path0)
 	skipped = path.with_suffix('.skip')
@@ -69,6 +79,7 @@ def run(path0):
 		["rm", str(storage_path)]
 	]
 	def map_conf(i, conf, total_conf):
+		conf = pickle.loads(pickle.dumps(conf))
 		if total_conf == 1:
 			suff = ''
 		else:
@@ -78,7 +89,17 @@ def run(path0):
 		new_calldata_obj = eval(conf["calldata"], globals(), eval_vars)
 		conf["calldata"] = str(base64.b64encode(calldata.encode(new_calldata_obj)), 'ascii')
 		conf["storage_file_path"] = str(storage_path)
+		conf = unfold_conf(conf, conf["vars"])
 		conf_path = tmp_dir.joinpath(path0).with_suffix(f'{suff}.json')
+		for acc_val in conf["accounts"].values():
+			code_path = acc_val.get("code", None)
+			if code_path is None:
+				continue
+			if code_path.endswith('.wat'):
+				out_path = tmp_dir.joinpath(Path(code_path).with_suffix(".wasm").relative_to(dir))
+				subprocess.run(['wat2wasm', '-o', out_path, code_path], check=True)
+				acc_val["code"] = str(out_path)
+			pass
 		conf_path.parent.mkdir(parents=True, exist_ok=True)
 		with open(conf_path, 'wt') as f:
 			json.dump(conf, f)
