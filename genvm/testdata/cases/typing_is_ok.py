@@ -1,4 +1,4 @@
-# { "runner": ["genvm-rustpython:test"] }
+# { "depends": ["genvm-rustpython:test"] }
 
 #from __future__ import annotations
 

@@ -1,7 +1,6 @@
 use core::str;
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, io::Write, path::Path};
 
-use serde::{Deserialize, Serialize};
 use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
@@ -10,11 +9,6 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use std::sync::{Arc, Mutex};
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct RunnerComment {
-    pub runner: Vec<String>,
-}
 
 #[derive(Clone)]
 pub struct Host {
@@ -287,6 +281,10 @@ impl Supervisor {
                 contents: code.clone(),
                 debug_path: "<contract>".into(),
             }])
+        } else if let Ok(mut as_contr) = zip::ZipArchive::new(std::io::Cursor::new(&code)) {
+            let mut runner = runner::RunnerReader::new()?;
+            runner.append_archieve("<contract>", &mut as_contr, &mut self.runner_cache)?;
+            runner.get()?
         } else {
             let code_str = str::from_utf8(&code[..])?;
             let code_start = (|| {
@@ -307,13 +305,16 @@ impl Supervisor {
                 }
                 code_comment.push_str(&l[code_start.len()..])
             }
-            let runner_desc: RunnerComment = serde_json::from_str(&code_comment)?;
 
+            let mut buf = [0; 4096];
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf[..]));
+            zip.start_file("runner.json", zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored))?;
+            zip.write_all(code_comment.as_bytes())?;
+            zip.finish()?;
+
+            let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&mut buf[..]))?;
             let mut runner = runner::RunnerReader::new()?;
-            for c in &runner_desc.runner {
-                runner.append(Arc::from(&c[..]), &mut self.runner_cache)?;
-            }
-
+            runner.append_archieve("<contract>", &mut zip, &mut self.runner_cache)?;
             runner.get()?
         };
 

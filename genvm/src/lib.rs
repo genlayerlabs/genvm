@@ -20,10 +20,8 @@ pub trait RequiredApis:
 
 pub fn run_with_api(mut api: Box<dyn RequiredApis>) -> Result<crate::vm::VMRunResult> {
     let mut entrypoint = b"call!".to_vec();
-    let calldata = api.get_calldata()?;
-    entrypoint.extend_from_slice(&calldata);
 
-    let init_data = api.get_initial_data()?;
+    let init_data = api.get_initial_data(&mut entrypoint)?;
 
     let supervisor = Arc::new(Mutex::new(vm::Supervisor::new(api)?));
 

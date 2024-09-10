@@ -1,4 +1,4 @@
-# { "runner": ["genvm-rustpython:test"] }
+# { "depends": ["genvm-rustpython:test"] }
 import genlayer.sdk as gsdk
 
 @gsdk.public

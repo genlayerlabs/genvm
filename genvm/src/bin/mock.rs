@@ -136,12 +136,9 @@ mod test_node_iface_impl {
 
     #[allow(unused_variables)]
     impl node_iface::InitApi for TestApi {
-        fn get_initial_data(&mut self) -> Result<node_iface::MessageData> {
+        fn get_initial_data(&mut self, calldata: &mut Vec<u8>) -> Result<node_iface::MessageData> {
+            calldata.extend_from_slice(&self.conf.calldata);
             Ok(self.conf.message.clone())
-        }
-
-        fn get_calldata(&mut self) -> Result<Vec<u8>> {
-            Ok(self.conf.calldata.clone())
         }
 
         fn get_code(&mut self, account: &node_iface::Address) -> Result<Arc<[u8]>> {
