@@ -13,15 +13,12 @@ from pathlib import Path
 
 conf = json.loads(sys.argv[1])
 
-all_deps = []
-
 fake_zip = io.BytesIO()
 with zipfile.ZipFile(fake_zip, mode="w", compression=zipfile.ZIP_STORED) as zip_file:
 	for file_conf in conf['files']:
 		with open(file_conf['read_from'], 'rb') as f:
 			contents = f.read()
 		path = file_conf['path']
-		all_deps.append(file_conf['read_from'])
 		info = zipfile.ZipInfo(path, date_time=(1980, 1, 1, 0, 0, 0))
 		zip_file.writestr(info, contents)
 fake_zip.flush()
@@ -39,9 +36,8 @@ out_name = out_dir.joinpath(f'{contents_hash}.zip')
 with open(out_name, 'wb') as f:
 	f.write(zip_contents)
 
-all_deps.append(str(out_name))
-with open(conf["dep_file"], "wt") as f:
-	f.write(f"{conf['fake_out']}: {' '.join(all_deps)}\n")
+with open(conf['fake_out'], 'wt') as f:
+	f.write(contents_hash)
 
 if conf['create_test_runner']:
 	out_dir.joinpath('test.zip').unlink(missing_ok=True)
