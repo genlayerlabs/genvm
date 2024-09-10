@@ -1,8 +1,8 @@
-local simple = import '../templates/simple.jsonnet';
+local simple = import '../../templates/simple.jsonnet';
 simple.run('${jsonnetDir}/methods.py') {
     "calldata": |||
         {
-            "method": "rback",
+            "method": "retn_ser",
             "args": []
         }
     |||
