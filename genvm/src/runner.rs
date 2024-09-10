@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use zip::ZipArchive;
 use std::{io::Read, sync::Arc};
+use zip::ZipArchive;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) enum InitAction {
@@ -72,9 +72,14 @@ impl RunnerReaderCache {
 }
 
 impl RunnerReaderCacheEntry {
-    fn transform_actions<R>(zip_file: &mut ZipArchive<R>, path_prefix: &str, dest: &mut Vec<InitAction>, from: Vec<RunnerJsonInitAction>) -> Result<()>
+    fn transform_actions<R>(
+        zip_file: &mut ZipArchive<R>,
+        path_prefix: &str,
+        dest: &mut Vec<InitAction>,
+        from: Vec<RunnerJsonInitAction>,
+    ) -> Result<()>
     where
-        R: std::io::Read + std::io::Seek
+        R: std::io::Read + std::io::Seek,
     {
         for a in from {
             match a {
@@ -86,15 +91,11 @@ impl RunnerReaderCacheEntry {
                         contents: Arc::from(buf),
                     })
                 }
-                RunnerJsonInitAction::MapCode { to } => {
-                    dest.push(InitAction::MapCode { to })
-                }
+                RunnerJsonInitAction::MapCode { to } => dest.push(InitAction::MapCode { to }),
                 RunnerJsonInitAction::AddEnv { name, val } => {
                     dest.push(InitAction::AddEnv { name, val })
                 }
-                RunnerJsonInitAction::SetArgs { args } => {
-                    dest.push(InitAction::SetArgs { args })
-                }
+                RunnerJsonInitAction::SetArgs { args } => dest.push(InitAction::SetArgs { args }),
                 RunnerJsonInitAction::LinkWasm { file } => {
                     let mut buf = Vec::new();
                     zip_file.by_name(&file)?.read_to_end(&mut buf)?;
@@ -117,9 +118,12 @@ impl RunnerReaderCacheEntry {
         Ok(())
     }
 
-    fn make_from_arch<R>(path_prefix: &str, zip_file: &mut ZipArchive<R>) -> Result<RunnerReaderCacheEntry>
+    fn make_from_arch<R>(
+        path_prefix: &str,
+        zip_file: &mut ZipArchive<R>,
+    ) -> Result<RunnerReaderCacheEntry>
     where
-        R: std::io::Read + std::io::Seek
+        R: std::io::Read + std::io::Seek,
     {
         let mut ret = RunnerReaderCacheEntry {
             pre_actions: Vec::new(),
@@ -130,9 +134,19 @@ impl RunnerReaderCacheEntry {
         let runner = std::io::read_to_string(zip_file.by_name("runner.json")?)?;
         let runner: RunnerJsonFile = serde_json::from_str(&runner)?;
 
-        RunnerReaderCacheEntry::transform_actions(zip_file, path_prefix, &mut ret.pre_actions, runner.pre_actions)?;
+        RunnerReaderCacheEntry::transform_actions(
+            zip_file,
+            path_prefix,
+            &mut ret.pre_actions,
+            runner.pre_actions,
+        )?;
         ret.depends = Arc::new(runner.depends);
-        RunnerReaderCacheEntry::transform_actions(zip_file, path_prefix, &mut ret.actions, runner.actions)?;
+        RunnerReaderCacheEntry::transform_actions(
+            zip_file,
+            path_prefix,
+            &mut ret.actions,
+            runner.actions,
+        )?;
 
         Ok(ret)
     }
@@ -185,12 +199,20 @@ impl RunnerReader {
         })
     }
 
-    fn post_load(&mut self, runner_id: Arc<str>, cache: &mut RunnerReaderCache, cache_entry: &RunnerReaderCacheEntry) -> Result<()> {
-
+    fn post_load(
+        &mut self,
+        runner_id: Arc<str>,
+        cache: &mut RunnerReaderCache,
+        cache_entry: &RunnerReaderCacheEntry,
+    ) -> Result<()> {
         let process_actions = |zelf: &mut Self, actions: &[InitAction]| {
             for ref act in actions {
                 if let Some(ref was_start) = zelf.was_start {
-                    anyhow::bail!("detected action after start: start from {} new action from {}", was_start, runner_id)
+                    anyhow::bail!(
+                        "detected action after start: start from {} new action from {}",
+                        was_start,
+                        runner_id
+                    )
                 }
                 match act {
                     InitAction::SetArgs { .. } => {
@@ -203,7 +225,9 @@ impl RunnerReader {
                     }
                     InitAction::StartWasm { .. } => {
                         zelf.was_start = match &zelf.was_start {
-                            Some(x) => anyhow::bail!("start called twice: old {} new {}", x, runner_id),
+                            Some(x) => {
+                                anyhow::bail!("start called twice: old {} new {}", x, runner_id)
+                            }
                             None => Some(runner_id.to_owned()),
                         };
                     }
@@ -223,9 +247,14 @@ impl RunnerReader {
         Ok(())
     }
 
-    pub fn append_archieve<R>(&mut self, path_prefix: &str, archieve: &mut zip::ZipArchive<R>, cache: &mut RunnerReaderCache) -> Result<()>
+    pub fn append_archieve<R>(
+        &mut self,
+        path_prefix: &str,
+        archieve: &mut zip::ZipArchive<R>,
+        cache: &mut RunnerReaderCache,
+    ) -> Result<()>
     where
-        R: std::io::Read + std::io::Seek
+        R: std::io::Read + std::io::Seek,
     {
         let cache_entry = RunnerReaderCacheEntry::make_from_arch(path_prefix, archieve)?;
 

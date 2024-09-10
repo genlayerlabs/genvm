@@ -97,6 +97,7 @@ def run(path0):
 				continue
 			if code_path.endswith('.wat'):
 				out_path = tmp_dir.joinpath(Path(code_path).with_suffix(".wasm").relative_to(dir))
+				out_path.parent.mkdir(parents=True, exist_ok=True)
 				subprocess.run(['wat2wasm', '-o', out_path, code_path], check=True)
 				acc_val["code"] = str(out_path)
 			pass

@@ -308,7 +308,11 @@ impl Supervisor {
 
             let mut buf = [0; 4096];
             let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf[..]));
-            zip.start_file("runner.json", zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored))?;
+            zip.start_file(
+                "runner.json",
+                zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Stored),
+            )?;
             zip.write_all(code_comment.as_bytes())?;
             zip.finish()?;
 

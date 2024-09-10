@@ -72,7 +72,8 @@ jobs:
         with:
           name: all
       - run: |
-          python3 -m pip install -r genvm/testdata/runner/requirements.txt && \
+          sudo apt-get install -y wabt && \
+            python3 -m pip install -r genvm/testdata/runner/requirements.txt && \
             mkdir -p build && \
             mv out.zip build/out.zip && \
             pushd build && \
@@ -107,8 +108,7 @@ jobs:
         with:
           name: all
       - run: |
-          sudo apt-get install -y wabt && \
-            python3.12 -m pip install poetry && \
+          python3.12 -m pip install poetry && \
             pushd sdk-python && \
             poetry install && \
             popd && \
