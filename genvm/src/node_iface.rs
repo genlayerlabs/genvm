@@ -141,9 +141,8 @@ pub struct RunnerDescription {
 }
 
 pub trait InitApi {
-    fn get_initial_data(&mut self) -> Result<MessageData>;
-
-    fn get_calldata(&mut self) -> Result<Vec<u8>>;
+    /// must append calldata to `calldata`
+    fn get_initial_data(&mut self, calldata: &mut Vec<u8>) -> Result<MessageData>;
 
     fn get_code(&mut self, account: &Address) -> Result<Arc<[u8]>>;
 }

@@ -1,4 +1,4 @@
-# { "runner": ["genvm-rustpython:test"] }
+# { "depends": ["genvm-rustpython:test"] }
 
 from threading import Thread
 

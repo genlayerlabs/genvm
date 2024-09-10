@@ -1,0 +1,155 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "GenVM runner schema",
+    "type": "object",
+    "anyOf": [
+        {
+          "required": [
+              "pre_actions"
+          ]
+        },
+        {
+          "required": [
+            "depends"
+          ]
+        },
+      {
+        "required": [
+          "actions"
+        ]
+      }
+    ],
+    "properties": {
+      "depends": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "description": "other runner id"
+        }
+      },
+      "actions": {
+        "description": "Actions to run on loading. It is ran after loading dependencies",
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/InitAction"
+        }
+      },
+      "pre_actions": {
+        "description": "Actions to run on loading. It is ran before loading dependencies",
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/InitAction"
+        }
+      }
+    },
+    "definitions": {
+      "InitAction": {
+        "description": "A single rule for loading.",
+        "type": "object",
+        "oneOf": [
+          {
+            "required": [
+              "AddEnv"
+            ]
+          },
+          {
+            "required": [
+              "MapFile"
+            ]
+          },
+          {
+            "required": [
+              "MapCode"
+            ]
+          },
+          {
+            "required": [
+              "SetArgs"
+            ]
+          },
+          {
+            "required": [
+              "LinkWasm"
+            ]
+          },
+          {
+            "required": [
+              "StartWasm"
+            ]
+          }
+        ],
+        "properties": {
+          "AddEnv": {
+            "description": "Adds environment variable",
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "variable name"
+              },
+              "val": {
+                "type": "string",
+                "description": "variable value"
+              }
+            }
+          },
+          "MapFile": {
+            "description": "Makes file available at specified path in genvm",
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string",
+                "description": "path within an archieve"
+              },
+              "to": {
+                "type": "string",
+                "description": "absolute path in genvm fs"
+              }
+            }
+          },
+          "MapCode": {
+            "description": "Makes contract code available at specified path in genvm",
+            "type": "object",
+            "properties": {
+              "to": {
+                "type": "string",
+                "description": "absolute path in genvm fs"
+              }
+            }
+          },
+          "SetArgs": {
+            "description": "sets process arguments for genvm",
+            "type": "object",
+            "properties": {
+              "args": {
+                "type": "array",
+                "elementType": "string",
+                "description": "all program arguments to set in genvm (argv)"
+              }
+            }
+          },
+          "LinkWasm": {
+            "description": "Link wasm file to be available from genvm",
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string",
+                "description": "path to file within archive"
+              }
+            }
+          },
+          "StartWasm": {
+            "description": "Start wasm file in genvm",
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string",
+                "description": "path to file within archive"
+              }
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }

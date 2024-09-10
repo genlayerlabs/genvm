@@ -50,6 +50,7 @@ Generic steps:
 ```bash
 ### install dependencies (once)
 python3 -m pip install -r genvm/testdata/runner/requirements.txt
+sudo apt-get install -y wabt
 ### run
 ./genvm/testdata/runner/run.py
 ```

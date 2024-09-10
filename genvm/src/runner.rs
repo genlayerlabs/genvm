@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{io::Read, sync::Arc};
+use zip::ZipArchive;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) enum InitAction {
@@ -38,15 +39,24 @@ pub enum RunnerJsonInitAction {
     StartWasm { file: String },
 }
 
+fn empty_vec<T>() -> Vec<T> {
+    return Vec::new();
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct RunnerJsonFile {
-    pub actions: Vec<RunnerJsonInitAction>,
+    #[serde(default = "empty_vec")]
+    pub pre_actions: Vec<RunnerJsonInitAction>,
+    #[serde(default = "empty_vec")]
     pub depends: Vec<Arc<str>>,
+    #[serde(default = "empty_vec")]
+    pub actions: Vec<RunnerJsonInitAction>,
 }
 
 struct RunnerReaderCacheEntry {
-    actions: Vec<InitAction>,
+    pre_actions: Vec<InitAction>,
     depends: Arc<Vec<Arc<str>>>,
+    actions: Vec<InitAction>,
 }
 
 pub struct RunnerReaderCache {
@@ -62,6 +72,85 @@ impl RunnerReaderCache {
 }
 
 impl RunnerReaderCacheEntry {
+    fn transform_actions<R>(
+        zip_file: &mut ZipArchive<R>,
+        path_prefix: &str,
+        dest: &mut Vec<InitAction>,
+        from: Vec<RunnerJsonInitAction>,
+    ) -> Result<()>
+    where
+        R: std::io::Read + std::io::Seek,
+    {
+        for a in from {
+            match a {
+                RunnerJsonInitAction::MapFile { to, file } => {
+                    let mut buf = Vec::new();
+                    zip_file.by_name(&file)?.read_to_end(&mut buf)?;
+                    dest.push(InitAction::MapFile {
+                        to,
+                        contents: Arc::from(buf),
+                    })
+                }
+                RunnerJsonInitAction::MapCode { to } => dest.push(InitAction::MapCode { to }),
+                RunnerJsonInitAction::AddEnv { name, val } => {
+                    dest.push(InitAction::AddEnv { name, val })
+                }
+                RunnerJsonInitAction::SetArgs { args } => dest.push(InitAction::SetArgs { args }),
+                RunnerJsonInitAction::LinkWasm { file } => {
+                    let mut buf = Vec::new();
+                    zip_file.by_name(&file)?.read_to_end(&mut buf)?;
+                    dest.push(InitAction::LinkWasm {
+                        contents: Arc::from(buf),
+                        debug_path: format!("{}/{}", path_prefix, file),
+                    })
+                }
+                RunnerJsonInitAction::StartWasm { file } => {
+                    let mut buf = Vec::new();
+                    zip_file.by_name(&file)?.read_to_end(&mut buf)?;
+                    dest.push(InitAction::StartWasm {
+                        contents: Arc::from(buf),
+                        debug_path: format!("{}/{}", path_prefix, file),
+                    })
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn make_from_arch<R>(
+        path_prefix: &str,
+        zip_file: &mut ZipArchive<R>,
+    ) -> Result<RunnerReaderCacheEntry>
+    where
+        R: std::io::Read + std::io::Seek,
+    {
+        let mut ret = RunnerReaderCacheEntry {
+            pre_actions: Vec::new(),
+            depends: Arc::new(Vec::new()),
+            actions: Vec::new(),
+        };
+
+        let runner = std::io::read_to_string(zip_file.by_name("runner.json")?)?;
+        let runner: RunnerJsonFile = serde_json::from_str(&runner)?;
+
+        RunnerReaderCacheEntry::transform_actions(
+            zip_file,
+            path_prefix,
+            &mut ret.pre_actions,
+            runner.pre_actions,
+        )?;
+        ret.depends = Arc::new(runner.depends);
+        RunnerReaderCacheEntry::transform_actions(
+            zip_file,
+            path_prefix,
+            &mut ret.actions,
+            runner.actions,
+        )?;
+
+        Ok(ret)
+    }
+
     fn make(runner_id: Arc<str>, mut path: std::path::PathBuf) -> Result<RunnerReaderCacheEntry> {
         let res: Vec<&str> = runner_id.split(":").collect();
         if res.len() != 2 {
@@ -70,10 +159,6 @@ impl RunnerReaderCacheEntry {
                 res
             );
         }
-        let mut ret = RunnerReaderCacheEntry {
-            actions: Vec::new(),
-            depends: Arc::new(Vec::new()),
-        };
 
         path.push(res[0]);
         let mut fname = res[1].to_owned();
@@ -82,49 +167,7 @@ impl RunnerReaderCacheEntry {
         let file = std::fs::File::open(&path).with_context(|| format!("reading {:?}", path))?;
         let mut zip_file = zip::ZipArchive::new(file)?;
 
-        let runner = std::io::read_to_string(zip_file.by_name("runner.json")?)?;
-        let runner: RunnerJsonFile = serde_json::from_str(&runner)?;
-
-        ret.depends = Arc::new(runner.depends);
-
-        for a in runner.actions {
-            match a {
-                RunnerJsonInitAction::MapFile { to, file } => {
-                    let mut buf = Vec::new();
-                    zip_file.by_name(&file)?.read_to_end(&mut buf)?;
-                    ret.actions.push(InitAction::MapFile {
-                        to,
-                        contents: Arc::from(buf),
-                    })
-                }
-                RunnerJsonInitAction::MapCode { to } => {
-                    ret.actions.push(InitAction::MapCode { to })
-                }
-                RunnerJsonInitAction::AddEnv { name, val } => {
-                    ret.actions.push(InitAction::AddEnv { name, val })
-                }
-                RunnerJsonInitAction::SetArgs { args } => {
-                    ret.actions.push(InitAction::SetArgs { args })
-                }
-                RunnerJsonInitAction::LinkWasm { file } => {
-                    let mut buf = Vec::new();
-                    zip_file.by_name(&file)?.read_to_end(&mut buf)?;
-                    ret.actions.push(InitAction::LinkWasm {
-                        contents: Arc::from(buf),
-                        debug_path: format!("{}/{}", runner_id, file),
-                    })
-                }
-                RunnerJsonInitAction::StartWasm { file } => {
-                    let mut buf = Vec::new();
-                    zip_file.by_name(&file)?.read_to_end(&mut buf)?;
-                    ret.actions.push(InitAction::StartWasm {
-                        contents: Arc::from(buf),
-                        debug_path: format!("{}/{}", runner_id, file),
-                    })
-                }
-            }
-        }
-        Ok(ret)
+        RunnerReaderCacheEntry::make_from_arch(&runner_id, &mut zip_file)
     }
 }
 
@@ -156,6 +199,68 @@ impl RunnerReader {
         })
     }
 
+    fn post_load(
+        &mut self,
+        runner_id: Arc<str>,
+        cache: &mut RunnerReaderCache,
+        cache_entry: &RunnerReaderCacheEntry,
+    ) -> Result<()> {
+        let process_actions = |zelf: &mut Self, actions: &[InitAction]| {
+            for ref act in actions {
+                if let Some(ref was_start) = zelf.was_start {
+                    anyhow::bail!(
+                        "detected action after start: start from {} new action from {}",
+                        was_start,
+                        runner_id
+                    )
+                }
+                match act {
+                    InitAction::SetArgs { .. } => {
+                        zelf.was_args = match &zelf.was_args {
+                            Some(x) => {
+                                anyhow::bail!("args were set twice: old {} new {}", x, runner_id)
+                            }
+                            None => Some(runner_id.to_owned()),
+                        };
+                    }
+                    InitAction::StartWasm { .. } => {
+                        zelf.was_start = match &zelf.was_start {
+                            Some(x) => {
+                                anyhow::bail!("start called twice: old {} new {}", x, runner_id)
+                            }
+                            None => Some(runner_id.to_owned()),
+                        };
+                    }
+                    _ => {}
+                }
+                zelf.actions.push((*act).clone());
+            }
+            Ok(())
+        };
+
+        process_actions(self, &cache_entry.pre_actions)?;
+        for c in &*cache_entry.depends.clone() {
+            self.append(c.clone(), cache)?;
+        }
+        process_actions(self, &cache_entry.actions)?;
+
+        Ok(())
+    }
+
+    pub fn append_archieve<R>(
+        &mut self,
+        path_prefix: &str,
+        archieve: &mut zip::ZipArchive<R>,
+        cache: &mut RunnerReaderCache,
+    ) -> Result<()>
+    where
+        R: std::io::Read + std::io::Seek,
+    {
+        let cache_entry = RunnerReaderCacheEntry::make_from_arch(path_prefix, archieve)?;
+
+        self.post_load(Arc::from(path_prefix), cache, &cache_entry)
+    }
+
     pub fn append(&mut self, runner_id: Arc<str>, cache: &mut RunnerReaderCache) -> Result<()> {
         if self.visited.contains(&runner_id) {
             return Ok(());
@@ -172,32 +277,7 @@ impl RunnerReader {
         }
         .clone();
 
-        for c in &*cache_entry.depends.clone() {
-            self.append(c.clone(), cache)?;
-        }
-
-        for act in &*cache_entry.actions {
-            match act {
-                InitAction::SetArgs { .. } => {
-                    self.was_args = match &self.was_args {
-                        Some(x) => {
-                            anyhow::bail!("args were set twice: old {} new {}", x, runner_id)
-                        }
-                        None => Some(runner_id.to_owned()),
-                    };
-                }
-                InitAction::StartWasm { .. } => {
-                    self.was_start = match &self.was_start {
-                        Some(x) => anyhow::bail!("start called twice: old {} new {}", x, runner_id),
-                        None => Some(runner_id.to_owned()),
-                    };
-                }
-                _ => {}
-            }
-            self.actions.push(act.clone());
-        }
-
-        Ok(())
+        self.post_load(runner_id, cache, &cache_entry)
     }
 
     pub(crate) fn get(self) -> Result<Vec<InitAction>> {
