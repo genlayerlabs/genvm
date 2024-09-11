@@ -3,10 +3,7 @@ use genvm_modules_common::*;
 
 use serde_derive::Deserialize;
 
-use std::{
-    ffi::CStr,
-    io::Read,
-};
+use std::{ffi::CStr, io::Read};
 
 use genvm_modules_common::interfaces::web_functions_api;
 
@@ -92,11 +89,14 @@ impl Impl {
             return Err(anyhow::anyhow!("can't get webpage {:?}", res));
         }
 
-        let script =
-            match config.mode {
-                GetWebpageConfigMode::html => r#"{ "script": "return document.body.innerHTML", "args": [] }"#,
-                GetWebpageConfigMode::text => r#"{ "script": "return document.body.innerText.replace(/[\\s\\n]+/g, ' ')", "args": [] }"#,
-            };
+        let script = match config.mode {
+            GetWebpageConfigMode::html => {
+                r#"{ "script": "return document.body.innerHTML", "args": [] }"#
+            }
+            GetWebpageConfigMode::text => {
+                r#"{ "script": "return document.body.innerText.replace(/[\\s\\n]+/g, ' ')", "args": [] }"#
+            }
+        };
 
         let res = ureq::post(&format!(
             "{}/session/{}/execute/sync",

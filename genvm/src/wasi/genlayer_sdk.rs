@@ -6,11 +6,7 @@ use std::{
 use wasmtime::StoreContextMut;
 use wiggle::GuestError;
 
-use crate::{
-    Address,
-    MessageData,
-    vm::InitActions,
-};
+use crate::{vm::InitActions, Address, MessageData};
 
 use super::{base, common::read_string};
 
@@ -48,10 +44,7 @@ impl crate::Address {
         addr: &generated::types::Addr,
         mem: &mut wiggle::GuestMemory<'_>,
     ) -> Result<Self, generated::types::Error> {
-        let cow = mem.as_cow(
-            addr.ptr
-                .as_array(crate::Address::len().try_into().unwrap()),
-        )?;
+        let cow = mem.as_cow(addr.ptr.as_array(crate::Address::len().try_into().unwrap()))?;
         let mut ret = Address::new();
         for (x, y) in ret.0.iter_mut().zip(cow.iter()) {
             *x = *y;
@@ -520,16 +513,13 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
-        let mut rem_gas = self.stor
-                .get_fuel()
-                .map_err(|_e| generated::types::Errno::Io)?;
-        let res = supervisor.host.storage_read(
-            &mut rem_gas,
-            account,
-            slot,
-            index,
-            &mut vec,
-        );
+        let mut rem_gas = self
+            .stor
+            .get_fuel()
+            .map_err(|_e| generated::types::Errno::Io)?;
+        let res = supervisor
+            .host
+            .storage_read(&mut rem_gas, account, slot, index, &mut vec);
         let _ = self.stor.set_fuel(rem_gas);
         res.map_err(|_e| generated::types::Errno::Io)?;
         mem.copy_from_slice(&vec, dest_buf)?;
@@ -559,13 +549,13 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
-        let mut rem_gas = self.stor
-                .get_fuel()
-                .map_err(|_e| generated::types::Errno::Io)?;
-        let res =
-            supervisor
-                .host
-                .storage_write(&mut rem_gas, account, slot, index, &buf);
+        let mut rem_gas = self
+            .stor
+            .get_fuel()
+            .map_err(|_e| generated::types::Errno::Io)?;
+        let res = supervisor
+            .host
+            .storage_write(&mut rem_gas, account, slot, index, &buf);
         let _ = self.stor.set_fuel(rem_gas);
         res.map_err(|_e| generated::types::Errno::Io)?;
         Ok(())

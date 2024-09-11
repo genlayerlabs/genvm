@@ -1,8 +1,11 @@
-use std::{borrow::BorrowMut, sync::{Arc, Mutex}};
+use std::{
+    borrow::BorrowMut,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, base64::Base64};
+use serde_with::{base64::Base64, serde_as};
 
 #[serde_as]
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash, Copy)]
@@ -46,13 +49,13 @@ impl Host {
     pub fn new(addr: &str) -> Result<Host> {
         const UNIX: &str = "unix://";
         let sock: Box<Mutex<dyn Sock>> = if addr.starts_with(UNIX) {
-            Box::new(Mutex::new(std::os::unix::net::UnixStream::connect(std::path::Path::new(&addr[UNIX.len()..]))?))
+            Box::new(Mutex::new(std::os::unix::net::UnixStream::connect(
+                std::path::Path::new(&addr[UNIX.len()..]),
+            )?))
         } else {
             Box::new(Mutex::new(std::net::TcpStream::connect(addr)?))
         };
-        Ok(Host {
-            sock,
-        })
+        Ok(Host { sock })
     }
 }
 
@@ -79,7 +82,9 @@ fn read_u64(sock: &mut dyn Sock) -> Result<u64> {
 
 impl Host {
     pub fn append_calldata(&mut self, calldata: &mut Vec<u8>) -> Result<()> {
-        let Ok(mut sock) = (*self.sock).lock() else { anyhow::bail!("can't take lock") };
+        let Ok(mut sock) = (*self.sock).lock() else {
+            anyhow::bail!("can't take lock")
+        };
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[0])?;
         let len = read_u32(sock)? as usize;
@@ -88,12 +93,14 @@ impl Host {
         unsafe {
             calldata.set_len(index + len);
         }
-        sock.read_exact(&mut calldata[index..index+len])?;
+        sock.read_exact(&mut calldata[index..index + len])?;
         Ok(())
     }
 
     pub fn get_code(&mut self, account: &Address) -> Result<Arc<[u8]>> {
-        let Ok(mut sock) = (*self.sock).lock() else { anyhow::bail!("can't take lock") };
+        let Ok(mut sock) = (*self.sock).lock() else {
+            anyhow::bail!("can't take lock")
+        };
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[1])?;
         sock.write_all(&account.raw())?;
@@ -116,7 +123,9 @@ impl Host {
         index: u32,
         buf: &mut [u8],
     ) -> Result<()> {
-        let Ok(mut sock) = (*self.sock).lock() else { anyhow::bail!("can't take lock") };
+        let Ok(mut sock) = (*self.sock).lock() else {
+            anyhow::bail!("can't take lock")
+        };
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[2])?;
         sock.write_all(&remaing_gas.to_le_bytes())?;
@@ -142,7 +151,9 @@ impl Host {
         index: u32,
         buf: &[u8],
     ) -> Result<()> {
-        let Ok(mut sock) = (*self.sock).lock() else { anyhow::bail!("can't take lock") };
+        let Ok(mut sock) = (*self.sock).lock() else {
+            anyhow::bail!("can't take lock")
+        };
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[3])?;
         sock.write_all(&remaing_gas.to_le_bytes())?;

@@ -1,19 +1,20 @@
 mod driver;
 
+mod host;
 pub mod plugin_loader;
 pub mod runner;
 pub mod string_templater;
 pub mod vm;
 pub mod wasi;
-mod host;
 
-pub use host::{Host, Address, MessageData};
+pub use host::{Address, Host, MessageData};
 
 use anyhow::Result;
 use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap, sync::{Arc, Mutex}
+    collections::HashMap,
+    sync::{Arc, Mutex},
 };
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]

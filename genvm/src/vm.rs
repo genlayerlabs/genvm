@@ -270,7 +270,9 @@ impl Supervisor {
         linker.allow_unknown_exports(false);
         linker.allow_shadowing(false);
 
-        crate::wasi::add_to_linker_sync(&mut linker, |host: &mut WasmContext| host.genlayer_ctx_mut())?;
+        crate::wasi::add_to_linker_sync(&mut linker, |host: &mut WasmContext| {
+            host.genlayer_ctx_mut()
+        })?;
 
         Ok(VM {
             store,
@@ -358,10 +360,7 @@ impl Supervisor {
         ))
     }
 
-    pub fn get_actions_for(
-        &mut self,
-        contract_account: &crate::Address,
-    ) -> Result<InitActions> {
+    pub fn get_actions_for(&mut self, contract_account: &crate::Address) -> Result<InitActions> {
         let code = self.host.get_code(contract_account)?;
         let actions = if wasmparser::Parser::is_core_wasm(&code[..]) {
             Vec::from([InitAction::StartWasm {

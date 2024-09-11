@@ -29,15 +29,14 @@ pub struct CStrResult {
 
 impl<S> From<anyhow::Result<S>> for CStrResult
 where
-    S: AsRef<str>
+    S: AsRef<str>,
 {
     fn from(value: anyhow::Result<S>) -> Self {
         match value {
-            Ok(v) =>
-                CStrResult {
-                    str: crate::str_to_shared(v.as_ref()),
-                    err: 0,
-                },
+            Ok(v) => CStrResult {
+                str: crate::str_to_shared(v.as_ref()),
+                err: 0,
+            },
             Err(e) => {
                 eprintln!("Module error {}", &e);
                 CStrResult {
