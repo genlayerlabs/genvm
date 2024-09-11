@@ -3,22 +3,19 @@ mod driver;
 pub mod node_iface;
 pub mod plugin_loader;
 pub mod runner;
+pub mod string_templater;
 pub mod vm;
 pub mod wasi;
-pub mod string_templater;
 
 use anyhow::Result;
 use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
-pub trait RequiredApis:
-    node_iface::InitApi
-    + node_iface::StorageApi
-    + Send
-    + Sync
-{
-}
+pub trait RequiredApis: node_iface::InitApi + node_iface::StorageApi + Send + Sync {}
 
 #[derive(Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
@@ -39,18 +36,22 @@ struct ConfigSchema {
     modules: Vec<ConfigModule>,
 }
 
-pub fn run_with_api(mut api: Box<dyn RequiredApis>, config_path: &String) -> Result<crate::vm::VMRunResult> {
-    use plugin_loader::web_functions_api::Loader as _;
+pub fn run_with_api(
+    mut api: Box<dyn RequiredApis>,
+    config_path: &String,
+) -> Result<crate::vm::VMRunResult> {
     use plugin_loader::llm_functions_api::Loader as _;
+    use plugin_loader::web_functions_api::Loader as _;
 
     let mut root_path = std::env::current_exe()?;
     root_path.pop();
     root_path.pop();
-    let root_path = root_path.into_os_string().into_string().map_err(|_e| anyhow::anyhow!("can't convert path to string"))?;
+    let root_path = root_path
+        .into_os_string()
+        .into_string()
+        .map_err(|_e| anyhow::anyhow!("can't convert path to string"))?;
 
-    let vars: HashMap<String, String> = HashMap::from([
-        ("genvmRoot".into(), root_path)
-    ]);
+    let vars: HashMap<String, String> = HashMap::from([("genvmRoot".into(), root_path)]);
 
     let config_path = string_templater::patch_str(&vars, &config_path)?;
     let config_str = std::fs::read_to_string(std::path::Path::new(&config_path))?;
@@ -65,21 +66,20 @@ pub fn run_with_api(mut api: Box<dyn RequiredApis>, config_path: &String) -> Res
         let config_str = serde_json::to_string(&c.config)?;
         match c.name {
             ConfigModuleName::llm => {
-                llm = Some(llm_functions_api::Methods::load_from_lib(path, "llm", config_str)?);
-            },
+                llm = Some(llm_functions_api::Methods::load_from_lib(
+                    path, "llm", config_str,
+                )?);
+            }
             ConfigModuleName::web => {
-                web = Some(web_functions_api::Methods::load_from_lib(path, "web", config_str)?);
-            },
+                web = Some(web_functions_api::Methods::load_from_lib(
+                    path, "web", config_str,
+                )?);
+            }
         }
     }
 
     let modules = match (llm, web) {
-        (Some(llm), Some(web)) => {
-            vm::Modules {
-                llm,
-                web
-            }
-        },
+        (Some(llm), Some(web)) => vm::Modules { llm, web },
         _ => anyhow::bail!("some of required modules is not supplied"),
     };
 

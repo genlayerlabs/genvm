@@ -24,7 +24,7 @@ macro_rules! default_base_functions {
                     let res: *mut std::mem::MaybeUninit<$name> = std::alloc::alloc(layout).cast();
                     (*res).write(v);
                     res as *const ()
-                },
+                }
                 Err(e) => {
                     eprintln!("{}\nbt: {}", e, e.backtrace());
                     panic!("couldn't initialize module");

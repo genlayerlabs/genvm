@@ -19,18 +19,13 @@ struct Impl {
 
 impl Drop for Impl {
     fn drop(&mut self) {
-        let _ = ureq::delete(&format!(
-            "{}/session/{}",
-            self.config.host,
-            self.session_id
-        ))
-        .call();
+        let _ = ureq::delete(&format!("{}/session/{}", self.config.host, self.session_id)).call();
     }
 }
 
 #[derive(Deserialize)]
 struct Config {
-    host: String
+    host: String,
 }
 
 impl Impl {
@@ -78,8 +73,7 @@ impl Impl {
         let req = serde_json::to_string(&req)?;
         let res = ureq::post(&format!(
             "{}/session/{}/url",
-            self.config.host,
-            &self.session_id
+            self.config.host, &self.session_id
         ))
         .send_bytes(req.as_bytes())?;
         if res.status() != 200 {
@@ -90,8 +84,7 @@ impl Impl {
 
         let res = ureq::post(&format!(
             "{}/session/{}/execute/sync",
-            self.config.host,
-            &self.session_id
+            self.config.host, &self.session_id
         ))
         .send_bytes(script.as_bytes())?;
         if res.status() != 200 {

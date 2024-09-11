@@ -118,10 +118,7 @@ mod test_node_iface_impl {
                     slots: HashMap::new(),
                 }
             };
-            Ok(Self {
-                conf,
-                fake_storage,
-            })
+            Ok(Self { conf, fake_storage })
         }
     }
 

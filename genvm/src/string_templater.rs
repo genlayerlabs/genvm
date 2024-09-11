@@ -1,5 +1,5 @@
-use std::{collections::HashMap, sync::LazyLock};
 use anyhow::Result;
+use std::{collections::HashMap, sync::LazyLock};
 
 static JSON_UNFOLDER_RE: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r#"\$\{([a-zA-Z0-9_]*)\}"#).unwrap());
@@ -24,13 +24,15 @@ fn replace_all<E>(
 pub fn patch_str(vars: &HashMap<String, String>, s: &String) -> Result<String> {
     replace_all(&JSON_UNFOLDER_RE, s, |r: &regex::Captures| {
         let r: &str = &r[1];
-        vars
-            .get(r)
+        vars.get(r)
             .ok_or(anyhow::anyhow!("error"))
             .map(|x| x.clone())
     })
 }
-pub fn patch_value(vars: &HashMap<String, String>, v: serde_json::Value) -> Result<serde_json::Value> {
+pub fn patch_value(
+    vars: &HashMap<String, String>,
+    v: serde_json::Value,
+) -> Result<serde_json::Value> {
     Ok(match v {
         serde_json::Value::String(s) => serde_json::Value::String(patch_str(vars, &s)?),
         serde_json::Value::Array(a) => {
@@ -41,7 +43,9 @@ pub fn patch_value(vars: &HashMap<String, String>, v: serde_json::Value) -> Resu
         serde_json::Value::Object(ob) => {
             let res: Result<Vec<(String, serde_json::Value)>, _> = ob
                 .into_iter()
-                .map(|(k, v)| -> Result<(String, serde_json::Value)> { Ok((k, patch_value(vars, v)?)) })
+                .map(|(k, v)| -> Result<(String, serde_json::Value)> {
+                    Ok((k, patch_value(vars, v)?))
+                })
                 .collect();
             serde_json::Value::Object(serde_json::Map::from_iter(res?.into_iter()))
         }

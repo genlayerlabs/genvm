@@ -13,8 +13,7 @@ genvm_modules_common::default_base_functions!(web_functions_api, Impl);
 struct Impl {}
 
 impl Drop for Impl {
-    fn drop(&mut self) {
-    }
+    fn drop(&mut self) {}
 }
 
 impl Impl {
