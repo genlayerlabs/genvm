@@ -4,3 +4,5 @@ target
 /build-config.json
 /third-party/*
 !/third-party/.gitkeep
+__pycache__
+

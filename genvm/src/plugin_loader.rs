@@ -42,11 +42,11 @@ macro_rules! create_trait {
     (($name:ident) { $($fn_name:ident : fn ($($arg_name:ident: $arg_t:ty),*) -> $ret_t:tt ;)* }) => {
         pub mod $name {
             pub trait Loader {
-                fn load_from_lib(path: &std::path::Path, name: &str) -> anyhow::Result<Box<dyn genvm_modules_common::interfaces::$name::Trait>>;
+                fn load_from_lib(path: &std::path::Path, name: &str, config: String) -> anyhow::Result<Box<dyn genvm_modules_common::interfaces::$name::Trait>>;
             }
         }
         impl $name::Loader for genvm_modules_common::interfaces::$name::Methods {
-            fn load_from_lib(path: &std::path::Path, name: &str) -> anyhow::Result<Box<dyn genvm_modules_common::interfaces::$name::Trait>> {
+            fn load_from_lib(path: &std::path::Path, name: &str, config: String) -> anyhow::Result<Box<dyn genvm_modules_common::interfaces::$name::Trait>> {
                 use anyhow::Context;
                 let name = libloading::library_filename(name);
                 let final_path = path.join(name);
@@ -81,10 +81,11 @@ macro_rules! create_trait {
                 }
 
                 unsafe {
-                    let ctor: libloading::Symbol<unsafe extern fn() -> *mut()> = lib.get(b"ctor")?;
+                    let ctor: libloading::Symbol<unsafe extern fn(config: *const u8) -> *mut()> = lib.get(b"ctor")?;
                     let dtor: libloading::os::unix::Symbol<unsafe extern fn(*const () ) -> ()> = get_sym(lib.get(b"dtor")?);
                     let dtor_cop = dtor.clone();
-                    let ctx = ctor();
+                    let config = std::ffi::CString::new(config)?;
+                    let ctx = ctor(config.as_ptr() as *const u8);
                     let f = || {
                         Ok(unwrap_ctor_inits!(lib, ctx, dtor, $($fn_name : fn ($($arg_name : $arg_t),*) -> $ret_t ;)*))
                     };
@@ -101,4 +102,5 @@ macro_rules! create_trait {
     };
 }
 
-genvm_modules_common::NondetFunctionsApiFns!(create_trait[nondet_functions_api]);
+genvm_modules_common::WebFunctionsApiFns!(create_trait[web_functions_api]);
+genvm_modules_common::LLMFunctionsApiFns!(create_trait[llm_functions_api]);

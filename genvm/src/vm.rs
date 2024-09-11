@@ -1,6 +1,8 @@
 use core::str;
 use std::{collections::HashMap, io::Write, path::Path};
 
+use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
+use itertools::Itertools;
 use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
@@ -10,20 +12,99 @@ use crate::{
 use anyhow::{Context, Result};
 use std::sync::{Arc, Mutex};
 
+#[derive(Clone, Debug)]
+pub struct DecodeUtf8<I: Iterator<Item = u8>>(std::iter::Peekable<I>);
+
+pub fn decode_utf8<I: IntoIterator<Item = u8>>(i: I) -> DecodeUtf8<I::IntoIter> {
+    DecodeUtf8(i.into_iter().peekable())
+}
+
+#[derive(PartialEq, Debug)]
+pub struct InvalidSequence(pub Vec<u8>);
+
+impl<I: Iterator<Item = u8>> Iterator for DecodeUtf8<I> {
+    type Item = Result<char, InvalidSequence>;
+    #[inline]
+    fn next(&mut self) -> Option<Result<char, InvalidSequence>> {
+        let mut on_err: Vec<u8> = Vec::new();
+        self.0.next().map(|b| {
+            on_err.push(b);
+            if b & 0x80 == 0 {
+                Ok(b as char)
+            } else {
+                let l = (!b).leading_zeros() as usize; // number of bytes in UTF-8 representation
+                if l < 2 || l > 6 {
+                    return Err(InvalidSequence(on_err));
+                };
+                let mut x = (b as u32) & (0x7F >> l);
+                for _ in 0..l - 1 {
+                    match self.0.peek() {
+                        Some(&b) if b & 0xC0 == 0x80 => {
+                            on_err.push(b);
+                            self.0.next();
+                            x = (x << 6) | (b as u32) & 0x3F;
+                        }
+                        _ => return Err(InvalidSequence(on_err)),
+                    }
+                }
+                match char::from_u32(x) {
+                    Some(x) if l == x.len_utf8() => Ok(x),
+                    _ => Err(InvalidSequence(on_err)),
+                }
+            }
+        })
+    }
+}
+
+pub enum VMRunResult {
+    Return(Vec<u8>),
+    Rollback(String),
+    /// TODO: should there be an error or should it be merged with rollback?
+    Error(String),
+}
+
+impl std::fmt::Debug for VMRunResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Return(r) => {
+                let str = decode_utf8(r.iter().cloned())
+                    .map(|r| match r {
+                        Ok('\\') => "\\\\".into(),
+                        Ok(c) if c.is_control() || c == '\n' || c == '\x07' => {
+                            if c as u32 <= 255 {
+                                format!("\\x{:02x}", c as u32)
+                            } else {
+                                format!("\\u{:04x}", c as u32)
+                            }
+                        }
+                        Ok(c) => c.to_string(),
+                        Err(InvalidSequence(seq)) => {
+                            seq.iter().map(|c| format!("\\{:02x}", *c as u32)).join("")
+                        }
+                    })
+                    .join("");
+                f.write_fmt(format_args!("Return(\"{}\")", str))
+            }
+            Self::Rollback(r) => f.debug_tuple("Rollback").field(r).finish(),
+            Self::Error(r) => f.debug_tuple("Error").field(r).finish(),
+        }
+    }
+}
+
 #[derive(Clone)]
-pub struct Host {
+pub struct WasmContext {
     genlayer_ctx: Arc<Mutex<wasi::Context>>,
 }
 
-impl Host {
-    fn new(data: crate::wasi::genlayer_sdk::EssentialGenlayerSdkData) -> Host {
-        return Host {
+impl WasmContext {
+    fn new(data: crate::wasi::genlayer_sdk::EssentialGenlayerSdkData) -> WasmContext {
+        return WasmContext {
             genlayer_ctx: Arc::new(Mutex::new(wasi::Context::new(data))),
         };
     }
 }
 
-impl Host {
+impl WasmContext {
     pub fn genlayer_ctx_mut(&mut self) -> &mut wasi::Context {
         Arc::get_mut(&mut self.genlayer_ctx)
             .expect("wasmtime_wasi is not compatible with threads")
@@ -37,11 +118,18 @@ pub struct PrecompiledModule {
     pub non_det: Module,
 }
 
+pub struct Modules {
+    pub web: Box<dyn web_functions_api::Trait>,
+    pub llm: Box<dyn llm_functions_api::Trait>,
+}
+
 pub struct Supervisor {
+    pub modules: Modules,
+    pub host: crate::Host,
+
     det_engine: Engine,
     non_det_engine: Engine,
     cached_modules: HashMap<Arc<[u8]>, Arc<PrecompiledModule>>,
-    pub api: Box<dyn crate::RequiredApis>,
     runner_cache: runner::RunnerReaderCache,
 }
 
@@ -52,13 +140,11 @@ pub struct InitActions {
 }
 
 pub struct VM {
-    pub store: Store<Host>,
-    pub linker: Linker<Host>,
+    pub store: Store<WasmContext>,
+    pub linker: Linker<WasmContext>,
     pub config_copy: wasi::base::Config,
     pub init_actions: InitActions,
 }
-
-pub use crate::node_iface::VMRunResult;
 
 impl VM {
     pub fn is_det(&self) -> bool {
@@ -97,7 +183,7 @@ impl VM {
 }
 
 impl Supervisor {
-    pub fn new(api: Box<dyn crate::RequiredApis>) -> Result<Self> {
+    pub fn new(modules: Modules, host: crate::Host) -> Result<Self> {
         let mut base_conf = wasmtime::Config::default();
         base_conf.cranelift_opt_level(wasmtime::OptLevel::None);
         //base_conf.cranelift_opt_level(wasmtime::OptLevel::Speed);
@@ -124,8 +210,9 @@ impl Supervisor {
             det_engine,
             non_det_engine,
             cached_modules: HashMap::new(),
-            api,
             runner_cache: runner::RunnerReaderCache::new(),
+            modules,
+            host,
         })
     }
 
@@ -176,14 +263,16 @@ impl Supervisor {
         };
 
         let init_gas = data.message_data.gas;
-        let mut store = Store::new(&engine, Host::new(data));
+        let mut store = Store::new(&engine, WasmContext::new(data));
         store.set_fuel(init_gas)?;
 
         let mut linker = Linker::new(engine);
         linker.allow_unknown_exports(false);
         linker.allow_shadowing(false);
 
-        crate::wasi::add_to_linker_sync(&mut linker, |host: &mut Host| host.genlayer_ctx_mut())?;
+        crate::wasi::add_to_linker_sync(&mut linker, |host: &mut WasmContext| {
+            host.genlayer_ctx_mut()
+        })?;
 
         Ok(VM {
             store,
@@ -271,11 +360,8 @@ impl Supervisor {
         ))
     }
 
-    pub fn get_actions_for(
-        &mut self,
-        contract_account: &crate::node_iface::Address,
-    ) -> Result<InitActions> {
-        let code = self.api.get_code(contract_account)?;
+    pub fn get_actions_for(&mut self, contract_account: &crate::Address) -> Result<InitActions> {
+        let code = self.host.get_code(contract_account)?;
         let actions = if wasmparser::Parser::is_core_wasm(&code[..]) {
             Vec::from([InitAction::StartWasm {
                 contents: code.clone(),

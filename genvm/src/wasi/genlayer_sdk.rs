@@ -6,16 +6,13 @@ use std::{
 use wasmtime::StoreContextMut;
 use wiggle::GuestError;
 
-use crate::{
-    node_iface::{self, Address, MessageData, StorageSlot},
-    vm::InitActions,
-};
+use crate::{vm::InitActions, Address, MessageData};
 
 use super::{base, common::read_string};
 
 pub struct EssentialGenlayerSdkData {
     pub conf: base::Config,
-    pub message_data: crate::node_iface::MessageData,
+    pub message_data: MessageData,
     pub entrypoint: Vec<u8>,
     pub supervisor: Arc<Mutex<crate::vm::Supervisor>>,
     pub init_actions: InitActions,
@@ -42,15 +39,12 @@ pub(crate) mod generated {
     });
 }
 
-impl node_iface::Address {
+impl crate::Address {
     fn read_from_mem(
         addr: &generated::types::Addr,
         mem: &mut wiggle::GuestMemory<'_>,
     ) -> Result<Self, generated::types::Error> {
-        let cow = mem.as_cow(
-            addr.ptr
-                .as_array(node_iface::Address::len().try_into().unwrap()),
-        )?;
+        let cow = mem.as_cow(addr.ptr.as_array(crate::Address::len().try_into().unwrap()))?;
         let mut ret = Address::new();
         for (x, y) in ret.0.iter_mut().zip(cow.iter()) {
             *x = *y;
@@ -343,7 +337,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             .stor
             .get_fuel()
             .map_err(|_e| generated::types::Errno::Io)?;
-        let res = supervisor.api.get_webpage(
+        let res = supervisor.modules.web.get_webpage(
             &mut fuel,
             config_str.as_bytes().as_ptr(),
             url_str.as_bytes().as_ptr(),
@@ -379,7 +373,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             .stor
             .get_fuel()
             .map_err(|_e| generated::types::Errno::Io)?;
-        let res = supervisor.api.call_llm(
+        let res = supervisor.modules.llm.call_llm(
             &mut fuel,
             config_str.as_bytes().as_ptr(),
             prompt_str.as_bytes().as_ptr(),
@@ -519,18 +513,14 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
-        let mut rem_gas = node_iface::Gas(
-            self.stor
-                .get_fuel()
-                .map_err(|_e| generated::types::Errno::Io)?,
-        );
-        let res = supervisor.api.storage_read(
-            &mut rem_gas,
-            StorageSlot { account, slot },
-            index,
-            &mut vec,
-        );
-        let _ = self.stor.set_fuel(rem_gas.raw());
+        let mut rem_gas = self
+            .stor
+            .get_fuel()
+            .map_err(|_e| generated::types::Errno::Io)?;
+        let res = supervisor
+            .host
+            .storage_read(&mut rem_gas, account, slot, index, &mut vec);
+        let _ = self.stor.set_fuel(rem_gas);
         res.map_err(|_e| generated::types::Errno::Io)?;
         mem.copy_from_slice(&vec, dest_buf)?;
         Ok(())
@@ -559,16 +549,14 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
-        let mut rem_gas = node_iface::Gas(
-            self.stor
-                .get_fuel()
-                .map_err(|_e| generated::types::Errno::Io)?,
-        );
-        let res =
-            supervisor
-                .api
-                .storage_write(&mut rem_gas, StorageSlot { account, slot }, index, &buf);
-        let _ = self.stor.set_fuel(rem_gas.raw());
+        let mut rem_gas = self
+            .stor
+            .get_fuel()
+            .map_err(|_e| generated::types::Errno::Io)?;
+        let res = supervisor
+            .host
+            .storage_write(&mut rem_gas, account, slot, index, &buf);
+        let _ = self.stor.set_fuel(rem_gas);
         res.map_err(|_e| generated::types::Errno::Io)?;
         Ok(())
     }
