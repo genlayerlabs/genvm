@@ -27,6 +27,28 @@ pub struct CStrResult {
     pub err: i32,
 }
 
+impl<S> From<anyhow::Result<S>> for CStrResult
+where
+    S: AsRef<str>
+{
+    fn from(value: anyhow::Result<S>) -> Self {
+        match value {
+            Ok(v) =>
+                CStrResult {
+                    str: crate::str_to_shared(v.as_ref()),
+                    err: 0,
+                },
+            Err(e) => {
+                eprintln!("Module error {}", &e);
+                CStrResult {
+                    str: std::ptr::null(),
+                    err: 1,
+                }
+            }
+        }
+    }
+}
+
 #[macro_export]
 macro_rules! WebFunctionsApiFns {
     ($cb:path[$($args:tt),*]) => {

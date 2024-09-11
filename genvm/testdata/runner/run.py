@@ -76,7 +76,8 @@ def run(path0):
 	storage_path = tmp_dir.joinpath(path0).with_suffix(f'.storage')
 	storage_path.unlink(missing_ok=True)
 	steps = [
-		["rm", str(storage_path)]
+		["rm", str(storage_path)],
+		[sys.executable, '-m', 'http.server', '--directory', http_dir, '4242'],
 	]
 	def map_conf(i, conf, total_conf):
 		conf = pickle.loads(pickle.dumps(conf))

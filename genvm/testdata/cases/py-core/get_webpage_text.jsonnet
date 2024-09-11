@@ -3,7 +3,7 @@ simple.run('${jsonnetDir}/get_webpage.py') {
     "calldata": |||
         {
             "method": "main",
-            "args": []
+            "args": ["text"]
         }
     |||
 }

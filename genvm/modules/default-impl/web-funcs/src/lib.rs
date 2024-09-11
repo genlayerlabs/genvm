@@ -5,7 +5,7 @@ use serde_derive::Deserialize;
 
 use std::{
     ffi::CStr,
-    io::{stderr, Read, Write},
+    io::Read,
 };
 
 use genvm_modules_common::interfaces::web_functions_api;
@@ -26,6 +26,17 @@ impl Drop for Impl {
 #[derive(Deserialize)]
 struct Config {
     host: String,
+}
+
+#[derive(Deserialize)]
+#[allow(non_camel_case_types)]
+enum GetWebpageConfigMode {
+    html,
+    text,
+}
+#[derive(Deserialize)]
+struct GetWebpageConfig {
+    mode: GetWebpageConfigMode,
 }
 
 impl Impl {
@@ -64,7 +75,8 @@ impl Impl {
         })
     }
 
-    fn get_webpage(&mut self, _config: &CStr, url: &CStr) -> Result<String> {
+    fn get_webpage(&mut self, config: &CStr, url: &CStr) -> Result<String> {
+        let config: GetWebpageConfig = serde_json::from_str(config.to_str()?)?;
         let url = url::Url::parse(url.to_str()?)?;
 
         let req = serde_json::Value::Object(serde_json::Map::from_iter(
@@ -80,7 +92,11 @@ impl Impl {
             return Err(anyhow::anyhow!("can't get webpage {:?}", res));
         }
 
-        let script = r#"{ "script": "return document.body.innerText.replace(/[\\s\\n]+/g, ' ')", "args": [] }"#;
+        let script =
+            match config.mode {
+                GetWebpageConfigMode::html => r#"{ "script": "return document.body.innerHTML", "args": [] }"#,
+                GetWebpageConfigMode::text => r#"{ "script": "return document.body.innerText.replace(/[\\s\\n]+/g, ' ')", "args": [] }"#,
+            };
 
         let res = ureq::post(&format!(
             "{}/session/{}/execute/sync",
@@ -108,22 +124,12 @@ impl Impl {
             .and_then(|x| x.1.as_str())
             .ok_or(anyhow::anyhow!("invalid json {}", val))?;
 
-        Ok(String::from(val))
+        Ok(String::from(val.trim()))
     }
 }
 
-fn errored_res(code: i32, err: anyhow::Error) -> interfaces::CStrResult {
-    let _ = stderr()
-        .lock()
-        .write_fmt(format_args!("{} err: {:?}", env!("CARGO_PKG_NAME"), err));
-    return interfaces::CStrResult {
-        str: std::ptr::null(),
-        err: code,
-    };
-}
-
 #[no_mangle]
-pub extern "C" fn get_webpage(
+pub extern "C-unwind" fn get_webpage(
     ctx: *const (),
     _gas: &mut u64,
     config: *const u8,
@@ -132,24 +138,5 @@ pub extern "C" fn get_webpage(
     let ctx = get_ptr(ctx);
     let config = unsafe { CStr::from_ptr(config as *const i8) };
     let url = unsafe { CStr::from_ptr(url as *const i8) };
-    match ctx.get_webpage(config, url) {
-        Err(e) => errored_res(1, e),
-        Ok(s) => ok_str_result(&s),
-    }
-}
-
-fn ok_str_result(s: &str) -> interfaces::CStrResult {
-    unsafe {
-        let res = libc::malloc(s.len() + 1) as *mut u8;
-        *res.add(s.len()) = 0;
-        libc::memcpy(
-            res as *mut std::ffi::c_void,
-            s.as_ptr() as *const std::ffi::c_void,
-            s.len(),
-        );
-        interfaces::CStrResult {
-            str: res as *const u8,
-            err: 0,
-        }
-    }
+    ctx.get_webpage(config, url).into()
 }

@@ -17,7 +17,7 @@ use std::{
 
 pub trait RequiredApis: node_iface::InitApi + node_iface::StorageApi + Send + Sync {}
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 #[allow(non_camel_case_types)]
 enum ConfigModuleName {
     llm,
@@ -27,7 +27,8 @@ enum ConfigModuleName {
 #[derive(Deserialize)]
 struct ConfigModule {
     path: String,
-    name: ConfigModuleName,
+    name: Option<String>,
+    id: ConfigModuleName,
     config: serde_json::Value,
 }
 
@@ -64,15 +65,22 @@ pub fn run_with_api(
     for c in &config.modules {
         let path = std::path::Path::new(&c.path);
         let config_str = serde_json::to_string(&c.config)?;
-        match c.name {
+        let name = match &c.name {
+            Some(v) => v,
+            None => match c.id {
+                ConfigModuleName::llm => "llm",
+                ConfigModuleName::web => "web",
+            },
+        };
+        match c.id {
             ConfigModuleName::llm => {
                 llm = Some(llm_functions_api::Methods::load_from_lib(
-                    path, "llm", config_str,
+                    path, name, config_str,
                 )?);
             }
             ConfigModuleName::web => {
                 web = Some(web_functions_api::Methods::load_from_lib(
-                    path, "web", config_str,
+                    path, name, config_str,
                 )?);
             }
         }
