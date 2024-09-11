@@ -1,6 +1,8 @@
 use anyhow::Result;
 use genvm_modules_common::*;
 
+use serde_derive::Deserialize;
+
 use std::{
     ffi::CStr,
     io::{stderr, Read, Write},
@@ -12,21 +14,29 @@ genvm_modules_common::default_base_functions!(web_functions_api, Impl);
 
 struct Impl {
     session_id: String,
+    config: Config,
 }
 
 impl Drop for Impl {
     fn drop(&mut self) {
         let _ = ureq::delete(&format!(
-            "http://127.0.0.1:4444/session/{}",
+            "{}/session/{}",
+            self.config.host,
             self.session_id
         ))
         .call();
     }
 }
 
+#[derive(Deserialize)]
+struct Config {
+    host: String
+}
+
 impl Impl {
-    fn try_new() -> Result<Self> {
-        let opened_session_res = ureq::post("http://127.0.0.1:4444/session").send_bytes(
+    fn try_new(conf: &CStr) -> Result<Self> {
+        let config: Config = serde_json::from_str(conf.to_str()?)?;
+        let opened_session_res = ureq::post(&format!("{}/session", &config.host)).send_bytes(
             br#"{
             "capabilities": {
                 "alwaysMatch": {
@@ -55,6 +65,7 @@ impl Impl {
             .ok_or(anyhow::anyhow!("invalid json {}", val))?;
         Ok(Impl {
             session_id: String::from(session_id),
+            config,
         })
     }
 
@@ -66,7 +77,8 @@ impl Impl {
         ));
         let req = serde_json::to_string(&req)?;
         let res = ureq::post(&format!(
-            "http://127.0.0.1:4444/session/{}/url",
+            "{}/session/{}/url",
+            self.config.host,
             &self.session_id
         ))
         .send_bytes(req.as_bytes())?;
@@ -77,7 +89,8 @@ impl Impl {
         let script = r#"{ "script": "return document.body.innerText.replace(/[\\s\\n]+/g, ' ')", "args": [] }"#;
 
         let res = ureq::post(&format!(
-            "http://127.0.0.1:4444/session/{}/execute/sync",
+            "{}/session/{}/execute/sync",
+            self.config.host,
             &self.session_id
         ))
         .send_bytes(script.as_bytes())?;

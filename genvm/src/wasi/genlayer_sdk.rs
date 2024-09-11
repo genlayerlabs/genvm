@@ -343,7 +343,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             .stor
             .get_fuel()
             .map_err(|_e| generated::types::Errno::Io)?;
-        let res = supervisor.api.get_webpage(
+        let res = supervisor.modules.web.get_webpage(
             &mut fuel,
             config_str.as_bytes().as_ptr(),
             url_str.as_bytes().as_ptr(),
@@ -379,7 +379,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             .stor
             .get_fuel()
             .map_err(|_e| generated::types::Errno::Io)?;
-        let res = supervisor.api.call_llm(
+        let res = supervisor.modules.llm.call_llm(
             &mut fuel,
             config_str.as_bytes().as_ptr(),
             prompt_str.as_bytes().as_ptr(),

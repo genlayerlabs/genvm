@@ -18,7 +18,7 @@ impl Drop for Impl {
 }
 
 impl Impl {
-    fn try_new() -> Result<Self> {
+    fn try_new(_conf: &CStr) -> Result<Self> {
         Ok(Impl {})
     }
 

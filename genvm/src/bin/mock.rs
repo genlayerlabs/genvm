@@ -1,13 +1,8 @@
-use std::{collections::HashMap, sync::LazyLock};
-
 use anyhow::{Context, Result};
 use clap::Parser;
 use genvm::vm::VMRunResult;
 
 mod test_node_iface_impl {
-    use genvm::plugin_loader::web_functions_api::Loader as _;
-    use genvm::plugin_loader::llm_functions_api::Loader as _;
-    use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
     use serde_with::{base64::Base64, serde_as};
 
     use genvm::*;
@@ -38,8 +33,6 @@ mod test_node_iface_impl {
 
     pub struct TestApi {
         conf: Config,
-        web_meths: Box<dyn web_functions_api::Trait>,
-        llm_meths: Box<dyn llm_functions_api::Trait>,
         fake_storage: FakeStorage,
     }
 
@@ -125,15 +118,8 @@ mod test_node_iface_impl {
                     slots: HashMap::new(),
                 }
             };
-            let dflt_path = genvm::plugin_loader::default_plugin_path()?;
-            let web_meths =
-                web_functions_api::Methods::load_from_lib(&dflt_path, "web-funcs")?;
-            let llm_meths =
-                llm_functions_api::Methods::load_from_lib(&dflt_path, "llm-funcs")?;
             Ok(Self {
                 conf,
-                web_meths,
-                llm_meths,
                 fake_storage,
             })
         }
@@ -164,138 +150,27 @@ mod test_node_iface_impl {
             Ok(Arc::from(code))
         }
     }
-
-    impl web_functions_api::Trait for TestApi {
-        fn get_webpage(
-            &mut self,
-            gas: &mut u64,
-            config: *const u8,
-            url: *const u8,
-        ) -> genvm_modules_common::interfaces::CStrResult {
-            return self.web_meths.get_webpage(gas, config, url);
-        }
-    }
-
-    impl llm_functions_api::Trait for TestApi {
-        fn call_llm(
-            &mut self,
-            gas: &mut u64,
-            config: *const u8,
-            data: *const u8,
-        ) -> genvm_modules_common::interfaces::CStrResult {
-            return self.llm_meths.call_llm(gas, config, data);
-        }
-    }
 }
 
 impl genvm::RequiredApis for test_node_iface_impl::TestApi {}
 
 #[derive(clap::Parser)]
 struct CliArgs {
+    #[arg(long, default_value_t = String::from("${genvmRoot}/share/genvm/default-config.json"))]
+    config: String,
     #[arg(long)]
     mock_config: std::path::PathBuf,
     #[arg(long, default_value_t = false)]
     shrink_error: bool,
 }
 
-struct JsonUnfolder {
-    vars: HashMap<String, String>,
-}
-
-fn replace_all<E>(
-    re: &regex::Regex,
-    haystack: &str,
-    replacement: impl Fn(&regex::Captures) -> Result<String, E>,
-) -> Result<String, E> {
-    let mut new = String::with_capacity(haystack.len());
-    let mut last_match = 0;
-    for caps in re.captures_iter(haystack) {
-        let m = caps.get(0).unwrap();
-        new.push_str(&haystack[last_match..m.start()]);
-        new.push_str(&replacement(&caps)?);
-        last_match = m.end();
-    }
-    new.push_str(&haystack[last_match..]);
-    Ok(new)
-}
-
-static JSON_UNFOLDER_RE: LazyLock<regex::Regex> =
-    LazyLock::new(|| regex::Regex::new(r#"\$\{([a-zA-Z0-9_]*)\}"#).unwrap());
-
-impl JsonUnfolder {
-    fn patch(&self, s: String) -> Result<String> {
-        replace_all(&JSON_UNFOLDER_RE, &s, |r: &regex::Captures| {
-            let r: &str = &r[1];
-            self.vars
-                .get(r)
-                .ok_or(anyhow::anyhow!("error"))
-                .map(|x| x.clone())
-        })
-    }
-    fn run(&self, v: serde_json::Value) -> Result<serde_json::Value> {
-        Ok(match v {
-            serde_json::Value::String(s) => serde_json::Value::String(self.patch(s)?),
-            serde_json::Value::Array(a) => {
-                let res: Result<Vec<serde_json::Value>, _> =
-                    a.into_iter().map(|a| self.run(a)).collect();
-                serde_json::Value::Array(res?)
-            }
-            serde_json::Value::Object(ob) => {
-                let res: Result<Vec<(String, serde_json::Value)>, _> = ob
-                    .into_iter()
-                    .map(|(k, v)| -> Result<(String, serde_json::Value)> { Ok((k, self.run(v)?)) })
-                    .collect();
-                serde_json::Value::Object(serde_json::Map::from_iter(res?.into_iter()))
-            }
-            x => x,
-        })
-    }
-}
-
 fn main() -> Result<()> {
     let args = CliArgs::parse();
-    let conf = std::fs::read(&args.mock_config)?;
-    let conf = String::from_utf8(conf)?;
-    let conf: serde_json::Value =
-        serde_json::from_str(&conf).with_context(|| "parsing config to raw json")?;
+    let mock_conf = std::fs::read_to_string(&args.mock_config)?;
+    let mock_conf = serde_json::from_str(&mock_conf).with_context(|| "parsing mock config")?;
 
-    let json_dir: String = std::path::Path::new(&args.mock_config)
-        .parent()
-        .ok_or(anyhow::anyhow!("no parent"))?
-        .to_str()
-        .ok_or(anyhow::anyhow!("to str"))?
-        .into();
-    let artifacts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../build/out")
-        .to_str()
-        .ok_or(anyhow::anyhow!("to str"))?
-        .into();
-    let mut unfolder = JsonUnfolder {
-        vars: HashMap::from([
-            ("jsonDir".into(), json_dir),
-            ("artifacts".into(), artifacts),
-        ]),
-    };
-    conf.get("vars")
-        .and_then(|x| x.as_object())
-        .map(|x| -> Result<()> {
-            for (k, v) in x {
-                unfolder.vars.insert(
-                    k.clone(),
-                    String::from(
-                        v.as_str()
-                            .ok_or(anyhow::anyhow!("invalid var value for {}", k))?,
-                    ),
-                );
-            }
-            Ok(())
-        })
-        .unwrap_or(Ok(()))?;
-    let conf = unfolder.run(conf)?;
-    let conf = serde_json::from_value(conf).with_context(|| "parsing config")?;
-
-    let node_api = Box::new(test_node_iface_impl::TestApi::new(conf)?);
-    let res = genvm::run_with_api(node_api)?;
+    let api = Box::new(test_node_iface_impl::TestApi::new(mock_conf)?);
+    let res = genvm::run_with_api(api, &args.config)?;
     let res = match (res, args.shrink_error) {
         (VMRunResult::Error(_), true) => VMRunResult::Error("".into()),
         (res, _) => res,

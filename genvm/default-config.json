@@ -1,0 +1,16 @@
+{
+    "modules": [
+        {
+            "path": "${genvmRoot}/lib/genvm-modules/",
+            "name": "llm",
+            "config": {}
+        },
+        {
+            "path": "${genvmRoot}/lib/genvm-modules/",
+            "name": "web",
+            "config": {
+                "host": "http://127.0.0.1:4444"
+            }
+        }
+    ]
+}

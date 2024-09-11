@@ -1,6 +1,7 @@
 use core::str;
 use std::{collections::HashMap, io::Write, path::Path};
 
+use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
 use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
@@ -37,11 +38,18 @@ pub struct PrecompiledModule {
     pub non_det: Module,
 }
 
+pub struct Modules {
+    pub web: Box<dyn web_functions_api::Trait>,
+    pub llm: Box<dyn llm_functions_api::Trait>,
+}
+
 pub struct Supervisor {
+    pub api: Box<dyn crate::RequiredApis>,
+    pub modules: Modules,
+
     det_engine: Engine,
     non_det_engine: Engine,
     cached_modules: HashMap<Arc<[u8]>, Arc<PrecompiledModule>>,
-    pub api: Box<dyn crate::RequiredApis>,
     runner_cache: runner::RunnerReaderCache,
 }
 
@@ -97,7 +105,7 @@ impl VM {
 }
 
 impl Supervisor {
-    pub fn new(api: Box<dyn crate::RequiredApis>) -> Result<Self> {
+    pub fn new(api: Box<dyn crate::RequiredApis>, modules: Modules) -> Result<Self> {
         let mut base_conf = wasmtime::Config::default();
         base_conf.cranelift_opt_level(wasmtime::OptLevel::None);
         //base_conf.cranelift_opt_level(wasmtime::OptLevel::Speed);
@@ -126,6 +134,7 @@ impl Supervisor {
             cached_modules: HashMap::new(),
             api,
             runner_cache: runner::RunnerReaderCache::new(),
+            modules,
         })
     }
 

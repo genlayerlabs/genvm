@@ -16,8 +16,9 @@ macro_rules! default_base_functions {
         }
 
         #[no_mangle]
-        pub unsafe extern "C" fn ctor() -> *const () {
-            match <$name>::try_new() {
+        pub unsafe extern "C" fn ctor(config: *const u8) -> *const () {
+            let config = CStr::from_ptr(config as *const i8);
+            match <$name>::try_new(config) {
                 Ok(v) => {
                     let layout = std::alloc::Layout::new::<std::mem::MaybeUninit<$name>>();
                     let res: *mut std::mem::MaybeUninit<$name> = std::alloc::alloc(layout).cast();
