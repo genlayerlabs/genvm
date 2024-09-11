@@ -12,7 +12,8 @@ use std::sync::{Arc, Mutex};
 pub trait RequiredApis:
     node_iface::InitApi
     + node_iface::StorageApi
-    + genvm_modules_common::interfaces::nondet_functions_api::Trait
+    + genvm_modules_common::interfaces::web_functions_api::Trait
+    + genvm_modules_common::interfaces::llm_functions_api::Trait
     + Send
     + Sync
 {

@@ -1,0 +1,17 @@
+[package]
+name = "genvm-modules-default-llm"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type=["cdylib"]
+
+[dependencies]
+anyhow = { version = "1.0.86", features = [] }
+encoding_rs = { version = "0.8.34", features = []}
+encoding_rs_io = "0.1.7"
+genvm-modules-common ={ path = "../../common" }
+libc = "0.2.158"
+serde_json = "1.0.128"
+ureq = "2.10.1"
+url = "2.5.2"

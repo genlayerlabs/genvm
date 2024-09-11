@@ -28,13 +28,21 @@ pub struct CStrResult {
 }
 
 #[macro_export]
-macro_rules! NondetFunctionsApiFns {
+macro_rules! WebFunctionsApiFns {
     ($cb:path[$($args:tt),*]) => {
         $cb!(($($args),*) {
             get_webpage: fn(gas: &mut u64, config: *const u8, url: *const u8) -> ($crate::interfaces::CStrResult);
+        });
+    };
+}
+WebFunctionsApiFns!(create_trait[web_functions_api, (Version { major: 0, minor: 0 })]);
+
+#[macro_export]
+macro_rules! LLMFunctionsApiFns {
+    ($cb:path[$($args:tt),*]) => {
+        $cb!(($($args),*) {
             call_llm: fn(gas: &mut u64, config: *const u8, prompt: *const u8) -> ($crate::interfaces::CStrResult);
         });
     };
 }
-
-NondetFunctionsApiFns!(create_trait[nondet_functions_api, (Version { major: 0, minor: 0 })]);
+LLMFunctionsApiFns!(create_trait[llm_functions_api, (Version { major: 0, minor: 0 })]);

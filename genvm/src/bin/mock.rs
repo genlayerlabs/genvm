@@ -5,8 +5,9 @@ use clap::Parser;
 use genvm::vm::VMRunResult;
 
 mod test_node_iface_impl {
-    use genvm::plugin_loader::nondet_functions_api::Loader;
-    use genvm_modules_common::interfaces::nondet_functions_api;
+    use genvm::plugin_loader::web_functions_api::Loader as _;
+    use genvm::plugin_loader::llm_functions_api::Loader as _;
+    use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
     use serde_with::{base64::Base64, serde_as};
 
     use genvm::*;
@@ -37,7 +38,8 @@ mod test_node_iface_impl {
 
     pub struct TestApi {
         conf: Config,
-        nondet_meths: Box<dyn nondet_functions_api::Trait>,
+        web_meths: Box<dyn web_functions_api::Trait>,
+        llm_meths: Box<dyn llm_functions_api::Trait>,
         fake_storage: FakeStorage,
     }
 
@@ -124,11 +126,14 @@ mod test_node_iface_impl {
                 }
             };
             let dflt_path = genvm::plugin_loader::default_plugin_path()?;
-            let nondet_meths =
-                nondet_functions_api::Methods::load_from_lib(&dflt_path, "nondet-funcs")?;
+            let web_meths =
+                web_functions_api::Methods::load_from_lib(&dflt_path, "web-funcs")?;
+            let llm_meths =
+                llm_functions_api::Methods::load_from_lib(&dflt_path, "llm-funcs")?;
             Ok(Self {
                 conf,
-                nondet_meths,
+                web_meths,
+                llm_meths,
                 fake_storage,
             })
         }
@@ -160,23 +165,25 @@ mod test_node_iface_impl {
         }
     }
 
-    impl nondet_functions_api::Trait for TestApi {
+    impl web_functions_api::Trait for TestApi {
         fn get_webpage(
             &mut self,
             gas: &mut u64,
             config: *const u8,
             url: *const u8,
         ) -> genvm_modules_common::interfaces::CStrResult {
-            return self.nondet_meths.get_webpage(gas, config, url);
+            return self.web_meths.get_webpage(gas, config, url);
         }
+    }
 
+    impl llm_functions_api::Trait for TestApi {
         fn call_llm(
             &mut self,
             gas: &mut u64,
             config: *const u8,
             data: *const u8,
         ) -> genvm_modules_common::interfaces::CStrResult {
-            return self.nondet_meths.get_webpage(gas, config, data);
+            return self.llm_meths.call_llm(gas, config, data);
         }
     }
 }
@@ -186,7 +193,7 @@ impl genvm::RequiredApis for test_node_iface_impl::TestApi {}
 #[derive(clap::Parser)]
 struct CliArgs {
     #[arg(long)]
-    config: std::path::PathBuf,
+    mock_config: std::path::PathBuf,
     #[arg(long, default_value_t = false)]
     shrink_error: bool,
 }
@@ -247,12 +254,12 @@ impl JsonUnfolder {
 
 fn main() -> Result<()> {
     let args = CliArgs::parse();
-    let conf = std::fs::read(&args.config)?;
+    let conf = std::fs::read(&args.mock_config)?;
     let conf = String::from_utf8(conf)?;
     let conf: serde_json::Value =
         serde_json::from_str(&conf).with_context(|| "parsing config to raw json")?;
 
-    let json_dir: String = std::path::Path::new(&args.config)
+    let json_dir: String = std::path::Path::new(&args.mock_config)
         .parent()
         .ok_or(anyhow::anyhow!("no parent"))?
         .to_str()

@@ -89,7 +89,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "genvm-modules-default-nondet-func"
+name = "genvm-modules-default-llm"
 version = "0.1.0"
 dependencies = [
  "anyhow",

@@ -6,16 +6,26 @@ use std::{
     io::{stderr, Read, Write},
 };
 
-#[no_mangle]
-pub extern "C" fn check_version(v: *const Version) -> bool {
-    return genvm_modules_common::interfaces::nondet_functions_api::VERSION == unsafe { *v };
+use genvm_modules_common::interfaces::web_functions_api;
+
+genvm_modules_common::default_base_functions!(web_functions_api, Impl);
+
+struct Impl {
+    session_id: String,
 }
 
-#[no_mangle]
-pub extern "C" fn ctor() -> *const () {
-    unsafe fn imp() -> Result<*const ()> {
-        let layout = std::alloc::Layout::new::<std::mem::MaybeUninit<Impl>>();
-        let res: *mut std::mem::MaybeUninit<Impl> = std::alloc::alloc(layout).cast();
+impl Drop for Impl {
+    fn drop(&mut self) {
+        let _ = ureq::delete(&format!(
+            "http://127.0.0.1:4444/session/{}",
+            self.session_id
+        ))
+        .call();
+    }
+}
+
+impl Impl {
+    fn try_new() -> Result<Self> {
         let opened_session_res = ureq::post("http://127.0.0.1:4444/session").send_bytes(
             br#"{
             "capabilities": {
@@ -43,50 +53,11 @@ pub extern "C" fn ctor() -> *const () {
             .and_then(|o| o.get_key_value("sessionId"))
             .and_then(|val| val.1.as_str())
             .ok_or(anyhow::anyhow!("invalid json {}", val))?;
-        (*res).write(Impl {
+        Ok(Impl {
             session_id: String::from(session_id),
-        });
-        return Ok(res as *const ());
+        })
     }
-    match unsafe { imp() } {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("{}\nbt: {}", e, e.backtrace());
-            panic!("couldn't initialize module");
-        }
-    }
-}
 
-#[no_mangle]
-pub unsafe extern "C" fn dtor(ptr: *const ()) {
-    let ctx = get_ptr(ptr);
-    std::ptr::drop_in_place(ctx);
-    let layout = std::alloc::Layout::new::<std::mem::MaybeUninit<Impl>>();
-    std::alloc::dealloc(ptr as *mut u8, layout);
-}
-
-fn get_ptr(ptr: *const ()) -> &'static mut Impl {
-    unsafe {
-        let ptr = ptr as *mut Impl;
-        return &mut *ptr;
-    }
-}
-
-struct Impl {
-    session_id: String,
-}
-
-impl Drop for Impl {
-    fn drop(&mut self) {
-        let _ = ureq::delete(&format!(
-            "http://127.0.0.1:4444/session/{}",
-            self.session_id
-        ))
-        .call();
-    }
-}
-
-impl Impl {
     fn get_webpage(&mut self, _config: &CStr, url: &CStr) -> Result<String> {
         let url = url::Url::parse(url.to_str()?)?;
 
@@ -133,10 +104,6 @@ impl Impl {
 
         Ok(String::from(val))
     }
-
-    fn call_llm(&mut self, _config: &CStr, _prompt: &CStr) -> Result<String> {
-        todo!()
-    }
 }
 
 fn errored_res(code: i32, err: anyhow::Error) -> interfaces::CStrResult {
@@ -160,22 +127,6 @@ pub extern "C" fn get_webpage(
     let config = unsafe { CStr::from_ptr(config as *const i8) };
     let url = unsafe { CStr::from_ptr(url as *const i8) };
     match ctx.get_webpage(config, url) {
-        Err(e) => errored_res(1, e),
-        Ok(s) => ok_str_result(&s),
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn call_llm(
-    ctx: *const (),
-    _gas: &mut u64,
-    config: *const u8,
-    prompt: *const u8,
-) -> interfaces::CStrResult {
-    let ctx = get_ptr(ctx);
-    let config = unsafe { CStr::from_ptr(config as *const i8) };
-    let prompt = unsafe { CStr::from_ptr(prompt as *const i8) };
-    match ctx.call_llm(config, prompt) {
         Err(e) => errored_res(1, e),
         Ok(s) => ok_str_result(&s),
     }

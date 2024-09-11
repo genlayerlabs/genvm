@@ -101,4 +101,5 @@ macro_rules! create_trait {
     };
 }
 
-genvm_modules_common::NondetFunctionsApiFns!(create_trait[nondet_functions_api]);
+genvm_modules_common::WebFunctionsApiFns!(create_trait[web_functions_api]);
+genvm_modules_common::LLMFunctionsApiFns!(create_trait[llm_functions_api]);

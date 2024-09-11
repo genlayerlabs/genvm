@@ -110,7 +110,7 @@ def run(path0):
 		for i, conf_i in enumerate(conf)
 	]
 	for conf_path in conf_paths:
-		cmd = [GENVM, '--config', conf_path, '--shrink-error']
+		cmd = [GENVM, '--mock-config', conf_path, '--shrink-error']
 		steps.append(cmd)
 		res = subprocess.run(cmd, check=False, text=True, capture_output=True)
 		base = {
