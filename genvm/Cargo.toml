@@ -3,10 +3,6 @@ name = "genvm"
 version = "0.1.0"
 edition = "2021"
 
-[[bin]]
-name = "genvm-mock"
-path = "src/bin/mock.rs"
-
 [dependencies]
 wasmtime = { path = "third-party/wasmtime/crates/wasmtime", default-features = false, features = ["cranelift", "std", "parallel-compilation", "cache"] }
 wiggle = { path = "third-party/wasmtime/crates/wiggle" }

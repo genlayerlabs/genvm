@@ -17,9 +17,9 @@ project('genvm') {
 	]
 
 	mock = target_cargo_build(
-		name: "genvm-mock",
+		name: "genvm",
 		profile: config.profile,
-		out_file: config.bin_dir.join('genvm-mock')
+		out_file: config.bin_dir.join('genvm')
 	)
 
 	all.add_deps(

@@ -12,6 +12,7 @@ import re
 import sys
 import base64
 import pickle
+import time
 
 import http.server as httpserv
 
@@ -26,6 +27,7 @@ sys.path.append(str(root_dir.joinpath('sdk-python', 'py')))
 
 import genlayer.calldata as calldata
 from genlayer.types import Address
+from mock_host import MockHost, MockStorage
 
 class MyHTTPHandler(httpserv.SimpleHTTPRequestHandler):
 	def __init__(self, *args, **kwargs):
@@ -39,13 +41,13 @@ http_thread = threading.Thread(target=run_serv, daemon=True)
 http_thread.start()
 
 dir = script_dir.parent.joinpath('cases')
-tmp_dir = root_dir.joinpath('build', 'genvm-testdata-out')
+root_tmp_dir = root_dir.joinpath('build', 'genvm-testdata-out')
 
 arg_parser = argparse.ArgumentParser("genvm-test-runner")
-arg_parser.add_argument('--mock-gen-vm', metavar='EXE', default=str(Path(os.getenv("GENVM", root_dir.joinpath('build', 'out', 'bin', 'genvm-mock')))))
+arg_parser.add_argument('--gen-vm', metavar='EXE', default=str(Path(os.getenv("GENVM", root_dir.joinpath('build', 'out', 'bin', 'genvm')))))
 arg_parser.add_argument('--filter', metavar='REGEX', default='.*')
 args_parsed = arg_parser.parse_args()
-GENVM = Path(args_parsed.mock_gen_vm)
+GENVM = Path(args_parsed.gen_vm)
 FILE_RE = re.compile(args_parsed.filter)
 
 if not GENVM.exists():
@@ -62,60 +64,97 @@ def unfold_conf(x: typing.Any, vars: dict[str, str]) -> typing.Any:
 		return {k: unfold_conf(v, vars) for k, v in x.items()}
 	return x
 
-def run(path0):
-	path = dir.joinpath(path0)
-	skipped = path.with_suffix('.skip')
+def run(jsonnet_rel_path):
+	jsonnet_path = dir.joinpath(jsonnet_rel_path)
+	skipped = jsonnet_path.with_suffix('.skip')
 	if skipped.exists():
 		return {
 			"category": "skip",
 		}
-	conf = _jsonnet.evaluate_file(str(path))
+	conf = _jsonnet.evaluate_file(str(jsonnet_path))
 	conf = json.loads(conf)
 	if not isinstance(conf, list):
 		conf = [conf]
-	storage_path = tmp_dir.joinpath(path0).with_suffix(f'.storage')
-	storage_path.unlink(missing_ok=True)
-	steps = [
-		["rm", str(storage_path)],
-		[sys.executable, '-m', 'http.server', '--directory', http_dir, '4242'],
-	]
-	def map_conf(i, conf, total_conf):
+	seq_tmp_dir = root_tmp_dir.joinpath(jsonnet_rel_path).with_suffix('')
+
+	import shutil
+	shutil.rmtree(seq_tmp_dir, ignore_errors=True)
+	seq_tmp_dir.mkdir(exist_ok=True, parents=True)
+
+	empty_storage = seq_tmp_dir.joinpath('empty-storage.pickle')
+	with open(empty_storage, 'wb') as f:
+		pickle.dump(MockStorage(), f)
+
+	def step_to_run_config(i, conf, total_conf):
 		conf = pickle.loads(pickle.dumps(conf))
 		if total_conf == 1:
+			my_tmp_dir = seq_tmp_dir
 			suff = ''
 		else:
+			my_tmp_dir = seq_tmp_dir.joinpath(str(i))
 			suff = f'.{i}'
-		conf["vars"]["jsonnetDir"] = str(path.parent)
-		eval_vars = conf["vars"].copy()
-		new_calldata_obj = eval(conf["calldata"], globals(), eval_vars)
-		conf["calldata"] = str(base64.b64encode(calldata.encode(new_calldata_obj)), 'ascii')
-		conf["storage_file_path"] = str(storage_path)
+		if i == 0:
+			pre_storage = empty_storage
+		else:
+			pre_storage = seq_tmp_dir.joinpath(str(i - 1), 'storage.pickle')
+		post_storage = my_tmp_dir.joinpath('storage.pickle')
+		my_tmp_dir.mkdir(exist_ok=True, parents=True)
+
+		conf["vars"]["jsonnetDir"] = str(jsonnet_path.parent)
+
 		conf = unfold_conf(conf, conf["vars"])
-		conf_path = tmp_dir.joinpath(path0).with_suffix(f'{suff}.json')
 		for acc_val in conf["accounts"].values():
 			code_path = acc_val.get("code", None)
 			if code_path is None:
 				continue
 			if code_path.endswith('.wat'):
-				out_path = tmp_dir.joinpath(Path(code_path).with_suffix(".wasm").relative_to(dir))
-				out_path.parent.mkdir(parents=True, exist_ok=True)
+				out_path = my_tmp_dir.joinpath(Path(code_path).with_suffix(".wasm").name)
 				subprocess.run(['wat2wasm', '-o', out_path, code_path], check=True)
 				acc_val["code"] = str(out_path)
-			pass
-		conf_path.parent.mkdir(parents=True, exist_ok=True)
-		with open(conf_path, 'wt') as f:
-			json.dump(conf, f)
-		return conf_path
-	conf_paths = [
-		map_conf(i, conf_i, len(conf))
+
+		calldata_bytes = calldata.encode(
+			eval(
+				conf["calldata"],
+				globals(),
+				conf["vars"].copy()
+			)
+		)
+		mock_sock_path = my_tmp_dir.joinpath('mock.sock')
+		host = MockHost(
+			path=str(mock_sock_path),
+			calldata=calldata_bytes,
+			codes={
+				Address(k): v
+				for k, v in conf["accounts"].items()
+			},
+			storage_path_post=post_storage,
+			storage_path_pre=pre_storage
+		)
+		return {
+			"host": host,
+			"message": conf["message"],
+			"tmp_dir": my_tmp_dir,
+			"expected_output": jsonnet_path.with_suffix(f'{suff}.stdout'),
+			"suff": suff,
+		}
+	run_configs = [
+		step_to_run_config(i, conf_i, len(conf))
 		for i, conf_i in enumerate(conf)
 	]
-	for conf_path in conf_paths:
-		cmd = [GENVM, '--mock-config', conf_path, '--shrink-error']
-		steps.append(cmd)
-		res = subprocess.run(cmd, check=False, text=True, capture_output=True)
+	for config in run_configs:
+		tmp_dir = config["tmp_dir"]
+		cmd = [GENVM, '--host', "unix://" + config["host"].path, '--message', json.dumps(config["message"]), '--shrink-error']
+		steps = [
+			[sys.executable, '-m', 'http.server', '--directory', http_dir, '4242'],
+			[sys.executable, Path(__file__).absolute().parent.joinpath('mock_host.py'), str(base64.b64encode(pickle.dumps(config["host"])), encoding='ascii')],
+			cmd
+		]
+		with config["host"] as mock_host:
+			while not mock_host.created:
+				time.sleep(0.05)
+			res = subprocess.run(cmd, check=False, text=True, capture_output=True)
 		base = {
-			"steps": pickle.loads(pickle.dumps(steps))
+			"steps": steps
 		}
 		if res.returncode != 0:
 			return {
@@ -123,20 +162,21 @@ def run(path0):
 				"reason": f"return code is {res.returncode}\n=== stdout ===\n{res.stdout}\n=== stderr ===\n{res.stderr}",
 				**base
 			}
-		res_path = conf_path.with_suffix('.stdout')
-		stdout = path.parent.joinpath(res_path.name)
-		if stdout.exists():
-			res_path.parent.mkdir(parents=True, exist_ok=True)
-			res_path.write_text(res.stdout)
+		got_stdout_path = tmp_dir.joinpath('stdout.txt')
+		got_stdout_path.parent.mkdir(parents=True, exist_ok=True)
+		got_stdout_path.write_text(res.stdout)
+		tmp_dir.joinpath('stderr.txt').write_text(res.stderr)
 
-			if stdout.read_text() != res.stdout:
+		exp_stdout_path = config["expected_output"]
+		if exp_stdout_path.exists():
+			if exp_stdout_path.read_text() != res.stdout:
 				return {
 					"category": "fail",
-					"reason": f"stdout mismatch, see\ndiff {str(stdout)} {str(res_path)}",
+					"reason": f"stdout mismatch, see\n\tdiff {str(exp_stdout_path)} {str(got_stdout_path)}",
 					**base
 				}
 		else:
-			stdout.write_text(res.stdout)
+			exp_stdout_path.write_text(res.stdout)
 	return {
 		"category": "pass",
 		**base
@@ -165,6 +205,9 @@ def prnt(path, res):
 		if "reason" in res:
 			for l in map(lambda x: '\t' + x, res["reason"].split('\n')):
 				print(l)
+		if "exc" in res and not isinstance(res["exc"], subprocess.CalledProcessError):
+			import traceback
+			traceback.print_exception(res["exc"])
 		if res['category'] == "fail" and "steps" in res:
 			import shlex
 			print("\tsteps to reproduce:")
@@ -189,6 +232,7 @@ with cfutures.ThreadPoolExecutor(max_workers=(os.cpu_count() or 1)) as executor:
 			res = {
 				"category": "fail",
 				"reason": str(e),
+				"exc": e,
 			}
 		if res["category"] == "fail":
 			categories["fail"].append(str(path))

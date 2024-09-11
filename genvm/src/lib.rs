@@ -1,21 +1,20 @@
 mod driver;
 
-pub mod node_iface;
 pub mod plugin_loader;
 pub mod runner;
 pub mod string_templater;
 pub mod vm;
 pub mod wasi;
+mod host;
+
+pub use host::{Host, Address, MessageData};
 
 use anyhow::Result;
 use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
+    collections::HashMap, sync::{Arc, Mutex}
 };
-
-pub trait RequiredApis: node_iface::InitApi + node_iface::StorageApi + Send + Sync {}
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 #[allow(non_camel_case_types)]
@@ -37,9 +36,10 @@ struct ConfigSchema {
     modules: Vec<ConfigModule>,
 }
 
-pub fn run_with_api(
-    mut api: Box<dyn RequiredApis>,
+pub fn run_with(
+    entry_message: MessageData,
     config_path: &String,
+    mut host: Host,
 ) -> Result<crate::vm::VMRunResult> {
     use plugin_loader::llm_functions_api::Loader as _;
     use plugin_loader::web_functions_api::Loader as _;
@@ -92,17 +92,16 @@ pub fn run_with_api(
     };
 
     let mut entrypoint = b"call!".to_vec();
+    host.append_calldata(&mut entrypoint)?;
 
-    let init_data = api.get_initial_data(&mut entrypoint)?;
-
-    let supervisor = Arc::new(Mutex::new(vm::Supervisor::new(api, modules)?));
+    let supervisor = Arc::new(Mutex::new(vm::Supervisor::new(modules, host)?));
 
     let (mut vm, instance) = {
         let supervisor_clone = supervisor.clone();
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(anyhow::anyhow!("can't lock supervisor"));
         };
-        let init_actions = supervisor.get_actions_for(&init_data.contract_account)?;
+        let init_actions = supervisor.get_actions_for(&entry_message.contract_account)?;
 
         let essential_data = wasi::genlayer_sdk::EssentialGenlayerSdkData {
             conf: wasi::base::Config {
@@ -111,7 +110,7 @@ pub fn run_with_api(
                 can_write_storage: true,
                 can_spawn_nondet: true,
             },
-            message_data: init_data,
+            message_data: entry_message,
             entrypoint,
             supervisor: supervisor_clone,
             init_actions,
