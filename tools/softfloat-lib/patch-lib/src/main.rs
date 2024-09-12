@@ -16,7 +16,7 @@ mod implementation {
         for subsection in section {
             match subsection? {
                 wasmparser::Name::Module { .. } => {}
-                subsection => reencoder.parse_custom_name_subsection(&mut ret, subsection)?,
+                _subsection => {} // reencoder.parse_custom_name_subsection(&mut ret, subsection)?,
             }
         }
         module.section(&ret);
@@ -40,6 +40,8 @@ mod implementation {
             let before = next_section;
             reencoder.intersperse_section_hook(module, after, before)
         }
+
+        let mut was_name_section = false;
 
         let mut sections = parser.parse_all(data);
         let mut next_section = sections.next();
@@ -141,9 +143,9 @@ mod implementation {
                     let mut exports = ExportSection::new();
                     for export in section {
                         let export = export?;
-                        if !(export.name.contains("f64") || export.name.contains("f32")) {
-                            continue;
-                        }
+                        //if !(export.name.contains("f64") || export.name.contains("f32")) {
+                        //    continue;
+                        //}
                         exports.export(
                             export.name,
                             reencoder.export_kind(export.kind),
@@ -250,7 +252,10 @@ mod implementation {
                 }
                 wasmparser::Payload::CustomSection(section) => match section.as_known() {
                     wasmparser::KnownCustom::Name(name) => {
+                        was_name_section = true;
                         patch_name_subs(reencoder, module, name, new_name)?;
+                    }
+                    _ if section.name().starts_with(".debug_") || section.name() == "producers" => {
                     }
                     _ => reencoder.parse_custom_section(module, section)?,
                 },
@@ -263,6 +268,12 @@ mod implementation {
             }
 
             next_section = sections.next();
+        }
+
+        if !was_name_section {
+            let mut ret = wasm_encoder::NameSection::new();
+            ret.module(new_name);
+            module.section(&ret);
         }
 
         Ok(())

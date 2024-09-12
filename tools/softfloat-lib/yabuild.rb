@@ -144,7 +144,7 @@ project('softfloat') {
 			'--target=wasm32-wasi', "--sysroot=#{sysroot}",
 			'-flto', '-O3',
 			'-frandom-seed=0',
-			'-Wl,--no-entry,--export-all',
+			'-Wl,--no-entry,--export-dynamic',
 			'-static',
 			'-lc'
 		]
