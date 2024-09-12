@@ -130,12 +130,15 @@ def run(jsonnet_rel_path):
 			storage_path_post=post_storage,
 			storage_path_pre=pre_storage
 		)
+		mock_host_path = my_tmp_dir.joinpath('mock-host.pickle')
+		mock_host_path.write_bytes(pickle.dumps(host))
 		return {
 			"host": host,
 			"message": conf["message"],
 			"tmp_dir": my_tmp_dir,
 			"expected_output": jsonnet_path.with_suffix(f'{suff}.stdout'),
 			"suff": suff,
+			"mock_host_path": mock_host_path,
 		}
 	run_configs = [
 		step_to_run_config(i, conf_i, len(conf))
@@ -143,10 +146,10 @@ def run(jsonnet_rel_path):
 	]
 	for config in run_configs:
 		tmp_dir = config["tmp_dir"]
-		cmd = [GENVM, '--host', "unix://" + config["host"].path, '--message', json.dumps(config["message"]), '--shrink-error']
+		cmd = [GENVM, '--host', "unix://" + config["host"].path, '--message', json.dumps(config["message"]), '--print=shrink']
 		steps = [
 			[sys.executable, '-m', 'http.server', '--directory', http_dir, '4242'],
-			[sys.executable, Path(__file__).absolute().parent.joinpath('mock_host.py'), str(base64.b64encode(pickle.dumps(config["host"])), encoding='ascii')],
+			[sys.executable, Path(__file__).absolute().parent.joinpath('mock_host.py'), config["mock_host_path"]],
 			cmd
 		]
 		with config["host"] as mock_host:

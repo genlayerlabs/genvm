@@ -422,11 +422,11 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let res = res.map_err(|_e| generated::types::Errno::Io);
 
         match res? {
-            crate::vm::VMRunResult::Return(r) => self.set_result(r),
-            crate::vm::VMRunResult::Rollback(r) => {
+            crate::vm::RunResult::Return(r) => self.set_result(r),
+            crate::vm::RunResult::Rollback(r) => {
                 Err(generated::types::Error::trap(Rollback(r).into()))
             }
-            crate::vm::VMRunResult::Error(e) => Err(generated::types::Error::trap(
+            crate::vm::RunResult::Error(e) => Err(generated::types::Error::trap(
                 Rollback(format!("subvm failed {}", e)).into(),
             )),
         }
@@ -481,11 +481,11 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let res = res.map_err(|_e| generated::types::Errno::Io);
 
         match res? {
-            crate::vm::VMRunResult::Return(r) => self.set_result(r),
-            crate::vm::VMRunResult::Rollback(r) => {
+            crate::vm::RunResult::Return(r) => self.set_result(r),
+            crate::vm::RunResult::Rollback(r) => {
                 Err(generated::types::Error::trap(Rollback(r).into()))
             }
-            crate::vm::VMRunResult::Error(e) => Err(generated::types::Error::trap(
+            crate::vm::RunResult::Error(e) => Err(generated::types::Error::trap(
                 Rollback(format!("subvm failed {}", e)).into(),
             )),
         }
@@ -567,7 +567,7 @@ impl<T> Mapped<'_, T> {
         &mut self,
         supervisor: Arc<Mutex<crate::vm::Supervisor>>,
         essential_data: EssentialGenlayerSdkData,
-    ) -> Result<crate::vm::VMRunResult, ()> {
+    ) -> Result<crate::vm::RunResult, ()> {
         fn dummy_error<E>(_e: E) -> () {
             ()
         }

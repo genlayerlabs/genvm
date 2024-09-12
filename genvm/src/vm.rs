@@ -56,14 +56,14 @@ impl<I: Iterator<Item = u8>> Iterator for DecodeUtf8<I> {
     }
 }
 
-pub enum VMRunResult {
+pub enum RunResult {
     Return(Vec<u8>),
     Rollback(String),
     /// TODO: should there be an error or should it be merged with rollback?
     Error(String),
 }
 
-impl std::fmt::Debug for VMRunResult {
+impl std::fmt::Debug for RunResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Return(r) => {
@@ -151,31 +151,31 @@ impl VM {
         self.config_copy.is_deterministic
     }
 
-    pub fn run(&mut self, instance: &wasmtime::Instance) -> Result<VMRunResult> {
+    pub fn run(&mut self, instance: &wasmtime::Instance) -> Result<RunResult> {
         let func = instance
             .get_typed_func::<(), ()>(&mut self.store, "")
             .or_else(|_| instance.get_typed_func::<(), ()>(&mut self.store, "_start"))
             .with_context(|| "can't find entrypoint")?;
-        let res: VMRunResult = match func.call(&mut self.store, ()) {
-            Ok(()) => VMRunResult::Return("".into()),
+        let res: RunResult = match func.call(&mut self.store, ()) {
+            Ok(()) => RunResult::Return("".into()),
             Err(e) => {
-                let res: Option<VMRunResult> = [
+                let res: Option<RunResult> = [
                     e.downcast_ref::<crate::wasi::preview1::I32Exit>()
                         .and_then(|v| {
                             if v.0 == 0 {
-                                Some(VMRunResult::Return("".into()))
+                                Some(RunResult::Return("".into()))
                             } else {
                                 None
                             }
                         }),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::Rollback>()
-                        .map(|v| VMRunResult::Rollback(v.0.clone())),
+                        .map(|v| RunResult::Rollback(v.0.clone())),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::ContractReturn>()
-                        .map(|v| VMRunResult::Return(v.0.clone())),
+                        .map(|v| RunResult::Return(v.0.clone())),
                 ]
                 .into_iter()
                 .fold(None, |x, y| if x.is_some() { x } else { y });
-                res.unwrap_or(VMRunResult::Error(format!("{}", e)))
+                res.unwrap_or(RunResult::Error(format!("{}", e)))
             }
         };
         Ok(res)

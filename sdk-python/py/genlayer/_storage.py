@@ -365,8 +365,8 @@ def _storage_build_struct(cls: type, generics_map: dict[str, _TypeDesc]) -> _Typ
 		)
 		size += desc.size
 		_append_actions(copy_actions, desc.copy_actions)
-	import sys
-	print(f'calculated size for {cls.__name__}[{generics_map}] is {size} actions are {copy_actions}', file=sys.stderr)
+	#import sys
+	#print(f'calculated size for {cls.__name__}[{generics_map}] is {size} actions are {copy_actions}', file=sys.stderr)
 	def view_at(slot: StorageSlot, off: int):
 		slf = cls.__new__(cls)
 		slf._storage_slot = slot

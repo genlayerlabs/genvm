@@ -1,6 +1,20 @@
 use anyhow::Result;
-use clap::Parser;
-use genvm::vm::VMRunResult;
+use clap::{Parser, ValueEnum};
+use genvm::vm::RunResult;
+
+#[derive(Debug, Clone, ValueEnum, PartialEq)]
+#[clap(rename_all = "kebab_case")]
+enum PrintOption {
+    Shrink,
+    All,
+    None,
+}
+
+impl std::fmt::Display for PrintOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
+}
 
 #[derive(clap::Parser)]
 struct CliArgs {
@@ -10,8 +24,8 @@ struct CliArgs {
     message: String,
     #[arg(long)]
     host: String,
-    #[arg(long, default_value_t = false)]
-    shrink_error: bool,
+    #[clap(long, default_value_t = PrintOption::None)]
+    print: PrintOption,
 }
 
 fn main() -> Result<()> {
@@ -20,11 +34,16 @@ fn main() -> Result<()> {
     let message: genvm::MessageData = serde_json::from_str(&args.message)?;
 
     let host = genvm::Host::new(&args.host)?;
-    let res = genvm::run_with(message, &args.config, host)?;
-    let res = match (res, args.shrink_error) {
-        (VMRunResult::Error(_), true) => VMRunResult::Error("".into()),
-        (res, _) => res,
+    let supervisor = genvm::create_supervisor(&args.config, host)?;
+    let res = genvm::run_with(message, supervisor)?;
+    let res = match (res, args.print) {
+        (_, PrintOption::None) => None,
+        (RunResult::Error(_), PrintOption::Shrink) => Some(RunResult::Error("".into())),
+        (res, _) => Some(res),
     };
-    println!("executed with `{res:?}`");
+    match res {
+        None => {},
+        Some(res) => println!("executed with `{res:?}`"),
+    }
     Ok(())
 }
