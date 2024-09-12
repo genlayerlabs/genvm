@@ -658,6 +658,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "directories-next",
  "genvm-modules-common",
  "itertools 0.13.0",
  "libc",
@@ -669,6 +670,7 @@ dependencies = [
  "tracing",
  "wasmparser",
  "wasmtime",
+ "wasmtime-cache",
  "wiggle",
  "zip",
 ]

@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 wasmtime = { path = "third-party/wasmtime/crates/wasmtime", default-features = false, features = ["cranelift", "std", "parallel-compilation", "cache"] }
+wasmtime-cache = { path = "third-party/wasmtime/crates/cache" }
 wiggle = { path = "third-party/wasmtime/crates/wiggle" }
 anyhow = { version = "1.0.22", default-features = false }
 wasmparser = { version = "0.215.0", default-features = false }
@@ -19,3 +20,4 @@ libloading = "0.8.5"
 genvm-modules-common = { path = "modules/common" }
 libc = { version = "0.2.158", default-features = false }
 zip = "2.2.0"
+directories-next = "2.0.0"

@@ -12,7 +12,7 @@ enum PrintOption {
 
 impl std::fmt::Display for PrintOption {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        std::fmt::Debug::fmt(self, f)
+        f.write_str(&format!("{:?}", self).to_ascii_lowercase())
     }
 }
 
@@ -42,7 +42,7 @@ fn main() -> Result<()> {
         (res, _) => Some(res),
     };
     match res {
-        None => {},
+        None => {}
         Some(res) => println!("executed with `{res:?}`"),
     }
     Ok(())

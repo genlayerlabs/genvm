@@ -37,10 +37,7 @@ struct ConfigSchema {
     modules: Vec<ConfigModule>,
 }
 
-pub fn create_supervisor(
-    config_path: &String,
-    host: Host,
-) -> Result<Arc<Mutex<vm::Supervisor>>> {
+pub fn create_supervisor(config_path: &String, host: Host) -> Result<Arc<Mutex<vm::Supervisor>>> {
     use plugin_loader::llm_functions_api::Loader as _;
     use plugin_loader::web_functions_api::Loader as _;
 
