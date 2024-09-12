@@ -37,11 +37,10 @@ struct ConfigSchema {
     modules: Vec<ConfigModule>,
 }
 
-pub fn run_with(
-    entry_message: MessageData,
+pub fn create_supervisor(
     config_path: &String,
-    mut host: Host,
-) -> Result<crate::vm::VMRunResult> {
+    host: Host,
+) -> Result<Arc<Mutex<vm::Supervisor>>> {
     use plugin_loader::llm_functions_api::Loader as _;
     use plugin_loader::web_functions_api::Loader as _;
 
@@ -92,16 +91,20 @@ pub fn run_with(
         _ => anyhow::bail!("some of required modules is not supplied"),
     };
 
-    let mut entrypoint = b"call!".to_vec();
-    host.append_calldata(&mut entrypoint)?;
+    Ok(Arc::new(Mutex::new(vm::Supervisor::new(modules, host)?)))
+}
 
-    let supervisor = Arc::new(Mutex::new(vm::Supervisor::new(modules, host)?));
-
+pub fn run_with(
+    entry_message: MessageData,
+    supervisor: Arc<Mutex<vm::Supervisor>>,
+) -> Result<crate::vm::RunResult> {
     let (mut vm, instance) = {
         let supervisor_clone = supervisor.clone();
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(anyhow::anyhow!("can't lock supervisor"));
         };
+        let mut entrypoint = b"call!".to_vec();
+        supervisor.host.append_calldata(&mut entrypoint)?;
         let init_actions = supervisor.get_actions_for(&entry_message.contract_account)?;
 
         let essential_data = wasi::genlayer_sdk::EssentialGenlayerSdkData {
@@ -126,9 +129,16 @@ pub fn run_with(
     let res = vm.run(&instance)?;
     let remaining_fuel = vm.store.get_fuel().unwrap_or(0);
     eprintln!(
-        "remaining fuel: {remaining_fuel}\nconsumed fuel: {}",
+        "remaining fuel: {remaining_fuel}\nconsumed fuel:  {}",
         u64::wrapping_sub(init_fuel, remaining_fuel)
     );
+
+    {
+        let Ok(mut supervisor) = supervisor.lock() else {
+            return Err(anyhow::anyhow!("can't lock supervisor"));
+        };
+        supervisor.host.consume_result(&res)?;
+    }
 
     Ok(res)
 }

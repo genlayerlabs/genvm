@@ -7,6 +7,8 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
 
+use crate::vm::RunResult;
+
 #[serde_as]
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash, Copy)]
 pub struct Address(#[serde_as(as = "Base64")] pub [u8; 32]);
@@ -168,6 +170,30 @@ impl Host {
         let new_gas = read_u64(sock)?;
         *remaing_gas = new_gas;
 
+        Ok(())
+    }
+
+    pub fn consume_result(&mut self, res: &RunResult) -> Result<()> {
+        let Ok(mut sock) = (*self.sock).lock() else {
+            anyhow::bail!("can't take lock")
+        };
+        let sock: &mut dyn Sock = &mut *sock;
+        sock.write_all(&[4])?;
+        let data = match res {
+            RunResult::Return(r) => {
+                sock.write_all(&[0])?;
+                &r
+            },
+            RunResult::Rollback(r) => {
+                sock.write_all(&[1])?;
+                r.as_bytes()
+            },
+            RunResult::Error(r) => {
+                sock.write_all(&[2])?;
+                r.as_bytes()
+            },
+        };
+        sock.write_all(&(data.len() as u32).to_le_bytes())?;
         Ok(())
     }
 

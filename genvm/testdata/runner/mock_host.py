@@ -40,9 +40,11 @@ class AbortThread(Exception):
 	pass
 
 class MockHost:
-	thread: threading.Thread
+	thread: threading.Thread | None
+	sock: socket.socket | None
+	storage: MockStorage | None
 
-	def __init__(self, *, path: str, calldata: bytes, storage_path_pre: Path, storage_path_post: Path, codes: dict[bytes, typing.Any]):
+	def __init__(self, *, path: str, calldata: bytes, storage_path_pre: Path, storage_path_post: Path, codes: dict[Address, typing.Any]):
 		self.path = path
 		self.calldata = calldata
 		self.storage_path_pre = storage_path_pre
@@ -63,6 +65,7 @@ class MockHost:
 	def _threadfn(self):
 		try:
 			with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock_listener:
+				assert self.storage is not None
 				sock_listener.settimeout(0.1)
 				sock_listener.bind(self.path)
 				sock_listener.listen(1)
@@ -135,11 +138,17 @@ class MockHost:
 							gas = self.storage.write(gas_before, account, slot, index, memoryview(buf)[:le])
 							sock.sendall(b"\x00")
 							send_int(gas, 8)
+						case 4:
+							read_exact(1) # type
+							le = recv_int() # len
+							read_exact(le) # all
+							return
 						case x:
 							raise Exception(f"unknown method {x}")
 		except Exception as e:
-			self.thread_should_stop = True
 			_handle_exc(e)
+		finally:
+			self.thread_should_stop = True
 	def __exit__(self, *_args):
 		if self.thread is not None:
 			self.thread_should_stop = True
@@ -154,6 +163,6 @@ class MockHost:
 if __name__ == '__main__':
 	import time
 	import base64
-	with pickle.loads(base64.b64decode(sys.argv[1])) as host:
+	with pickle.loads(Path(sys.argv[1]).read_bytes()) as host:
 		while not host.thread_should_stop:
 			time.sleep(0.2)
