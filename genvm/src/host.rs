@@ -183,15 +183,15 @@ impl Host {
             RunResult::Return(r) => {
                 sock.write_all(&[0])?;
                 &r
-            },
+            }
             RunResult::Rollback(r) => {
                 sock.write_all(&[1])?;
                 r.as_bytes()
-            },
+            }
             RunResult::Error(r) => {
                 sock.write_all(&[2])?;
                 r.as_bytes()
-            },
+            }
         };
         sock.write_all(&(data.len() as u32).to_le_bytes())?;
         Ok(())

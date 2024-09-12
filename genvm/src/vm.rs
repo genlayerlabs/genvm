@@ -189,7 +189,25 @@ impl Supervisor {
         //base_conf.cranelift_opt_level(wasmtime::OptLevel::Speed);
         base_conf.wasm_tail_call(true);
         base_conf.wasm_relaxed_simd(false);
-        base_conf.cache_config_load_default()?;
+
+        match directories_next::ProjectDirs::from("", "yagerai", "genvm") {
+            None => {
+                base_conf.disable_cache();
+            }
+            Some(dirs) => {
+                let cache_dir = dirs.cache_dir().join("modules");
+                let cache_conf: wasmtime_cache::CacheConfig = serde_json::from_value(
+                    serde_json::Value::Object(
+                        [
+                            ("enabled".into(), serde_json::Value::Bool(true)),
+                            ("directory".into(), cache_dir.into_os_string().into_string().unwrap().into()),
+                        ].into_iter().collect()
+                    )
+                )?;
+                base_conf.cache_config_set(cache_conf)?;
+            }
+        }
+
         base_conf.consume_fuel(true);
         //base_conf.wasm_threads(false);
         //base_conf.wasm_reference_types(false);
