@@ -196,14 +196,18 @@ impl Supervisor {
             }
             Some(dirs) => {
                 let cache_dir = dirs.cache_dir().join("modules");
-                let cache_conf: wasmtime_cache::CacheConfig = serde_json::from_value(
-                    serde_json::Value::Object(
+                let cache_conf: wasmtime_cache::CacheConfig =
+                    serde_json::from_value(serde_json::Value::Object(
                         [
                             ("enabled".into(), serde_json::Value::Bool(true)),
-                            ("directory".into(), cache_dir.into_os_string().into_string().unwrap().into()),
-                        ].into_iter().collect()
-                    )
-                )?;
+                            (
+                                "directory".into(),
+                                cache_dir.into_os_string().into_string().unwrap().into(),
+                            ),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    ))?;
                 base_conf.cache_config_set(cache_conf)?;
             }
         }

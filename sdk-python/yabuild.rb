@@ -52,7 +52,7 @@ project('sdk-python') {
 		]+ if debug_sdk then [{ path: 'genvm-python-sdk.frozen', read_from: py_sdk_debug.output_file }] else [] end,
 		runner_dict: {
 			"depends": [
-				"softfloat:FUS2YETW7TWLRNYBUVBOFON7DGAURM3LQR2X3QH54E7N7S7UG7S4OTMUMTBKJ2NPNFG32MXIXXGPWBPBS35FTMSE7QUFTCRPFGIA4LY="
+				"softfloat:FC4YL2JHW76LFFWNIJZZ62D4Q6I5APZK2MUMQHNKNUS6E7DDZMS4FOYG3YUQ4MIAR4N4XR5JLXRI5RBWZ6BQHFT5V2MRCDV34LBE7NI="
 			],
 			"actions": [
 				{ "AddEnv": { "name": "pwd", "val": "/" } },

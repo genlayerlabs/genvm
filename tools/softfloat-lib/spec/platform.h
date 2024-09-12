@@ -8,3 +8,5 @@
 
 #define SOFTFLOAT_BUILTIN_CLZ 0
 #define SOFTFLOAT_INTRINSIC_INT128 0
+
+#define export __attribute__((visibility("default")))

@@ -44,7 +44,7 @@ Actually building became way too complex really fast (patching floats for softwa
 As of now there are two test suites
 
 ### genvm/testdata
-For `get_webpage` tests to work, one needs a compatible webdriver. There is a docker image for simplification: `bash -c 'docker run --network host $(docker build -q genvm/modules/default-impl/nondet-funcs/)' &`
+For `get_webpage` tests to work, one needs a compatible webdriver. There is a docker image for simplification: `bash -c 'docker run --network host $(docker build -q genvm/modules/default-impl/web-funcs/)' &`
 
 Generic steps:
 ```bash

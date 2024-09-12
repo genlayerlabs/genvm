@@ -13,7 +13,7 @@
 		"tools/softfloat-lib/berkeley-softfloat-3": {
 			"url": "https://github.com/ucb-bar/berkeley-softfloat-3.git",
 			"commit": "3b70b5d8147675932c38b36cd09af6df4eedd919",
-			"patches": 1
+			"patches": 2
 		},
 		"sdk-python/third-party/RustPython": {
 			"url": "https://github.com/RustPython/RustPython.git",
