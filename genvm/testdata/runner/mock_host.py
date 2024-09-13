@@ -15,6 +15,8 @@ import typing
 from genlayer.types import Address
 import pickle
 
+from host_fns import *
+
 def _handle_exc(e):
 	if isinstance(e, (AbortThread, ConnectionResetError)):
 		return
@@ -98,13 +100,17 @@ class MockHost:
 					return int.from_bytes(buf[:bytes], byteorder='little', signed=False)
 				def send_int(i: int, bytes=4):
 					sock.sendall(int.to_bytes(i, bytes, byteorder='little', signed=False))
+				def read_result():
+					read_exact(1) # type
+					le = recv_int() # len
+					read_exact(le) # all
 				while not self.thread_should_stop:
 					read_exact(1)
 					match buf[0]:
-						case 0: # get calldata
+						case Methods.APPEND_CALLDATA:
 							send_int(len(self.calldata))
 							sock.sendall(self.calldata)
-						case 1: # get_code
+						case Methods.GET_CODE:
 							addr = Address(read_exact_get(32))
 							res = self.codes.get(addr, None)
 							if res is not None:
@@ -117,7 +123,7 @@ class MockHost:
 								sock.sendall(b"\x00")
 								send_int(len(contents))
 								sock.sendall(contents)
-						case 2: # storage_read
+						case Methods.STORAGE_READ:
 							gas_before = recv_int(8)
 							account = Address(read_exact_get(32))
 							slot = Address(read_exact_get(32))
@@ -128,7 +134,7 @@ class MockHost:
 							sock.sendall(b"\x00")
 							send_int(gas, 8)
 							sock.sendall(res)
-						case 3: # storage write
+						case Methods.STORAGE_WRITE:
 							gas_before = recv_int(8)
 							account = Address(read_exact_get(32))
 							slot = Address(read_exact_get(32))
@@ -138,11 +144,15 @@ class MockHost:
 							gas = self.storage.write(gas_before, account, slot, index, memoryview(buf)[:le])
 							sock.sendall(b"\x00")
 							send_int(gas, 8)
-						case 4:
-							read_exact(1) # type
-							le = recv_int() # len
-							read_exact(le) # all
+						case Methods.CONSUME_RESULT:
+							read_result()
 							return
+						case Methods.GET_LEADER_NONDET_RESULT:
+							recv_int() # call no
+							sock.sendall(bytes([ResultCode.NONE]))
+						case Methods.POST_NONDET_RESULT:
+							recv_int() # call no
+							read_result()
 						case x:
 							raise Exception(f"unknown method {x}")
 		except Exception as e:

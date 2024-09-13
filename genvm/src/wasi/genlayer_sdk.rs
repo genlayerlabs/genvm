@@ -6,7 +6,7 @@ use std::{
 use wasmtime::StoreContextMut;
 use wiggle::GuestError;
 
-use crate::{vm::InitActions, Address, MessageData};
+use crate::{vm::{self, InitActions}, Address, Host, MessageData};
 
 use super::{base, common::read_string};
 
@@ -20,6 +20,7 @@ pub struct EssentialGenlayerSdkData {
 
 pub struct ContextData {
     pub data: EssentialGenlayerSdkData,
+    pub shared_data: Arc<vm::SharedData>,
 
     result: Vec<u8>,
     result_cursor: usize,
@@ -64,11 +65,12 @@ impl generated::types::Bytes {
 }
 
 impl ContextData {
-    pub fn new(data: EssentialGenlayerSdkData) -> Self {
+    pub fn new(data: EssentialGenlayerSdkData, shared_data: Arc<vm::SharedData>) -> Self {
         Self {
             data,
             result: Vec::new(),
             result_cursor: 0,
+            shared_data,
         }
     }
 }
@@ -167,6 +169,17 @@ pub struct ContractReturn(pub Vec<u8>);
 impl std::error::Error for ContractReturn {}
 
 impl std::fmt::Display for ContractReturn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Returned {:?}", self.0)
+    }
+}
+
+#[derive(Debug)]
+pub struct ContractError(pub String);
+
+impl std::error::Error for ContractError {}
+
+impl std::fmt::Display for ContractError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Returned {:?}", self.0)
     }
@@ -397,6 +410,11 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
 
+        let eq_principle = read_string(mem, eq_principle)?;
+
+        // relaxed reason: here is no actual race possible, only the determinsiitc vm can call it, and it has no concurrency
+        let call_no = self.data_mut().shared_data.nondet_call_no.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
         let cow = mem.as_cow(data.buf.as_array(data.buf_len))?;
         let mut entrypoint = Vec::from(b"nondet!");
         entrypoint.extend(cow.iter());
@@ -416,17 +434,47 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             init_actions: self.data_mut().data.init_actions.clone(),
         };
 
-        let res = self.spaw_and_run(supervisor, essential_data);
+        let res = self.spaw_and_run(&supervisor, essential_data);
 
         //let res = eq_principle
         let res = res.map_err(|_e| generated::types::Errno::Io);
+        let res = match res {
+            Ok(res) => res,
+            Err(e) => return Err(generated::types::Error::trap(
+                ContractError(format!("internal error: nondet vm failed to execute {}", e)).into()
+            )),
+        };
 
-        match res? {
-            crate::vm::RunResult::Return(r) => self.set_result(r),
-            crate::vm::RunResult::Rollback(r) => {
+        // FIXME we need to handle errors in a better way here: by traps
+        let res = {
+            let Ok(mut supervisor) = supervisor.lock() else {
+                return Err(generated::types::Errno::Io.into());
+            };
+            let leader_res = supervisor
+                .host
+                .get_leader_result(call_no).map_err(|_e| generated::types::Errno::Io)?;
+
+            let res = match (leader_res, res) {
+                (Some(vm::RunResult::Return(leader_res)), vm::RunResult::Return(res)) => {
+                    equivalence_principle_check(&mut supervisor.host, &eq_principle, leader_res, res).map(vm::RunResult::Return).map_err(|_e| generated::types::Errno::Io)
+                }
+                (None, res) => {
+                    supervisor.host.post_result(call_no, &res).map_err(|_e| generated::types::Errno::Io)?;
+                    Ok(res)
+                }
+                (_, _) => return Err(generated::types::Error::trap(
+                    ContractError("mismatch".into()).into(),
+                ))
+            };
+            res?
+        };
+
+        match res {
+            vm::RunResult::Return(r) => self.set_result(r),
+            vm::RunResult::Rollback(r) => {
                 Err(generated::types::Error::trap(Rollback(r).into()))
             }
-            crate::vm::RunResult::Error(e) => Err(generated::types::Error::trap(
+            vm::RunResult::Error(e) => Err(generated::types::Error::trap(
                 Rollback(format!("subvm failed {}", e)).into(),
             )),
         }
@@ -477,7 +525,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             init_actions,
         };
 
-        let res = self.spaw_and_run(supervisor, essential_data);
+        let res = self.spaw_and_run(&supervisor, essential_data);
         let res = res.map_err(|_e| generated::types::Errno::Io);
 
         match res? {
@@ -565,7 +613,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
 impl<T> Mapped<'_, T> {
     fn spaw_and_run(
         &mut self,
-        supervisor: Arc<Mutex<crate::vm::Supervisor>>,
+        supervisor: &Arc<Mutex<crate::vm::Supervisor>>,
         essential_data: EssentialGenlayerSdkData,
     ) -> Result<crate::vm::RunResult, ()> {
         fn dummy_error<E>(_e: E) -> () {
@@ -597,4 +645,9 @@ fn vec_from_cstr_libc(str: *const u8) -> Vec<u8> {
         libc::free(str as *mut std::ffi::c_void);
     }
     res
+}
+
+fn equivalence_principle_check(_host: &mut Host, _config: &str, leader: Vec<u8>, _cur: Vec<u8>) -> Result<Vec<u8>, ()> {
+    // FIXME
+    Ok(leader)
 }

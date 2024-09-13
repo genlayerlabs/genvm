@@ -150,7 +150,6 @@ pub mod genlayer_sdk {
         len: u32,
         vm: &VirtualMachine,
     ) -> PyResult<PyBytes> {
-        let dbg = &addr;
         let addr = super::get_addr(&addr, vm)?;
         let mut v = Vec::with_capacity(len as usize);
         let res = unsafe {

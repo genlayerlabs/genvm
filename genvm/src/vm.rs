@@ -1,5 +1,5 @@
 use core::str;
-use std::{collections::HashMap, io::Write, path::Path};
+use std::{collections::HashMap, io::Write, path::Path, sync::atomic::AtomicU32};
 
 use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
 use itertools::Itertools;
@@ -97,9 +97,9 @@ pub struct WasmContext {
 }
 
 impl WasmContext {
-    fn new(data: crate::wasi::genlayer_sdk::EssentialGenlayerSdkData) -> WasmContext {
+    fn new(data: crate::wasi::genlayer_sdk::EssentialGenlayerSdkData, shared_data: Arc<SharedData>) -> WasmContext {
         return WasmContext {
-            genlayer_ctx: Arc::new(Mutex::new(wasi::Context::new(data))),
+            genlayer_ctx: Arc::new(Mutex::new(wasi::Context::new(data, shared_data))),
         };
     }
 }
@@ -110,6 +110,18 @@ impl WasmContext {
             .expect("wasmtime_wasi is not compatible with threads")
             .get_mut()
             .unwrap()
+    }
+}
+
+pub struct SharedData {
+    pub nondet_call_no: AtomicU32,
+}
+
+impl SharedData {
+    fn new() -> Self {
+        Self {
+            nondet_call_no: 0.into(),
+        }
     }
 }
 
@@ -126,6 +138,7 @@ pub struct Modules {
 pub struct Supervisor {
     pub modules: Modules,
     pub host: crate::Host,
+    pub shared_data: Arc<SharedData>,
 
     det_engine: Engine,
     non_det_engine: Engine,
@@ -235,6 +248,7 @@ impl Supervisor {
             runner_cache: runner::RunnerReaderCache::new(),
             modules,
             host,
+            shared_data: Arc::new(SharedData::new()),
         })
     }
 
@@ -285,7 +299,7 @@ impl Supervisor {
         };
 
         let init_gas = data.message_data.gas;
-        let mut store = Store::new(&engine, WasmContext::new(data));
+        let mut store = Store::new(&engine, WasmContext::new(data, self.shared_data.clone()));
         store.set_fuel(init_gas)?;
 
         let mut linker = Linker::new(engine);
