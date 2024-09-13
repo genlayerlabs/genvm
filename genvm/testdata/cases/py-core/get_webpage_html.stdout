@@ -1,2 +1,2 @@
 <b>Hello</b> world!
-executed with `Return("")`
+executed with `Return("\x00")`

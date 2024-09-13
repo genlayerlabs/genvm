@@ -25,10 +25,6 @@ jobs:
             genvm -> target
             sdk-python -> target
             tools/softfloat-lib/patch-floats -> target
-      - name: check format
-        run: |
-          ./build-scripts/cargo-fmt.sh && \
-          git diff -U1 --exit-code
       - name: checkout submodules
         run: |
           cd "$GITHUB_WORKSPACE" && \
@@ -53,6 +49,10 @@ jobs:
             ninja -v -C build && \
             tree build/out && \
             pushd "$GITHUB_WORKSPACE/build" && zip -r out.zip out config.json && popd
+      - name: check format
+        run: |
+          ./build-scripts/cargo-fmt.sh && \
+          git diff -U1 --exit-code
       - name: publish
         uses: actions/upload-artifact@v4
         with:

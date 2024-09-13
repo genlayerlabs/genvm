@@ -3,10 +3,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use serde::Deserialize;
 use wasmtime::StoreContextMut;
 use wiggle::GuestError;
 
-use crate::{vm::InitActions, Address, MessageData};
+use crate::{
+    vm::{self, InitActions},
+    Address, Host, MessageData,
+};
 
 use super::{base, common::read_string};
 
@@ -20,6 +24,7 @@ pub struct EssentialGenlayerSdkData {
 
 pub struct ContextData {
     pub data: EssentialGenlayerSdkData,
+    pub shared_data: Arc<vm::SharedData>,
 
     result: Vec<u8>,
     result_cursor: usize,
@@ -64,11 +69,12 @@ impl generated::types::Bytes {
 }
 
 impl ContextData {
-    pub fn new(data: EssentialGenlayerSdkData) -> Self {
+    pub fn new(data: EssentialGenlayerSdkData, shared_data: Arc<vm::SharedData>) -> Self {
         Self {
             data,
             result: Vec::new(),
             result_cursor: 0,
+            shared_data,
         }
     }
 }
@@ -252,6 +258,16 @@ impl<'a, T> Mapped<'a, T> {
         self.consume_fuel(gas_consumed)?;
         Ok(res)
     }
+
+    fn set_vm_run_result(
+        &mut self,
+        data: vm::RunOk,
+    ) -> Result<generated::types::BytesLen, generated::types::Error> {
+        match data {
+            vm::RunOk::Return(buf) => self.set_result(buf),
+            vm::RunOk::Rollback(buf) => self.set_result(buf.into()),
+        }
+    }
 }
 
 #[allow(unused_variables)]
@@ -396,6 +412,14 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         if !self.data_mut().data.conf.can_spawn_nondet {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
+        let eq_principle = read_string(mem, eq_principle)?;
+
+        // relaxed reason: here is no actual race possible, only the determinsiitc vm can call it, and it has no concurrency
+        let call_no = self
+            .data_mut()
+            .shared_data
+            .nondet_call_no
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         let cow = mem.as_cow(data.buf.as_array(data.buf_len))?;
         let mut entrypoint = Vec::from(b"nondet!");
@@ -416,20 +440,44 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             init_actions: self.data_mut().data.init_actions.clone(),
         };
 
-        let res = self.spaw_and_run(supervisor, essential_data);
+        let res = self
+            .spaw_and_run(&supervisor, essential_data)
+            .map_err(generated::types::Error::trap)?;
 
-        //let res = eq_principle
-        let res = res.map_err(|_e| generated::types::Errno::Io);
+        let res: vm::RunResult = (|| {
+            let Ok(mut supervisor) = supervisor.lock() else {
+                return Err(anyhow::anyhow!("can't lock supervisor"));
+            };
+            let leader_res = supervisor.host.get_leader_result(call_no)?;
 
-        match res? {
-            crate::vm::RunResult::Return(r) => self.set_result(r),
-            crate::vm::RunResult::Rollback(r) => {
-                Err(generated::types::Error::trap(Rollback(r).into()))
+            match (leader_res, res) {
+                (Some(vm::RunOk::Return(leader_res)), vm::RunOk::Return(res)) => {
+                    equivalence_principle_check(
+                        &mut supervisor.host,
+                        &eq_principle,
+                        decode_nondet_return(&leader_res)?,
+                        decode_nondet_return(&res)?,
+                    )
+                    .map(|_| vm::RunOk::Return(leader_res))
+                }
+                (Some(vm::RunOk::Rollback(leader_res)), vm::RunOk::Rollback(res)) => {
+                    equivalence_principle_check(
+                        &mut supervisor.host,
+                        &eq_principle,
+                        &leader_res,
+                        &res,
+                    )
+                    .map(|_| vm::RunOk::Rollback(leader_res))
+                }
+                (None, res) => {
+                    supervisor.host.post_result(call_no, &res)?;
+                    Ok(res)
+                }
+                (_, _) => Err(anyhow::anyhow!("result diverged from leader's")),
             }
-            crate::vm::RunResult::Error(e) => Err(generated::types::Error::trap(
-                Rollback(format!("subvm failed {}", e)).into(),
-            )),
-        }
+        })();
+
+        self.set_vm_run_result(res.map_err(generated::types::Error::trap)?)
     }
 
     fn call_contract(
@@ -477,18 +525,11 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             init_actions,
         };
 
-        let res = self.spaw_and_run(supervisor, essential_data);
-        let res = res.map_err(|_e| generated::types::Errno::Io);
+        let res = self
+            .spaw_and_run(&supervisor, essential_data)
+            .map_err(generated::types::Error::trap)?;
 
-        match res? {
-            crate::vm::RunResult::Return(r) => self.set_result(r),
-            crate::vm::RunResult::Rollback(r) => {
-                Err(generated::types::Error::trap(Rollback(r).into()))
-            }
-            crate::vm::RunResult::Error(e) => Err(generated::types::Error::trap(
-                Rollback(format!("subvm failed {}", e)).into(),
-            )),
-        }
+        self.set_vm_run_result(res)
     }
 
     fn storage_read(
@@ -563,25 +604,25 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
 }
 
 impl<T> Mapped<'_, T> {
+    /// note: handles fuel itself
     fn spaw_and_run(
         &mut self,
-        supervisor: Arc<Mutex<crate::vm::Supervisor>>,
+        supervisor: &Arc<Mutex<crate::vm::Supervisor>>,
         essential_data: EssentialGenlayerSdkData,
-    ) -> Result<crate::vm::RunResult, ()> {
-        fn dummy_error<E>(_e: E) -> () {
-            ()
-        }
+    ) -> vm::RunResult {
         let (mut vm, instance) = {
-            let mut supervisor = supervisor.lock().map_err(dummy_error)?;
-            let mut vm = supervisor.spawn(essential_data).map_err(dummy_error)?;
-            let instance = supervisor.apply_actions(&mut vm).map_err(dummy_error)?;
+            let mut supervisor = supervisor
+                .lock()
+                .map_err(|_e| anyhow::anyhow!("can't lock supervisor"))?;
+            let mut vm = supervisor.spawn(essential_data)?;
+            let instance = supervisor.apply_actions(&mut vm)?;
             (vm, instance)
         };
 
-        let pre_fuel = self.stor.get_fuel().map_err(dummy_error)?;
-        vm.store.set_fuel(pre_fuel).map_err(dummy_error)?;
+        let pre_fuel = self.stor.get_fuel()?;
+        vm.store.set_fuel(pre_fuel)?;
 
-        let res = vm.run(&instance).map_err(dummy_error);
+        let res = vm.run(&instance);
 
         let remaining_fuel = vm.store.get_fuel().unwrap_or(0);
         let _ = self.stor.set_fuel(remaining_fuel);
@@ -597,4 +638,35 @@ fn vec_from_cstr_libc(str: *const u8) -> Vec<u8> {
         libc::free(str as *mut std::ffi::c_void);
     }
     res
+}
+
+fn decode_nondet_return<'a>(_cur: &'a [u8]) -> Result<&'a str, anyhow::Error> {
+    todo!()
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum EqPrincipleMode {
+    Refl,
+}
+
+#[derive(Deserialize)]
+struct EqPrincipleConfig {
+    mode: EqPrincipleMode,
+}
+
+fn equivalence_principle_check(
+    _host: &mut Host,
+    config: &str,
+    leader: &str,
+    cur: &str,
+) -> Result<(), anyhow::Error> {
+    let config: EqPrincipleConfig = serde_json::from_str(config)?;
+    let is_ok = match config.mode {
+        EqPrincipleMode::Refl => leader == cur,
+    };
+    if !is_ok {
+        anyhow::bail!("equivalence_principle_check failed");
+    }
+    Ok(())
 }

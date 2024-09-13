@@ -1,5 +1,5 @@
 use core::str;
-use std::{collections::HashMap, io::Write, path::Path};
+use std::{collections::HashMap, io::Write, path::Path, sync::atomic::AtomicU32};
 
 use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
 use itertools::Itertools;
@@ -56,14 +56,20 @@ impl<I: Iterator<Item = u8>> Iterator for DecodeUtf8<I> {
     }
 }
 
-pub enum RunResult {
+pub enum RunOk {
     Return(Vec<u8>),
     Rollback(String),
-    /// TODO: should there be an error or should it be merged with rollback?
-    Error(String),
 }
 
-impl std::fmt::Debug for RunResult {
+pub type RunResult = Result<RunOk>;
+
+impl RunOk {
+    pub fn empty_return() -> Self {
+        Self::Return([0].into())
+    }
+}
+
+impl std::fmt::Debug for RunOk {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Return(r) => {
@@ -86,7 +92,6 @@ impl std::fmt::Debug for RunResult {
                 f.write_fmt(format_args!("Return(\"{}\")", str))
             }
             Self::Rollback(r) => f.debug_tuple("Rollback").field(r).finish(),
-            Self::Error(r) => f.debug_tuple("Error").field(r).finish(),
         }
     }
 }
@@ -97,9 +102,12 @@ pub struct WasmContext {
 }
 
 impl WasmContext {
-    fn new(data: crate::wasi::genlayer_sdk::EssentialGenlayerSdkData) -> WasmContext {
+    fn new(
+        data: crate::wasi::genlayer_sdk::EssentialGenlayerSdkData,
+        shared_data: Arc<SharedData>,
+    ) -> WasmContext {
         return WasmContext {
-            genlayer_ctx: Arc::new(Mutex::new(wasi::Context::new(data))),
+            genlayer_ctx: Arc::new(Mutex::new(wasi::Context::new(data, shared_data))),
         };
     }
 }
@@ -110,6 +118,18 @@ impl WasmContext {
             .expect("wasmtime_wasi is not compatible with threads")
             .get_mut()
             .unwrap()
+    }
+}
+
+pub struct SharedData {
+    pub nondet_call_no: AtomicU32,
+}
+
+impl SharedData {
+    fn new() -> Self {
+        Self {
+            nondet_call_no: 0.into(),
+        }
     }
 }
 
@@ -126,6 +146,7 @@ pub struct Modules {
 pub struct Supervisor {
     pub modules: Modules,
     pub host: crate::Host,
+    pub shared_data: Arc<SharedData>,
 
     det_engine: Engine,
     non_det_engine: Engine,
@@ -151,34 +172,34 @@ impl VM {
         self.config_copy.is_deterministic
     }
 
-    pub fn run(&mut self, instance: &wasmtime::Instance) -> Result<RunResult> {
+    pub fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
         let func = instance
             .get_typed_func::<(), ()>(&mut self.store, "")
             .or_else(|_| instance.get_typed_func::<(), ()>(&mut self.store, "_start"))
             .with_context(|| "can't find entrypoint")?;
         let res: RunResult = match func.call(&mut self.store, ()) {
-            Ok(()) => RunResult::Return("".into()),
+            Ok(()) => Ok(RunOk::empty_return()),
             Err(e) => {
-                let res: Option<RunResult> = [
+                let res: Option<RunOk> = [
                     e.downcast_ref::<crate::wasi::preview1::I32Exit>()
                         .and_then(|v| {
                             if v.0 == 0 {
-                                Some(RunResult::Return("".into()))
+                                Some(RunOk::empty_return())
                             } else {
                                 None
                             }
                         }),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::Rollback>()
-                        .map(|v| RunResult::Rollback(v.0.clone())),
+                        .map(|v| RunOk::Rollback(v.0.clone())),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::ContractReturn>()
-                        .map(|v| RunResult::Return(v.0.clone())),
+                        .map(|v| RunOk::Return(v.0.clone())),
                 ]
                 .into_iter()
                 .fold(None, |x, y| if x.is_some() { x } else { y });
-                res.unwrap_or(RunResult::Error(format!("{}", e)))
+                res.map_or(Err(e), Ok)
             }
         };
-        Ok(res)
+        res
     }
 }
 
@@ -235,6 +256,7 @@ impl Supervisor {
             runner_cache: runner::RunnerReaderCache::new(),
             modules,
             host,
+            shared_data: Arc::new(SharedData::new()),
         })
     }
 
@@ -285,7 +307,7 @@ impl Supervisor {
         };
 
         let init_gas = data.message_data.gas;
-        let mut store = Store::new(&engine, WasmContext::new(data));
+        let mut store = Store::new(&engine, WasmContext::new(data, self.shared_data.clone()));
         store.set_fuel(init_gas)?;
 
         let mut linker = Linker::new(engine);

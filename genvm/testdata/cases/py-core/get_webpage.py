@@ -12,4 +12,4 @@ class NonDetInit(gsdk.Runner):
 
 @gsdk.public
 def main(mode: str):
-    gsdk.run_nondet({}, NonDetInit(mode))
+    gsdk.run_nondet({"mode": "refl"}, NonDetInit(mode))

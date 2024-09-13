@@ -1,3 +1,3 @@
 second
 [('1', 12), ('abc', 30)]
-executed with `Return("")`
+executed with `Return("\x00")`

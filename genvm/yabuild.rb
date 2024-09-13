@@ -16,17 +16,40 @@ project('genvm') {
 		)
 	)
 
+	codegen = target_command(
+		output_file: cur_src.join('src', 'host', 'host_fns.rs'),
+		command: [
+			RbConfig.ruby, cur_src.join('codegen', 'templates', 'host-rs.rb')
+		],
+		dependencies: [cur_src.join('codegen', 'data', 'host-fns.json')]
+	)
+
 	bin = target_alias(
 		'bin',
 		target_cargo_build(
 			name: "genvm",
 			profile: config.profile,
 			out_file: config.bin_dir.join('genvm')
-		)
+		) {
+			add_deps codegen
+		}
 	)
 
+	genvm_all = target_alias('all', bin, modules)
+
 	all.add_deps(
-		target_alias('all', bin, modules),
+		genvm_all,
 		target_copy(dest: config.out_dir.join('share', 'genvm', 'default-config.json'), src: cur_src.join('default-config.json'))
+	)
+
+	target_alias('test',
+		genvm_all,
+		target_command(
+			output_file: cur_src.join('testdata', 'runner', 'host_fns.py'),
+			command: [
+				RbConfig.ruby, cur_src.join('codegen', 'templates', 'host-py.rb')
+			],
+			dependencies: [cur_src.join('codegen', 'data', 'host-fns.json')]
+		)
 	)
 }

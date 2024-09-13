@@ -1,14 +1,14 @@
 from .types import Address
 from typing import Any
 
-TYPE_PINT = 0
-TYPE_NINT = 1
-TYPE_BYTES = 2
-TYPE_STR = 3
-TYPE_ARR = 4
-TYPE_MAP = 5
-TYPE_NULL = 6
-TYPE_ADDR = 7
+TYPE_NULL = 0
+TYPE_PINT = 1
+TYPE_NINT = 2
+TYPE_BYTES = 3
+TYPE_ADDR = 4
+TYPE_STR = 5
+TYPE_ARR = 6
+TYPE_MAP = 7
 
 def encode(x: Any) -> bytes:
 	mem = bytearray()

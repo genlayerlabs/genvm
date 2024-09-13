@@ -11,4 +11,4 @@ args=(<class 'str'>,)
 <class 'type'>
 <class 'contract.Test'>
 	foo: contract.Foo[str]
-executed with `Return("")`
+executed with `Return("\x00")`
