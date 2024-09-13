@@ -11,6 +11,6 @@ class Methods(IntEnum):
 class ResultCode(IntEnum):
 	RETURN = 0
 	ROLLBACK = 1
-	ERROR = 2
-	NONE = 3
+	NONE = 2
+	ERROR = 3
 

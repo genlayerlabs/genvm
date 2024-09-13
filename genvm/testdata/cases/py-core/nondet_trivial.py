@@ -11,4 +11,4 @@ class NonDetInit(gsdk.Runner):
 @gsdk.public
 def init():
     eval("print('init from eval!')")
-    return gsdk.run_nondet({}, NonDetInit())
+    return gsdk.run_nondet({"mode": "refl"}, NonDetInit())

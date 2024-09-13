@@ -94,7 +94,7 @@ pub fn create_supervisor(config_path: &String, host: Host) -> Result<Arc<Mutex<v
 pub fn run_with(
     entry_message: MessageData,
     supervisor: Arc<Mutex<vm::Supervisor>>,
-) -> Result<crate::vm::RunResult> {
+) -> vm::RunResult {
     let (mut vm, instance) = {
         let supervisor_clone = supervisor.clone();
         let Ok(mut supervisor) = supervisor.lock() else {
@@ -123,7 +123,7 @@ pub fn run_with(
     };
 
     let init_fuel = vm.store.get_fuel().unwrap_or(0);
-    let res = vm.run(&instance)?;
+    let res = vm.run(&instance);
     let remaining_fuel = vm.store.get_fuel().unwrap_or(0);
     eprintln!(
         "remaining fuel: {remaining_fuel}\nconsumed fuel:  {}",
@@ -137,5 +137,5 @@ pub fn run_with(
         supervisor.host.consume_result(&res)?;
     }
 
-    Ok(res)
+    res
 }

@@ -84,19 +84,21 @@ fn read_u64(sock: &mut dyn Sock) -> Result<u64> {
     Ok(u64::from_le_bytes(int_buf))
 }
 
-fn write_result(sock: &mut dyn Sock, res: &vm::RunResult) -> Result<()> {
+fn write_result(sock: &mut dyn Sock, res: Result<&vm::RunOk, &anyhow::Error>) -> Result<()> {
+    let str: String;
     let data = match res {
-        vm::RunResult::Return(r) => {
+        Ok(vm::RunOk::Return(r)) => {
             sock.write_all(&[host_fns::ResultCode::Return as u8])?;
             &r
         }
-        vm::RunResult::Rollback(r) => {
+        Ok(vm::RunOk::Rollback(r)) => {
             sock.write_all(&[host_fns::ResultCode::Rollback as u8])?;
             r.as_bytes()
         }
-        vm::RunResult::Error(r) => {
+        Err(e) => {
             sock.write_all(&[host_fns::ResultCode::Error as u8])?;
-            r.as_bytes()
+            str = format!("{}", e);
+            str.as_bytes()
         }
     };
     sock.write_all(&(data.len() as u32).to_le_bytes())?;
@@ -201,11 +203,15 @@ impl Host {
         };
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::ConsumeResult as u8])?;
+        let res = match res {
+            Ok(res) => Ok(res),
+            Err(e) => Err(e),
+        };
         write_result(sock, res)?;
         Ok(())
     }
 
-    pub fn get_leader_result(&mut self, call_no: u32) -> Result<Option<vm::RunResult>> {
+    pub fn get_leader_result(&mut self, call_no: u32) -> Result<Option<vm::RunOk>> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -224,26 +230,23 @@ impl Host {
         }
         sock.read_exact(&mut buf)?;
         let res = match has_some[0] {
-            x if x == host_fns::ResultCode::Error as u8 => {
-                vm::RunResult::Error(String::from_utf8(buf)?)
-            }
-            x if x == host_fns::ResultCode::Return as u8 => vm::RunResult::Return(buf),
+            x if x == host_fns::ResultCode::Return as u8 => vm::RunOk::Return(buf),
             x if x == host_fns::ResultCode::Rollback as u8 => {
-                vm::RunResult::Rollback(String::from_utf8(buf)?)
+                vm::RunOk::Rollback(String::from_utf8(buf)?)
             }
             x => anyhow::bail!("host returned incorrect result id {}", x),
         };
         Ok(Some(res))
     }
 
-    pub fn post_result(&mut self, call_no: u32, res: &vm::RunResult) -> Result<()> {
+    pub fn post_result(&mut self, call_no: u32, res: &vm::RunOk) -> Result<()> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::PostNondetResult as u8])?;
         sock.write_all(&call_no.to_le_bytes())?;
-        write_result(sock, res)?;
+        write_result(sock, Ok(res))?;
         Ok(())
     }
 

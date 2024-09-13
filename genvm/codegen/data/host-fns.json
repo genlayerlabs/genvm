@@ -20,8 +20,8 @@
         "values": {
             "return": 0,
             "rollback": 1,
-            "error": 2,
-            "none": 3
+            "none": 2,
+            "error": 3
         }
     }
 ]

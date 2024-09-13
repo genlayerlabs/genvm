@@ -56,20 +56,20 @@ impl<I: Iterator<Item = u8>> Iterator for DecodeUtf8<I> {
     }
 }
 
-pub enum RunResult {
+pub enum RunOk {
     Return(Vec<u8>),
     Rollback(String),
-    /// TODO: should there be an error or should it be merged with rollback?
-    Error(String),
 }
 
-impl RunResult {
+pub type RunResult = Result<RunOk>;
+
+impl RunOk {
     pub fn empty_return() -> Self {
         Self::Return([0].into())
     }
 }
 
-impl std::fmt::Debug for RunResult {
+impl std::fmt::Debug for RunOk {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Return(r) => {
@@ -92,7 +92,6 @@ impl std::fmt::Debug for RunResult {
                 f.write_fmt(format_args!("Return(\"{}\")", str))
             }
             Self::Rollback(r) => f.debug_tuple("Rollback").field(r).finish(),
-            Self::Error(r) => f.debug_tuple("Error").field(r).finish(),
         }
     }
 }
@@ -173,34 +172,34 @@ impl VM {
         self.config_copy.is_deterministic
     }
 
-    pub fn run(&mut self, instance: &wasmtime::Instance) -> Result<RunResult> {
+    pub fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
         let func = instance
             .get_typed_func::<(), ()>(&mut self.store, "")
             .or_else(|_| instance.get_typed_func::<(), ()>(&mut self.store, "_start"))
             .with_context(|| "can't find entrypoint")?;
         let res: RunResult = match func.call(&mut self.store, ()) {
-            Ok(()) => RunResult::empty_return(),
+            Ok(()) => Ok(RunOk::empty_return()),
             Err(e) => {
-                let res: Option<RunResult> = [
+                let res: Option<RunOk> = [
                     e.downcast_ref::<crate::wasi::preview1::I32Exit>()
                         .and_then(|v| {
                             if v.0 == 0 {
-                                Some(RunResult::empty_return())
+                                Some(RunOk::empty_return())
                             } else {
                                 None
                             }
                         }),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::Rollback>()
-                        .map(|v| RunResult::Rollback(v.0.clone())),
+                        .map(|v| RunOk::Rollback(v.0.clone())),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::ContractReturn>()
-                        .map(|v| RunResult::Return(v.0.clone())),
+                        .map(|v| RunOk::Return(v.0.clone())),
                 ]
                 .into_iter()
                 .fold(None, |x, y| if x.is_some() { x } else { y });
-                res.unwrap_or(RunResult::Error(format!("{}", e)))
+                res.map_or(Err(e), Ok)
             }
         };
-        Ok(res)
+        res
     }
 }
 
