@@ -1,3 +1,5 @@
+use std::io::{stderr, Write};
+
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use genvm::vm::RunResult;
@@ -38,7 +40,10 @@ fn main() -> Result<()> {
     let res = genvm::run_with(message, supervisor)?;
     let res = match (res, args.print) {
         (_, PrintOption::None) => None,
-        (RunResult::Error(_), PrintOption::Shrink) => Some(RunResult::Error("".into())),
+        (RunResult::Error(e), PrintOption::Shrink) => {
+            let _ = stderr().write(format!("shrinked error is {}\n", e).as_bytes());
+            Some(RunResult::Error("".into()))
+        }
         (res, _) => Some(res),
     };
     match res {

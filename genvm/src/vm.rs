@@ -63,6 +63,12 @@ pub enum RunResult {
     Error(String),
 }
 
+impl RunResult {
+    pub fn empty_return() -> Self {
+        Self::Return([0].into())
+    }
+}
+
 impl std::fmt::Debug for RunResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -173,13 +179,13 @@ impl VM {
             .or_else(|_| instance.get_typed_func::<(), ()>(&mut self.store, "_start"))
             .with_context(|| "can't find entrypoint")?;
         let res: RunResult = match func.call(&mut self.store, ()) {
-            Ok(()) => RunResult::Return("".into()),
+            Ok(()) => RunResult::empty_return(),
             Err(e) => {
                 let res: Option<RunResult> = [
                     e.downcast_ref::<crate::wasi::preview1::I32Exit>()
                         .and_then(|v| {
                             if v.0 == 0 {
-                                Some(RunResult::Return("".into()))
+                                Some(RunResult::empty_return())
                             } else {
                                 None
                             }

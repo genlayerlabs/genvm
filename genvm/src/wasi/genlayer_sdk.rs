@@ -412,7 +412,6 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         if !self.data_mut().data.conf.can_spawn_nondet {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
-
         let eq_principle = read_string(mem, eq_principle)?;
 
         // relaxed reason: here is no actual race possible, only the determinsiitc vm can call it, and it has no concurrency

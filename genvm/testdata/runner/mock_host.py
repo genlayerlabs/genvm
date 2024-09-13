@@ -172,7 +172,6 @@ class MockHost:
 
 if __name__ == '__main__':
 	import time
-	import base64
 	with pickle.loads(Path(sys.argv[1]).read_bytes()) as host:
 		while not host.thread_should_stop:
 			time.sleep(0.2)

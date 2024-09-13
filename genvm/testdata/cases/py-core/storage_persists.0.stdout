@@ -1,2 +1,2 @@
 first
-executed with `Return("")`
+executed with `Return("\x00")`

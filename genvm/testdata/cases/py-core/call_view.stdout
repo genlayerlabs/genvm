@@ -1,4 +1,4 @@
 contract from.main
 contract to.foo
 3
-executed with `Return("")`
+executed with `Return("\x00")`
