@@ -212,19 +212,25 @@ impl Host {
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::GetLeaderNondetResult as u8])?;
         sock.write_all(&call_no.to_le_bytes())?;
-        let mut has_some =[0; 1];
+        let mut has_some = [0; 1];
         sock.read_exact(&mut has_some)?;
         if has_some[0] == host_fns::ResultCode::None as u8 {
             return Ok(None);
         }
         let len = read_u32(sock)?;
         let mut buf = Vec::with_capacity(len as usize);
-        unsafe { buf.set_len(len as usize); }
+        unsafe {
+            buf.set_len(len as usize);
+        }
         sock.read_exact(&mut buf)?;
         let res = match has_some[0] {
-            x if x == host_fns::ResultCode::Error as u8 => vm::RunResult::Error(String::from_utf8(buf)?),
+            x if x == host_fns::ResultCode::Error as u8 => {
+                vm::RunResult::Error(String::from_utf8(buf)?)
+            }
             x if x == host_fns::ResultCode::Return as u8 => vm::RunResult::Return(buf),
-            x if x == host_fns::ResultCode::Rollback as u8 => vm::RunResult::Rollback(String::from_utf8(buf)?),
+            x if x == host_fns::ResultCode::Rollback as u8 => {
+                vm::RunResult::Rollback(String::from_utf8(buf)?)
+            }
             x => anyhow::bail!("host returned incorrect result id {}", x),
         };
         Ok(Some(res))

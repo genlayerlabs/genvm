@@ -6,7 +6,10 @@ use std::{
 use wasmtime::StoreContextMut;
 use wiggle::GuestError;
 
-use crate::{vm::{self, InitActions}, Address, Host, MessageData};
+use crate::{
+    vm::{self, InitActions},
+    Address, Host, MessageData,
+};
 
 use super::{base, common::read_string};
 
@@ -413,7 +416,11 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let eq_principle = read_string(mem, eq_principle)?;
 
         // relaxed reason: here is no actual race possible, only the determinsiitc vm can call it, and it has no concurrency
-        let call_no = self.data_mut().shared_data.nondet_call_no.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let call_no = self
+            .data_mut()
+            .shared_data
+            .nondet_call_no
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         let cow = mem.as_cow(data.buf.as_array(data.buf_len))?;
         let mut entrypoint = Vec::from(b"nondet!");
@@ -440,9 +447,12 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let res = res.map_err(|_e| generated::types::Errno::Io);
         let res = match res {
             Ok(res) => res,
-            Err(e) => return Err(generated::types::Error::trap(
-                ContractError(format!("internal error: nondet vm failed to execute {}", e)).into()
-            )),
+            Err(e) => {
+                return Err(generated::types::Error::trap(
+                    ContractError(format!("internal error: nondet vm failed to execute {}", e))
+                        .into(),
+                ))
+            }
         };
 
         // FIXME we need to handle errors in a better way here: by traps
@@ -452,28 +462,39 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             };
             let leader_res = supervisor
                 .host
-                .get_leader_result(call_no).map_err(|_e| generated::types::Errno::Io)?;
+                .get_leader_result(call_no)
+                .map_err(|_e| generated::types::Errno::Io)?;
 
             let res = match (leader_res, res) {
                 (Some(vm::RunResult::Return(leader_res)), vm::RunResult::Return(res)) => {
-                    equivalence_principle_check(&mut supervisor.host, &eq_principle, leader_res, res).map(vm::RunResult::Return).map_err(|_e| generated::types::Errno::Io)
+                    equivalence_principle_check(
+                        &mut supervisor.host,
+                        &eq_principle,
+                        leader_res,
+                        res,
+                    )
+                    .map(vm::RunResult::Return)
+                    .map_err(|_e| generated::types::Errno::Io)
                 }
                 (None, res) => {
-                    supervisor.host.post_result(call_no, &res).map_err(|_e| generated::types::Errno::Io)?;
+                    supervisor
+                        .host
+                        .post_result(call_no, &res)
+                        .map_err(|_e| generated::types::Errno::Io)?;
                     Ok(res)
                 }
-                (_, _) => return Err(generated::types::Error::trap(
-                    ContractError("mismatch".into()).into(),
-                ))
+                (_, _) => {
+                    return Err(generated::types::Error::trap(
+                        ContractError("mismatch".into()).into(),
+                    ))
+                }
             };
             res?
         };
 
         match res {
             vm::RunResult::Return(r) => self.set_result(r),
-            vm::RunResult::Rollback(r) => {
-                Err(generated::types::Error::trap(Rollback(r).into()))
-            }
+            vm::RunResult::Rollback(r) => Err(generated::types::Error::trap(Rollback(r).into())),
             vm::RunResult::Error(e) => Err(generated::types::Error::trap(
                 Rollback(format!("subvm failed {}", e)).into(),
             )),
@@ -647,7 +668,12 @@ fn vec_from_cstr_libc(str: *const u8) -> Vec<u8> {
     res
 }
 
-fn equivalence_principle_check(_host: &mut Host, _config: &str, leader: Vec<u8>, _cur: Vec<u8>) -> Result<Vec<u8>, ()> {
+fn equivalence_principle_check(
+    _host: &mut Host,
+    _config: &str,
+    leader: Vec<u8>,
+    _cur: Vec<u8>,
+) -> Result<Vec<u8>, ()> {
     // FIXME
     Ok(leader)
 }

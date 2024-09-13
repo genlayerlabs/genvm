@@ -13,7 +13,10 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(data: genlayer_sdk::EssentialGenlayerSdkData, shared_data: Arc<vm::SharedData>) -> Self {
+    pub fn new(
+        data: genlayer_sdk::EssentialGenlayerSdkData,
+        shared_data: Arc<vm::SharedData>,
+    ) -> Self {
         Self {
             preview1: preview1::Context::new(),
             genlayer_sdk: genlayer_sdk::ContextData::new(data, shared_data),

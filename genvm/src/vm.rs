@@ -97,7 +97,10 @@ pub struct WasmContext {
 }
 
 impl WasmContext {
-    fn new(data: crate::wasi::genlayer_sdk::EssentialGenlayerSdkData, shared_data: Arc<SharedData>) -> WasmContext {
+    fn new(
+        data: crate::wasi::genlayer_sdk::EssentialGenlayerSdkData,
+        shared_data: Arc<SharedData>,
+    ) -> WasmContext {
         return WasmContext {
             genlayer_ctx: Arc::new(Mutex::new(wasi::Context::new(data, shared_data))),
         };
