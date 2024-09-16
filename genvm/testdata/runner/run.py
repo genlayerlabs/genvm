@@ -120,7 +120,7 @@ def run(jsonnet_rel_path):
 			)
 		)
 		# here tmp is used because of size limit for sock path
-		mock_sock_path = Path('/tmp', 'genvm-test', jsonnet_rel_path, f'sock{suff}')
+		mock_sock_path = Path('/tmp', 'genvm-test', jsonnet_rel_path.with_suffix(f'.sock{suff}'))
 		mock_sock_path.parent.mkdir(exist_ok=True, parents=True)
 		host = MockHost(
 			path=str(mock_sock_path),

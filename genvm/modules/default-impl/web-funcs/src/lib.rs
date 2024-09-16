@@ -10,13 +10,19 @@ use genvm_modules_common::interfaces::web_functions_api;
 genvm_modules_common::default_base_functions!(web_functions_api, Impl);
 
 struct Impl {
-    session_id: String,
+    session_id: Option<String>,
     config: Config,
 }
 
 impl Drop for Impl {
     fn drop(&mut self) {
-        let _ = ureq::delete(&format!("{}/session/{}", self.config.host, self.session_id)).call();
+        match &self.session_id {
+            Some(session_id) => {
+                let _ =
+                    ureq::delete(&format!("{}/session/{}", self.config.host, session_id)).call();
+            }
+            None => {}
+        }
     }
 }
 
@@ -37,9 +43,13 @@ struct GetWebpageConfig {
 }
 
 impl Impl {
-    fn try_new(conf: &CStr) -> Result<Self> {
-        let config: Config = serde_json::from_str(conf.to_str()?)?;
-        let opened_session_res = ureq::post(&format!("{}/session", &config.host)).send_bytes(
+    fn init_session(&mut self) -> Result<()> {
+        match &self.session_id {
+            Some(_) => return Ok(()),
+            None => {}
+        }
+
+        let opened_session_res = ureq::post(&format!("{}/session", &self.config.host)).send_bytes(
             br#"{
             "capabilities": {
                 "alwaysMatch": {
@@ -66,8 +76,21 @@ impl Impl {
             .and_then(|o| o.get_key_value("sessionId"))
             .and_then(|val| val.1.as_str())
             .ok_or(anyhow::anyhow!("invalid json {}", val))?;
+        self.session_id = Some(session_id.into());
+        Ok(())
+    }
+
+    fn get_session(&self) -> Result<&str> {
+        match &self.session_id {
+            None => unreachable!(),
+            Some(v) => Ok(v),
+        }
+    }
+
+    fn try_new(conf: &CStr) -> Result<Self> {
+        let config: Config = serde_json::from_str(conf.to_str()?)?;
         Ok(Impl {
-            session_id: String::from(session_id),
+            session_id: None,
             config,
         })
     }
@@ -76,15 +99,15 @@ impl Impl {
         let config: GetWebpageConfig = serde_json::from_str(config.to_str()?)?;
         let url = url::Url::parse(url.to_str()?)?;
 
+        self.init_session()?;
+        let session_id = self.get_session()?;
+
         let req = serde_json::Value::Object(serde_json::Map::from_iter(
             [("url".into(), url.as_str().into())].into_iter(),
         ));
         let req = serde_json::to_string(&req)?;
-        let res = ureq::post(&format!(
-            "{}/session/{}/url",
-            self.config.host, &self.session_id
-        ))
-        .send_bytes(req.as_bytes())?;
+        let res = ureq::post(&format!("{}/session/{}/url", self.config.host, session_id))
+            .send_bytes(req.as_bytes())?;
         if res.status() != 200 {
             return Err(anyhow::anyhow!("can't get webpage {:?}", res));
         }
@@ -100,7 +123,7 @@ impl Impl {
 
         let res = ureq::post(&format!(
             "{}/session/{}/execute/sync",
-            self.config.host, &self.session_id
+            self.config.host, session_id
         ))
         .send_bytes(script.as_bytes())?;
         if res.status() != 200 {

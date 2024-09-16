@@ -3,7 +3,11 @@
         {
             "path": "${genvmRoot}/lib/genvm-modules/",
             "id": "llm",
-            "config": {}
+            "config": {
+                "host": "http://127.0.0.1:4443",
+                "provider": "ollama",
+                "model": "tinyllama"
+            }
         },
         {
             "path": "${genvmRoot}/lib/genvm-modules/",
