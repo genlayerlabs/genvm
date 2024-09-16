@@ -66,7 +66,7 @@ class Runner:
 def run_nondet(eq_principle, runner: Runner) -> typing.Any:
 	import pickle
 	res = wasi.run_nondet(json.dumps(eq_principle), pickle.dumps(runner))
-	return pickle.loads(res)
+	return genlayer.calldata.decode(res)
 
 class _ActualStorageMan(_storage.StorageMan):
 	_slots: dict[Address, '_ActualStorageSlot']
