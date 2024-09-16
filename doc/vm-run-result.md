@@ -2,7 +2,7 @@
 
 1. Success --- calldata-encoded data that contract provided
 2. Error --- unrecoverable error that makes entire transaction to not be applied ; internal vm failure or `panic` in solidity terms
-3. (?) Rollback --- error that a guest program explicitly produced and can handle
+3. Rollback --- error that a guest program explicitly produced and can handle
 
 Solidity states following about rollback (revert):
 

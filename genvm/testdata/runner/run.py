@@ -10,7 +10,6 @@ from threading import Lock
 import argparse
 import re
 import sys
-import base64
 import pickle
 import time
 

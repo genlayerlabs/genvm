@@ -129,7 +129,6 @@ class MockHost:
 							else:
 								with open(res, "rb") as f:
 									contents = f.read()
-								sock.sendall(b"\x00")
 								send_int(len(contents))
 								sock.sendall(contents)
 						case Methods.STORAGE_READ:
@@ -140,7 +139,6 @@ class MockHost:
 							le = recv_int()
 							res, gas = self.storage.read(gas_before, account, slot, index, le)
 							assert len(res) == le
-							sock.sendall(b"\x00")
 							send_int(gas, 8)
 							sock.sendall(res)
 						case Methods.STORAGE_WRITE:
@@ -151,7 +149,6 @@ class MockHost:
 							le = recv_int()
 							read_exact(le)
 							gas = self.storage.write(gas_before, account, slot, index, memoryview(buf)[:le])
-							sock.sendall(b"\x00")
 							send_int(gas, 8)
 						case Methods.CONSUME_RESULT:
 							read_result()

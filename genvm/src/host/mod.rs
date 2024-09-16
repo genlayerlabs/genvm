@@ -1,9 +1,6 @@
 mod host_fns;
 
-use std::{
-    borrow::BorrowMut,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -61,15 +58,6 @@ impl Host {
         };
         Ok(Host { sock })
     }
-}
-
-fn read_is_ok(sock: &mut dyn Sock, dbg: &str) -> Result<()> {
-    let mut is_ok = [0; 1];
-    sock.borrow_mut().read_exact(&mut is_ok)?;
-    if is_ok[0] != 0 {
-        anyhow::bail!("host error {} at {}", is_ok[0], dbg);
-    }
-    Ok(())
 }
 
 fn read_u32(sock: &mut dyn Sock) -> Result<u32> {
@@ -131,10 +119,7 @@ impl Host {
         sock.write_all(&[host_fns::Methods::GetCode as u8])?;
         sock.write_all(&account.raw())?;
 
-        read_is_ok(sock, "get_code")?;
         let len = read_u32(sock)? as usize;
-
-        // TODO rewrite with nightly new_uninit_slice
         let mut res = Vec::with_capacity(len);
         unsafe { res.set_len(len) };
         sock.read_exact(&mut res)?;
@@ -159,8 +144,6 @@ impl Host {
         sock.write_all(&slot.raw())?;
         sock.write_all(&index.to_le_bytes())?;
         sock.write_all(&(buf.len() as u32).to_le_bytes())?;
-
-        read_is_ok(sock, "storage_read")?;
 
         let new_gas = read_u64(sock)?;
         *remaing_gas = new_gas;
@@ -188,8 +171,6 @@ impl Host {
         sock.write_all(&index.to_le_bytes())?;
         sock.write_all(&(buf.len() as u32).to_le_bytes())?;
         sock.write_all(buf)?;
-
-        read_is_ok(sock, "storage_write")?;
 
         let new_gas = read_u64(sock)?;
         *remaing_gas = new_gas;
