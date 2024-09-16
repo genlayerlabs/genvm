@@ -13,6 +13,9 @@ To run a genvm, one must start a genvm process with following arguments:
   }
   ```
 
+## How node receives code, message, ... from user
+It is for node to decide. GenVM knows only about the calldata (and potentially message) and nothing else
+
 ## Storage format
 Storage can be seen as a mapping from account address to slot address to linear memory. It supports two operations: read and write. Reading undefined memory must return zeroes
 
