@@ -8,6 +8,7 @@ if __name__ == '__main__':
 	sys.path.append(str(root_dir.joinpath('sdk-python', 'py')))
 
 import genlayer.types
+import genlayer.calldata
 
 import socket
 import threading
@@ -46,11 +47,19 @@ class MockHost:
 	sock: socket.socket | None
 	storage: MockStorage | None
 
-	def __init__(self, *, path: str, calldata: bytes, storage_path_pre: Path, storage_path_post: Path, codes: dict[Address, typing.Any]):
+	def __init__(self, *,
+			path: str,
+			calldata: bytes,
+			storage_path_pre: Path,
+			storage_path_post: Path,
+			codes: dict[Address, typing.Any],
+			leader_nondet,
+		):
 		self.path = path
 		self.calldata = calldata
 		self.storage_path_pre = storage_path_pre
 		self.storage_path_post = storage_path_post
+		self.leader_nondet = leader_nondet
 		self.codes = codes
 		self.storage = None
 		self.sock = None
@@ -120,7 +129,6 @@ class MockHost:
 							else:
 								with open(res, "rb") as f:
 									contents = f.read()
-								sock.sendall(b"\x00")
 								send_int(len(contents))
 								sock.sendall(contents)
 						case Methods.STORAGE_READ:
@@ -131,7 +139,6 @@ class MockHost:
 							le = recv_int()
 							res, gas = self.storage.read(gas_before, account, slot, index, le)
 							assert len(res) == le
-							sock.sendall(b"\x00")
 							send_int(gas, 8)
 							sock.sendall(res)
 						case Methods.STORAGE_WRITE:
@@ -142,14 +149,23 @@ class MockHost:
 							le = recv_int()
 							read_exact(le)
 							gas = self.storage.write(gas_before, account, slot, index, memoryview(buf)[:le])
-							sock.sendall(b"\x00")
 							send_int(gas, 8)
 						case Methods.CONSUME_RESULT:
 							read_result()
 							return
 						case Methods.GET_LEADER_NONDET_RESULT:
-							recv_int() # call no
-							sock.sendall(bytes([ResultCode.NONE]))
+							call_no = recv_int() # call no
+							if self.leader_nondet is None:
+								sock.sendall(bytes([ResultCode.NONE]))
+							else:
+								res = self.leader_nondet[call_no]
+								if res["ok"]:
+									sock.sendall(bytes([ResultCode.RETURN]))
+								else:
+									sock.sendall(bytes([ResultCode.ROLLBACK]))
+								data = genlayer.calldata.encode(res["value"])
+								send_int(len(data))
+								sock.sendall(data)
 						case Methods.POST_NONDET_RESULT:
 							recv_int() # call no
 							read_result()

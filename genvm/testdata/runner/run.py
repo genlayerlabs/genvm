@@ -10,7 +10,6 @@ from threading import Lock
 import argparse
 import re
 import sys
-import base64
 import pickle
 import time
 
@@ -46,6 +45,7 @@ root_tmp_dir = root_dir.joinpath('build', 'genvm-testdata-out')
 arg_parser = argparse.ArgumentParser("genvm-test-runner")
 arg_parser.add_argument('--gen-vm', metavar='EXE', default=str(Path(os.getenv("GENVM", root_dir.joinpath('build', 'out', 'bin', 'genvm')))))
 arg_parser.add_argument('--filter', metavar='REGEX', default='.*')
+arg_parser.add_argument('--show-steps', default=False, action='store_true')
 args_parsed = arg_parser.parse_args()
 GENVM = Path(args_parsed.gen_vm)
 FILE_RE = re.compile(args_parsed.filter)
@@ -71,10 +71,10 @@ def run(jsonnet_rel_path):
 		return {
 			"category": "skip",
 		}
-	conf = _jsonnet.evaluate_file(str(jsonnet_path))
-	conf = json.loads(conf)
-	if not isinstance(conf, list):
-		conf = [conf]
+	jsonnet_conf = _jsonnet.evaluate_file(str(jsonnet_path))
+	jsonnet_conf = json.loads(jsonnet_conf)
+	if not isinstance(jsonnet_conf, list):
+		jsonnet_conf = [jsonnet_conf]
 	seq_tmp_dir = root_tmp_dir.joinpath(jsonnet_rel_path).with_suffix('')
 
 	import shutil
@@ -85,8 +85,8 @@ def run(jsonnet_rel_path):
 	with open(empty_storage, 'wb') as f:
 		pickle.dump(MockStorage(), f)
 
-	def step_to_run_config(i, conf, total_conf):
-		conf = pickle.loads(pickle.dumps(conf))
+	def step_to_run_config(i, single_conf_form_file, total_conf):
+		single_conf_form_file = pickle.loads(pickle.dumps(single_conf_form_file))
 		if total_conf == 1:
 			my_tmp_dir = seq_tmp_dir
 			suff = ''
@@ -100,10 +100,10 @@ def run(jsonnet_rel_path):
 		post_storage = my_tmp_dir.joinpath('storage.pickle')
 		my_tmp_dir.mkdir(exist_ok=True, parents=True)
 
-		conf["vars"]["jsonnetDir"] = str(jsonnet_path.parent)
+		single_conf_form_file["vars"]["jsonnetDir"] = str(jsonnet_path.parent)
 
-		conf = unfold_conf(conf, conf["vars"])
-		for acc_val in conf["accounts"].values():
+		single_conf_form_file = unfold_conf(single_conf_form_file, single_conf_form_file["vars"])
+		for acc_val in single_conf_form_file["accounts"].values():
 			code_path = acc_val.get("code", None)
 			if code_path is None:
 				continue
@@ -114,35 +114,38 @@ def run(jsonnet_rel_path):
 
 		calldata_bytes = calldata.encode(
 			eval(
-				conf["calldata"],
+				single_conf_form_file["calldata"],
 				globals(),
-				conf["vars"].copy()
+				single_conf_form_file["vars"].copy()
 			)
 		)
-		mock_sock_path = my_tmp_dir.joinpath('mock.sock')
+		# here tmp is used because of size limit for sock path
+		mock_sock_path = Path('/tmp', 'genvm-test', jsonnet_rel_path, f'sock{suff}')
+		mock_sock_path.parent.mkdir(exist_ok=True, parents=True)
 		host = MockHost(
 			path=str(mock_sock_path),
 			calldata=calldata_bytes,
 			codes={
 				Address(k): v
-				for k, v in conf["accounts"].items()
+				for k, v in single_conf_form_file["accounts"].items()
 			},
 			storage_path_post=post_storage,
-			storage_path_pre=pre_storage
+			storage_path_pre=pre_storage,
+			leader_nondet=single_conf_form_file.get('leader_nondet', None)
 		)
 		mock_host_path = my_tmp_dir.joinpath('mock-host.pickle')
 		mock_host_path.write_bytes(pickle.dumps(host))
 		return {
 			"host": host,
-			"message": conf["message"],
+			"message": single_conf_form_file["message"],
 			"tmp_dir": my_tmp_dir,
 			"expected_output": jsonnet_path.with_suffix(f'{suff}.stdout'),
 			"suff": suff,
 			"mock_host_path": mock_host_path,
 		}
 	run_configs = [
-		step_to_run_config(i, conf_i, len(conf))
-		for i, conf_i in enumerate(conf)
+		step_to_run_config(i, conf_i, len(jsonnet_conf))
+		for i, conf_i in enumerate(jsonnet_conf)
 	]
 	for config in run_configs:
 		tmp_dir = config["tmp_dir"]
@@ -211,7 +214,7 @@ def prnt(path, res):
 		if "exc" in res and not isinstance(res["exc"], subprocess.CalledProcessError):
 			import traceback
 			traceback.print_exception(res["exc"])
-		if res['category'] == "fail" and "steps" in res:
+		if res['category'] == "fail" and "steps" in res or args_parsed.show_steps:
 			import shlex
 			print("\tsteps to reproduce:")
 			for line in res["steps"]:
@@ -245,6 +248,7 @@ with cfutures.ThreadPoolExecutor(max_workers=(os.cpu_count() or 1)) as executor:
 	if len(files) > 0:
 		# NOTE this is needed to cache wasm compilation result
 		first, *files = files
+		print('running the first test, it can take a while..')
 		process_result(first, lambda: run(first))
 		future2path = {executor.submit(run, path): path for path in files}
 		for future in cfutures.as_completed(future2path):

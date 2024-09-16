@@ -19,3 +19,8 @@ def retn():
 @gsdk.public
 def retn_ser():
     return gsdk.AlreadySerializedResult(b"123")
+
+@gsdk.public
+def det_viol():
+    import json
+    gsdk.wasi.get_webpage(json.dumps({"mode": "text"}), "http://127.0.0.1:4242/hello.html")

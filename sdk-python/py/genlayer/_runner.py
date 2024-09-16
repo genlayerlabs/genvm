@@ -27,9 +27,8 @@ def run(mod):
 		_give_result(res)
 	elif entrypoint.startswith(NONDET):
 		import pickle
-		import base64
-		res = pickle.loads(entrypoint[len(NONDET):])
-		res = res.run()
-		wasi.contract_return(pickle.dumps(res))
+		runner = pickle.loads(entrypoint[len(NONDET):])
+		res = runner.run()
+		_give_result(res)
 	else:
 		raise Exception(f"unknown entrypoint {entrypoint}")

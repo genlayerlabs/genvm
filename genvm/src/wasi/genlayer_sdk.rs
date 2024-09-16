@@ -1,3 +1,4 @@
+use core::str;
 use std::{
     ffi::{CStr, CString},
     sync::{Arc, Mutex},
@@ -452,13 +453,18 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
 
             match (leader_res, res) {
                 (Some(vm::RunOk::Return(leader_res)), vm::RunOk::Return(res)) => {
-                    equivalence_principle_check(
-                        &mut supervisor.host,
-                        &eq_principle,
-                        decode_nondet_return(&leader_res)?,
-                        decode_nondet_return(&res)?,
-                    )
-                    .map(|_| vm::RunOk::Return(leader_res))
+                    // handle two null's
+                    if leader_res == b"\x00" && res == b"\x00" {
+                        Ok(vm::RunOk::Return(leader_res))
+                    } else {
+                        equivalence_principle_check(
+                            &mut supervisor.host,
+                            &eq_principle,
+                            decode_nondet_return(&leader_res)?,
+                            decode_nondet_return(&res)?,
+                        )
+                        .map(|_| vm::RunOk::Return(leader_res))
+                    }
                 }
                 (Some(vm::RunOk::Rollback(leader_res)), vm::RunOk::Rollback(res)) => {
                     equivalence_principle_check(
@@ -640,8 +646,40 @@ fn vec_from_cstr_libc(str: *const u8) -> Vec<u8> {
     res
 }
 
-fn decode_nondet_return<'a>(_cur: &'a [u8]) -> Result<&'a str, anyhow::Error> {
-    todo!()
+fn decode_nondet_return<'a>(cur: &'a [u8]) -> Result<&'a str, anyhow::Error> {
+    if cur.is_empty() {
+        anyhow::bail!("invalid nondet return ; expected calldata encoded string; got empty")
+    }
+
+    let mut len: u64 = 0u64;
+    let mut off = 0u64;
+
+    let mut idx = 0usize;
+    while idx < cur.len() {
+        let byte = cur[idx];
+        idx += 1;
+        len |= (byte as u64 & 0x7f) << off;
+        off += 7;
+        if byte & 0x80 == 0 {
+            break;
+        }
+        if off >= 40 {
+            anyhow::bail!("invalid nondet return ; string length is too big")
+        }
+    }
+    let typ = len & 0x7;
+    len >>= 3;
+    if typ != 5 {
+        anyhow::bail!("invalid nondet return ; expected string")
+    }
+    if len > u32::max_value() as u64 {
+        anyhow::bail!("invalid nondet return ; string length is too big")
+    }
+    let len = len as u32;
+    if idx + len as usize != cur.len() {
+        anyhow::bail!("invalid nondet return ; string size is encoded incorrectly")
+    }
+    Ok(str::from_utf8(&cur[idx..])?)
 }
 
 #[derive(Deserialize)]

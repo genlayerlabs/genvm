@@ -6,7 +6,7 @@ mod implementation {
     use wasm_encoder::*;
 
     fn patch_name_subs<T: ?Sized + Reencode>(
-        reencoder: &mut T,
+        _reencoder: &mut T,
         module: &mut Module,
         section: wasmparser::Subsections<wasmparser::Name>,
         new_name: &str,

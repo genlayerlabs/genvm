@@ -71,7 +71,7 @@ def encode(x: Any) -> bytes:
 	impl(x)
 	return bytes(mem)
 
-def decode(mem: bytes | memoryview) -> Any:
+def decode(mem: bytes | memoryview) -> Any: # type: ignore
 	mem: memoryview = memoryview(mem)
 	def read_uleb128() -> int:
 		nonlocal mem
@@ -129,4 +129,7 @@ def decode(mem: bytes | memoryview) -> Any:
 				ret[key] = impl()
 			return ret
 		raise Exception(f'invalid type {typ}')
-	return impl()
+	res = impl()
+	if len(mem) != 0:
+		raise Exception(f'unparsed end {bytes(mem[:5])}...')
+	return res
