@@ -49,7 +49,9 @@ impl Impl {
             None => {}
         }
 
-        let opened_session_res = ureq::post(&format!("{}/session", &self.config.host)).send_bytes(
+        let opened_session_res = ureq::post(&format!("{}/session", &self.config.host))
+        .set("Content-Type", "application/json; charset=utf-8")
+        .send_bytes(
             br#"{
             "capabilities": {
                 "alwaysMatch": {
@@ -107,6 +109,7 @@ impl Impl {
         ));
         let req = serde_json::to_string(&req)?;
         let res = ureq::post(&format!("{}/session/{}/url", self.config.host, session_id))
+            .set("Content-Type", "application/json; charset=utf-8")
             .send_bytes(req.as_bytes())?;
         if res.status() != 200 {
             return Err(anyhow::anyhow!("can't get webpage {:?}", res));
@@ -125,6 +128,7 @@ impl Impl {
             "{}/session/{}/execute/sync",
             self.config.host, session_id
         ))
+        .set("Content-Type", "application/json; charset=utf-8")
         .send_bytes(script.as_bytes())?;
         if res.status() != 200 {
             return Err(anyhow::anyhow!("can't get webpage contents {:?}", res));
