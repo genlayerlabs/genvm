@@ -49,8 +49,8 @@ jobs:
         with:
           header: "Semgrep Scan Results"
           message: |
-            Semgrep OSS ${{ github.sha }} finished scanning.
-            Download the Semgrep OSS scan results from [here](${{needs.semgrep.outputs.artifact_url}})
-            Please note that files only stay for around 90 days!
+            The Semgrep OSS scan for commit ${{ github.sha }} is complete.
+            You can download the scan results from [this link.](${{needs.semgrep.outputs.artifact_url}})
+            Please note that the files will be available for approximately 90 days!
 
     if: github.event_name == 'pull_request'
