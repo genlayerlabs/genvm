@@ -42,13 +42,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Get artifact download link
-        run: echo "Download the Semgrep scan results from [here](${{ steps.upload-artifact.outputs.artifact-url }})"
+        run: "Download the Semgrep scan results from [here](${{needs.semgrep.steps.upload-artifact.outputs.artifact-url}})"
 
       # Comment the link to the PR
       - name: Add a comment with the artifact link
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: "Semgrep Scan Results"
-          message: "Download the Semgrep scan results from [here](${{ steps.upload-artifact.outputs.artifact-url }})"
+          message: "Download the Semgrep scan results from [here](${{needs.semgrep.steps.upload-artifact.outputs.artifact-url}})"
 
     if: github.event_name == 'pull_request'
