@@ -313,7 +313,7 @@ impl Supervisor {
             &self.non_det_engine
         };
 
-        let mut store = Store::new(
+        let store = Store::new(
             &engine,
             self.fuel_desc.clone(),
             WasmContext::new(data, self.shared_data.clone()),

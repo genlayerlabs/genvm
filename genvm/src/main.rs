@@ -1,5 +1,3 @@
-use std::io::{stderr, Write};
-
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
 

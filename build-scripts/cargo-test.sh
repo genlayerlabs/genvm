@@ -9,7 +9,10 @@ cd "$SCRIPT_DIR/.."
 for dir in $(git ls-files | grep -P 'Cargo\.toml')
 do
     pushd "$(dirname -- $dir)" 2> /dev/null > /dev/null
-    echo "=== testing $dir ==="
-    cargo test --tests
+    if test -d "tests"
+    then
+        echo "=== testing $dir ==="
+        cargo test --tests
+    fi
     popd  2> /dev/null > /dev/null
 done
