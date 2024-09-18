@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Get artifact download link
-        run: "Download the Semgrep scan results from [here](${{needs.semgrep.steps.upload-artifact.outputs.artifact-url}})"
+        run: echo "Download the Semgrep scan results from [here](${{needs.semgrep.steps.upload-artifact.outputs.artifact-url}})"
 
       # Comment the link to the PR
       - name: Add a comment with the artifact link
