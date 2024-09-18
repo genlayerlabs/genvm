@@ -30,17 +30,32 @@ jobs:
       - id: semgrep_scan
         run: semgrep scan --config auto --text > semgrep.txt
 
-      - name: DEBUG
-        run: cat semgrep.txt
+      - name: Upload semgrep.txt
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: semgrep.txt
 
-      - name: Install GitHub CLI
-        run: sudo apt install -y gh
+  create_comment:
+    name: Create comment with semgrep.txt scan results
+    needs: semgrep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - run: gh issue comment $ISSUE --body "Semgrep scan results:"
+      - name: Download semgrep.txt
+        uses: actions/download-artifact@v4
+        with:
+          name: semgrep-results
+          path: .
+
+      - name: Add a comment to the PR
+        uses: marocchino/sticky-pull-request-comment@v2
         if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE: ${{ github.event.issue.html_url }}
+        with:
+          header: "Semgrep Scan Results"
+          path: semgrep.txt
+
 
       # - name: Post SARIF Summary in the Pull Request
       #   run: |
