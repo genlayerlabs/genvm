@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - id: semgrep_scan
-        run: semgrep scan --metrics=off --config auto --text > semgrep.txt
+        run: semgrep scan --config auto --text > semgrep.txt
 
       - name: Upload semgrep.txt
         uses: actions/upload-artifact@v4
