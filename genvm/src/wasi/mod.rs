@@ -9,7 +9,7 @@ pub mod preview1;
 
 pub struct Context {
     pub preview1: preview1::Context,
-    pub genlayer_sdk: genlayer_sdk::ContextData,
+    pub genlayer_sdk: genlayer_sdk::Context,
 }
 
 impl Context {
@@ -19,7 +19,7 @@ impl Context {
     ) -> Self {
         Self {
             preview1: preview1::Context::new(),
-            genlayer_sdk: genlayer_sdk::ContextData::new(data, shared_data),
+            genlayer_sdk: genlayer_sdk::Context::new(data, shared_data),
         }
     }
 }
