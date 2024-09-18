@@ -123,12 +123,15 @@ impl WasmContext {
 
 pub struct SharedData {
     pub nondet_call_no: AtomicU32,
+    // rust doesn't have aliasing Arc constructor
+    pub fuel_descriptor: Arc<wasmtime::FuelDescriptor>,
 }
 
 impl SharedData {
-    fn new() -> Self {
+    fn new(total_gas: u64) -> Self {
         Self {
             nondet_call_no: 0.into(),
+            fuel_descriptor: Arc::new(wasmtime::FuelDescriptor::new(total_gas)),
         }
     }
 }
@@ -147,6 +150,7 @@ pub struct Supervisor {
     pub modules: Modules,
     pub host: crate::Host,
     pub shared_data: Arc<SharedData>,
+    pub fuel_desc: Arc<wasmtime::FuelDescriptor>,
 
     det_engine: Engine,
     non_det_engine: Engine,
@@ -204,7 +208,7 @@ impl VM {
 }
 
 impl Supervisor {
-    pub fn new(modules: Modules, host: crate::Host) -> Result<Self> {
+    pub fn new(modules: Modules, total_gas: u64, host: crate::Host) -> Result<Self> {
         let mut base_conf = wasmtime::Config::default();
         base_conf.cranelift_opt_level(wasmtime::OptLevel::None);
         //base_conf.cranelift_opt_level(wasmtime::OptLevel::Speed);
@@ -249,6 +253,8 @@ impl Supervisor {
 
         let det_engine = Engine::new(&det_conf)?;
         let non_det_engine = Engine::new(&non_det_conf)?;
+        let shared_data = Arc::new(SharedData::new(total_gas));
+        let fuel_desc = shared_data.fuel_descriptor.clone();
         Ok(Self {
             det_engine,
             non_det_engine,
@@ -256,7 +262,8 @@ impl Supervisor {
             runner_cache: runner::RunnerReaderCache::new(),
             modules,
             host,
-            shared_data: Arc::new(SharedData::new()),
+            shared_data,
+            fuel_desc,
         })
     }
 
@@ -306,9 +313,11 @@ impl Supervisor {
             &self.non_det_engine
         };
 
-        let init_gas = data.message_data.gas;
-        let mut store = Store::new(&engine, WasmContext::new(data, self.shared_data.clone()));
-        store.set_fuel(init_gas)?;
+        let mut store = Store::new(
+            &engine,
+            self.fuel_desc.clone(),
+            WasmContext::new(data, self.shared_data.clone()),
+        );
 
         let mut linker = Linker::new(engine);
         linker.allow_unknown_exports(false);

@@ -35,12 +35,12 @@ fn main() -> Result<()> {
     let message: genvm::MessageData = serde_json::from_str(&args.message)?;
 
     let host = genvm::Host::new(&args.host)?;
-    let supervisor = genvm::create_supervisor(&args.config, host)?;
+    let supervisor = genvm::create_supervisor(&args.config, message.gas, host)?;
     let res = genvm::run_with(message, supervisor);
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,
         (Err(e), PrintOption::Shrink) => {
-            let _ = stderr().write(format!("shrinked error is {}\n", e).as_bytes());
+            eprintln!("shrinked error is {}\n", e);
             Some("Error(\"\")".into())
         }
         (Err(e), _) => Some(format!("Error({})", e)),

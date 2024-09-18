@@ -235,18 +235,6 @@ impl From<serde_json::Error> for generated::types::Error {
 }
 
 impl<'a, T> Mapped<'a, T> {
-    fn consume_fuel(&mut self, gas_consumed: u64) -> Result<(), generated::types::Error> {
-        let old_fuel = self
-            .stor
-            .get_fuel()
-            .map_err(|_e| generated::types::Errno::Io)?;
-        let gas_consumed = gas_consumed.min(old_fuel).max(1);
-        self.stor
-            .set_fuel(old_fuel - gas_consumed)
-            .map_err(|_e| generated::types::Errno::Io)?;
-        Ok(())
-    }
-
     fn set_result(
         &mut self,
         data: Vec<u8>,
@@ -256,7 +244,10 @@ impl<'a, T> Mapped<'a, T> {
         let res: u32 = self.data_mut().result.len().try_into()?;
         let mut gas_consumed: u64 = res.into();
         gas_consumed /= 32;
-        self.consume_fuel(gas_consumed)?;
+        self.data_mut()
+            .shared_data
+            .fuel_descriptor
+            .consume_fuel(gas_consumed);
         Ok(res)
     }
 
@@ -354,14 +345,16 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             .stor
             .get_fuel()
             .map_err(|_e| generated::types::Errno::Io)?;
+        let init_fuel = fuel;
         let res = supervisor.modules.web.get_webpage(
             &mut fuel,
             config_str.as_bytes().as_ptr(),
             url_str.as_bytes().as_ptr(),
         );
-        self.stor
-            .set_fuel(fuel)
-            .map_err(|_e| generated::types::Errno::Io)?;
+        self.data_mut()
+            .shared_data
+            .fuel_descriptor
+            .consume_fuel(init_fuel - fuel);
         if res.err != 0 {
             return Err(generated::types::Errno::Io.into());
         }
@@ -390,14 +383,16 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
             .stor
             .get_fuel()
             .map_err(|_e| generated::types::Errno::Io)?;
+        let init_fuel = fuel;
         let res = supervisor.modules.llm.call_llm(
             &mut fuel,
             config_str.as_bytes().as_ptr(),
             prompt_str.as_bytes().as_ptr(),
         );
-        self.stor
-            .set_fuel(fuel)
-            .map_err(|_e| generated::types::Errno::Io)?;
+        self.data_mut()
+            .shared_data
+            .fuel_descriptor
+            .consume_fuel(init_fuel - fuel);
         if res.err != 0 {
             return Err(generated::types::Errno::Io.into());
         }
@@ -560,14 +555,18 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
-        let mut rem_gas = self
+        let mut fuel = self
             .stor
             .get_fuel()
             .map_err(|_e| generated::types::Errno::Io)?;
+        let init_fuel = fuel;
         let res = supervisor
             .host
-            .storage_read(&mut rem_gas, account, slot, index, &mut vec);
-        let _ = self.stor.set_fuel(rem_gas);
+            .storage_read(&mut fuel, account, slot, index, &mut vec);
+        self.data_mut()
+            .shared_data
+            .fuel_descriptor
+            .consume_fuel(init_fuel - fuel);
         res.map_err(|_e| generated::types::Errno::Io)?;
         mem.copy_from_slice(&vec, dest_buf)?;
         Ok(())
@@ -596,14 +595,18 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
-        let mut rem_gas = self
+        let mut fuel = self
             .stor
             .get_fuel()
             .map_err(|_e| generated::types::Errno::Io)?;
+        let init_fuel = fuel;
         let res = supervisor
             .host
-            .storage_write(&mut rem_gas, account, slot, index, &buf);
-        let _ = self.stor.set_fuel(rem_gas);
+            .storage_write(&mut fuel, account, slot, index, &buf);
+        self.data_mut()
+            .shared_data
+            .fuel_descriptor
+            .consume_fuel(init_fuel - fuel);
         res.map_err(|_e| generated::types::Errno::Io)?;
         Ok(())
     }
@@ -624,16 +627,7 @@ impl<T> Mapped<'_, T> {
             let instance = supervisor.apply_actions(&mut vm)?;
             (vm, instance)
         };
-
-        let pre_fuel = self.stor.get_fuel()?;
-        vm.store.set_fuel(pre_fuel)?;
-
-        let res = vm.run(&instance);
-
-        let remaining_fuel = vm.store.get_fuel().unwrap_or(0);
-        let _ = self.stor.set_fuel(remaining_fuel);
-
-        res
+        vm.run(&instance)
     }
     //EssentialGenlayerSdkData
 }
