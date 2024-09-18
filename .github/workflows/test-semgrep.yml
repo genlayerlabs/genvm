@@ -44,14 +44,13 @@ jobs:
     needs: semgrep
     runs-on: ubuntu-latest
     steps:
-      - name: Get artifact download link
-        run: echo "Download the Semgrep scan results from [here](${{needs.semgrep.outputs.artifact_url}})"
-
-      # Comment the link to the PR
       - name: Add a comment with the artifact link
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: "Semgrep Scan Results"
-          message: "Download the Semgrep scan results from [here](${{needs.semgrep.outputs.artifact_url}})"
+          message: |
+          Semgrep OSS ${{ github.sha }} finished scanning.
+          Download the Semgrep OSS scan results from [here](${{needs.semgrep.outputs.artifact_url}})
+          Please note that files only stay for around 90 days!
 
     if: github.event_name == 'pull_request'
