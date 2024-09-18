@@ -30,6 +30,22 @@ jobs:
       - id: semgrep_scan
         run: semgrep scan --config auto --sarif > semgrep.sarif
 
+      - name: DEBUG
+        run: cat semgrep.sarif
+
+      - name: Post SARIF Summary in the Pull Request
+        if: github.event_name == 'pull_request'
+        run: |
+          # Limit the length of the comment to avoid exceeding GitHub's max limit of 65536 characters
+          SUMMARY=$(head -c 65000 semgrep.sarif)  # Trim SARIF content to 65,000 characters
+          echo "$SUMMARY" > truncated_sarif.txt
+          # Create a comment linking to the full SARIF file
+          echo "Semgrep SARIF scan completed. [Download full SARIF report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts) for detailed results." > summary_comment.txt
+          echo "" >> summary_comment.txt
+          echo "Summary of SARIF file:" >> summary_comment.txt
+          cat truncated_sarif.txt >> summary_comment.txt
+          gh pr comment ${{ github.event.number }} --body "$(cat summary_comment.txt)"
+
       - name: Post SARIF findings in the pull request
         if: github.event_name == 'pull_request'
         uses: sett-and-hive/sarif-to-comment-action@v2.0.1
@@ -39,5 +55,5 @@ jobs:
           branch: ${{ github.head_ref }}
           pr-number: ${{ github.event.number }}
           sarif-file: semgrep.sarif
-          title: My security issue
+          title: Semgrep scan results
           dry-run: false
