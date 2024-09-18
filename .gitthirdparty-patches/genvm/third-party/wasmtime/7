@@ -6,9 +6,35 @@ Subject: [PATCH] Revert "add ability to pass storage context to component,
 
 This reverts commit 55b4035eb18daa42cc6d3eb1906799a0b5aa8b5e.
 ---
+ crates/wasmtime/src/runtime/store.rs   |  7 +++-
  crates/wiggle/generate/src/wasmtime.rs | 58 --------------------------
- 1 file changed, 58 deletions(-)
+ 2 files changed, 5 insertions(+), 60 deletions(-)
 
+diff --git a/crates/wasmtime/src/runtime/store.rs b/crates/wasmtime/src/runtime/store.rs
+index a84233b..32c736c 100644
+--- a/crates/wasmtime/src/runtime/store.rs
++++ b/crates/wasmtime/src/runtime/store.rs
+@@ -213,8 +213,10 @@ impl CallHook {
+ 
+ /// Struct to share fuel across storages
+ pub struct FuelDescriptor {
+-    injected: AtomicI64,
+-    reserve: Mutex<u64>,
++    /// injected (negative goes to zero)
++    pub injected: AtomicI64,
++    /// reserve
++    pub reserve: Mutex<u64>,
+ }
+ 
+ impl FuelDescriptor {
+@@ -248,6 +250,7 @@ impl FuelDescriptor {
+         // can we do better?
+         let Ok(reserved) = self.reserve.lock() else { panic!("can't lock fuel") };
+         let a = self.injected.load(core::sync::atomic::Ordering::SeqCst);
++        let a = a.min(0);
+         (-a) as u64 + *reserved
+     }
+ 
 diff --git a/crates/wiggle/generate/src/wasmtime.rs b/crates/wiggle/generate/src/wasmtime.rs
 index feefb5e..cb488f9 100644
 --- a/crates/wiggle/generate/src/wasmtime.rs
