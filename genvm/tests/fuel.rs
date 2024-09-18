@@ -10,6 +10,15 @@ impl FakeFuel {
     }
 }
 
+fn consume_fuel_as_rt(desc: &wasmtime::FuelDescriptor, amount: i64) {
+    let old_val = desc
+        .injected
+        .fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
+    if old_val + amount > 0 {
+        desc.refuel();
+    }
+}
+
 fn fuel_fuzz_impl(consume_baseline: u64) {
     for i in 0u64..1000 {
         let initial_fuel = (1u64 << (30 + i % 5)) + i * 127;
@@ -19,7 +28,7 @@ fn fuel_fuzz_impl(consume_baseline: u64) {
         while fake_fuel.get_fuel() > 0 {
             assert_eq!(fake_fuel.get_fuel(), fuel.get_fuel());
             let to_consume = (1u64 << (consume_baseline + i % 3)) + i * 53;
-            fuel.consume_fuel(to_consume);
+            consume_fuel_as_rt(&fuel, to_consume.try_into().unwrap());
             fake_fuel.consume_fuel(to_consume);
         }
         assert_eq!(fake_fuel.get_fuel(), fuel.get_fuel());
