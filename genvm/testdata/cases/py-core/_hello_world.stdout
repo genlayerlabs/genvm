@@ -1,1 +1,2 @@
-executed with `Error("")`
+1
+executed with `Return("\x00")`

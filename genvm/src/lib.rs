@@ -37,7 +37,11 @@ struct ConfigSchema {
     modules: Vec<ConfigModule>,
 }
 
-pub fn create_supervisor(config_path: &String, host: Host) -> Result<Arc<Mutex<vm::Supervisor>>> {
+pub fn create_supervisor(
+    config_path: &String,
+    total_gas: u64,
+    host: Host,
+) -> Result<Arc<Mutex<vm::Supervisor>>> {
     use plugin_loader::llm_functions_api::Loader as _;
     use plugin_loader::web_functions_api::Loader as _;
 
@@ -88,7 +92,9 @@ pub fn create_supervisor(config_path: &String, host: Host) -> Result<Arc<Mutex<v
         _ => anyhow::bail!("some of required modules is not supplied"),
     };
 
-    Ok(Arc::new(Mutex::new(vm::Supervisor::new(modules, host)?)))
+    Ok(Arc::new(Mutex::new(vm::Supervisor::new(
+        modules, total_gas, host,
+    )?)))
 }
 
 pub fn run_with(

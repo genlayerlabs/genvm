@@ -5,7 +5,6 @@ use std::{
 };
 
 use serde::Deserialize;
-use wasmtime::StoreContextMut;
 use wiggle::GuestError;
 
 use crate::{
@@ -23,7 +22,7 @@ pub struct EssentialGenlayerSdkData {
     pub init_actions: InitActions,
 }
 
-pub struct ContextData {
+pub struct Context {
     pub data: EssentialGenlayerSdkData,
     pub shared_data: Arc<vm::SharedData>,
 
@@ -69,7 +68,7 @@ impl generated::types::Bytes {
     }
 }
 
-impl ContextData {
+impl Context {
     pub fn new(data: EssentialGenlayerSdkData, shared_data: Arc<vm::SharedData>) -> Self {
         Self {
             data,
@@ -86,74 +85,11 @@ impl wiggle::GuestErrorType for generated::types::Errno {
     }
 }
 
-trait MappedVtable<T> {
-    fn get_data_mut<'a, 'b>(&self, store: &'b mut StoreContextMut<'a, T>) -> &'b mut ContextData;
-}
-
-struct Mapped<'a, T> {
-    stor: StoreContextMut<'a, T>,
-    vtable: Arc<dyn MappedVtable<T>>,
-}
-
-impl<'a, T> Mapped<'a, T> {
-    fn data_mut<'loc>(&'loc mut self) -> &'loc mut ContextData {
-        self.vtable.get_data_mut(&mut self.stor)
-    }
-
-    fn read<'loc, R>(&'loc mut self, f: impl Fn(&ContextData) -> R) -> R {
-        let data: &ContextData = self.vtable.get_data_mut(&mut self.stor);
-        f(data)
-    }
-}
-
-pub(super) fn add_to_linker_sync<
-    'a,
-    T: Send + 'static,
-    F: Fn(&mut T) -> &mut ContextData + Copy + Send + Sync + 'static,
->(
+pub(super) fn add_to_linker_sync<T: Send + 'static>(
     linker: &mut wasmtime::Linker<T>,
-    f: F,
+    f: impl Fn(&mut T) -> &mut Context + Copy + Send + Sync + 'static,
 ) -> anyhow::Result<()> {
-    struct A<F: Send + Sync> {
-        f: F,
-    }
-    impl<T, F: Fn(&mut T) -> &mut ContextData + Copy + Send + Sync + 'static> MappedVtable<T> for A<F> {
-        fn get_data_mut<'a, 'b>(
-            &self,
-            store: &'b mut StoreContextMut<'a, T>,
-        ) -> &'b mut ContextData {
-            let fc = &self.f;
-            fc(store.data_mut())
-        }
-    }
-
-    let vtable = Arc::new(A::<F> { f });
-
-    //#[derive(Send, Sync)]
-    struct FnBuilderImpl<T> {
-        vtable: Arc<dyn MappedVtable<T> + Send + Sync + 'static>,
-    }
-    impl<T> Clone for FnBuilderImpl<T> {
-        fn clone(&self) -> Self {
-            Self {
-                vtable: self.vtable.clone(),
-            }
-        }
-    }
-    impl<T: 'static> generated::FnBuilderGenlayerSdk<T> for FnBuilderImpl<T> {
-        type MappedTo<'a> = Mapped<'a, T>;
-
-        fn build<'a>(&self) -> impl Fn(wasmtime::StoreContextMut<'a, T>) -> Mapped<'a, T> {
-            |x| Mapped {
-                stor: x,
-                vtable: self.vtable.clone(),
-            }
-        }
-    }
-
-    let fn_bilder = FnBuilderImpl { vtable: vtable };
-
-    generated::add_genlayer_sdk_to_linker(linker, fn_bilder)?;
+    generated::add_genlayer_sdk_to_linker(linker, f)?;
     Ok(())
 }
 
@@ -179,7 +115,7 @@ impl std::fmt::Display for ContractReturn {
     }
 }
 
-impl ContextData {
+impl Context {
     fn ensure_det(&self) -> Result<(), generated::types::Error> {
         if self.data.conf.is_deterministic {
             Ok(())
@@ -234,29 +170,17 @@ impl From<serde_json::Error> for generated::types::Error {
     }
 }
 
-impl<'a, T> Mapped<'a, T> {
-    fn consume_fuel(&mut self, gas_consumed: u64) -> Result<(), generated::types::Error> {
-        let old_fuel = self
-            .stor
-            .get_fuel()
-            .map_err(|_e| generated::types::Errno::Io)?;
-        let gas_consumed = gas_consumed.min(old_fuel).max(1);
-        self.stor
-            .set_fuel(old_fuel - gas_consumed)
-            .map_err(|_e| generated::types::Errno::Io)?;
-        Ok(())
-    }
-
+impl Context {
     fn set_result(
         &mut self,
         data: Vec<u8>,
     ) -> Result<generated::types::BytesLen, generated::types::Error> {
-        self.data_mut().result = data;
-        self.data_mut().result_cursor = 0;
-        let res: u32 = self.data_mut().result.len().try_into()?;
+        self.result = data;
+        self.result_cursor = 0;
+        let res: u32 = self.result.len().try_into()?;
         let mut gas_consumed: u64 = res.into();
         gas_consumed /= 32;
-        self.consume_fuel(gas_consumed)?;
+        self.shared_data.fuel_descriptor.consume_fuel(gas_consumed);
         Ok(res)
     }
 
@@ -272,12 +196,12 @@ impl<'a, T> Mapped<'a, T> {
 }
 
 #[allow(unused_variables)]
-impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
+impl generated::genlayer_sdk::GenlayerSdk for Context {
     fn get_message_data(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
     ) -> Result<generated::types::BytesLen, generated::types::Error> {
-        let res = serde_json::to_string(&self.data_mut().data.message_data)?;
+        let res = serde_json::to_string(&self.data.message_data)?;
         self.set_result(Vec::from(res))
     }
 
@@ -285,7 +209,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
     ) -> Result<generated::types::BytesLen, generated::types::Error> {
-        let ep = self.data_mut().data.entrypoint.clone();
+        let ep = self.data.entrypoint.clone();
         self.set_result(ep)
     }
 
@@ -295,16 +219,16 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         buf: wiggle::GuestPtr<u8>,
         len: u32,
     ) -> Result<generated::types::BytesLen, generated::types::Error> {
-        let cursor = self.read(|x| x.result_cursor);
-        let len_left = self.data_mut().result.len() - cursor;
+        let cursor = self.result_cursor;
+        let len_left = self.result.len() - cursor;
         let len_left = len_left.min(len as usize);
         let len_left_u32 = len_left.try_into()?;
 
         mem.copy_from_slice(
-            &self.data_mut().result[cursor..cursor + len_left],
+            &self.result[cursor..cursor + len_left],
             buf.as_array(len_left_u32),
         )?;
-        self.data_mut().result_cursor += len_left;
+        self.result_cursor += len_left;
 
         Ok(len_left_u32)
     }
@@ -338,7 +262,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         config: wiggle::GuestPtr<str>,
         url: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::BytesLen, generated::types::Error> {
-        if self.data_mut().data.conf.is_deterministic {
+        if self.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
         let config_str = read_string(mem, config)?;
@@ -346,22 +270,20 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let url_str = read_string(mem, url)?;
         let url_str = CString::new(url_str).map_err(|e| generated::types::Errno::Inval)?;
 
-        let supervisor = self.data_mut().data.supervisor.clone();
+        let supervisor = self.data.supervisor.clone();
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
-        let mut fuel = self
-            .stor
-            .get_fuel()
-            .map_err(|_e| generated::types::Errno::Io)?;
+        let mut fuel = self.shared_data.fuel_descriptor.get_fuel();
+        let init_fuel = fuel;
         let res = supervisor.modules.web.get_webpage(
             &mut fuel,
             config_str.as_bytes().as_ptr(),
             url_str.as_bytes().as_ptr(),
         );
-        self.stor
-            .set_fuel(fuel)
-            .map_err(|_e| generated::types::Errno::Io)?;
+        self.shared_data
+            .fuel_descriptor
+            .consume_fuel(init_fuel - fuel);
         if res.err != 0 {
             return Err(generated::types::Errno::Io.into());
         }
@@ -374,7 +296,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         config: wiggle::GuestPtr<str>,
         prompt: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::BytesLen, generated::types::Error> {
-        if self.data_mut().data.conf.is_deterministic {
+        if self.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
         let config_str = read_string(mem, config)?;
@@ -382,22 +304,20 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let prompt_str = read_string(mem, prompt)?;
         let prompt_str = CString::new(prompt_str).map_err(|e| generated::types::Errno::Inval)?;
 
-        let supervisor = self.data_mut().data.supervisor.clone();
+        let supervisor = self.data.supervisor.clone();
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
-        let mut fuel = self
-            .stor
-            .get_fuel()
-            .map_err(|_e| generated::types::Errno::Io)?;
+        let mut fuel = self.shared_data.fuel_descriptor.get_fuel();
+        let init_fuel = fuel;
         let res = supervisor.modules.llm.call_llm(
             &mut fuel,
             config_str.as_bytes().as_ptr(),
             prompt_str.as_bytes().as_ptr(),
         );
-        self.stor
-            .set_fuel(fuel)
-            .map_err(|_e| generated::types::Errno::Io)?;
+        self.shared_data
+            .fuel_descriptor
+            .consume_fuel(init_fuel - fuel);
         if res.err != 0 {
             return Err(generated::types::Errno::Io.into());
         }
@@ -410,14 +330,13 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         eq_principle: wiggle::GuestPtr<str>,
         data: &generated::types::Bytes,
     ) -> Result<generated::types::BytesLen, generated::types::Error> {
-        if !self.data_mut().data.conf.can_spawn_nondet {
+        if !self.data.conf.can_spawn_nondet {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
         let eq_principle = read_string(mem, eq_principle)?;
 
         // relaxed reason: here is no actual race possible, only the determinsiitc vm can call it, and it has no concurrency
         let call_no = self
-            .data_mut()
             .shared_data
             .nondet_call_no
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -426,7 +345,7 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         let mut entrypoint = Vec::from(b"nondet!");
         entrypoint.extend(cow.iter());
 
-        let supervisor = self.data_mut().data.supervisor.clone();
+        let supervisor = self.data.supervisor.clone();
 
         let essential_data = EssentialGenlayerSdkData {
             conf: base::Config {
@@ -435,10 +354,10 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
                 can_write_storage: false,
                 can_spawn_nondet: false,
             },
-            message_data: self.data_mut().data.message_data.clone(),
+            message_data: self.data.message_data.clone(),
             entrypoint,
             supervisor: supervisor.clone(),
-            init_actions: self.data_mut().data.init_actions.clone(),
+            init_actions: self.data.init_actions.clone(),
         };
 
         let res = self
@@ -492,13 +411,13 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         account: &generated::types::Addr,
         calldata: &generated::types::Bytes,
     ) -> Result<generated::types::BytesLen, generated::types::Error> {
-        self.data_mut().ensure_det()?;
+        self.ensure_det()?;
         let called_contract_account = Address::read_from_mem(account, mem)?;
         let mut res_calldata = b"call!".to_vec();
         let calldata = calldata.buf.as_array(calldata.buf_len);
         res_calldata.extend(mem.as_cow(calldata)?.iter());
 
-        let supervisor = self.data_mut().data.supervisor.clone();
+        let supervisor = self.data.supervisor.clone();
         let init_actions = {
             let Ok(mut supervisor) = supervisor.lock() else {
                 return Err(generated::types::Errno::Io.into());
@@ -508,9 +427,9 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
                 .map_err(|_e| generated::types::Errno::Inval)
         }?;
 
-        let my_conf = self.data_mut().data.conf;
+        let my_conf = self.data.conf;
 
-        let my_data = self.data_mut().data.message_data.clone();
+        let my_data = self.data.message_data.clone();
 
         let essential_data = EssentialGenlayerSdkData {
             conf: base::Config {
@@ -545,29 +464,29 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         index: u32,
         buf: &generated::types::MutBytes,
     ) -> Result<(), generated::types::Error> {
-        if !self.data_mut().data.conf.can_read_storage {
+        if !self.data.conf.can_read_storage {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
         let dest_buf = buf.buf.as_array(buf.buf_len);
 
-        let account = self.data_mut().data.message_data.contract_account;
+        let account = self.data.message_data.contract_account;
 
         let slot = Address::read_from_mem(&slot, mem)?;
         let mem_size = buf.buf_len as usize;
         let mut vec = Vec::with_capacity(mem_size);
         unsafe { vec.set_len(mem_size) };
-        let supervisor = self.data_mut().data.supervisor.clone();
+        let supervisor = self.data.supervisor.clone();
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
-        let mut rem_gas = self
-            .stor
-            .get_fuel()
-            .map_err(|_e| generated::types::Errno::Io)?;
+        let mut fuel = self.shared_data.fuel_descriptor.get_fuel();
+        let init_fuel = fuel;
         let res = supervisor
             .host
-            .storage_read(&mut rem_gas, account, slot, index, &mut vec);
-        let _ = self.stor.set_fuel(rem_gas);
+            .storage_read(&mut fuel, account, slot, index, &mut vec);
+        self.shared_data
+            .fuel_descriptor
+            .consume_fuel(init_fuel - fuel);
         res.map_err(|_e| generated::types::Errno::Io)?;
         mem.copy_from_slice(&vec, dest_buf)?;
         Ok(())
@@ -580,36 +499,36 @@ impl<'a, T> generated::genlayer_sdk::GenlayerSdk for Mapped<'a, T> {
         index: u32,
         buf: &generated::types::Bytes,
     ) -> Result<(), generated::types::Error> {
-        if !self.data_mut().data.conf.can_write_storage {
+        if !self.data.conf.can_write_storage {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
-        if !self.data_mut().data.conf.can_read_storage {
+        if !self.data.conf.can_read_storage {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
 
         let buf: Vec<u8> = buf.read_owned(mem)?;
 
-        let account = self.data_mut().data.message_data.contract_account;
+        let account = self.data.message_data.contract_account;
         let slot = Address::read_from_mem(&slot, mem)?;
 
-        let supervisor = self.data_mut().data.supervisor.clone();
+        let supervisor = self.data.supervisor.clone();
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
-        let mut rem_gas = self
-            .stor
-            .get_fuel()
-            .map_err(|_e| generated::types::Errno::Io)?;
+        let mut fuel = self.shared_data.fuel_descriptor.get_fuel();
+        let init_fuel = fuel;
         let res = supervisor
             .host
-            .storage_write(&mut rem_gas, account, slot, index, &buf);
-        let _ = self.stor.set_fuel(rem_gas);
+            .storage_write(&mut fuel, account, slot, index, &buf);
+        self.shared_data
+            .fuel_descriptor
+            .consume_fuel(init_fuel - fuel);
         res.map_err(|_e| generated::types::Errno::Io)?;
         Ok(())
     }
 }
 
-impl<T> Mapped<'_, T> {
+impl Context {
     /// note: handles fuel itself
     fn spaw_and_run(
         &mut self,
@@ -624,16 +543,7 @@ impl<T> Mapped<'_, T> {
             let instance = supervisor.apply_actions(&mut vm)?;
             (vm, instance)
         };
-
-        let pre_fuel = self.stor.get_fuel()?;
-        vm.store.set_fuel(pre_fuel)?;
-
-        let res = vm.run(&instance);
-
-        let remaining_fuel = vm.store.get_fuel().unwrap_or(0);
-        let _ = self.stor.set_fuel(remaining_fuel);
-
-        res
+        vm.run(&instance)
     }
     //EssentialGenlayerSdkData
 }

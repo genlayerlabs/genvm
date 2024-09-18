@@ -87,7 +87,7 @@ rule CARGO_BUILD
 EOF
 )
 
-self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, name:, target: nil, profile: "debug", features: [], &blk|
+self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, name:, target: nil, profile: "debug", features: [], **kwargs, &blk|
 	if dir.nil?
 		dir = cur_src
 	end
@@ -95,11 +95,11 @@ self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, n
 	trg = CargoBuildTarget.new(dir, name, target, profile, features)
 
 	if out_file.nil?
-		return return_target(trg, &blk)
+		return return_target(trg, **kwargs, &blk)
 	end
 
 	register_target(trg)
 
 	trg_copy = CargoCopyTarget.new(out_file, trg.output_file, trg)
-	return_target(trg_copy, &blk)
+	return_target(trg_copy, **kwargs, &blk)
 end
