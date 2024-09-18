@@ -64,10 +64,9 @@ project('sdk-python') {
 		}
 	)
 
-	all.add_deps(
-		target_alias(
-			'all',
-			runner_target
-		)
+	target_alias(
+		'all',
+		runner_target,
+		tags: ['all']
 	)
 }

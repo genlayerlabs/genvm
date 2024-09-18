@@ -21,7 +21,8 @@ project('genvm') {
 		command: [
 			RbConfig.ruby, cur_src.join('codegen', 'templates', 'host-rs.rb')
 		],
-		dependencies: [cur_src.join('codegen', 'data', 'host-fns.json')]
+		dependencies: [cur_src.join('codegen', 'data', 'host-fns.json')],
+		tags: ['codegen']
 	)
 
 	bin = target_alias(
@@ -35,11 +36,12 @@ project('genvm') {
 		}
 	)
 
-	genvm_all = target_alias('all', bin, modules)
+	genvm_all = target_alias('all', bin, modules, tags: ['all'])
 
-	all.add_deps(
-		genvm_all,
-		target_copy(dest: config.out_dir.join('share', 'genvm', 'default-config.json'), src: cur_src.join('default-config.json'))
+	target_copy(
+		dest: config.out_dir.join('share', 'genvm', 'default-config.json'),
+		src: cur_src.join('default-config.json'),
+		tags: ['all']
 	)
 
 	target_alias('test',

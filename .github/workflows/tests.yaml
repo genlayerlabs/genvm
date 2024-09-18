@@ -43,21 +43,25 @@ jobs:
             popd
       - name: configure
         run: cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config --preload ./.ci/release-conf.rb
+      - name: check format
+        run: |
+          ninja -v -C build tags/codegen && \
+          ./build-scripts/cargo-fmt.sh && \
+          git diff -U1 --exit-code
       - name: build
         run: |
           cd "$GITHUB_WORKSPACE" && \
             ninja -v -C build && \
             tree build/out && \
             pushd "$GITHUB_WORKSPACE/build" && zip -r out.zip out config.json && popd
-      - name: check format
-        run: |
-          ./build-scripts/cargo-fmt.sh && \
-          git diff -U1 --exit-code
       - name: publish
         uses: actions/upload-artifact@v4
         with:
           name: all
           path: ${{ github.workspace }}/build/out.zip
+      - name: cargo test
+        run: |
+          ./build-scripts/cargo-test.sh
   test-genvm-mock:
     needs: [build]
     runs-on: ubuntu-latest

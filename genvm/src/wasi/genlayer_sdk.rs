@@ -180,10 +180,7 @@ impl Context {
         let res: u32 = self.result.len().try_into()?;
         let mut gas_consumed: u64 = res.into();
         gas_consumed /= 32;
-        self
-            .shared_data
-            .fuel_descriptor
-            .consume_fuel(gas_consumed);
+        self.shared_data.fuel_descriptor.consume_fuel(gas_consumed);
         Ok(res)
     }
 
@@ -284,8 +281,7 @@ impl generated::genlayer_sdk::GenlayerSdk for Context {
             config_str.as_bytes().as_ptr(),
             url_str.as_bytes().as_ptr(),
         );
-        self
-            .shared_data
+        self.shared_data
             .fuel_descriptor
             .consume_fuel(init_fuel - fuel);
         if res.err != 0 {
@@ -319,8 +315,7 @@ impl generated::genlayer_sdk::GenlayerSdk for Context {
             config_str.as_bytes().as_ptr(),
             prompt_str.as_bytes().as_ptr(),
         );
-        self
-            .shared_data
+        self.shared_data
             .fuel_descriptor
             .consume_fuel(init_fuel - fuel);
         if res.err != 0 {
@@ -489,8 +484,7 @@ impl generated::genlayer_sdk::GenlayerSdk for Context {
         let res = supervisor
             .host
             .storage_read(&mut fuel, account, slot, index, &mut vec);
-        self
-            .shared_data
+        self.shared_data
             .fuel_descriptor
             .consume_fuel(init_fuel - fuel);
         res.map_err(|_e| generated::types::Errno::Io)?;
@@ -526,8 +520,7 @@ impl generated::genlayer_sdk::GenlayerSdk for Context {
         let res = supervisor
             .host
             .storage_write(&mut fuel, account, slot, index, &buf);
-        self
-            .shared_data
+        self.shared_data
             .fuel_descriptor
             .consume_fuel(init_fuel - fuel);
         res.map_err(|_e| generated::types::Errno::Io)?;
