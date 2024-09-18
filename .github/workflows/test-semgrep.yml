@@ -36,22 +36,38 @@ jobs:
           name: semgrep-results
           path: semgrep.txt
 
+  # create_comment:
+  #   name: Create comment with semgrep.txt scan results
+  #   needs: semgrep
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: Download semgrep.txt
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: semgrep-results
+  #         path: .
+
+  #     - name: Add a comment to the PR
+  #       uses: marocchino/sticky-pull-request-comment@v2
+  #       if: github.event_name == 'pull_request'
+  #       with:
+  #         header: "Semgrep Scan Results"
+  #         path: semgrep.txt
   create_comment:
-    name: Create comment with semgrep.txt scan results
+    name: Create comment with link to semgrep.txt
     needs: semgrep
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Get artifact download link
+        run: echo "Download the Semgrep scan results from [here](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts)"
 
-      - name: Download semgrep.txt
-        uses: actions/download-artifact@v4
-        with:
-          name: semgrep-results
-          path: .
-
-      - name: Add a comment to the PR
+      # Comment the link to the PR
+      - name: Add a comment with the artifact link
         uses: marocchino/sticky-pull-request-comment@v2
-        if: github.event_name == 'pull_request'
         with:
           header: "Semgrep Scan Results"
-          path: semgrep.txt
+          message: "Download the Semgrep scan results from [here](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts)"
+
+    if: github.event_name == 'pull_request'
