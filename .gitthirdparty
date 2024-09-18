@@ -18,7 +18,7 @@
 		"sdk-python/third-party/RustPython": {
 			"url": "https://github.com/RustPython/RustPython.git",
 			"commit": "8bc59441789868cc3da216703f743cd33b03752b",
-			"patches": 1
+			"patches": 2
 		}
 	}
 }

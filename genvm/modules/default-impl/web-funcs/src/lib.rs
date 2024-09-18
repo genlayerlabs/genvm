@@ -49,18 +49,20 @@ impl Impl {
             None => {}
         }
 
-        let opened_session_res = ureq::post(&format!("{}/session", &self.config.host)).send_bytes(
-            br#"{
-            "capabilities": {
-                "alwaysMatch": {
-                    "browserName": "chrome",
-                    "goog:chromeOptions": {
-                        "args": ["--headless", "--no-sandbox", "--disable-dev-shm-usage"]
+        let opened_session_res = ureq::post(&format!("{}/session", &self.config.host))
+            .set("Content-Type", "application/json; charset=utf-8")
+            .send_bytes(
+                br#"{
+                    "capabilities": {
+                        "alwaysMatch": {
+                            "browserName": "chrome",
+                            "goog:chromeOptions": {
+                                "args": ["--headless", "--no-sandbox", "--disable-dev-shm-usage"]
+                            }
+                        }
                     }
-                }
-            }
-        }"#,
-        )?;
+                }"#,
+            )?;
         let status = opened_session_res.status();
         let body = opened_session_res
             .into_string()
@@ -102,11 +104,12 @@ impl Impl {
         self.init_session()?;
         let session_id = self.get_session()?;
 
-        let req = serde_json::Value::Object(serde_json::Map::from_iter(
-            [("url".into(), url.as_str().into())].into_iter(),
-        ));
+        let req = serde_json::json!({
+            "url": url.as_str()
+        });
         let req = serde_json::to_string(&req)?;
         let res = ureq::post(&format!("{}/session/{}/url", self.config.host, session_id))
+            .set("Content-Type", "application/json; charset=utf-8")
             .send_bytes(req.as_bytes())?;
         if res.status() != 200 {
             return Err(anyhow::anyhow!("can't get webpage {:?}", res));
@@ -125,6 +128,7 @@ impl Impl {
             "{}/session/{}/execute/sync",
             self.config.host, session_id
         ))
+        .set("Content-Type", "application/json; charset=utf-8")
         .send_bytes(script.as_bytes())?;
         if res.status() != 200 {
             return Err(anyhow::anyhow!("can't get webpage contents {:?}", res));

@@ -12,10 +12,12 @@ genvm_modules_common::default_base_functions!(web_functions_api, Impl);
 #[serde(rename_all = "kebab-case")]
 enum LLLMProvider {
     Ollama,
+    Openai,
 }
 
 struct Impl {
     config: Config,
+    openai_key: String,
 }
 
 impl Drop for Impl {
@@ -32,7 +34,10 @@ struct Config {
 impl Impl {
     fn try_new(conf: &CStr) -> Result<Self> {
         let config: Config = serde_json::from_str(conf.to_str()?)?;
-        Ok(Impl { config })
+        Ok(Impl {
+            config,
+            openai_key: std::env::var("OPENAIKEY").unwrap_or("".into()),
+        })
     }
 
     fn call_llm(&mut self, gas: &mut u64, _config: &CStr, prompt: &CStr) -> Result<String> {
@@ -53,13 +58,50 @@ impl Impl {
                     .and_then(|v| v.get("response"))
                     .and_then(|v| v.as_str())
                     .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
-                let mut eval_duration = val
+                let eval_duration = val
                     .as_object()
                     .and_then(|v| v.get("eval_duration"))
                     .and_then(|v| v.as_u64())
                     .ok_or(anyhow::anyhow!("can't get eval_duration field {}", &res))?;
-                eval_duration <<= 4;
-                *gas -= eval_duration.min(*gas);
+                *gas -= (eval_duration << 4).min(*gas);
+                Ok(response.into())
+            }
+            LLLMProvider::Openai => {
+                let request = serde_json::json!({
+                    "model": &self.config.model,
+                    "messages": {
+                        "role": "user",
+                        "content": prompt,
+                    },
+                    "max_completion_tokens": 1000,
+                    "stream": false,
+                    "tempreture": 0.7,
+                });
+                let res = ureq::post(&format!("{}/v1/chat/completions", self.config.host))
+                    .set("Content-Type", "application/json")
+                    .set("Authorization", &format!("Bearer {}", &self.openai_key))
+                    .send_bytes(serde_json::to_string(&request)?.as_bytes())?;
+                let res = res.into_string()?;
+                let val: serde_json::Value = serde_json::from_str(&res)?;
+                let response = val
+                    .as_object()
+                    .and_then(|v| v.get("choices"))
+                    .and_then(|v| v.as_array())
+                    .and_then(|v| v.get(0))
+                    .and_then(|v| v.as_object())
+                    .and_then(|v| v.get("message"))
+                    .and_then(|v| v.as_object())
+                    .and_then(|v| v.get("content"))
+                    .and_then(|v| v.as_str())
+                    .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+                let total_tokens = val
+                    .as_object()
+                    .and_then(|v| v.get("usage"))
+                    .and_then(|v| v.as_object())
+                    .and_then(|v| v.get("total_tokens"))
+                    .and_then(|v| v.as_u64())
+                    .ok_or(anyhow::anyhow!("can't get eval_duration field {}", &res))?;
+                *gas -= (total_tokens << 8).min(*gas);
                 Ok(response.into())
             }
         }
