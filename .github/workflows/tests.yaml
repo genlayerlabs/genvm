@@ -129,8 +129,10 @@ jobs:
             popd && \
             true
       - name: genvm mock tests
+        env:
+          OPENAIKEY: ${{ secrets.OPENAIKEY }}
         run: |
-          docker run --detach --rm --network host "$(docker build -q -t genvm/modules-webdriver -f genvm/modules/default-impl/web-funcs/webdriver.dockerfile genvm/modules/default-impl/web-funcs/)" && \
+          OPENAIKEY="" docker run --detach --rm --network host "$(docker build -q -t genvm/modules-webdriver -f genvm/modules/default-impl/web-funcs/webdriver.dockerfile genvm/modules/default-impl/web-funcs/)" && \
           sleep 5 && \
           ./genvm/testdata/runner/run.py
   test-python:

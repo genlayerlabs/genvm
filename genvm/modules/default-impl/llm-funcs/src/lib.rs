@@ -69,13 +69,13 @@ impl Impl {
             LLLMProvider::Openai => {
                 let request = serde_json::json!({
                     "model": &self.config.model,
-                    "messages": {
+                    "messages": [{
                         "role": "user",
                         "content": prompt,
-                    },
+                    }],
                     "max_completion_tokens": 1000,
                     "stream": false,
-                    "tempreture": 0.7,
+                    "temperature": 0.7,
                 });
                 let res = ureq::post(&format!("{}/v1/chat/completions", self.config.host))
                     .set("Content-Type", "application/json")
