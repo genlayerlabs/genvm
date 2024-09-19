@@ -1,3 +1,5 @@
+#![feature(once_wait)]
+
 mod driver;
 
 mod host;

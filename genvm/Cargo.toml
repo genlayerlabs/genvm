@@ -21,3 +21,4 @@ genvm-modules-common = { path = "modules/common" }
 libc = { version = "0.2.158", default-features = false }
 zip = "2.2.0"
 directories-next = "2.0.0"
+futures = "0.3.30"

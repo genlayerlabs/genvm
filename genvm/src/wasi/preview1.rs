@@ -9,6 +9,7 @@ use tracing::instrument;
 use wiggle::{GuestError, GuestMemory, GuestPtr};
 
 use std::collections::BTreeMap;
+use super::common::{FileContents, FileDescriptor};
 
 pub struct Context {
     args_buf: Vec<u8>,
@@ -107,14 +108,6 @@ impl From<GuestError> for generated::types::Error {
             InFunc { err, .. } => generated::types::Error::from(*err),
         }
     }
-}
-
-enum FileDescriptor {
-    Stdin,
-    Stdout,
-    Stderr,
-    File { contents: Arc<[u8]>, pos: usize },
-    Dir { path: Vec<String> },
 }
 
 enum FilesTrie {
@@ -475,7 +468,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
         _memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
     ) -> Result<generated::types::Filestat, generated::types::Error> {
-        match self.get_fd_desc(fd)? {
+        match self.get_fd_desc_mut(fd)? {
             FileDescriptor::Stdin | FileDescriptor::Stdout | FileDescriptor::Stderr => {
                 Ok(generated::types::Filestat {
                     dev: 0,
@@ -488,16 +481,19 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
                     ctim: 0,
                 })
             }
-            FileDescriptor::File { contents, pos } => Ok(generated::types::Filestat {
-                dev: 0,
-                ino: 0,
-                filetype: generated::types::Filetype::RegularFile,
-                nlink: 0,
-                size: contents.len().try_into()?,
-                atim: 0,
-                mtim: 0,
-                ctim: 0,
-            }),
+            FileDescriptor::File(file) => {
+                let contents = file.get().map_err(unwrap_file_result)?;
+                Ok(generated::types::Filestat {
+                    dev: 0,
+                    ino: 0,
+                    filetype: generated::types::Filetype::RegularFile,
+                    nlink: 0,
+                    size: contents.contents.len().try_into()?,
+                    atim: 0,
+                    mtim: 0,
+                    ctim: 0,
+                })
+            }
             FileDescriptor::Dir { .. } => Ok(generated::types::Filestat {
                 dev: 0,
                 ino: 0,
@@ -553,10 +549,8 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
             FileDescriptor::Stdout | FileDescriptor::Stderr => {
                 Err(generated::types::Errno::Acces.into())
             }
-            FileDescriptor::File {
-                contents,
-                ref mut pos,
-            } => {
+            FileDescriptor::File(file) => {
+                let FileContents{contents, pos } = file.get().map_err(unwrap_file_result)?;
                 let mut written: u32 = 0;
                 for iov in iovs.iter() {
                     let iov = iov?;
@@ -594,7 +588,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
             FileDescriptor::Stdout | FileDescriptor::Stderr => {
                 Err(generated::types::Errno::Acces.into())
             }
-            FileDescriptor::File { contents, pos } => {
+            FileDescriptor::File(_) => {
                 todo!()
             }
             FileDescriptor::Dir { .. } => Err(generated::types::Errno::Badf.into()),
@@ -729,13 +723,11 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
             FileDescriptor::Stdin | FileDescriptor::Stderr | FileDescriptor::Stdout => {
                 Err(generated::types::Errno::Spipe.into())
             }
-            FileDescriptor::File {
-                contents,
-                ref mut pos,
-            } => {
+            FileDescriptor::File(file) => {
                 const {
                     assert!(std::mem::size_of::<usize>() <= std::mem::size_of::<u64>());
                 }
+                let FileContents{contents, pos } = file.get().map_err(unwrap_file_result)?;
                 match whence {
                     generated::types::Whence::Cur => {
                         if offset < 0 {
@@ -999,10 +991,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
             }
             match &**cur_trie {
                 FilesTrie::File { data } => {
-                    let f = FileDescriptor::File {
-                        contents: data.clone(),
-                        pos: 0,
-                    };
+                    let f = FileDescriptor::File(super::common::FileContentsUnevaluated::from_contents(data.clone(), 0));
                     self.fds.insert(new_fd, f);
                     Ok(new_fd.into())
                 }
@@ -1232,6 +1221,13 @@ impl Context {
             Some(x) => Ok(x),
             None => Err(generated::types::Errno::Badf.into()),
         }
+    }
+}
+
+fn unwrap_file_result(err: super::common::FileEvalError) -> generated::types::Error {
+    match err {
+        None => generated::types::Errno::Io.into(),
+        Some(e) => generated::types::Error::trap(e),
     }
 }
 
