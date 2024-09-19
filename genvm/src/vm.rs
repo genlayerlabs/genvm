@@ -393,6 +393,12 @@ impl Supervisor {
                         &debug_path
                     ))?;
                     vm.linker.instance(&mut vm.store, name, instance)?;
+                    match instance.get_typed_func::<(), ()>(&mut vm.store, "_initialize") {
+                        Err(_) => {}
+                        Ok(func) => {
+                            func.call(&mut vm.store, ())?;
+                        }
+                    }
                 }
                 crate::runner::InitAction::StartWasm {
                     contents,
