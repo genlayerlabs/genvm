@@ -1,7 +1,8 @@
 target
 .vscode
+.idea
 /build
-/build-config.json
+/.env
 /third-party/*
 !/third-party/.gitkeep
 __pycache__
