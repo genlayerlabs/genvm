@@ -1,5 +1,8 @@
 name: GenVM tests
-on: [push]
+on:
+  push:
+    paths-ignore:
+      - doc/**
 defaults:
   run:
     shell: bash -x {0}
