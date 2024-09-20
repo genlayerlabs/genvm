@@ -13,7 +13,7 @@ jobs:
       - name: basic setup
         run: |
           sudo apt-get update -y && \
-          sudo apt-get install -y --no-install-recommends ninja-build ruby curl git python3 zip wget tar tree && \
+          sudo apt-get install -y --no-install-recommends pkg-config ninja-build ruby curl git python3 zip wget tar tree && \
           git lfs install
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1

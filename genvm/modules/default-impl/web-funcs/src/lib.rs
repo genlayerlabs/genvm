@@ -3,9 +3,11 @@ use genvm_modules_common::*;
 
 use serde_derive::Deserialize;
 
-use std::{ffi::CStr, io::Read};
+use std::ffi::CStr;
 
 use genvm_modules_common::interfaces::web_functions_api;
+
+mod response;
 
 struct MyAlloc;
 
@@ -33,8 +35,7 @@ impl Drop for Impl {
     fn drop(&mut self) {
         match &self.session_id {
             Some(session_id) => {
-                let _ =
-                    ureq::delete(&format!("{}/session/{}", self.config.host, session_id)).call();
+                let _ = isahc::send(isahc::Request::delete(&format!("{}/session/{}", self.config.host, session_id)).body(()).unwrap());
             }
             None => {}
         }
@@ -64,10 +65,7 @@ impl Impl {
             None => {}
         }
 
-        let opened_session_res = ureq::post(&format!("{}/session", &self.config.host))
-            .set("Content-Type", "application/json; charset=utf-8")
-            .send_bytes(
-                br#"{
+        const INIT_REQUEST: &str = r#"{
                     "capabilities": {
                         "alwaysMatch": {
                             "browserName": "chrome",
@@ -76,15 +74,12 @@ impl Impl {
                             }
                         }
                     }
-                }"#,
-            )?;
-        let status = opened_session_res.status();
-        let body = opened_session_res
-            .into_string()
-            .unwrap_or(r#"{"value":{"error":"can't read body from genvm"}}"#.into());
-        if status != 200 {
-            return Err(anyhow::anyhow!("couldn't initialize {}", body));
-        }
+                }"#;
+
+        let mut opened_session_res = isahc::send(isahc::Request::post(&format!("{}/session", &self.config.host))
+            .header("Content-Type", "application/json; charset=utf-8")
+            .body(INIT_REQUEST)?)?;
+        let body = response::read(&mut opened_session_res)?;
         let val: serde_json::Value = serde_json::from_str(&body)?;
         let session_id = val
             .as_object()
@@ -124,12 +119,10 @@ impl Impl {
             "url": url.as_str()
         });
         let req = serde_json::to_string(&req)?;
-        let res = ureq::post(&format!("{}/session/{}/url", self.config.host, session_id))
-            .set("Content-Type", "application/json; charset=utf-8")
-            .send_bytes(req.as_bytes())?;
-        if res.status() != 200 {
-            return Err(anyhow::anyhow!("can't get webpage {:?}", res));
-        }
+        let mut res = isahc::send(isahc::Request::post(&format!("{}/session/{}/url", self.config.host, session_id))
+            .header("Content-Type", "application/json; charset=utf-8")
+            .body(req.as_bytes())?)?;
+        let _ = response::read(&mut res)?;
 
         let script = match config.mode {
             GetWebpageConfigMode::html => {
@@ -140,25 +133,13 @@ impl Impl {
             }
         };
 
-        let res = ureq::post(&format!(
+        let mut res = isahc::send(isahc::Request::post(&format!(
             "{}/session/{}/execute/sync",
             self.config.host, session_id
         ))
-        .set("Content-Type", "application/json; charset=utf-8")
-        .send_bytes(script.as_bytes())?;
-        if res.status() != 200 {
-            return Err(anyhow::anyhow!("can't get webpage contents {:?}", res));
-        }
-
-        let encoding = encoding_rs::Encoding::for_label(res.charset().as_bytes())
-            .unwrap_or(encoding_rs::UTF_8);
-
-        let mut res_buf = String::new();
-        let res_reader = res.into_reader();
-        let mut res_reader = encoding_rs_io::DecodeReaderBytesBuilder::new()
-            .encoding(Some(encoding))
-            .build(res_reader);
-        let _ = res_reader.read_to_string(&mut res_buf)?;
+        .header("Content-Type", "application/json; charset=utf-8")
+        .body(script)?)?;
+        let res_buf = response::read(&mut res)?;
 
         let val: serde_json::Value = serde_json::from_str(&res_buf)?;
         let val = val

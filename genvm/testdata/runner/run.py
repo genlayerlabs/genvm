@@ -159,9 +159,10 @@ def run(jsonnet_rel_path):
 		with config["host"] as mock_host:
 			while not mock_host.created:
 				time.sleep(0.05)
-			_env = {}
+			_env = dict(os.environ)
 			if args_parsed.nop_dlclose:
 				_env["LD_PRELOAD"] = GENVM.parent.parent.parent.joinpath('fake-dlclose.so')
+				#_env["LD_DEBUG"] = "libs"
 			res = subprocess.run(cmd, check=False, text=True, capture_output=True, env=_env)
 		base = {
 			"steps": steps
