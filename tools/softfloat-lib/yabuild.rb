@@ -123,6 +123,7 @@ project('softfloat') {
 			file: cf,
 			cc: clang,
 			flags: [
+				'-c',
 				'--target=wasm32-wasi', "--sysroot=#{sysroot}",
 				'-flto', '-O3',
 				'-DINLINE_LEVEL=9', '-DSOFTFLOAT_FAST_INT64',
