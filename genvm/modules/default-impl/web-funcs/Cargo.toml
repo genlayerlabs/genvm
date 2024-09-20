@@ -3,6 +3,13 @@ name = "genvm-modules-default-web"
 version = "0.1.0"
 edition = "2021"
 
+[profile.dev]
+rustflags = [
+    #"-Zsanitizer=memory",
+    "-Zsanitizer=leak",
+    "-Cforce-frame-pointers=true"
+]
+
 [lib]
 crate-type=["cdylib"]
 

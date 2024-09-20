@@ -750,6 +750,7 @@ dependencies = [
  "directories-next",
  "futures",
  "genvm-modules-common",
+ "is_debug",
  "itertools 0.13.0",
  "libc",
  "libloading",
@@ -912,6 +913,12 @@ checksum = "a0c10553d664a4d0bcff9f4215d0aac67a639cc68ef660840afe309b807bc9f5"
 dependencies = [
  "generic-array",
 ]
+
+[[package]]
+name = "is_debug"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06d198e9919d9822d5f7083ba8530e04de87841eaf21ead9af8f2304efd57c89"
 
 [[package]]
 name = "is_terminal_polyfill"

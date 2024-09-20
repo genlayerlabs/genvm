@@ -42,22 +42,18 @@ macro_rules! create_trait {
     (($name:ident) { $($fn_name:ident : fn ($($arg_name:ident: $arg_t:ty),*) -> $ret_t:tt ;)* }) => {
         pub mod $name {
             pub trait Loader {
-                fn load_from_lib(path: &std::path::Path, name: &str, config: String) -> anyhow::Result<Box<dyn genvm_modules_common::interfaces::$name::Trait>>;
+                fn load_from_lib(path: &std::path::Path, name: &str, args: genvm_modules_common::CtorArgs) -> anyhow::Result<Box<dyn genvm_modules_common::interfaces::$name::Trait>>;
             }
         }
         impl $name::Loader for genvm_modules_common::interfaces::$name::Methods {
-            fn load_from_lib(path: &std::path::Path, name: &str, config: String) -> anyhow::Result<Box<dyn genvm_modules_common::interfaces::$name::Trait>> {
+            fn load_from_lib(path: &std::path::Path, name: &str, mut args: genvm_modules_common::CtorArgs) -> anyhow::Result<Box<dyn genvm_modules_common::interfaces::$name::Trait>> {
+                args.version = genvm_modules_common::interfaces::$name::VERSION;
                 use anyhow::Context;
                 let name = libloading::library_filename(name);
                 let final_path = path.join(name);
                 let lib = unsafe {
                     let lib = libloading::Library::new(&final_path).with_context(|| format!("loading lib {:?}", &final_path))?;
                     let lib = std::sync::Arc::new(lib);
-                    let checker: libloading::Symbol<fn(v: *const genvm_modules_common::Version) -> bool> = lib.get(b"check_version")?;
-                    let ver = genvm_modules_common::interfaces::$name::VERSION;
-                    if !checker(&ver) {
-                        return Err(anyhow::anyhow!("Version didn't amtch"));
-                    }
                     lib
                 };
 
@@ -81,11 +77,11 @@ macro_rules! create_trait {
                 }
 
                 unsafe {
-                    let ctor: libloading::Symbol<unsafe extern fn(config: *const u8) -> *mut()> = lib.get(b"ctor")?;
+                    let ctor: libloading::Symbol<unsafe extern fn(args: &genvm_modules_common::CtorArgs) -> *mut()> = lib.get(b"ctor")?;
                     let dtor: libloading::os::unix::Symbol<unsafe extern fn(*const () ) -> ()> = get_sym(lib.get(b"dtor")?);
                     let dtor_cop = dtor.clone();
-                    let config = std::ffi::CString::new(config)?;
-                    let ctx = ctor(config.as_ptr() as *const u8);
+
+                    let ctx = ctor(&args);
                     let f = || {
                         Ok(unwrap_ctor_inits!(lib, ctx, dtor, $($fn_name : fn ($($arg_name : $arg_t),*) -> $ret_t ;)*))
                     };

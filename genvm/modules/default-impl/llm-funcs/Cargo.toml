@@ -6,6 +6,12 @@ edition = "2021"
 [lib]
 crate-type=["cdylib"]
 
+[profile.dev]
+rustflags = [
+    "-Zsanitizer=leak",
+    "-Cforce-frame-pointers=true"
+]
+
 [dependencies]
 anyhow = { version = "1.0.86", features = [] }
 encoding_rs = { version = "0.8.34", features = []}

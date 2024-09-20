@@ -32,8 +32,9 @@ struct Config {
 }
 
 impl Impl {
-    fn try_new(conf: &CStr) -> Result<Self> {
-        let config: Config = serde_json::from_str(conf.to_str()?)?;
+    fn try_new(args: &CtorArgs) -> Result<Self> {
+        let conf: &str = args.config()?;
+        let config: Config = serde_json::from_str(conf)?;
         Ok(Impl {
             config,
             openai_key: std::env::var("OPENAIKEY").unwrap_or("".into()),

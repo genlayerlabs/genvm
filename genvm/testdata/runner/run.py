@@ -46,6 +46,7 @@ arg_parser = argparse.ArgumentParser("genvm-test-runner")
 arg_parser.add_argument('--gen-vm', metavar='EXE', default=str(Path(os.getenv("GENVM", root_dir.joinpath('build', 'out', 'bin', 'genvm')))))
 arg_parser.add_argument('--filter', metavar='REGEX', default='.*')
 arg_parser.add_argument('--show-steps', default=False, action='store_true')
+arg_parser.add_argument('--nop-dlclose', default=False, action='store_true')
 args_parsed = arg_parser.parse_args()
 GENVM = Path(args_parsed.gen_vm)
 FILE_RE = re.compile(args_parsed.filter)
@@ -158,7 +159,10 @@ def run(jsonnet_rel_path):
 		with config["host"] as mock_host:
 			while not mock_host.created:
 				time.sleep(0.05)
-			res = subprocess.run(cmd, check=False, text=True, capture_output=True)
+			_env = {}
+			if args_parsed.nop_dlclose:
+				_env["LD_PRELOAD"] = GENVM.parent.parent.parent.joinpath('fake-dlclose.so')
+			res = subprocess.run(cmd, check=False, text=True, capture_output=True, env=_env)
 		base = {
 			"steps": steps
 		}

@@ -7,6 +7,21 @@ use std::{ffi::CStr, io::Read};
 
 use genvm_modules_common::interfaces::web_functions_api;
 
+struct MyAlloc;
+
+unsafe impl std::alloc::GlobalAlloc for MyAlloc {
+    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+        libc::malloc(layout.size()) as *mut u8
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: std::alloc::Layout) {
+        libc::free(ptr as *mut std::ffi::c_void)
+    }
+}
+
+#[global_allocator]
+static A: MyAlloc = MyAlloc;
+
 genvm_modules_common::default_base_functions!(web_functions_api, Impl);
 
 struct Impl {
@@ -89,8 +104,9 @@ impl Impl {
         }
     }
 
-    fn try_new(conf: &CStr) -> Result<Self> {
-        let config: Config = serde_json::from_str(conf.to_str()?)?;
+    fn try_new(args: &CtorArgs) -> Result<Self> {
+        let conf: &str = args.config()?;
+        let config: Config = serde_json::from_str(conf)?;
         Ok(Impl {
             session_id: None,
             config,

@@ -39,6 +39,16 @@ struct ConfigSchema {
     modules: Vec<ConfigModule>,
 }
 
+fn fake_thead_pool() -> genvm_modules_common::SharedThreadPoolABI {
+    extern "C-unwind" fn exec(_zelf: *const (), ctx: *const (), cb: extern "C-unwind" fn(ctx: *const ())) {
+        cb(ctx);
+    }
+    genvm_modules_common::SharedThreadPoolABI {
+        ctx: std::ptr::null(),
+        submit_task: exec,
+    }
+}
+
 pub fn create_supervisor(
     config_path: &String,
     total_gas: u64,
@@ -68,6 +78,12 @@ pub fn create_supervisor(
     for c in &config.modules {
         let path = std::path::Path::new(&c.path);
         let config_str = serde_json::to_string(&c.config)?;
+        let args = genvm_modules_common::CtorArgs {
+            version: genvm_modules_common::Version{major: 0, minor: 0},
+            module_config: config_str.as_ptr(),
+            module_config_len: config_str.len(),
+            thread_pool: fake_thead_pool(),
+        };
         let name = match &c.name {
             Some(v) => v,
             None => match c.id {
@@ -78,12 +94,12 @@ pub fn create_supervisor(
         match c.id {
             ConfigModuleName::llm => {
                 llm = Some(llm_functions_api::Methods::load_from_lib(
-                    path, name, config_str,
+                    path, name, args,
                 )?);
             }
             ConfigModuleName::web => {
                 web = Some(web_functions_api::Methods::load_from_lib(
-                    path, name, config_str,
+                    path, name, args,
                 )?);
             }
         }
