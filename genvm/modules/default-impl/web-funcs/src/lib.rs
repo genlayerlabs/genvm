@@ -35,7 +35,11 @@ impl Drop for Impl {
     fn drop(&mut self) {
         match &self.session_id {
             Some(session_id) => {
-                let _ = isahc::send(isahc::Request::delete(&format!("{}/session/{}", self.config.host, session_id)).body(()).unwrap());
+                let _ = isahc::send(
+                    isahc::Request::delete(&format!("{}/session/{}", self.config.host, session_id))
+                        .body(())
+                        .unwrap(),
+                );
             }
             None => {}
         }
@@ -76,9 +80,11 @@ impl Impl {
                     }
                 }"#;
 
-        let mut opened_session_res = isahc::send(isahc::Request::post(&format!("{}/session", &self.config.host))
-            .header("Content-Type", "application/json; charset=utf-8")
-            .body(INIT_REQUEST)?)?;
+        let mut opened_session_res = isahc::send(
+            isahc::Request::post(&format!("{}/session", &self.config.host))
+                .header("Content-Type", "application/json; charset=utf-8")
+                .body(INIT_REQUEST)?,
+        )?;
         let body = response::read(&mut opened_session_res)?;
         let val: serde_json::Value = serde_json::from_str(&body)?;
         let session_id = val
@@ -119,9 +125,11 @@ impl Impl {
             "url": url.as_str()
         });
         let req = serde_json::to_string(&req)?;
-        let mut res = isahc::send(isahc::Request::post(&format!("{}/session/{}/url", self.config.host, session_id))
-            .header("Content-Type", "application/json; charset=utf-8")
-            .body(req.as_bytes())?)?;
+        let mut res = isahc::send(
+            isahc::Request::post(&format!("{}/session/{}/url", self.config.host, session_id))
+                .header("Content-Type", "application/json; charset=utf-8")
+                .body(req.as_bytes())?,
+        )?;
         let _ = response::read(&mut res)?;
 
         let script = match config.mode {
@@ -133,12 +141,14 @@ impl Impl {
             }
         };
 
-        let mut res = isahc::send(isahc::Request::post(&format!(
-            "{}/session/{}/execute/sync",
-            self.config.host, session_id
-        ))
-        .header("Content-Type", "application/json; charset=utf-8")
-        .body(script)?)?;
+        let mut res = isahc::send(
+            isahc::Request::post(&format!(
+                "{}/session/{}/execute/sync",
+                self.config.host, session_id
+            ))
+            .header("Content-Type", "application/json; charset=utf-8")
+            .body(script)?,
+        )?;
         let res_buf = response::read(&mut res)?;
 
         let val: serde_json::Value = serde_json::from_str(&res_buf)?;

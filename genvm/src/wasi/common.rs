@@ -18,16 +18,23 @@ impl FileContentsUnevaluated {
         match &mut self.data {
             Ok(x) => return Ok(x),
             placed_data => {
-                let mut old_data = Ok(FileContents{ contents: Arc::new([]), pos: 0 });
+                let mut old_data = Ok(FileContents {
+                    contents: Arc::new([]),
+                    pos: 0,
+                });
                 swap(placed_data, &mut old_data);
-                match old_data { // old data
+                match old_data {
+                    // old data
                     Ok(_) => unreachable!(),
                     Err(fut) => {
                         fut.wait();
                         let val = fut.into_inner().unwrap();
                         match val {
                             Ok(val) => {
-                                *placed_data = Ok(FileContents{ contents: val, pos: 0 });
+                                *placed_data = Ok(FileContents {
+                                    contents: val,
+                                    pos: 0,
+                                });
                                 match placed_data {
                                     Ok(x) => Ok(x),
                                     _ => unreachable!(),
@@ -45,9 +52,9 @@ impl FileContentsUnevaluated {
     }
 
     pub fn from_contents(contents: Arc<[u8]>, pos: usize) -> Self {
-        Self{data: Ok(FileContents{
-            contents, pos
-        })}
+        Self {
+            data: Ok(FileContents { contents, pos }),
+        }
     }
 }
 

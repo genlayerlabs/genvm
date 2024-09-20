@@ -8,8 +8,8 @@ use std::{
 use tracing::instrument;
 use wiggle::{GuestError, GuestMemory, GuestPtr};
 
-use std::collections::BTreeMap;
 use super::common::{FileContents, FileDescriptor};
+use std::collections::BTreeMap;
 
 pub struct Context {
     args_buf: Vec<u8>,
@@ -550,7 +550,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
                 Err(generated::types::Errno::Acces.into())
             }
             FileDescriptor::File(file) => {
-                let FileContents{contents, pos } = file.get().map_err(unwrap_file_result)?;
+                let FileContents { contents, pos } = file.get().map_err(unwrap_file_result)?;
                 let mut written: u32 = 0;
                 for iov in iovs.iter() {
                     let iov = iov?;
@@ -727,7 +727,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
                 const {
                     assert!(std::mem::size_of::<usize>() <= std::mem::size_of::<u64>());
                 }
-                let FileContents{contents, pos } = file.get().map_err(unwrap_file_result)?;
+                let FileContents { contents, pos } = file.get().map_err(unwrap_file_result)?;
                 match whence {
                     generated::types::Whence::Cur => {
                         if offset < 0 {
@@ -991,7 +991,9 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
             }
             match &**cur_trie {
                 FilesTrie::File { data } => {
-                    let f = FileDescriptor::File(super::common::FileContentsUnevaluated::from_contents(data.clone(), 0));
+                    let f = FileDescriptor::File(
+                        super::common::FileContentsUnevaluated::from_contents(data.clone(), 0),
+                    );
                     self.fds.insert(new_fd, f);
                     Ok(new_fd.into())
                 }

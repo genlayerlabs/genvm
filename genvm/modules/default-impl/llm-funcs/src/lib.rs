@@ -52,8 +52,10 @@ impl Impl {
                     "prompt": prompt,
                     "stream": false,
                 });
-                let mut res = isahc::send(isahc::Request::post(&format!("{}/api/generate", self.config.host))
-                    .body(serde_json::to_string(&request)?.as_bytes())?)?;
+                let mut res = isahc::send(
+                    isahc::Request::post(&format!("{}/api/generate", self.config.host))
+                        .body(serde_json::to_string(&request)?.as_bytes())?,
+                )?;
                 let res = response::read(&mut res)?;
                 let val: serde_json::Value = serde_json::from_str(&res)?;
                 let response = val
@@ -81,10 +83,12 @@ impl Impl {
                     "temperature": 0.7,
                 });
                 eprintln!("api key {}", self.openai_key);
-                let mut res = isahc::send(isahc::Request::post(&format!("{}/v1/chat/completions", self.config.host))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", &format!("Bearer {}", &self.openai_key))
-                    .body(serde_json::to_string(&request)?.as_bytes())?)?;
+                let mut res = isahc::send(
+                    isahc::Request::post(&format!("{}/v1/chat/completions", self.config.host))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", &format!("Bearer {}", &self.openai_key))
+                        .body(serde_json::to_string(&request)?.as_bytes())?,
+                )?;
                 let res = response::read(&mut res)?;
                 let val: serde_json::Value = serde_json::from_str(&res)?;
                 let response = val

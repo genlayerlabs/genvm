@@ -148,7 +148,11 @@ pub struct Modules {
 
 impl Drop for Modules {
     fn drop(&mut self) {
-        eprintln!("{}", std::fs::read_to_string(std::path::Path::new("/proc/self/maps")).unwrap_or(String::new()));
+        eprintln!(
+            "{}",
+            std::fs::read_to_string(std::path::Path::new("/proc/self/maps"))
+                .unwrap_or(String::new())
+        );
     }
 }
 

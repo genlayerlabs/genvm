@@ -10,7 +10,11 @@ pub struct Version {
 #[repr(C)]
 pub struct SharedThreadPoolABI {
     pub ctx: *const (),
-    pub submit_task: extern "C-unwind" fn(zelf: *const (), ctx: *const (), cb: extern "C-unwind" fn(ctx: *const ())),
+    pub submit_task: extern "C-unwind" fn(
+        zelf: *const (),
+        ctx: *const (),
+        cb: extern "C-unwind" fn(ctx: *const ()),
+    ),
 }
 
 #[repr(C)]
@@ -23,7 +27,9 @@ pub struct CtorArgs {
 
 impl CtorArgs {
     pub fn config(&self) -> Result<&str, std::str::Utf8Error> {
-        std::str::from_utf8(unsafe { std::slice::from_raw_parts(self.module_config, self.module_config_len) })
+        std::str::from_utf8(unsafe {
+            std::slice::from_raw_parts(self.module_config, self.module_config_len)
+        })
     }
 }
 
@@ -89,7 +95,8 @@ impl SharedThreadPool {
     }
 
     pub fn submit<F>(&self, f: F)
-    where F: FnOnce() -> ()
+    where
+        F: FnOnce() -> (),
     {
         let ctx = unsafe {
             let layout = std::alloc::Layout::new::<std::mem::MaybeUninit<F>>();
@@ -100,7 +107,9 @@ impl SharedThreadPool {
         extern "C-unwind" fn run<F: FnOnce() -> ()>(ctx_ptr: *const ()) {
             let ctx = unsafe { std::ptr::read(ctx_ptr as *mut F) };
             let layout = std::alloc::Layout::new::<std::mem::MaybeUninit<F>>();
-            unsafe { std::alloc::dealloc(ctx_ptr as *mut u8, layout); }
+            unsafe {
+                std::alloc::dealloc(ctx_ptr as *mut u8, layout);
+            }
             // this call will drop the memory
             ctx();
         }
