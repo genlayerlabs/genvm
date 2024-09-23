@@ -33,17 +33,11 @@ jobs:
             git config --global user.name "CI worker" && \
             git submodule update --init --recursive && \
             ./tools/git-third-party/git-third-party update --all
-      - name: download wasi
+      - name: install tools and configure
         run: |
           cd "$GITHUB_WORKSPACE" && \
-            mkdir -p build && \
-            pushd build && \
-            wget -q https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-linux.tar.gz && \
-            tar -xf wasi-sdk-24.0-x86_64-linux.tar.gz && \
-            mv wasi-sdk-24.0-x86_64-linux wasi-sdk-24 && \
-            popd
-      - name: configure
-        run: cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config --preload ./.ci/release-conf.rb
+          ./build-scripts/install-tools.rb && \
+          ./tools/ya-build/ya-build config --preload ./.ci/release-conf.rb
       - name: check format
         run: |
           ninja -v -C build tags/codegen && \

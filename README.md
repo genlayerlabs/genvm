@@ -18,27 +18,18 @@ Required tools:
 - cargo and rust of version 1.80; please, refer to [rustup docs](https://www.rust-lang.org/tools/install) for installation. Target wasm32-wasi and "host" are required. `rustup target add wasm32-wasi`
 
 Getting the source
-1. clone the repositopry
-2. `git submodule update --init --recursive`
-3. `./tools/git-third-party/git-third-party update --all`
+1. clone the repositopry and `cd` to it
+2. `./build-scripts/install-tools.rb`
+3. `git submodule update --init --recursive`
+4. `./tools/git-third-party/git-third-party update --all`
   This command will clone all third-party repositories and then apply patches to them
 
-Download WASI sdk (v. 24 is tested)
-```bash
-mkdir -p build
-pushd build
-wget https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-linux.tar.gz
-# ^ note that your link may be different, refer to https://github.com/WebAssembly/wasi-sdk/releases/ for other target triples
-tar -xvf wasi-sdk-24.0-x86_64-linux.tar.gz
-mv wasi-sdk-24.0-x86_64-linux wasi-sdk-24
-popd
-```
-
-Actually building became way too complex really fast (patching floats for software ones and so on), for convenience small generator script was introduced
+Building
 1. `./tools/ya-build/ya-build config`
   This command scraps and configures all targets (similar to CMake)
 2. `ninja -C build`
   This command actually builds the project. Please, use it before every run. Also note, that it doesn't detect new files **creation**, so if you added a file (to `sdk-python/py` for instance), you may need to rerun the above command as well
+3. output is located at `build/out` as a root (`bin`, `lib`, `share`)
 
 ## Running tests
 As of now there are two test suites

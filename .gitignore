@@ -3,6 +3,7 @@ target
 .idea
 /build
 /.env
+/tools/downloaded
 /third-party/*
 !/third-party/.gitkeep
 __pycache__
