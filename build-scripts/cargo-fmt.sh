@@ -8,8 +8,8 @@ cd "$SCRIPT_DIR/.."
 
 for dir in $(git ls-files | grep -P 'Cargo\.toml')
 do
-    pushd "$(dirname -- $dir)"
+    pushd "$(dirname -- $dir)" 2> /dev/null > /dev/null
     echo "formatting $dir"
     cargo fmt
-    popd
+    popd 2> /dev/null > /dev/null
 done
