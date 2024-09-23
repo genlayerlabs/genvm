@@ -82,7 +82,6 @@ impl Impl {
                     "stream": false,
                     "temperature": 0.7,
                 });
-                eprintln!("api key {}", self.openai_key);
                 let mut res = isahc::send(
                     isahc::Request::post(&format!("{}/v1/chat/completions", self.config.host))
                         .header("Content-Type", "application/json")

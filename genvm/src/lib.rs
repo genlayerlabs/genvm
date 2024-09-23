@@ -134,7 +134,7 @@ pub fn run_with(
                 can_spawn_nondet: true,
             },
             message_data: entry_message,
-            entrypoint,
+            entrypoint: entrypoint.into(),
             supervisor: supervisor_clone,
             init_actions,
         };

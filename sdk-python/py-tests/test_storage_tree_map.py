@@ -1,5 +1,5 @@
-from genlayer._storage import Vec, storage, TreeMap
-from genlayer.types import *
+from genlayer.py._storage import Vec, storage, TreeMap
+from genlayer.py.types import *
 
 @storage
 class UserStorage:

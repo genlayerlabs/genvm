@@ -1,21 +1,69 @@
 import genlayer.wasi as wasi
-import genlayer.calldata
-import genlayer._storage as _storage
+import genlayer.py._storage as _storage
 import collections.abc
 
 import typing
 import json
-from types import SimpleNamespace
+from types import SimpleNamespace as _SimpleNamespace
 import base64
+import os
 
 # reexports
-from ._storage import storage, ROOT_STORAGE_ADDRESS
-from ._storage_tree_map import TreeMap
-from .types import *
+import genlayer.py.calldata as calldata
+from .py._storage import storage, ROOT_STORAGE_ADDRESS
+from .py._storage_tree_map import TreeMap
+from .py.types import *
 
 def public(f):
 	setattr(f, '__public__', True)
 	return f
+
+class AwaitableResult:
+	_exc: typing.Optional[Exception]
+	_fd: int
+	def __init__(self, fd: int):
+		self._fd = fd
+		self._exc = None
+		self._res = None
+	def __del__(self):
+		if self._fd == 0:
+			return
+		os.close(self._fd)
+		self._fd = 0
+	def __await__(self):
+		if self._fd == 0:
+			if self._exc is not None:
+				raise self._exc
+			return self._res
+		try:
+			self._res = self._get_res(self._fd)
+			return self._res
+		except Exception as e:
+			self._exc = e
+			raise
+		finally:
+			self._fd = 0
+		yield
+	@abc.abstractmethod
+	def _get_res(self, fd: int): ...
+
+class AwaitableResultStr(AwaitableResult):
+	def _get_res(self, fd: int) -> str:
+		with os.fdopen(fd, "rt") as f:
+			return f.read()
+
+class AwaitableResultBytes(AwaitableResult):
+	def _get_res(self, fd: int) -> bytes:
+		with os.fdopen(fd, "rb") as f:
+			return f.read()
+
+class AwaitableResultBytesMap[T](AwaitableResult):
+	def __init__(self, fd: int, fn: collections.abc.Callable[[bytes], T]):
+		super().__init__(fd)
+		self._fn = fn
+	def _get_res(self, fd: int) -> T:
+		with os.fdopen(fd, "rb") as f:
+			return self._fn(f.read())
 
 class AlreadySerializedResult(bytes):
 	def __new__(cls, *args, **kwargs):
@@ -28,14 +76,14 @@ class ContractMethod:
 	def __init__(self, addr: Address, name: str):
 		self.addr = addr
 		self.name = name
-	def __call__(self, *args):
+	def __call__(self, *args) -> AwaitableResultBytesMap:
 		obj = {
 			"method": self.name,
 			"args": args,
 		}
-		calldata = genlayer.calldata.encode(obj)
-		res = wasi.call_contract(self.addr.as_bytes, calldata)
-		return genlayer.calldata.decode(res)
+		cd = calldata.encode(obj)
+		res = wasi.call_contract(self.addr.as_bytes, cd)
+		return AwaitableResultBytesMap(res, calldata.decode)
 
 class Contract:
 	def __init__(self, addr: Address):
@@ -48,7 +96,7 @@ class Contract:
 
 message_raw = json.loads(wasi.get_message_data())
 
-message = SimpleNamespace(
+message = _SimpleNamespace(
 	gas=message_raw["gas"],
 	contract_account=Address(message_raw["contract_account"]),
 	sender_account=Address(message_raw["sender_account"]),
@@ -63,10 +111,16 @@ class Runner:
 	def run(self):
 		pass
 
-def run_nondet(eq_principle, runner: Runner) -> typing.Any:
+def get_webpage(config: typing.Any, url: str) -> AwaitableResultStr:
+	return AwaitableResultStr(wasi.get_webpage(json.dumps(config), url))
+
+def call_llm(config: typing.Any, prompt: str) -> AwaitableResultStr:
+	return AwaitableResultStr(wasi.call_llm(json.dumps(config), prompt))
+
+def run_nondet(eq_principle, runner: Runner) -> AwaitableResultBytesMap:
 	import pickle
 	res = wasi.run_nondet(json.dumps(eq_principle), pickle.dumps(runner))
-	return genlayer.calldata.decode(res)
+	return AwaitableResultBytesMap(res, calldata.decode)
 
 class _ActualStorageMan(_storage.StorageMan):
 	_slots: dict[Address, '_ActualStorageSlot']

@@ -17,7 +17,7 @@ use super::{base, common::*};
 pub struct EssentialGenlayerSdkData {
     pub conf: base::Config,
     pub message_data: MessageData,
-    pub entrypoint: Vec<u8>,
+    pub entrypoint: Arc<[u8]>,
     pub supervisor: Arc<Mutex<crate::vm::Supervisor>>,
     pub init_actions: InitActions,
 }
@@ -25,9 +25,6 @@ pub struct EssentialGenlayerSdkData {
 pub struct Context {
     pub data: EssentialGenlayerSdkData,
     pub shared_data: Arc<vm::SharedData>,
-
-    result: Vec<u8>,
-    result_cursor: usize,
 }
 
 pub struct ContextVFS<'a> {
@@ -75,12 +72,7 @@ impl generated::types::Bytes {
 
 impl Context {
     pub fn new(data: EssentialGenlayerSdkData, shared_data: Arc<vm::SharedData>) -> Self {
-        Self {
-            data,
-            result: Vec::new(),
-            result_cursor: 0,
-            shared_data,
-        }
+        Self { data, shared_data }
     }
 }
 
@@ -194,30 +186,17 @@ impl From<serde_json::Error> for generated::types::Error {
 }
 
 impl ContextVFS<'_> {
-    fn set_result(
-        &mut self,
-        data: Vec<u8>,
-    ) -> Result<generated::types::BytesLen, generated::types::Error> {
-        self.context.result = data;
-        self.context.result_cursor = 0;
-        let res: u32 = self.context.result.len().try_into()?;
-        let mut gas_consumed: u64 = res.into();
-        gas_consumed /= 32;
-        self.context
-            .shared_data
-            .fuel_descriptor
-            .consume_fuel(gas_consumed);
-        Ok(res)
-    }
-
     fn set_vm_run_result(
         &mut self,
         data: vm::RunOk,
-    ) -> Result<generated::types::BytesLen, generated::types::Error> {
-        match data {
-            vm::RunOk::Return(buf) => self.set_result(buf),
-            vm::RunOk::Rollback(buf) => self.set_result(buf.into()),
-        }
+    ) -> Result<generated::types::Fd, generated::types::Error> {
+        let data: Arc<[u8]> = match data {
+            vm::RunOk::Return(buf) => buf.into(),
+            vm::RunOk::Rollback(buf) => buf.into_bytes().into(),
+        };
+        Ok(generated::types::Fd::from(self.vfs.place_content(
+            FileContentsUnevaluated::from_contents(data, 0),
+        )))
     }
 }
 
@@ -226,37 +205,32 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
     fn get_message_data(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-    ) -> Result<generated::types::BytesLen, generated::types::Error> {
-        let res = serde_json::to_string(&self.context.data.message_data)?;
-        self.set_result(Vec::from(res))
+    ) -> Result<generated::types::ResultNow, generated::types::Error> {
+        let res = serde_json::to_vec(&self.context.data.message_data)?;
+        let res: Arc<[u8]> = Arc::from(res);
+        let len = res.len().try_into()?;
+        let fd = self
+            .vfs
+            .place_content(FileContentsUnevaluated::from_contents(res, 0));
+        Ok(generated::types::ResultNow {
+            len,
+            file: generated::types::Fd::from(fd),
+        })
     }
 
     fn get_entrypoint(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-    ) -> Result<generated::types::BytesLen, generated::types::Error> {
-        let ep = self.context.data.entrypoint.clone();
-        self.set_result(ep)
-    }
-
-    fn read_result(
-        &mut self,
-        mem: &mut wiggle::GuestMemory<'_>,
-        buf: wiggle::GuestPtr<u8>,
-        len: u32,
-    ) -> Result<generated::types::BytesLen, generated::types::Error> {
-        let cursor = self.context.result_cursor;
-        let len_left = self.context.result.len() - cursor;
-        let len_left = len_left.min(len as usize);
-        let len_left_u32 = len_left.try_into()?;
-
-        mem.copy_from_slice(
-            &self.context.result[cursor..cursor + len_left],
-            buf.as_array(len_left_u32),
-        )?;
-        self.context.result_cursor += len_left;
-
-        Ok(len_left_u32)
+    ) -> Result<generated::types::ResultNow, generated::types::Error> {
+        let res = self.context.data.entrypoint.clone();
+        let len = res.len().try_into()?;
+        let fd = self
+            .vfs
+            .place_content(FileContentsUnevaluated::from_contents(res, 0));
+        Ok(generated::types::ResultNow {
+            len,
+            file: generated::types::Fd::from(fd),
+        })
     }
 
     fn rollback(
@@ -287,7 +261,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         mem: &mut wiggle::GuestMemory<'_>,
         config: wiggle::GuestPtr<str>,
         url: wiggle::GuestPtr<str>,
-    ) -> Result<generated::types::BytesLen, generated::types::Error> {
+    ) -> Result<generated::types::Fd, generated::types::Error> {
         if self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
@@ -314,7 +288,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         if res.err != 0 {
             return Err(generated::types::Errno::Io.into());
         }
-        self.set_result(vec_from_cstr_libc(res.str))
+        Ok(generated::types::Fd::from(self.vfs.place_content(
+            FileContentsUnevaluated::from_contents(vec_from_cstr_libc(res.str), 0),
+        )))
     }
 
     fn call_llm(
@@ -322,7 +298,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         mem: &mut wiggle::GuestMemory<'_>,
         config: wiggle::GuestPtr<str>,
         prompt: wiggle::GuestPtr<str>,
-    ) -> Result<generated::types::BytesLen, generated::types::Error> {
+    ) -> Result<generated::types::Fd, generated::types::Error> {
         if self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
@@ -349,7 +325,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         if res.err != 0 {
             return Err(generated::types::Errno::Io.into());
         }
-        self.set_result(vec_from_cstr_libc(res.str))
+        Ok(generated::types::Fd::from(self.vfs.place_content(
+            FileContentsUnevaluated::from_contents(vec_from_cstr_libc(res.str), 0),
+        )))
     }
 
     fn run_nondet(
@@ -357,7 +335,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         mem: &mut wiggle::GuestMemory<'_>,
         eq_principle: wiggle::GuestPtr<str>,
         data: &generated::types::Bytes,
-    ) -> Result<generated::types::BytesLen, generated::types::Error> {
+    ) -> Result<generated::types::Fd, generated::types::Error> {
         if !self.context.data.conf.can_spawn_nondet {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
@@ -373,6 +351,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let cow = mem.as_cow(data.buf.as_array(data.buf_len))?;
         let mut entrypoint = Vec::from(b"nondet!");
         entrypoint.extend(cow.iter());
+        let entrypoint = Arc::from(entrypoint);
 
         let supervisor = self.context.data.supervisor.clone();
 
@@ -440,12 +419,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         mem: &mut wiggle::GuestMemory<'_>,
         account: &generated::types::Addr,
         calldata: &generated::types::Bytes,
-    ) -> Result<generated::types::BytesLen, generated::types::Error> {
+    ) -> Result<generated::types::Fd, generated::types::Error> {
         self.context.ensure_det()?;
         let called_contract_account = Address::read_from_mem(account, mem)?;
         let mut res_calldata = b"call!".to_vec();
         let calldata = calldata.buf.as_array(calldata.buf_len);
         res_calldata.extend(mem.as_cow(calldata)?.iter());
+        let res_calldata = Arc::from(res_calldata);
 
         let supervisor = self.context.data.supervisor.clone();
         let init_actions = {
@@ -578,11 +558,10 @@ impl Context {
         };
         vm.run(&instance)
     }
-    //EssentialGenlayerSdkData
 }
 
-fn vec_from_cstr_libc(str: *const u8) -> Vec<u8> {
-    let res = Vec::from(unsafe { CStr::from_ptr(str as *const i8) }.to_bytes());
+fn vec_from_cstr_libc(str: *const u8) -> Arc<[u8]> {
+    let res = Arc::from(unsafe { CStr::from_ptr(str as *const i8) }.to_bytes());
     unsafe {
         libc::free(str as *mut std::ffi::c_void);
     }

@@ -19,6 +19,16 @@
     )
 )
 
+(typename $fd (handle))
+
+(typename $result_now
+    (record
+        ;;; The address of the buffer to be written.
+        (field $file $fd)
+        ;;; The length of the buffer to be written.
+        (field $len $bytes_len)
+    )
+)
 
 (typename $bytes
     (record

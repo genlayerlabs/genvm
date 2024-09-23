@@ -14,41 +14,35 @@
     )
 
     (@interface func (export "get_message_data")
-        (result $error (expected $bytes_len (error $errno)))
+        (result $error (expected $result_now (error $errno)))
     )
 
     (@interface func (export "get_entrypoint")
-        (result $error (expected $bytes_len (error $errno)))
+        (result $error (expected $result_now (error $errno)))
     )
 
     (@interface func (export "run_nondet")
         (param $eq_principle string)
         (param $calldata $bytes)
-        (result $error (expected $bytes_len (error $errno)))
+        (result $error (expected $fd (error $errno)))
     )
 
     (@interface func (export "get_webpage")
         (param $config string)
         (param $url string)
-        (result $error (expected $bytes_len (error $errno)))
+        (result $error (expected $fd (error $errno)))
     )
 
     (@interface func (export "call_llm")
         (param $config string)
         (param $prompt string)
-        (result $error (expected $bytes_len (error $errno)))
+        (result $error (expected $fd (error $errno)))
     )
 
     (@interface func (export "call_contract")
         (param $account $addr)
         (param $calldata $bytes)
-        (result $error (expected $bytes_len (error $errno)))
-    )
-
-    (@interface func (export "read_result")
-        (param $buf (@witx pointer u8))
-        (param $len u32)
-        (result $error (expected $bytes_len (error $errno)))
+        (result $error (expected $fd (error $errno)))
     )
 
     (@interface func (export "storage_read")

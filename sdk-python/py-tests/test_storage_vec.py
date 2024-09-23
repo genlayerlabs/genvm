@@ -1,4 +1,4 @@
-from genlayer._storage import Vec, storage
+from genlayer.py._storage import Vec, storage
 
 import common
 

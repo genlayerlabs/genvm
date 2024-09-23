@@ -110,4 +110,10 @@ impl VFS {
     pub fn free_fd(&mut self, fd: u32) {
         self.free_descriptors.push(fd);
     }
+
+    pub fn place_content(&mut self, value: FileContentsUnevaluated) -> u32 {
+        let fd = self.alloc_fd();
+        self.fds.insert(fd, FileDescriptor::File(value));
+        fd
+    }
 }

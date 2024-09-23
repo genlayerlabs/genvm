@@ -24,8 +24,9 @@ http_dir = str(script_dir.parent.joinpath('http').absolute())
 
 sys.path.append(str(root_dir.joinpath('sdk-python', 'py')))
 
-import genlayer.calldata as calldata
-from genlayer.types import Address
+import genlayer.py
+from genlayer.py import calldata
+from genlayer.py.types import Address
 from mock_host import MockHost, MockStorage
 
 class MyHTTPHandler(httpserv.SimpleHTTPRequestHandler):

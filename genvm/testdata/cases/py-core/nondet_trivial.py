@@ -9,6 +9,6 @@ class NonDetInit(gsdk.Runner):
         return 'web page?'
 
 @gsdk.public
-def init():
+async def init():
     eval("print('init from eval!')")
-    return gsdk.run_nondet({"mode": "refl"}, NonDetInit())
+    return await gsdk.run_nondet({"mode": "refl"}, NonDetInit())
