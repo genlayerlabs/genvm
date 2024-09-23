@@ -5,9 +5,9 @@ import json
 class NonDetInit(gsdk.Runner):
     def __init__(self):
         pass
-    def run(self):
-        return gsdk.wasi.call_llm(json.dumps({}), "print 'yes' (without quotes) and nothing else")
+    async def run(self):
+        return await gsdk.call_llm({}, "print 'yes' (without quotes) and nothing else")
 
 @gsdk.public
-def main():
-    print(gsdk.run_nondet({"mode": "refl"}, NonDetInit()))
+async def main():
+    print(await gsdk.run_nondet({"mode": "refl"}, NonDetInit()))

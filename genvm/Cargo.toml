@@ -1,7 +1,14 @@
+cargo-features = ["profile-rustflags"]
+
 [package]
 name = "genvm"
 version = "0.1.0"
 edition = "2021"
+
+[profile.dev]
+rustflags = [
+    "-Zsanitizer=leak"
+]
 
 [dependencies]
 wasmtime = { path = "third-party/wasmtime/crates/wasmtime", default-features = false, features = ["cranelift", "std", "parallel-compilation", "cache"] }
@@ -21,3 +28,5 @@ genvm-modules-common = { path = "modules/common" }
 libc = { version = "0.2.158", default-features = false }
 zip = "2.2.0"
 directories-next = "2.0.0"
+futures = "0.3.30"
+is_debug = "1.0.1"

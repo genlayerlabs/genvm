@@ -7,13 +7,12 @@ if __name__ == '__main__':
 		root_dir = root_dir.parent
 	sys.path.append(str(root_dir.joinpath('sdk-python', 'py')))
 
-import genlayer.types
-import genlayer.calldata
+from genlayer.py.types import Address
+from genlayer.py import calldata as _calldata
 
 import socket
 import threading
 import typing
-from genlayer.types import Address
 import pickle
 
 from host_fns import *
@@ -163,7 +162,7 @@ class MockHost:
 									sock.sendall(bytes([ResultCode.RETURN]))
 								else:
 									sock.sendall(bytes([ResultCode.ROLLBACK]))
-								data = genlayer.calldata.encode(res["value"])
+								data = _calldata.encode(res["value"])
 								send_int(len(data))
 								sock.sendall(data)
 						case Methods.POST_NONDET_RESULT:

@@ -16,6 +16,7 @@ impl std::fmt::Display for PrintOption {
 }
 
 #[derive(clap::Parser)]
+#[command(version = concat!(env!("CARGO_PKG_VERSION"), " ", env!("PROFILE")))]
 struct CliArgs {
     #[arg(long, default_value_t = String::from("${genvmRoot}/share/genvm/default-config.json"))]
     config: String,

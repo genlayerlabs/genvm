@@ -1,7 +1,7 @@
 # { "depends": ["genvm-rustpython:test"] }
 
 import genlayer.sdk as gsdk
-from genlayer.types import *
+from genlayer.py.types import *
 
 __gsdk_self_run__ = True
 

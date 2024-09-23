@@ -1,6 +1,8 @@
+require 'open3'
 class CargoBuildTarget < Target
 	attr_reader :output_file
-	def initialize(dir, name, target, profile, features)
+	def initialize(dir, name, target, profile, features, flags)
+		@flags = flags
 		@features = features
 		cargo_out_dir = dir.join('target')
 		@target = target
@@ -51,6 +53,7 @@ class CargoBuildTarget < Target
 		if @features.size > 0
 			buf << " --features #{@features.join(',')}"
 		end
+		escape_args_to buf, @flags
 		buf << "\n"
 		buf << "  depfile = #{@cargo_out_dir.join(@name)}.d\n"
 	end
@@ -87,12 +90,22 @@ rule CARGO_BUILD
 EOF
 )
 
-self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, name:, target: nil, profile: "debug", features: [], **kwargs, &blk|
+self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, name:, target: nil, profile: "debug", features: [], flags: [], **kwargs, &blk|
+	if target.nil?
+		@dflt_target ||= Proc.new {
+			o, e, s = Open3.capture3('rustc --version --verbose')
+			raise "rustc failed #{o} #{e}" if not s.success?
+			res = o.match(/host: ([a-zA-Z0-9_\-]*)/)[1]
+			@logger.info("default rust target is set to #{res}")
+			res
+		}.call()
+		target = @dflt_target
+	end
 	if dir.nil?
 		dir = cur_src
 	end
 
-	trg = CargoBuildTarget.new(dir, name, target, profile, features)
+	trg = CargoBuildTarget.new(dir, name, target, profile, features, flags)
 
 	if out_file.nil?
 		return return_target(trg, **kwargs, &blk)

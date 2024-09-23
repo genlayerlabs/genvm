@@ -6,6 +6,8 @@ use std::ffi::CStr;
 
 use genvm_modules_common::interfaces::web_functions_api;
 
+mod response;
+
 genvm_modules_common::default_base_functions!(web_functions_api, Impl);
 
 #[derive(Deserialize)]
@@ -32,8 +34,9 @@ struct Config {
 }
 
 impl Impl {
-    fn try_new(conf: &CStr) -> Result<Self> {
-        let config: Config = serde_json::from_str(conf.to_str()?)?;
+    fn try_new(args: &CtorArgs) -> Result<Self> {
+        let conf: &str = args.config()?;
+        let config: Config = serde_json::from_str(conf)?;
         Ok(Impl {
             config,
             openai_key: std::env::var("OPENAIKEY").unwrap_or("".into()),
@@ -49,9 +52,11 @@ impl Impl {
                     "prompt": prompt,
                     "stream": false,
                 });
-                let res = ureq::post(&format!("{}/api/generate", self.config.host))
-                    .send_bytes(serde_json::to_string(&request)?.as_bytes())?;
-                let res = res.into_string()?;
+                let mut res = isahc::send(
+                    isahc::Request::post(&format!("{}/api/generate", self.config.host))
+                        .body(serde_json::to_string(&request)?.as_bytes())?,
+                )?;
+                let res = response::read(&mut res)?;
                 let val: serde_json::Value = serde_json::from_str(&res)?;
                 let response = val
                     .as_object()
@@ -77,11 +82,13 @@ impl Impl {
                     "stream": false,
                     "temperature": 0.7,
                 });
-                let res = ureq::post(&format!("{}/v1/chat/completions", self.config.host))
-                    .set("Content-Type", "application/json")
-                    .set("Authorization", &format!("Bearer {}", &self.openai_key))
-                    .send_bytes(serde_json::to_string(&request)?.as_bytes())?;
-                let res = res.into_string()?;
+                let mut res = isahc::send(
+                    isahc::Request::post(&format!("{}/v1/chat/completions", self.config.host))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", &format!("Bearer {}", &self.openai_key))
+                        .body(serde_json::to_string(&request)?.as_bytes())?,
+                )?;
+                let res = response::read(&mut res)?;
                 let val: serde_json::Value = serde_json::from_str(&res)?;
                 let response = val
                     .as_object()

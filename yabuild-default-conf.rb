@@ -1,4 +1,5 @@
 {
+	cc: "cc",
 	profile: "debug",
 	wasiSdk: root_src.join('tools', 'downloaded', 'wasi-sdk-24'),
 	createTestRunner: true,

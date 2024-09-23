@@ -16,6 +16,8 @@ fn get_addr(x: &PyBytes, vm: &VirtualMachine) -> PyResult<genvm_sdk_rust::Addr> 
 
 #[pymodule]
 pub mod genlayer_sdk {
+    use std::{io::Read, os::fd::FromRawFd};
+
     use rustpython::vm::{
         builtins::{PyBytes, PyBytesRef, PyStrRef},
         protocol::PyBuffer,
@@ -57,11 +59,11 @@ pub mod genlayer_sdk {
         eq_principle: PyStrRef,
         calldata: PyBytesRef,
         vm: &VirtualMachine,
-    ) -> PyResult<PyBytes> {
+    ) -> PyResult<u32> {
         flush_everything(vm);
         let eq_principle = eq_principle.as_str();
         let calldata: &[u8] = calldata.as_bytes();
-        let len = map_error(vm, unsafe {
+        map_error(vm, unsafe {
             genvm_sdk_rust::run_nondet(
                 eq_principle.as_ref(),
                 genvm_sdk_rust::Bytes {
@@ -69,8 +71,7 @@ pub mod genlayer_sdk {
                     buf_len: calldata.len() as u32,
                 },
             )
-        })?;
-        read_result_bytes(vm, len)
+        })
     }
 
     #[pyfunction]
@@ -78,10 +79,10 @@ pub mod genlayer_sdk {
         address: PyBytesRef,
         calldata: PyBytesRef,
         vm: &VirtualMachine,
-    ) -> PyResult<PyBytes> {
+    ) -> PyResult<u32> {
         flush_everything(vm);
         let address = super::get_addr(&address, vm)?;
-        let len = map_error(vm, unsafe {
+        map_error(vm, unsafe {
             genvm_sdk_rust::call_contract(
                 address,
                 genvm_sdk_rust::Bytes {
@@ -89,58 +90,50 @@ pub mod genlayer_sdk {
                     buf_len: calldata.len() as u32,
                 },
             )
-        })?;
-        read_result_bytes(vm, len)
-    }
-
-    fn read_result_str(vm: &VirtualMachine, len: u32) -> PyResult<String> {
-        let mut ret = Vec::<u8>::new();
-        ret.resize(len as usize, 0);
-        map_error(vm, unsafe {
-            genvm_sdk_rust::read_result(ret.as_mut_ptr(), len)
-        })?;
-        String::from_utf8(ret).map_err(|_e| vm.new_buffer_error(String::from("invalid utf8 seq")))
-    }
-
-    fn read_result_bytes(vm: &VirtualMachine, len: u32) -> PyResult<PyBytes> {
-        let mut ret = Vec::<u8>::new();
-        ret.resize(len as usize, 0);
-        map_error(vm, unsafe {
-            genvm_sdk_rust::read_result(ret.as_mut_ptr(), len)
-        })?;
-        Ok(PyBytes::from(ret))
+        })
     }
 
     #[pyfunction]
     fn get_message_data(vm: &VirtualMachine) -> PyResult<String> {
-        let len = map_error(vm, unsafe { genvm_sdk_rust::get_message_data() })?;
-
-        read_result_str(vm, len)
+        let res = map_error(vm, unsafe { genvm_sdk_rust::get_message_data() })?;
+        let mut file = unsafe { std::fs::File::from_raw_fd(res.file as std::os::fd::RawFd) };
+        let mut r = String::with_capacity(res.len as usize);
+        map_error(
+            vm,
+            file.read_to_string(&mut r)
+                .map_err(|_| genvm_sdk_rust::ERRNO_IO),
+        )?;
+        Ok(r)
     }
 
     #[pyfunction]
     fn get_entrypoint(vm: &VirtualMachine) -> PyResult<PyBytes> {
-        let len = map_error(vm, unsafe { genvm_sdk_rust::get_entrypoint() })?;
-
-        read_result_bytes(vm, len)
+        let res = map_error(vm, unsafe { genvm_sdk_rust::get_entrypoint() })?;
+        let mut file = unsafe { std::fs::File::from_raw_fd(res.file as std::os::fd::RawFd) };
+        let mut b = Vec::with_capacity(res.len as usize);
+        unsafe {
+            b.set_len(res.len as usize);
+        }
+        map_error(
+            vm,
+            file.read_exact(&mut b)
+                .map_err(|_| genvm_sdk_rust::ERRNO_IO),
+        )?;
+        Ok(b.into())
     }
 
     #[pyfunction]
-    fn get_webpage(config: PyStrRef, url: PyStrRef, vm: &VirtualMachine) -> PyResult<String> {
-        let len = map_error(vm, unsafe {
+    fn get_webpage(config: PyStrRef, url: PyStrRef, vm: &VirtualMachine) -> PyResult<u32> {
+        map_error(vm, unsafe {
             genvm_sdk_rust::get_webpage(config.as_str(), url.as_str())
-        })?;
-
-        read_result_str(vm, len)
+        })
     }
 
     #[pyfunction]
-    fn call_llm(config: PyStrRef, prompt: PyStrRef, vm: &VirtualMachine) -> PyResult<String> {
-        let len = map_error(vm, unsafe {
+    fn call_llm(config: PyStrRef, prompt: PyStrRef, vm: &VirtualMachine) -> PyResult<u32> {
+        map_error(vm, unsafe {
             genvm_sdk_rust::call_llm(config.as_str(), prompt.as_str())
-        })?;
-
-        read_result_str(vm, len)
+        })
     }
 
     #[pyfunction]

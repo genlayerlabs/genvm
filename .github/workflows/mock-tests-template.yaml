@@ -1,8 +1,11 @@
-name: GenVM tests
+name: GenVM build & run mock tests
 on:
-  push:
-    paths-ignore:
-      - doc/**
+  workflow_call:
+    inputs:
+      build_type:
+        type: string
+        required: true
+        description: build type
 defaults:
   run:
     shell: bash -x {0}
@@ -13,7 +16,7 @@ jobs:
       - name: basic setup
         run: |
           sudo apt-get update -y && \
-          sudo apt-get install -y --no-install-recommends ninja-build ruby curl git python3 zip wget tar tree && \
+          sudo apt-get install -y --no-install-recommends pkg-config ninja-build ruby curl git python3 zip wget tar tree && \
           git lfs install
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -37,7 +40,7 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE" && \
           ./build-scripts/install-tools.rb && \
-          ./tools/ya-build/ya-build config --preload ./.ci/release-conf.rb
+          ./tools/ya-build/ya-build config --preload .ci/${{ inputs.build_type }}-conf.rb
       - name: check format
         run: |
           ninja -v -C build tags/codegen && \
@@ -52,42 +55,8 @@ jobs:
       - name: publish
         uses: actions/upload-artifact@v4
         with:
-          name: all
+          name: all-${{ inputs.build_type }}
           path: ${{ github.workspace }}/build/out.zip
-
-  cargo-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - name: basic setup
-        run: |
-          sudo apt-get update -y && \
-          sudo apt-get install -y --no-install-recommends ninja-build ruby curl git python3 zip wget tar tree && \
-          git lfs install
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: 1.80.0
-          components: rustfmt
-          target: wasm32-wasi
-          rustflags: ""
-          cache-workspaces: |
-            genvm -> target
-            sdk-python -> target
-            tools/softfloat-lib/patch-floats -> target
-      - name: checkout submodules
-        run: |
-          cd "$GITHUB_WORKSPACE" && \
-            git config --global user.email "worker@ci.ci" && \
-            git config --global user.name "CI worker" && \
-            git submodule update --init --recursive && \
-            ./tools/git-third-party/git-third-party update --all
-      - name: configure and run codegen
-        run: |
-          cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \
-          ninja -v -C build tags/codegen
-      - name: cargo test
-        run: |
-          ./build-scripts/cargo-test.sh
 
   test-genvm-mock:
     needs: [build]
@@ -112,7 +81,7 @@ jobs:
             ${{ runner.os }}-buildx-
       - uses: actions/download-artifact@v4
         with:
-          name: all
+          name: all-${{ inputs.build_type }}
       - run: |
             sudo apt-get install -y wabt && \
             python3 -m pip install -r genvm/testdata/runner/requirements.txt && \
@@ -129,33 +98,3 @@ jobs:
           OPENAIKEY="" docker run --detach --rm --network host "$(docker build -q -t genvm/modules-webdriver -f genvm/modules/default-impl/web-funcs/webdriver.dockerfile genvm/modules/default-impl/web-funcs/)" && \
           sleep 5 && \
           ./genvm/testdata/runner/run.py
-  test-python:
-    needs: [build]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            sdk-python
-            .genvm-monorepo-root
-      - uses: actions/download-artifact@v4
-        with:
-          name: all
-      - run: |
-          python3.12 -m pip install poetry && \
-            pushd sdk-python && \
-            poetry install && \
-            popd && \
-            mkdir -p build && \
-            mv out.zip build/out.zip && \
-            pushd build && \
-            unzip out.zip && \
-            popd
-      - name: pytest
-        run: |
-          pushd sdk-python && \
-          poetry run pytest -n auto && \
-          popd
