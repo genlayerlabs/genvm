@@ -1,7 +1,5 @@
 #![feature(once_wait)]
 
-mod driver;
-
 mod host;
 pub mod plugin_loader;
 pub mod runner;

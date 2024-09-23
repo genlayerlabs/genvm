@@ -8,7 +8,7 @@ use std::{
 use tracing::instrument;
 use wiggle::{GuestError, GuestMemory, GuestPtr};
 
-use super::common::{FileContents, FileDescriptor};
+use super::common::*;
 use std::collections::BTreeMap;
 
 pub struct Context {
@@ -17,11 +17,12 @@ pub struct Context {
     env_buf: Vec<u8>,
     env_offsets: Vec<u32>,
 
-    fds: BTreeMap<u32, FileDescriptor>,
-    free_descriptors: Vec<u32>,
-    next_free_descriptor: u32,
-
     fs: Box<FilesTrie>,
+}
+
+pub struct ContextVFS<'a> {
+    pub(super) vfs: &'a mut VFS,
+    pub(super) context: &'a mut Context,
 }
 
 /// An error returned from the `proc_exit` host syscall.
@@ -210,50 +211,46 @@ impl Context {
     }
 }
 
-pub(super) fn add_to_linker_sync<T: Send + 'static>(
+pub trait AddToLinkerFn<T> {
+    fn call<'a>(&self, arg: &'a mut T) -> ContextVFS<'a>;
+}
+
+pub(super) fn add_to_linker_sync<'a, T: Send + 'static, F>(
     linker: &mut wasmtime::Linker<T>,
-    f: impl Fn(&mut T) -> &mut Context + Copy + Send + Sync + 'static,
-) -> anyhow::Result<()> {
-    generated::add_wasi_snapshot_preview1_to_linker(linker, f)?;
+    f: F,
+) -> anyhow::Result<()>
+where
+    F: AddToLinkerFn<T> + Copy + Send + Sync + 'static,
+{
+    #[derive(Clone, Copy)]
+    struct Fwd<F>(F);
+
+    impl<T, F> generated::AddWasiSnapshotPreview1ToLinkerFn<T> for Fwd<F>
+    where
+        F: AddToLinkerFn<T> + Copy + Send + Sync + 'static,
+    {
+        fn call<'a>(
+            &self,
+            arg: &'a mut T,
+        ) -> impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 {
+            self.0.call(arg)
+        }
+    }
+    generated::add_wasi_snapshot_preview1_to_linker(linker, Fwd(f))?;
     Ok(())
 }
 
 impl Context {
     pub fn new() -> Self {
-        let fds = BTreeMap::from([
-            (0, FileDescriptor::Stdin),
-            (1, FileDescriptor::Stdout),
-            (2, FileDescriptor::Stderr),
-            (3, FileDescriptor::Dir { path: Vec::new() }),
-        ]);
-        let mut next_free_descriptor: u32 = 0;
-        for c in &fds {
-            next_free_descriptor = next_free_descriptor.max(*c.0);
-        }
         Self {
             args_buf: Vec::new(),
             args_offsets: Vec::new(),
             env_buf: Vec::new(),
             env_offsets: Vec::new(),
-            fds,
-            free_descriptors: Vec::new(),
-            next_free_descriptor,
             fs: Box::new(FilesTrie::Dir {
                 children: BTreeMap::new(),
             }),
         }
-    }
-
-    fn alloc_fd(&mut self) -> u32 {
-        if self.free_descriptors.len() != 0 {
-            return self.free_descriptors.pop().unwrap();
-        }
-        self.next_free_descriptor += 1;
-        return self.next_free_descriptor;
-    }
-
-    fn free_fd(&mut self, fd: u32) {
-        self.free_descriptors.push(fd);
     }
 }
 
@@ -279,7 +276,7 @@ fn args_env_get(
 }
 
 #[allow(unused_variables)]
-impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
+impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> {
     #[instrument(skip(self, memory))]
     fn args_get(
         &mut self,
@@ -287,7 +284,13 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
         argv: GuestPtr<GuestPtr<u8>>,
         argv_buf: GuestPtr<u8>,
     ) -> Result<(), generated::types::Error> {
-        args_env_get(memory, argv, argv_buf, &self.args_offsets, &self.args_buf)
+        args_env_get(
+            memory,
+            argv,
+            argv_buf,
+            &self.context.args_offsets,
+            &self.context.args_buf,
+        )
     }
 
     #[instrument(skip(self, _memory))]
@@ -295,8 +298,8 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
         &mut self,
         _memory: &mut GuestMemory<'_>,
     ) -> Result<(generated::types::Size, generated::types::Size), generated::types::Error> {
-        let count: u32 = self.args_offsets.len().try_into()?;
-        let len: u32 = self.args_buf.len().try_into()?;
+        let count: u32 = self.context.args_offsets.len().try_into()?;
+        let len: u32 = self.context.args_buf.len().try_into()?;
         Ok((count, len))
     }
 
@@ -311,8 +314,8 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
             memory,
             environ,
             environ_buf,
-            &self.env_offsets,
-            &self.env_buf,
+            &self.context.env_offsets,
+            &self.context.env_buf,
         )
     }
 
@@ -321,8 +324,8 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
         &mut self,
         _memory: &mut GuestMemory<'_>,
     ) -> Result<(generated::types::Size, generated::types::Size), generated::types::Error> {
-        let count: u32 = self.env_offsets.len().try_into()?;
-        let len: u32 = self.env_buf.len().try_into()?;
+        let count: u32 = self.context.env_offsets.len().try_into()?;
+        let len: u32 = self.context.env_buf.len().try_into()?;
         Ok((count, len))
     }
 
@@ -379,9 +382,9 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
         fd: generated::types::Fd,
     ) -> Result<(), generated::types::Error> {
         let fdi: u32 = fd.into();
-        match self.fds.remove(&fdi) {
+        match self.vfs.fds.remove(&fdi) {
             Some(_) => {
-                self.free_fd(fdi);
+                self.vfs.free_fd(fdi);
                 Ok(())
             }
             None => Err(generated::types::Errno::Badf.into()),
@@ -800,7 +803,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
             return Err(generated::types::Errno::Badf.into());
         };
 
-        let dirent = Self::dir_fd_follow_trie(dir_path, &self.fs)?;
+        let dirent = Self::dir_fd_follow_trie(dir_path, &self.context.fs)?;
         let FilesTrie::Dir {
             children: direntries,
         } = &**dirent
@@ -901,10 +904,10 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
     ) -> Result<generated::types::Filestat, generated::types::Error> {
         let fdi: u32 = dirfd.into();
         let path = super::common::read_string(memory, path)?;
-        let Some(FileDescriptor::Dir { path: dir_path }) = self.fds.get(&fdi) else {
+        let Some(FileDescriptor::Dir { path: dir_path }) = self.vfs.fds.get(&fdi) else {
             return Err(generated::types::Errno::Badf.into());
         };
-        let mut cur_trie = Self::dir_fd_follow_trie(dir_path, &self.fs)?;
+        let mut cur_trie = Self::dir_fd_follow_trie(dir_path, &self.context.fs)?;
         for fname in path.split("/") {
             cur_trie = Self::dir_fd_get_trie(fname, cur_trie)?;
         }
@@ -980,12 +983,12 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
         let file_path = super::common::read_string(memory, path)?;
         let fdi: u32 = dirfd.into();
         let fdi: u32 = dirfd.into();
-        let new_fd = self.alloc_fd();
+        let new_fd = self.vfs.alloc_fd();
         {
-            let Some(FileDescriptor::Dir { path: dir_path }) = self.fds.get(&fdi) else {
+            let Some(FileDescriptor::Dir { path: dir_path }) = self.vfs.fds.get(&fdi) else {
                 return Err(generated::types::Errno::Badf.into());
             };
-            let mut cur_trie = Self::dir_fd_follow_trie(dir_path, &self.fs)?;
+            let mut cur_trie = Self::dir_fd_follow_trie(dir_path, &self.context.fs)?;
             for fname in file_path.split("/") {
                 cur_trie = Self::dir_fd_get_trie(fname, cur_trie)?;
             }
@@ -994,20 +997,20 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
                     let f = FileDescriptor::File(
                         super::common::FileContentsUnevaluated::from_contents(data.clone(), 0),
                     );
-                    self.fds.insert(new_fd, f);
+                    self.vfs.fds.insert(new_fd, f);
                     Ok(new_fd.into())
                 }
                 FilesTrie::Dir { .. } => {
                     let mut path = dir_path.clone();
                     path.push(file_path);
                     let f = FileDescriptor::Dir { path: path };
-                    self.fds.insert(new_fd, f);
+                    self.vfs.fds.insert(new_fd, f);
                     Ok(new_fd.into())
                 }
             }
         }
         .map_err(|e| {
-            self.free_fd(new_fd);
+            self.vfs.free_fd(new_fd);
             e
         })
     }
@@ -1176,7 +1179,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for Context {
     }
 }
 
-impl Context {
+impl ContextVFS<'_> {
     fn dir_fd_get_trie<'a>(
         dir_path: &str,
         cur_trie: &'a Box<FilesTrie>,
@@ -1208,7 +1211,7 @@ impl Context {
         fd: generated::types::Fd,
     ) -> Result<&FileDescriptor, generated::types::Error> {
         let fdi: u32 = fd.into();
-        match self.fds.get(&fdi) {
+        match self.vfs.fds.get(&fdi) {
             Some(x) => Ok(x),
             None => Err(generated::types::Errno::Badf.into()),
         }
@@ -1219,7 +1222,7 @@ impl Context {
         fd: generated::types::Fd,
     ) -> Result<&mut FileDescriptor, generated::types::Error> {
         let fdi: u32 = fd.into();
-        match self.fds.get_mut(&fdi) {
+        match self.vfs.fds.get_mut(&fdi) {
             Some(x) => Ok(x),
             None => Err(generated::types::Errno::Badf.into()),
         }

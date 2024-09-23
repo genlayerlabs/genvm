@@ -29,3 +29,4 @@ Floats are [partially non deterministic](https://github.com/WebAssembly/design/b
 
 ### Cons
 1. If binary was patched, non deterministic mode will use slow software implementation as well
+    - this can be addressed with SIMD

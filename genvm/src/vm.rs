@@ -146,15 +146,15 @@ pub struct Modules {
     pub llm: Box<dyn llm_functions_api::Trait>,
 }
 
-impl Drop for Modules {
-    fn drop(&mut self) {
-        eprintln!(
-            "{}",
-            std::fs::read_to_string(std::path::Path::new("/proc/self/maps"))
-                .unwrap_or(String::new())
-        );
-    }
-}
+// impl Drop for Modules {
+//     fn drop(&mut self) {
+//         eprintln!(
+//             "{}",
+//             std::fs::read_to_string(std::path::Path::new("/proc/self/maps"))
+//                 .unwrap_or(String::new())
+//         );
+//     }
+// }
 
 pub struct Supervisor {
     pub modules: Modules,

@@ -1,6 +1,6 @@
 (use "genlayer_sdk_types.witx")
 
-;;; @PASS_STORE@
+;;; @CONTEXT_REF_TYPE@
 (module $genlayer_sdk
 
     (@interface func (export "rollback")

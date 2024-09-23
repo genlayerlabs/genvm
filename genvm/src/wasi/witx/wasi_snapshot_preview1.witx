@@ -1,5 +1,6 @@
 (use "wasi_snapshot_preview1_types.witx")
 
+;;; @CONTEXT_REF_TYPE@
 (module $wasi_snapshot_preview1
   ;;; Linear memory to be accessed by WASI functions that need it.
   (import "memory" (memory))

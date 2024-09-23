@@ -1,4 +1,4 @@
-use std::{mem::swap, sync::Arc};
+use std::{collections::BTreeMap, mem::swap, sync::Arc};
 
 use wiggle::{GuestError, GuestMemory, GuestPtr};
 
@@ -71,4 +71,43 @@ pub fn read_string<'a>(
     ptr: GuestPtr<str>,
 ) -> Result<String, GuestError> {
     Ok(memory.as_cow_str(ptr)?.into_owned())
+}
+
+pub(super) struct VFS {
+    pub fds: BTreeMap<u32, FileDescriptor>,
+    pub free_descriptors: Vec<u32>,
+    pub next_free_descriptor: u32,
+}
+
+impl VFS {
+    pub fn new() -> Self {
+        let fds = BTreeMap::from([
+            (0, FileDescriptor::Stdin),
+            (1, FileDescriptor::Stdout),
+            (2, FileDescriptor::Stderr),
+            (3, FileDescriptor::Dir { path: Vec::new() }),
+        ]);
+        let next_free_descriptor = fds.last_key_value().map(|x| *x.0).unwrap_or(0);
+        Self {
+            fds,
+            next_free_descriptor,
+            free_descriptors: Vec::new(),
+        }
+    }
+
+    /// gives vacant fd
+    pub fn alloc_fd(&mut self) -> u32 {
+        match self.free_descriptors.pop() {
+            Some(v) => v,
+            None => {
+                self.next_free_descriptor += 1;
+                self.next_free_descriptor
+            }
+        }
+    }
+
+    /// it must be removed from fds beforehand
+    pub fn free_fd(&mut self, fd: u32) {
+        self.free_descriptors.push(fd);
+    }
 }
