@@ -1,4 +1,4 @@
-# { "depends": ["genvm-rustpython:test"] }
+# { "depends": ["genlayer-py-std:test"] }
 import genlayer.sdk as gsdk
 
 @gsdk.public

@@ -1,8 +1,9 @@
 use core::str;
-use std::{collections::HashMap, io::Write, path::Path, sync::atomic::AtomicU32};
+use std::{collections::{BTreeMap, HashMap}, io::Write, path::Path, sync::atomic::AtomicU32};
 
 use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
 use itertools::Itertools;
+use wasmparser::WasmFeatures;
 use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
@@ -187,6 +188,15 @@ impl VM {
     }
 
     pub fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
+        (|| {
+            let Ok(lck) = self.store.data().genlayer_ctx.lock() else { return };
+            let mut stderr = std::io::stderr().lock();
+            let _ = stderr.write(b"Spawning genvm\n");
+            lck.preview1.log(&mut stderr);
+            lck.genlayer_sdk.log(&mut stderr);
+            let _ = stderr.flush();
+        })();
+
         let func = instance
             .get_typed_func::<(), ()>(&mut self.store, "")
             .or_else(|_| instance.get_typed_func::<(), ()>(&mut self.store, "_start"))
@@ -223,7 +233,16 @@ impl Supervisor {
         base_conf.cranelift_opt_level(wasmtime::OptLevel::None);
         //base_conf.cranelift_opt_level(wasmtime::OptLevel::Speed);
         base_conf.wasm_tail_call(true);
+        base_conf.wasm_bulk_memory(true);
         base_conf.wasm_relaxed_simd(false);
+        base_conf.wasm_simd(true);
+        base_conf.wasm_relaxed_simd(false);
+        base_conf.wasm_feature(WasmFeatures::BULK_MEMORY, true);
+        base_conf.wasm_feature(WasmFeatures::REFERENCE_TYPES, false);
+        base_conf.wasm_feature(WasmFeatures::SIGN_EXTENSION, true);
+        base_conf.wasm_feature(WasmFeatures::MUTABLE_GLOBAL, true);
+        base_conf.wasm_feature(WasmFeatures::SATURATING_FLOAT_TO_INT, false);
+        base_conf.wasm_feature(WasmFeatures::MULTI_VALUE, true);
 
         match directories_next::ProjectDirs::from("", "yagerai", "genvm") {
             None => {
@@ -286,13 +305,20 @@ impl Supervisor {
         match entry {
             std::collections::hash_map::Entry::Occupied(entry) => Ok(entry.get().clone()),
             std::collections::hash_map::Entry::Vacant(entry) => {
+                // FIXME: find source of this. why call_indirect requires tables?
+                let add_features = WasmFeatures::REFERENCE_TYPES.bits() | WasmFeatures::FLOATS.bits();
+
+                let det_features = self.det_engine.config().get_features().bits() | add_features;
+
+                let non_det_features = self.non_det_engine.config().get_features().bits() | add_features;
+
                 let mut det_validator = wasmparser::Validator::new_with_features(
-                    *self.det_engine.config().get_features(),
+                    WasmFeatures::from_bits(det_features).unwrap(),
                 );
                 let mut non_det_validator = wasmparser::Validator::new_with_features(
-                    *self.det_engine.config().get_features(),
+                    WasmFeatures::from_bits(non_det_features).unwrap(),
                 );
-                det_validator.validate_all(&module_bytes[..])?;
+                det_validator.validate_all(&module_bytes[..]).with_context(|| format!("validating {}", &String::from_utf8_lossy(&module_bytes[..10])))?;
                 non_det_validator.validate_all(&module_bytes[..])?;
                 let module_det = wasmtime::CodeBuilder::new(&self.det_engine)
                     .wasm_binary(&module_bytes[..], path)?
@@ -358,7 +384,7 @@ impl Supervisor {
         } else {
             None
         };
-        let prec = self.cache_module(contents, debug_path)?;
+        let prec = self.cache_module(contents, debug_path).with_context(|| format!("caching {:?}", &debug_path))?;
         if ret_vm.is_det() {
             Ok(prec.det.clone())
         } else {
@@ -367,7 +393,7 @@ impl Supervisor {
     }
 
     pub fn apply_actions(&mut self, vm: &mut VM) -> Result<wasmtime::Instance> {
-        let mut env = Vec::new();
+        let mut env = BTreeMap::new();
 
         for act in vm.init_actions.actions.clone().iter() {
             match act {
@@ -384,7 +410,15 @@ impl Supervisor {
                     .preview1
                     .map_file(&to, vm.init_actions.code.clone())?,
                 crate::runner::InitAction::AddEnv { name, val } => {
-                    env.push((name.clone(), val.clone()))
+                    match env.entry(name.clone()) {
+                        std::collections::btree_map::Entry::Vacant(vacant_entry) => {
+                            vacant_entry.insert(val.clone());
+                        },
+                        std::collections::btree_map::Entry::Occupied(mut occupied_entry) => {
+                            occupied_entry.get_mut().push_str(":");
+                            occupied_entry.get_mut().push_str(val);
+                        },
+                    }
                 }
                 crate::runner::InitAction::SetArgs { args } => vm
                     .store
@@ -414,11 +448,12 @@ impl Supervisor {
                     contents,
                     debug_path,
                 } => {
+                    let env: Vec<(String, String)> = env.into_iter().collect();
                     vm.store
                         .data_mut()
                         .genlayer_ctx_mut()
                         .preview1
-                        .set_env(&env[..])?;
+                        .set_env(&env)?;
                     let module = self.link_wasm_into(vm, contents.clone(), Some(debug_path))?;
                     return vm.linker.instantiate(&mut vm.store, &module);
                 }

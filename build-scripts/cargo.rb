@@ -13,7 +13,7 @@ class CargoBuildTarget < Target
 		cargo_out_dir = cargo_out_dir.join(profile)
 		@cargo_out_dir = cargo_out_dir
 		@dir = dir
-		@is_lib = name == "lib"
+		@is_lib = name =~ /^(static|dy)lib$/
 		if @is_lib
 			# avoid toml dependency
 			File.read(@dir.join('Cargo.toml')).lines.each { |l|
@@ -24,7 +24,11 @@ class CargoBuildTarget < Target
 				end
 			}
 			@name = 'lib' + @name.gsub('-', '_')
-			suff = NATIVE_LIB_EXT
+			if name == 'staticlib'
+				suff = NATIVE_STATIC_LIB_EXT
+			else
+				suff = NATIVE_SHARED_LIB_EXT
+			end
 		else
 			@name = name
 			if @target =~ /wasm/

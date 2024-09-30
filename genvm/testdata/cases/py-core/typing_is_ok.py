@@ -1,4 +1,4 @@
-# { "depends": ["genvm-rustpython:test"] }
+# { "depends": ["genlayer-py-std:test"] }
 
 #from __future__ import annotations
 

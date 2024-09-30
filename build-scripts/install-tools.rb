@@ -64,7 +64,7 @@ while not root.join('.genvm-monorepo-root').exist?()
 end
 logger.debug("genvm root is #{root}")
 
-download_dir = root.join('tools', 'downloaded')
+download_dir = root.join('third-party')
 download_dir.mkpath()
 
 logger.debug("download dir is #{download_dir}")

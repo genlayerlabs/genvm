@@ -15,10 +15,10 @@
 			"commit": "3b70b5d8147675932c38b36cd09af6df4eedd919",
 			"patches": 2
 		},
-		"sdk-python/third-party/RustPython": {
-			"url": "https://github.com/RustPython/RustPython.git",
-			"commit": "8bc59441789868cc3da216703f743cd33b03752b",
-			"patches": 2
+		"genvm/third-party/wasm-tools": {
+			"url": "https://github.com/bytecodealliance/wasm-tools.git",
+			"commit": "5a83828b7ff0e59db322de2a6466abca656de9a5",
+			"patches": 0
 		}
 	}
 }

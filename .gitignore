@@ -1,12 +1,26 @@
-target
+# editors
 .vscode
 .idea
-/build
-/.env
+
+# non git-controlled code and tools
 /tools/downloaded
 /third-party/*
 !/third-party/.gitkeep
+
+# build related directories
+/build
+target
+zig-out
+zig-build
+
+# secrets
+/.env
+
+# py
 __pycache__
+.pytest_cache
+
+# apple
 .DS_Store
 .AppleDouble
 .LSOverride

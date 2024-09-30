@@ -1,0 +1,7 @@
+[env]
+PYO3_CROSS_PYTHON_VERSION = "3.13"
+
+[build]
+rustflags =[
+    "-Ctarget-feature=-reference-types",
+]

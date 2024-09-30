@@ -3,14 +3,14 @@ project('genvm') {
 
 	modules = target_alias('modules',
 		target_cargo_build(
-			name: "lib",
+			name: "dylib",
 			profile: config.profile,
 			out_file: modules_dir.join('libweb.so'),
 			dir: cur_src.join('modules', 'default-impl', 'web-funcs'),
 			flags: ['-Zprofile-rustflags']
 		),
 		target_cargo_build(
-			name: "lib",
+			name: "dylib",
 			profile: config.profile,
 			out_file: modules_dir.join('libllm.so'),
 			dir: cur_src.join('modules', 'default-impl', 'llm-funcs'),
