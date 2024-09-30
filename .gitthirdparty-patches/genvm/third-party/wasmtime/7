@@ -11,7 +11,7 @@ This reverts commit 55b4035eb18daa42cc6d3eb1906799a0b5aa8b5e.
  2 files changed, 5 insertions(+), 60 deletions(-)
 
 diff --git a/crates/wasmtime/src/runtime/store.rs b/crates/wasmtime/src/runtime/store.rs
-index a84233b..32c736c 100644
+index dc776d5..3b302bf 100644
 --- a/crates/wasmtime/src/runtime/store.rs
 +++ b/crates/wasmtime/src/runtime/store.rs
 @@ -213,8 +213,10 @@ impl CallHook {
