@@ -1,8 +1,4 @@
-mod generated {
-    include! {
-        concat!(env!("OUT_DIR"), "/generated.rs")
-    }
-}
+mod generated;
 
 #[allow(unused_imports)]
 pub use generated::*;

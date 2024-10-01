@@ -8,7 +8,7 @@
 		"third-party/wasi-rs": {
 			"url": "https://github.com/bytecodealliance/wasi-rs/",
 			"commit": "9ec04a7d8ebb1bbb9e3291503425cee1ec38a560",
-			"patches": 0
+			"patches": 1
 		},
 		"runners/softfloat/berkeley-softfloat-3": {
 			"url": "https://github.com/ucb-bar/berkeley-softfloat-3.git",

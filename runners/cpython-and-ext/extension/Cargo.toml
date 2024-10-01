@@ -9,8 +9,12 @@ edition = "2021"
 crate-type = ["staticlib"]
 
 [dependencies]
-pyo3 = { version = "0.22.3", features = ["extension-module"] }
 genvm-sdk-rust = { path = "../../../sdk-rust", default-features = false }
+
+[dependencies.pyo3]
+version = "0.22.3"
+default-features = false
+features = ["macros", "abi3-py312", "extension-module"]
 
 [profile.release]
 lto = "fat"
