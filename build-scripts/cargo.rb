@@ -1,10 +1,14 @@
 require 'open3'
+
+CONFIGURATOR = self
+
 class CargoBuildTarget < Target
 	attr_reader :output_file
 	def initialize(dir, name, target, profile, features, flags)
 		@flags = flags
 		@features = features
-		cargo_out_dir = dir.join('target')
+		@target_dir = CONFIGURATOR.root_build.join('generated', 'rust-target') # dir.join('target')
+		cargo_out_dir = @target_dir
 		@target = target
 		if not target.nil?
 			cargo_out_dir = cargo_out_dir.join(target)
@@ -48,6 +52,7 @@ class CargoBuildTarget < Target
 		else
 			buf << "  FLAGS = --bin #{@name}"
 		end
+		buf << " --target-dir " << @target_dir.to_s
 		if @profile != "debug"
 			buf << " --profile=#{@profile}"
 		end

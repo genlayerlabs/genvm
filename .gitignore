@@ -12,6 +12,7 @@
 target
 zig-out
 zig-build
+/mkmf.log
 
 # secrets
 /.env

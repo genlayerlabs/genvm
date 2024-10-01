@@ -12,7 +12,7 @@ do
     if test -d "tests"
     then
         echo "=== testing $dir ==="
-        cargo test --tests
+        cargo test --target-dir "$SCRIPT_DIR/../build/generated/rust-target" --tests
     fi
     popd  2> /dev/null > /dev/null
 done

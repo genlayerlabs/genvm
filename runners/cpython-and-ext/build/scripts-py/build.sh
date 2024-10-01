@@ -40,7 +40,7 @@ touch lib-dynload/.keep
 cp /out/py/bin/python3.wasm /out/cpython.raw.wasm
 /opt/wabt-1.0.36/bin/wasm-strip /out/cpython.raw.wasm
 
-chmod -R a+rw /out/to-zip /out/cpython.raw.wasm
+chmod -R a+rw /out/
 
 cd /out/to-zip
 zip -r ../cpython.zip *

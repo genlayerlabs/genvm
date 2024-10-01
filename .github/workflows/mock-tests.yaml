@@ -1,16 +1,21 @@
-name: GenVM mock tests
+name: Build all
 on:
   push:
     paths-ignore:
       - doc/**
 jobs:
-  build-debug:
-    uses: ./.github/workflows/mock-tests-template.yaml
+  build-debug-ubuntu:
+    uses: ./.github/workflows/mock-genvm-template.yaml
     with:
       build_type: debug
-    secrets: inherit
-  build-release:
-    uses: ./.github/workflows/mock-tests-template.yaml
+      runs_on: ubuntu-latest
+  build-release-ubuntu:
+    uses: ./.github/workflows/mock-genvm-template.yaml
     with:
       build_type: release
-    secrets: inherit
+      runs_on: ubuntu-latest
+  build-release-macos:
+    uses: ./.github/workflows/mock-genvm-template.yaml
+    with:
+      build_type: release
+      runs_on: macos-latest

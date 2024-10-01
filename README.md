@@ -12,17 +12,33 @@ It is a monorepo for GenVM, which consists of the following subprojects:
 
 Required tools:
 - git
-- python3
-- ruby (tested with 3.0)
-- ninja-build (or just ninja)
-- cargo and rust of version 1.80; please, refer to [rustup docs](https://www.rust-lang.org/tools/install) for installation. Target wasm32-wasi and "host" are required. `rustup target add wasm32-wasi`
+- ruby 3.\*
+- [...](./build-scripts/src/ubuntu.sh) can be installed via scripts (see below)
 
-Getting the source
-1. clone the repositopry and `cd` to it
-2. `./build-scripts/install-tools.rb`
-3. `git submodule update --init --recursive`
-4. `./tools/git-third-party/git-third-party update --all`
-  This command will clone all third-party repositories and then apply patches to them
+Basic setup:
+1. `cd $PROJECT_DIR`
+2. `git submodule update --init --recursive --depth 1`
+3. `./build-scripts/install-deps.rb --os`
+4. `source env.sh`
+5. `git third-party update --all`
+<!--
+  of version 1.80; please, refer to [rustup docs](https://www.rust-lang.org/tools/install) for installation. Target wasm32-wasi and "host" are required. `rustup target add wasm32-wasi`
+-->
+
+### Simple
+
+1. `./build-scripts/install-deps.rb --rust --genvm`
+2. `ya-build config` (for release build pass `--preload .ci/release-conf.rb`)
+3. `ninja -C build genvm/genvm/all`
+4. Get `genvm-runners.zip` from [github](https://github.com/yeagerai/genvm)
+5. merge `build/out` and `genvm-runners.zip`
+
+### Full
+
+1. `./build-scripts/install-deps.rb --rust --genvm --runners`
+2. `ya-build config` (for release build pass `--preload .ci/release-conf.rb`)
+3. `ninja -C build tags/all`
+4. full genvm is located at `build/out`
 
 Building
 1. `./tools/ya-build/ya-build config`

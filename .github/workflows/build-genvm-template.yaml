@@ -1,0 +1,47 @@
+name: GenVM build
+on:
+  workflow_call:
+    inputs:
+      build_type:
+        type: string
+        required: true
+        description: build type
+      runs_on:
+        type: string
+        required: true
+        description: runner id
+defaults:
+  run:
+    shell: bash -x {0}
+jobs:
+  build:
+    runs-on: ${{ inputs.runs_on }}
+    outputs:
+      runners-url: ${{ steps.artifact-upload-step.outputs.artifact-url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          install_also: --genvm
+      - name: Install rust
+        uses: ./.github/actions/setup-rust
+      - name: install tools and configure
+        run: |
+          cd "$GITHUB_WORKSPACE" && \
+          ./build-scripts/install-deps.rb --genvm && \
+          ./tools/ya-build/ya-build config --preload .ci/${{ inputs.build_type }}-conf.rb
+      - name: build
+        run: |
+          cd "$GITHUB_WORKSPACE" && \
+            ninja -v -C build genvm/genvm/all && \
+            tree build/out && \
+            pushd build/out && \
+            zip -r -9 ../genvm.zip * && \
+            popd
+      - name: Publish genvm
+        id: artifact-upload-step
+        uses: actions/upload-artifact@v4
+        with:
+          name: genvm-${{ inputs.build_type }}-${{ inputs.runs_on }}
+          path: ${{ github.workspace }}/build/genvm.zip

@@ -3,9 +3,9 @@ name = "genvm-sdk-python"
 version = "0.1.0"
 description = ""
 authors = ["Kira Prokopenko <kira@yeager.ai>"]
-readme = "README.md"
+#readme = "README.md"
 packages = [
-    { include = "src", from = "py" },
+    { include = "genlayer", from = "src" },
 ]
 
 [tool.poetry.dependencies]
