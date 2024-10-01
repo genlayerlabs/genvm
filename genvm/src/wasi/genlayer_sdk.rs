@@ -543,15 +543,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
 impl Context {
     pub fn log(&self, to: &mut dyn std::io::Write) {
-        let _ = to.write_fmt(
-            format_args!(
-                "config {}\n",
-                serde_json::json!({
-                    "config": &self.data.conf,
-                    "message": self.data.message_data
-                })
-            )
-        );
+        let _ = to.write_fmt(format_args!(
+            "config {}\n",
+            serde_json::json!({
+                "config": &self.data.conf,
+                "message": self.data.message_data
+            })
+        ));
     }
 
     /// note: handles fuel itself

@@ -82,13 +82,21 @@ impl RunnerReaderCacheEntry {
     where
         R: std::io::Read + std::io::Seek,
     {
-        let all_files: Vec<String> = zip_file.file_names().filter(|f| !f.ends_with("/")).map(|f| f.into()).sorted().collect();
+        let all_files: Vec<String> = zip_file
+            .file_names()
+            .filter(|f| !f.ends_with("/"))
+            .map(|f| f.into())
+            .sorted()
+            .collect();
         for a in from {
             match a {
                 RunnerJsonInitAction::MapFile { to, file } => {
                     let mut read_to_buf = |name: &str, to: String| -> Result<()> {
                         let mut buf = Vec::new();
-                        zip_file.by_name(&name).with_context(|| format!("reading {name}"))?.read_to_end(&mut buf)?;
+                        zip_file
+                            .by_name(&name)
+                            .with_context(|| format!("reading {name}"))?
+                            .read_to_end(&mut buf)?;
                         dest.push(InitAction::MapFile {
                             to,
                             contents: Arc::from(buf),
@@ -96,9 +104,10 @@ impl RunnerReaderCacheEntry {
                         Ok(())
                     };
                     if file.ends_with("/") {
-                        for f in all_files.iter().filter(|f| {
-                            !f.ends_with("/") && f.starts_with(&file)
-                        }) {
+                        for f in all_files
+                            .iter()
+                            .filter(|f| !f.ends_with("/") && f.starts_with(&file))
+                        {
                             let mut name = to.clone();
                             if !name.ends_with("/") {
                                 name.push_str("/");
@@ -117,7 +126,10 @@ impl RunnerReaderCacheEntry {
                 RunnerJsonInitAction::SetArgs { args } => dest.push(InitAction::SetArgs { args }),
                 RunnerJsonInitAction::LinkWasm { file } => {
                     let mut buf = Vec::new();
-                    zip_file.by_name(&file).with_context(|| format!("linking {file}"))?.read_to_end(&mut buf)?;
+                    zip_file
+                        .by_name(&file)
+                        .with_context(|| format!("linking {file}"))?
+                        .read_to_end(&mut buf)?;
                     dest.push(InitAction::LinkWasm {
                         contents: Arc::from(buf),
                         debug_path: format!("{}/{}", path_prefix, file),
@@ -125,7 +137,10 @@ impl RunnerReaderCacheEntry {
                 }
                 RunnerJsonInitAction::StartWasm { file } => {
                     let mut buf = Vec::new();
-                    zip_file.by_name(&file).with_context(|| format!("starting {file}"))?.read_to_end(&mut buf)?;
+                    zip_file
+                        .by_name(&file)
+                        .with_context(|| format!("starting {file}"))?
+                        .read_to_end(&mut buf)?;
                     dest.push(InitAction::StartWasm {
                         contents: Arc::from(buf),
                         debug_path: format!("{}/{}", path_prefix, file),
@@ -158,14 +173,16 @@ impl RunnerReaderCacheEntry {
             path_prefix,
             &mut ret.pre_actions,
             runner.pre_actions,
-        ).with_context(|| format!("pre_actions from {}", &path_prefix))?;
+        )
+        .with_context(|| format!("pre_actions from {}", &path_prefix))?;
         ret.depends = Arc::new(runner.depends);
         RunnerReaderCacheEntry::transform_actions(
             zip_file,
             path_prefix,
             &mut ret.actions,
             runner.actions,
-        ).with_context(|| format!("actions from {}", &path_prefix))?;
+        )
+        .with_context(|| format!("actions from {}", &path_prefix))?;
 
         Ok(ret)
     }

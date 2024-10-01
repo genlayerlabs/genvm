@@ -7,8 +7,8 @@ mod implementation {
     use wasm_encoder::reencode::*;
     use wasm_encoder::*;
 
-    const ROUND_MIN: i32 = 2;  // softfloat_round_min
-    const ROUND_MAX: i32 = 2;  // softfloat_round_max
+    const ROUND_MIN: i32 = 2; // softfloat_round_min
+    const ROUND_MAX: i32 = 2; // softfloat_round_max
 
     pub struct MyEncoder {
         start: u32,
@@ -139,10 +139,13 @@ mod implementation {
                         boolop: adder.add([ValType::F32, ValType::F32], [ValType::I32]),
                         from_i32: adder.add([ValType::I32], [ValType::F32]),
                         from_i64: adder.add([ValType::I64], [ValType::F32]),
-                        to_i32: adder.add([ValType::F32, ValType::I32, ValType::I32], [ValType::I32]),
-                        to_i64: adder.add([ValType::F32, ValType::I32, ValType::I32], [ValType::I64]),
+                        to_i32: adder
+                            .add([ValType::F32, ValType::I32, ValType::I32], [ValType::I32]),
+                        to_i64: adder
+                            .add([ValType::F32, ValType::I32, ValType::I32], [ValType::I64]),
 
-                        round: adder.add([ValType::F32, ValType::I32, ValType::I32], [ValType::F32]),
+                        round: adder
+                            .add([ValType::F32, ValType::I32, ValType::I32], [ValType::F32]),
                     });
                     f64_types = Some(FTypes {
                         bopf: adder.add([ValType::F64, ValType::F64], [ValType::F64]),
@@ -150,10 +153,13 @@ mod implementation {
                         boolop: adder.add([ValType::F64, ValType::F64], [ValType::I32]),
                         from_i32: adder.add([ValType::I32], [ValType::F64]),
                         from_i64: adder.add([ValType::I64], [ValType::F64]),
-                        to_i32: adder.add([ValType::F64, ValType::I32, ValType::I32], [ValType::I32]),
-                        to_i64: adder.add([ValType::F64, ValType::I32, ValType::I32], [ValType::I64]),
+                        to_i32: adder
+                            .add([ValType::F64, ValType::I32, ValType::I32], [ValType::I32]),
+                        to_i64: adder
+                            .add([ValType::F64, ValType::I32, ValType::I32], [ValType::I64]),
 
-                        round: adder.add([ValType::F64, ValType::I32, ValType::I32], [ValType::F64]),
+                        round: adder
+                            .add([ValType::F64, ValType::I32, ValType::I32], [ValType::F64]),
                     });
 
                     module.section(&adder.types);
@@ -203,7 +209,7 @@ mod implementation {
                         to_i64: adder.add("f32_to_i64", f32_types.unwrap().to_i64),
                         to_u64: adder.add("f32_to_ui64", f32_types.unwrap().to_i64),
 
-                        round: adder.add("f32_roundToInt", f32_types.unwrap().round)
+                        round: adder.add("f32_roundToInt", f32_types.unwrap().round),
                     });
                     f64_ops = Some(FOps {
                         add: adder.add("f64_add", f64_types.unwrap().bopf),
@@ -224,7 +230,7 @@ mod implementation {
                         to_i64: adder.add("f64_to_i64", f64_types.unwrap().to_i64),
                         to_u64: adder.add("f64_to_ui64", f64_types.unwrap().to_i64),
 
-                        round: adder.add("f64_roundToInt", f64_types.unwrap().round)
+                        round: adder.add("f64_roundToInt", f64_types.unwrap().round),
                     });
                     reencoder.off = adder.cnt;
 

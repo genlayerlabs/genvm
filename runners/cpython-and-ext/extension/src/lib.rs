@@ -1,4 +1,9 @@
-use pyo3::{buffer::PyBuffer, types::PyBytes, exceptions::{PySystemError, PyValueError}, prelude::*};
+use pyo3::{
+    buffer::PyBuffer,
+    exceptions::{PySystemError, PyValueError},
+    prelude::*,
+    types::PyBytes,
+};
 
 use std::{io::Read, os::fd::FromRawFd};
 
@@ -21,7 +26,7 @@ fn flush_everything() {
 }
 
 #[pymodule]
-#[pyo3(name="_genlayer_wasi")]
+#[pyo3(name = "_genlayer_wasi")]
 fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[pyfn(m)]
     fn rollback(s: &str) -> PyResult<()> {
@@ -42,10 +47,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfn(m)]
-    fn run_nondet(
-        eq_principle: &str,
-        calldata: &[u8],
-    ) -> PyResult<u32> {
+    fn run_nondet(eq_principle: &str, calldata: &[u8]) -> PyResult<u32> {
         flush_everything();
         map_error(unsafe {
             genvm_sdk_rust::run_nondet(
@@ -59,10 +61,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfn(m)]
-    fn call_contract(
-        address: &[u8],
-        calldata: &[u8],
-    ) -> PyResult<u32> {
+    fn call_contract(address: &[u8], calldata: &[u8]) -> PyResult<u32> {
         flush_everything();
         let address = get_addr(&address)?;
         map_error(unsafe {
@@ -93,30 +92,19 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
         let res = map_error(unsafe { genvm_sdk_rust::get_entrypoint() })?;
         let mut file = unsafe { std::fs::File::from_raw_fd(res.file as std::os::fd::RawFd) };
 
-        PyBytes::new_bound_with(
-            py,
-            res.len as usize,
-            |byts| {
-                map_error(
-                    file.read_exact(byts)
-                        .map_err(|_| genvm_sdk_rust::ERRNO_IO),
-                )
-            }
-        )
+        PyBytes::new_bound_with(py, res.len as usize, |byts| {
+            map_error(file.read_exact(byts).map_err(|_| genvm_sdk_rust::ERRNO_IO))
+        })
     }
 
     #[pyfn(m)]
     fn get_webpage(config: &str, url: &str) -> PyResult<u32> {
-        map_error(unsafe {
-            genvm_sdk_rust::get_webpage(config, url)
-        })
+        map_error(unsafe { genvm_sdk_rust::get_webpage(config, url) })
     }
 
     #[pyfn(m)]
     fn call_llm(config: &str, prompt: &str) -> PyResult<u32> {
-        map_error(unsafe {
-            genvm_sdk_rust::call_llm(config, prompt)
-        })
+        map_error(unsafe { genvm_sdk_rust::call_llm(config, prompt) })
     }
 
     #[pyfn(m)]
@@ -127,31 +115,20 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
         len: u32,
     ) -> PyResult<Bound<'a, PyBytes>> {
         let addr = get_addr(&addr)?;
-        PyBytes::new_bound_with(
-            py,
-            len as usize,
-            |byts| {
-                unsafe {
-                    map_error(genvm_sdk_rust::storage_read(
-                        addr,
-                        off,
-                        genvm_sdk_rust::MutBytes {
-                            buf: byts.as_mut_ptr(),
-                            buf_len: len,
-                        },
-                    ))
-                }
-            }
-        )
+        PyBytes::new_bound_with(py, len as usize, |byts| unsafe {
+            map_error(genvm_sdk_rust::storage_read(
+                addr,
+                off,
+                genvm_sdk_rust::MutBytes {
+                    buf: byts.as_mut_ptr(),
+                    buf_len: len,
+                },
+            ))
+        })
     }
 
     #[pyfn(m)]
-    fn storage_write(
-        py: Python<'_>,
-        addr: &[u8],
-        off: u32,
-        buf: PyBuffer<u8>,
-    ) -> PyResult<()> {
+    fn storage_write(py: Python<'_>, addr: &[u8], off: u32, buf: PyBuffer<u8>) -> PyResult<()> {
         let addr = get_addr(&addr)?;
         let buf = buf.as_slice(py).unwrap();
         let res = unsafe {

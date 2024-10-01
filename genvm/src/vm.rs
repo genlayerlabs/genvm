@@ -1,5 +1,10 @@
 use core::str;
-use std::{collections::{BTreeMap, HashMap}, io::Write, path::Path, sync::atomic::AtomicU32};
+use std::{
+    collections::{BTreeMap, HashMap},
+    io::Write,
+    path::Path,
+    sync::atomic::AtomicU32,
+};
 
 use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
 use itertools::Itertools;
@@ -189,7 +194,9 @@ impl VM {
 
     pub fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
         (|| {
-            let Ok(lck) = self.store.data().genlayer_ctx.lock() else { return };
+            let Ok(lck) = self.store.data().genlayer_ctx.lock() else {
+                return;
+            };
             let mut stderr = std::io::stderr().lock();
             let _ = stderr.write(b"Spawning genvm\n");
             lck.preview1.log(&mut stderr);
@@ -306,11 +313,13 @@ impl Supervisor {
             std::collections::hash_map::Entry::Occupied(entry) => Ok(entry.get().clone()),
             std::collections::hash_map::Entry::Vacant(entry) => {
                 // FIXME: find source of this. why call_indirect requires tables?
-                let add_features = WasmFeatures::REFERENCE_TYPES.bits() | WasmFeatures::FLOATS.bits();
+                let add_features =
+                    WasmFeatures::REFERENCE_TYPES.bits() | WasmFeatures::FLOATS.bits();
 
                 let det_features = self.det_engine.config().get_features().bits() | add_features;
 
-                let non_det_features = self.non_det_engine.config().get_features().bits() | add_features;
+                let non_det_features =
+                    self.non_det_engine.config().get_features().bits() | add_features;
 
                 let mut det_validator = wasmparser::Validator::new_with_features(
                     WasmFeatures::from_bits(det_features).unwrap(),
@@ -318,7 +327,14 @@ impl Supervisor {
                 let mut non_det_validator = wasmparser::Validator::new_with_features(
                     WasmFeatures::from_bits(non_det_features).unwrap(),
                 );
-                det_validator.validate_all(&module_bytes[..]).with_context(|| format!("validating {}", &String::from_utf8_lossy(&module_bytes[..10])))?;
+                det_validator
+                    .validate_all(&module_bytes[..])
+                    .with_context(|| {
+                        format!(
+                            "validating {}",
+                            &String::from_utf8_lossy(&module_bytes[..10])
+                        )
+                    })?;
                 non_det_validator.validate_all(&module_bytes[..])?;
                 let module_det = wasmtime::CodeBuilder::new(&self.det_engine)
                     .wasm_binary(&module_bytes[..], path)?
@@ -384,7 +400,9 @@ impl Supervisor {
         } else {
             None
         };
-        let prec = self.cache_module(contents, debug_path).with_context(|| format!("caching {:?}", &debug_path))?;
+        let prec = self
+            .cache_module(contents, debug_path)
+            .with_context(|| format!("caching {:?}", &debug_path))?;
         if ret_vm.is_det() {
             Ok(prec.det.clone())
         } else {
@@ -409,17 +427,15 @@ impl Supervisor {
                     .genlayer_ctx_mut()
                     .preview1
                     .map_file(&to, vm.init_actions.code.clone())?,
-                crate::runner::InitAction::AddEnv { name, val } => {
-                    match env.entry(name.clone()) {
-                        std::collections::btree_map::Entry::Vacant(vacant_entry) => {
-                            vacant_entry.insert(val.clone());
-                        },
-                        std::collections::btree_map::Entry::Occupied(mut occupied_entry) => {
-                            occupied_entry.get_mut().push_str(":");
-                            occupied_entry.get_mut().push_str(val);
-                        },
+                crate::runner::InitAction::AddEnv { name, val } => match env.entry(name.clone()) {
+                    std::collections::btree_map::Entry::Vacant(vacant_entry) => {
+                        vacant_entry.insert(val.clone());
                     }
-                }
+                    std::collections::btree_map::Entry::Occupied(mut occupied_entry) => {
+                        occupied_entry.get_mut().push_str(":");
+                        occupied_entry.get_mut().push_str(val);
+                    }
+                },
                 crate::runner::InitAction::SetArgs { args } => vm
                     .store
                     .data_mut()
