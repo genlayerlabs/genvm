@@ -4,7 +4,15 @@ require 'open3'
 
 img = nil
 
-log_file, id_file = ARGV
+log_file, id_file, path, dfile = ARGV
+
+if dfile.nil?
+	dfile = 'Dockerfile'
+end
+
+if path.nil?
+	path = '.'
+end
 
 begin
 	Pathname.new(id_file).unlink()
@@ -12,7 +20,7 @@ rescue
 end
 
 File.open(log_file, 'wt') { |f|
-	command = ['docker', 'build', '--network=host', '--progress=plain', '.']
+	command = ['docker', 'build', '--network=host', '--progress=plain', '-f', dfile, path]
 	puts "run: #{command}"
 	Open3.popen2e(*command) { |stdin, stdout, wait_thr|
 		stdin.close()
@@ -21,7 +29,7 @@ File.open(log_file, 'wt') { |f|
 			f.write(l)
 			mtch = /writing image (sha256:[0-9a-z]+)/.match(l)
 			if mtch
-				if not img.nil?
+				if not img.nil? and img != mtch[1]
 					raise "found two write logs: #{img} vs #{mtch[1]}"
 				end
 				img = mtch[1]

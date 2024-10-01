@@ -14,7 +14,7 @@ build_pyc_s = target_command(
 		['mkdir', '-p', compile_dir],
 		['cp', '-r', base_genlayer_lib_dir, compile_dir],
 		[
-			RbConfig.ruby, dev_container.meta.dir.join('compile-in-docker.rb'),
+			RbConfig.ruby, root_src.join('build-scripts', 'docker-run-in.rb'),
 			'--log', cur_build.join('compile-lib-log'),
 			'--id-file', dev_container.meta.output_file,
 			'--out-dir', compile_dir,

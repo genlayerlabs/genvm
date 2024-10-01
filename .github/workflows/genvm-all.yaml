@@ -1,4 +1,3 @@
-malformed
 name: GenVM
 on:
   push:
@@ -57,7 +56,6 @@ jobs:
 
   build-runners:
     runs-on: ubuntu-latest
-    needs: [module-test-cargo, module-test-python]
     outputs:
       url: ${{ steps.artifact-upload-step.outputs.artifact-url }}
     steps:
@@ -65,7 +63,7 @@ jobs:
       - name: Get source
         uses: ./.github/actions/get-src
         with:
-          install_also: --runners --rust
+          install_also: --wasi --rust
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Cache Docker layers
@@ -77,14 +75,17 @@ jobs:
           restore-keys: |
             runners-buildx-
       - name: Configure
-          ./build-scripts/install-deps.rb --runners && \
+        run: |
           source env.sh && \
           ya-build config
+      - name: Build extension
+        run: |
+          source env.sh && \
+          ninja --verbose -C build genvm/runners/cpython/extension && \
+          git diff -U1 --exit-code
       - name: Build
         run: |
-          ./build-scripts/install-deps.rb --runners && \
           source env.sh && \
-          ya-build config && \
           ninja --verbose -C build tags/runner && \
           tree build/out && \
           pushd build/out && \
@@ -106,7 +107,7 @@ jobs:
       build_type: debug
       runs_on: ubuntu-latest
   build-genvm-release-ubuntu-latest:
-    needs: [module-test-cargo, module-test-python]
+    needs: []
     uses: ./.github/workflows/genvm-build-template.yaml
     with:
       build_type: release
@@ -124,19 +125,16 @@ jobs:
     uses: ./.github/workflows/genvm-test-template.yaml
     with:
       runs_on: ubuntu-latest
-      runners_url: ${{ needs.build-runners.outputs.url }}
-      genvm_url: ${{ needs.test-genvm-debug-ubuntu-latest.outputs.url }}
+      genvm_artifact_name: ${{ needs.test-genvm-debug-ubuntu-latest.outputs.art-name }}
   test-genvm-release-ubuntu-latest:
     needs: [build-runners, build-genvm-release-ubuntu-latest]
     uses: ./.github/workflows/genvm-test-template.yaml
     with:
       runs_on: ubuntu-latest
-      runners_url: ${{ needs.build-runners.outputs.url }}
-      genvm_url: ${{ needs.test-genvm-release-ubuntu-latest.outputs.url }}
+      genvm_artifact_name: ${{ needs.test-genvm-release-ubuntu-latest.outputs.art-name }}
   test-genvm-release-macos-latest:
     needs: [build-runners, build-genvm-release-macos-latest]
     uses: ./.github/workflows/genvm-test-template.yaml
     with:
       runs_on: macos-latest
-      runners_url: ${{ needs.build-runners.outputs.url }}
-      genvm_url: ${{ needs.test-genvm-release-macos-latest.outputs.url }}
+      genvm_artifact_name: ${{ needs.test-genvm-release-macos-latest.outputs.art-name }}

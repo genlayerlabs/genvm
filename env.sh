@@ -2,8 +2,13 @@
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-PATH="$SCRIPT_DIR/tools/git-third-party:$SCRIPT_DIR/tools/ya-build:$PATH"
+export PATH="$SCRIPT_DIR/tools/git-third-party:$SCRIPT_DIR/tools/ya-build:$PATH"
 if [ -f "$SCRIPT_DIR/.env" ]
 then
     source "$SCRIPT_DIR/.env"
+fi
+
+if ! command -v rustup && [ -d ~/.cargo/bin ]
+then
+    export PATH="$HOME/.cargo/bin:$PATH"
 fi

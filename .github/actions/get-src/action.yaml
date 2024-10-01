@@ -11,6 +11,7 @@ runs:
     - name: checkout submodules
       run: |
         cd "$GITHUB_WORKSPACE" && \
+          sudo apt-get update && sudo apt-get install -y ruby ruby-dev && \
           (./build-scripts/install-deps.rb --os ${{ inputs.install_also }} || true) && \
           ./build-scripts/install-deps.rb --os ${{ inputs.install_also }} && \
           git config --global user.email "worker@ci.ci" && \

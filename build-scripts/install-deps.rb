@@ -2,6 +2,9 @@
 
 # frozen_string_literal: true
 
+STDERR.sync = true
+STDOUT.sync = true
+
 require 'open3'
 require 'pathname'
 require 'logger'
@@ -20,7 +23,7 @@ OptionParser.new do |opts|
 	opts.on '--genvm'
 	opts.on '--rust'
 	opts.on '--os'
-	opts.on '--runners'
+	opts.on '--wasi'
 end.parse!(into: options)
 
 logger = Logger.new(STDOUT, level: Logger::DEBUG)
@@ -103,25 +106,24 @@ if not RUBY_VERSION =~ /^3\./
 end
 
 if options[:rust]
-	if find_executable('rustup').nil?
+	rustup = find_executable('rustup')
+	if rustup.nil?
 		logger.debug("downloading rust")
-		`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y`
+		`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile=minimal --component rust-fmt`
+		rustup = ENV['HOME'] + "/.cargo/bin/rustup"
 	else
-		logger.debug("rustup is already installed")
+		logger.debug("rustup is already installed at #{rustup}")
 	end
-	`cd "#{root}" && rustup show active-toolchain || rustup toolchain install`
+	`cd "#{root}" && #{rustup} show active-toolchain || #{rustup} toolchain install`
 
-	# remove it when rustup is updated
-	if options[:runners]
-		cur_toolchain = `rustup show active-toolchain`
-		cur_toolchain = cur_toolchain.strip
-		cur_toolchain = /^([a-zA-Z0-9\-_]+)/.match(cur_toolchain)[1]
-		logger.debug("installing for toolchain #{cur_toolchain}")
-		`cd "#{root}" && rustup target add --toolchain #{cur_toolchain} wasm32-wasip1`
-	end
+	cur_toolchain = `#{rustup} show active-toolchain`
+	cur_toolchain = cur_toolchain.strip
+	cur_toolchain = /^([a-zA-Z0-9\-_]+)/.match(cur_toolchain)[1]
+	logger.debug("installing for toolchain #{cur_toolchain}")
+	`cd "#{root}" && #{rustup} target add --toolchain #{cur_toolchain} wasm32-wasip1`
 end
 
-if options[:runners]
+if options[:wasi]
 	logger.debug("downloading runners dependencies")
 	src = Pathname.new(__FILE__).parent.join('src', 'wasi-sdk.rb').read
 	eval(src, binding)

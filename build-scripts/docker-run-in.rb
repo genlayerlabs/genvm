@@ -6,7 +6,7 @@ require 'pathname'
 require 'optparse'
 
 options = {
-
+	network: 'none'
 }
 OptionParser.new do |parser|
 	parser.on('--cp FILE') do |cp_file|
@@ -15,6 +15,7 @@ OptionParser.new do |parser|
 	end
 	parser.on('--id-file FILE')
 	parser.on('--log FILE')
+	parser.on('--network NETWORK')
 	parser.on('--out-dir DIR') do |v|
 		puts "got out dir #{v}"
 		out_dir = Pathname.new(v)
@@ -30,7 +31,7 @@ out_dir = options[:out_dir]
 id = File.read(options[:'id-file']).strip
 
 File.open(log_file, 'wt') { |f|
-	command = ['docker', 'run', '--network=none', '--rm', '-v', "#{out_dir}:/out", '--entrypoint', options[:entrypoint], id, *ARGV]
+	command = ['docker', 'run', "--network=#{options[:network]}", '--rm', '-v', "#{out_dir}:/out", '--entrypoint', options[:entrypoint], id, *ARGV]
 	puts "run: #{command}"
 	Open3.popen2e(*command) { |stdin, stdout, wait_thr|
 		stdin.close()

@@ -10,8 +10,8 @@ docker_compile_files.sort!()
 docker_id_file = cur_build.join('docker-id.txt')
 
 docker_build_dev_container = target_command(
-	command: [RbConfig.ruby, cur_src.join('run-docker-build.rb'), cur_build.join('build-log'), docker_id_file],
-	dependencies: docker_build_files + docker_compile_files + [cur_src.join('run-docker-build.rb')],
+	command: [RbConfig.ruby, root_src.join('build-scripts', 'docker-build.rb'), cur_build.join('build-log'), docker_id_file],
+	dependencies: docker_build_files + docker_compile_files + [root_src.join('build-scripts', 'docker-build.rb')],
 	cwd: cur_src,
 	output_file: docker_id_file,
 	pool: 'console',
@@ -30,14 +30,14 @@ cpython_raw_wasm_path = out_dir.join('cpython.raw.wasm')
 
 build_py_raw = target_command(
 	command: [
-		RbConfig.ruby, cur_src.join('compile-in-docker.rb'),
+		RbConfig.ruby, root_src.join('build-scripts', 'docker-run-in.rb'),
 		'--log', cur_build.join('run-log'),
 		'--id-file', docker_id_file,
 		'--out-dir', out_dir,
 		'--cp', compile_cpython_ext.meta.output_file,
 		'--entrypoint', '/scripts-py/build.sh'
 	],
-	dependencies: docker_compile_files + [docker_build_dev_container, cur_src.join('compile-in-docker.rb'), compile_cpython_ext],
+	dependencies: docker_compile_files + [docker_build_dev_container, root_src.join('build-scripts', 'docker-run-in.rb'), compile_cpython_ext],
 	cwd: cur_src,
 	output_file: cpython_libs_zip,
 	pool: 'console',

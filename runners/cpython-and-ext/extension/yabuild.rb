@@ -1,33 +1,48 @@
 sdk_rust = find_target /genvm\/sdk-rust$/
 
-compile_cpython_ext = target_cargo_build(
-	name: 'staticlib',
-	dir: cur_src,
-	profile: "release",
-	target: "wasm32-wasip1",
-) {
-	add_deps sdk_rust
-}
+docker_id_file = cur_build.join('docker-id.txt')
 
-dirs = [root_src.join('sdk-rust'), cur_src.join('target', 'wasm32-wasip1', 'release')]
-dirs.map! { |d| d.relative_path_from(cur_src) }.sort!
+files = [cur_src.join('Cargo.toml'), cur_src.join('Cargo.lock'), cur_src.join('docker-build.sh')] +  Dir::glob(cur_src.join('src').to_s + '/**/*') + Dir::glob(cur_src.join('.cargo').to_s + '/**/*')
 
-check_sum = target_command(
-	commands: [
-		[root_src.join('build-scripts', 'dbg.sh'), *dirs],
-		['cat', 'target/wasm32-wasip1/release/.fingerprint/cfg-if-dac41bbddfe2cdc5/lib-cfg_if.json'],
-		['cat', 'target/wasm32-wasip1/release/.fingerprint/libc-1fb03017ae73ebbb/lib-libc.json'],
-		['cat', 'target/wasm32-wasip1/release/.fingerprint/memoffset-8f8cbf46c23111d8/lib-memoffset.json'],
-		['echo', ''],
-		['sha256sum', '-c', cur_src.join('lib.sha256')],
+docker_build_dev_container = target_command(
+	command: [
+		RbConfig.ruby, root_src.join('build-scripts', 'docker-build.rb'),
+		cur_build.join('build-log'),
+		docker_id_file,
+		root_src.relative_path_from(cur_src),
+		'Dockerfile',
 	],
-	tags: ['checksum'],
-	output_file: cur_build.join('check-sha256.dirty'),
-	dependencies: [compile_cpython_ext],
+	dependencies: files + [sdk_rust],
+	cwd: cur_src,
+	output_file: docker_id_file,
+	pool: 'console',
+)
+
+out_dir = cur_build.join('out')
+output_file = out_dir.join('libgenvm_cpython_ext.a')
+
+compile_cpython_ext = target_command(
+	commands: [
+		[
+			RbConfig.ruby, root_src.join('build-scripts', 'docker-run-in.rb'),
+			'--log', cur_build.join('run-log'),
+			'--id-file', docker_id_file,
+			'--out-dir', out_dir,
+			'--network', 'host',
+			'--entrypoint', '/opt/genvm/runners/cpython-and-ext/extension/docker-build.sh'
+		],
+		[
+			'diff', cur_src.join('sum.sha256'), out_dir.join('sum')
+		]
+	],
+	dependencies: [docker_build_dev_container, root_src.join('build-scripts', 'docker-run-in.rb')],
+	cwd: cur_src,
+	output_file: output_file,
+	pool: 'console',
 )
 
 compile_cpython_ext = target_alias(
-	'extension', compile_cpython_ext, check_sum
+	'extension', compile_cpython_ext
 ) {
 	meta.output_file = compile_cpython_ext.output_file
 }

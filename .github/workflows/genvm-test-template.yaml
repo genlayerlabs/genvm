@@ -6,14 +6,10 @@ on:
         type: string
         required: true
         description: runner id
-      runners_url:
+      genvm_artifact_name:
         type: string
         required: true
-        description: runners url
-      genvm_url:
-        type: string
-        required: true
-        description: url to genvm built for this platform
+        description: artifact name to download
 defaults:
   run:
     shell: bash -x {0}
@@ -26,19 +22,27 @@ jobs:
         uses: ./.github/actions/get-src
         with:
           install_also: ""
+      - run: |
+          mkdir -p "$GITHUB_WORKSPACE/build/out"
+      - uses: actions/download-artifact@v4
+        with:
+          name: runners
+          path: build/out
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.genvm_artifact_name }}
+          path: build/out
       - name: Get artifacts
         run: |
           cd "$GITHUB_WORKSPACE" && \
           mkdir -p build/out && \
           pushd build/out && \
-          wget -q "${{ inputs.runners_url }}" && \
-          ls && \
-          wget -q "${{ inputs.genvm_url }}" && \
-          ls && \
+          ls -lR . && \
           unzip runners.zip && \
-          unzip genvm.zip && \
-          rm runners.zip genvm.zip && \
           tree && \
+          unzip genvm.zip && \
+          tree && \
+          rm runners.zip genvm* && \
           popd
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
