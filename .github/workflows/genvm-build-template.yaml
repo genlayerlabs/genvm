@@ -1,4 +1,4 @@
-name: GenVM build
+name: GenVM build GenVM template
 on:
   workflow_call:
     inputs:
@@ -10,6 +10,10 @@ on:
         type: string
         required: true
         description: runner id
+    outputs:
+      url:
+        description: "url"
+        value: ${{ jobs.build.outputs.url }}
 defaults:
   run:
     shell: bash -x {0}
@@ -17,19 +21,17 @@ jobs:
   build:
     runs-on: ${{ inputs.runs_on }}
     outputs:
-      runners-url: ${{ steps.artifact-upload-step.outputs.artifact-url }}
+      url: ${{ steps.artifact-upload-step.outputs.artifact-url }}
     steps:
       - uses: actions/checkout@v4
       - name: Get source
         uses: ./.github/actions/get-src
         with:
-          install_also: --genvm
-      - name: Install rust
-        uses: ./.github/actions/setup-rust
+          install_also: --genvm --rust
       - name: install tools and configure
         run: |
           cd "$GITHUB_WORKSPACE" && \
-          ./build-scripts/install-deps.rb --genvm && \
+          source env.sh && \
           ./tools/ya-build/ya-build config --preload .ci/${{ inputs.build_type }}-conf.rb
       - name: build
         run: |

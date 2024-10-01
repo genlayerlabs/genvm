@@ -23,12 +23,11 @@ def tst(x):
     elif isinstance(x, typing._GenericAlias):
         print(f'origin={x.__origin__}')
         print(f'args={x.__args__}')
-    for k, v in typing.get_type_hints(x).items():
-        if isinstance(v, typing.TypeVar):
-            v = v.__name__
-        if 'TypeVar' in str(v):
-            v = '~T'
-        print(f"\t{k}: {v}")
+    if not isinstance(x, types.GenericAlias):
+        for k, v in typing.get_type_hints(x).items():
+            if isinstance(v, typing.TypeVar):
+                v = v.__name__
+            print(f"\t{k}: {v}")
 
 tst(Foo)
 

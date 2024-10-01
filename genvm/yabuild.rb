@@ -39,13 +39,12 @@ project('genvm') {
 		}
 	)
 
-	genvm_all = target_alias('all', bin, modules, tags: ['all'])
-
-	target_copy(
+	config_target = target_copy(
 		dest: config.out_dir.join('share', 'genvm', 'default-config.json'),
 		src: cur_src.join('default-config.json'),
-		tags: ['all']
 	)
+
+	genvm_all = target_alias('all', bin, modules, config_target, tags: ['all'])
 
 	target_command(
 		output_file: cur_src.join('testdata', 'runner', 'host_fns.py'),

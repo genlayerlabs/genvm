@@ -1,0 +1,136 @@
+name: GenVM
+on:
+  push:
+    paths-ignore:
+      - doc/**
+defaults:
+  run:
+    shell: bash -x {0}
+
+jobs:
+
+### MODULE TESTS
+
+  module-test-cargo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          install_also: --rust
+      - name: configure and run codegen
+        run: |
+          cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \
+          ninja -v -C build tags/codegen
+      - name: check format
+        run: |
+          ./build-scripts/cargo-fmt.sh && \
+          git diff -U1 --exit-code
+      - name: cargo test
+        run: |
+          ./build-scripts/cargo-test.sh
+
+  module-test-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/checkout@v4
+      - name: Get source
+        uses: ./.github/actions/get-src
+      - name: install dependencies
+        run: |
+          python3.12 -m pip install poetry && \
+            pushd runners/genlayer-std && \
+            poetry install && \
+            popd
+      - name: pytest
+        run: |
+          pushd runners/genlayer-std && \
+          poetry run pytest -n auto && \
+          popd
+
+### RUNNERS
+
+  build-runners:
+    runs-on: ubuntu-latest
+    needs: [module-test-cargo, module-test-python]
+    outputs:
+      url: ${{ steps.artifact-upload-step.outputs.artifact-url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          install_also: --runners --rust
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: runners-buildx-${{ github.sha }}
+          restore-keys: |
+            runners-buildx-
+      - name: Build
+        run: |
+          ./build-scripts/install-deps.rb --runners && \
+          source env.sh && \
+          ya-build config && \
+          ninja --verbose -C build tags/runner && \
+          tree build/out && \
+          pushd build/out && \
+          zip -r -9 ../runners.zip * && \
+          popd
+      - name: Publish runners
+        id: artifact-upload-step
+        uses: actions/upload-artifact@v4
+        with:
+          name: runners
+          path: ${{ github.workspace }}/build/runners.zip
+
+### GENVMS build
+
+  build-genvm-debug-ubuntu-latest:
+    needs: [module-test-cargo, module-test-python]
+    uses: ./.github/workflows/genvm-build-template.yaml
+    with:
+      build_type: debug
+      runs_on: ubuntu-latest
+  build-genvm-release-ubuntu-latest:
+    needs: [module-test-cargo, module-test-python]
+    uses: ./.github/workflows/genvm-build-template.yaml
+    with:
+      build_type: release
+      runs_on: ubuntu-latest
+  build-genvm-release-macos-latest:
+    needs: [module-test-cargo, module-test-python]
+    uses: ./.github/workflows/genvm-build-template.yaml
+    with:
+      build_type: release
+      runs_on: macos-latest
+
+### GENVMS test
+  test-genvm-debug-ubuntu-latest:
+    needs: [build-runners, build-genvm-debug-ubuntu-latest]
+    uses: ./.github/workflows/genvm-test-template.yaml
+    with:
+      runs_on: ubuntu-latest
+      runners_url: ${{ needs.build-runners.outputs.url }}
+      genvm_url: ${{ needs.test-genvm-debug-ubuntu-latest.outputs.url }}
+  test-genvm-release-ubuntu-latest:
+    needs: [build-runners, build-genvm-release-ubuntu-latest]
+    uses: ./.github/workflows/genvm-test-template.yaml
+    with:
+      runs_on: ubuntu-latest
+      runners_url: ${{ needs.build-runners.outputs.url }}
+      genvm_url: ${{ needs.test-genvm-release-ubuntu-latest.outputs.url }}
+  test-genvm-release-macos-latest:
+    needs: [build-runners, build-genvm-release-macos-latest]
+    uses: ./.github/workflows/genvm-test-template.yaml
+    with:
+      runs_on: macos-latest
+      runners_url: ${{ needs.build-runners.outputs.url }}
+      genvm_url: ${{ needs.test-genvm-release-macos-latest.outputs.url }}

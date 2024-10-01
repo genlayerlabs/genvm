@@ -92,7 +92,7 @@ if options[:os]
 			logger.error("auto install of packages for linux excluding ubuntu is not supported")
 		end
 	when 'macos'
-		`/usr/bin/bash "#{Pathname.new(__FILE__).parent.join('src', 'brew.sh')}"`
+		`sh "#{Pathname.new(__FILE__).parent.join('src', 'brew.sh')}"`
 	else
 		logger.error("auto install of packages for your os is not supported")
 	end
@@ -107,7 +107,17 @@ if options[:rust]
 		logger.debug("downloading rust")
 		`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y`
 	else
-		logger.debug("rust is already installed")
+		logger.debug("rustup is already installed")
+	end
+	`cd "#{root}" && rustup show active-toolchain || rustup toolchain install`
+
+	# remove it when rustup is updated
+	if options[:runners]
+		cur_toolchain = `rustup show active-toolchain`
+		cur_toolchain = cur_toolchain.strip
+		cur_toolchain = /^([a-zA-Z0-9\-_]+)/.match(cur_toolchain)[1]
+		logger.debug("installing for toolchain #{cur_toolchain}")
+		`cd "#{root}" && rustup target add --toolchain #{cur_toolchain} wasm32-wasip1`
 	end
 end
 
