@@ -1,3 +1,4 @@
+malformed
 name: GenVM
 on:
   push:
@@ -70,10 +71,15 @@ jobs:
       - name: Cache Docker layers
         uses: actions/cache@v4
         with:
+          save-always: true
           path: /tmp/.buildx-cache
           key: runners-buildx-${{ github.sha }}
           restore-keys: |
             runners-buildx-
+      - name: Configure
+          ./build-scripts/install-deps.rb --runners && \
+          source env.sh && \
+          ya-build config
       - name: Build
         run: |
           ./build-scripts/install-deps.rb --runners && \

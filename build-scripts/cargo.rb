@@ -7,7 +7,8 @@ class CargoBuildTarget < Target
 	def initialize(dir, name, target, profile, features, flags)
 		@flags = flags
 		@features = features
-		@target_dir = CONFIGURATOR.root_build.join('generated', 'rust-target') # dir.join('target')
+		# @target_dir = CONFIGURATOR.root_build.join('generated', 'rust-target') # dir.join('target')
+		@target_dir = dir.join('target')
 		cargo_out_dir = @target_dir
 		@target = target
 		if not target.nil?

@@ -46,5 +46,8 @@ cd /out/to-zip
 zip -r ../cpython.zip *
 
 :> /out/checksums
+sha256sum /out/libgenvm_cpython_ext.a  >> /out/checksums
 find /opt/wasm32-wasip1-root/ -type f | sort | xargs sha256sum >> /out/checksums
 find /opt/cpython/cross-build/wasm32-wasi/Programs /opt/cpython/cross-build/wasm32-wasi/Python/ -type f -name '*.o' | sort | xargs sha256sum >> /out/checksums
+
+cat /out/checksums
