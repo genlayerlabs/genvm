@@ -3,7 +3,7 @@ FROM ubuntu:22.04
 RUN apt-get update && \
     apt-get upgrade && \
     apt-get install -y --no-install-recommends \
-        ruby ruby-dev \
+        ruby \
         tar wget curl clang autoconf zip unzip \
         build-essential pkg-config \
         ca-certificates && \

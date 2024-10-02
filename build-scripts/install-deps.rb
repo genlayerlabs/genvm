@@ -11,7 +11,6 @@ require 'logger'
 require 'rubygems/package'
 require 'zlib'
 require 'net/http'
-require 'mkmf'
 
 require 'optparse'
 
@@ -24,6 +23,7 @@ OptionParser.new do |opts|
 	opts.on '--rust'
 	opts.on '--os'
 	opts.on '--wasi'
+	opts.on '--test'
 end.parse!(into: options)
 
 logger = Logger.new(STDOUT, level: Logger::DEBUG)
@@ -84,25 +84,48 @@ download_dir = root.join('tools', 'downloaded')
 download_dir.mkpath()
 
 logger.debug("download dir is #{download_dir}")
+$logger = logger
 
-if options[:os]
-	logger.info("downloading OS packages")
+def load_packages_from_lists(dir)
+	$logger.info("downloading #{dir} packages")
 	case OS
 	when 'linux'
 		if Pathname.new('/etc/lsb-release').exist?()
-			`/usr/bin/bash "#{Pathname.new(__FILE__).parent.join('src', 'ubuntu.sh')}"`
+			puts `/usr/bin/bash "#{Pathname.new(__FILE__).parent.join('src', dir, 'ubuntu.sh')}"`
 		else
-			logger.error("auto install of packages for linux excluding ubuntu is not supported")
+			$logger.error("auto install of packages for linux excluding ubuntu is not supported")
 		end
 	when 'macos'
-		`sh "#{Pathname.new(__FILE__).parent.join('src', 'brew.sh')}"`
+		puts `sh "#{Pathname.new(__FILE__).parent.join('src', dir, 'brew.sh')}"`
 	else
-		logger.error("auto install of packages for your os is not supported")
+		$logger.error("auto install of packages for your os is not supported")
 	end
+end
+
+if options[:os]
+	load_packages_from_lists 'os'
 end
 
 if not RUBY_VERSION =~ /^3\./
 	logger.error("ruby must be at least 3.0, yours is #{RUBY_VERSION}")
+end
+
+def find_executable(name)
+	paths = ENV['PATH'].split(':')
+	paths << '/usr/bin'
+	paths << '/bin'
+	paths << "#{ENV['HOME']}/.local/bin"
+	paths << "#{ENV['HOME']}/.cargo/bin"
+	paths.each { |p|
+		check = ['', '.elf', '.exe']
+		check.each { |c|
+			cur_p = Pathname.new(p).join("#{name}#{c}")
+			if cur_p.exist?()
+				return cur_p
+			end
+		}
+	}
+	return nil
 end
 
 if options[:rust]
@@ -135,4 +158,8 @@ end
 
 if options[:genvm]
 	logger.debug("downloading genvm dependencies")
+end
+
+if options[:test]
+	load_packages_from_lists 'test'
 end
