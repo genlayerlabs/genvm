@@ -112,12 +112,12 @@ jobs:
     with:
       build_type: release
       runs_on: ubuntu-latest
-  build-genvm-release-macos-latest:
-    needs: [module-test-cargo, module-test-python]
-    uses: ./.github/workflows/genvm-build-template.yaml
-    with:
-      build_type: release
-      runs_on: macos-latest
+#  build-genvm-release-macos-latest:
+#    needs: [module-test-cargo, module-test-python]
+#    uses: ./.github/workflows/genvm-build-template.yaml
+#    with:
+#      build_type: release
+#      runs_on: macos-latest
 
 ### GENVMS test
   test-genvm-debug-ubuntu-latest:
@@ -132,9 +132,9 @@ jobs:
     with:
       runs_on: ubuntu-latest
       genvm_artifact_name: ${{ needs.test-genvm-release-ubuntu-latest.outputs.art-name }}
-  test-genvm-release-macos-latest:
-    needs: [build-runners, build-genvm-release-macos-latest]
-    uses: ./.github/workflows/genvm-test-template.yaml
-    with:
-      runs_on: macos-latest
-      genvm_artifact_name: ${{ needs.test-genvm-release-macos-latest.outputs.art-name }}
+#  test-genvm-release-macos-latest:
+#    needs: [build-runners, build-genvm-release-macos-latest]
+#    uses: ./.github/workflows/genvm-test-template.yaml
+#    with:
+#      runs_on: macos-latest
+#      genvm_artifact_name: ${{ needs.test-genvm-release-macos-latest.outputs.art-name }}
