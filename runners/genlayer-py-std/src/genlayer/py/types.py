@@ -37,3 +37,8 @@ i8 = typing.NewType('i8', int)
 i64 = typing.NewType('i64', int)
 u32 = typing.NewType('u32', int)
 u64 = typing.NewType('u64', int)
+
+class Rollback(Exception):
+	def __init__(self, msg: str):
+		self.msg = msg
+		super()

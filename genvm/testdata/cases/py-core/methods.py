@@ -7,7 +7,7 @@ def pub():
 
 @gsdk.public
 def rback():
-    gsdk.rollback("nah, I won't execute")
+    gsdk.rollback_immediate("nah, I won't execute")
 
 def priv():
     eval("print('init from priv!')")

@@ -18,7 +18,7 @@ def public(f):
 	setattr(f, '__public__', True)
 	return f
 
-class AwaitableResult:
+class AwaitableResult[T]:
 	_exc: typing.Optional[Exception]
 	_fd: int
 	def __init__(self, fd: int):
@@ -45,19 +45,19 @@ class AwaitableResult:
 			self._fd = 0
 		yield
 	@abc.abstractmethod
-	def _get_res(self, fd: int): ...
+	def _get_res(self, fd: int) -> T: ...
 
-class AwaitableResultStr(AwaitableResult):
+class AwaitableResultStr(AwaitableResult[str]):
 	def _get_res(self, fd: int) -> str:
 		with os.fdopen(fd, "rt") as f:
 			return f.read()
 
-class AwaitableResultBytes(AwaitableResult):
+class AwaitableResultBytes(AwaitableResult[str]):
 	def _get_res(self, fd: int) -> bytes:
 		with os.fdopen(fd, "rb") as f:
 			return f.read()
 
-class AwaitableResultBytesMap[T](AwaitableResult):
+class AwaitableResultMap[T](AwaitableResult[T]):
 	def __init__(self, fd: int, fn: collections.abc.Callable[[bytes], T]):
 		super().__init__(fd)
 		self._fn = fn
@@ -72,18 +72,24 @@ class AlreadySerializedResult(bytes):
 def account_from_b64(x: str) -> bytes:
 	return base64.b64decode(x)
 
+def _decode_sub_vm_result(data: bytes) -> typing.Any:
+	mem = memoryview(data)
+	if mem[0] != 0:
+		raise Rollback(str(mem[1:], encoding='utf8'))
+	return calldata.decode(mem[1:])
+
 class ContractMethod:
 	def __init__(self, addr: Address, name: str):
 		self.addr = addr
 		self.name = name
-	def __call__(self, *args) -> AwaitableResultBytesMap:
+	def __call__(self, *args) -> AwaitableResultMap[typing.Any]:
 		obj = {
 			"method": self.name,
 			"args": args,
 		}
 		cd = calldata.encode(obj)
 		res = wasi.call_contract(self.addr.as_bytes, cd)
-		return AwaitableResultBytesMap(res, calldata.decode)
+		return AwaitableResultMap(res, _decode_sub_vm_result)
 
 class Contract:
 	def __init__(self, addr: Address):
@@ -104,7 +110,7 @@ message = _SimpleNamespace(
 	is_init=message_raw.get("is_init", None),
 )
 
-def rollback(reason: str) -> typing.NoReturn:
+def rollback_immediate(reason: str) -> typing.NoReturn:
 	wasi.rollback(reason)
 
 class Runner:
@@ -117,10 +123,10 @@ def get_webpage(config: typing.Any, url: str) -> AwaitableResultStr:
 def call_llm(config: typing.Any, prompt: str) -> AwaitableResultStr:
 	return AwaitableResultStr(wasi.call_llm(json.dumps(config), prompt))
 
-def run_nondet(eq_principle, runner: Runner) -> AwaitableResultBytesMap:
+def run_nondet(eq_principle, runner: Runner) -> AwaitableResultMap[typing.Any]:
 	import pickle
 	res = wasi.run_nondet(json.dumps(eq_principle), pickle.dumps(runner))
-	return AwaitableResultBytesMap(res, calldata.decode)
+	return AwaitableResultMap[typing.Any](res, _decode_sub_vm_result)
 
 class _ActualStorageMan(_storage.StorageMan):
 	_slots: dict[Address, '_ActualStorageSlot']

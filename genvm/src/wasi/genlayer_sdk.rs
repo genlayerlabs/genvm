@@ -191,8 +191,10 @@ impl ContextVFS<'_> {
         data: vm::RunOk,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         let data: Arc<[u8]> = match data {
-            vm::RunOk::Return(buf) => buf.into(),
-            vm::RunOk::Rollback(buf) => buf.into_bytes().into(),
+            vm::RunOk::Return(buf) => {
+                [0].into_iter().chain(buf.into_iter()).collect()
+            }
+            vm::RunOk::Rollback(buf) => [1].into_iter().chain(buf.into_bytes()).collect(),
         };
         Ok(generated::types::Fd::from(self.vfs.place_content(
             FileContentsUnevaluated::from_contents(data, 0),

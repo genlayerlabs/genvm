@@ -237,10 +237,12 @@ def prnt(path, res):
 					print(f"\t\t{l}")
 				if len(lines) >= 10:
 					print("\t...")
-			print("\t=== stdout ===")
-			print_lines(res["stdout"])
-			print("\t=== stderr ===")
-			print_lines(res["stderr"])
+			if "stdout" in res:
+				print("\t=== stdout ===")
+				print_lines(res["stdout"])
+			if "stderr" in res:
+				print("\t=== stderr ===")
+				print_lines(res["stderr"])
 
 with cfutures.ThreadPoolExecutor(max_workers=(os.cpu_count() or 1)) as executor:
 	categories = {
