@@ -41,8 +41,8 @@ def run(contract: type):
 		contract_instance = contract.__view_at__(top_slot, 0)
 		_give_result(lambda: meth(contract_instance, *calldata['args']))
 	elif entrypoint.startswith(NONDET):
-		import pickle
-		runner = pickle.loads(entrypoint[len(NONDET):])
-		_give_result(lambda: runner.run())
+		import cloudpickle
+		runner = cloudpickle.loads(entrypoint[len(NONDET):])
+		_give_result(runner)
 	else:
 		raise Exception(f"unknown entrypoint {entrypoint}")

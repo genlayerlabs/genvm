@@ -61,19 +61,15 @@ message = _SimpleNamespace(
 def rollback_immediate(reason: str) -> typing.NoReturn:
 	wasi.rollback(reason)
 
-class Runner:
-	def run(self):
-		pass
-
 def get_webpage(config: typing.Any, url: str) -> AwaitableResultStr:
 	return AwaitableResultStr(wasi.get_webpage(json.dumps(config), url))
 
 def call_llm(config: typing.Any, prompt: str) -> AwaitableResultStr:
 	return AwaitableResultStr(wasi.call_llm(json.dumps(config), prompt))
 
-def run_nondet(eq_principle, runner: Runner) -> AwaitableResultMap[typing.Any]:
-	import pickle
-	res = wasi.run_nondet(json.dumps(eq_principle), pickle.dumps(runner))
+def run_nondet(eq_principle, runner: typing.Callable[[], typing.Any]) -> AwaitableResultMap[typing.Any]:
+	import cloudpickle
+	res = wasi.run_nondet(json.dumps(eq_principle), cloudpickle.dumps(runner))
 	return AwaitableResultMap[typing.Any](res, _decode_sub_vm_result)
 
 def contract(t: type) -> type:

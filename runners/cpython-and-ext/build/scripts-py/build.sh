@@ -12,7 +12,7 @@ pushd cross-build/wasm32-wasi
 
 env \
     CC=/opt/wasi-sdk-24.0/bin/clang \
-    CFLAGS="-O3 -g0 --sysroot=/opt/wasi-sdk-24.0/share/wasi-sysroot --target=wasm32-wasip1 -I$WASM32_WASI_ROOT/include -Wno-builtin-macro-redefined -D__TIME__='\"0:42:42\"' -D__DATE__='\"Jan/24/2024\"'" \
+    CFLAGS="-O3 -g0 --sysroot=/opt/wasi-sdk-24.0/share/wasi-sysroot --target=wasm32-wasip1 -I$WASM32_WASI_ROOT/include -Wno-builtin-macro-redefined -D__TIME__='\"00:42:42\"' -D__DATE__='\"Jan_24_2024\"'" \
     LDFLAGS="-L$WASM32_WASI_ROOT/lib" \
     CONFIG_SITE="/opt/cpython/Tools/wasm/config.site-wasm32-wasi" \
     ../../configure \
