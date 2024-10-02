@@ -4,15 +4,15 @@ import collections.abc
 
 import typing
 import types
+import hashlib
 
 # FIXME
 def hash_combine(l: Address, r: int) -> Address:
-	hsh = hash((l, r))
-	hsh *= 2
-	if hsh < 0:
-		hsh = 1 - hsh
-	btes = hsh.to_bytes(32)
-	return Address(btes)
+	hasher = hashlib.sha3_256()
+	hasher.update(l.as_bytes)
+	hasher.update(r.to_bytes(4, 'little', signed=False))
+	res = hasher.digest()
+	return Address(res)
 
 class StorageMan(typing.Protocol):
 	@abc.abstractmethod
