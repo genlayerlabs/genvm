@@ -37,10 +37,10 @@ index 62fc6e9..ddc19cc 100644
  
      fn spawn_worker(&mut self) {
 diff --git a/crates/wasmtime/src/config.rs b/crates/wasmtime/src/config.rs
-index de6585a..8542a6b 100644
+index 4f017dc..8d62e06 100644
 --- a/crates/wasmtime/src/config.rs
 +++ b/crates/wasmtime/src/config.rs
-@@ -1207,6 +1207,14 @@ impl Config {
+@@ -1219,6 +1219,14 @@ impl Config {
          Ok(self)
      }
  

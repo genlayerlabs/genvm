@@ -6,14 +6,14 @@ Subject: [PATCH] fix bug with runtime-disallowed floats and fuel consumption
 ---
  cranelift/wasm/src/code_translator.rs | 1 +
  cranelift/wasm/src/environ/spec.rs    | 3 +++
- crates/cranelift/src/func_environ.rs  | 5 +++++
- 3 files changed, 9 insertions(+)
+ crates/cranelift/src/func_environ.rs  | 6 ++++++
+ 3 files changed, 10 insertions(+)
 
 diff --git a/cranelift/wasm/src/code_translator.rs b/cranelift/wasm/src/code_translator.rs
-index 8fa0e68..3630916 100644
+index dfed7ac..92e3a06 100644
 --- a/cranelift/wasm/src/code_translator.rs
 +++ b/cranelift/wasm/src/code_translator.rs
-@@ -3803,6 +3803,7 @@ fn float_op_unreachable_check<FE: FuncEnvironment + ?Sized>(environ: &mut FE, bu
+@@ -3872,6 +3872,7 @@ fn float_op_unreachable_check<FE: FuncEnvironment + ?Sized>(environ: &mut FE, bu
      if environ.are_floats_enabled() {
          return false;
      }
@@ -22,10 +22,10 @@ index 8fa0e68..3630916 100644
      state.reachable = false;
      return true;
 diff --git a/cranelift/wasm/src/environ/spec.rs b/cranelift/wasm/src/environ/spec.rs
-index 1c2af70..668edc8 100644
+index e281d0d..e3868ef 100644
 --- a/cranelift/wasm/src/environ/spec.rs
 +++ b/cranelift/wasm/src/environ/spec.rs
-@@ -92,6 +92,9 @@ pub trait FuncEnvironment: TargetEnvironment {
+@@ -96,6 +96,9 @@ pub trait FuncEnvironment: TargetEnvironment {
      /// Does the given result require inclusion in stack maps?
      fn sig_ref_result_needs_stack_map(&self, sig_ref: ir::SigRef, index: usize) -> bool;
  
@@ -36,10 +36,18 @@ index 1c2af70..668edc8 100644
      fn func_ref_result_needs_stack_map(
          &self,
 diff --git a/crates/cranelift/src/func_environ.rs b/crates/cranelift/src/func_environ.rs
-index 565d925..fa13361 100644
+index a62c9b3..0477d05 100644
 --- a/crates/cranelift/src/func_environ.rs
 +++ b/crates/cranelift/src/func_environ.rs
-@@ -2753,6 +2753,11 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
+@@ -2990,6 +2990,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
+         }
+     }
+ 
++<<<<<<< HEAD
+ <<<<<<< HEAD
+     fn isa(&self) -> &dyn TargetIsa {
+         &*self.isa
+@@ -3145,6 +3146,11 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
          }
      }
  

@@ -1,0 +1,58 @@
+name: GenVM build GenVM template
+on:
+  workflow_call:
+    inputs:
+      build_type:
+        type: string
+        required: true
+        description: build type
+      runs_on:
+        type: string
+        required: true
+        description: runner id
+    outputs:
+      url:
+        description: "url"
+        value: ${{ jobs.build.outputs.url }}
+      art-name:
+        description: "name of the artifact"
+        value: ${{ jobs.build.outputs.art-name }}
+defaults:
+  run:
+    shell: bash -x {0}
+jobs:
+  build:
+    runs-on: ${{ inputs.runs_on }}
+    outputs:
+      url: ${{ steps.artifact-upload-step.outputs.artifact-url }}
+      art-name: genvm-${{ inputs.build_type }}-${{ inputs.runs_on }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          install_also: --genvm --rust
+      - name: install tools and configure
+        run: |
+          cd "$GITHUB_WORKSPACE" && \
+          source env.sh && \
+          ./tools/ya-build/ya-build config --preload .ci/${{ inputs.build_type }}-conf.rb
+      - name: build
+        run: |
+          cd "$GITHUB_WORKSPACE" && \
+            source env.sh && \
+            ninja -v -C build genvm/genvm/all && \
+            tree build/out && \
+            pushd build/out && \
+            zip -r -9 ../genvm.zip * && \
+            popd
+      - name: Publish genvm
+        id: artifact-upload-step
+        uses: actions/upload-artifact@v4
+        with:
+          name: genvm-${{ inputs.build_type }}-${{ inputs.runs_on }}
+          path: ${{ github.workspace }}/build/genvm.zip
+#      - name: Set output name
+#        id: set-output-name
+#        run: |
+#          echo "art-name=genvm-${{ inputs.build_type }}-${{ inputs.runs_on }}" >> $GITHUB_OUTPUT

@@ -1,4 +1,1 @@
-[toolchain]
-channel = "nightly-2024-09-09"
-components = [ "rustfmt" ]
-target = [ "wasm32-wasi" ]
+../rust-toolchain.toml

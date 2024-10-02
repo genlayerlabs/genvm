@@ -2,23 +2,23 @@
 	"repos": {
 		"genvm/third-party/wasmtime": {
 			"url": "https://github.com/bytecodealliance/wasmtime.git",
-			"commit": "a2f0f2fd03c7a376ee4676f009e3cc8b8fc82e25",
-			"patches": 8
+			"commit": "110e70f30e34b9df5ed4aaf401c8818c23204ca2",
+			"patches": 9
 		},
 		"third-party/wasi-rs": {
 			"url": "https://github.com/bytecodealliance/wasi-rs/",
 			"commit": "9ec04a7d8ebb1bbb9e3291503425cee1ec38a560",
-			"patches": 0
+			"patches": 1
 		},
-		"tools/softfloat-lib/berkeley-softfloat-3": {
+		"runners/softfloat/berkeley-softfloat-3": {
 			"url": "https://github.com/ucb-bar/berkeley-softfloat-3.git",
 			"commit": "3b70b5d8147675932c38b36cd09af6df4eedd919",
 			"patches": 2
 		},
-		"sdk-python/third-party/RustPython": {
-			"url": "https://github.com/RustPython/RustPython.git",
-			"commit": "8bc59441789868cc3da216703f743cd33b03752b",
-			"patches": 2
+		"genvm/third-party/wasm-tools": {
+			"url": "https://github.com/bytecodealliance/wasm-tools.git",
+			"commit": "5a83828b7ff0e59db322de2a6466abca656de9a5",
+			"patches": 0
 		}
 	}
 }

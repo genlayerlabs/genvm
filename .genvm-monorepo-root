@@ -1,0 +1,3 @@
+{
+    "py-std": ["runners", "genlayer-std", "src"]
+}

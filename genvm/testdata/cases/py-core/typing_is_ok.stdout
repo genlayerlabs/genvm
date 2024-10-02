@@ -1,7 +1,7 @@
 === Foo
 <class 'type'>
 <class 'contract.Foo'>
-	a: ~T
+	a: X
 === list
 <class 'types.GenericAlias'>
 list[str]

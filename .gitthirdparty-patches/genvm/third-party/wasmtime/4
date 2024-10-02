@@ -8,7 +8,7 @@ Subject: [PATCH] allow reinterpret float instructions
  1 file changed, 4 deletions(-)
 
 diff --git a/cranelift/wasm/src/code_translator.rs b/cranelift/wasm/src/code_translator.rs
-index 3630916..e1bdf52 100644
+index 92e3a06..35e2b90 100644
 --- a/cranelift/wasm/src/code_translator.rs
 +++ b/cranelift/wasm/src/code_translator.rs
 @@ -1073,22 +1073,18 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(

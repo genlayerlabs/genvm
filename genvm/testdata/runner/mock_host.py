@@ -1,11 +1,16 @@
 from pathlib import Path
 import sys
 if __name__ == '__main__':
+	import json
+	MONO_REPO_ROOT_FILE = '.genvm-monorepo-root'
 	script_dir = Path(__file__).parent.absolute()
+
 	root_dir = script_dir
-	while not root_dir.joinpath('.genvm-monorepo-root').exists():
+	while not root_dir.joinpath(MONO_REPO_ROOT_FILE).exists():
 		root_dir = root_dir.parent
-	sys.path.append(str(root_dir.joinpath('sdk-python', 'py')))
+	MONOREPO_CONF = json.loads(root_dir.joinpath(MONO_REPO_ROOT_FILE).read_text())
+
+	sys.path.append(str(root_dir.joinpath(*MONOREPO_CONF["py-std"])))
 
 from genlayer.py.types import Address
 from genlayer.py import calldata as _calldata

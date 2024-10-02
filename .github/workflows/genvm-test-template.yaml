@@ -1,0 +1,63 @@
+name: GenVM build GenVM template
+on:
+  workflow_call:
+    inputs:
+      runs_on:
+        type: string
+        required: true
+        description: runner id
+      genvm_artifact_name:
+        type: string
+        required: true
+        description: artifact name to download
+defaults:
+  run:
+    shell: bash -x {0}
+jobs:
+  mock-tests:
+    runs-on: ${{ inputs.runs_on }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          install_also: ""
+      - run: |
+          mkdir -p "$GITHUB_WORKSPACE/build/out"
+      - uses: actions/download-artifact@v4
+        with:
+          name: runners
+          path: build/out
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.genvm_artifact_name }}
+          path: build/out
+      - name: Get artifacts
+        run: |
+          cd "$GITHUB_WORKSPACE" && \
+          mkdir -p build/out && \
+          pushd build/out && \
+          ls -lR . && \
+          unzip runners.zip && \
+          tree && \
+          unzip genvm.zip && \
+          tree && \
+          rm runners.zip genvm* && \
+          popd
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: mock-${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            mock-${{ runner.os }}-buildx-
+      - name: Run
+        env:
+          OPENAIKEY: ${{ secrets.OPENAIKEY }}
+        run: |
+          OPENAIKEY="" python3 -m pip install -r genvm/testdata/runner/requirements.txt && \
+          OPENAIKEY="" docker run --detach --rm --network host "$(docker build -q -t genvm/modules-webdriver -f genvm/modules/default-impl/web-funcs/webdriver.dockerfile genvm/modules/default-impl/web-funcs/)" && \
+          sleep 5 && \
+          ./genvm/testdata/runner/run.py

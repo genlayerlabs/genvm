@@ -39,7 +39,7 @@ fn main() -> Result<()> {
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,
         (Err(e), PrintOption::Shrink) => {
-            eprintln!("shrinked error is {}\n", e);
+            eprintln!("shrinked error {:?}", e);
             Some("Error(\"\")".into())
         }
         (Err(e), _) => Some(format!("Error({})", e)),

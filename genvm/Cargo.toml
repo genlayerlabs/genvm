@@ -11,11 +11,13 @@ rustflags = [
 ]
 
 [dependencies]
-wasmtime = { path = "third-party/wasmtime/crates/wasmtime", default-features = false, features = ["cranelift", "std", "parallel-compilation", "cache"] }
+# 432745aca5ee802255935768125810fcba38dae0
+wasmtime = { path = "third-party/wasmtime/crates/wasmtime", default-features = false, features = ["cranelift", "std", "parallel-compilation", "cache", "demangle"] }
 wasmtime-cache = { path = "third-party/wasmtime/crates/cache" }
 wiggle = { path = "third-party/wasmtime/crates/wiggle" }
+wasmparser = { path = "third-party/wasm-tools/crates/wasmparser" }
+
 anyhow = { version = "1.0.22", default-features = false }
-wasmparser = { version = "0.215.0", default-features = false }
 tracing = "0.1.26"
 serde = { version = "1.0.204", features = ["rc"]}
 serde_json = "1.0.122"

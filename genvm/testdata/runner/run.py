@@ -15,16 +15,17 @@ import time
 
 import http.server as httpserv
 
+MONO_REPO_ROOT_FILE = '.genvm-monorepo-root'
 script_dir = Path(__file__).parent.absolute()
-root_dir = script_dir
-while not root_dir.joinpath('.genvm-monorepo-root').exists():
-	root_dir = root_dir.parent
-
 http_dir = str(script_dir.parent.joinpath('http').absolute())
 
-sys.path.append(str(root_dir.joinpath('sdk-python', 'py')))
+root_dir = script_dir
+while not root_dir.joinpath(MONO_REPO_ROOT_FILE).exists():
+	root_dir = root_dir.parent
+MONOREPO_CONF = json.loads(root_dir.joinpath(MONO_REPO_ROOT_FILE).read_text())
 
-import genlayer.py
+sys.path.append(str(root_dir.joinpath(*MONOREPO_CONF["py-std"])))
+
 from genlayer.py import calldata
 from genlayer.py.types import Address
 from mock_host import MockHost, MockStorage
@@ -166,18 +167,22 @@ def run(jsonnet_rel_path):
 				#_env["LD_DEBUG"] = "libs"
 			res = subprocess.run(cmd, check=False, text=True, capture_output=True, env=_env)
 		base = {
-			"steps": steps
+			"steps": steps,
+			"stdout": res.stdout,
+			"stderr": res.stderr,
 		}
-		if res.returncode != 0:
-			return {
-				"category": "fail",
-				"reason": f"return code is {res.returncode}\n=== stdout ===\n{res.stdout}\n=== stderr ===\n{res.stderr}",
-				**base
-			}
+
 		got_stdout_path = tmp_dir.joinpath('stdout.txt')
 		got_stdout_path.parent.mkdir(parents=True, exist_ok=True)
 		got_stdout_path.write_text(res.stdout)
 		tmp_dir.joinpath('stderr.txt').write_text(res.stderr)
+
+		if res.returncode != 0:
+			return {
+				"category": "fail",
+				"reason": f"return code is {res.returncode}",
+				**base
+			}
 
 		exp_stdout_path = config["expected_output"]
 		if exp_stdout_path.exists():
@@ -225,6 +230,17 @@ def prnt(path, res):
 			print("\tsteps to reproduce:")
 			for line in res["steps"]:
 				print(f"\t\t{' '.join(map(lambda x: shlex.quote(str(x)), line))}")
+		if res['category'] == "fail":
+			def print_lines(st):
+				lines = st.splitlines()
+				for l in lines[:10]:
+					print(f"\t\t{l}")
+				if len(lines) >= 10:
+					print("\t...")
+			print("\t=== stdout ===")
+			print_lines(res["stdout"])
+			print("\t=== stderr ===")
+			print_lines(res["stderr"])
 
 with cfutures.ThreadPoolExecutor(max_workers=(os.cpu_count() or 1)) as executor:
 	categories = {
