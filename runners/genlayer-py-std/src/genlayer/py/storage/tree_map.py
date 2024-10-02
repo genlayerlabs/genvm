@@ -1,20 +1,18 @@
+import abc
 import collections.abc
 
-from ._storage import Vec
-from .types import *
+import typing
+import collections.abc
 
-class Node[K, V]:
-	# rustpython workaround
-	__type_params__ = (typing.TypeVar('K'), typing.TypeVar('V'))
+from .vec import Vec
+from genlayer.py.types import u32, i8
 
+class _Node[K, V]:
 	key: K
 	value: V
 	left: u32
 	right: u32
 	balance: i8
-
-	def __class_getitem__(self, k):
-		return typing._GenericAlias(self, k)
 
 	def __init__(self, k: K, v: V):
 		self.key = k
@@ -33,17 +31,11 @@ class Comparable(typing.Protocol):
 		pass
 
 class TreeMap[K: Comparable, V]:
-	# rustpython workaround
-	__type_params__ = (typing.TypeVar('K'), typing.TypeVar('V'))
-
 	root: u32
-	slots: Vec[Node[K, V]]
+	slots: Vec[_Node[K, V]]
 	free_slots: Vec[u32]
 
-	def __class_getitem__(self, k):
-		return typing._GenericAlias(self, k)
-
-	def _alloc_slot(self) -> tuple[int, Node[K, V]]:
+	def _alloc_slot(self) -> tuple[int, _Node[K, V]]:
 		if len(self.free_slots) > 0:
 			idx = self.free_slots[-1]
 			self.free_slots.pop()
@@ -353,16 +345,16 @@ class TreeMap[K: Comparable, V]:
 		if self.root != seq[0]:
 			self.root = seq[0]
 
-	def get_fn[T](self, k: K, found: collections.abc.Callable[[Node[K, V]], T], not_found: collections.abc.Callable[[], T]) -> T:
+	def get_fn[T](self, k: K, found: collections.abc.Callable[[_Node[K, V]], T], not_found: collections.abc.Callable[[], T]) -> T:
 		idx = self.root
 		while idx != 0:
-			node = self.slots[idx - 1]
-			if node.key == k:
-				return found(node)
-			if k < node.key:
-				idx = node.left
+			_Node = self.slots[idx - 1]
+			if _Node.key == k:
+				return found(_Node)
+			if k < _Node.key:
+				idx = _Node.left
 			else:
-				idx = node.right
+				idx = _Node.right
 		return not_found()
 
 	def get(self, k: K, dflt=None): #  -> V | None
@@ -376,7 +368,7 @@ class TreeMap[K: Comparable, V]:
 	def __contains__(self, k: K) -> bool:
 		return self.get_fn(k, lambda _: True, lambda: False)
 
-	def visit[T](self, cb: collections.abc.Callable[[Node[K, V]], T]):
+	def visit[T](self, cb: collections.abc.Callable[[_Node[K, V]], T]):
 		def go(idx):
 			if idx == 0:
 				return

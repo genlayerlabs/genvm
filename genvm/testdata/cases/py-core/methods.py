@@ -1,26 +1,31 @@
 # { "depends": ["genlayer-py-std:test"] }
 import genlayer.sdk as gsdk
 
-@gsdk.public
-def pub():
-    eval("print('init from pub!')")
+@gsdk.contract
+class Contract:
+    def __init__(self):
+        print("init")
 
-@gsdk.public
-def rback():
-    gsdk.rollback_immediate("nah, I won't execute")
+    @gsdk.public
+    def pub(self):
+        eval("print('init from pub!')")
 
-def priv():
-    eval("print('init from priv!')")
+    @gsdk.public
+    def rback(self):
+        gsdk.rollback_immediate("nah, I won't execute")
 
-@gsdk.public
-def retn():
-    return {"x": 10}
+    def priv(self):
+        eval("print('init from priv!')")
 
-@gsdk.public
-def retn_ser():
-    return gsdk.AlreadySerializedResult(b"123")
+    @gsdk.public
+    def retn(self):
+        return {"x": 10}
 
-@gsdk.public
-def det_viol():
-    import json
-    gsdk.wasi.get_webpage(json.dumps({"mode": "text"}), "http://127.0.0.1:4242/hello.html")
+    @gsdk.public
+    def retn_ser(self):
+        return gsdk.AlreadySerializedResult(b"123")
+
+    @gsdk.public
+    def det_viol(self):
+        import json
+        gsdk.wasi.get_webpage(json.dumps({"mode": "text"}), "http://127.0.0.1:4242/hello.html")

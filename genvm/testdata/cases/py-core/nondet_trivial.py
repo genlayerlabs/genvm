@@ -8,7 +8,9 @@ class NonDetInit(gsdk.Runner):
         print('wow, nondet')
         return 'web page?'
 
-@gsdk.public
-async def init():
-    eval("print('init from eval!')")
-    return await gsdk.run_nondet({"mode": "refl"}, NonDetInit())
+@gsdk.contract
+class Contract:
+    @gsdk.public
+    async def init(self):
+        eval("print('init from eval!')")
+        return await gsdk.run_nondet({"mode": "refl"}, NonDetInit())

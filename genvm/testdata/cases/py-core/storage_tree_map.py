@@ -2,13 +2,13 @@
 
 import genlayer.sdk as gsdk
 from genlayer.py.types import *
+from genlayer.py.storage import storage, TreeMap
 
 __gsdk_self_run__ = True
 
-
-@gsdk.storage
+@storage
 class UserStorage:
-    m: gsdk.TreeMap[str, u32]
+    m: TreeMap[str, u32]
 
 tst = UserStorage()
 

@@ -8,6 +8,8 @@ class NonDetInit(gsdk.Runner):
     async def run(self):
         return await gsdk.call_llm({}, "print 'yes' (without quotes) and nothing else")
 
-@gsdk.public
-async def main():
-    print(await gsdk.run_nondet({"mode": "refl"}, NonDetInit()))
+@gsdk.contract
+class Contract:
+    @gsdk.public
+    async def main(self):
+        print(await gsdk.run_nondet({"mode": "refl"}, NonDetInit()))

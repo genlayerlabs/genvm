@@ -25,18 +25,21 @@ def _give_result(res_fn: typing.Callable[[], typing.Any]):
 	else:
 		wasi.contract_return(genlayer.py.calldata.encode(res))
 
-def run(mod):
+def run(contract: type):
 	entrypoint: bytes = wasi.get_entrypoint()
 	CALL = b'call!'
 	NONDET = b'nondet!'
 	if entrypoint.startswith(CALL):
 		calldata = memoryview(entrypoint)[len(CALL):]
 		calldata = genlayer.py.calldata.decode(calldata)
-		meth = getattr(mod, calldata['method'])
+		meth = getattr(contract, calldata['method'])
 		from .sdk import message
 		if not message.is_init and not getattr(meth, '__public__', False):
 			raise Exception(f"can't call non-public methods")
-		_give_result(lambda: meth(*calldata['args']))
+		from .storage import STORAGE_MAN, ROOT_STORAGE_ADDRESS
+		top_slot = STORAGE_MAN.get_store_slot(ROOT_STORAGE_ADDRESS)
+		contract_instance = contract.__view_at__(top_slot, 0)
+		_give_result(lambda: meth(contract_instance, *calldata['args']))
 	elif entrypoint.startswith(NONDET):
 		import pickle
 		runner = pickle.loads(entrypoint[len(NONDET):])

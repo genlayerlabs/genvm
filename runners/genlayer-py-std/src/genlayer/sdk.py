@@ -1,69 +1,18 @@
 import genlayer.wasi as wasi
-import genlayer.py._storage as _storage
-import collections.abc
 
 import typing
 import json
 from types import SimpleNamespace as _SimpleNamespace
 import base64
-import os
 
 # reexports
 import genlayer.py.calldata as calldata
-from .py._storage import storage, ROOT_STORAGE_ADDRESS
-from .py._storage_tree_map import TreeMap
 from .py.types import *
+from .asyn import *
 
 def public(f):
 	setattr(f, '__public__', True)
 	return f
-
-class AwaitableResult[T]:
-	_exc: typing.Optional[Exception]
-	_fd: int
-	def __init__(self, fd: int):
-		self._fd = fd
-		self._exc = None
-		self._res = None
-	def __del__(self):
-		if self._fd == 0:
-			return
-		os.close(self._fd)
-		self._fd = 0
-	def __await__(self):
-		if self._fd == 0:
-			if self._exc is not None:
-				raise self._exc
-			return self._res
-		try:
-			self._res = self._get_res(self._fd)
-			return self._res
-		except Exception as e:
-			self._exc = e
-			raise
-		finally:
-			self._fd = 0
-		yield
-	@abc.abstractmethod
-	def _get_res(self, fd: int) -> T: ...
-
-class AwaitableResultStr(AwaitableResult[str]):
-	def _get_res(self, fd: int) -> str:
-		with os.fdopen(fd, "rt") as f:
-			return f.read()
-
-class AwaitableResultBytes(AwaitableResult[str]):
-	def _get_res(self, fd: int) -> bytes:
-		with os.fdopen(fd, "rb") as f:
-			return f.read()
-
-class AwaitableResultMap[T](AwaitableResult[T]):
-	def __init__(self, fd: int, fn: collections.abc.Callable[[bytes], T]):
-		super().__init__(fd)
-		self._fn = fn
-	def _get_res(self, fd: int) -> T:
-		with os.fdopen(fd, "rb") as f:
-			return self._fn(f.read())
 
 class AlreadySerializedResult(bytes):
 	def __new__(cls, *args, **kwargs):
@@ -78,7 +27,7 @@ def _decode_sub_vm_result(data: bytes) -> typing.Any:
 		raise Rollback(str(mem[1:], encoding='utf8'))
 	return calldata.decode(mem[1:])
 
-class ContractMethod:
+class OtherContractMethod:
 	def __init__(self, addr: Address, name: str):
 		self.addr = addr
 		self.name = name
@@ -91,14 +40,13 @@ class ContractMethod:
 		res = wasi.call_contract(self.addr.as_bytes, cd)
 		return AwaitableResultMap(res, _decode_sub_vm_result)
 
-class Contract:
+class OtherContract:
 	def __init__(self, addr: Address):
 		if not isinstance(addr, Address):
 			raise Exception("address expected")
 		self.addr = addr
 	def __getattr__(self, name):
-		return ContractMethod(self.addr, name)
-
+		return OtherContractMethod(self.addr, name)
 
 message_raw = json.loads(wasi.get_message_data())
 
@@ -128,27 +76,16 @@ def run_nondet(eq_principle, runner: Runner) -> AwaitableResultMap[typing.Any]:
 	res = wasi.run_nondet(json.dumps(eq_principle), pickle.dumps(runner))
 	return AwaitableResultMap[typing.Any](res, _decode_sub_vm_result)
 
-class _ActualStorageMan(_storage.StorageMan):
-	_slots: dict[Address, '_ActualStorageSlot']
-	def __init__(self):
-		self._slots = {}
-
-	def get_store_slot(self, addr: Address) -> '_ActualStorageSlot':
-		ret = self._slots.get(addr, None)
-		if ret is None:
-			ret = _ActualStorageSlot(addr, self)
-			self._slots[addr] = ret
-		return ret
-
-class _ActualStorageSlot(_storage.StorageSlot):
-	def __init__(self, addr: Address, manager: _storage.StorageMan):
-		_storage.StorageSlot.__init__(self, addr, manager)
-
-	def read(self, addr: int, len: int) -> bytes:
-		return wasi.storage_read(self.addr.as_bytes, addr, len)
-
-	@abc.abstractmethod
-	def write(self, addr: int, what: collections.abc.Buffer) -> None:
-		wasi.storage_write(self.addr.as_bytes, addr, what)
-
-STORAGE_MAN = _ActualStorageMan()
+def contract(t: type) -> type:
+	import genlayer.runner as runner
+	import inspect
+	mod = inspect.getmodule(t)
+	if mod is None:
+		raise Exception(f"can't detect module where {t} is declared")
+	if hasattr(mod, '__KNOWN_CONTRACT'):
+		raise Exception(f"only one @contract is allowed, old {mod.__KNOWN_CONTRACT} new {t}")
+	t.__contract__ = True
+	from genlayer.py.storage import storage
+	t = storage(t)
+	setattr(mod, '__KNOWN_CONTRACT', t)
+	return t

@@ -2,6 +2,7 @@
 
 import genlayer.sdk as gsdk
 from genlayer.py.types import *
+from genlayer.py.storage import storage
 
 __gsdk_self_run__ = True
 
@@ -13,7 +14,7 @@ class Test:
     def abc(self):
         return self.foo
 
-@gsdk.storage
+@storage
 class Composite:
     a: Test
     b: Test

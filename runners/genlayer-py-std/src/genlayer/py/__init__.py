@@ -1,1 +1,1 @@
-# this module contains etites that don't depend on wasm
+# this module contains entities that don't depend on wasm

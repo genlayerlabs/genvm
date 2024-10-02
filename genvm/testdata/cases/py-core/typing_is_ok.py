@@ -10,8 +10,6 @@ __gsdk_self_run__ = True
 
 class Foo[X]:
     a: X
-    def __class_getitem__(self, k):
-        return typing._GenericAlias(Foo, (k,))
 
 def tst(x):
     print(f"=== {x.__name__}")
