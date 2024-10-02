@@ -1,0 +1,56 @@
+name: Semgrep OSS scan
+
+on:
+  push:
+    branches:
+      - main
+      # - staging
+  workflow_dispatch:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  semgrep:
+    name: semgrep-oss/scan
+    runs-on: ubuntu-latest
+    container:
+      # A Docker image with Semgrep installed. Do not change this.
+      image: semgrep/semgrep
+
+    outputs:
+      artifact_url: ${{ steps.artifact-upload-step.outputs.artifact-url }}
+    # Skip any PR created by dependabot/renovatebot to avoid permission issues:
+    if: (github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]')
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: semgrep_scan
+        run: semgrep scan --config auto --text > semgrep.txt
+
+      - name: Upload semgrep.txt
+        uses: actions/upload-artifact@v4
+        id: artifact-upload-step
+        with:
+          name: semgrep-results
+          path: semgrep.txt
+
+  create_comment:
+    name: Create comment with link to semgrep.txt
+    needs: semgrep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add a comment with the artifact link
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: "Semgrep Scan Results"
+          message: |
+            The Semgrep OSS scan for commit ${{ github.sha }} is complete.
+            You can download the scan results from [this link.](${{needs.semgrep.outputs.artifact_url}})
+            Please note that the files will be available for approximately 90 days!
+
+    if: github.event_name == 'pull_request'

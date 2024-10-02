@@ -1,0 +1,30 @@
+# Common large paths
+node_modules/
+build/
+dist/
+vendor/
+.env/
+.venv/
+.tox/
+*.min.js
+.npm/
+.yarn/
+
+# Common test paths
+test/
+tests/
+testsuite/
+*_test.go
+
+# Semgrep rules folder
+.semgrep
+
+# Semgrep-action log folder
+.semgrep_logs/
+
+# custom test paths
+testdata
+
+# build files
+yabuild.rb
+build-scripts/*.rb
