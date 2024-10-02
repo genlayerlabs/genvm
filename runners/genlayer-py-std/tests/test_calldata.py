@@ -6,7 +6,7 @@ import common
 
 def make_rnd(size_limit, rem_depth):
     if rem_depth <= 0:
-        r = random.randint(0, 4)
+        r = random.randint(0, 7)
         if r == 0:
             return random.randint(-10**8, 10**8)
         if r == 1:
@@ -15,6 +15,10 @@ def make_rnd(size_limit, rem_depth):
             return random.randbytes(random.randint(0, size_limit))
         if r == 3:
             return common.random_str(size_limit)
+        if r == 4:
+            return True
+        if r == 5:
+            return False
         return None
     if random.randint(0, 100) % 2 == 0:
         le = random.randint(0, size_limit)

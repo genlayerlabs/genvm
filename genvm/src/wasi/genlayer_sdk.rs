@@ -603,7 +603,7 @@ fn decode_nondet_return<'a>(cur: &'a [u8]) -> Result<&'a str, anyhow::Error> {
     }
     let typ = len & 0x7;
     len >>= 3;
-    if typ != 5 {
+    if typ != 4 {
         anyhow::bail!("invalid nondet return ; expected string")
     }
     if len > u32::max_value() as u64 {

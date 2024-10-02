@@ -1,14 +1,20 @@
 from .types import Address
 from typing import Any
 
-TYPE_NULL = 0
+BITS_IN_TYPE = 3
+
+TYPE_SPECIAL = 0
 TYPE_PINT = 1
 TYPE_NINT = 2
 TYPE_BYTES = 3
-TYPE_ADDR = 4
-TYPE_STR = 5
-TYPE_ARR = 6
-TYPE_MAP = 7
+TYPE_STR = 4
+TYPE_ARR = 5
+TYPE_MAP = 6
+
+SPECIAL_NULL = (0 << BITS_IN_TYPE) | TYPE_SPECIAL
+SPECIAL_TRUE = (1 << BITS_IN_TYPE) | TYPE_SPECIAL
+SPECIAL_FALSE = (2 << BITS_IN_TYPE) | TYPE_SPECIAL
+SPECIAL_ADDR = (3 << BITS_IN_TYPE) | TYPE_SPECIAL
 
 def encode(x: Any) -> bytes:
 	mem = bytearray()
@@ -24,7 +30,11 @@ def encode(x: Any) -> bytes:
 			mem.append(cur)
 	def impl(b):
 		if b is None:
-			append_uleb128(TYPE_NULL)
+			mem.append(SPECIAL_NULL)
+		elif b is True:
+			mem.append(SPECIAL_TRUE)
+		elif b is False:
+			mem.append(SPECIAL_FALSE)
 		elif isinstance(b, int):
 			if b >= 0:
 				b = (b << 3) | TYPE_PINT
@@ -34,7 +44,7 @@ def encode(x: Any) -> bytes:
 				b = (b << 3) | TYPE_NINT
 				append_uleb128(b)
 		elif isinstance(b, Address):
-			append_uleb128(TYPE_ADDR)
+			mem.append(SPECIAL_ADDR)
 			mem.extend(b.as_bytes)
 		elif isinstance(b, bytes):
 			lb = len(b)
@@ -89,10 +99,20 @@ def decode(mem: bytes | memoryview) -> Any: # type: ignore
 		nonlocal mem
 		code = read_uleb128()
 		typ = code & 0x7
+		if typ == TYPE_SPECIAL:
+			if code == SPECIAL_NULL:
+				return None
+			if code == SPECIAL_FALSE:
+				return False
+			if code == SPECIAL_TRUE:
+				return True
+			if code == SPECIAL_ADDR:
+				ret = mem[:Address.SIZE]
+				mem = mem[Address.SIZE:]
+				return Address(ret)
+			raise Exception(f"Unknown special {bin(code)} {hex(code)}")
 		code = code >> 3
-		if typ == TYPE_NULL:
-			return None
-		elif typ == TYPE_PINT:
+		if typ == TYPE_PINT:
 			return code
 		elif typ == TYPE_NINT:
 			return -code - 1
@@ -104,11 +124,6 @@ def decode(mem: bytes | memoryview) -> Any: # type: ignore
 			ret = mem[:code]
 			mem = mem[code:]
 			return str(ret, encoding='utf-8')
-		elif typ == TYPE_ADDR:
-			assert code == 0
-			ret = mem[:Address.SIZE]
-			mem = mem[Address.SIZE:]
-			return Address(ret)
 		elif typ == TYPE_ARR:
 			ret = []
 			for i in range(code):
