@@ -2,11 +2,9 @@ name: Release GenVM
 
 on:
   push:
-    branches:
-      - release # REMOVE ME ON MERGE!
     tags:
       - 'v*'  # Trigger on version tags
-  workflow_dispatch:
+  # workflow_dispatch:
 
 defaults:
   run:
@@ -43,7 +41,7 @@ jobs:
 
       - name: Create Release
         id: create_release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: build/package.zip
           name: Release ${{ github.ref_name }}
