@@ -47,14 +47,17 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfn(m)]
-    fn run_nondet(eq_principle: &str, calldata: &[u8]) -> PyResult<u32> {
+    fn run_nondet(leader_data: &[u8], validator_data: &[u8]) -> PyResult<u32> {
         flush_everything();
         map_error(unsafe {
             genvm_sdk_rust::run_nondet(
-                eq_principle.as_ref(),
                 genvm_sdk_rust::Bytes {
-                    buf: calldata.as_ptr(),
-                    buf_len: calldata.len() as u32,
+                    buf: leader_data.as_ptr(),
+                    buf_len: leader_data.len() as u32,
+                },
+                genvm_sdk_rust::Bytes {
+                    buf: validator_data.as_ptr(),
+                    buf_len: validator_data.len() as u32,
                 },
             )
         })

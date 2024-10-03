@@ -47,7 +47,7 @@ As of now there are two test suites, both of which require `./build-scripts/inst
 
 ### genvm/testdata (mock tests)
 Prerequisites:
-- For `get_webpage` tests to work, one needs a compatible webdriver. There is a docker image for simplification: `bash -c 'docker run --network host $(docker build -q -t genvm/modules-webdriver -f genvm/modules/default-impl/web-funcs/webdriver.dockerfile genvm/modules/default-impl/web-funcs/)' &`
+- For `get_webpage` tests to work, one needs a compatible webdriver. There is a docker image for simplification: `bash -c 'docker run --rm -d --network=host $(docker build -q -t genvm/modules-webdriver -f genvm/modules/default-impl/web-funcs/webdriver.dockerfile genvm/modules/default-impl/web-funcs/)'`
 - For the default `call_llm` to work `OPENAIKEY` should be set to openai key
 
 Generic steps:

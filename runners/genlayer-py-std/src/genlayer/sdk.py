@@ -9,6 +9,7 @@ import base64
 import genlayer.py.calldata as calldata
 from .py.types import *
 from .asyn import *
+from ._private import _decode_sub_vm_result, _run_nondet, _call_user_fn
 
 def public(f):
 	setattr(f, '__public__', True)
@@ -20,12 +21,6 @@ class AlreadySerializedResult(bytes):
 
 def account_from_b64(x: str) -> bytes:
 	return base64.b64decode(x)
-
-def _decode_sub_vm_result(data: bytes) -> typing.Any:
-	mem = memoryview(data)
-	if mem[0] != 0:
-		raise Rollback(str(mem[1:], encoding='utf8'))
-	return calldata.decode(mem[1:])
 
 class OtherContractMethod:
 	def __init__(self, addr: Address, name: str):
@@ -67,10 +62,18 @@ def get_webpage(config: typing.Any, url: str) -> AwaitableResultStr:
 def call_llm(config: typing.Any, prompt: str) -> AwaitableResultStr:
 	return AwaitableResultStr(wasi.call_llm(json.dumps(config), prompt))
 
-def run_nondet(eq_principle, runner: typing.Callable[[], typing.Any]) -> AwaitableResultMap[typing.Any]:
-	import cloudpickle
-	res = wasi.run_nondet(json.dumps(eq_principle), cloudpickle.dumps(runner))
-	return AwaitableResultMap[typing.Any](res, _decode_sub_vm_result)
+def eq_principle_refl[T](fn: typing.Callable[[], T]) -> AwaitableResultMap[T]:
+	def validator_fn(leaders: typing.Any | Rollback) -> bool:
+		try:
+			my_res = _call_user_fn(fn)
+		except Rollback as r:
+			if isinstance(leaders, Rollback) and leaders.msg == r.msg:
+				return True
+		else:
+			if not isinstance(leaders, Rollback) and leaders == my_res:
+				return True
+		return False
+	return _run_nondet(fn, validator_fn)
 
 def contract(t: type) -> type:
 	import genlayer.runner as runner

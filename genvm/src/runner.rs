@@ -283,7 +283,7 @@ impl RunnerReader {
         Ok(())
     }
 
-    pub fn append_archieve<R>(
+    pub fn append_archive<R>(
         &mut self,
         path_prefix: &str,
         archieve: &mut zip::ZipArchive<R>,

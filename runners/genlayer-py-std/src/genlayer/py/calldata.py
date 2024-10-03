@@ -12,8 +12,8 @@ TYPE_ARR = 5
 TYPE_MAP = 6
 
 SPECIAL_NULL = (0 << BITS_IN_TYPE) | TYPE_SPECIAL
-SPECIAL_TRUE = (1 << BITS_IN_TYPE) | TYPE_SPECIAL
-SPECIAL_FALSE = (2 << BITS_IN_TYPE) | TYPE_SPECIAL
+SPECIAL_FALSE = (1 << BITS_IN_TYPE) | TYPE_SPECIAL
+SPECIAL_TRUE = (2 << BITS_IN_TYPE) | TYPE_SPECIAL
 SPECIAL_ADDR = (3 << BITS_IN_TYPE) | TYPE_SPECIAL
 
 def encode(x: Any) -> bytes:
@@ -146,5 +146,5 @@ def decode(mem: bytes | memoryview) -> Any: # type: ignore
 		raise Exception(f'invalid type {typ}')
 	res = impl()
 	if len(mem) != 0:
-		raise Exception(f'unparsed end {bytes(mem[:5])}...')
+		raise Exception(f'unparsed end {bytes(mem[:5])}... (decoded {res})')
 	return res

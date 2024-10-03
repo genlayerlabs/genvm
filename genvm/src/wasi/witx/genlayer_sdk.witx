@@ -22,8 +22,8 @@
     )
 
     (@interface func (export "run_nondet")
-        (param $eq_principle string)
-        (param $calldata $bytes)
+        (param $data_leader $bytes)
+        (param $data_validator $bytes)
         (result $error (expected $fd (error $errno)))
     )
 

@@ -7,4 +7,4 @@ class Contract:
     async def main(self, mode: str):
         async def run():
             return await gsdk.get_webpage({"mode": mode}, "http://127.0.0.1:4242/hello.html")
-        print(await gsdk.run_nondet({"mode": "refl"}, run))
+        print(await gsdk.eq_principle_refl(run))

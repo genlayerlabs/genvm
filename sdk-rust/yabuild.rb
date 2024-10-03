@@ -14,7 +14,7 @@ target_alias(
 			[build_generator.output_file, witx_file, output_file],
 			['cargo', 'fmt']
 		],
-		dependencies: [build_generator],
+		dependencies: [build_generator, witx_file],
 		output_file: output_file,
 	)
 )

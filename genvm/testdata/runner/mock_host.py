@@ -74,10 +74,10 @@ class MockHost:
 		self.thread_should_stop = False
 		with open(self.storage_path_pre, 'rb') as f:
 			self.storage = pickle.load(f)
-		self.thread = threading.Thread(target=lambda: self._threadfn(), daemon=True)
+		self.thread = threading.Thread(target=lambda: self._thread_fn(), daemon=True)
 		self.thread.start()
 		return self
-	def _threadfn(self):
+	def _thread_fn(self):
 		try:
 			with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock_listener:
 				assert self.storage is not None
@@ -165,9 +165,11 @@ class MockHost:
 								res = self.leader_nondet[call_no]
 								if res["ok"]:
 									sock.sendall(bytes([ResultCode.RETURN]))
+									data = _calldata.encode(res["value"])
 								else:
 									sock.sendall(bytes([ResultCode.ROLLBACK]))
-								data = _calldata.encode(res["value"])
+									dat: str = res["value"]
+									data = dat.encode('utf-8')
 								send_int(len(data))
 								sock.sendall(data)
 						case Methods.POST_NONDET_RESULT:

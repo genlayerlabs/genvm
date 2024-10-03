@@ -9,4 +9,4 @@ class Contract:
         def run():
             print('wow, nondet')
             return 'web page?'
-        return await gsdk.run_nondet({"mode": "refl"}, run)
+        return await gsdk.eq_principle_refl(run)

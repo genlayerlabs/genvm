@@ -14,10 +14,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(
-        data: genlayer_sdk::EssentialGenlayerSdkData,
-        shared_data: Arc<vm::SharedData>,
-    ) -> Self {
+    pub fn new(data: genlayer_sdk::SingleVMData, shared_data: Arc<vm::SharedData>) -> Self {
         Self {
             vfs: common::VFS::new(),
             preview1: preview1::Context::new(),

@@ -73,6 +73,13 @@ impl RunOk {
     pub fn empty_return() -> Self {
         Self::Return([0].into())
     }
+
+    pub fn as_bytes_iter<'a>(&'a self) -> impl Iterator<Item = u8> + use<'a> {
+        match self {
+            RunOk::Return(buf) => [0].into_iter().chain(buf.iter().cloned()),
+            RunOk::Rollback(buf) => [1].into_iter().chain(buf.as_bytes().iter().cloned()),
+        }
+    }
 }
 
 impl std::fmt::Debug for RunOk {
@@ -109,7 +116,7 @@ pub struct WasmContext {
 
 impl WasmContext {
     fn new(
-        data: crate::wasi::genlayer_sdk::EssentialGenlayerSdkData,
+        data: crate::wasi::genlayer_sdk::SingleVMData,
         shared_data: Arc<SharedData>,
     ) -> WasmContext {
         return WasmContext {
@@ -128,6 +135,7 @@ impl WasmContext {
 }
 
 pub struct SharedData {
+    /// shared across all deterministic VMs
     pub nondet_call_no: AtomicU32,
     // rust doesn't have aliasing Arc constructor
     pub fuel_descriptor: Arc<wasmtime::FuelDescriptor>,
@@ -352,10 +360,7 @@ impl Supervisor {
         }
     }
 
-    pub fn spawn(
-        &mut self,
-        data: crate::wasi::genlayer_sdk::EssentialGenlayerSdkData,
-    ) -> Result<VM> {
+    pub fn spawn(&mut self, data: crate::wasi::genlayer_sdk::SingleVMData) -> Result<VM> {
         let config_copy = data.conf.clone();
         let init_actions = data.init_actions.clone();
 
@@ -400,13 +405,13 @@ impl Supervisor {
         } else {
             None
         };
-        let prec = self
+        let precompiled = self
             .cache_module(contents, debug_path)
             .with_context(|| format!("caching {:?}", &debug_path))?;
         if ret_vm.is_det() {
-            Ok(prec.det.clone())
+            Ok(precompiled.det.clone())
         } else {
-            Ok(prec.non_det.clone())
+            Ok(precompiled.non_det.clone())
         }
     }
 
@@ -489,7 +494,7 @@ impl Supervisor {
             }])
         } else if let Ok(mut as_contr) = zip::ZipArchive::new(std::io::Cursor::new(&code)) {
             let mut runner = runner::RunnerReader::new()?;
-            runner.append_archieve("<contract>", &mut as_contr, &mut self.runner_cache)?;
+            runner.append_archive("<contract>", &mut as_contr, &mut self.runner_cache)?;
             runner.get()?
         } else {
             let code_str = str::from_utf8(&code[..])?;
@@ -524,7 +529,7 @@ impl Supervisor {
 
             let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&mut buf[..]))?;
             let mut runner = runner::RunnerReader::new()?;
-            runner.append_archieve("<contract>", &mut zip, &mut self.runner_cache)?;
+            runner.append_archive("<contract>", &mut zip, &mut self.runner_cache)?;
             runner.get()?
         };
 

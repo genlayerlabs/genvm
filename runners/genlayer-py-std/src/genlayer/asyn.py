@@ -7,6 +7,7 @@ import abc
 class AwaitableResult[T]:
 	_exc: typing.Optional[Exception]
 	_fd: int
+	_res: T | None
 	def __init__(self, fd: int):
 		self._fd = fd
 		self._exc = None
@@ -16,11 +17,11 @@ class AwaitableResult[T]:
 			return
 		os.close(self._fd)
 		self._fd = 0
-	def __await__(self):
+	def __await__(self) -> typing.Generator[None, None, T]:
 		if self._fd == 0:
 			if self._exc is not None:
 				raise self._exc
-			return self._res
+			return self._res # type: ignore
 		try:
 			self._res = self._get_res(self._fd)
 			return self._res

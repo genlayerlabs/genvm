@@ -8,7 +8,7 @@ class Contract:
         try:
             def run():
                 gsdk.rollback_immediate("nah, I won't execute")
-            res = await gsdk.run_nondet({"mode": "refl"}, run)
+            res = await gsdk.eq_principle_refl(run)
         except gsdk.Rollback as r:
             print('handled', r.msg)
         else:

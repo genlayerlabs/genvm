@@ -4,17 +4,17 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use serde::Deserialize;
+use itertools::Itertools;
 use wiggle::GuestError;
 
 use crate::{
-    vm::{self, InitActions},
-    Address, Host, MessageData,
+    vm::{self, InitActions, RunOk},
+    Address, MessageData,
 };
 
 use super::{base, common::*};
 
-pub struct EssentialGenlayerSdkData {
+pub struct SingleVMData {
     pub conf: base::Config,
     pub message_data: MessageData,
     pub entrypoint: Arc<[u8]>,
@@ -23,7 +23,7 @@ pub struct EssentialGenlayerSdkData {
 }
 
 pub struct Context {
-    pub data: EssentialGenlayerSdkData,
+    pub data: SingleVMData,
     pub shared_data: Arc<vm::SharedData>,
 }
 
@@ -71,7 +71,7 @@ impl generated::types::Bytes {
 }
 
 impl Context {
-    pub fn new(data: EssentialGenlayerSdkData, shared_data: Arc<vm::SharedData>) -> Self {
+    pub fn new(data: SingleVMData, shared_data: Arc<vm::SharedData>) -> Self {
         Self { data, shared_data }
     }
 }
@@ -189,16 +189,16 @@ impl ContextVFS<'_> {
     fn set_vm_run_result(
         &mut self,
         data: vm::RunOk,
-    ) -> Result<generated::types::Fd, generated::types::Error> {
-        let data: Arc<[u8]> = match data {
-            vm::RunOk::Return(buf) => {
-                [0].into_iter().chain(buf.into_iter()).collect()
-            }
-            vm::RunOk::Rollback(buf) => [1].into_iter().chain(buf.into_bytes()).collect(),
-        };
-        Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_contents(data, 0),
-        )))
+    ) -> Result<(generated::types::Fd, usize), generated::types::Error> {
+        let data: Arc<[u8]> = data.as_bytes_iter().collect();
+        let len = data.len();
+        Ok((
+            generated::types::Fd::from(
+                self.vfs
+                    .place_content(FileContentsUnevaluated::from_contents(data, 0)),
+            ),
+            len,
+        ))
     }
 }
 
@@ -335,29 +335,59 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
     fn run_nondet(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        eq_principle: wiggle::GuestPtr<str>,
-        data: &generated::types::Bytes,
+        data_leader: &generated::types::Bytes,
+        data_validator: &generated::types::Bytes,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if !self.context.data.conf.can_spawn_nondet {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
-        let eq_principle = read_string(mem, eq_principle)?;
 
-        // relaxed reason: here is no actual race possible, only the determinsiitc vm can call it, and it has no concurrency
+        // relaxed reason: here is no actual race possible, only the deterministic vm can call it, and it has no concurrency
         let call_no = self
             .context
             .shared_data
             .nondet_call_no
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-        let cow = mem.as_cow(data.buf.as_array(data.buf_len))?;
+        let leaders_res = (|| -> anyhow::Result<Option<vm::RunOk>> {
+            let supervisor = self.context.data.supervisor.clone();
+            let Ok(mut supervisor) = supervisor.lock() else {
+                return Err(anyhow::anyhow!("can't lock supervisor"));
+            };
+            supervisor.host.get_leader_result(call_no)
+        })()
+        .map_err(generated::types::Error::trap)?;
+
         let mut entrypoint = Vec::from(b"nondet!");
-        entrypoint.extend(cow.iter());
+        match &leaders_res {
+            None => {
+                // we are the leader
+                entrypoint.extend_from_slice(&0u32.to_le_bytes());
+                let cow_leader = mem.as_cow(data_leader.buf.as_array(data_leader.buf_len))?;
+                entrypoint.extend(cow_leader.into_iter());
+            }
+            Some(leaders_res) => {
+                // reserve size to rewrite later
+                let entrypoint_size_off = entrypoint.len();
+                entrypoint.extend_from_slice(&0u32.to_le_bytes());
+                entrypoint.extend(leaders_res.as_bytes_iter());
+                let written_len = (entrypoint.len() - 4 - entrypoint_size_off) as u32;
+                entrypoint[entrypoint_size_off..entrypoint_size_off + 4]
+                    .iter_mut()
+                    .zip_eq(written_len.to_le_bytes())
+                    .for_each(|(dst, src)| {
+                        *dst = src;
+                    });
+                let cow_validator =
+                    mem.as_cow(data_validator.buf.as_array(data_validator.buf_len))?;
+                entrypoint.extend(cow_validator.into_iter());
+            }
+        }
         let entrypoint = Arc::from(entrypoint);
 
         let supervisor = self.context.data.supervisor.clone();
 
-        let essential_data = EssentialGenlayerSdkData {
+        let vm_data = SingleVMData {
             conf: base::Config {
                 is_deterministic: false,
                 can_read_storage: false,
@@ -370,50 +400,26 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             init_actions: self.context.data.init_actions.clone(),
         };
 
-        let res = self
+        let my_res = self
             .context
-            .spaw_and_run(&supervisor, essential_data)
+            .spawn_and_run(&supervisor, vm_data)
             .map_err(generated::types::Error::trap)?;
 
-        let res: vm::RunResult = (|| {
-            let Ok(mut supervisor) = supervisor.lock() else {
-                return Err(anyhow::anyhow!("can't lock supervisor"));
-            };
-            let leader_res = supervisor.host.get_leader_result(call_no)?;
-
-            match (leader_res, res) {
-                (Some(vm::RunOk::Return(leader_res)), vm::RunOk::Return(res)) => {
-                    // handle two null's
-                    if leader_res == b"\x00" && res == b"\x00" {
-                        Ok(vm::RunOk::Return(leader_res))
-                    } else {
-                        equivalence_principle_check(
-                            &mut supervisor.host,
-                            &eq_principle,
-                            decode_nondet_return(&leader_res)?,
-                            decode_nondet_return(&res)?,
-                        )
-                        .map(|_| vm::RunOk::Return(leader_res))
-                    }
-                }
-                (Some(vm::RunOk::Rollback(leader_res)), vm::RunOk::Rollback(res)) => {
-                    equivalence_principle_check(
-                        &mut supervisor.host,
-                        &eq_principle,
-                        &leader_res,
-                        &res,
-                    )
-                    .map(|_| vm::RunOk::Rollback(leader_res))
-                }
-                (None, res) => {
-                    supervisor.host.post_result(call_no, &res)?;
-                    Ok(res)
-                }
-                (_, _) => Err(anyhow::anyhow!("result diverged from leader's")),
+        let ret_res = (|| match leaders_res {
+            None => {
+                let Ok(mut supervisor) = supervisor.lock() else {
+                    anyhow::bail!("can't lock supervisor");
+                };
+                supervisor.host.post_result(call_no, &my_res)?;
+                Ok(my_res)
             }
-        })();
-
-        self.set_vm_run_result(res.map_err(generated::types::Error::trap)?)
+            Some(leaders_res) => match my_res {
+                RunOk::Return(v) if v == [16] => Ok(leaders_res),
+                _ => Err(anyhow::anyhow!("Validator disagrees for call {}", call_no)),
+            },
+        })()
+        .map_err(generated::types::Error::trap)?;
+        self.set_vm_run_result(ret_res).map(|x| x.0)
     }
 
     fn call_contract(
@@ -443,7 +449,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let my_data = self.context.data.message_data.clone();
 
-        let essential_data = EssentialGenlayerSdkData {
+        let vm_data = SingleVMData {
             conf: base::Config {
                 is_deterministic: true,
                 can_read_storage: my_conf.can_read_storage,
@@ -464,10 +470,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let res = self
             .context
-            .spaw_and_run(&supervisor, essential_data)
+            .spawn_and_run(&supervisor, vm_data)
             .map_err(generated::types::Error::trap)?;
 
-        self.set_vm_run_result(res)
+        self.set_vm_run_result(res).map(|x| x.0)
     }
 
     fn storage_read(
@@ -555,10 +561,10 @@ impl Context {
     }
 
     /// note: handles fuel itself
-    fn spaw_and_run(
+    fn spawn_and_run(
         &mut self,
         supervisor: &Arc<Mutex<crate::vm::Supervisor>>,
-        essential_data: EssentialGenlayerSdkData,
+        essential_data: SingleVMData,
     ) -> vm::RunResult {
         let (mut vm, instance) = {
             let mut supervisor = supervisor
@@ -578,67 +584,4 @@ fn vec_from_cstr_libc(str: *const u8) -> Arc<[u8]> {
         libc::free(str as *mut std::ffi::c_void);
     }
     res
-}
-
-fn decode_nondet_return<'a>(cur: &'a [u8]) -> Result<&'a str, anyhow::Error> {
-    if cur.is_empty() {
-        anyhow::bail!("invalid nondet return ; expected calldata encoded string; got empty")
-    }
-
-    let mut len: u64 = 0u64;
-    let mut off = 0u64;
-
-    let mut idx = 0usize;
-    while idx < cur.len() {
-        let byte = cur[idx];
-        idx += 1;
-        len |= (byte as u64 & 0x7f) << off;
-        off += 7;
-        if byte & 0x80 == 0 {
-            break;
-        }
-        if off >= 40 {
-            anyhow::bail!("invalid nondet return ; string length is too big")
-        }
-    }
-    let typ = len & 0x7;
-    len >>= 3;
-    if typ != 4 {
-        anyhow::bail!("invalid nondet return ; expected string")
-    }
-    if len > u32::max_value() as u64 {
-        anyhow::bail!("invalid nondet return ; string length is too big")
-    }
-    let len = len as u32;
-    if idx + len as usize != cur.len() {
-        anyhow::bail!("invalid nondet return ; string size is encoded incorrectly")
-    }
-    Ok(str::from_utf8(&cur[idx..])?)
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "kebab-case")]
-enum EqPrincipleMode {
-    Refl,
-}
-
-#[derive(Deserialize)]
-struct EqPrincipleConfig {
-    mode: EqPrincipleMode,
-}
-
-fn equivalence_principle_check(
-    _host: &mut Host,
-    config: &str,
-    leader: &str,
-    cur: &str,
-) -> Result<(), anyhow::Error> {
-    let config: EqPrincipleConfig = serde_json::from_str(config)?;
-    let is_ok = match config.mode {
-        EqPrincipleMode::Refl => leader == cur,
-    };
-    if !is_ok {
-        anyhow::bail!("equivalence_principle_check failed");
-    }
-    Ok(())
 }

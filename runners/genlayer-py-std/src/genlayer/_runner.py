@@ -2,23 +2,13 @@ import genlayer.wasi as wasi
 import genlayer.py.calldata
 import typing
 from genlayer.py.types import Rollback
+from ._private import _call_user_fn
 
 def _give_result(res_fn: typing.Callable[[], typing.Any]):
 	try:
-		res = res_fn()
+		res = _call_user_fn(res_fn)
 	except Rollback as r:
 		wasi.rollback(r.msg)
-	if hasattr(res, '__await__'):
-		try:
-			res.send(None)
-		except StopIteration as si:
-			res = si.value
-		except Rollback as r:
-			wasi.rollback(r.msg)
-		else:
-			raise Exception(f"no send for awaitable {res}")
-	if res is None:
-		exit(0)
 	from genlayer.sdk import AlreadySerializedResult
 	if isinstance(res, AlreadySerializedResult):
 		wasi.contract_return(res)
@@ -27,11 +17,12 @@ def _give_result(res_fn: typing.Callable[[], typing.Any]):
 
 def run(contract: type):
 	entrypoint: bytes = wasi.get_entrypoint()
+	mem = memoryview(entrypoint)
 	CALL = b'call!'
 	NONDET = b'nondet!'
 	if entrypoint.startswith(CALL):
-		calldata = memoryview(entrypoint)[len(CALL):]
-		calldata = genlayer.py.calldata.decode(calldata)
+		mem = mem[len(CALL):]
+		calldata = genlayer.py.calldata.decode(mem)
 		meth = getattr(contract, calldata['method'])
 		from .sdk import message
 		if not message.is_init and not getattr(meth, '__public__', False):
@@ -41,8 +32,20 @@ def run(contract: type):
 		contract_instance = contract.__view_at__(top_slot, 0)
 		_give_result(lambda: meth(contract_instance, *calldata['args']))
 	elif entrypoint.startswith(NONDET):
+		mem = mem[len(NONDET):]
+		# fetch leaders result length
+		le = int.from_bytes(mem[:4], 'little')
+		mem = mem[4:]
+
+		leaders_res = mem[:le]
+		mem = mem[le:]
 		import cloudpickle
-		runner = cloudpickle.loads(entrypoint[len(NONDET):])
-		_give_result(runner)
+		runner = cloudpickle.loads(mem)
+		if le == 0:
+			_give_result(runner)
+		else:
+			from ._private import _decode_sub_vm_result_retn
+			leaders_res = _decode_sub_vm_result_retn(leaders_res)
+			_give_result(lambda: runner(leaders_res))
 	else:
 		raise Exception(f"unknown entrypoint {entrypoint}")

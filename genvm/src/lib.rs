@@ -37,7 +37,7 @@ struct ConfigSchema {
     modules: Vec<ConfigModule>,
 }
 
-fn fake_thead_pool() -> genvm_modules_common::SharedThreadPoolABI {
+fn fake_thread_pool() -> genvm_modules_common::SharedThreadPoolABI {
     extern "C-unwind" fn exec(
         _zelf: *const (),
         ctx: *const (),
@@ -84,7 +84,7 @@ pub fn create_supervisor(
             version: genvm_modules_common::Version { major: 0, minor: 0 },
             module_config: config_str.as_ptr(),
             module_config_len: config_str.len(),
-            thread_pool: fake_thead_pool(),
+            thread_pool: fake_thread_pool(),
         };
         let name = match &c.name {
             Some(v) => v,
@@ -126,7 +126,7 @@ pub fn run_with(
         supervisor.host.append_calldata(&mut entrypoint)?;
         let init_actions = supervisor.get_actions_for(&entry_message.contract_account)?;
 
-        let essential_data = wasi::genlayer_sdk::EssentialGenlayerSdkData {
+        let essential_data = wasi::genlayer_sdk::SingleVMData {
             conf: wasi::base::Config {
                 is_deterministic: true,
                 can_read_storage: true,
