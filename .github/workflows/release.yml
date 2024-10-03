@@ -17,26 +17,26 @@ jobs:
       contents: write  # Needed for creating releases
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Get source
         uses: ./.github/actions/get-src
         with:
-          install_also: --genvm --rust
+          install_also: --genvm --rust --wasi
 
       - name: Install tools and configure
         run: |
-          cd "$GITHUB_WORKSPACE"
-          source env.sh
+          cd "$GITHUB_WORKSPACE" && \
+          source env.sh && \
           ./tools/ya-build/ya-build config --preload .ci/release-conf.rb
 
       - name: Build package
         run: |
-          cd "$GITHUB_WORKSPACE"
-          source env.sh
-          ninja -v -C build tags/all
-          tree build/out
-          pushd build/out
-          zip -r -9 ../package.zip *
+          cd "$GITHUB_WORKSPACE" && \
+          source env.sh && \
+          ninja -v -C build tags/all && \
+          tree build/out && \
+          pushd build/out && \
+          zip -r -9 ../package.zip * && \
           popd
 
       - name: Create Release

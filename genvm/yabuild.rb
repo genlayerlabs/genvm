@@ -1,20 +1,31 @@
 project('genvm') {
 	modules_dir = config.out_dir.join('lib', 'genvm-modules')
 
+	base_env = {}
+	compiler = config.tools.clang || config.tools.gcc
+	linker = config.tools.mold || config.tools.lld
+	# not config.tools.clang.nil? and
+	if not compiler.nil? and not linker.nil?
+		base_env['RUSTFLAGS'] ||= ''
+		base_env['RUSTFLAGS'] << "-Clinker=#{Shellwords.escape compiler} -Clink-arg=-fuse-ld=#{Shellwords.escape linker}"
+	end
+
 	modules = target_alias('modules',
 		target_cargo_build(
 			name: "dylib",
 			profile: config.profile,
 			out_file: modules_dir.join('libweb.so'),
 			dir: cur_src.join('modules', 'default-impl', 'web-funcs'),
-			flags: ['-Zprofile-rustflags']
+			flags: ['-Zprofile-rustflags'],
+			env: base_env,
 		),
 		target_cargo_build(
 			name: "dylib",
 			profile: config.profile,
 			out_file: modules_dir.join('libllm.so'),
 			dir: cur_src.join('modules', 'default-impl', 'llm-funcs'),
-			flags: ['-Zprofile-rustflags']
+			flags: ['-Zprofile-rustflags'],
+			env: base_env,
 		)
 	)
 
@@ -24,7 +35,7 @@ project('genvm') {
 			RbConfig.ruby, cur_src.join('codegen', 'templates', 'host-rs.rb')
 		],
 		dependencies: [cur_src.join('codegen', 'data', 'host-fns.json')],
-		tags: ['codegen']
+		tags: ['codegen'],
 	)
 
 	bin = target_alias(
@@ -33,7 +44,8 @@ project('genvm') {
 			name: "genvm",
 			profile: config.profile,
 			out_file: config.bin_dir.join('genvm'),
-			flags: ['-Zprofile-rustflags']
+			flags: ['-Zprofile-rustflags'],
+			env: base_env,
 		) {
 			add_deps codegen
 		}

@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 set -ex
 
 cd /opt/openssl-3.3.2

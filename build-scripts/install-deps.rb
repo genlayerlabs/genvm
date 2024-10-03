@@ -11,6 +11,7 @@ require 'logger'
 require 'rubygems/package'
 require 'zlib'
 require 'net/http'
+require 'shellwords'
 
 require 'optparse'
 
@@ -21,6 +22,7 @@ options = {
 OptionParser.new do |opts|
 	opts.on '--genvm'
 	opts.on '--rust'
+	opts.on '--rust-det'
 	opts.on '--os'
 	opts.on '--wasi'
 	opts.on '--test'
@@ -34,6 +36,49 @@ logger.formatter = proc do |severity, datetime, progname, msg|
 	end
 	"#{severity.ljust(5)} #{msg}\n"
 end
+$logger = logger
+
+def run_command(*cmd, chdir: nil)
+	$logger.info("running #{cmd} at #{chdir || Dir.pwd}")
+	buf = String.new
+	kws = {}
+	if not chdir.nil?
+		kws[:chdir] = chdir
+	end
+	Open3.popen2e(*cmd.map { |s| s.to_s }, **kws) { |stdin, stdout, wait_thr|
+		stdin.close()
+		stdout.each_line { |l|
+			puts "\t#{l}"
+			buf << l << "\n"
+		}
+		exit_status = wait_thr.value
+		if exit_status != 0
+			raise "command #{cmd.map{ |x| Shellwords.escape x }.join(' ')} failed"
+		end
+	}
+	buf
+end
+
+def find_executable(name)
+	paths = ENV['PATH'].split(':')
+	paths << '/usr/bin'
+	paths << '/bin'
+	paths << "#{ENV['HOME']}/.local/bin"
+	paths << "#{ENV['HOME']}/.cargo/bin"
+	paths.each { |p|
+		check = ['', '.elf', '.exe']
+		check.each { |c|
+			cur_p = Pathname.new(p).join("#{name}#{c}")
+			if cur_p.exist?()
+				$logger.debug("located #{name} at #{cur_p}")
+				return cur_p
+			end
+		}
+	}
+	return nil
+end
+
+$bash = find_executable 'bash'
 
 TARGET_TRIPLE = Proc.new do
 	o, e, s = Open3.capture3('rustc --version --verbose')
@@ -84,19 +129,18 @@ download_dir = root.join('tools', 'downloaded')
 download_dir.mkpath()
 
 logger.debug("download dir is #{download_dir}")
-$logger = logger
 
 def load_packages_from_lists(dir)
 	$logger.info("downloading #{dir} packages")
 	case OS
 	when 'linux'
 		if Pathname.new('/etc/lsb-release').exist?()
-			puts `/usr/bin/bash "#{Pathname.new(__FILE__).parent.join('src', dir, 'ubuntu.sh')}"`
+			run_command $bash, Pathname.new(__FILE__).parent.join('src', dir, 'ubuntu.sh')
 		else
 			$logger.error("auto install of packages for linux excluding ubuntu is not supported")
 		end
 	when 'macos'
-		puts `sh "#{Pathname.new(__FILE__).parent.join('src', dir, 'brew.sh')}"`
+		run_command $bash, Pathname.new(__FILE__).parent.join('src', dir, 'brew.sh')
 	else
 		$logger.error("auto install of packages for your os is not supported")
 	end
@@ -110,40 +154,28 @@ if not RUBY_VERSION =~ /^3\./
 	logger.error("ruby must be at least 3.0, yours is #{RUBY_VERSION}")
 end
 
-def find_executable(name)
-	paths = ENV['PATH'].split(':')
-	paths << '/usr/bin'
-	paths << '/bin'
-	paths << "#{ENV['HOME']}/.local/bin"
-	paths << "#{ENV['HOME']}/.cargo/bin"
-	paths.each { |p|
-		check = ['', '.elf', '.exe']
-		check.each { |c|
-			cur_p = Pathname.new(p).join("#{name}#{c}")
-			if cur_p.exist?()
-				return cur_p
-			end
-		}
-	}
-	return nil
-end
-
-if options[:rust]
+if options[:rust] || options[:'rust-det']
 	rustup = find_executable('rustup')
 	if rustup.nil?
 		logger.debug("downloading rust")
-		`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile=minimal --component rust-fmt`
-		rustup = ENV['HOME'] + "/.cargo/bin/rustup"
+		puts `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile=minimal --component rust-fmt`
+		rustup = find_executable 'rustup'
 	else
 		logger.debug("rustup is already installed at #{rustup}")
 	end
-	`cd "#{root}" && #{rustup} show active-toolchain || #{rustup} toolchain install`
+	raise "rustup not found" if rustup.nil?
 
-	cur_toolchain = `#{rustup} show active-toolchain`
-	cur_toolchain = cur_toolchain.strip
+	puts `cd "#{root}" && #{rustup} show active-toolchain || #{rustup} toolchain install`
+	run_command(rustup, 'component', 'add', 'rustfmt', chdir: root)
+end
+
+if options[:'rust-det']
+	ext_path = root.join('runners', 'cpython-and-ext', 'extension')
+	cur_toolchain = run_command(rustup, 'show', 'active-toolchain', chdir: ext_path)
+	cur_toolchain = cur_toolchain.lines.map { |l| l.strip }.filter { |l| l.size != 0 }.last
 	cur_toolchain = /^([a-zA-Z0-9\-_]+)/.match(cur_toolchain)[1]
 	logger.debug("installing for toolchain #{cur_toolchain}")
-	`cd "#{root}" && #{rustup} target add --toolchain #{cur_toolchain} wasm32-wasip1`
+	run_command(rustup, 'target', 'add', '--toolchain', cur_toolchain, 'wasm32-wasip1', chdir: ext_path)
 end
 
 if options[:wasi]

@@ -1,5 +1,5 @@
 [toolchain]
-channel = "nightly"
-components = [ "rustfmt", "rust-std" ]
+channel = "nightly-2024-09-09"
+components = [ "rust-std" ]
 target = []
 profile = "minimal"

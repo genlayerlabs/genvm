@@ -8,8 +8,7 @@ edition = "2021"
 [profile.dev]
 rustflags = [
     #"-Zsanitizer=memory",
-    "-Zsanitizer=leak",
-    "-Cforce-frame-pointers=true"
+    #"-Zsanitizer=leak",
 ]
 
 [lib]

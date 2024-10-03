@@ -4,7 +4,8 @@ CONFIGURATOR = self
 
 class CargoBuildTarget < Target
 	attr_reader :output_file
-	def initialize(dir, name, target, profile, features, flags)
+	def initialize(dir, name, target, profile, features, flags, env)
+		@env = env
 		@flags = flags
 		@features = features
 		@target_dir = CONFIGURATOR.root_build.join('generated', 'rust-target') # dir.join('target')
@@ -48,6 +49,13 @@ class CargoBuildTarget < Target
 
 	protected def dump_rules_impl(buf)
 		buf << "  WD = #{Shellwords.escape @dir}\n"
+		if @env.size > 0
+			buf << "  ENV = env"
+			@env.each { |k, v|
+				buf << ' ' << k << '=' << Shellwords.escape(v).gsub(/\\=/, '=')
+			}
+			buf << "\n"
+		end
 		if @is_lib
 			buf << "  FLAGS = --lib"
 		else
@@ -93,14 +101,14 @@ end
 
 add_rule(<<-EOF
 rule CARGO_BUILD
-  command = cd $WD && cargo build $FLAGS && touch $out
+  command = cd $WD && env $ENV cargo build $FLAGS && touch $out
   pool = console
   description = $DESC
 
 EOF
 )
 
-self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, name:, target: nil, profile: "debug", features: [], flags: [], **kwargs, &blk|
+self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, name:, target: nil, profile: "debug", features: [], flags: [], env: {}, **kwargs, &blk|
 	if target.nil?
 		@dflt_target ||= Proc.new {
 			o, e, s = Open3.capture3('rustc --version --verbose')
@@ -115,7 +123,7 @@ self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, n
 		dir = cur_src
 	end
 
-	trg = CargoBuildTarget.new(dir, name, target, profile, features, flags)
+	trg = CargoBuildTarget.new(dir, name, target, profile, features, flags, env)
 
 	if out_file.nil?
 		return return_target(trg, **kwargs, &blk)

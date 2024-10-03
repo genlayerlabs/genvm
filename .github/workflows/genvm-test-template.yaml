@@ -18,6 +18,9 @@ jobs:
     runs-on: ${{ inputs.runs_on }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Get source
         uses: ./.github/actions/get-src
         with:
@@ -57,7 +60,7 @@ jobs:
         env:
           OPENAIKEY: ${{ secrets.OPENAIKEY }}
         run: |
-          OPENAIKEY="" python3 -m pip install -r genvm/testdata/runner/requirements.txt && \
+          OPENAIKEY="" python3.12 -m pip install -r genvm/testdata/runner/requirements.txt && \
           OPENAIKEY="" docker run --detach --rm --network host "$(docker build -q -t genvm/modules-webdriver -f genvm/modules/default-impl/web-funcs/webdriver.dockerfile genvm/modules/default-impl/web-funcs/)" && \
           sleep 5 && \
-          ./genvm/testdata/runner/run.py
+          python3.12 ./genvm/testdata/runner/run.py

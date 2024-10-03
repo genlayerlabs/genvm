@@ -12,7 +12,7 @@ runs:
       run: |
         cd "$GITHUB_WORKSPACE" && \
           sudo apt-get update && sudo apt-get install -y ruby && \
-          (./build-scripts/install-deps.rb --os ${{ inputs.install_also }} || true) && \
+          (./build-scripts/install-deps.rb --os || true) && \
           ./build-scripts/install-deps.rb --os ${{ inputs.install_also }} && \
           git config --global user.email "worker@ci.ci" && \
           git config --global user.name "CI worker" && \

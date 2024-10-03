@@ -32,7 +32,7 @@ self.define_singleton_method(:target_publish_runner) do |name_base:, runner_dict
 	target_command(
 		output_file: out_file,
 		commands: [
-			[config.python, publish_script, runner_publish_config_file]
+			[config.tools.python3, publish_script, runner_publish_config_file]
 		],
 		dependencies: [publish_script, runner_json] + dependencies + fdeps
 	) {

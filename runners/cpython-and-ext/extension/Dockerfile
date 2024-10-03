@@ -19,4 +19,4 @@ WORKDIR /opt/genvm/
 
 RUN ls
 
-RUN /opt/genvm/build-scripts/install-deps.rb --rust
+RUN /opt/genvm/build-scripts/install-deps.rb --rust-det
