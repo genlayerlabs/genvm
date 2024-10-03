@@ -1,0 +1,52 @@
+name: Release GenVM
+
+on:
+  push:
+    branches:
+      - make-release # REMOVE ME ON MERGE!
+    tags:
+      - 'v*'  # Trigger on version tags
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash -x {0}
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed for creating releases
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          install_also: --genvm --rust
+
+      - name: Install tools and configure
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          source env.sh
+          ./tools/ya-build/ya-build config --preload .ci/release-conf.rb
+
+      - name: Build package
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          source env.sh
+          ninja -v -C build tags/all
+          tree build/out
+          pushd build/out
+          zip -r -9 ../package.zip *
+          popd
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/package.zip
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
