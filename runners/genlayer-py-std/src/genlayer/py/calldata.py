@@ -1,5 +1,6 @@
 from .types import Address
 from typing import Any
+import collections.abc
 
 BITS_IN_TYPE = 3
 
@@ -81,8 +82,8 @@ def encode(x: Any) -> bytes:
 	impl(x)
 	return bytes(mem)
 
-def decode(mem: bytes | memoryview) -> Any: # type: ignore
-	mem: memoryview = memoryview(mem)
+def decode(mem0: collections.abc.Buffer) -> Any: # type: ignore
+	mem: memoryview = memoryview(mem0)
 	def read_uleb128() -> int:
 		nonlocal mem
 		ret = 0
@@ -107,9 +108,9 @@ def decode(mem: bytes | memoryview) -> Any: # type: ignore
 			if code == SPECIAL_TRUE:
 				return True
 			if code == SPECIAL_ADDR:
-				ret = mem[:Address.SIZE]
+				ret_addr = mem[:Address.SIZE]
 				mem = mem[Address.SIZE:]
-				return Address(ret)
+				return Address(ret_addr)
 			raise Exception(f"Unknown special {bin(code)} {hex(code)}")
 		code = code >> 3
 		if typ == TYPE_PINT:
@@ -117,34 +118,33 @@ def decode(mem: bytes | memoryview) -> Any: # type: ignore
 		elif typ == TYPE_NINT:
 			return -code - 1
 		elif typ == TYPE_BYTES:
-			ret = mem[:code]
+			ret_bytes = mem[:code]
 			mem = mem[code:]
-			return ret
+			return ret_bytes
 		elif typ == TYPE_STR:
-			ret = mem[:code]
+			ret_str = mem[:code]
 			mem = mem[code:]
-			return str(ret, encoding='utf-8')
+			return str(ret_str, encoding='utf-8')
 		elif typ == TYPE_ARR:
-			ret = []
-			for i in range(code):
-				ret.append(impl())
-			return ret
+			ret_arr = []
+			for _i in range(code):
+				ret_arr.append(impl())
+			return ret_arr
 		elif typ == TYPE_MAP:
-			ret = {}
+			ret_dict: dict[str, Any] = {}
 			prev = None
-			for i in range(code):
+			for _i in range(code):
 				le = read_uleb128()
-				key = mem[:le]
+				key = str(mem[:le], encoding='utf-8')
 				mem = mem[le:]
-				key = str(key, encoding='utf-8')
 				if prev is not None:
 					assert prev < key
 				prev = key
-				assert key not in ret
-				ret[key] = impl()
-			return ret
+				assert key not in ret_dict
+				ret_dict[key] = impl()
+			return ret_dict
 		raise Exception(f'invalid type {typ}')
 	res = impl()
 	if len(mem) != 0:
-		raise Exception(f'unparsed end {bytes(mem[:5])}... (decoded {res})')
+		raise Exception(f'unparsed end {bytes(mem[:5])!r}... (decoded {res})')
 	return res

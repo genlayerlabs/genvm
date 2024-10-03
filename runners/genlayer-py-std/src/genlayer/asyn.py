@@ -40,7 +40,7 @@ class AwaitableResultStr(AwaitableResult[str]):
 		with os.fdopen(fd, "rt") as f:
 			return f.read()
 
-class AwaitableResultBytes(AwaitableResult[str]):
+class AwaitableResultBytes(AwaitableResult[bytes]):
 	def _get_res(self, fd: int) -> bytes:
 		with os.fdopen(fd, "rb") as f:
 			return f.read()

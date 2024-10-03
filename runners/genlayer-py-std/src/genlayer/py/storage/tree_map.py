@@ -37,7 +37,7 @@ class TreeMap[K: Comparable, V]:
 
 	def _alloc_slot(self) -> tuple[int, _Node[K, V]]:
 		if len(self.free_slots) > 0:
-			idx = self.free_slots[-1]
+			idx = int(self.free_slots[-1])
 			self.free_slots.pop()
 			slot = self.slots[idx]
 		else:

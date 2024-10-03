@@ -15,6 +15,7 @@ python = "^3.12"
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.2"
 pytest-xdist = "^3.6.1"
+mypy = "^1.11.2"
 
 [build-system]
 requires = ["poetry-core"]
@@ -23,4 +24,10 @@ build-backend = "poetry.core.masonry.api"
 [tool.pytest.ini_options]
 testpaths = [
     "tests",
+]
+
+[tool.mypy]
+exclude  = [
+    "tests",
+    "src/cloudpickle",
 ]

@@ -37,7 +37,7 @@ def run(contract: type):
 		le = int.from_bytes(mem[:4], 'little')
 		mem = mem[4:]
 
-		leaders_res = mem[:le]
+		leaders_res_mem = mem[:le]
 		mem = mem[le:]
 		import cloudpickle
 		runner = cloudpickle.loads(mem)
@@ -45,7 +45,7 @@ def run(contract: type):
 			_give_result(runner)
 		else:
 			from ._private import _decode_sub_vm_result_retn
-			leaders_res = _decode_sub_vm_result_retn(leaders_res)
+			leaders_res = _decode_sub_vm_result_retn(leaders_res_mem)
 			_give_result(lambda: runner(leaders_res))
 	else:
 		raise Exception(f"unknown entrypoint {entrypoint}")
