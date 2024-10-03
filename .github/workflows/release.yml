@@ -3,7 +3,7 @@ name: Release GenVM
 on:
   push:
     branches:
-      - make-release # REMOVE ME ON MERGE!
+      - release # REMOVE ME ON MERGE!
     tags:
       - 'v*'  # Trigger on version tags
   workflow_dispatch:
