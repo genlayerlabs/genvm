@@ -1,1 +1,5 @@
-../rust-toolchain.toml
+[toolchain]
+channel = "nightly"
+components = [ "rustfmt", "rust-std" ]
+target = []
+profile = "minimal"

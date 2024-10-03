@@ -1,4 +1,4 @@
-from genlayer.py._storage import Vec, storage, TreeMap
+from genlayer.py.storage import Vec, storage, TreeMap
 from genlayer.py.types import *
 
 @storage

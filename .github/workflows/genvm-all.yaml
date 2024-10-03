@@ -43,12 +43,12 @@ jobs:
       - name: install dependencies
         run: |
           python3.12 -m pip install poetry && \
-            pushd runners/genlayer-std && \
+            pushd runners/genlayer-py-std && \
             poetry install && \
             popd
       - name: pytest
         run: |
-          pushd runners/genlayer-std && \
+          pushd runners/genlayer-py-std && \
           poetry run pytest -n auto && \
           popd
 
@@ -106,12 +106,13 @@ jobs:
     with:
       build_type: debug
       runs_on: ubuntu-latest
-  build-genvm-release-ubuntu-latest:
-    needs: []
-    uses: ./.github/workflows/genvm-build-template.yaml
-    with:
-      build_type: release
-      runs_on: ubuntu-latest
+#  build-genvm-release-ubuntu-latest:
+#    needs: []
+#    uses: ./.github/workflows/genvm-build-template.yaml
+#    with:
+#      build_type: release
+#      runs_on: ubuntu-latest
+
 #  build-genvm-release-macos-latest:
 #    needs: [module-test-cargo, module-test-python]
 #    uses: ./.github/workflows/genvm-build-template.yaml
@@ -125,13 +126,17 @@ jobs:
     uses: ./.github/workflows/genvm-test-template.yaml
     with:
       runs_on: ubuntu-latest
-      genvm_artifact_name: ${{ needs.test-genvm-debug-ubuntu-latest.outputs.art-name }}
-  test-genvm-release-ubuntu-latest:
-    needs: [build-runners, build-genvm-release-ubuntu-latest]
-    uses: ./.github/workflows/genvm-test-template.yaml
-    with:
-      runs_on: ubuntu-latest
-      genvm_artifact_name: ${{ needs.test-genvm-release-ubuntu-latest.outputs.art-name }}
+      # based on genvm-${{ inputs.build_type }}-${{ inputs.runs_on }}
+      # ${{ needs.test-genvm-debug-ubuntu-latest.outputs.art-name }} doesn't work
+      genvm_artifact_name: genvm-debug-ubuntu-latest
+
+#  test-genvm-release-ubuntu-latest:
+#    needs: [build-runners, build-genvm-release-ubuntu-latest]
+#    uses: ./.github/workflows/genvm-test-template.yaml
+#    with:
+#      runs_on: ubuntu-latest
+#      genvm_artifact_name: ${{ needs.test-genvm-release-ubuntu-latest.outputs.art-name }}
+
 #  test-genvm-release-macos-latest:
 #    needs: [build-runners, build-genvm-release-macos-latest]
 #    uses: ./.github/workflows/genvm-test-template.yaml
