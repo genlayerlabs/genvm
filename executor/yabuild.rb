@@ -1,4 +1,4 @@
-project('genvm') {
+project('executor') {
 	modules_dir = config.out_dir.join('lib', 'genvm-modules')
 
 	base_env = {}

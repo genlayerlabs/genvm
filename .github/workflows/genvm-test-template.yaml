@@ -24,7 +24,7 @@ jobs:
       - name: Get source
         uses: ./.github/actions/get-src
         with:
-          install_also: ""
+          install_also: --test
       - run: |
           mkdir -p "$GITHUB_WORKSPACE/build/out"
       - uses: actions/download-artifact@v4
@@ -60,7 +60,7 @@ jobs:
         env:
           OPENAIKEY: ${{ secrets.OPENAIKEY }}
         run: |
-          OPENAIKEY="" python3.12 -m pip install -r genvm/testdata/runner/requirements.txt && \
-          OPENAIKEY="" docker run --detach --rm --network host "$(docker build -q -t genvm/modules-webdriver -f genvm/modules/default-impl/web-funcs/webdriver.dockerfile genvm/modules/default-impl/web-funcs/)" && \
+          OPENAIKEY="" python3.12 -m pip install -r executor/testdata/runner/requirements.txt && \
+          OPENAIKEY="" docker run --rm -d --network=host $(docker build -q -t genvm/modules-webdriver -f executor/modules/default-impl/web-funcs/webdriver.dockerfile executor/modules/default-impl/web-funcs/) && \
           sleep 5 && \
-          python3.12 ./genvm/testdata/runner/run.py
+          python3.12 ./executor/testdata/runner/run.py

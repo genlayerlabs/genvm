@@ -7,5 +7,5 @@ config.bin_dir.mkpath
 project('genvm') {
 	include_dir 'sdk-rust'
 	include_dir 'runners'
-	include_dir 'genvm'
+	include_dir 'executor'
 }
