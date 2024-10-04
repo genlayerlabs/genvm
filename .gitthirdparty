@@ -1,11 +1,11 @@
 {
 	"repos": {
-		"genvm/third-party/wasmtime": {
+		"executor/third-party/wasmtime": {
 			"url": "https://github.com/bytecodealliance/wasmtime.git",
 			"commit": "110e70f30e34b9df5ed4aaf401c8818c23204ca2",
 			"patches": 9
 		},
-		"third-party/wasi-rs": {
+		"sdk-rust/third-party/wasi-rs": {
 			"url": "https://github.com/bytecodealliance/wasi-rs/",
 			"commit": "9ec04a7d8ebb1bbb9e3291503425cee1ec38a560",
 			"patches": 1
@@ -15,7 +15,7 @@
 			"commit": "3b70b5d8147675932c38b36cd09af6df4eedd919",
 			"patches": 2
 		},
-		"genvm/third-party/wasm-tools": {
+		"executor/third-party/wasm-tools": {
 			"url": "https://github.com/bytecodealliance/wasm-tools.git",
 			"commit": "5a83828b7ff0e59db322de2a6466abca656de9a5",
 			"patches": 0

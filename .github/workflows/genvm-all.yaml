@@ -129,6 +129,7 @@ jobs:
       # based on genvm-${{ inputs.build_type }}-${{ inputs.runs_on }}
       # ${{ needs.test-genvm-debug-ubuntu-latest.outputs.art-name }} doesn't work
       genvm_artifact_name: genvm-debug-ubuntu-latest
+    secrets: inherit
 
 #  test-genvm-release-ubuntu-latest:
 #    needs: [build-runners, build-genvm-release-ubuntu-latest]

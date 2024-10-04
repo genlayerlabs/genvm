@@ -1,9 +1,9 @@
 build_generator = target_cargo_build(
 	name: 'witx-bindgen',
-	dir: root_src.join('third-party', 'wasi-rs', 'crates', 'witx-bindgen'),
+	dir: cur_src.join('third-party', 'wasi-rs', 'crates', 'witx-bindgen'),
 )
 
-witx_file = root_src.join('genvm', 'src', 'wasi', 'witx', 'genlayer_sdk.witx')
+witx_file = root_src.join('executor', 'src', 'wasi', 'witx', 'genlayer_sdk.witx')
 
 output_file = cur_src.join('src', 'generated.rs')
 

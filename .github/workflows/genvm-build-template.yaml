@@ -41,7 +41,7 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE" && \
             source env.sh && \
-            ninja -v -C build genvm/genvm/all && \
+            ninja -v -C build genvm/executor/all && \
             tree build/out && \
             pushd build/out && \
             zip -r -9 ../genvm.zip * && \
