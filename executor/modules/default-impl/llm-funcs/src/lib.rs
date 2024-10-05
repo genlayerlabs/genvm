@@ -123,7 +123,7 @@ pub extern "C-unwind" fn call_llm(
     prompt: *const u8,
 ) -> interfaces::CStrResult {
     let ctx = get_ptr(ctx);
-    let config = unsafe { CStr::from_ptr(config as *const i8) };
-    let prompt = unsafe { CStr::from_ptr(prompt as *const i8) };
+    let config = unsafe { CStr::from_ptr(config as *const std::ffi::c_char) };
+    let prompt = unsafe { CStr::from_ptr(prompt as *const std::ffi::c_char) };
     ctx.call_llm(gas, config, prompt).into()
 }

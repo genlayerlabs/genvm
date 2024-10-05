@@ -170,7 +170,7 @@ pub extern "C-unwind" fn get_webpage(
     url: *const u8,
 ) -> interfaces::CStrResult {
     let ctx = get_ptr(ctx);
-    let config = unsafe { CStr::from_ptr(config as *const i8) };
-    let url = unsafe { CStr::from_ptr(url as *const i8) };
+    let config = unsafe { CStr::from_ptr(config as *const std::ffi::c_char) };
+    let url = unsafe { CStr::from_ptr(url as *const std::ffi::c_char) };
     ctx.get_webpage(config, url).into()
 }
