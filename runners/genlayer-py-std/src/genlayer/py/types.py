@@ -2,6 +2,7 @@ import base64
 import typing
 import abc
 
+
 class Address:
 	SIZE = 32
 	_as_bytes: bytes
@@ -12,7 +13,7 @@ class Address:
 		if isinstance(val, str) or len(val) > Address.SIZE:
 			val = base64.b64decode(val)
 		if len(val) != Address.SIZE:
-			raise Exception("invalid address")
+			raise Exception('invalid address')
 		self._as_bytes = val
 
 	@property
@@ -30,13 +31,16 @@ class Address:
 		if not isinstance(r, Address):
 			return False
 		return self._as_bytes == r._as_bytes
+
 	def __repr__(self) -> str:
-		return 'addr:[' + ''.join(["{:02x}".format(x) for x in self._as_bytes]) + "]"
+		return 'addr:[' + ''.join(['{:02x}'.format(x) for x in self._as_bytes]) + ']'
+
 
 i8 = typing.NewType('i8', int)
 i64 = typing.NewType('i64', int)
 u32 = typing.NewType('u32', int)
 u64 = typing.NewType('u64', int)
+
 
 class Rollback(Exception):
 	def __init__(self, msg: str):

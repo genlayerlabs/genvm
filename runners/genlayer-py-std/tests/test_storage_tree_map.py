@@ -1,16 +1,20 @@
 from genlayer.py.storage import Vec, storage, TreeMap
 from genlayer.py.types import *
 
+
 @storage
 class UserStorage:
 	m: TreeMap[str, u32]
 
+
 def test_compiles():
 	pass
+
 
 import common
 import itertools
 import random
+
 
 def dump(v, x, ind=0):
 	if x == 0:
@@ -21,12 +25,13 @@ def dump(v, x, ind=0):
 	dump(v, p.left, ind + 1)
 	print()
 	dump(v, p.right, ind + 1)
-	print(f'\n{" "*ind}}}',end='')
+	print(f'\n{" "*ind}}}', end='')
+
 
 def verify_invariants(v: TreeMap[str, u32]):
 	def check(idx):
 		if idx == 0:
-			return { "depth": 0 }
+			return {'depth': 0}
 		cur = v.slots[idx - 1]
 		ld = check(cur.left)
 		rd = check(cur.right)
@@ -34,19 +39,25 @@ def verify_invariants(v: TreeMap[str, u32]):
 			assert v.slots[cur.left - 1].key < cur.key
 		if cur.right != 0:
 			assert cur.key < v.slots[cur.right - 1].key
-		ldepth = ld["depth"]
-		rdepth = rd["depth"]
-		assert rdepth - ldepth == cur.balance, "invariant broken"
-		return { "depth": 1 + max(ldepth, rdepth) }
+		ldepth = ld['depth']
+		rdepth = rd['depth']
+		assert rdepth - ldepth == cur.balance, 'invariant broken'
+		return {'depth': 1 + max(ldepth, rdepth)}
+
 	check(v.root)
+
 
 def test_insert():
 	stor = UserStorage()
 	dic = {}
+
 	def same_iter():
-		for (lk, lv), (rk, rv) in itertools.zip_longest(stor.m.items(), sorted(dic.items())):
+		for (lk, lv), (rk, rv) in itertools.zip_longest(
+			stor.m.items(), sorted(dic.items())
+		):
 			assert lk == rk
 			assert lv == rv
+
 	op = common.SameOp(stor.m, dic)
 	same_iter()
 	vals = list(range(1048)) * 2
@@ -68,7 +79,7 @@ def test_insert():
 		same_iter()
 		verify_invariants(stor.m)
 	except Exception:
-		print("====")
+		print('====')
 		for l, r in itertools.zip_longest(stor.m.items(), sorted(dic.items())):
 			print(l, ' vs ', r)
 		raise
@@ -78,13 +89,13 @@ def test_insert():
 	while len(vals) > 0:
 		iteration += 1
 		it = vals.pop()
-		#print(f'iteration {iteration}')
+		# print(f'iteration {iteration}')
 		try:
 			op(lambda x: x.__delitem__(str(it)), void=True)
 			same_iter()
 			verify_invariants(stor.m)
 		except Exception:
-			print("====")
+			print('====')
 			for l, r in itertools.zip_longest(stor.m.items(), sorted(dic.items())):
 				print(l, ' vs ', r)
 			raise

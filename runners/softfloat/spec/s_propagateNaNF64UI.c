@@ -55,4 +55,3 @@ uint_fast64_t
     return defaultNaNF64UI;
 
 }
-

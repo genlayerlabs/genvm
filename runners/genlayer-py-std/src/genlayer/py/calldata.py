@@ -17,18 +17,21 @@ SPECIAL_FALSE = (1 << BITS_IN_TYPE) | TYPE_SPECIAL
 SPECIAL_TRUE = (2 << BITS_IN_TYPE) | TYPE_SPECIAL
 SPECIAL_ADDR = (3 << BITS_IN_TYPE) | TYPE_SPECIAL
 
+
 def encode(x: Any) -> bytes:
 	mem = bytearray()
+
 	def append_uleb128(i):
 		assert i >= 0
 		if i == 0:
 			mem.append(0)
 		while i > 0:
-			cur = i & 0x7f
+			cur = i & 0x7F
 			i = i >> 7
 			if i > 0:
 				cur |= 0x80
 			mem.append(cur)
+
 	def impl(b):
 		if b is None:
 			mem.append(SPECIAL_NULL)
@@ -79,23 +82,27 @@ def encode(x: Any) -> bytes:
 				impl(b[k])
 		else:
 			raise Exception(f'invalid type {type(b)}')
+
 	impl(x)
 	return bytes(mem)
 
-def decode(mem0: collections.abc.Buffer) -> Any: # type: ignore
+
+def decode(mem0: collections.abc.Buffer) -> Any:  # type: ignore
 	mem: memoryview = memoryview(mem0)
+
 	def read_uleb128() -> int:
 		nonlocal mem
 		ret = 0
 		off = 0
 		while True:
 			m = mem[0]
-			ret = ret | ((m & 0x7f) << off)
+			ret = ret | ((m & 0x7F) << off)
 			off += 7
 			mem = mem[1:]
 			if (m & 0x80) == 0:
 				break
 		return ret
+
 	def impl() -> Any:
 		nonlocal mem
 		code = read_uleb128()
@@ -108,10 +115,10 @@ def decode(mem0: collections.abc.Buffer) -> Any: # type: ignore
 			if code == SPECIAL_TRUE:
 				return True
 			if code == SPECIAL_ADDR:
-				ret_addr = mem[:Address.SIZE]
-				mem = mem[Address.SIZE:]
+				ret_addr = mem[: Address.SIZE]
+				mem = mem[Address.SIZE :]
 				return Address(ret_addr)
-			raise Exception(f"Unknown special {bin(code)} {hex(code)}")
+			raise Exception(f'Unknown special {bin(code)} {hex(code)}')
 		code = code >> 3
 		if typ == TYPE_PINT:
 			return code
@@ -144,6 +151,7 @@ def decode(mem0: collections.abc.Buffer) -> Any: # type: ignore
 				ret_dict[key] = impl()
 			return ret_dict
 		raise Exception(f'invalid type {typ}')
+
 	res = impl()
 	if len(mem) != 0:
 		raise Exception(f'unparsed end {bytes(mem[:5])!r}... (decoded {res})')

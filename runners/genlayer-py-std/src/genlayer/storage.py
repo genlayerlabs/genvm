@@ -7,8 +7,10 @@ from .py.types import Address
 import collections.abc
 import abc
 
+
 class _ActualStorageMan(StorageMan):
 	_slots: dict[Address, '_ActualStorageSlot']
+
 	def __init__(self):
 		self._slots = {}
 
@@ -18,6 +20,7 @@ class _ActualStorageMan(StorageMan):
 			ret = _ActualStorageSlot(addr, self)
 			self._slots[addr] = ret
 		return ret
+
 
 class _ActualStorageSlot(StorageSlot):
 	def __init__(self, addr: Address, manager: StorageMan):
@@ -29,5 +32,6 @@ class _ActualStorageSlot(StorageSlot):
 	@abc.abstractmethod
 	def write(self, addr: int, what: collections.abc.Buffer) -> None:
 		wasi.storage_write(self.addr.as_bytes, addr, what)
+
 
 STORAGE_MAN = _ActualStorageMan()

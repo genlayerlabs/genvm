@@ -1,0 +1,12 @@
+exclude = [
+    "runners/genlayer-py-std/src/cloudpickle"
+]
+indent-width = 2
+
+[format]
+indent-style = "tab"
+quote-style = "single"
+line-ending = "lf"
+
+skip-magic-trailing-comma = false
+docstring-code-format = true

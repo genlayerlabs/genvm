@@ -7,6 +7,7 @@ import collections.abc
 from .vec import Vec
 from genlayer.py.types import u32, i8
 
+
 class _Node[K, V]:
 	key: K
 	value: V
@@ -21,6 +22,7 @@ class _Node[K, V]:
 		self.right = u32(0)
 		self.balance = i8(0)
 
+
 class Comparable(typing.Protocol):
 	@abc.abstractmethod
 	def __eq__(self, other: typing.Any, /) -> bool:
@@ -29,6 +31,7 @@ class Comparable(typing.Protocol):
 	@abc.abstractmethod
 	def __lt__(self, other: typing.Any, /) -> bool:
 		pass
+
 
 class TreeMap[K: Comparable, V]:
 	root: u32
@@ -44,6 +47,7 @@ class TreeMap[K: Comparable, V]:
 			idx = len(self.slots)
 			slot = self.slots.append_new_get()
 		return (idx, slot)
+
 	def _free_slot(self, slot: u32):
 		if slot + 1 == len(self.slots):
 			self.slots.pop()
@@ -62,6 +66,7 @@ class TreeMap[K: Comparable, V]:
 		else:
 			par_node.balance = i8(0)
 			cur_node.balance = i8(0)
+
 	def _rot_right(self, par: int, cur: int):
 		par_node = self.slots[par - 1]
 		cur_node = self.slots[cur - 1]
@@ -222,12 +227,12 @@ class TreeMap[K: Comparable, V]:
 				if sib_bal > 0:
 					right_child = sib_node.right
 					self._rot_left_right(par, sib, right_child)
-					seq.pop() # cur
-					seq.pop() # par
+					seq.pop()  # cur
+					seq.pop()  # par
 					seq.append(right_child)
 				else:
 					self._rot_right(par, sib)
-					seq.pop(-2) # par
+					seq.pop(-2)  # par
 					seq[-1] = sib
 				if gp != 0:
 					gp = self.slots[gp - 1]
@@ -246,12 +251,12 @@ class TreeMap[K: Comparable, V]:
 				if sib_bal < 0:
 					left_child = sib_node.left
 					self._rot_right_left(par, sib, left_child)
-					seq.pop() # cur
-					seq.pop() # par
+					seq.pop()  # cur
+					seq.pop()  # par
 					seq.append(left_child)
 				else:
 					self._rot_left(par, sib)
-					seq.pop(-2) # par
+					seq.pop(-2)  # par
 					seq[-1] = sib
 				if gp != 0:
 					gp = self.slots[gp - 1]
@@ -297,7 +302,7 @@ class TreeMap[K: Comparable, V]:
 			par_node = self.slots[par - 1]
 			is_left = cur == par_node.left
 			# we inserted to null place, so we increaced it depth
-			delta = (-1 if is_left else 1)
+			delta = -1 if is_left else 1
 			new_b = par_node.balance + delta
 			if new_b == -2:
 				gp = 0 if len(seq) == 2 else seq[-3]
@@ -305,12 +310,12 @@ class TreeMap[K: Comparable, V]:
 				if cur_node.balance > 0:
 					right_child = cur_node.right
 					self._rot_left_right(par, cur, right_child)
-					seq.pop() # cur
-					seq.pop() # par
+					seq.pop()  # cur
+					seq.pop()  # par
 					seq.append(right_child)
 				else:
 					self._rot_right(par, cur)
-					seq.pop(-2) # par
+					seq.pop(-2)  # par
 				if gp != 0:
 					gp = self.slots[gp - 1]
 					if gp.left == par:
@@ -324,12 +329,12 @@ class TreeMap[K: Comparable, V]:
 				if cur_node.balance < 0:
 					left_child = cur_node.left
 					self._rot_right_left(par, cur, left_child)
-					seq.pop() # cur
-					seq.pop() # par
+					seq.pop()  # cur
+					seq.pop()  # par
 					seq.append(left_child)
 				else:
 					self._rot_left(par, cur)
-					seq.pop(-2) # par
+					seq.pop(-2)  # par
 				if gp != 0:
 					gp = self.slots[gp - 1]
 					if gp.left == par:
@@ -345,7 +350,12 @@ class TreeMap[K: Comparable, V]:
 		if self.root != seq[0]:
 			self.root = seq[0]
 
-	def get_fn[T](self, k: K, found: collections.abc.Callable[[_Node[K, V]], T], not_found: collections.abc.Callable[[], T]) -> T:
+	def get_fn[T](
+		self,
+		k: K,
+		found: collections.abc.Callable[[_Node[K, V]], T],
+		not_found: collections.abc.Callable[[], T],
+	) -> T:
 		idx = self.root
 		while idx != 0:
 			_Node = self.slots[idx - 1]
@@ -357,12 +367,13 @@ class TreeMap[K: Comparable, V]:
 				idx = _Node.right
 		return not_found()
 
-	def get(self, k: K, dflt=None): #  -> V | None
+	def get(self, k: K, dflt=None):  #  -> V | None
 		return self.get_fn(k, lambda n: n.value, lambda: dflt)
 
 	def __getitem__(self, k: K) -> V:
 		def not_found() -> V:
 			raise KeyError()
+
 		return self.get_fn(k, lambda x: x.value, not_found)
 
 	def __contains__(self, k: K) -> bool:
@@ -376,6 +387,7 @@ class TreeMap[K: Comparable, V]:
 			yield from go(slot.left)
 			yield cb(slot)
 			yield from go(slot.right)
+
 		yield from go(self.root)
 
 	def __iter__(self):

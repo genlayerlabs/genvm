@@ -5,6 +5,7 @@ import collections.abc
 import typing
 import hashlib
 
+
 def _calculate_indirection_addr(l: Address, r: int) -> Address:
 	hasher = hashlib.sha3_256()
 	hasher.update(l.as_bytes)
@@ -12,10 +13,12 @@ def _calculate_indirection_addr(l: Address, r: int) -> Address:
 	res = hasher.digest()
 	return Address(res)
 
+
 class StorageMan(typing.Protocol):
 	@abc.abstractmethod
 	def get_store_slot(self, addr: Address) -> 'StorageSlot':
 		pass
+
 
 class StorageSlot:
 	manager: StorageMan
@@ -34,13 +37,24 @@ class StorageSlot:
 	@abc.abstractmethod
 	def write(self, addr: int, what: collections.abc.Buffer) -> None: ...
 
+
 class ComplexCopyAction(typing.Protocol):
 	@abc.abstractmethod
-	def copy(self, frm: StorageSlot, frm_off: int, to: StorageSlot,to_off: int) -> int: ...
+	def copy(
+		self, frm: StorageSlot, frm_off: int, to: StorageSlot, to_off: int
+	) -> int: ...
+
 
 type CopyAction = int | ComplexCopyAction
 
-def actions_apply_copy(copy_actions: list[CopyAction], to_stor: StorageSlot, to_off: int, frm_stor: StorageSlot, frm_off: int) -> int:
+
+def actions_apply_copy(
+	copy_actions: list[CopyAction],
+	to_stor: StorageSlot,
+	to_off: int,
+	frm_stor: StorageSlot,
+	frm_off: int,
+) -> int:
 	cum_off = 0
 	for act in copy_actions:
 		if isinstance(act, int):
@@ -50,12 +64,14 @@ def actions_apply_copy(copy_actions: list[CopyAction], to_stor: StorageSlot, to_
 			cum_off += act.copy(frm_stor, frm_off + cum_off, to_stor, to_off + cum_off)
 	return cum_off
 
+
 def actions_append(l: list[CopyAction], r: list[CopyAction]):
 	it = iter(r)
 	if len(l) > 0 and len(r) > 0 and isinstance(l[-1], int) and isinstance(r[0], int):
 		l[-1] += r[0]
 		next(it)
 	l.extend(it)
+
 
 class TypeDesc[T]:
 	size: int
@@ -71,9 +87,11 @@ class TypeDesc[T]:
 	@abc.abstractmethod
 	def set(self, slot: StorageSlot, off: int, val: T) -> None: ...
 
+
 class WithStorageSlot(typing.Protocol):
 	__description__: typing.ClassVar[TypeDesc]
 	_storage_slot: StorageSlot
 	_off: int
+
 
 ROOT_STORAGE_ADDRESS = Address(bytes([0] * 32))
