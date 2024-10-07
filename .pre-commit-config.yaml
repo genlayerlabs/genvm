@@ -1,0 +1,42 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^\.gitthirdparty
+      - id: end-of-file-fixer
+        exclude: ^\.gitthirdparty
+      - id: check-added-large-files
+      - id: check-json
+        exclude: ^\.gitthirdparty
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff-format
+
+#  - repo: local
+#    hooks:
+
+
+  - repo: https://github.com/editorconfig-checker/editorconfig-checker.python
+    rev: 3.0.3
+    hooks:
+      - id: editorconfig-checker
+        exclude: (runners/genlayer-py-std/src/cloudpickle|.gitthirdparty)
+
+  - repo: local
+    hooks:
+      - id: check-shebang
+        name: check shebang
+        entry: ./build-scripts/hooks/shebang.py
+        language: system
+
+#      - id: cargo-fmt
+#        name: cargo fmt
+#        entry: sh build-scripts/cargo-fmt.sh
+#        language: system
+#        files: ".*\\.rs$"

@@ -6,9 +6,11 @@ from genlayer.py.storage import storage, TreeMap
 
 __gsdk_self_run__ = True
 
+
 @storage
 class UserStorage:
-    m: TreeMap[str, u32]
+	m: TreeMap[str, u32]
+
 
 tst = UserStorage()
 

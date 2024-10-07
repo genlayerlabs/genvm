@@ -55,4 +55,3 @@ uint_fast32_t
     return defaultNaNF32UI;
 
 }
-

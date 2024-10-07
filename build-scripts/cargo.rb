@@ -99,6 +99,7 @@ class CargoCopyTarget < Target
 	end
 end
 
+# editorconfig-checker-disable
 add_rule(<<-EOF
 rule CARGO_BUILD
   command = cd $WD && env $ENV cargo build $FLAGS && touch $out
@@ -107,6 +108,7 @@ rule CARGO_BUILD
 
 EOF
 )
+# editorconfig-checker-enable
 
 self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, name:, target: nil, profile: "debug", features: [], flags: [], env: {}, **kwargs, &blk|
 	if target.nil?

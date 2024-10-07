@@ -2,8 +2,14 @@ import typing
 
 from .core import *
 
+
 class _RecordDesc[T: WithStorageSlot](TypeDesc):
-	def __init__(self, view_ctor: typing.Callable[[StorageSlot, int], T], size: int, actions: list[CopyAction]):
+	def __init__(
+		self,
+		view_ctor: typing.Callable[[StorageSlot, int], T],
+		size: int,
+		actions: list[CopyAction],
+	):
 		TypeDesc.__init__(self, size, actions)
 		self.view_ctor = view_ctor
 

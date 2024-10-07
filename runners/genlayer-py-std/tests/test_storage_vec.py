@@ -2,13 +2,16 @@ from genlayer.py.storage import Vec, storage
 
 import common
 
+
 @storage
 class StorVec:
 	x: Vec[str]
 
+
 def same_iter(li, ri):
 	for l, r in zip(li, ri):
 		assert l == r
+
 
 def test_len():
 	l = StorVec()

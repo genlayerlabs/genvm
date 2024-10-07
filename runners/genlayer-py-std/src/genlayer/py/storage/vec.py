@@ -3,8 +3,10 @@ import typing
 from .core import *
 from .desc_base_types import _u32_desc
 
+
 class WithItemStorageSlot(WithStorageSlot):
 	_item_desc: TypeDesc
+
 
 class Vec[T](WithItemStorageSlot):
 	def __init__(self):
@@ -19,34 +21,41 @@ class Vec[T](WithItemStorageSlot):
 
 	def __len__(self) -> int:
 		return _u32_desc.get(self._storage_slot, self._off)
+
 	def _map_index(self, idx: int) -> int:
 		le = len(self)
 		if idx < 0:
 			idx += le
 		if idx < 0 or idx >= le:
-			raise IndexError(f"index out of range {idx} not in 0..<{le}")
+			raise IndexError(f'index out of range {idx} not in 0..<{le}')
 		return idx
+
 	def __getitem__(self, idx: int) -> T:
 		idx = self._map_index(idx)
 		items_at = self._storage_slot.indirect(self._off)
 		return self._item_desc.get(items_at, idx * self._item_desc.size)
+
 	def __setitem__(self, idx: int, val: T) -> None:
 		idx = self._map_index(idx)
 		items_at = self._storage_slot.indirect(self._off)
 		return self._item_desc.set(items_at, idx * self._item_desc.size, val)
+
 	def __iter__(self) -> typing.Any:
 		for i in range(len(self)):
 			yield self[i]
+
 	def append(self, item: T) -> None:
 		le = len(self)
 		_u32_desc.set(self._storage_slot, self._off, le + 1)
 		items_at = self._storage_slot.indirect(self._off)
 		return self._item_desc.set(items_at, le * self._item_desc.size, item)
+
 	def append_new_get(self) -> T:
 		le = len(self)
 		_u32_desc.set(self._storage_slot, self._off, le + 1)
 		items_at = self._storage_slot.indirect(self._off)
 		return self._item_desc.get(items_at, le * self._item_desc.size)
+
 	def pop(self) -> None:
 		le = len(self)
 		if le == 0:
@@ -72,8 +81,10 @@ class _VecCopyAction(ComplexCopyAction):
 				cum_off += actions_apply_copy(cop, to, to_off + cum_off, frm, frm_off + cum_off)
 		return _u32_desc.size
 
+
 class _VecDescription(TypeDesc):
 	_item_desc: TypeDesc
+
 	def __init__(self, it_desc: TypeDesc):
 		self._item_desc = it_desc
 		self._cop = _VecCopyAction(it_desc)
@@ -86,5 +97,5 @@ class _VecDescription(TypeDesc):
 
 	def set(self, slot: StorageSlot, off: int, val: Vec) -> None:
 		if val._item_desc is not self:
-			raise Exception("incompatible vector type")
+			raise Exception('incompatible vector type')
 		self._cop.copy(val._storage_slot, val._off, slot, off)
