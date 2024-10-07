@@ -8,8 +8,20 @@ defaults:
     shell: bash -x {0}
 
 jobs:
+  pre-job:
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@v3.4.0
+        with:
+          skip_after_successful_duplicate: 'true'
+
   pre-commit:
     runs-on: ubuntu-latest
+    needs: [pre-job]
+    if: ${{ needs.pre-job.outputs.should_skip != 'true' }}
     steps:
       - uses: actions/checkout@v4
       - name: Get source
@@ -29,7 +41,8 @@ jobs:
 ### MODULE TESTS
 
   module-test-cargo:
-    needs: []
+    needs: [pre-job]
+    if: ${{ needs.pre-job.outputs.should_skip != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
