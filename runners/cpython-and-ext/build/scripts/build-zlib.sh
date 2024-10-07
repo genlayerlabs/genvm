@@ -9,5 +9,5 @@ CC=/opt/wasi-sdk-24.0/bin/clang CFLAGS="$C_AND_CXX_FLAGS" ./configure \
     "--prefix=$WASM32_WASI_ROOT"
 
 make -j
-
 make install
+make clean || true
