@@ -10,3 +10,5 @@ make CC=/opt/wasi-sdk-24.0/bin/clang CFLAGS="$C_AND_CXX_FLAGS" -j libbz2.a
 cp -f libbz2.a "$WASM32_WASI_ROOT/lib/libbz2.a"
 cp -f bzlib.h "$WASM32_WASI_ROOT/include"
 chmod a+r "$WASM32_WASI_ROOT/include/bzlib.h"
+
+make clean || true

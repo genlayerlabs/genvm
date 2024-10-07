@@ -24,3 +24,4 @@ env \
 make -j
 
 make install_sw install_ssldirs
+make clean || true

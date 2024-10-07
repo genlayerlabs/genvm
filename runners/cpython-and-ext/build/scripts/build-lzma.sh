@@ -18,3 +18,4 @@ env \
 
 make -C src/liblzma/ -j
 make -C src/liblzma/ install
+make clean || true

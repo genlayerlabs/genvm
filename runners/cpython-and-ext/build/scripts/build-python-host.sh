@@ -12,6 +12,7 @@ pushd cross-build/build
 
 make -j
 make install
+make clean || true
 
 popd
 
