@@ -8,7 +8,10 @@ for file in files:
 	if file.endswith('.rs'):
 		continue
 	with open(file, 'rt') as f:
-		s = f.readline()
+		try:
+			s = f.readline()
+		except:
+			continue
 		if not s.startswith('#!'):
 			continue
 		if not s.startswith('#!/usr/bin/env'):

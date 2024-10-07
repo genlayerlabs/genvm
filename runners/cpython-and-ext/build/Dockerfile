@@ -1,6 +1,9 @@
 # syntax=docker/dockerfile:1
 FROM ubuntu:22.04
 
+ENV WASI_SDK_PATH=/opt/wasi-sdk-24.0
+ENV WASM32_WASI_ROOT=/opt/wasm32-wasip1-root/
+
 RUN apt-get update && \
     apt-get upgrade && \
     apt-get install -y --no-install-recommends \
@@ -9,7 +12,8 @@ RUN apt-get update && \
         build-essential pkg-config \
         lzma-dev m4 zlib1g-dev libssl-dev ca-certificates && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /out $WASM32_WASI_ROOT/include $WASM32_WASI_ROOT/lib $WASM32_WASI_ROOT/share
 
 # cmake
 
@@ -48,14 +52,8 @@ RUN mkdir -p /opt/cpython && cd /opt/cpython && \
     git fetch origin e9b00cc78853373623031c657193cbe557488c0a --depth 1 && \
     git checkout e9b00cc78853373623031c657193cbe557488c0a
 
-ENV WASI_SDK_PATH=/opt/wasi-sdk-24.0
-ENV WASM32_WASI_ROOT=/opt/wasm32-wasip1-root/
-
-RUN mkdir -p /out $WASM32_WASI_ROOT/include $WASM32_WASI_ROOT/lib $WASM32_WASI_ROOT/share
-
-COPY ./scripts /scripts
-
 WORKDIR /opt
+COPY ./scripts /scripts
 
 RUN /scripts/build-all-deps.sh && /scripts/build-python-host.sh
 
