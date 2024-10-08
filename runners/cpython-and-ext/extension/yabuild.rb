@@ -2,7 +2,7 @@ sdk_rust = find_target /genvm\/sdk-rust$/
 
 docker_id_file = cur_build.join('docker-id.txt')
 
-files = [cur_src.join('Cargo.toml'), cur_src.join('Cargo.lock'), cur_src.join('docker-build.sh')] +  Dir::glob(cur_src.join('src').to_s + '/**/*') + Dir::glob(cur_src.join('.cargo').to_s + '/**/*')
+files = [cur_src.join('Dockerfile'), cur_src.join('Cargo.toml'), cur_src.join('Cargo.lock'), cur_src.join('docker-build.sh')] +  Dir::glob(cur_src.join('src').to_s + '/**/*') + Dir::glob(cur_src.join('.cargo').to_s + '/**/*')
 
 docker_build_dev_container = target_command(
 	command: [

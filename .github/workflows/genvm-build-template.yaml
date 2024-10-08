@@ -32,6 +32,7 @@ jobs:
         uses: ./.github/actions/get-src
         with:
           install_also: --genvm --rust
+          third_party: executor/third-party/wasmtime executor/third-party/wasm-tools
       - name: install tools and configure
         run: |
           cd "$GITHUB_WORKSPACE" && \

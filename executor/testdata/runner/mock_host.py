@@ -21,6 +21,7 @@ import socket
 import threading
 import typing
 import pickle
+import io
 
 from host_fns import *
 
@@ -72,12 +73,14 @@ class MockHost:
 	thread: threading.Thread | None
 	sock: socket.socket | None
 	storage: MockStorage | None
+	messages_file: io.TextIOWrapper | None
 
 	def __init__(
 		self,
 		*,
 		path: str,
 		calldata: bytes,
+		messages_path: Path,
 		storage_path_pre: Path,
 		storage_path_post: Path,
 		codes: dict[Address, typing.Any],
@@ -92,6 +95,8 @@ class MockHost:
 		self.storage = None
 		self.sock = None
 		self.thread = None
+		self.messages_file = None
+		self.messages_path = messages_path
 
 	def __enter__(self):
 		self.created = False
@@ -209,6 +214,16 @@ class MockHost:
 						case Methods.POST_NONDET_RESULT:
 							recv_int()  # call no
 							read_result()
+						case Methods.POST_MESSAGE:
+							account = Address(read_exact_get(32))
+							gas = recv_int(8)
+							calldata_len = recv_int()
+							calldata = read_exact_get(calldata_len)
+							code_len = recv_int()
+							code = read_exact_get(code_len)
+							if self.messages_file is None:
+								self.messages_file = open(self.messages_path, 'wt')
+							self.messages_file.write(f'{gas}\n{calldata}\n{code}\n')
 						case x:
 							raise Exception(f'unknown method {x}')
 		except Exception as e:
@@ -225,6 +240,9 @@ class MockHost:
 			with open(self.storage_path_post, 'wb') as f:
 				pickle.dump(self.storage, f)
 			self.storage = None
+		if self.messages_file is not None:
+			self.messages_file.close()
+			self.messages_file = None
 		Path(self.path).unlink(missing_ok=True)
 
 

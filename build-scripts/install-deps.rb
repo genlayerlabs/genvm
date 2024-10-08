@@ -164,7 +164,9 @@ if options[:rust] || options[:'rust-det']
 		logger.debug("rustup is already installed at #{rustup}")
 	end
 	raise "rustup not found" if rustup.nil?
+end
 
+if options[:rust]
 	puts `cd "#{root}" && #{rustup} show active-toolchain || #{rustup} toolchain install`
 	run_command(rustup, 'component', 'add', 'rustfmt', chdir: root)
 end
@@ -176,6 +178,7 @@ if options[:'rust-det']
 	cur_toolchain = /^([a-zA-Z0-9\-_]+)/.match(cur_toolchain)[1]
 	logger.debug("installing for toolchain #{cur_toolchain}")
 	run_command(rustup, 'target', 'add', '--toolchain', cur_toolchain, 'wasm32-wasip1', chdir: ext_path)
+	run_command(rustup, 'component', 'add', '--toolchain', cur_toolchain, 'rust-std', chdir: ext_path)
 end
 
 if options[:wasi]

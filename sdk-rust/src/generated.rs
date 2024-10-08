@@ -179,6 +179,24 @@ pub unsafe fn call_contract(account: Addr, calldata: Bytes) -> Result<Fd, Errno>
     }
 }
 
+pub unsafe fn post_message(
+    account: Addr,
+    calldata: Bytes,
+    gas: u64,
+    code: Bytes,
+) -> Result<(), Errno> {
+    let ret = genlayer_sdk::post_message(
+        &account as *const _ as i32,
+        &calldata as *const _ as i32,
+        gas as i64,
+        &code as *const _ as i32,
+    );
+    match ret {
+        0 => Ok(()),
+        _ => Err(Errno(ret as u32)),
+    }
+}
+
 pub unsafe fn storage_read(slot: Addr, index: u32, buf: MutBytes) -> Result<(), Errno> {
     let ret = genlayer_sdk::storage_read(
         &slot as *const _ as i32,
@@ -214,6 +232,7 @@ pub mod genlayer_sdk {
         pub fn get_webpage(arg0: i32, arg1: i32, arg2: i32, arg3: i32, arg4: i32) -> i32;
         pub fn call_llm(arg0: i32, arg1: i32, arg2: i32, arg3: i32, arg4: i32) -> i32;
         pub fn call_contract(arg0: i32, arg1: i32, arg2: i32) -> i32;
+        pub fn post_message(arg0: i32, arg1: i32, arg2: i64, arg3: i32) -> i32;
         pub fn storage_read(arg0: i32, arg1: i32, arg2: i32) -> i32;
         pub fn storage_write(arg0: i32, arg1: i32, arg2: i32) -> i32;
     }

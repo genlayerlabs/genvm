@@ -29,6 +29,7 @@ jobs:
         uses: ./.github/actions/get-src
         with:
           install_also: --test
+          load_submodules: "false"
       - run: |
           mkdir -p "$GITHUB_WORKSPACE/build/out"
       - uses: actions/download-artifact@v4

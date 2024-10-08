@@ -130,16 +130,6 @@ impl std::fmt::Display for ContractReturn {
     }
 }
 
-impl Context {
-    fn ensure_det(&self) -> Result<(), generated::types::Error> {
-        if self.data.conf.is_deterministic {
-            Ok(())
-        } else {
-            Err(generated::types::Errno::DeterministicViolation.into())
-        }
-    }
-}
-
 impl From<GuestError> for generated::types::Error {
     fn from(err: GuestError) -> Self {
         use wiggle::GuestError::*;
@@ -428,7 +418,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         account: &generated::types::Addr,
         calldata: &generated::types::Bytes,
     ) -> Result<generated::types::Fd, generated::types::Error> {
-        self.context.ensure_det()?;
+        if !self.context.data.conf.is_deterministic {
+            return Err(generated::types::Errno::DeterministicViolation.into());
+        }
         let called_contract_account = Address::read_from_mem(account, mem)?;
         let mut res_calldata = b"call!".to_vec();
         let calldata = calldata.buf.as_array(calldata.buf_len);
@@ -474,6 +466,32 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             .map_err(generated::types::Error::trap)?;
 
         self.set_vm_run_result(res).map(|x| x.0)
+    }
+
+    fn post_message(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        account: &generated::types::Addr,
+        calldata: &generated::types::Bytes,
+        gas: u64,
+        code: &generated::types::Bytes,
+    ) -> Result<(), generated::types::Error> {
+        if !self.context.data.conf.is_deterministic {
+            return Err(generated::types::Errno::DeterministicViolation.into());
+        }
+        let address = Address::read_from_mem(account, mem)?;
+        let supervisor = self.context.data.supervisor.clone();
+        let calldata = calldata.read_owned(mem)?;
+        let code = code.read_owned(mem)?;
+        let Ok(mut supervisor) = supervisor.lock() else {
+            return Err(generated::types::Errno::Io.into());
+        };
+        let res = supervisor
+            .host
+            .post_message(&address, gas, &calldata, &code)
+            .map_err(generated::types::Error::trap)?;
+        self.context.shared_data.fuel_descriptor.consume_fuel(gas);
+        Ok(())
     }
 
     fn storage_read(

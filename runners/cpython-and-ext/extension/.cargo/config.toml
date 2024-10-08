@@ -6,3 +6,7 @@ PYO3_NO_PYTHON = "1"
 rustflags =[
     "-Ctarget-feature=-reference-types",
 ]
+
+#[unstable]
+#unstable-options = true
+#build-std = ["core", "alloc", "std", "panic_abort"]

@@ -139,6 +139,7 @@ def run(jsonnet_rel_path):
 				single_conf_form_file['vars'].copy(),
 			)
 		)
+		messages_path = my_tmp_dir.joinpath('messages.txt')
 		# here tmp is used because of size limit for sock path
 		mock_sock_path = Path(
 			'/tmp', 'genvm-test', jsonnet_rel_path.with_suffix(f'.sock{suff}')
@@ -151,6 +152,7 @@ def run(jsonnet_rel_path):
 			storage_path_post=post_storage,
 			storage_path_pre=pre_storage,
 			leader_nondet=single_conf_form_file.get('leader_nondet', None),
+			messages_path=messages_path,
 		)
 		mock_host_path = my_tmp_dir.joinpath('mock-host.pickle')
 		mock_host_path.write_bytes(pickle.dumps(host))
@@ -161,6 +163,8 @@ def run(jsonnet_rel_path):
 			'expected_output': jsonnet_path.with_suffix(f'{suff}.stdout'),
 			'suff': suff,
 			'mock_host_path': mock_host_path,
+			'messages_path': messages_path,
+			'expected_messages_path': jsonnet_path.with_suffix(f'{suff}.msgs'),
 		}
 
 	run_configs = [
@@ -191,7 +195,7 @@ def run(jsonnet_rel_path):
 				time.sleep(0.05)
 			_env = dict(os.environ)
 			if args_parsed.nop_dlclose:
-				_env['LD_PRELOAD'] = GENVM.parent.parent.parent.joinpath('fake-dlclose.so')
+				_env['LD_PRELOAD'] = str(GENVM.parent.parent.parent.joinpath('fake-dlclose.so'))
 				# _env["LD_DEBUG"] = "libs"
 			res = subprocess.run(cmd, check=False, text=True, capture_output=True, env=_env)
 		base = {
@@ -222,6 +226,25 @@ def run(jsonnet_rel_path):
 				}
 		else:
 			exp_stdout_path.write_text(res.stdout)
+
+		messages_path: Path = config['messages_path']
+		expected_messages_path: Path = config['expected_messages_path']
+		if messages_path.exists() != expected_messages_path.exists():
+			return {
+				'category': 'fail',
+				'reason': f'messages do not exists\n\tdiff {messages_path} {expected_messages_path}',
+				**base,
+			}
+		if messages_path.exists():
+			got = messages_path.read_text()
+			exp = expected_messages_path.read_text()
+			if got != exp:
+				return {
+					'category': 'fail',
+					'reason': f'messages differ\n\tdiff {messages_path} {expected_messages_path}',
+					**base,
+				}
+
 	return {'category': 'pass', **base}
 
 

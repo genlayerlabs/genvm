@@ -75,6 +75,12 @@ loop:
       call_no = read_u32_le
       host_nondet_result[call_no] = read_result()
       # validator can just skip this bytes if this command was sent
+    json/methods/post_message:
+      address := read_bytes(32)
+      len_calldata := read_u32_le
+      calldata := read_bytes(len_calldata)
+      len_code := read_u32_le
+      code := read_bytes(len_code)
 ```
 
-See [mock implementation](../../genvm/testdata/runner/mock_host.py)
+See [mock implementation](../../executor/testdata/runner/mock_host.py)

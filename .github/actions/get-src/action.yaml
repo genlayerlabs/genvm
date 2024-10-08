@@ -5,18 +5,31 @@ inputs:
     required: false
     default: ""
     type: string
+  load_submodules:
+    description:
+    required: false
+    default: "true"
+    type: string
+  third_party:
+    description:
+    required: false
+    default: --all
+    type: string
 runs:
   using: composite
   steps:
     - name: checkout submodules
       run: |
-        cd "$GITHUB_WORKSPACE" && \
-          sudo apt-get update && sudo apt-get install -y ruby && \
-          (./build-scripts/install-deps.rb --os || true) && \
-          ./build-scripts/install-deps.rb --os ${{ inputs.install_also }} && \
-          git config --global user.email "worker@ci.ci" && \
-          git config --global user.name "CI worker" && \
-          git submodule update --init --recursive --depth 1 && \
-          source env.sh && \
-          git third-party update --all
+        cd "$GITHUB_WORKSPACE"
+        sudo apt-get update && sudo apt-get install -y ruby
+        (./build-scripts/install-deps.rb --os || true)
+        ./build-scripts/install-deps.rb --os ${{ inputs.install_also }}
+        git config --global user.email "worker@ci.ci"
+        git config --global user.name "CI worker"
+        if [ "${{ inputs.load_submodules }}" == "true" ]
+        then
+          git submodule update --init --recursive --depth 1
+          source env.sh
+          git third-party update ${{ inputs.third_party }}
+        fi
       shell: bash -ex {0}

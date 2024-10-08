@@ -9,6 +9,7 @@ class Methods(IntEnum):
 	CONSUME_RESULT = 4
 	GET_LEADER_NONDET_RESULT = 5
 	POST_NONDET_RESULT = 6
+	POST_MESSAGE = 7
 
 
 class ResultCode(IntEnum):

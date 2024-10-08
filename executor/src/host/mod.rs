@@ -128,7 +128,7 @@ impl Host {
 
     pub fn storage_read(
         &mut self,
-        remaing_gas: &mut u64,
+        remaining_gas: &mut u64,
         account: Address,
         slot: Address,
         index: u32,
@@ -139,14 +139,14 @@ impl Host {
         };
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::StorageRead as u8])?;
-        sock.write_all(&remaing_gas.to_le_bytes())?;
+        sock.write_all(&remaining_gas.to_le_bytes())?;
         sock.write_all(&account.raw())?;
         sock.write_all(&slot.raw())?;
         sock.write_all(&index.to_le_bytes())?;
         sock.write_all(&(buf.len() as u32).to_le_bytes())?;
 
         let new_gas = read_u64(sock)?;
-        *remaing_gas = new_gas;
+        *remaining_gas = new_gas;
 
         sock.read_exact(buf)?;
         Ok(())
@@ -154,7 +154,7 @@ impl Host {
 
     pub fn storage_write(
         &mut self,
-        remaing_gas: &mut u64,
+        remaining_gas: &mut u64,
         account: Address,
         slot: Address,
         index: u32,
@@ -165,7 +165,7 @@ impl Host {
         };
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::StorageWrite as u8])?;
-        sock.write_all(&remaing_gas.to_le_bytes())?;
+        sock.write_all(&remaining_gas.to_le_bytes())?;
         sock.write_all(&account.raw())?;
         sock.write_all(&slot.raw())?;
         sock.write_all(&index.to_le_bytes())?;
@@ -173,7 +173,7 @@ impl Host {
         sock.write_all(buf)?;
 
         let new_gas = read_u64(sock)?;
-        *remaing_gas = new_gas;
+        *remaining_gas = new_gas;
 
         Ok(())
     }
@@ -231,5 +231,26 @@ impl Host {
         Ok(())
     }
 
-    //fn post_message(&mut self, remaing_gas: &mut Gas, data: MessageData, when: ()) -> Result<()>;
+    pub fn post_message(
+        &mut self,
+        account: &Address,
+        gas: u64,
+        calldata: &[u8],
+        code: &[u8],
+    ) -> Result<()> {
+        let Ok(mut sock) = (*self.sock).lock() else {
+            anyhow::bail!("can't take lock")
+        };
+        let sock: &mut dyn Sock = &mut *sock;
+        sock.write_all(&[host_fns::Methods::PostMessage as u8])?;
+        sock.write_all(&account.raw())?;
+        sock.write_all(&gas.to_le_bytes())?;
+
+        sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
+        sock.write_all(calldata)?;
+
+        sock.write_all(&(code.len() as u32).to_le_bytes())?;
+        sock.write_all(code)?;
+        Ok(())
+    }
 }

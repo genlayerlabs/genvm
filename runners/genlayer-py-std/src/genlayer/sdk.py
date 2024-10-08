@@ -26,7 +26,7 @@ def account_from_b64(x: str) -> bytes:
 	return base64.b64decode(x)
 
 
-class OtherContractMethod:
+class _OtherContractMethod:
 	def __init__(self, addr: Address, name: str):
 		self.addr = addr
 		self.name = name
@@ -40,6 +40,14 @@ class OtherContractMethod:
 		res = wasi.call_contract(self.addr.as_bytes, cd)
 		return AwaitableResultMap(res, _decode_sub_vm_result)
 
+	def send(self, *args, gas: int, code: bytes = b'') -> None:
+		obj = {
+			'method': self.name,
+			'args': args,
+		}
+		cd = calldata.encode(obj)
+		wasi.post_message(self.addr.as_bytes, cd, gas, code)
+
 
 class OtherContract:
 	def __init__(self, addr: Address):
@@ -48,7 +56,7 @@ class OtherContract:
 		self.addr = addr
 
 	def __getattr__(self, name):
-		return OtherContractMethod(self.addr, name)
+		return _OtherContractMethod(self.addr, name)
 
 
 message_raw = json.loads(wasi.get_message_data())
