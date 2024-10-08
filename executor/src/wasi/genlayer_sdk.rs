@@ -579,7 +579,7 @@ impl Context {
 }
 
 fn vec_from_cstr_libc(str: *const u8) -> Arc<[u8]> {
-    let res = Arc::from(unsafe { CStr::from_ptr(str as *const i8) }.to_bytes());
+    let res = Arc::from(unsafe { CStr::from_ptr(str as *const std::ffi::c_char) }.to_bytes());
     unsafe {
         libc::free(str as *mut std::ffi::c_void);
     }
