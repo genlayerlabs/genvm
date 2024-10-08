@@ -19,10 +19,14 @@ pkgs.mkShellNoCC {
     unzip
     gnutar
     tree
+    vim
     rustup
     mold
     clang
     openssl
     pkg-config
+    zlib
+    wabt
   ];
+  LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.openssl pkgs.zlib ];
 }

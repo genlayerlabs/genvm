@@ -3,6 +3,8 @@ on:
   push:
     paths-ignore:
       - doc/**
+      - shell.nix
+      - '*.md'
 defaults:
   run:
     shell: bash -x {0}
