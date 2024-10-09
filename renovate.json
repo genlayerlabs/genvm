@@ -19,5 +19,7 @@
     "enabled": true
   },
   "osvVulnerabilityAlerts": true,
-  "dependencyDashboard": true
+  "dependencyDashboard": true,
+  "rebaseWhen": "never",
+  "automerge": false
 }

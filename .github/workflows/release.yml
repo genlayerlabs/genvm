@@ -11,39 +11,95 @@ defaults:
     shell: bash -x {0}
 
 jobs:
-  build-and-release:
+  release-build-runners:
+    runs-on: ubuntu-latest
+    outputs:
+      url: ${{ steps.artifact-upload-step.outputs.artifact-url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          install_also: --wasi --rust
+          third_party: sdk-rust/third-party/wasi-rs runners/softfloat/berkeley-softfloat-3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          save-always: true
+          path: /tmp/.buildx-cache
+          key: runners-buildx-${{ github.sha }}
+          restore-keys: |
+            runners-buildx-
+      - name: Configure
+        run: |
+          source env.sh && \
+          ya-build config
+      - name: Build extension
+        run: |
+          source env.sh && \
+          ninja --verbose -C build genvm/runners/cpython/extension && \
+          git diff -U1 --exit-code
+      - name: Build
+        run: |
+          source env.sh && \
+          ninja --verbose -C build tags/runner && \
+          tree build/out && \
+          pushd build/out && \
+          zip -r -9 ../runners.zip * && \
+          popd
+      - name: Publish runners
+        id: artifact-upload-step
+        uses: actions/upload-artifact@v4
+        with:
+          name: genvm-runners
+          path: ${{ github.workspace }}/build/runners.zip
+
+  release-build-genvm-release-ubuntu-latest:
+    uses: ./.github/workflows/genvm-build-template.yaml
+    with:
+      build_type: release
+      runs_on: ubuntu-latest
+
+  release-build-genvm-release-macos-latest:
+    uses: ./.github/workflows/genvm-build-template.yaml
+    with:
+      build_type: release
+      runs_on: macos-latest
+
+  release-publish:
+    needs: [release-build-runners, release-build-genvm-release-ubuntu-latest, release-build-genvm-release-macos-latest]
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Needed for creating releases
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Get source
-        uses: ./.github/actions/get-src
+      - uses: actions/download-artifact@v4
         with:
-          install_also: --genvm --rust --wasi
+          name: genvm-runners
 
-      - name: Install tools and configure
-        run: |
-          cd "$GITHUB_WORKSPACE" && \
-          source env.sh && \
-          ./tools/ya-build/ya-build config --preload .ci/release-conf.rb
+      - run: mv runners.zip genvm-runners.zip
 
-      - name: Build package
-        run: |
-          cd "$GITHUB_WORKSPACE" && \
-          source env.sh && \
-          ninja -v -C build tags/all && \
-          tree build/out && \
-          pushd build/out && \
-          zip -r -9 ../package.zip * && \
-          popd
+      - uses: actions/download-artifact@v4
+        with:
+          name: genvm-release-ubuntu-latest
+
+      - run: mv genvm.zip genvm-linux-amd64.zip
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: genvm-release-macos-latest
+
+      - run: mv genvm.zip genvm-macos-arm64.zip
 
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/package.zip
+          files: |
+            genvm-runners.zip
+            genvm-linux-amd64.zip
+            genvm-macos-arm64.zip
           name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
