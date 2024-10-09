@@ -135,7 +135,7 @@ storage_write *x, 2     |
 ```
 
 ## User interface
-Rhere is no multiline lambda in python. Creator of python suggests following approach
+There is no multiline lambda in python. Creator of python suggests following approach
 ```py
 def contract_method():
   def nondet_block():

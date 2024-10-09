@@ -17,9 +17,4 @@ Each calldata value is prefixed by uleb128 number, which is treated as follows:
 _FastString_ is encoded as uleb128 length followed by utf8 encoded bytes (difference is that it doesn't have a type)
 
 ## What contract expects as a calldata?
-```json
-{
-    "method": string,
-    "args": array
-}
-```
+See [*abi*](./internal/solved%20problems/5.%20abi.md)

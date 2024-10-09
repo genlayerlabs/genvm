@@ -23,8 +23,12 @@ testsuite/
 .semgrep_logs/
 
 # custom test paths
-testdata
+executor/testdata
+
+# third party paths
+runners/genlayer-py-std/src/cloudpickle
 
 # build files
 yabuild.rb
 build-scripts/*.rb
+executor/codegen/templates
