@@ -49,6 +49,12 @@ http_thread.start()
 dir = script_dir.parent.joinpath('cases')
 root_tmp_dir = root_dir.joinpath('build', 'genvm-testdata-out')
 
+coverage_dir = root_tmp_dir.joinpath('coverage')
+import shutil
+
+shutil.rmtree(coverage_dir, True)
+coverage_dir.mkdir(parents=True, exist_ok=True)
+
 arg_parser = argparse.ArgumentParser('genvm-test-runner')
 arg_parser.add_argument(
 	'--gen-vm',
@@ -197,7 +203,9 @@ def run(jsonnet_rel_path):
 			if args_parsed.nop_dlclose:
 				_env['LD_PRELOAD'] = str(GENVM.parent.parent.parent.joinpath('fake-dlclose.so'))
 				# _env["LD_DEBUG"] = "libs"
-			res = subprocess.run(cmd, check=False, text=True, capture_output=True, env=_env)
+			res = subprocess.run(
+				cmd, check=False, text=True, capture_output=True, env=_env, cwd=coverage_dir
+			)
 		base = {
 			'steps': steps,
 			'stdout': res.stdout,
@@ -339,6 +347,7 @@ with cfutures.ThreadPoolExecutor(max_workers=(os.cpu_count() or 1)) as executor:
 			process_result(future2path[future], lambda: future.result())
 	import json
 
+	print(f'coverage data is located at {coverage_dir} (if any)')
 	print(json.dumps(categories))
 	if len(categories['fail']) != 0:
 		exit(1)

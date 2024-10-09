@@ -69,3 +69,7 @@ jobs:
           OPENAIKEY="" docker run --rm -d --network=host $(docker build -q -t genvm/modules-webdriver -f executor/modules/default-impl/web-funcs/webdriver.dockerfile executor/modules/default-impl/web-funcs/) && \
           sleep 5 && \
           python3.12 ./executor/testdata/runner/run.py
+      - name: Try to get coverage
+        run: |
+          rustup component add llvm-tools-preview
+          ./build-scripts/ci/rust-cov.sh || true

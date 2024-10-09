@@ -1,6 +1,6 @@
 from genlayer.py.storage import Vec, storage
 
-import common
+from .common import *
 
 
 @storage
@@ -16,7 +16,7 @@ def same_iter(li, ri):
 def test_len():
 	l = StorVec()
 	r: list[str] = []
-	op = common.SameOp(l.x, r)
+	op = SameOp(l.x, r)
 	same_iter(l.x, r)
 	op(len)
 	op(lambda x: x.append('123'))

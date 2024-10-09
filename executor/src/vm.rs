@@ -340,7 +340,7 @@ impl Supervisor {
                     .with_context(|| {
                         format!(
                             "validating {}",
-                            &String::from_utf8_lossy(&module_bytes[..10])
+                            &String::from_utf8_lossy(&module_bytes[..10.min(module_bytes.len())])
                         )
                     })?;
                 non_det_validator.validate_all(&module_bytes[..])?;
@@ -506,7 +506,7 @@ impl Supervisor {
                 }
                 return Err(anyhow::anyhow!(
                     "can't detect comment in text contract {}",
-                    &code_str[..10]
+                    &code_str[..10.min(code_str.len())]
                 ));
             })()?;
             let mut code_comment = String::new();

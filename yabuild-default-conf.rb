@@ -16,6 +16,10 @@ conf = {
 		},
 	},
 
+	executor: {
+		coverage: false,
+	},
+
 	tools: {
 		clang: find_executable("clang") || find_executable("clang-18") || find_executable("clang-17"),
 		gcc: find_executable("gcc"),

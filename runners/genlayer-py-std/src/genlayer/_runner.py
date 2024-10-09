@@ -10,12 +10,18 @@ def _give_result(res_fn: typing.Callable[[], typing.Any]):
 		res = _call_user_fn(res_fn)
 	except Rollback as r:
 		wasi.rollback(r.msg)
-	from genlayer.sdk import AlreadySerializedResult
+	from genlayer.std import AlreadySerializedResult
 
 	if isinstance(res, AlreadySerializedResult):
 		wasi.contract_return(res)
 	else:
 		wasi.contract_return(genlayer.py.calldata.encode(res))
+
+
+def _is_public(meth) -> bool:
+	if meth is None:
+		return False
+	return getattr(meth, '__public__', False)
 
 
 def run(contract: type):
@@ -26,11 +32,23 @@ def run(contract: type):
 	if entrypoint.startswith(CALL):
 		mem = mem[len(CALL) :]
 		calldata = genlayer.py.calldata.decode(mem)
-		meth = getattr(contract, calldata['method'])
-		from .sdk import message
+		from .std import message
 
-		if not message.is_init and not getattr(meth, '__public__', False):
-			raise Exception(f"can't call non-public methods")
+		if message.is_init:
+			meth = getattr(contract, '__init__')
+			if _is_public(meth):
+				raise Exception(f'constructor must be private')
+		else:
+			meth_name = calldata['method']
+			if meth_name == '__get_schema__':
+				from .py.get_schema import get_schema
+				import json
+
+				_give_result(lambda: json.dumps(get_schema(contract), separators=(',', ':')))
+				return
+			meth = getattr(contract, meth_name)
+			if not _is_public(meth):
+				raise Exception(f"can't call non-public methods")
 		from .storage import STORAGE_MAN, ROOT_STORAGE_ADDRESS
 
 		top_slot = STORAGE_MAN.get_store_slot(ROOT_STORAGE_ADDRESS)

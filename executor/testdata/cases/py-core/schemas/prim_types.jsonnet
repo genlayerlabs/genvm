@@ -1,9 +1,8 @@
 local simple = import '../../../templates/simple.jsonnet';
-simple.run('${jsonnetDir}/contract.zip') {
+simple.run('${jsonnetDir}/prim_types.py') {
     "calldata": |||
         {
-            "method": "__init__",
-            "args": []
+            "method": "__get_schema__"
         }
     |||
 }

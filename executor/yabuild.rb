@@ -10,6 +10,11 @@ project('executor') {
 		base_env['RUSTFLAGS'] << "-Clinker=#{Shellwords.escape compiler} -Clink-arg=-fuse-ld=#{Shellwords.escape linker}"
 	end
 
+	if config.executor.coverage
+		base_env['RUSTFLAGS'] ||= ''
+		base_env['RUSTFLAGS'] << " -Cinstrument-coverage"
+	end
+
 	modules = target_alias('modules',
 		target_cargo_build(
 			name: "dylib",

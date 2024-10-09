@@ -1,0 +1,1 @@
+executed with `Return("\b4\x12{"ctor":{"args":[],"kwargs":{}},"methods":{"erased":{"args":[["a1","array"],["a2","dict"],["a3","any"]],"kwargs":{},"readonly":false,"ret":"any"},"foo":{"args":[["a1","int"],["a2","null"],["a3","bool"],["a4","string"],["a5","bytes"],["a6","address"]],"kwargs":{},"readonly":false,"ret":"any"}}}")`

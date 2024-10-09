@@ -11,6 +11,7 @@ crate-type=["cdylib"]
 [profile.dev]
 rustflags = [
     #"-Zsanitizer=leak",
+    #"--remap-path-prefix=src/=genvm/executor/modules/default-impl/llm-funcs/src/"
 ]
 
 [dependencies]

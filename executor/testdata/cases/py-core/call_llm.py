@@ -1,5 +1,5 @@
 # { "depends": ["genlayer-py-std:test"] }
-import genlayer.sdk as gsdk
+import genlayer.std as gsdk
 import json
 
 

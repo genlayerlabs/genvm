@@ -2,7 +2,7 @@ import genlayer.py.calldata as calldata
 from genlayer.py.types import Address
 
 import random
-import common
+from .common import *
 
 
 def make_rnd(size_limit, rem_depth):
@@ -15,7 +15,7 @@ def make_rnd(size_limit, rem_depth):
 		if r == 2:
 			return random.randbytes(random.randint(0, size_limit))
 		if r == 3:
-			return common.random_str(size_limit)
+			return random_str(size_limit)
 		if r == 4:
 			return True
 		if r == 5:
@@ -30,7 +30,7 @@ def make_rnd(size_limit, rem_depth):
 	le = random.randint(0, size_limit)
 	ret = {}
 	for i in range(le):
-		ret[common.random_str(20)] = make_rnd(size_limit, rem_depth - 1)
+		ret[random_str(20)] = make_rnd(size_limit, rem_depth - 1)
 	return ret
 
 

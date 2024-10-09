@@ -9,6 +9,7 @@ edition = "2021"
 rustflags = [
     #"-Zsanitizer=memory",
     #"-Zsanitizer=leak",
+    #"--remap-path-prefix=src/=genvm/executor/modules/default-impl/web-funcs/src/"
 ]
 
 [lib]

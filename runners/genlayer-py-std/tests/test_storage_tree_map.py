@@ -11,7 +11,7 @@ def test_compiles():
 	pass
 
 
-import common
+from .common import *
 import itertools
 import random
 
@@ -58,7 +58,7 @@ def test_insert():
 			assert lk == rk
 			assert lv == rv
 
-	op = common.SameOp(stor.m, dic)
+	op = SameOp(stor.m, dic)
 	same_iter()
 	vals = list(range(1048)) * 2
 	vals_dup = vals.copy()
