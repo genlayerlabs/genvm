@@ -5,8 +5,8 @@ import genlayer.std as gl
 @gl.contract
 class Contract:
 	@gl.public
-	async def main(self, mode: str):
-		async def run():
-			return await gl.get_webpage({'mode': mode}, 'http://127.0.0.1:4242/hello.html')
+	def main(self, mode: str):
+		def run():
+			return gl.get_webpage({'mode': mode}, 'http://127.0.0.1:4242/hello.html').get()
 
-		print(await gl.eq_principle_refl(run))
+		print(gl.eq_principle_refl(run).get())

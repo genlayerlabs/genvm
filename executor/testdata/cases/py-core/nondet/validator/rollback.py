@@ -5,8 +5,8 @@ import genlayer.std as gl
 @gl.contract
 class Contract:
 	@gl.public
-	async def main(self):
+	def main(self):
 		def run():
 			raise gl.Rollback('rollback')
 
-		print(await gl.eq_principle_refl(run))
+		print(gl.eq_principle_refl(run).get())

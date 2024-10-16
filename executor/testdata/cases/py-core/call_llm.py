@@ -6,8 +6,8 @@ import json
 @gl.contract
 class Contract:
 	@gl.public
-	async def main(self):
-		async def run():
-			return await gl.exec_prompt({}, "print 'yes' (without quotes) and nothing else")
+	def main(self):
+		def run():
+			return gl.exec_prompt({}, "print 'yes' (without quotes) and nothing else").get()
 
-		print(await gl.eq_principle_refl(run))
+		print(gl.eq_principle_refl(run).get())

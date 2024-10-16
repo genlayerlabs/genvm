@@ -127,7 +127,27 @@ impl Impl {
                 Ok(response.into())
             }
             LLLMProvider::Simulator => {
-                todo!()
+                let request = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "method": "llm_genvm_module_call",
+                    "params": [&self.config.model, prompt],
+                    "id": 1,
+                });
+                let mut res = isahc::send(
+                    isahc::Request::post(format!("{}/api", &self.config.host))
+                        .header("Content-Type", "application/json")
+                        .body(serde_json::to_string(&request)?.as_bytes())?,
+                )?;
+                let res = response::read(&mut res)?;
+                let res: serde_json::Value = serde_json::from_str(&res)?;
+                res
+                    .as_object()
+                    .and_then(|v| v.get("result"))
+                    .and_then(|v| v.as_object())
+                    .and_then(|v| v.get("response"))
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                    .ok_or(anyhow::anyhow!("can't get response field {}", &res))
             }
         }
     }

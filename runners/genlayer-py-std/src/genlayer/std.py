@@ -8,8 +8,7 @@ import base64
 # reexports
 import genlayer.py.calldata as calldata
 from .py.types import *
-from .asyn import *
-from ._private import _decode_sub_vm_result, _run_nondet, _call_user_fn
+from ._private import _decode_sub_vm_result, _run_nondet, _lazy_from_fd
 
 
 def public(f):
@@ -35,14 +34,15 @@ class _OtherContractMethod:
 		self.addr = addr
 		self.name = name
 
-	def __call__(self, *args) -> AwaitableResultMap[typing.Any]:
+	def __call__(self, *args) -> Lazy[typing.Any]:
 		obj = {
 			'method': self.name,
 			'args': args,
 		}
 		cd = calldata.encode(obj)
-		res = wasi.call_contract(self.addr.as_bytes, cd)
-		return AwaitableResultMap(res, _decode_sub_vm_result)
+		return _lazy_from_fd(
+			wasi.call_contract(self.addr.as_bytes, cd), _decode_sub_vm_result
+		)
 
 	def send(self, *args, gas: int, code: bytes = b'') -> None:
 		obj = {
@@ -78,18 +78,22 @@ def rollback_immediate(reason: str) -> typing.NoReturn:
 	wasi.rollback(reason)
 
 
-def get_webpage(config: typing.Any, url: str) -> AwaitableResultStr:
-	return AwaitableResultStr(wasi.get_webpage(json.dumps(config), url))
+def get_webpage(config: typing.Any, url: str) -> Lazy[str]:
+	return _lazy_from_fd(
+		wasi.get_webpage(json.dumps(config), url), lambda buf: str(buf, 'utf-8')
+	)
 
 
-def exec_prompt(config: typing.Any, prompt: str) -> AwaitableResultStr:
-	return AwaitableResultStr(wasi.exec_prompt(json.dumps(config), prompt))
+def exec_prompt(config: typing.Any, prompt: str) -> Lazy[str]:
+	return _lazy_from_fd(
+		wasi.exec_prompt(json.dumps(config), prompt), lambda buf: str(buf, 'utf-8')
+	)
 
 
-def eq_principle_refl[T](fn: typing.Callable[[], T]) -> AwaitableResultMap[T]:
+def eq_principle_refl[T](fn: typing.Callable[[], T]) -> Lazy[T]:
 	def validator_fn(leaders: typing.Any | Rollback) -> bool:
 		try:
-			my_res = _call_user_fn(fn)
+			my_res = fn()
 		except Rollback as r:
 			if isinstance(leaders, Rollback) and leaders.msg == r.msg:
 				return True

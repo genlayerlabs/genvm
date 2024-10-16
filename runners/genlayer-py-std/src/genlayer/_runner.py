@@ -2,12 +2,11 @@ import genlayer.wasi as wasi
 import genlayer.py.calldata
 import typing
 from genlayer.py.types import Rollback
-from ._private import _call_user_fn
 
 
 def _give_result(res_fn: typing.Callable[[], typing.Any]):
 	try:
-		res = _call_user_fn(res_fn)
+		res = res_fn()
 	except Rollback as r:
 		wasi.rollback(r.msg)
 	from .advanced import AlreadySerializedResult

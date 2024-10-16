@@ -5,13 +5,13 @@ import genlayer.std as gl
 @gl.contract
 class Contract:
 	@gl.public
-	async def main(self):
+	def main(self):
 		try:
 
 			def run():
 				gl.rollback_immediate("nah, I won't execute")
 
-			res = await gl.eq_principle_refl(run)
+			res = gl.eq_principle_refl(run).get()
 		except gl.Rollback as r:
 			print('handled', r.msg)
 		else:

@@ -5,6 +5,6 @@ import genlayer.std as gl
 @gl.contract
 class Contract:
 	@gl.public
-	async def main(self, addr: gl.Address):
+	def main(self, addr: gl.Address):
 		print('contract from.main')
-		print(await gl.OtherContract(addr).foo(1, 2))
+		print(gl.OtherContract(addr).foo(1, 2).get())

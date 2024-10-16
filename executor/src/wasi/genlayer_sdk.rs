@@ -1,7 +1,6 @@
 use core::str;
 use std::{
     ffi::{CStr, CString},
-    io::{stdout, Write},
     sync::{Arc, Mutex},
 };
 

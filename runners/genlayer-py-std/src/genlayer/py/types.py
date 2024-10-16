@@ -54,3 +54,26 @@ class Rollback(Exception):
 	def __init__(self, msg: str):
 		self.msg = msg
 		super()
+
+
+class Lazy[T]:
+	_eval: typing.Callable[[], T] | None
+	_exc: Exception | None
+	_res: T | None
+
+	def __init__(self, _eval: typing.Callable[[], T]):
+		self._eval = _eval
+		self._exc = None
+		self._res = None
+
+	def get(self) -> T:
+		if self._eval is not None:
+			ev = self._eval
+			self._eval = None
+			try:
+				self._res = ev()
+			except Exception as e:
+				self._exc = e
+		if self._exc is not None:
+			raise self._exc
+		return self._res  # type: ignore
