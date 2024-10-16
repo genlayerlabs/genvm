@@ -20,7 +20,7 @@ rescue
 end
 
 File.open(log_file, 'wt') { |f|
-	command = ['docker', 'build', '--network=host', '--progress=plain', '-f', dfile, path]
+	command = ['docker', 'buildx', 'build', '--network=host', '--progress=plain', '-f', dfile, path]
 	puts "run: #{command}"
 	Open3.popen2e(*command) { |stdin, stdout, wait_thr|
 		stdin.close()

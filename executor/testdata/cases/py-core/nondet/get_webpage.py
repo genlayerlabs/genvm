@@ -1,12 +1,12 @@
 # { "depends": ["genlayer-py-std:test"] }
-import genlayer.std as gsdk
+import genlayer.std as gl
 
 
-@gsdk.contract
+@gl.contract
 class Contract:
-	@gsdk.public
+	@gl.public
 	async def main(self, mode: str):
 		async def run():
-			return await gsdk.get_webpage({'mode': mode}, 'http://127.0.0.1:4242/hello.html')
+			return await gl.get_webpage({'mode': mode}, 'http://127.0.0.1:4242/hello.html')
 
-		print(await gsdk.eq_principle_refl(run))
+		print(await gl.eq_principle_refl(run))

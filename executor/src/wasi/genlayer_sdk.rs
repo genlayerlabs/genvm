@@ -1,6 +1,7 @@
 use core::str;
 use std::{
     ffi::{CStr, CString},
+    io::{stdout, Write},
     sync::{Arc, Mutex},
 };
 
@@ -9,7 +10,7 @@ use wiggle::GuestError;
 
 use crate::{
     vm::{self, InitActions, RunOk},
-    Address, MessageData,
+    AccountAddress, GenericAddress, MessageData,
 };
 
 use super::{base, common::*};
@@ -46,13 +47,33 @@ pub(crate) mod generated {
     });
 }
 
-impl crate::Address {
+impl crate::AccountAddress {
     fn read_from_mem(
         addr: &generated::types::Addr,
         mem: &mut wiggle::GuestMemory<'_>,
     ) -> Result<Self, generated::types::Error> {
-        let cow = mem.as_cow(addr.ptr.as_array(crate::Address::len().try_into().unwrap()))?;
-        let mut ret = Address::new();
+        let cow = mem.as_cow(
+            addr.ptr
+                .as_array(crate::AccountAddress::len().try_into().unwrap()),
+        )?;
+        let mut ret = AccountAddress::new();
+        for (x, y) in ret.0.iter_mut().zip(cow.iter()) {
+            *x = *y;
+        }
+        Ok(ret)
+    }
+}
+
+impl crate::GenericAddress {
+    fn read_from_mem(
+        addr: &generated::types::FullAddr,
+        mem: &mut wiggle::GuestMemory<'_>,
+    ) -> Result<Self, generated::types::Error> {
+        let cow = mem.as_cow(
+            addr.ptr
+                .as_array(crate::GenericAddress::len().try_into().unwrap()),
+        )?;
+        let mut ret = GenericAddress::new();
         for (x, y) in ret.0.iter_mut().zip(cow.iter()) {
             *x = *y;
         }
@@ -421,7 +442,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         if !self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
-        let called_contract_account = Address::read_from_mem(account, mem)?;
+        let called_contract_account = AccountAddress::read_from_mem(account, mem)?;
         let mut res_calldata = b"call!".to_vec();
         let calldata = calldata.buf.as_array(calldata.buf_len);
         res_calldata.extend(mem.as_cow(calldata)?.iter());
@@ -479,7 +500,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         if !self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
-        let address = Address::read_from_mem(account, mem)?;
+        let address = AccountAddress::read_from_mem(account, mem)?;
         let supervisor = self.context.data.supervisor.clone();
         let calldata = calldata.read_owned(mem)?;
         let code = code.read_owned(mem)?;
@@ -497,7 +518,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
     fn storage_read(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        slot: &generated::types::Addr,
+        slot: &generated::types::FullAddr,
         index: u32,
         buf: &generated::types::MutBytes,
     ) -> Result<(), generated::types::Error> {
@@ -508,7 +529,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let account = self.context.data.message_data.contract_account;
 
-        let slot = Address::read_from_mem(&slot, mem)?;
+        let slot = GenericAddress::read_from_mem(&slot, mem)?;
         let mem_size = buf.buf_len as usize;
         let mut vec = Vec::with_capacity(mem_size);
         unsafe { vec.set_len(mem_size) };
@@ -533,7 +554,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
     fn storage_write(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        slot: &generated::types::Addr,
+        slot: &generated::types::FullAddr,
         index: u32,
         buf: &generated::types::Bytes,
     ) -> Result<(), generated::types::Error> {
@@ -547,7 +568,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let buf: Vec<u8> = buf.read_owned(mem)?;
 
         let account = self.context.data.message_data.contract_account;
-        let slot = Address::read_from_mem(&slot, mem)?;
+        let slot = GenericAddress::read_from_mem(&slot, mem)?;
 
         let supervisor = self.context.data.supervisor.clone();
         let Ok(mut supervisor) = supervisor.lock() else {

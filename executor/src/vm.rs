@@ -485,7 +485,10 @@ impl Supervisor {
         ))
     }
 
-    pub fn get_actions_for(&mut self, contract_account: &crate::Address) -> Result<InitActions> {
+    pub fn get_actions_for(
+        &mut self,
+        contract_account: &crate::AccountAddress,
+    ) -> Result<InitActions> {
         let code = self.host.get_code(contract_account)?;
         let actions = if wasmparser::Parser::is_core_wasm(&code[..]) {
             Vec::from([InitAction::StartWasm {

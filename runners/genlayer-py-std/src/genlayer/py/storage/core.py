@@ -5,25 +5,27 @@ import collections.abc
 import typing
 import hashlib
 
+from genlayer.py.types import u256
 
-def _calculate_indirection_addr(l: Address, r: int) -> Address:
+
+def _calculate_indirection_addr(l: u256, r: int) -> u256:
 	hasher = hashlib.sha3_256()
-	hasher.update(l.as_bytes)
-	hasher.update(r.to_bytes(4, 'little', signed=False))
+	hasher.update(l.to_bytes(32, 'little'))
+	hasher.update(r.to_bytes(4, 'little'))
 	res = hasher.digest()
-	return Address(res)
+	return u256(int.from_bytes(res, 'little'))
 
 
 class StorageMan(typing.Protocol):
 	@abc.abstractmethod
-	def get_store_slot(self, addr: Address) -> 'StorageSlot':
+	def get_store_slot(self, addr: u256) -> 'StorageSlot':
 		pass
 
 
 class StorageSlot:
 	manager: StorageMan
 
-	def __init__(self, addr: Address, manager: StorageMan):
+	def __init__(self, addr: u256, manager: StorageMan):
 		self.addr = addr
 		self.manager = manager
 
@@ -32,10 +34,10 @@ class StorageSlot:
 		return self.manager.get_store_slot(addr)
 
 	@abc.abstractmethod
-	def read(self, addr: int, len: int) -> bytes: ...
+	def read(self, off: int, len: int) -> bytes: ...
 
 	@abc.abstractmethod
-	def write(self, addr: int, what: collections.abc.Buffer) -> None: ...
+	def write(self, off: int, what: collections.abc.Buffer) -> None: ...
 
 
 class ComplexCopyAction(typing.Protocol):
@@ -94,4 +96,4 @@ class WithStorageSlot(typing.Protocol):
 	_off: int
 
 
-ROOT_STORAGE_ADDRESS = Address(bytes([0] * 32))
+ROOT_STORAGE_ADDRESS = u256(0)

@@ -1,6 +1,6 @@
 # { "depends": ["genlayer-py-std:test"] }
 
-import genlayer.std as gsdk
+import genlayer.std as gl
 from genlayer.py.types import *
 from genlayer.py.storage import storage
 

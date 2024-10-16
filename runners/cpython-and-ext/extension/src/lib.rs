@@ -8,10 +8,17 @@ use pyo3::{
 use std::{io::Read, os::fd::FromRawFd};
 
 fn get_addr(x: &[u8]) -> PyResult<genvm_sdk_rust::Addr> {
-    if x.len() != 32 {
+    if x.len() != 20 {
         return Err(PyValueError::new_err("invalid address size"));
     }
     Ok(genvm_sdk_rust::Addr { ptr: x.as_ptr() })
+}
+
+fn get_full_addr(x: &[u8]) -> PyResult<genvm_sdk_rust::FullAddr> {
+    if x.len() != 32 {
+        return Err(PyValueError::new_err("invalid full address size"));
+    }
+    Ok(genvm_sdk_rust::FullAddr { ptr: x.as_ptr() })
 }
 
 fn map_error<T>(res: Result<T, genvm_sdk_rust::Errno>) -> PyResult<T> {
@@ -106,7 +113,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfn(m)]
-    fn call_llm(config: &str, prompt: &str) -> PyResult<u32> {
+    fn exec_prompt(config: &str, prompt: &str) -> PyResult<u32> {
         map_error(unsafe { genvm_sdk_rust::call_llm(config, prompt) })
     }
 
@@ -117,7 +124,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
         off: u32,
         len: u32,
     ) -> PyResult<Bound<'a, PyBytes>> {
-        let addr = get_addr(&addr)?;
+        let addr = get_full_addr(&addr)?;
         PyBytes::new_bound_with(py, len as usize, |byts| unsafe {
             map_error(genvm_sdk_rust::storage_read(
                 addr,
@@ -132,7 +139,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     #[pyfn(m)]
     fn storage_write(py: Python<'_>, addr: &[u8], off: u32, buf: PyBuffer<u8>) -> PyResult<()> {
-        let addr = get_addr(&addr)?;
+        let addr = get_full_addr(&addr)?;
         let buf = buf.as_slice(py).unwrap();
         let res = unsafe {
             genvm_sdk_rust::storage_write(

@@ -3,18 +3,18 @@
 		{
 			"vars": {},
 			"accounts": {
-				"AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=": {
+				"AQAAAAAAAAAAAAAAAAAAAAAAAAA=": {
 					"code": scriptfile
 				},
-				"AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=": {
+				"AgAAAAAAAAAAAAAAAAAAAAAAAAA=": {
 					"code": null
 				}
 			},
 
 			"message": {
 				"gas": 9007199254740991,
-				"contract_account": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-				"sender_account": "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+				"contract_account": "AQAAAAAAAAAAAAAAAAAAAAAAAAA=",
+				"sender_account": "AgAAAAAAAAAAAAAAAAAAAAAAAAA=",
 				"value": null,
 				"is_init": false,
 			},

@@ -19,6 +19,12 @@
     )
 )
 
+(typename $full_addr
+    (record
+        (field $ptr (@witx const_pointer u8))
+    )
+)
+
 (typename $fd (handle))
 
 (typename $result_now

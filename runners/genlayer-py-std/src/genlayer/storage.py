@@ -9,12 +9,12 @@ import abc
 
 
 class _ActualStorageMan(StorageMan):
-	_slots: dict[Address, '_ActualStorageSlot']
+	_slots: dict[u256, '_ActualStorageSlot']
 
 	def __init__(self):
 		self._slots = {}
 
-	def get_store_slot(self, addr: Address) -> '_ActualStorageSlot':
+	def get_store_slot(self, addr: u256) -> '_ActualStorageSlot':
 		ret = self._slots.get(addr, None)
 		if ret is None:
 			ret = _ActualStorageSlot(addr, self)
@@ -23,15 +23,15 @@ class _ActualStorageMan(StorageMan):
 
 
 class _ActualStorageSlot(StorageSlot):
-	def __init__(self, addr: Address, manager: StorageMan):
+	def __init__(self, addr: u256, manager: StorageMan):
 		super().__init__(addr, manager)
 
 	def read(self, addr: int, len: int) -> bytes:
-		return wasi.storage_read(self.addr.as_bytes, addr, len)
+		return wasi.storage_read(int.to_bytes(self.addr, 32, 'little'), addr, len)
 
 	@abc.abstractmethod
 	def write(self, addr: int, what: collections.abc.Buffer) -> None:
-		wasi.storage_write(self.addr.as_bytes, addr, what)
+		wasi.storage_write(int.to_bytes(self.addr, 32, 'little'), addr, what)
 
 
 STORAGE_MAN = _ActualStorageMan()

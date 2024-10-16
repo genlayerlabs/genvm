@@ -1,12 +1,12 @@
 # { "depends": ["genlayer-py-std:test"] }
-import genlayer.std as gsdk
+import genlayer.std as gl
 
 
-@gsdk.contract
+@gl.contract
 class Contract:
-	@gsdk.public
+	@gl.public
 	async def main(self):
 		def run():
-			raise gsdk.Rollback('rollback')
+			raise gl.Rollback('rollback')
 
-		print(await gsdk.eq_principle_refl(run))
+		print(await gl.eq_principle_refl(run))

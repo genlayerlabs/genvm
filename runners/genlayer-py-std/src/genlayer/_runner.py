@@ -10,7 +10,7 @@ def _give_result(res_fn: typing.Callable[[], typing.Any]):
 		res = _call_user_fn(res_fn)
 	except Rollback as r:
 		wasi.rollback(r.msg)
-	from genlayer.std import AlreadySerializedResult
+	from .advanced import AlreadySerializedResult
 
 	if isinstance(res, AlreadySerializedResult):
 		wasi.contract_return(res)
@@ -53,7 +53,11 @@ def run(contract: type):
 
 		top_slot = STORAGE_MAN.get_store_slot(ROOT_STORAGE_ADDRESS)
 		contract_instance = contract.__view_at__(top_slot, 0)
-		_give_result(lambda: meth(contract_instance, *calldata['args']))
+		_give_result(
+			lambda: meth(
+				contract_instance, *calldata.get('args', []), **calldata.get('kwargs', {})
+			)
+		)
 	elif entrypoint.startswith(NONDET):
 		mem = mem[len(NONDET) :]
 		# fetch leaders result length

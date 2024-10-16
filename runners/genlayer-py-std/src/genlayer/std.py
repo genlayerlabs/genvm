@@ -17,9 +17,13 @@ def public(f):
 	return f
 
 
-class AlreadySerializedResult(bytes):
-	def __new__(cls, *args, **kwargs):
-		return bytes.__new__(cls, *args, **kwargs)
+def _public_view(f):
+	f = public(f)
+	setattr(f, '__readonly__', True)
+	return f
+
+
+public.view = _public_view
 
 
 def account_from_b64(x: str) -> bytes:
@@ -78,8 +82,8 @@ def get_webpage(config: typing.Any, url: str) -> AwaitableResultStr:
 	return AwaitableResultStr(wasi.get_webpage(json.dumps(config), url))
 
 
-def call_llm(config: typing.Any, prompt: str) -> AwaitableResultStr:
-	return AwaitableResultStr(wasi.call_llm(json.dumps(config), prompt))
+def exec_prompt(config: typing.Any, prompt: str) -> AwaitableResultStr:
+	return AwaitableResultStr(wasi.exec_prompt(json.dumps(config), prompt))
 
 
 def eq_principle_refl[T](fn: typing.Callable[[], T]) -> AwaitableResultMap[T]:

@@ -71,6 +71,11 @@ pub type BytesLen = u32;
 pub struct Addr {
     pub ptr: *const u8,
 }
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct FullAddr {
+    pub ptr: *const u8,
+}
 pub type Fd = u32;
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
@@ -197,7 +202,7 @@ pub unsafe fn post_message(
     }
 }
 
-pub unsafe fn storage_read(slot: Addr, index: u32, buf: MutBytes) -> Result<(), Errno> {
+pub unsafe fn storage_read(slot: FullAddr, index: u32, buf: MutBytes) -> Result<(), Errno> {
     let ret = genlayer_sdk::storage_read(
         &slot as *const _ as i32,
         index as i32,
@@ -209,7 +214,7 @@ pub unsafe fn storage_read(slot: Addr, index: u32, buf: MutBytes) -> Result<(), 
     }
 }
 
-pub unsafe fn storage_write(slot: Addr, index: u32, buf: Bytes) -> Result<(), Errno> {
+pub unsafe fn storage_write(slot: FullAddr, index: u32, buf: Bytes) -> Result<(), Errno> {
     let ret = genlayer_sdk::storage_write(
         &slot as *const _ as i32,
         index as i32,

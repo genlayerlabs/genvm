@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::{collections::HashMap, sync::LazyLock};
 
 static JSON_UNFOLDER_RE: LazyLock<regex::Regex> =
-    LazyLock::new(|| regex::Regex::new(r#"\$\{([a-zA-Z0-9_]*)\}"#).unwrap());
+    LazyLock::new(|| regex::Regex::new(r#"#\{([a-zA-Z0-9_]*)\}"#).unwrap());
 
 fn replace_all<E>(
     re: &regex::Regex,

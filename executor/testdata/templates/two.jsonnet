@@ -2,25 +2,25 @@
 	run(scriptfilefrom, scriptfileto)::
 		{
 			"vars": {
-				"fromAddr": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-				"toAddr": "AwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+				"fromAddr": "AQAAAAAAAAAAAAAAAAAAAAAAAAA=",
+				"toAddr": "AwAAAAAAAAAAAAAAAAAAAAAAAAA=",
 			},
 			"accounts": {
-				"AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=": {
+				"AQAAAAAAAAAAAAAAAAAAAAAAAAA=": {
 					"code": scriptfilefrom
 				},
-				"AwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=": {
+				"AwAAAAAAAAAAAAAAAAAAAAAAAAA=": {
 					"code": scriptfileto
 				},
-				"AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=": {
+				"AgAAAAAAAAAAAAAAAAAAAAAAAAA=": {
 					"code": null
 				}
 			},
 
 			"message": {
 				"gas": 9007199254740991,
-				"contract_account": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-				"sender_account": "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+				"contract_account": "AQAAAAAAAAAAAAAAAAAAAAAAAAA=",
+				"sender_account": "AgAAAAAAAAAAAAAAAAAAAAAAAAA=",
 				"value": null,
 				"is_init": false,
 			},

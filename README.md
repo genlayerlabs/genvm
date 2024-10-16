@@ -12,7 +12,7 @@ It is a monorepo for GenVM, which consists of the following subprojects:
 Prelude:
 - `./tools/ya-build/ya-build config`
   This command scraps and configures all targets (similar to CMake)
-- `ninja` is an alternative to `Makefile`, it runs build commands
+- `ninja` is an alternative to `make`, it runs build commands
 - Output is located at `build/out` as a "root" (`bin`, `lib`, `share`)
 
 Required tools:
@@ -20,27 +20,28 @@ Required tools:
 - ruby (3.\*, otherwise it will be installed from a script)
 - [...](./build-scripts/src/ubuntu.sh) can be installed via scripts (see below)
 
-Basic setup:
+### Simple
 1. `cd $PROJECT_DIR`
 2. `git submodule update --init --recursive --depth 1`
-3. `./build-scripts/install-deps.rb --os`
+3. `./build-scripts/install-deps.rb --os --rust --genvm`
 4. `source env.sh`
 5. `git third-party update --all`
-
-### Simple
-
-1. `./build-scripts/install-deps.rb --rust --genvm`
-2. `ya-build config` (for release build pass `--preload .ci/release-conf.rb`)
-3. `ninja -C build genvm/executor/all`
-4. Get `genvm-runners.zip` from [github](https://github.com/yeagerai/genvm)
-5. merge `build/out` and `genvm-runners.zip`
+7. `ya-build config` (for release build pass `--preload .ci/release-conf.rb`)
+8. `ninja -C build genvm/executor/all`
+9. Get `genvm-runners.zip` from [github](https://github.com/yeagerai/genvm)
+10. merge `build/out` and `genvm-runners.zip`
 
 ### Full
 
-1. `./build-scripts/install-deps.rb --rust --genvm --runners`
-2. `ya-build config` (for release build pass `--preload .ci/release-conf.rb`)
-3. `ninja -C build tags/all`
-4. full genvm (including runners) is located at `build/out`
+It will also require `docker` and `docker-buildx`
+
+1. `cd $PROJECT_DIR`
+2. `git submodule update --init --recursive --depth 1`
+3. `./build-scripts/install-deps.rb --os --rust --genvm --runners`
+4. `source env.sh`
+5. `ya-build config` (for release build pass `--preload .ci/release-conf.rb`)
+6. `ninja -C build tags/all`
+7. full genvm (including runners) is located at `build/out`
 
 ## Running tests
 As of now there are two test suites, both of which require `./build-scripts/install-deps.rb --test`

@@ -1,13 +1,13 @@
 # { "depends": ["genlayer-py-std:test"] }
-import genlayer.std as gsdk
+import genlayer.std as gl
 import json
 
 
-@gsdk.contract
+@gl.contract
 class Contract:
-	@gsdk.public
+	@gl.public
 	async def main(self):
 		async def run():
-			return await gsdk.call_llm({}, "print 'yes' (without quotes) and nothing else")
+			return await gl.exec_prompt({}, "print 'yes' (without quotes) and nothing else")
 
-		print(await gsdk.eq_principle_refl(run))
+		print(await gl.eq_principle_refl(run))

@@ -25,6 +25,9 @@ All further communication is done via socket. If genvm process exited before sen
 Method ids list is available as [json](../../executor/codegen/data/host-fns.json)
 
 ```
+const ACCOUNT_ADDR_SIZE = 20
+const GENERIC_ADDR_SIZE = 32
+
 fn write_bytes_with_len(arr):
   write_u32_le len(arr)
   write_bytes arr
@@ -40,12 +43,12 @@ loop:
     json/methods/append_calldata:
       write_bytes_with_len host_calldata
     json/methods/get_code:
-      address := read_bytes(32)
+      address := read_bytes(ACCOUNT_ADDR_SIZE)
       write_bytes_with_len host_code[address]
     json/methods/storage_read:
       available_gas := read_u64_le
-      address := read_bytes(32)
-      slot := read_bytes(32)
+      address := read_bytes(ACCOUNT_ADDR_SIZE)
+      slot := read_bytes(GENERIC_ADDR_SIZE)
       index := read_u32_le
       len := read_u32_le
       write_u64_le host_consumed_gas
@@ -53,8 +56,8 @@ loop:
     json/methods/storage_write:
       available_gas := read_u64_le
       # as per genvm definition this address can be only the address of entrypoint account
-      address := read_bytes(32)
-      slot := read_bytes(32)
+      address := read_bytes(ACCOUNT_ADDR_SIZE)
+      slot := read_bytes(GENERIC_ADDR_SIZE)
       index := read_u32_le
       len := read_u32_le
       data := read_bytes(len)
@@ -76,7 +79,7 @@ loop:
       host_nondet_result[call_no] = read_result()
       # validator can just skip this bytes if this command was sent
     json/methods/post_message:
-      address := read_bytes(32)
+      address := read_bytes(ACCOUNT_ADDR_SIZE)
       len_calldata := read_u32_le
       calldata := read_bytes(len_calldata)
       len_code := read_u32_le

@@ -54,14 +54,14 @@
     )
 
     (@interface func (export "storage_read")
-        (param $slot $addr)
+        (param $slot $full_addr)
         (param $index u32)
         (param $buf $mut_bytes)
         (result $error (expected (error $errno)))
     )
 
     (@interface func (export "storage_write")
-        (param $slot $addr)
+        (param $slot $full_addr)
         (param $index u32)
         (param $buf $bytes)
         (result $error (expected (error $errno)))

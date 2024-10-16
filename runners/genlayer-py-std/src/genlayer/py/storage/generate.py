@@ -49,7 +49,7 @@ _default_extension = b'\x00' * 64
 class _FakeStorageSlot(StorageSlot):
 	_mem: bytearray
 
-	def __init__(self, addr: Address, manager: StorageMan):
+	def __init__(self, addr: u256, manager: StorageMan):
 		StorageSlot.__init__(self, addr, manager)
 		self._mem = bytearray()
 
@@ -64,15 +64,15 @@ class _FakeStorageSlot(StorageSlot):
 
 
 class _FakeStorageMan(StorageMan):
-	_parts: dict[Address, _FakeStorageSlot] = {}
+	_parts: dict[u256, _FakeStorageSlot] = {}
 
-	def get_store_slot(self, addr: Address) -> StorageSlot:
+	def get_store_slot(self, addr: u256) -> StorageSlot:
 		return self._parts.setdefault(addr, _FakeStorageSlot(addr, self))
 
 	def debug(self):
 		print('=== fake storage ===')
 		for k, v in self._parts.items():
-			print(f'{hex(k.as_int)}\n\t{v._mem}')
+			print(f'{hex(k)}\n\t{v._mem}')
 
 
 def _storage_build(
