@@ -59,7 +59,7 @@ impl Impl {
         })
     }
 
-    fn call_llm(&mut self, gas: &mut u64, _config: &str, prompt: &str) -> Result<String> {
+    fn exec_prompt(&mut self, gas: &mut u64, _config: &str, prompt: &str) -> Result<String> {
         match self.config.provider {
             LLLMProvider::Ollama => {
                 let request = serde_json::json!({
@@ -140,8 +140,7 @@ impl Impl {
                 )?;
                 let res = response::read(&mut res)?;
                 let res: serde_json::Value = serde_json::from_str(&res)?;
-                res
-                    .as_object()
+                res.as_object()
                     .and_then(|v| v.get("result"))
                     .and_then(|v| v.as_object())
                     .and_then(|v| v.get("response"))
@@ -152,7 +151,7 @@ impl Impl {
         }
     }
 
-    fn equivalence_prompt(&mut self, gas: &mut u64, prompt: &str) -> Result<String> {
+    fn eq_principle_prompt(&mut self, gas: &mut u64, prompt: &str) -> Result<bool> {
         let data: EqPrinciplePrompt = serde_json::from_str(prompt)?;
         let map = HashMap::from([
             ("leader_answer".into(), data.leader_answer),
@@ -160,12 +159,14 @@ impl Impl {
             ("principle".into(), data.principle),
         ]);
         let new_prompt = string_templater::patch_str(&map, &self.config.equivalence_prompt)?;
-        self.call_llm(gas, "{}".into(), &new_prompt)
+        let mut res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
+        res.make_ascii_lowercase();
+        Ok(res.contains("true"))
     }
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn call_llm(
+pub extern "C-unwind" fn exec_prompt(
     ctx: *const (),
     gas: &mut u64,
     config: *const u8,
@@ -181,21 +182,21 @@ pub extern "C-unwind" fn call_llm(
             prompt
                 .to_str()
                 .map_err(|e| anyhow::Error::from(e))
-                .and_then(|prompt| ctx.call_llm(gas, config, prompt))
+                .and_then(|prompt| ctx.exec_prompt(gas, config, prompt))
         })
         .into()
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn equivalence_prompt(
+pub extern "C-unwind" fn eq_principle_prompt(
     ctx: *const (),
     gas: &mut u64,
     data: *const u8,
-) -> interfaces::CStrResult {
+) -> interfaces::BoolResult {
     let ctx = get_ptr(ctx);
     let data = unsafe { CStr::from_ptr(data as *const std::ffi::c_char) };
     data.to_str()
         .map_err(|e| anyhow::Error::from(e))
-        .and_then(|data| ctx.equivalence_prompt(gas, data))
+        .and_then(|data| ctx.eq_principle_prompt(gas, data))
         .into()
 }

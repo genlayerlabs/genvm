@@ -24,6 +24,10 @@ class Address:
 		return self._as_bytes
 
 	@property
+	def as_hex(self) -> str:
+		return '0x' + self._as_bytes.hex()
+
+	@property
 	def as_b64(self) -> str:
 		return str(base64.b64encode(self.as_bytes), encoding='ascii')
 

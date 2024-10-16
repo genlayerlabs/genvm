@@ -11,6 +11,8 @@
     )
 )
 
+(typename $success bool)
+
 (typename $bytes_len u32)
 
 (typename $addr

@@ -305,7 +305,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         )))
     }
 
-    fn call_llm(
+    fn exec_prompt(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         config: wiggle::GuestPtr<str>,
@@ -325,7 +325,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         };
         let mut fuel = self.context.shared_data.fuel_descriptor.get_fuel();
         let init_fuel = fuel;
-        let res = supervisor.modules.llm.call_llm(
+        let res = supervisor.modules.llm.exec_prompt(
             &mut fuel,
             config_str.as_bytes().as_ptr(),
             prompt_str.as_bytes().as_ptr(),
@@ -340,6 +340,37 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         Ok(generated::types::Fd::from(self.vfs.place_content(
             FileContentsUnevaluated::from_contents(vec_from_cstr_libc(res.str), 0),
         )))
+    }
+
+    fn eq_principle_prompt(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        config: wiggle::GuestPtr<str>,
+    ) -> Result<generated::types::Success, generated::types::Error> {
+        if self.context.data.conf.is_deterministic {
+            return Err(generated::types::Errno::DeterministicViolation.into());
+        }
+        let config_str = read_string(mem, config)?;
+        let config_str = CString::new(config_str).map_err(|e| generated::types::Errno::Inval)?;
+
+        let supervisor = self.context.data.supervisor.clone();
+        let Ok(mut supervisor) = supervisor.lock() else {
+            return Err(generated::types::Errno::Io.into());
+        };
+        let mut fuel = self.context.shared_data.fuel_descriptor.get_fuel();
+        let init_fuel = fuel;
+        let res = supervisor
+            .modules
+            .llm
+            .eq_principle_prompt(&mut fuel, config_str.as_bytes().as_ptr());
+        self.context
+            .shared_data
+            .fuel_descriptor
+            .consume_fuel(init_fuel - fuel);
+        if res.err != 0 {
+            return Err(generated::types::Errno::Io.into());
+        }
+        Ok((res.res as i32).try_into().unwrap())
     }
 
     fn run_nondet(

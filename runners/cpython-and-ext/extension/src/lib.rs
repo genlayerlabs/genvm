@@ -114,7 +114,12 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     #[pyfn(m)]
     fn exec_prompt(config: &str, prompt: &str) -> PyResult<u32> {
-        map_error(unsafe { genvm_sdk_rust::call_llm(config, prompt) })
+        map_error(unsafe { genvm_sdk_rust::exec_prompt(config, prompt) })
+    }
+
+    #[pyfn(m)]
+    fn eq_principle_prompt(config: &str) -> PyResult<bool> {
+        map_error(unsafe { genvm_sdk_rust::eq_principle_prompt(config) }).map(|x| x.raw() != 0)
     }
 
     #[pyfn(m)]

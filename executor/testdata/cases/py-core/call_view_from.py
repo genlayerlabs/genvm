@@ -7,4 +7,4 @@ class Contract:
 	@gl.public
 	def main(self, addr: gl.Address):
 		print('contract from.main')
-		print(gl.OtherContract(addr).foo(1, 2).get())
+		print(gl.ContractAt(addr).view().foo(1, 2).get())

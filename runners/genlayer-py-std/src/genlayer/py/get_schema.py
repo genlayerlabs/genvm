@@ -77,13 +77,13 @@ def _escape_dict_prop(prop: str) -> str:
 	return prop
 
 
-def _get_args(m: types.FunctionType, *, is_ctor: bool) -> dict:
+def _get_params(m: types.FunctionType, *, is_ctor: bool) -> dict:
 	import inspect
 
 	signature = inspect.signature(m)
 	members = dict(inspect.getmembers(m))
-	args = []
-	kwargs = {}
+	params = []
+	kwparams = {}
 
 	is_first = True
 	for name, par in signature.parameters.items():
@@ -94,15 +94,15 @@ def _get_args(m: types.FunctionType, *, is_ctor: bool) -> dict:
 			continue
 		match str(par.kind):
 			case 'POSITIONAL_ONLY' | 'POSITIONAL_OR_KEYWORD':
-				args.append([name, _repr_type(par.annotation, True)])
+				params.append([name, _repr_type(par.annotation, True)])
 			case 'KEYWORD_ONLY':
-				kwargs[_escape_dict_prop(name)] = _repr_type(par.annotation, True)
+				kwparams[_escape_dict_prop(name)] = _repr_type(par.annotation, True)
 			case kind:
 				raise Exception(f'unsupported parameter type {kind} {type(kind)}')
 
 	ret = {
-		'args': args,
-		'kwargs': kwargs,
+		'params': params,
+		'kwparams': kwparams,
 	}
 	if not is_ctor:
 		ret.update(
@@ -126,6 +126,6 @@ def get_schema(contract: type) -> typing.Any:
 	}
 
 	return {
-		'ctor': _get_args(ctor, is_ctor=True),
-		'methods': {k: _get_args(v, is_ctor=False) for k, v in meths.items()},
+		'ctor': _get_params(ctor, is_ctor=True),
+		'methods': {k: _get_params(v, is_ctor=False) for k, v in meths.items()},
 	}

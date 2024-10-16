@@ -8,7 +8,7 @@ class Contract:
 	def main(self, addr: gl.Address):
 		print('contract from.main')
 		try:
-			res = gl.OtherContract(addr).foo(1, 2).get()
+			res = gl.ContractAt(addr).view().foo(1, 2).get()
 		except gl.Rollback as r:
 			print('handled', r.msg)
 		else:

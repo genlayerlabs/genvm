@@ -39,6 +39,7 @@ _known_descs: dict[type | _Instantiation, TypeDesc] = {
 	i64: _IntDesc(8),
 	u32: _u32_desc,
 	u64: _IntDesc(8, signed=False),
+	u256: _IntDesc(32, signed=False),
 	str: _StrDesc(),
 	bytes: _BytesDesc(),
 }
@@ -132,7 +133,7 @@ def _storage_build_struct(cls: type, generics_map: dict[str, TypeDesc]) -> TypeD
 		actions_append(copy_actions, desc.copy_actions)
 
 	def view_at(slot: StorageSlot, off: int):
-		slf: typing.Any = cls.__new__(cls)
+		slf: typing.Any = cls.__new__(cls)  # type: ignore
 		slf._storage_slot = slot
 		slf._off = off
 		return slf

@@ -24,7 +24,7 @@ class Contract:
 		return {'x': 10}
 
 	@gl.public.view
-	def retn(self):
+	def retn_view(self):
 		return {'x': 10}
 
 	@gl.public

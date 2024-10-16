@@ -7,7 +7,7 @@ class Contract:
 	def __init__(self, foo, bar):
 		pass
 
-	@std.public
+	@std.public.view
 	def foo(self):
 		pass
 

@@ -1,5 +1,5 @@
-local simple = import '../../templates/simple.jsonnet';
-simple.run('${jsonnetDir}/call_llm.py') {
+local simple = import '../../../templates/simple.jsonnet';
+simple.run('${jsonnetDir}/eq_prompt.py') {
     "calldata": |||
         {
             "method": "main",

@@ -33,10 +33,15 @@
         (result $error (expected $fd (error $errno)))
     )
 
-    (@interface func (export "call_llm")
+    (@interface func (export "exec_prompt")
         (param $config string)
         (param $prompt string)
         (result $error (expected $fd (error $errno)))
+    )
+
+    (@interface func (export "eq_principle_prompt")
+        (param $config string)
+        (result $error (expected $success (error $errno)))
     )
 
     (@interface func (export "call_contract")
