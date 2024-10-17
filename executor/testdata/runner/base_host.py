@@ -188,7 +188,7 @@ async def run_host_and_program(
 	coro_proc = asyncio.ensure_future(wrap_proc())
 
 	done, _pending = await asyncio.wait(
-		[coro_loop, coro_proc, asyncio.ensure_future(process.wait())],
+		[coro_loop, coro_proc],
 		return_when=asyncio.FIRST_COMPLETED,
 	)
 
@@ -216,7 +216,7 @@ async def run_host_and_program(
 		if not coro_proc.done():
 			# genvm exit takes to long, maybe it hanged. Politely ask to quit and wait a bit
 			try:
-				process.kill()
+				process.terminate()
 			except:
 				pass
 			exit_code_use = False
@@ -227,7 +227,7 @@ async def run_host_and_program(
 			if not coro_proc.done():
 				# genvm exit takes to long, forcefully quit it
 				try:
-					process.terminate()
+					process.kill()
 				except:
 					pass
 

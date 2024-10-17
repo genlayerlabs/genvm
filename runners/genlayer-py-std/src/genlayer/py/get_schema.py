@@ -81,7 +81,6 @@ def _get_params(m: types.FunctionType, *, is_ctor: bool) -> dict:
 	import inspect
 
 	signature = inspect.signature(m)
-	members = dict(inspect.getmembers(m))
 	params = []
 	kwparams = {}
 

@@ -8,6 +8,9 @@ from .vec import Vec
 from genlayer.py.types import u32, i8
 
 
+_NO_OBJ = object()
+
+
 class _Node[K, V]:
 	key: K
 	value: V
@@ -17,7 +20,8 @@ class _Node[K, V]:
 
 	def __init__(self, k: K, v: V):
 		self.key = k
-		self.value = v
+		if v is not _NO_OBJ:
+			self.value = v
 		self.left = u32(0)
 		self.right = u32(0)
 		self.balance = i8(0)
@@ -276,17 +280,58 @@ class TreeMap[K: Comparable, V]:
 			self.root = seq[0]
 
 	def __setitem__(self, k: K, v: V):
+		def setter(node: _Node[K, V]):
+			node.value = v
+
+		self._get_set(
+			k,
+			setter,
+			lambda: v,
+		)
+
+	def compute_if_absent(self, k: K, supplier: typing.Callable[[], V]) -> V:
+		res: list[V] = []
+
+		def existing(node: _Node[K, V]):
+			res.append(node.value)
+
+		def new() -> V:
+			x = supplier()
+			res.append(x)
+			return x
+
+		self._get_set(
+			k,
+			existing,
+			supplier,
+		)
+		return res[0]
+
+	def get_or_insert_default(self, k: K) -> V:
+		return self._get_set(
+			k,
+			lambda _k: None,
+			lambda: _NO_OBJ,  # type: ignore
+		)
+
+	def _get_set(
+		self,
+		k: K,
+		exists: typing.Callable[[_Node[K, V]], None],
+		does_not_exist: typing.Callable[[], V],
+	) -> V:
 		seq, is_less = self._find_seq(k)
-		# replace existing
+		# exists
 		if seq[-1] != 0:
-			self.slots[seq[-1] - 1].value = v
-			return
+			slot = self.slots[seq[-1] - 1]
+			exists(slot)
+			return slot.value
 		# patch root
 		if len(seq) == 1:
 			idx, cur_node = self._alloc_slot()
 			self.root = u32(idx + 1)
-			cur_node.__init__(k, v)
-			return
+			cur_node.__init__(k, does_not_exist())
+			return cur_node.value
 		# alloc new
 		new_idx, new_slot = self._alloc_slot()
 		if is_less:
@@ -294,7 +339,7 @@ class TreeMap[K: Comparable, V]:
 		else:
 			self.slots[seq[-2] - 1].right = u32(new_idx + 1)
 		seq[-1] = new_idx + 1
-		new_slot.__init__(k, v)
+		new_slot.__init__(k, does_not_exist())
 		# rebalance
 		while len(seq) >= 2:
 			cur = seq[-1]
@@ -349,6 +394,7 @@ class TreeMap[K: Comparable, V]:
 				seq.pop()
 		if self.root != seq[0]:
 			self.root = seq[0]
+		return new_slot.value
 
 	def get_fn[T](
 		self,
@@ -367,7 +413,7 @@ class TreeMap[K: Comparable, V]:
 				idx = _Node.right
 		return not_found()
 
-	def get(self, k: K, dflt=None):  #  -> V | None
+	def get(self, k: K, dflt=None) -> V | None:
 		return self.get_fn(k, lambda n: n.value, lambda: dflt)
 
 	def __getitem__(self, k: K) -> V:

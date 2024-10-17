@@ -1,6 +1,7 @@
 import typing
 
 from .core import *
+from .core import _FakeStorageMan
 from .desc_base_types import _u32_desc
 
 
@@ -13,8 +14,9 @@ class Vec[T](WithItemStorageSlot):
 		raise Exception("this class can't be instantiated")
 
 	@staticmethod
-	def view_at(slot: StorageSlot, off: int) -> 'Vec':
+	def _view_at(item_desc: TypeDesc, slot: StorageSlot, off: int) -> 'Vec':
 		slf = Vec.__new__(Vec)
+		slf._item_desc = item_desc
 		slf._storage_slot = slot
 		slf._off = off
 		return slf
@@ -70,19 +72,23 @@ class _VecCopyAction(ComplexCopyAction):
 	def copy(self, frm: StorageSlot, frm_off: int, to: StorageSlot, to_off: int) -> int:
 		le = _u32_desc.get(frm, frm_off)
 		_u32_desc.set(to, to_off, le)
+
 		cop = self._item_desc.copy_actions
-		to_indir = to.indirect(to_off)
-		frm_indir = frm.indirect(frm_off)
+		to_indirect = to.indirect(to_off)
+		frm_indirect = frm.indirect(frm_off)
 		if len(cop) == 1 and isinstance(cop[0], int):
-			to_indir.write(0, frm_indir.read(0, self._item_desc.size * le))
+			to_indirect.write(0, frm_indirect.read(0, cop[0] * le))
 		else:
 			cum_off = 0
-			for i in range(le):
-				cum_off += actions_apply_copy(cop, to, to_off + cum_off, frm, frm_off + cum_off)
+			for _i in range(le):
+				cum_off += actions_apply_copy(cop, to_indirect, cum_off, frm_indirect, cum_off)
 		return _u32_desc.size
 
+	def __repr__(self):
+		return '_VecCopyAction'
 
-class _VecDescription(TypeDesc):
+
+class _VecDesc(TypeDesc):
 	_item_desc: TypeDesc
 
 	def __init__(self, it_desc: TypeDesc):
@@ -91,11 +97,26 @@ class _VecDescription(TypeDesc):
 		TypeDesc.__init__(self, _u32_desc.size, [self._cop])
 
 	def get(self, slot: StorageSlot, off: int) -> Vec:
-		res = Vec.view_at(slot, off)
-		res._item_desc = self._item_desc
-		return res
+		return Vec._view_at(self._item_desc, slot, off)
 
-	def set(self, slot: StorageSlot, off: int, val: Vec) -> None:
+	def set(self, slot: StorageSlot, off: int, val: Vec | list) -> None:
+		if isinstance(val, list):
+			_u32_desc.set(slot, off, len(val))
+			indirect_slot = slot.indirect(off)
+			for i in range(len(val)):
+				self._item_desc.set(indirect_slot, i * self._item_desc.size, val[i])
+			return
 		if val._item_desc is not self:
 			raise Exception('incompatible vector type')
 		self._cop.copy(val._storage_slot, val._off, slot, off)
+
+	def __eq__(self, r):
+		if not isinstance(r, _VecDesc):
+			return False
+		return self._item_desc == r._item_desc
+
+	def __hash__(self):
+		return hash(('_VecDesc', hash(self._item_desc)))
+
+	def __repr__(self):
+		return f'_VecDesc[{self._item_desc!r}]'

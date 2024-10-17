@@ -5,10 +5,18 @@ from genlayer.py.types import *
 import typing
 
 from .core import *
+from .core import _FakeStorageMan
 
-from .desc_base_types import _AddrDesc, _IntDesc, _StrDesc, _BytesDesc, _u32_desc
-from .desc_record import _RecordDesc
-from .vec import Vec, _VecDescription
+from .desc_base_types import (
+	_AddrDesc,
+	_IntDesc,
+	_StrDesc,
+	_BytesDesc,
+	_u32_desc,
+	_BoolDesc,
+)
+from .desc_record import _RecordDesc, WithRecordStorageSlot
+from .vec import Vec, _VecDesc
 
 
 def storage(cls: type) -> type:
@@ -25,12 +33,15 @@ class _Instantiation:
 		self.args = args
 
 	def __eq__(self, r):
-		if r is not _Instantiation:
+		if not isinstance(r, _Instantiation):
 			return False
 		return self.origin == r.origin and self.args == r.args
 
 	def __hash__(self):
-		return hash((self.origin, self.args))
+		return hash(('_Instantiation', self.origin, self.args))
+
+	def __repr__(self):
+		return f"{self.origin.__name__}[{', '.join(map(repr, self.args))}]"
 
 
 _known_descs: dict[type | _Instantiation, TypeDesc] = {
@@ -42,38 +53,8 @@ _known_descs: dict[type | _Instantiation, TypeDesc] = {
 	u256: _IntDesc(32, signed=False),
 	str: _StrDesc(),
 	bytes: _BytesDesc(),
+	bool: _BoolDesc(),
 }
-
-_default_extension = b'\x00' * 64
-
-
-class _FakeStorageSlot(StorageSlot):
-	_mem: bytearray
-
-	def __init__(self, addr: u256, manager: StorageMan):
-		StorageSlot.__init__(self, addr, manager)
-		self._mem = bytearray()
-
-	def read(self, addr: int, len: int) -> bytes:
-		return bytes(memoryview(self._mem)[addr : addr + len])
-
-	def write(self, addr: int, what: memoryview) -> None:
-		l = len(what)
-		while addr + l > len(self._mem):
-			self._mem.extend(_default_extension)
-		memoryview(self._mem)[addr : addr + l] = what
-
-
-class _FakeStorageMan(StorageMan):
-	_parts: dict[u256, _FakeStorageSlot] = {}
-
-	def get_store_slot(self, addr: u256) -> StorageSlot:
-		return self._parts.setdefault(addr, _FakeStorageSlot(addr, self))
-
-	def debug(self):
-		print('=== fake storage ===')
-		for k, v in self._parts.items():
-			print(f'{hex(k)}\n\t{v._mem}')
 
 
 def _storage_build(
@@ -81,10 +62,13 @@ def _storage_build(
 ) -> TypeDesc:
 	if isinstance(cls, typing.TypeVar):
 		return generics_map[cls.__name__]
+
 	origin = typing.get_origin(cls)
 	if origin is not None:
 		args = [_storage_build(c, generics_map) for c in typing.get_args(cls)]
+		old_cls = cls
 		cls = _Instantiation(origin, tuple(args))
+
 	old = _known_descs.get(cls, None)
 	if old is not None:
 		return old
@@ -106,49 +90,69 @@ def _storage_build_generic(
 			f'incorrect number of generic arguments parameters={generic_params}, args={cls.args}'
 		)
 	if cls.origin is Vec:
-		return _VecDescription(cls.args[0])
+		return _VecDesc(cls.args[0])
 	else:
 		gen = {k.__name__: v for k, v in zip(generic_params, cls.args)}
-		return _storage_build_struct(cls.origin, gen)
+		res = _storage_build_struct(cls.origin, gen)
+		res.alias_to = cls
+		return res
 
 
 def _storage_build_struct(cls: type, generics_map: dict[str, TypeDesc]) -> TypeDesc:
 	if cls is Vec:
 		raise Exception('invalid builder')
-	cls_any: typing.Any = cls
 	size: int = 0
 	copy_actions: list[CopyAction] = []
+	props: dict[str, tuple[TypeDesc, int]] = {}
+
+	was_generic = False
+
 	for prop_name, prop_value in typing.get_type_hints(cls).items():
-		cur_offset = size
-		desc = _storage_build(prop_value, generics_map)
+		cur_offset: int = size
+		prop_desc = _storage_build(prop_value, generics_map)
+		props[prop_name] = (prop_desc, cur_offset)
 
-		def getter(s, desc=desc, cur_offset=cur_offset):
-			return desc.get(s._storage_slot, s._off + cur_offset)
+		if isinstance(prop_value, typing.TypeVar):
+			was_generic = True
 
-		def setter(s, v, desc=desc, cur_offset=cur_offset):
-			desc.set(s._storage_slot, s._off + cur_offset, v)
+		if not getattr(cls, '__storage_patched__', False):
 
-		setattr(cls, prop_name, property(getter, setter))
-		size += desc.size
-		actions_append(copy_actions, desc.copy_actions)
+			def getter(s: WithRecordStorageSlot, prop_name=prop_name):
+				prop_desc, off = s.__type_desc__.props[prop_name]
+				return prop_desc.get(s._storage_slot, s._off + off)
 
-	def view_at(slot: StorageSlot, off: int):
-		slf: typing.Any = cls.__new__(cls)  # type: ignore
+			def setter(s: WithRecordStorageSlot, v, prop_name=prop_name):
+				prop_desc, off = s.__type_desc__.props[prop_name]
+				prop_desc.set(s._storage_slot, s._off + off, v)
+
+			setattr(cls, prop_name, property(getter, setter))
+
+		size += prop_desc.size
+		actions_append(copy_actions, prop_desc.copy_actions)
+
+	def view_at(desc: _RecordDesc, slot: StorageSlot, off: int, cls=cls):
+		slf: WithRecordStorageSlot = cls.__new__(cls)  # type: ignore
 		slf._storage_slot = slot
 		slf._off = off
+		slf.__type_desc__ = desc
 		return slf
+
+	description = _RecordDesc(view_at, size, copy_actions, props)
 
 	old_init = cls.__init__
 
 	def new_init(self, *args, **kwargs):
 		if not hasattr(self, '_storage_slot'):
+			assert not was_generic
 			self._storage_slot = _FakeStorageMan().get_store_slot(ROOT_STORAGE_ADDRESS)
 			self._off = 0
+			self.__type_desc__ = description
 		old_init(self, *args, **kwargs)
 
-	if not hasattr(cls, '__contract__'):
+	new_init.__storage_patched__ = True
+
+	if not hasattr(cls, '__contract__') and not getattr(
+		old_init, '__storage_patched__', False
+	):
 		cls.__init__ = new_init
-	cls_any.__view_at__ = staticmethod(view_at)
-	description = _RecordDesc(view_at, size, copy_actions)
-	cls_any.__description__ = description
 	return description

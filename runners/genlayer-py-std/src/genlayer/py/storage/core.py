@@ -78,10 +78,12 @@ def actions_append(l: list[CopyAction], r: list[CopyAction]):
 class TypeDesc[T]:
 	size: int
 	copy_actions: list[CopyAction]
+	alias_to: typing.Any
 
 	def __init__(self, size: int, copy_actions: list[CopyAction]):
 		self.copy_actions = copy_actions
 		self.size = size
+		self.alias_to = None
 
 	@abc.abstractmethod
 	def get(self, slot: StorageSlot, off: int) -> T: ...
@@ -89,11 +91,58 @@ class TypeDesc[T]:
 	@abc.abstractmethod
 	def set(self, slot: StorageSlot, off: int, val: T) -> None: ...
 
+	def __repr__(self):
+		ret: list[str] = []
+		if self.alias_to is not None:
+			ret.append(repr(self.alias_to))
+			ret.append('((')
+		ret.append(type(self).__name__)
+		ret.append('[')
+		for k, v in self.__dict__.items():
+			if k == 'alias_to':
+				continue
+			ret.append(f' {k!r}: {v!r} ;')
+		ret.append(']')
+		if self.alias_to is not None:
+			ret.append('))')
+		return ''.join(ret)
+
 
 class WithStorageSlot(typing.Protocol):
-	__description__: typing.ClassVar[TypeDesc]
 	_storage_slot: StorageSlot
 	_off: int
+
+
+class _FakeStorageSlot(StorageSlot):
+	_mem: bytearray
+
+	def __init__(self, addr: u256, manager: StorageMan):
+		StorageSlot.__init__(self, addr, manager)
+		self._mem = bytearray()
+
+	def read(self, addr: int, le: int) -> bytes:
+		self._mem.extend(b'\x00' * (addr + le - len(self._mem)))
+		return bytes(memoryview(self._mem)[addr : addr + le])
+
+	def write(self, addr: int, what: memoryview) -> None:
+		l = len(what)
+		self._mem.extend(b'\x00' * (addr + l - len(self._mem)))
+		memoryview(self._mem)[addr : addr + l] = what
+
+
+class _FakeStorageMan(StorageMan):
+	_parts: dict[u256, _FakeStorageSlot]
+
+	def __init__(self):
+		self._parts = {}
+
+	def get_store_slot(self, addr: u256) -> StorageSlot:
+		return self._parts.setdefault(addr, _FakeStorageSlot(addr, self))
+
+	def debug(self):
+		print('=== fake storage ===')
+		for k, v in self._parts.items():
+			print(f'{hex(k)}\n\t{v._mem}')
 
 
 ROOT_STORAGE_ADDRESS = u256(0)

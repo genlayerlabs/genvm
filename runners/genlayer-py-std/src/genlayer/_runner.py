@@ -3,6 +3,8 @@ import genlayer.py.calldata
 import typing
 from genlayer.py.types import Rollback
 
+from genlayer.py.storage.generate import _known_descs
+
 
 def _give_result(res_fn: typing.Callable[[], typing.Any]):
 	try:
@@ -55,7 +57,7 @@ def run(contract: type):
 		from .storage import STORAGE_MAN, ROOT_STORAGE_ADDRESS
 
 		top_slot = STORAGE_MAN.get_store_slot(ROOT_STORAGE_ADDRESS)
-		contract_instance = contract.__view_at__(top_slot, 0)
+		contract_instance = _known_descs[contract].get(top_slot, 0)
 		_give_result(
 			lambda: meth(
 				contract_instance, *calldata.get('args', []), **calldata.get('kwargs', {})

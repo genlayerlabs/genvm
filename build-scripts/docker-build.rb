@@ -20,6 +20,7 @@ rescue
 end
 
 File.open(log_file, 'wt') { |f|
+	puts `docker buildx ls`
 	command = ['docker', 'buildx', 'build', '--network=host', '--progress=plain', '-f', dfile, path]
 	puts "run: #{command}"
 	Open3.popen2e(*command) { |stdin, stdout, wait_thr|
@@ -41,5 +42,6 @@ File.open(log_file, 'wt') { |f|
 		end
 	}
 	puts "detected image is #{img}"
+	raise "Image not found" if img.nil?
 	File.write(id_file, img)
 }

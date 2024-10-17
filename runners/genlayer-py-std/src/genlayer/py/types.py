@@ -38,10 +38,26 @@ class Address:
 	def __hash__(self):
 		return hash(self._as_bytes)
 
+	def __lt__(self, r):
+		assert isinstance(r, Address)
+		return self._as_bytes < r._as_bytes
+
+	def __le__(self, r):
+		assert isinstance(r, Address)
+		return self._as_bytes <= r._as_bytes
+
 	def __eq__(self, r):
 		if not isinstance(r, Address):
 			return False
 		return self._as_bytes == r._as_bytes
+
+	def __ge__(self, r):
+		assert isinstance(r, Address)
+		return self._as_bytes >= r._as_bytes
+
+	def __gt__(self, r):
+		assert isinstance(r, Address)
+		return self._as_bytes > r._as_bytes
 
 	def __repr__(self) -> str:
 		return 'addr#' + ''.join(['{:02x}'.format(x) for x in self._as_bytes])
