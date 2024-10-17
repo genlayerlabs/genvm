@@ -1,4 +1,4 @@
-# { "depends": ["genlayer-py-std:test"] }
+# { "Depends": "genlayer-py-std:test" }
 
 import genlayer.std as gl
 from genlayer.py.types import *

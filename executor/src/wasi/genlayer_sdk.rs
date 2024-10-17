@@ -8,7 +8,7 @@ use itertools::Itertools;
 use wiggle::GuestError;
 
 use crate::{
-    vm::{self, InitActions, RunOk},
+    vm::{self, ContractCodeData, RunOk},
     AccountAddress, GenericAddress, MessageData,
 };
 
@@ -19,7 +19,7 @@ pub struct SingleVMData {
     pub message_data: MessageData,
     pub entrypoint: Arc<[u8]>,
     pub supervisor: Arc<Mutex<crate::vm::Supervisor>>,
-    pub init_actions: InitActions,
+    pub init_actions: ContractCodeData,
 }
 
 pub struct Context {

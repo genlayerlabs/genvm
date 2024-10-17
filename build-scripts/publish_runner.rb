@@ -37,5 +37,6 @@ self.define_singleton_method(:target_publish_runner) do |name_base:, runner_dict
 		dependencies: [publish_script, runner_json] + dependencies + fdeps
 	) {
 		meta.expected_hash = expected_hash
+		meta.runner_dep_id = "#{name_base}:#{expected_hash}"
 	}
 end

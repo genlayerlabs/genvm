@@ -49,7 +49,7 @@ contents_hash = str(base64.b32encode(contents_hash.digest()), encoding='ascii')
 
 if conf['expected_hash'] is not None and conf['expected_hash'] != contents_hash:
 	raise Exception(
-		f'hashes diverge\nexp: {conf["expected_hash"]}\ngot: {contents_hash}\nIf it is desired, update hash at yabuild-default-conf.rb'
+		f'hashes diverge for {conf['out_dir']}\nexp: {conf["expected_hash"]}\ngot: {contents_hash}\nIf it is desired, update hash at yabuild-default-conf.rb'
 	)
 
 out_dir = Path(conf['out_dir'])

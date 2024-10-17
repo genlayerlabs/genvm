@@ -37,14 +37,12 @@ runner_target = target_publish_runner(
 	out_dir: config.runners_dir,
 	files: [{ include: out_file }],
 	runner_dict: {
-		"pre_actions": [
-			{ "MapFile": { "to": "/py/genlayer", "file": "src/" }},
-			{ "AddEnv": { "name": "PYTHONPATH", "val": "/py/genlayer" } },
-			{ "MapCode": { "to": "/contract.py" } },
-			{ "SetArgs": { "args": ["py", "-u", "-c", "import contract;import genlayer.runner as r;r.run(contract)"] } },
-		],
-		"depends": [
-			"genvm-cpython:#{cpython_runner.meta.expected_hash}"
+		Seq: [
+			{ MapFile: { to: "/py/genlayer", file: "src/" }},
+			{ AddEnv: { name: "PYTHONPATH", val: "/py/genlayer" } },
+			{ MapCode: { to: "/contract.py" } },
+			{ SetArgs: ["py", "-u", "-c", "import contract;import genlayer.runner as r;r.run(contract)"] },
+			{ Depends: "genvm-cpython:#{cpython_runner.meta.expected_hash}" },
 		],
 	},
 	dependencies: [build_pyc_s],

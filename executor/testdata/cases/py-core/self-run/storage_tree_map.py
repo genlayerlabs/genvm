@@ -1,10 +1,10 @@
-# { "depends": ["genlayer-py-std:test"] }
+# { "Depends": "genlayer-py-std:test" }
 
 import genlayer.std as gl
 from genlayer.py.types import *
 from genlayer.py.storage import storage, TreeMap
 
-__gsdk_self_run__ = True
+__gl_self_run__ = True
 
 
 @storage

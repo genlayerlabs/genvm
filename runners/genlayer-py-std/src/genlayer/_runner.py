@@ -40,6 +40,10 @@ def run(contract: type):
 		else:
 			meth_name = calldata['method']
 			if meth_name == '__get_schema__':
+				if hasattr(contract, '__get_schema__'):
+					_give_result(contract.__get_schema__)
+					return
+
 				from .py.get_schema import get_schema
 				import json
 

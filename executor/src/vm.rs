@@ -12,7 +12,7 @@ use wasmparser::WasmFeatures;
 use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
-    runner::{self, InitAction},
+    runner::{self, InitAction, InitActionTrivial, WasmMode},
     wasi,
 };
 use anyhow::{Context, Result};
@@ -183,16 +183,16 @@ pub struct Supervisor {
 }
 
 #[derive(Clone)]
-pub struct InitActions {
+pub struct ContractCodeData {
     pub code: Arc<[u8]>,
-    pub(crate) actions: Arc<Vec<InitAction>>,
+    pub(crate) actions: Arc<InitAction>,
 }
 
 pub struct VM {
     pub store: Store<WasmContext>,
     pub linker: Linker<WasmContext>,
     pub config_copy: wasi::base::Config,
-    pub init_actions: InitActions,
+    pub init_actions: ContractCodeData,
 }
 
 impl VM {
@@ -415,24 +415,31 @@ impl Supervisor {
         }
     }
 
-    pub fn apply_actions(&mut self, vm: &mut VM) -> Result<wasmtime::Instance> {
-        let mut env = BTreeMap::new();
-
-        for act in vm.init_actions.actions.clone().iter() {
-            match act {
-                crate::runner::InitAction::MapFile { to, contents } => vm
-                    .store
+    fn apply_single_action(
+        &mut self,
+        vm: &mut VM,
+        ctx: &mut BTreeMap<String, String>,
+        action: &InitAction,
+    ) -> Result<Option<wasmtime::Instance>> {
+        match action {
+            InitAction::Trivial(InitActionTrivial::MapFile { to, contents }) => {
+                vm.store
                     .data_mut()
                     .genlayer_ctx_mut()
                     .preview1
-                    .map_file(&to, contents.clone())?,
-                crate::runner::InitAction::MapCode { to } => vm
-                    .store
+                    .map_file(&to, contents.clone())?;
+                Ok(None)
+            }
+            InitAction::Trivial(InitActionTrivial::MapCode { to }) => {
+                vm.store
                     .data_mut()
                     .genlayer_ctx_mut()
                     .preview1
-                    .map_file(&to, vm.init_actions.code.clone())?,
-                crate::runner::InitAction::AddEnv { name, val } => match env.entry(name.clone()) {
+                    .map_file(&to, vm.init_actions.code.clone())?;
+                Ok(None)
+            }
+            InitAction::Trivial(InitActionTrivial::AddEnv { name, val }) => {
+                match ctx.entry(name.clone()) {
                     std::collections::btree_map::Entry::Vacant(vacant_entry) => {
                         vacant_entry.insert(val.clone());
                     }
@@ -440,65 +447,92 @@ impl Supervisor {
                         occupied_entry.get_mut().push_str(":");
                         occupied_entry.get_mut().push_str(val);
                     }
-                },
-                crate::runner::InitAction::SetArgs { args } => vm
-                    .store
+                }
+                Ok(None)
+            }
+            InitAction::Trivial(InitActionTrivial::SetArgs(args)) => {
+                vm.store
                     .data_mut()
                     .genlayer_ctx_mut()
                     .preview1
-                    .set_args(&args[..])?,
-                crate::runner::InitAction::LinkWasm {
-                    contents,
-                    debug_path,
-                } => {
-                    let module = self.link_wasm_into(vm, contents.clone(), Some(debug_path))?;
-                    let instance = vm.linker.instantiate(&mut vm.store, &module)?;
-                    let name = module.name().ok_or(anyhow::anyhow!(
-                        "can't link unnamed module {:?}",
-                        &debug_path
-                    ))?;
-                    vm.linker.instance(&mut vm.store, name, instance)?;
-                    match instance.get_typed_func::<(), ()>(&mut vm.store, "_initialize") {
-                        Err(_) => {}
-                        Ok(func) => {
-                            func.call(&mut vm.store, ())?;
-                        }
+                    .set_args(&args[..])?;
+                Ok(None)
+            }
+            InitAction::Trivial(InitActionTrivial::LinkWasm {
+                contents,
+                debug_path,
+            }) => {
+                let module = self.link_wasm_into(vm, contents.clone(), Some(debug_path))?;
+                let instance = vm.linker.instantiate(&mut vm.store, &module)?;
+                let name = module.name().ok_or(anyhow::anyhow!(
+                    "can't link unnamed module {:?}",
+                    &debug_path
+                ))?;
+                vm.linker.instance(&mut vm.store, name, instance)?;
+                match instance.get_typed_func::<(), ()>(&mut vm.store, "_initialize") {
+                    Err(_) => {}
+                    Ok(func) => {
+                        func.call(&mut vm.store, ())?;
                     }
                 }
-                crate::runner::InitAction::StartWasm {
-                    contents,
-                    debug_path,
-                } => {
-                    let env: Vec<(String, String)> = env.into_iter().collect();
-                    vm.store
-                        .data_mut()
-                        .genlayer_ctx_mut()
-                        .preview1
-                        .set_env(&env)?;
-                    let module = self.link_wasm_into(vm, contents.clone(), Some(debug_path))?;
-                    return vm.linker.instantiate(&mut vm.store, &module);
+                Ok(None)
+            }
+            InitAction::Trivial(InitActionTrivial::StartWasm {
+                contents,
+                debug_path,
+            }) => {
+                let env: Vec<(String, String)> =
+                    ctx.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                vm.store
+                    .data_mut()
+                    .genlayer_ctx_mut()
+                    .preview1
+                    .set_env(&env)?;
+                let module = self.link_wasm_into(vm, contents.clone(), Some(debug_path))?;
+                Ok(Some(vm.linker.instantiate(&mut vm.store, &module)?))
+            }
+            InitAction::When { cond, act } => {
+                if (*cond == WasmMode::Det) != vm.is_det() {
+                    return Ok(None);
                 }
+                self.apply_single_action(vm, ctx, act)
+            }
+            InitAction::Seq(vec) => {
+                for act in vec {
+                    match self.apply_single_action(vm, ctx, act)? {
+                        Some(x) => return Ok(Some(x)),
+                        None => {}
+                    }
+                }
+                Ok(None)
             }
         }
-        Err(anyhow::anyhow!(
-            "actions returned by runner do not have a start instruction"
-        ))
+    }
+
+    pub fn apply_actions(&mut self, vm: &mut VM) -> Result<wasmtime::Instance> {
+        let mut env = BTreeMap::new();
+
+        match self.apply_single_action(vm, &mut env, &vm.init_actions.actions.clone())? {
+            Some(e) => Ok(e),
+            None => Err(anyhow::anyhow!(
+                "actions returned by runner do not have a start instruction"
+            )),
+        }
     }
 
     pub fn get_actions_for(
         &mut self,
         contract_account: &crate::AccountAddress,
-    ) -> Result<InitActions> {
+    ) -> Result<ContractCodeData> {
         let code = self.host.get_code(contract_account)?;
+        let mut runner = runner::RunnerReader::new()?;
         let actions = if wasmparser::Parser::is_core_wasm(&code[..]) {
-            Vec::from([InitAction::StartWasm {
+            InitAction::Trivial(InitActionTrivial::StartWasm {
                 contents: code.clone(),
                 debug_path: "<contract>".into(),
-            }])
+            })
         } else if let Ok(mut as_contr) = zip::ZipArchive::new(std::io::Cursor::new(&code)) {
-            let mut runner = runner::RunnerReader::new()?;
-            runner.append_archive("<contract>", &mut as_contr, &mut self.runner_cache)?;
-            runner.get()?
+            runner.get_for_archive("<contract>", &mut as_contr, &mut self.runner_cache)?
         } else {
             let code_str = str::from_utf8(&code[..])?;
             let code_start = (|| {
@@ -532,11 +566,10 @@ impl Supervisor {
 
             let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&mut buf[..]))?;
             let mut runner = runner::RunnerReader::new()?;
-            runner.append_archive("<contract>", &mut zip, &mut self.runner_cache)?;
-            runner.get()?
+            runner.get_for_archive("<contract>", &mut zip, &mut self.runner_cache)?
         };
 
-        Ok(InitActions {
+        Ok(ContractCodeData {
             code,
             actions: Arc::new(actions),
         })

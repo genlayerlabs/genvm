@@ -34,17 +34,22 @@ def account_from_b64(x: str) -> bytes:
 	return base64.b64decode(x)
 
 
+def _make_calldata_obj(method, args, kwargs):
+	ret = {'method': method}
+	if len(args) > 0:
+		ret.update({'args': args})
+	if len(kwargs) > 0:
+		ret.update({'kwargs': kwargs})
+	return ret
+
+
 class _ContractAtViewMethod:
 	def __init__(self, addr: Address, name: str):
 		self.addr = addr
 		self.name = name
 
 	def __call__(self, *args, **kwargs) -> Lazy[typing.Any]:
-		obj = {
-			'method': self.name,
-			'args': args,
-			'kwargs': kwargs,
-		}
+		obj = _make_calldata_obj(self.name, args, kwargs)
 		cd = calldata.encode(obj)
 		return _lazy_from_fd(
 			wasi.call_contract(self.addr.as_bytes, cd), _decode_sub_vm_result
@@ -59,11 +64,7 @@ class _ContractAtEmitMethod:
 		self.code = code
 
 	def __call__(self, *args, **kwargs) -> None:
-		obj = {
-			'method': self.name,
-			'args': args,
-			'kwargs': kwargs,
-		}
+		obj = _make_calldata_obj(self.name, args, kwargs)
 		cd = calldata.encode(obj)
 		wasi.post_message(self.addr.as_bytes, cd, self.gas, self.code)
 

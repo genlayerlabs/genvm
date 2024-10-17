@@ -28,13 +28,3 @@ def _lazy_from_fd[T](
 			return after(f.read())
 
 	return Lazy(run)
-
-
-def _run_nondet(
-	leader_fn: typing.Callable[[], typing.Any],
-	validator_fn: typing.Callable[[typing.Any | Rollback], bool],
-) -> Lazy[typing.Any]:
-	import cloudpickle
-
-	fd = wasi.run_nondet(cloudpickle.dumps(leader_fn), cloudpickle.dumps(validator_fn))
-	return _lazy_from_fd(fd, _decode_sub_vm_result)
