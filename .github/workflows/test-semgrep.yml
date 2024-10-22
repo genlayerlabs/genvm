@@ -56,8 +56,15 @@ jobs:
           # Upload file directly to GCS
           gsutil cp semgrep.txt "gs://${GCS_BUCKET}/${FILENAME}"
           
-          # Generate signed URL
-          SIGNED_URL=$(gsutil signurl -d ${URL_EXPIRATION} "${GCS_BUCKET}/${FILENAME}" | awk 'NR==2 {print $5}')
+          # Extract JSON key to a file for signurl
+          echo "${{ secrets.GCP_SA_KEY }}" > key.json
+          
+          # Generate signed URL using the key file
+          SIGNED_URL=$(gsutil signurl -d "${URL_EXPIRATION}" key.json "gs://${GCS_BUCKET}/${FILENAME}" | awk 'NR==2 {print $5}')
+          
+          # Clean up key file
+          rm key.json
+          
           echo "url=${SIGNED_URL}" >> $GITHUB_OUTPUT
 
   create_comment:
