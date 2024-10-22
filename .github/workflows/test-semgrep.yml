@@ -54,7 +54,7 @@ jobs:
           path: semgrep.txt
           destination: ${{ env.GCS_BUCKET }}/${{ steps.filename.outputs.filename }}
           parent: false
-          predefinedAcl: publicRead
+          # predefinedAcl: publicRead
 
   create_comment:
     name: Create comment with link to semgrep.txt
