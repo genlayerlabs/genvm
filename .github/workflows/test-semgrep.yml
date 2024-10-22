@@ -1,5 +1,4 @@
 name: Semgrep OSS scan
-
 on:
   push:
     branches:
@@ -14,21 +13,17 @@ permissions:
   pull-requests: write
 
 env:
-  GCS_BUCKET: "gh-af"
-  URL_EXPIRATION: "604800s"
+  GCS_BUCKET: "your-bucket-name"  # Replace with your bucket name
 
 jobs:
   semgrep:
     name: semgrep-oss/scan
     runs-on: ubuntu-latest
-    outputs:
-      signed_url: ${{ steps.generate-signed-url.outputs.url }}
     if: (github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]')
     
     steps:
       - uses: actions/checkout@v4
-
-      # Run Semgrep in a container while mounting the workspace
+      
       - name: Run Semgrep scan
         run: |
           docker run --rm \
@@ -36,32 +31,30 @@ jobs:
             -w /src \
             semgrep/semgrep \
             semgrep scan --config auto --text > semgrep.txt
-
+            
       - id: auth
         name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-
+          
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
-
-      - name: Upload to GCS and generate signed URL
-        id: generate-signed-url
+        
+      - name: Generate filename
+        id: filename
         run: |
-          # Create unique filename with timestamp
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-          FILENAME="semgrep_${GITHUB_SHA}_${TIMESTAMP}.txt"
+          echo "filename=semgrep_${GITHUB_SHA}_${TIMESTAMP}.txt" >> $GITHUB_OUTPUT
+          echo "gcs_url=https://storage.googleapis.com/${GCS_BUCKET}/semgrep_${GITHUB_SHA}_${TIMESTAMP}.txt" >> $GITHUB_OUTPUT
           
-          # Upload file directly to GCS
-          gsutil cp semgrep.txt "gs://${GCS_BUCKET}/${FILENAME}"
-          
-          # Generate signed URL using gcloud storage
-          SIGNED_URL=$(gcloud storage sign-url \
-            "gs://${GCS_BUCKET}/${FILENAME}" \
-            --duration="${URL_EXPIRATION}")
-          
-          echo "url=${SIGNED_URL}" >> $GITHUB_OUTPUT
+      - name: Upload to GCS
+        uses: google-github-actions/upload-cloud-storage@v2
+        with:
+          path: semgrep.txt
+          destination: ${{ env.GCS_BUCKET }}/${{ steps.filename.outputs.filename }}
+          parent: false
+          predefinedAcl: publicRead
 
   create_comment:
     name: Create comment with link to semgrep.txt
@@ -70,11 +63,10 @@ jobs:
     if: github.event_name == 'pull_request'
     
     steps:
-      - name: Add a comment with the signed URL
+      - name: Add a comment with the GCS URL
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: "Semgrep Scan Results"
           message: |
             The Semgrep OSS scan for commit ${{ github.sha }} is complete.
-            You can download the scan results using [this secure link](${{ needs.semgrep.outputs.signed_url }}).
-            Note: This link will expire in 7 days.
+            You can view the scan results at: ${{ needs.semgrep.outputs.gcs_url }}
