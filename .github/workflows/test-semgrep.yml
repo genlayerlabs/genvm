@@ -13,7 +13,7 @@ permissions:
   pull-requests: write
 
 env:
-  GCS_BUCKET: "your-bucket-name"  # Replace with your bucket name
+  GCS_BUCKET: "gh-af"
 
 jobs:
   semgrep:
