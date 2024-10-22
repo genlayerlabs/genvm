@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      # - staging
   workflow_dispatch:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
@@ -14,43 +13,65 @@ permissions:
   security-events: write
   pull-requests: write
 
+env:
+  GCS_BUCKET: "gh-af"
+  URL_EXPIRATION: "604800s"
+
 jobs:
   semgrep:
     name: semgrep-oss/scan
     runs-on: ubuntu-latest
-    container:
-      # A Docker image with Semgrep installed. Do not change this.
-      image: semgrep/semgrep
-
     outputs:
-      artifact_url: ${{ steps.artifact-upload-step.outputs.artifact-url }}
-    # Skip any PR created by dependabot/renovatebot to avoid permission issues:
+      signed_url: ${{ steps.generate-signed-url.outputs.url }}
     if: (github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]')
+    
     steps:
       - uses: actions/checkout@v4
 
-      - id: semgrep_scan
-        run: semgrep scan --config auto --text > semgrep.txt
+      # Run Semgrep in a container while mounting the workspace
+      - name: Run Semgrep scan
+        run: |
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/src" \
+            -w /src \
+            semgrep/semgrep \
+            semgrep scan --config auto --text > semgrep.txt
 
-      - name: Upload semgrep.txt
-        uses: actions/upload-artifact@v4
-        id: artifact-upload-step
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          name: semgrep-results
-          path: semgrep.txt
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Upload to GCS and generate signed URL
+        id: generate-signed-url
+        run: |
+          # Create unique filename with timestamp
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          FILENAME="semgrep_${GITHUB_SHA}_${TIMESTAMP}.txt"
+          
+          # Upload file directly to GCS
+          gsutil cp semgrep.txt "gs://${GCS_BUCKET}/${FILENAME}"
+          
+          # Generate signed URL
+          SIGNED_URL=$(gsutil signurl -d ${URL_EXPIRATION} "${GCS_BUCKET}/${FILENAME}" | awk 'NR==2 {print $5}')
+          echo "url=${SIGNED_URL}" >> $GITHUB_OUTPUT
 
   create_comment:
     name: Create comment with link to semgrep.txt
     needs: semgrep
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
     steps:
-      - name: Add a comment with the artifact link
+      - name: Add a comment with the signed URL
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: "Semgrep Scan Results"
           message: |
             The Semgrep OSS scan for commit ${{ github.sha }} is complete.
-            You can download the scan results from [this link.](${{needs.semgrep.outputs.artifact_url}})
-            Please note that the files will be available for approximately 90 days!
-
-    if: github.event_name == 'pull_request'
+            You can download the scan results using [this secure link](${{ needs.semgrep.outputs.signed_url }}).
+            Note: This link will expire in 7 days.
