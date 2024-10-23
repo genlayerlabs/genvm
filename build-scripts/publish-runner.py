@@ -18,6 +18,13 @@ DEFAULT_TIME = (1980, 1, 1, 0, 0, 0)
 
 fake_zip = io.BytesIO()
 with zipfile.ZipFile(fake_zip, mode='w', compression=zipfile.ZIP_STORED) as zip_file:
+
+	def add_file(name, contents, ctx={}):
+		contents_hash = hashlib.sha3_256()
+		contents_hash.update(contents)
+		print(f'\tADDING {f} {contents_hash.digest()} {ctx}')
+		zip_file.writestr(zipfile.ZipInfo(name, date_time=DEFAULT_TIME), contents)
+
 	for file_conf in conf['files']:
 		if 'include' in file_conf:
 			with zipfile.ZipFile(file_conf['include']) as incl_zip:
@@ -28,15 +35,13 @@ with zipfile.ZipFile(fake_zip, mode='w', compression=zipfile.ZIP_STORED) as zip_
 					if info.is_dir():
 						pass  # zip_file.mkdir(zipfile.ZipInfo(f, DEFAULT_TIME), 444)
 					else:
-						zip_file.writestr(
-							zipfile.ZipInfo(f, date_time=DEFAULT_TIME), incl_zip.read(f)
-						)
+						add_file(f, incl_zip.read(f))
 			continue
-		with open(file_conf['read_from'], 'rb') as f:
+		read_from = file_conf['read_from']
+		with open(read_from, 'rb') as f:
 			contents = f.read()
 		path = file_conf['path']
-		info = zipfile.ZipInfo(path, date_time=DEFAULT_TIME)
-		zip_file.writestr(info, contents)
+		add_file(path, contents, {'read_from': read_from})
 fake_zip.flush()
 
 zip_contents = fake_zip.getvalue()
@@ -46,6 +51,8 @@ contents_hash.update(zip_contents)
 import base64
 
 contents_hash = str(base64.b32encode(contents_hash.digest()), encoding='ascii')
+
+print(f'CREATING {contents_hash}.zip')
 
 if conf['expected_hash'] is not None and conf['expected_hash'] != contents_hash:
 	raise Exception(

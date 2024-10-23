@@ -9,11 +9,11 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         tar zip unzip \
         git \
-        build-essential pkg-config \
+        build-essential pkg-config ninja-build \
         lzma-dev m4 zlib1g-dev libssl-dev ca-certificates && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
-    mkdir -p /out $WASM32_WASI_ROOT/include $WASM32_WASI_ROOT/lib $WASM32_WASI_ROOT/share
+    mkdir -p /out $WASM32_WASI_ROOT/include $WASM32_WASI_ROOT/lib $WASM32_WASI_ROOT/share /opt/whl
 
 # cmake
 
@@ -29,6 +29,8 @@ ADD --checksum=sha256:8bfd20c0e1d86f0402f2497cfa71c6ab62d4cd35fd704276e3140bfb71
     https://github.com/tukaani-project/xz/releases/download/v5.6.2/xz-5.6.2.tar.gz /opt/
 ADD --checksum=sha256:9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23 \
     https://www.zlib.net/zlib-1.3.1.tar.gz /opt/
+ADD --checksum=sha256:9c02361af9bfa10ff1ccf967fc75159e56b1c8093caf565739ed77a559c1f29f \
+    https://github.com/cython/cython/releases/download/3.0.11-1/Cython-3.0.11-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl /opt/whl
 
 RUN cd /opt && \
     tar -xf wasi-sdk-24.0-x86_64-linux.tar.gz && \
@@ -50,7 +52,13 @@ RUN mkdir -p /opt/cpython && cd /opt/cpython && \
     git init && \
     git remote add origin https://github.com/python/cpython.git && \
     git fetch origin e9b00cc78853373623031c657193cbe557488c0a --depth 1 && \
-    git checkout e9b00cc78853373623031c657193cbe557488c0a
+    git checkout e9b00cc78853373623031c657193cbe557488c0a && \
+    mkdir -p /opt/numpy && cd /opt/numpy && \
+    git init && \
+    git remote add origin https://github.com/numpy/numpy.git && \
+    git fetch origin 8c2476b23d13ca03a5595455a1120c9f80a651f4 --depth 1 && \
+    git checkout 8c2476b23d13ca03a5595455a1120c9f80a651f4 && \
+    git submodule update --init --recursive --depth 1
 
 WORKDIR /opt
 COPY ./scripts /scripts

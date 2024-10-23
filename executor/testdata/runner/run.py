@@ -345,10 +345,17 @@ with cfutures.ThreadPoolExecutor(max_workers=(os.cpu_count() or 1)) as executor:
 
 	if len(files) > 0:
 		# NOTE this is needed to cache wasm compilation result
-		first, *files = files
-		print('running the first test, it can take a while..')
-		process_result(first, lambda: run(first))
-		future2path = {executor.submit(run, path): path for path in files}
+		firsts = [f for f in files if f.name.startswith('_hello')]
+		lasts = [f for f in files if not f.name.startswith('_hello')]
+		if len(firsts) == 0:
+			firsts = [files[0]]
+			lasts = files[1:]
+		print(
+			f'running the first test(s) sequentially ({len(firsts)}), it can take a while..'
+		)
+		for f in firsts:
+			process_result(f, lambda: run(f))
+		future2path = {executor.submit(run, path): path for path in lasts}
 		for future in cfutures.as_completed(future2path):
 			path = future2path[future]
 			process_result(future2path[future], lambda: future.result())

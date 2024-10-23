@@ -4,7 +4,7 @@ import collections.abc
 import typing
 import collections.abc
 
-from .vec import Vec
+from .vec import DynArray
 from genlayer.py.types import u32, i8
 
 
@@ -29,18 +29,19 @@ class _Node[K, V]:
 
 class Comparable(typing.Protocol):
 	@abc.abstractmethod
-	def __eq__(self, other: typing.Any, /) -> bool:
-		pass
+	def __eq__(self, other: typing.Any, /) -> bool: ...
 
 	@abc.abstractmethod
-	def __lt__(self, other: typing.Any, /) -> bool:
-		pass
+	def __lt__(self, other: typing.Any, /) -> bool: ...
 
 
 class TreeMap[K: Comparable, V]:
 	root: u32
-	slots: Vec[_Node[K, V]]
-	free_slots: Vec[u32]
+	slots: DynArray[_Node[K, V]]
+	free_slots: DynArray[u32]
+
+	def __len__(self) -> int:
+		return len(self.slots) - len(self.free_slots)
 
 	def _alloc_slot(self) -> tuple[int, _Node[K, V]]:
 		if len(self.free_slots) > 0:

@@ -1,4 +1,4 @@
-from genlayer.py.storage import Vec, storage
+from genlayer.py.storage import DynArray, storage
 
 
 class A:
@@ -24,7 +24,7 @@ def test_assignments_depth_1():
 
 
 class C:
-	v: Vec[str]
+	v: DynArray[str]
 
 	def __init__(self, x: list[str]):
 		self.v = x  # type: ignore

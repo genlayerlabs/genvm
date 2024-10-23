@@ -1,4 +1,4 @@
-from genlayer.py.storage import Vec, storage, TreeMap
+from genlayer.py.storage import storage, TreeMap
 from genlayer.py.types import *
 
 
@@ -69,6 +69,8 @@ def test_insert():
 	while len(vals) > 0:
 		iteration += 1
 		it = vals.pop()
+		op(len)
+		op(lambda x: x[it])
 		op(lambda x: x.get(str(it), None))
 		op(lambda x: x.__setitem__(str(it), iteration), void=True)
 		same_iter()

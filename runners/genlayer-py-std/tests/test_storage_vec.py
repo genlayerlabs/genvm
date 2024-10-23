@@ -1,11 +1,11 @@
-from genlayer.py.storage import Vec, storage
+from genlayer.py.storage import DynArray, storage
 
 from .common import *
 
 
 @storage
 class StorVec:
-	x: Vec[str]
+	x: DynArray[str]
 
 
 def same_iter(li, ri):

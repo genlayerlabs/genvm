@@ -16,7 +16,7 @@ from .desc_base_types import (
 	_BoolDesc,
 )
 from .desc_record import _RecordDesc, WithRecordStorageSlot
-from .vec import Vec, _VecDesc
+from .vec import DynArray, _DynArrayDesc, Array, _ArrayDesc
 
 
 def storage(cls: type) -> type:
@@ -58,15 +58,23 @@ _known_descs: dict[type | _Instantiation, TypeDesc] = {
 
 
 def _storage_build(
-	cls: type | _Instantiation, generics_map: dict[str, TypeDesc]
+	cls: type | _Instantiation,
+	generics_map: dict[str, TypeDesc],
 ) -> TypeDesc:
 	if isinstance(cls, typing.TypeVar):
 		return generics_map[cls.__name__]
 
 	origin = typing.get_origin(cls)
-	if origin is not None:
+	if origin is Array:
+		args = typing.get_args(cls)
+		assert len(args) == 2
+		assert typing.get_origin(args[1]) is typing.Literal
+		lit_args = typing.get_args(args[1])
+		assert len(lit_args) == 1
+		assert isinstance(lit_args[0], int)
+		cls = _Instantiation(origin, (_storage_build(args[0], generics_map), lit_args[0]))  # type: ignore
+	elif origin is not None:
 		args = [_storage_build(c, generics_map) for c in typing.get_args(cls)]
-		old_cls = cls
 		cls = _Instantiation(origin, tuple(args))
 
 	old = _known_descs.get(cls, None)
@@ -89,8 +97,10 @@ def _storage_build_generic(
 		raise Exception(
 			f'incorrect number of generic arguments parameters={generic_params}, args={cls.args}'
 		)
-	if cls.origin is Vec:
-		return _VecDesc(cls.args[0])
+	if cls.origin is DynArray:
+		return _DynArrayDesc(cls.args[0])
+	elif cls.origin is Array:
+		return _ArrayDesc(cls.args[0], typing.cast(int, cls.args[1]))
 	else:
 		gen = {k.__name__: v for k, v in zip(generic_params, cls.args)}
 		res = _storage_build_struct(cls.origin, gen)
@@ -99,7 +109,7 @@ def _storage_build_generic(
 
 
 def _storage_build_struct(cls: type, generics_map: dict[str, TypeDesc]) -> TypeDesc:
-	if cls is Vec:
+	if cls is DynArray:
 		raise Exception('invalid builder')
 	size: int = 0
 	copy_actions: list[CopyAction] = []
