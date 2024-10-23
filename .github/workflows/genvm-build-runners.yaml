@@ -1,15 +1,6 @@
 name: GenVM build GenVM template
 on:
   workflow_call:
-    inputs:
-      build_type:
-        type: string
-        required: true
-        description: build type
-      runs_on:
-        type: string
-        required: true
-        description: runner id
     outputs:
       artifact_name:
         value: ${{ jobs.build.outputs.artifact_name }}
@@ -18,11 +9,13 @@ on:
 defaults:
   run:
     shell: bash -x {0}
+
 env:
   GCS_BUCKET: "gh-af"
+
 jobs:
   build:
-    runs-on: ${{ inputs.runs_on }}
+    runs-on: ubuntu-latest
     outputs:
       artifact_name: ${{ steps.upload.outputs.basename }}
       artifact_url: ${{ steps.upload.outputs.gcs_url }}
@@ -31,22 +24,35 @@ jobs:
       - name: Get source
         uses: ./.github/actions/get-src
         with:
-          install_also: --genvm --rust
-          third_party: executor/third-party/wasmtime executor/third-party/wasm-tools
-      - name: install tools and configure
+          install_also: --wasi --rust
+          third_party: sdk-rust/third-party/wasi-rs runners/softfloat/berkeley-softfloat-3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          save-always: true
+          path: /tmp/.buildx-cache
+          key: runners-buildx-${{ github.sha }}
+          restore-keys: |
+            runners-buildx-
+      - name: Configure
         run: |
-          cd "$GITHUB_WORKSPACE" && \
           source env.sh && \
-          ./tools/ya-build/ya-build config --preload .ci/${{ inputs.build_type }}-conf.rb
-      - name: build
+          ya-build config
+      - name: Build extension
         run: |
-          cd "$GITHUB_WORKSPACE" && \
-            source env.sh && \
-            ninja -v -C build genvm/executor/all && \
-            tree build/out && \
-            pushd build/out && \
-            zip -r -9 ../genvm_executor.zip * && \
-            popd
+          source env.sh && \
+          ninja --verbose -C build genvm/runners/cpython/extension && \
+          git diff -U1 --exit-code
+      - name: Build
+        run: |
+          source env.sh && \
+          ninja --verbose -C build tags/runner && \
+          tree build/out && \
+          pushd build/out && \
+          zip -r -9 ../runners.zip * && \
+          popd
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -58,9 +64,9 @@ jobs:
         id: upload
         run: |
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-          DIR_NAME="genvm_executor_${GITHUB_SHA}_${TIMESTAMP}"
+          DIR_NAME="genvm_runners_${GITHUB_SHA}_${TIMESTAMP}"
           echo "dirname=$DIR_NAME" >> $GITHUB_OUTPUT
-          BASE_NAME="genvm_executor.zip"
+          BASE_NAME="runners.zip"
           echo "basename=$BASE_NAME" >> $GITHUB_OUTPUT
           echo "gcs_url=https://storage.googleapis.com/$GCS_BUCKET/$DIR_NAME/$BASE_NAME" >> $GITHUB_OUTPUT
       - name: Upload to GCS
