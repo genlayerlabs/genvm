@@ -13,9 +13,15 @@ defaults:
   run:
     shell: bash -x {0}
 
+env:
+  GCS_BUCKET: "gh-af"
+
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.changes.outputs.python }}
+      rs: ${{ steps.changes.outputs.rs }}
     steps:
       - uses: actions/checkout@v4
       - name: Get source
@@ -31,12 +37,21 @@ jobs:
           cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \
           ninja -v -C build tags/codegen
       - uses: pre-commit/action@v3.0.1
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            python:
+              - runners/genlayer-py-std/src/genlayer/py/**/*.py
+            rs:
+              - '**/*.rs'
 
 ### MODULE TESTS
 
   module-test-cargo:
     needs: [pre-commit]
     runs-on: ubuntu-latest
+    if: needs.pre-commit.outputs.rs == 'true' || github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - name: Get source
@@ -58,6 +73,7 @@ jobs:
   module-test-python:
     needs: [pre-commit]
     runs-on: ubuntu-latest
+    if: needs.pre-commit.outputs.python == 'true' || github.ref == 'refs/heads/main'
     steps:
       - run: sudo apt-get install -y python3-poetry
       - uses: actions/checkout@v4
@@ -84,59 +100,20 @@ jobs:
 ### RUNNERS
 
   build-runners:
-    runs-on: ubuntu-latest
     needs: [pre-commit]
-    outputs:
-      url: ${{ steps.artifact-upload-step.outputs.artifact-url }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Get source
-        uses: ./.github/actions/get-src
-        with:
-          install_also: --wasi --rust
-          third_party: sdk-rust/third-party/wasi-rs runners/softfloat/berkeley-softfloat-3
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          save-always: true
-          path: /tmp/.buildx-cache
-          key: runners-buildx-${{ github.sha }}
-          restore-keys: |
-            runners-buildx-
-      - name: Configure
-        run: |
-          source env.sh && \
-          ya-build config
-      - name: Build extension
-        run: |
-          source env.sh && \
-          ninja --verbose -C build genvm/runners/cpython/extension && \
-          git diff -U1 --exit-code
-      - name: Build
-        run: |
-          source env.sh && \
-          ninja --verbose -C build tags/runner && \
-          tree build/out && \
-          pushd build/out && \
-          zip -r -9 ../runners.zip * && \
-          popd
-      - name: Publish runners
-        id: artifact-upload-step
-        uses: actions/upload-artifact@v4
-        with:
-          name: runners
-          path: ${{ github.workspace }}/build/runners.zip
+    uses: ./.github/workflows/genvm-build-runners.yaml
+    secrets: inherit
 
 ### GENVMS build
 
   build-genvm-debug-ubuntu-latest:
-    needs: [module-test-cargo, module-test-python]
+    needs: [pre-commit]
     uses: ./.github/workflows/genvm-build-template.yaml
     with:
       build_type: debug
       runs_on: ubuntu-latest
+    secrets: inherit
+
 #  build-genvm-release-ubuntu-latest:
 #    needs: []
 #    uses: ./.github/workflows/genvm-build-template.yaml
@@ -152,14 +129,16 @@ jobs:
 #      runs_on: macos-latest
 
 ### GENVMS test
+
   test-genvm-debug-ubuntu-latest:
     needs: [build-runners, build-genvm-debug-ubuntu-latest]
     uses: ./.github/workflows/genvm-test-template.yaml
     with:
       runs_on: ubuntu-latest
-      # based on genvm-${{ inputs.build_type }}-${{ inputs.runs_on }}
-      # ${{ needs.test-genvm-debug-ubuntu-latest.outputs.art-name }} doesn't work
-      genvm_artifact_name: genvm-debug-ubuntu-latest
+      genvm_artifact_name: ${{ needs.build-genvm-debug-ubuntu-latest.outputs.artifact_name }}
+      genvm_artifact_url: ${{ needs.build-genvm-debug-ubuntu-latest.outputs.artifact_url }}
+      runners_artifact_name: ${{ needs.build-runners.outputs.artifact_name }}
+      runners_artifact_url: ${{ needs.build-runners.outputs.artifact_url }}
     secrets: inherit
 
 #  test-genvm-release-ubuntu-latest:

@@ -22,7 +22,7 @@ Storage can be seen as a mapping from account address to slot address to linear 
 ## Communication protocol
 All further communication is done via socket. If genvm process exited before sending the result, it means that genvm crushed. Potential bug should be reported
 
-Method ids list is available as [json](../../genvm/codegen/data/host-fns.json)
+Method ids list is available as [json](../../executor/codegen/data/host-fns.json)
 
 ```
 fn write_bytes_with_len(arr):
