@@ -1,10 +1,10 @@
-# { "depends": ["genlayer-py-std:test"] }
+# { "Depends": "genlayer-py-std:test" }
 
-import genlayer.std as gsdk
+import genlayer.std as gl
 from genlayer.py.types import *
 from genlayer.py.storage import storage
 
-__gsdk_self_run__ = True
+__gl_self_run__ = True
 
 
 class Test:

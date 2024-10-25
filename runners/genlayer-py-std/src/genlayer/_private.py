@@ -1,9 +1,9 @@
 import typing
 import genlayer.wasi as wasi
 import genlayer.py.calldata as calldata
-from .py.types import Rollback
-from .asyn import AwaitableResultMap
+from .py.types import Rollback, Lazy
 import collections.abc
+import os
 
 
 def _decode_sub_vm_result_retn(data: collections.abc.Buffer) -> typing.Any | Rollback:
@@ -20,23 +20,11 @@ def _decode_sub_vm_result(data: collections.abc.Buffer) -> typing.Any:
 	return dat
 
 
-def _run_nondet(
-	leader_fn: typing.Callable[[], typing.Any],
-	validator_fn: typing.Callable[[typing.Any | Rollback], bool],
-) -> AwaitableResultMap[typing.Any]:
-	import cloudpickle
+def _lazy_from_fd[T](
+	fd: int, after: typing.Callable[[collections.abc.Buffer], T]
+) -> Lazy[T]:
+	def run():
+		with os.fdopen(fd, 'rb') as f:
+			return after(f.read())
 
-	fd = wasi.run_nondet(cloudpickle.dumps(leader_fn), cloudpickle.dumps(validator_fn))
-	return AwaitableResultMap(fd, _decode_sub_vm_result)
-
-
-def _call_user_fn(fn: typing.Callable[[], typing.Any]) -> typing.Any:
-	res = fn()
-	if hasattr(res, '__await__'):
-		try:
-			res.send(None)
-		except StopIteration as si:
-			return si.value
-		raise Exception('invalid __await__ method')
-	else:
-		return res
+	return Lazy(run)

@@ -1,18 +1,18 @@
-# { "depends": ["genlayer-py-std:test"] }
-import genlayer.std as gsdk
+# { "Depends": "genlayer-py-std:test" }
+import genlayer.std as gl
 
 
-@gsdk.contract
+@gl.contract
 class Contract:
-	@gsdk.public
-	async def main(self):
+	@gl.public
+	def main(self):
 		try:
 
 			def run():
-				gsdk.rollback_immediate("nah, I won't execute")
+				gl.rollback_immediate("nah, I won't execute")
 
-			res = await gsdk.eq_principle_refl(run)
-		except gsdk.Rollback as r:
+			res = gl.eq_principle_refl(run).get()
+		except gl.Rollback as r:
 			print('handled', r.msg)
 		else:
 			print(res)

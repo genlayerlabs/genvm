@@ -21,7 +21,7 @@ fn replace_all<E>(
     Ok(new)
 }
 
-pub fn patch_str(vars: &HashMap<String, String>, s: &String) -> Result<String> {
+pub fn patch_str(vars: &HashMap<String, String>, s: &str) -> Result<String> {
     replace_all(&JSON_UNFOLDER_RE, s, |r: &regex::Captures| {
         let r: &str = &r[1];
         vars.get(r)

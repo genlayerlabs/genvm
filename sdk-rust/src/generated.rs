@@ -65,10 +65,50 @@ extern crate std;
 #[cfg(feature = "std")]
 impl std::error::Error for Errno {}
 
+#[repr(transparent)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Success(u32);
+pub const SUCCESS_FALSE: Success = Success(0);
+pub const SUCCESS_TRUE: Success = Success(1);
+impl Success {
+    pub const fn raw(&self) -> u32 {
+        self.0
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self.0 {
+            0 => "FALSE",
+            1 => "TRUE",
+            _ => unsafe { core::hint::unreachable_unchecked() },
+        }
+    }
+    pub fn message(&self) -> &'static str {
+        match self.0 {
+            0 => "",
+            1 => "",
+            _ => unsafe { core::hint::unreachable_unchecked() },
+        }
+    }
+}
+impl fmt::Debug for Success {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Success")
+            .field("code", &self.0)
+            .field("name", &self.name())
+            .field("message", &self.message())
+            .finish()
+    }
+}
+
 pub type BytesLen = u32;
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct Addr {
+    pub ptr: *const u8,
+}
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct FullAddr {
     pub ptr: *const u8,
 }
 pub type Fd = u32;
@@ -151,9 +191,9 @@ pub unsafe fn get_webpage(config: &str, url: &str) -> Result<Fd, Errno> {
     }
 }
 
-pub unsafe fn call_llm(config: &str, prompt: &str) -> Result<Fd, Errno> {
+pub unsafe fn exec_prompt(config: &str, prompt: &str) -> Result<Fd, Errno> {
     let mut rp0 = MaybeUninit::<Fd>::uninit();
-    let ret = genlayer_sdk::call_llm(
+    let ret = genlayer_sdk::exec_prompt(
         config.as_ptr() as i32,
         config.len() as i32,
         prompt.as_ptr() as i32,
@@ -162,6 +202,19 @@ pub unsafe fn call_llm(config: &str, prompt: &str) -> Result<Fd, Errno> {
     );
     match ret {
         0 => Ok(core::ptr::read(rp0.as_mut_ptr() as i32 as *const Fd)),
+        _ => Err(Errno(ret as u32)),
+    }
+}
+
+pub unsafe fn eq_principle_prompt(config: &str) -> Result<Success, Errno> {
+    let mut rp0 = MaybeUninit::<Success>::uninit();
+    let ret = genlayer_sdk::eq_principle_prompt(
+        config.as_ptr() as i32,
+        config.len() as i32,
+        rp0.as_mut_ptr() as i32,
+    );
+    match ret {
+        0 => Ok(core::ptr::read(rp0.as_mut_ptr() as i32 as *const Success)),
         _ => Err(Errno(ret as u32)),
     }
 }
@@ -197,7 +250,7 @@ pub unsafe fn post_message(
     }
 }
 
-pub unsafe fn storage_read(slot: Addr, index: u32, buf: MutBytes) -> Result<(), Errno> {
+pub unsafe fn storage_read(slot: FullAddr, index: u32, buf: MutBytes) -> Result<(), Errno> {
     let ret = genlayer_sdk::storage_read(
         &slot as *const _ as i32,
         index as i32,
@@ -209,7 +262,7 @@ pub unsafe fn storage_read(slot: Addr, index: u32, buf: MutBytes) -> Result<(), 
     }
 }
 
-pub unsafe fn storage_write(slot: Addr, index: u32, buf: Bytes) -> Result<(), Errno> {
+pub unsafe fn storage_write(slot: FullAddr, index: u32, buf: Bytes) -> Result<(), Errno> {
     let ret = genlayer_sdk::storage_write(
         &slot as *const _ as i32,
         index as i32,
@@ -230,7 +283,8 @@ pub mod genlayer_sdk {
         pub fn get_entrypoint(arg0: i32) -> i32;
         pub fn run_nondet(arg0: i32, arg1: i32, arg2: i32) -> i32;
         pub fn get_webpage(arg0: i32, arg1: i32, arg2: i32, arg3: i32, arg4: i32) -> i32;
-        pub fn call_llm(arg0: i32, arg1: i32, arg2: i32, arg3: i32, arg4: i32) -> i32;
+        pub fn exec_prompt(arg0: i32, arg1: i32, arg2: i32, arg3: i32, arg4: i32) -> i32;
+        pub fn eq_principle_prompt(arg0: i32, arg1: i32, arg2: i32) -> i32;
         pub fn call_contract(arg0: i32, arg1: i32, arg2: i32) -> i32;
         pub fn post_message(arg0: i32, arg1: i32, arg2: i64, arg3: i32) -> i32;
         pub fn storage_read(arg0: i32, arg1: i32, arg2: i32) -> i32;

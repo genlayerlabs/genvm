@@ -10,11 +10,30 @@ use crate::vm;
 
 #[serde_as]
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash, Copy)]
-pub struct Address(#[serde_as(as = "Base64")] pub [u8; 32]);
+pub struct AccountAddress(#[serde_as(as = "Base64")] pub [u8; 20]);
 
-impl Address {
+impl AccountAddress {
+    pub fn raw(&self) -> [u8; 20] {
+        let AccountAddress(r) = self;
+        *r
+    }
+
+    pub fn new() -> Self {
+        Self([0; 20])
+    }
+
+    pub const fn len() -> usize {
+        return 20;
+    }
+}
+
+#[serde_as]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash, Copy)]
+pub struct GenericAddress(#[serde_as(as = "Base64")] pub [u8; 32]);
+
+impl GenericAddress {
     pub fn raw(&self) -> [u8; 32] {
-        let Address(r) = self;
+        let GenericAddress(r) = self;
         *r
     }
 
@@ -30,8 +49,8 @@ impl Address {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MessageData {
     pub gas: u64,
-    pub contract_account: crate::Address,
-    pub sender_account: crate::Address,
+    pub contract_account: crate::AccountAddress,
+    pub sender_account: crate::AccountAddress,
     pub value: Option<u64>,
     pub is_init: bool,
 }
@@ -111,7 +130,7 @@ impl Host {
         Ok(())
     }
 
-    pub fn get_code(&mut self, account: &Address) -> Result<Arc<[u8]>> {
+    pub fn get_code(&mut self, account: &AccountAddress) -> Result<Arc<[u8]>> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -129,8 +148,8 @@ impl Host {
     pub fn storage_read(
         &mut self,
         remaining_gas: &mut u64,
-        account: Address,
-        slot: Address,
+        account: AccountAddress,
+        slot: GenericAddress,
         index: u32,
         buf: &mut [u8],
     ) -> Result<()> {
@@ -155,8 +174,8 @@ impl Host {
     pub fn storage_write(
         &mut self,
         remaining_gas: &mut u64,
-        account: Address,
-        slot: Address,
+        account: AccountAddress,
+        slot: GenericAddress,
         index: u32,
         buf: &[u8],
     ) -> Result<()> {
@@ -233,7 +252,7 @@ impl Host {
 
     pub fn post_message(
         &mut self,
-        account: &Address,
+        account: &AccountAddress,
         gas: u64,
         calldata: &[u8],
         code: &[u8],

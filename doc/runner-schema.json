@@ -1,48 +1,11 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "GenVM runner schema",
-    "type": "object",
-    "anyOf": [
-        {
-          "required": [
-              "pre_actions"
-          ]
-        },
-        {
-          "required": [
-            "depends"
-          ]
-        },
-      {
-        "required": [
-          "actions"
-        ]
-      }
-    ],
-    "properties": {
-      "depends": {
-        "type": "array",
-        "items": {
-          "type": "string",
-          "description": "other runner id"
-        }
-      },
-      "actions": {
-        "description": "Actions to run on loading. It is ran after loading dependencies",
-        "type": "array",
-        "items": {
-          "$ref": "#/definitions/InitAction"
-        }
-      },
-      "pre_actions": {
-        "description": "Actions to run on loading. It is ran before loading dependencies",
-        "type": "array",
-        "items": {
-          "$ref": "#/definitions/InitAction"
-        }
-      }
-    },
+    "$ref": "#/definitions/InitAction",
     "definitions": {
+      "WasmMode": {
+        "enum": ["det", "nondet"]
+      },
       "InitAction": {
         "description": "A single rule for loading.",
         "type": "object",
@@ -75,6 +38,21 @@
           {
             "required": [
               "StartWasm"
+            ]
+          },
+          {
+            "required": [
+              "Depends"
+            ]
+          },
+          {
+            "required": [
+              "Seq"
+            ]
+          },
+          {
+            "required": [
+              "When"
             ]
           }
         ],
@@ -119,33 +97,36 @@
           },
           "SetArgs": {
             "description": "sets process arguments for genvm",
-            "type": "object",
-            "properties": {
-              "args": {
-                "type": "array",
-                "elementType": "string",
-                "description": "all program arguments to set in genvm (argv)"
-              }
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           },
           "LinkWasm": {
             "description": "Link wasm file to be available from genvm",
-            "type": "object",
-            "properties": {
-              "file": {
-                "type": "string",
-                "description": "path to file within archive"
-              }
-            }
+            "type": "string"
           },
           "StartWasm": {
             "description": "Start wasm file in genvm",
+            "type": "string"
+          },
+          "Depends": {
+            "description": "Depend on other runner by id:hash",
+            "type": "string"
+          },
+          "Seq": {
+            "description": "Execute sequence",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/InitAction"
+            }
+          },
+          "When": {
+            "description": "Conditionally execute action",
             "type": "object",
             "properties": {
-              "file": {
-                "type": "string",
-                "description": "path to file within archive"
-              }
+              "cond": { "$ref": "#/definitions/WasmMode" },
+              "action": { "$ref": "#/definitions/InitAction" }
             }
           }
         },

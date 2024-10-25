@@ -69,13 +69,10 @@ project('softfloat') {
 		out_dir: config.runners_dir,
 		create_test_runner: false,
 		files: [
-			{ path: 'softfloat.wasm', read_from: softfloat_lib.meta.output_file }
+			{ path: 'softfloat.wasm', read_from: softfloat_lib.meta.output_file },
 		],
 		runner_dict: {
-			"depends": [],
-			"actions": [
-				{ "LinkWasm": { "file": "softfloat.wasm" } }
-			]
+			LinkWasm: "softfloat.wasm",
 		},
 		expected_hash: config.runners.softfloat.hash,
 	)
@@ -84,7 +81,7 @@ project('softfloat') {
 		'runner',
 		runner_target,
 		tags: ['all', 'runner'],
-		inherit_meta: ['expected_hash']
+		inherit_meta: ['expected_hash', 'runner_dep_id']
 	)
 
 

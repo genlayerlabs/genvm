@@ -1,0 +1,17 @@
+=== fake storage ===
+0x0
+	bytearray(b'\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x03\x00\x00\x00\r\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00')
+0xf4495479b62637ddebbe95617a4927043c5d86b350d0baf3e685b7d132ee60a8
+	bytearray(b'123')
+0x3bcb0c912f24d9bd4f3e82502471dcebab4f505d25ff62f707509ca1254a03d8
+	bytearray(b'321')
+123 321
+=== fake storage ===
+0x0
+	bytearray(b'\r\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\r\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00')
+0xf4495479b62637ddebbe95617a4927043c5d86b350d0baf3e685b7d132ee60a8
+	bytearray(b'321')
+0x3bcb0c912f24d9bd4f3e82502471dcebab4f505d25ff62f707509ca1254a03d8
+	bytearray(b'321')
+321 321
+executed with `Return("\x00")`

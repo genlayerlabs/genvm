@@ -1,10 +1,10 @@
-# { "depends": ["genlayer-py-std:test"] }
-import genlayer.std as gsdk
+# { "Depends": "genlayer-py-std:test" }
+import genlayer.std as gl
 
 
-@gsdk.contract
+@gl.contract
 class Contract:
-	@gsdk.public
+	@gl.public
 	def foo(self, a, b):
 		print('contract to.foo')
 		import json

@@ -34,10 +34,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 =============================================================================*/
 
-#include <stdint.h>
 #include "platform.h"
-#include "specialize.h"
 #include "softfloat.h"
+#include "specialize.h"
+#include <stdint.h>
 
 /*----------------------------------------------------------------------------
 | Interpreting `uiA' and `uiB' as the bit patterns of two 64-bit floating-
@@ -46,12 +46,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 | signaling NaN, the invalid exception is raised.
 *----------------------------------------------------------------------------*/
 uint_fast64_t
- softfloat_propagateNaNF64UI( uint_fast64_t uiA, uint_fast64_t uiB )
+softfloat_propagateNaNF64UI(uint_fast64_t uiA, uint_fast64_t uiB)
 {
 
-    if ( softfloat_isSigNaNF64UI( uiA ) || softfloat_isSigNaNF64UI( uiB ) ) {
-        softfloat_raiseFlags( softfloat_flag_invalid );
+    if (softfloat_isSigNaNF64UI(uiA) || softfloat_isSigNaNF64UI(uiB)) {
+	softfloat_raiseFlags(softfloat_flag_invalid);
     }
     return defaultNaNF64UI;
-
 }

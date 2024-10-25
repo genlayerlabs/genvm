@@ -23,25 +23,17 @@ import typing
 import pickle
 import io
 
-from host_fns import *
-
-
-def _handle_exc(e):
-	if isinstance(e, (AbortThread, ConnectionResetError)):
-		return
-	import traceback
-
-	traceback.print_exception(e)
+from base_host import *
 
 
 class MockStorage:
-	_storages: dict[Address, dict[Address, bytearray]]
+	_storages: dict[Address, dict[bytes, bytearray]]
 
 	def __init__(self):
 		self._storages = {}
 
 	def read(
-		self, gas_before: int, account: Address, slot: Address, index: int, le: int
+		self, gas_before: int, account: Address, slot: bytes, index: int, le: int
 	) -> tuple[bytes, int]:
 		res = self._storages.setdefault(account, {})
 		res = res.setdefault(slot, bytearray())
@@ -54,23 +46,19 @@ class MockStorage:
 		self,
 		gas_before: int,
 		account: Address,
-		slot: Address,
+		slot: bytes,
 		index: int,
-		what: memoryview,
+		what: collections.abc.Buffer,
 	) -> int:
 		res = self._storages.setdefault(account, {})
 		res = res.setdefault(slot, bytearray())
+		what = memoryview(what)
 		res.extend(b'\x00' * (index + len(what) - len(res)))
 		memoryview(res)[index : index + len(what)] = what
 		return gas_before
 
 
-class AbortThread(Exception):
-	pass
-
-
-class MockHost:
-	thread: threading.Thread | None
+class MockHost(IHost):
 	sock: socket.socket | None
 	storage: MockStorage | None
 	messages_file: io.TextIOWrapper | None
@@ -104,138 +92,14 @@ class MockHost:
 		self.thread_should_stop = False
 		with open(self.storage_path_pre, 'rb') as f:
 			self.storage = pickle.load(f)
-		self.thread = threading.Thread(target=lambda: self._thread_fn(), daemon=True)
-		self.thread.start()
+
+		self.sock_listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+		self.sock_listener.bind(self.path)
+		self.sock_listener.listen(1)
+
 		return self
 
-	def _thread_fn(self):
-		try:
-			with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock_listener:
-				assert self.storage is not None
-				sock_listener.settimeout(0.1)
-				sock_listener.bind(self.path)
-				sock_listener.listen(1)
-				self.created = True
-				not_accept = True
-				while not_accept:
-					try:
-						sock, _ = sock_listener.accept()
-						sock.settimeout(0.1)
-						not_accept = False
-					except socket.timeout:
-						if self.thread_should_stop:
-							raise AbortThread()
-				buf = bytearray([0] * 4)
-
-				def read_exact(le, idx0=0):
-					buf.extend(b'\x00' * (idx0 + le - len(buf)))
-					idx = idx0
-					while idx < le:
-						if self.thread_should_stop:
-							raise AbortThread()
-						try:
-							idx += sock.recv_into(memoryview(buf)[idx:], idx0 + le - idx)
-						except socket.timeout:
-							pass
-
-				def read_exact_get(le, idx0=0):
-					read_exact(le, idx0)
-					return bytes(buf[idx0 : idx0 + le])
-
-				def recv_int(bytes=4) -> int:
-					read_exact(bytes)
-					return int.from_bytes(buf[:bytes], byteorder='little', signed=False)
-
-				def send_int(i: int, bytes=4):
-					sock.sendall(int.to_bytes(i, bytes, byteorder='little', signed=False))
-
-				def read_result():
-					read_exact(1)  # type
-					le = recv_int()  # len
-					read_exact(le)  # all
-
-				while not self.thread_should_stop:
-					read_exact(1)
-					match buf[0]:
-						case Methods.APPEND_CALLDATA:
-							send_int(len(self.calldata))
-							sock.sendall(self.calldata)
-						case Methods.GET_CODE:
-							addr = Address(read_exact_get(32))
-							res = self.codes.get(addr, None)
-							if res is not None:
-								res = res.get('code', None)
-							if res is None:
-								sock.sendall(b'\x01')
-							else:
-								with open(res, 'rb') as f:
-									contents = f.read()
-								send_int(len(contents))
-								sock.sendall(contents)
-						case Methods.STORAGE_READ:
-							gas_before = recv_int(8)
-							account = Address(read_exact_get(32))
-							slot = Address(read_exact_get(32))
-							index = recv_int()
-							le = recv_int()
-							res, gas = self.storage.read(gas_before, account, slot, index, le)
-							assert len(res) == le
-							send_int(gas, 8)
-							sock.sendall(res)
-						case Methods.STORAGE_WRITE:
-							gas_before = recv_int(8)
-							account = Address(read_exact_get(32))
-							slot = Address(read_exact_get(32))
-							index = recv_int()
-							le = recv_int()
-							read_exact(le)
-							gas = self.storage.write(
-								gas_before, account, slot, index, memoryview(buf)[:le]
-							)
-							send_int(gas, 8)
-						case Methods.CONSUME_RESULT:
-							read_result()
-							return
-						case Methods.GET_LEADER_NONDET_RESULT:
-							call_no = recv_int()  # call no
-							if self.leader_nondet is None:
-								sock.sendall(bytes([ResultCode.NONE]))
-							else:
-								res = self.leader_nondet[call_no]
-								if res['ok']:
-									sock.sendall(bytes([ResultCode.RETURN]))
-									data = _calldata.encode(res['value'])
-								else:
-									sock.sendall(bytes([ResultCode.ROLLBACK]))
-									dat: str = res['value']
-									data = dat.encode('utf-8')
-								send_int(len(data))
-								sock.sendall(data)
-						case Methods.POST_NONDET_RESULT:
-							recv_int()  # call no
-							read_result()
-						case Methods.POST_MESSAGE:
-							account = Address(read_exact_get(32))
-							gas = recv_int(8)
-							calldata_len = recv_int()
-							calldata = read_exact_get(calldata_len)
-							code_len = recv_int()
-							code = read_exact_get(code_len)
-							if self.messages_file is None:
-								self.messages_file = open(self.messages_path, 'wt')
-							self.messages_file.write(f'{gas}\n{calldata}\n{code}\n')
-						case x:
-							raise Exception(f'unknown method {x}')
-		except Exception as e:
-			_handle_exc(e)
-		finally:
-			self.thread_should_stop = True
-
 	def __exit__(self, *_args):
-		if self.thread is not None:
-			self.thread_should_stop = True
-			self.thread.join()
-			self.thread = None
 		if self.storage is not None:
 			with open(self.storage_path_post, 'wb') as f:
 				pickle.dump(self.storage, f)
@@ -243,12 +107,76 @@ class MockHost:
 		if self.messages_file is not None:
 			self.messages_file.close()
 			self.messages_file = None
+		if self.sock is not None:
+			self.sock.close()
 		Path(self.path).unlink(missing_ok=True)
+
+	async def loop_enter(self):
+		assert self.sock_listener is not None
+		self.sock = self.sock_listener.accept()[0]
+		self.sock_listener.close()
+		self.sock_listener = None
+		return self.sock
+
+	async def get_calldata(self) -> bytes:
+		return self.calldata
+
+	async def get_code(self, addr_b: bytes) -> bytes:
+		addr = Address(addr_b)
+		res = self.codes.get(addr, None)
+		if res is not None:
+			res = res.get('code', None)
+		if res is None:
+			raise Exception(f'no code for {addr}')
+		with open(res, 'rb') as f:
+			return f.read()
+
+	async def storage_read(
+		self, gas_before: int, account: bytes, slot: bytes, index: int, le: int
+	) -> tuple[bytes, int]:
+		assert self.storage is not None
+		return self.storage.read(gas_before, Address(account), slot, index, le)
+
+	async def storage_write(
+		self,
+		gas_before: int,
+		account: bytes,
+		slot: bytes,
+		index: int,
+		got: collections.abc.Buffer,
+	) -> int:
+		assert self.storage is not None
+		return self.storage.write(gas_before, Address(account), slot, index, got)
+
+	async def consume_result(
+		self, type: ResultCode, data: collections.abc.Buffer
+	) -> None:
+		pass
+
+	async def get_leader_nondet_result(self, call_no: int) -> bytes | str | None:
+		if self.leader_nondet is None:
+			return None
+		res = self.leader_nondet[call_no]
+		if res['ok']:
+			return _calldata.encode(res['value'])
+		else:
+			val = res['value']
+			assert isinstance(val, str)
+			return val
+
+	async def post_nondet_result(
+		self, call_no: int, type: ResultCode, data: collections.abc.Buffer
+	):
+		pass
+
+	async def post_message(
+		self, gas: int, account: bytes, calldata: bytes, code: bytes
+	) -> None:
+		if self.messages_file is None:
+			self.messages_file = open(self.messages_path, 'wt')
+			self.messages_file.write(f'{gas}\n{calldata}\n{code}\n')
 
 
 if __name__ == '__main__':
-	import time
-
 	with pickle.loads(Path(sys.argv[1]).read_bytes()) as host:
-		while not host.thread_should_stop:
-			time.sleep(0.2)
+		asyncio.run(host_loop(host))

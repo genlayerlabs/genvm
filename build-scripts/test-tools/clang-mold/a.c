@@ -1,5 +1,8 @@
-int foo();
+int
+foo();
 
-int main() {
+int
+main()
+{
     return foo();
 }

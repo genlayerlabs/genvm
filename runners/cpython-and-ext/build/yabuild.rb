@@ -74,18 +74,18 @@ py_runner_target = target_publish_runner(
 	out_dir: config.runners_dir,
 	files: [
 		{ include: cpython_libs_zip },
-		{ path: 'cpython.wasm', read_from: cpython_softfloat_wasm_path }
+		{ path: 'cpython.wasm', read_from: cpython_softfloat_wasm_path },
+		{ path: 'cpython.nondet.wasm', read_from: cpython_raw_wasm_path },
 	],
 	runner_dict: {
-		"depends": [
-			"softfloat:#{softfloat_target.meta.expected_hash}"
+		Seq: [
+			{ When: { cond: "det", action: { Depends: softfloat_target.meta.runner_dep_id } } },
+			{ AddEnv: { name: "pwd", val: "/" } },
+			{ MapFile: { to: "/py/std", file: "py/" }},
+			{ AddEnv: { name: "PYTHONPATH", val: "/py/std" } },
+			{ When: { cond: "det", action: { StartWasm: "cpython.wasm" } } },
+			{ When: { cond: "nondet", action: { StartWasm: "cpython.nondet.wasm" } } },
 		],
-		"actions": [
-			{ "AddEnv": { "name": "pwd", "val": "/" } },
-			{ "MapFile": { "to": "/py/std", "file": "py/" }},
-			{ "AddEnv": { "name": "PYTHONPATH", "val": "/py/std" } },
-			{ "StartWasm": { "file": "cpython.wasm" } }
-		]
 	},
 	dependencies: [build_py_raw, build_py_softfloat],
 	create_test_runner: false,
@@ -96,7 +96,7 @@ target_alias(
 	'runner',
 	py_runner_target,
 	tags: ['all', 'runner'],
-	inherit_meta: ['expected_hash'],
+	inherit_meta: ['expected_hash', 'output_file'],
 ) {
 	meta.output_file = py_runner_target.output_file
 }

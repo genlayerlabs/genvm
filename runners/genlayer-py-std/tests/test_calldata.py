@@ -11,7 +11,7 @@ def make_rnd(size_limit, rem_depth):
 		if r == 0:
 			return random.randint(-(10**8), 10**8)
 		if r == 1:
-			return Address(random.randbytes(32))
+			return Address(random.randbytes(Address.SIZE))
 		if r == 2:
 			return random.randbytes(random.randint(0, size_limit))
 		if r == 3:

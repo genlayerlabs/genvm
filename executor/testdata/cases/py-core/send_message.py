@@ -1,8 +1,8 @@
-# { "depends": ["genlayer-py-std:test"] }
-import genlayer.std as gsdk
+# { "Depends": "genlayer-py-std:test" }
+import genlayer.std as gl
 
 
-@gsdk.contract
+@gl.contract
 class Contract:
 	def __init__(self):
-		gsdk.OtherContract(gsdk.Address(b'\x30' * 32)).foo.send(1, 2, gas=100)
+		gl.ContractAt(gl.Address(b'\x30' * 20)).emit(gas=100).foo(1, 2)

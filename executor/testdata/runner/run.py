@@ -11,7 +11,7 @@ import argparse
 import re
 import sys
 import pickle
-import time
+import asyncio
 
 import http.server as httpserv
 
@@ -25,10 +25,11 @@ while not root_dir.joinpath(MONO_REPO_ROOT_FILE).exists():
 MONOREPO_CONF = json.loads(root_dir.joinpath(MONO_REPO_ROOT_FILE).read_text())
 
 sys.path.append(str(root_dir.joinpath(*MONOREPO_CONF['py-std'])))
+sys.path.append(str(script_dir))
 
 from genlayer.py import calldata
 from genlayer.py.types import Address
-from mock_host import MockHost, MockStorage
+from mock_host import MockHost, MockStorage, run_host_and_program
 
 
 class MyHTTPHandler(httpserv.SimpleHTTPRequestHandler):
@@ -197,15 +198,15 @@ def run(jsonnet_rel_path):
 			cmd,
 		]
 		with config['host'] as mock_host:
-			while not mock_host.created:
-				time.sleep(0.05)
 			_env = dict(os.environ)
 			if args_parsed.nop_dlclose:
 				_env['LD_PRELOAD'] = str(GENVM.parent.parent.parent.joinpath('fake-dlclose.so'))
 				# _env["LD_DEBUG"] = "libs"
-			res = subprocess.run(
-				cmd, check=False, text=True, capture_output=True, env=_env, cwd=coverage_dir
+
+			res = asyncio.run(
+				run_host_and_program(mock_host, cmd, env=_env, cwd=coverage_dir, exit_timeout=2)
 			)
+
 		base = {
 			'steps': steps,
 			'stdout': res.stdout,
@@ -217,10 +218,11 @@ def run(jsonnet_rel_path):
 		got_stdout_path.write_text(res.stdout)
 		tmp_dir.joinpath('stderr.txt').write_text(res.stderr)
 
-		if res.returncode != 0:
+		if len(res.exceptions) != 0:
 			return {
 				'category': 'fail',
-				'reason': f'return code is {res.returncode}',
+				'reason': f'some exceptions occured',
+				'exc': res.exceptions,
 				**base,
 			}
 
@@ -282,10 +284,15 @@ def prnt(path, res):
 		if 'reason' in res:
 			for l in map(lambda x: '\t' + x, res['reason'].split('\n')):
 				print(l)
-		if 'exc' in res and not isinstance(res['exc'], subprocess.CalledProcessError):
+		if 'exc' in res:
 			import traceback
 
-			traceback.print_exception(res['exc'])
+			exc = res['exc']
+			if not isinstance(exc, list):
+				exc = [exc]
+			for e in exc:
+				st = traceback.format_exception(e)
+				print(re.sub(r'^', '\t\t', ''.join(st), flags=re.MULTILINE))
 		if res['category'] == 'fail' and 'steps' in res or args_parsed.show_steps:
 			import shlex
 
@@ -338,10 +345,17 @@ with cfutures.ThreadPoolExecutor(max_workers=(os.cpu_count() or 1)) as executor:
 
 	if len(files) > 0:
 		# NOTE this is needed to cache wasm compilation result
-		first, *files = files
-		print('running the first test, it can take a while..')
-		process_result(first, lambda: run(first))
-		future2path = {executor.submit(run, path): path for path in files}
+		firsts = [f for f in files if f.name.startswith('_hello')]
+		lasts = [f for f in files if not f.name.startswith('_hello')]
+		if len(firsts) == 0:
+			firsts = [files[0]]
+			lasts = files[1:]
+		print(
+			f'running the first test(s) sequentially ({len(firsts)}), it can take a while..'
+		)
+		for f in firsts:
+			process_result(f, lambda: run(f))
+		future2path = {executor.submit(run, path): path for path in lasts}
 		for future in cfutures.as_completed(future2path):
 			path = future2path[future]
 			process_result(future2path[future], lambda: future.result())

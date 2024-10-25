@@ -1,4 +1,4 @@
-# { "depends": ["genlayer-py-std:test"] }
+# { "Depends": "genlayer-py-std:test" }
 import genlayer.std as std
 
 
@@ -7,7 +7,7 @@ class Contract:
 	def __init__(self, foo, bar):
 		pass
 
-	@std.public
+	@std.public.view
 	def foo(self):
 		pass
 

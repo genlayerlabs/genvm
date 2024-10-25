@@ -55,7 +55,7 @@ def _repr_type(t: typing.Any, permissive: bool) -> typing.Any:
 	if t is typing.Any:
 		return 'any'
 	ttype = type(t)
-	if ttype is typing._UnionGenericAlias or ttype is types.UnionType:
+	if ttype is getattr(typing, '_UnionGenericAlias', None) or ttype is types.UnionType:
 		return {'$or': [_repr_type(x, permissive) for x in typing.get_args(t)]}
 	origin = typing.get_origin(t)
 	if origin != None:
@@ -77,13 +77,12 @@ def _escape_dict_prop(prop: str) -> str:
 	return prop
 
 
-def _get_args(m: types.FunctionType, is_ctor) -> dict:
+def _get_params(m: types.FunctionType, *, is_ctor: bool) -> dict:
 	import inspect
 
 	signature = inspect.signature(m)
-	members = dict(inspect.getmembers(m))
-	args = []
-	kwargs = {}
+	params = []
+	kwparams = {}
 
 	is_first = True
 	for name, par in signature.parameters.items():
@@ -94,19 +93,22 @@ def _get_args(m: types.FunctionType, is_ctor) -> dict:
 			continue
 		match str(par.kind):
 			case 'POSITIONAL_ONLY' | 'POSITIONAL_OR_KEYWORD':
-				args.append([name, _repr_type(par.annotation, True)])
+				params.append([name, _repr_type(par.annotation, True)])
 			case 'KEYWORD_ONLY':
-				kwargs[_escape_dict_prop(name)] = _repr_type(par.annotation, True)
+				kwparams[_escape_dict_prop(name)] = _repr_type(par.annotation, True)
 			case kind:
 				raise Exception(f'unsupported parameter type {kind} {type(kind)}')
 
 	ret = {
-		'args': args,
-		'kwargs': kwargs,
+		'params': params,
+		'kwparams': kwparams,
 	}
 	if not is_ctor:
 		ret.update(
-			{'readonly': False, 'ret': _repr_type(signature.return_annotation, False)}
+			{
+				'readonly': getattr(m, '__readonly__', False),
+				'ret': _repr_type(signature.return_annotation, False),
+			}
 		)
 	return ret
 
@@ -123,6 +125,6 @@ def get_schema(contract: type) -> typing.Any:
 	}
 
 	return {
-		'ctor': _get_args(ctor, True),
-		'methods': {k: _get_args(v, False) for k, v in meths.items()},
+		'ctor': _get_params(ctor, is_ctor=True),
+		'methods': {k: _get_params(v, is_ctor=False) for k, v in meths.items()},
 	}

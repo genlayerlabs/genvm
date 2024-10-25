@@ -12,7 +12,7 @@ docker_build_dev_container = target_command(
 		root_src.relative_path_from(cur_src),
 		'Dockerfile',
 	],
-	dependencies: files + [sdk_rust],
+	dependencies: files + [sdk_rust, root_src.join('build-scripts', 'docker-build.rb')],
 	cwd: cur_src,
 	output_file: docker_id_file,
 	pool: 'console',

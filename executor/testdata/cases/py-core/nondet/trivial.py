@@ -1,15 +1,15 @@
-# { "depends": ["genlayer-py-std:test"] }
-import genlayer.std as gsdk
+# { "Depends": "genlayer-py-std:test" }
+import genlayer.std as gl
 
 
-@gsdk.contract
+@gl.contract
 class Contract:
-	@gsdk.public
-	async def init(self):
+	@gl.public
+	def init(self):
 		eval("print('init from eval!')")
 
 		def run():
 			print('wow, nondet')
 			return 'web page?'
 
-		return await gsdk.eq_principle_refl(run)
+		return gl.eq_principle_refl(run).get()

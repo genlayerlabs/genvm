@@ -7,7 +7,7 @@ pub mod string_templater;
 pub mod vm;
 pub mod wasi;
 
-pub use host::{Address, Host, MessageData};
+pub use host::{AccountAddress, GenericAddress, Host, MessageData};
 
 use anyhow::Result;
 use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};

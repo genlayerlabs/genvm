@@ -112,10 +112,10 @@ eq_principle_prompt("The score and the winner has to be exactly the same", fn)
 ```py
 def leader_fn():
     web = get_webpage()
-    return call_llm('summary of {web}')
+    return exec_prompt('summary of {web}')
 def validator_fn(leader_res):
     web = get_webpage()
-    return "yes" in call_llm('summary of {web} is {leaders}')
+    return "yes" in exec_prompt('summary of {web} is {leaders}')
 return eq_principle(leader_fn, validator_fn)
 ```
 

@@ -11,9 +11,17 @@
     )
 )
 
+(typename $success bool)
+
 (typename $bytes_len u32)
 
 (typename $addr
+    (record
+        (field $ptr (@witx const_pointer u8))
+    )
+)
+
+(typename $full_addr
     (record
         (field $ptr (@witx const_pointer u8))
     )

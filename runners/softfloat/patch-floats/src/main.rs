@@ -87,11 +87,16 @@ mod implementation {
             to_u64: u32,
             to_i64: u32,
 
+            flt_conv_to: u32,
+
             round: u32,
         }
 
         let mut f32_types: Option<FTypes> = None;
         let mut f32_ops: Option<FOps> = None;
+
+        let mut f32_to_f64_type: Option<u32> = None;
+        let mut f64_to_f32_type: Option<u32> = None;
 
         let mut f64_types: Option<FTypes> = None;
         let mut f64_ops: Option<FOps> = None;
@@ -162,6 +167,9 @@ mod implementation {
                             .add([ValType::F64, ValType::I32, ValType::I32], [ValType::F64]),
                     });
 
+                    f32_to_f64_type = Some(adder.add([ValType::F32], [ValType::F64]));
+                    f64_to_f32_type = Some(adder.add([ValType::F64], [ValType::F32]));
+
                     module.section(&adder.types);
                 }
                 wasmparser::Payload::ImportSection(section) => {
@@ -209,6 +217,8 @@ mod implementation {
                         to_i64: adder.add("f32_to_i64", f32_types.unwrap().to_i64),
                         to_u64: adder.add("f32_to_ui64", f32_types.unwrap().to_i64),
 
+                        flt_conv_to: adder.add("f64_to_f32", f64_to_f32_type.unwrap()),
+
                         round: adder.add("f32_roundToInt", f32_types.unwrap().round),
                     });
                     f64_ops = Some(FOps {
@@ -229,6 +239,8 @@ mod implementation {
                         to_u32: adder.add("f64_to_ui32", f64_types.unwrap().to_i32),
                         to_i64: adder.add("f64_to_i64", f64_types.unwrap().to_i64),
                         to_u64: adder.add("f64_to_ui64", f64_types.unwrap().to_i64),
+
+                        flt_conv_to: adder.add("f32_to_f64", f32_to_f64_type.unwrap()),
 
                         round: adder.add("f64_roundToInt", f64_types.unwrap().round),
                     });
@@ -538,6 +550,12 @@ mod implementation {
                                         f.instruction(&Instruction::I32Const(0));
                                         f.instruction(&Instruction::Call(f64_ops.unwrap().round))
                                     }
+                                    Instruction::F32DemoteF64 => f.instruction(&Instruction::Call(
+                                        f32_ops.unwrap().flt_conv_to,
+                                    )),
+                                    Instruction::F64PromoteF32 => f.instruction(
+                                        &Instruction::Call(f64_ops.unwrap().flt_conv_to),
+                                    ),
                                     // common
                                     ins => f.instruction(&ins),
                                 };

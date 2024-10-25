@@ -1,9 +1,9 @@
-# { "depends": ["genlayer-py-std:test"] }
-import genlayer.std as gsdk
+# { "Depends": "genlayer-py-std:test" }
+import genlayer.std as gl
 
 
-@gsdk.contract
+@gl.contract
 class Contract:
-	@gsdk.public
+	@gl.public
 	def main(self):
-		gsdk.rollback_immediate("nah, I won't execute")
+		gl.rollback_immediate("nah, I won't execute")

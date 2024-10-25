@@ -27,6 +27,12 @@ pub struct CStrResult {
     pub err: i32,
 }
 
+#[repr(C)]
+pub struct BoolResult {
+    pub res: bool,
+    pub err: i32,
+}
+
 impl<S> From<anyhow::Result<S>> for CStrResult
 where
     S: AsRef<str>,
@@ -48,6 +54,18 @@ where
     }
 }
 
+impl From<anyhow::Result<bool>> for BoolResult {
+    fn from(value: anyhow::Result<bool>) -> Self {
+        match value {
+            Ok(v) => BoolResult { res: v, err: 0 },
+            Err(e) => {
+                eprintln!("Module error {}", &e);
+                BoolResult { res: false, err: 1 }
+            }
+        }
+    }
+}
+
 #[macro_export]
 macro_rules! WebFunctionsApiFns {
     ($cb:path[$($args:tt),*]) => {
@@ -62,7 +80,8 @@ WebFunctionsApiFns!(create_trait[web_functions_api, (Version { major: 0, minor: 
 macro_rules! LLMFunctionsApiFns {
     ($cb:path[$($args:tt),*]) => {
         $cb!(($($args),*) {
-            call_llm: fn(gas: &mut u64, config: *const u8, prompt: *const u8) -> ($crate::interfaces::CStrResult);
+            exec_prompt: fn(gas: &mut u64, config: *const u8, prompt: *const u8) -> ($crate::interfaces::CStrResult);
+            eq_principle_prompt: fn(gas: &mut u64, config: *const u8) -> ($crate::interfaces::BoolResult);
         });
     };
 }

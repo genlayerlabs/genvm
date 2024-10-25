@@ -2,11 +2,13 @@ use anyhow::Result;
 use genvm_modules_common::*;
 use serde_derive::Deserialize;
 
+use std::collections::HashMap;
 use std::ffi::CStr;
 
 use genvm_modules_common::interfaces::web_functions_api;
 
 mod response;
+mod string_templater;
 
 genvm_modules_common::default_base_functions!(web_functions_api, Impl);
 
@@ -15,6 +17,7 @@ genvm_modules_common::default_base_functions!(web_functions_api, Impl);
 enum LLLMProvider {
     Ollama,
     Openai,
+    Simulator,
 }
 
 struct Impl {
@@ -26,11 +29,24 @@ impl Drop for Impl {
     fn drop(&mut self) {}
 }
 
+fn default_equivalence_prompt() -> String {
+    "Given the equivalence principle '#{principle}', decide whether the following two outputs can be considered equivalent.\nLeader's Output: #{leader_answer}\n\nValidator's Output: #{validator_answer}\n\nRespond with: TRUE or FALSE".into()
+}
+
 #[derive(Deserialize)]
 struct Config {
     host: String,
     provider: LLLMProvider,
     model: String,
+    #[serde(default = "default_equivalence_prompt")]
+    equivalence_prompt: String,
+}
+
+#[derive(Deserialize)]
+struct EqPrinciplePrompt {
+    leader_answer: String,
+    validator_answer: String,
+    principle: String,
 }
 
 impl Impl {
@@ -43,8 +59,7 @@ impl Impl {
         })
     }
 
-    fn call_llm(&mut self, gas: &mut u64, _config: &CStr, prompt: &CStr) -> Result<String> {
-        let prompt = prompt.to_str()?;
+    fn exec_prompt(&mut self, gas: &mut u64, _config: &str, prompt: &str) -> Result<String> {
         match self.config.provider {
             LLLMProvider::Ollama => {
                 let request = serde_json::json!({
@@ -111,12 +126,47 @@ impl Impl {
                 *gas -= (total_tokens << 8).min(*gas);
                 Ok(response.into())
             }
+            LLLMProvider::Simulator => {
+                let request = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "method": "llm_genvm_module_call",
+                    "params": [&self.config.model, prompt],
+                    "id": 1,
+                });
+                let mut res = isahc::send(
+                    isahc::Request::post(format!("{}/api", &self.config.host))
+                        .header("Content-Type", "application/json")
+                        .body(serde_json::to_string(&request)?.as_bytes())?,
+                )?;
+                let res = response::read(&mut res)?;
+                let res: serde_json::Value = serde_json::from_str(&res)?;
+                res.as_object()
+                    .and_then(|v| v.get("result"))
+                    .and_then(|v| v.as_object())
+                    .and_then(|v| v.get("response"))
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                    .ok_or(anyhow::anyhow!("can't get response field {}", &res))
+            }
         }
+    }
+
+    fn eq_principle_prompt(&mut self, gas: &mut u64, prompt: &str) -> Result<bool> {
+        let data: EqPrinciplePrompt = serde_json::from_str(prompt)?;
+        let map = HashMap::from([
+            ("leader_answer".into(), data.leader_answer),
+            ("validator_answer".into(), data.validator_answer),
+            ("principle".into(), data.principle),
+        ]);
+        let new_prompt = string_templater::patch_str(&map, &self.config.equivalence_prompt)?;
+        let mut res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
+        res.make_ascii_lowercase();
+        Ok(res.contains("true"))
     }
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn call_llm(
+pub extern "C-unwind" fn exec_prompt(
     ctx: *const (),
     gas: &mut u64,
     config: *const u8,
@@ -125,5 +175,28 @@ pub extern "C-unwind" fn call_llm(
     let ctx = get_ptr(ctx);
     let config = unsafe { CStr::from_ptr(config as *const std::ffi::c_char) };
     let prompt = unsafe { CStr::from_ptr(prompt as *const std::ffi::c_char) };
-    ctx.call_llm(gas, config, prompt).into()
+    config
+        .to_str()
+        .map_err(|e| anyhow::Error::from(e))
+        .and_then(|config| {
+            prompt
+                .to_str()
+                .map_err(|e| anyhow::Error::from(e))
+                .and_then(|prompt| ctx.exec_prompt(gas, config, prompt))
+        })
+        .into()
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn eq_principle_prompt(
+    ctx: *const (),
+    gas: &mut u64,
+    data: *const u8,
+) -> interfaces::BoolResult {
+    let ctx = get_ptr(ctx);
+    let data = unsafe { CStr::from_ptr(data as *const std::ffi::c_char) };
+    data.to_str()
+        .map_err(|e| anyhow::Error::from(e))
+        .and_then(|data| ctx.eq_principle_prompt(gas, data))
+        .into()
 }
