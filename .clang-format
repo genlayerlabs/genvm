@@ -1,0 +1,9 @@
+BasedOnStyle: Mozilla
+IndentWidth: 4
+UseTab: AlignWithSpaces
+AllowShortIfStatementsOnASingleLine: false
+IndentCaseLabels: false
+AlignAfterOpenBracket: BlockIndent
+AlignArrayOfStructures: Right
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveMacros: Consecutive

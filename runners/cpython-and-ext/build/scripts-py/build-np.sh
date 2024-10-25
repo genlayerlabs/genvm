@@ -15,7 +15,7 @@ cp /scripts-py/numpy/_multiarray_umath.py /opt/np-built/lib/python3.13/site-pack
 cp /scripts-py/numpy/_umath_linalg.py /opt/np-built/lib/python3.13/site-packages/numpy/linalg/_umath_linalg.py
 
 AR_SCRIPT="CREATE /opt/np-built/all.a"
-for f in $(find /opt/np-built/lib/python3.13/site-packages/numpy -name '*.so')
+for f in $(find /opt/np-built/lib/python3.13/site-packages/numpy -name '*.so' | sort)
 do
     AR_SCRIPT="$AR_SCRIPT"$'\n'"ADDLIB $f"
 done

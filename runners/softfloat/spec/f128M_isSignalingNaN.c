@@ -34,26 +34,25 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 =============================================================================*/
 
-#include <stdbool.h>
-#include <stdint.h>
 #include "platform.h"
 #include "primitives.h"
 #include "softfloat.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 /*----------------------------------------------------------------------------
-*----------------------------------------------------------------------------*/
-bool f128M_isSignalingNaN( const float128_t *aPtr )
+ *----------------------------------------------------------------------------*/
+bool
+f128M_isSignalingNaN(const float128_t* aPtr)
 {
-    const uint32_t *aWPtr;
+    const uint32_t* aWPtr;
     uint32_t uiA96;
 
-    aWPtr = (const uint32_t *) aPtr;
-    uiA96 = aWPtr[indexWordHi( 4 )];
-    if ( (uiA96 & 0x7FFF8000) != 0x7FFF0000 ) return false;
-    return
-        ((uiA96 & 0x00007FFF) != 0)
-            || ((aWPtr[indexWord( 4, 2 )] | aWPtr[indexWord( 4, 1 )]
-                     | aWPtr[indexWord( 4, 0 )])
-                    != 0);
-
+    aWPtr = (const uint32_t*)aPtr;
+    uiA96 = aWPtr[indexWordHi(4)];
+    if ((uiA96 & 0x7FFF8000) != 0x7FFF0000)
+	return false;
+    return ((uiA96 & 0x00007FFF) != 0) ||
+           ((aWPtr[indexWord(4, 2)] | aWPtr[indexWord(4, 1)] |
+             aWPtr[indexWord(4, 0)]) != 0);
 }

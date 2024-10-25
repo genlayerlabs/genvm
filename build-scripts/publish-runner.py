@@ -19,10 +19,10 @@ DEFAULT_TIME = (1980, 1, 1, 0, 0, 0)
 fake_zip = io.BytesIO()
 with zipfile.ZipFile(fake_zip, mode='w', compression=zipfile.ZIP_STORED) as zip_file:
 
-	def add_file(name, contents, ctx={}):
+	def add_file(name: str, contents, ctx={}):
 		contents_hash = hashlib.sha3_256()
 		contents_hash.update(contents)
-		print(f'\tADDING {f} {contents_hash.digest()} {ctx}')
+		print(f'\tADDING {contents_hash.digest().hex()} {name}\t{ctx}')
 		zip_file.writestr(zipfile.ZipInfo(name, date_time=DEFAULT_TIME), contents)
 
 	for file_conf in conf['files']:
