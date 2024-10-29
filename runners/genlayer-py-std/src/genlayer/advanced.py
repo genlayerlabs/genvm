@@ -1,7 +1,7 @@
 import typing
 
 from ._private import _lazy_from_fd, _decode_sub_vm_result
-import genlayer.wasi as wasi
+import genlayer._wasi as wasi
 from .py.types import Rollback, Lazy
 
 

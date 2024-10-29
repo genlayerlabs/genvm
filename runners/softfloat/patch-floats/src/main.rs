@@ -8,7 +8,8 @@ mod implementation {
     use wasm_encoder::*;
 
     const ROUND_MIN: i32 = 2; // softfloat_round_min
-    const ROUND_MAX: i32 = 2; // softfloat_round_max
+    const ROUND_MAX: i32 = 3; // softfloat_round_max
+    const ROUND_MIN_MAG: i32 = 1; // softfloat_round_minMag
 
     pub struct MyEncoder {
         start: u32,
@@ -90,6 +91,7 @@ mod implementation {
             flt_conv_to: u32,
 
             round: u32,
+            sqrt: u32,
         }
 
         let mut f32_types: Option<FTypes> = None;
@@ -220,6 +222,7 @@ mod implementation {
                         flt_conv_to: adder.add("f64_to_f32", f64_to_f32_type.unwrap()),
 
                         round: adder.add("f32_roundToInt", f32_types.unwrap().round),
+                        sqrt: adder.add("f32_sqrt", f32_types.unwrap().uopf),
                     });
                     f64_ops = Some(FOps {
                         add: adder.add("f64_add", f64_types.unwrap().bopf),
@@ -243,6 +246,7 @@ mod implementation {
                         flt_conv_to: adder.add("f32_to_f64", f32_to_f64_type.unwrap()),
 
                         round: adder.add("f64_roundToInt", f64_types.unwrap().round),
+                        sqrt: adder.add("f64_sqrt", f64_types.unwrap().uopf),
                     });
                     reencoder.off = adder.cnt;
 
@@ -431,22 +435,22 @@ mod implementation {
                                         f.instruction(&Instruction::I32Xor)
                                     }
                                     Instruction::I32TruncF32S => {
-                                        f.instruction(&Instruction::I32Const(ROUND_MIN));
+                                        f.instruction(&Instruction::I32Const(ROUND_MIN_MAG));
                                         f.instruction(&Instruction::I32Const(0));
                                         f.instruction(&Instruction::Call(f32_ops.unwrap().to_i32))
                                     }
                                     Instruction::I32TruncF32U => {
-                                        f.instruction(&Instruction::I32Const(ROUND_MIN));
+                                        f.instruction(&Instruction::I32Const(ROUND_MIN_MAG));
                                         f.instruction(&Instruction::I32Const(0));
                                         f.instruction(&Instruction::Call(f32_ops.unwrap().to_u32))
                                     }
                                     Instruction::I64TruncF32S => {
-                                        f.instruction(&Instruction::I32Const(ROUND_MIN));
+                                        f.instruction(&Instruction::I32Const(ROUND_MIN_MAG));
                                         f.instruction(&Instruction::I32Const(0));
                                         f.instruction(&Instruction::Call(f32_ops.unwrap().to_i64))
                                     }
                                     Instruction::I64TruncF32U => {
-                                        f.instruction(&Instruction::I32Const(ROUND_MIN));
+                                        f.instruction(&Instruction::I32Const(ROUND_MIN_MAG));
                                         f.instruction(&Instruction::I32Const(0));
                                         f.instruction(&Instruction::Call(f32_ops.unwrap().to_u64))
                                     }
@@ -520,22 +524,22 @@ mod implementation {
                                         f.instruction(&Instruction::I32Xor)
                                     }
                                     Instruction::I64TruncF64S => {
-                                        f.instruction(&Instruction::I32Const(ROUND_MIN));
+                                        f.instruction(&Instruction::I32Const(ROUND_MIN_MAG));
                                         f.instruction(&Instruction::I32Const(0));
                                         f.instruction(&Instruction::Call(f64_ops.unwrap().to_i64))
                                     }
                                     Instruction::I64TruncF64U => {
-                                        f.instruction(&Instruction::I32Const(ROUND_MIN));
+                                        f.instruction(&Instruction::I32Const(ROUND_MIN_MAG));
                                         f.instruction(&Instruction::I32Const(0));
                                         f.instruction(&Instruction::Call(f64_ops.unwrap().to_u64))
                                     }
                                     Instruction::I32TruncF64S => {
-                                        f.instruction(&Instruction::I32Const(ROUND_MIN));
+                                        f.instruction(&Instruction::I32Const(ROUND_MIN_MAG));
                                         f.instruction(&Instruction::I32Const(0));
                                         f.instruction(&Instruction::Call(f64_ops.unwrap().to_i32))
                                     }
                                     Instruction::I32TruncF64U => {
-                                        f.instruction(&Instruction::I32Const(ROUND_MIN));
+                                        f.instruction(&Instruction::I32Const(ROUND_MIN_MAG));
                                         f.instruction(&Instruction::I32Const(0));
                                         f.instruction(&Instruction::Call(f64_ops.unwrap().to_u32))
                                     }
@@ -556,6 +560,13 @@ mod implementation {
                                     Instruction::F64PromoteF32 => f.instruction(
                                         &Instruction::Call(f64_ops.unwrap().flt_conv_to),
                                     ),
+
+                                    Instruction::F32Sqrt => {
+                                        f.instruction(&Instruction::Call(f32_ops.unwrap().sqrt))
+                                    }
+                                    Instruction::F64Sqrt => {
+                                        f.instruction(&Instruction::Call(f64_ops.unwrap().sqrt))
+                                    }
                                     // common
                                     ins => f.instruction(&ins),
                                 };

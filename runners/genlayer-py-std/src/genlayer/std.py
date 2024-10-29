@@ -1,4 +1,4 @@
-import genlayer.wasi as wasi
+import genlayer._wasi as wasi
 
 import typing
 import json

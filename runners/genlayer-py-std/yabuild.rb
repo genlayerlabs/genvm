@@ -1,4 +1,4 @@
-dev_container = find_target /cpython\/dev-container$/
+dev_container = find_target /runners\/cpython-dev-container$/
 
 base_genlayer_lib_dir = cur_src.join('src')
 lib_files = Dir.glob(base_genlayer_lib_dir.to_s + "/**/*.py")
@@ -30,7 +30,12 @@ build_pyc_s = target_command(
 	pool: 'console',
 )
 
-cpython_runner = find_target /cpython\/runner$/
+cpython_runner = find_target /runners\/cpython$/
+cloudpickle_runner = find_target /runners\/py-libs\/cloudpickle$/
+
+# extension_target = find_target /runners\/cpython-extension-lib$/
+
+raise "Nil hash" if cpython_runner.meta.expected_hash.nil?
 
 runner_target = target_publish_runner(
 	name_base: 'genlayer-py-std',
@@ -42,14 +47,15 @@ runner_target = target_publish_runner(
 			{ AddEnv: { name: "PYTHONPATH", val: "/py/genlayer" } },
 			{ MapCode: { to: "/contract.py" } },
 			{ SetArgs: ["py", "-u", "-c", "import contract;import genlayer.runner as r;r.run(contract)"] },
-			{ Depends: "genvm-cpython:#{cpython_runner.meta.expected_hash}" },
+			{ Depends: cloudpickle_runner.meta.runner_dep_id },
+			{ Depends: cpython_runner.meta.runner_dep_id },
 		],
 	},
 	dependencies: [build_pyc_s],
 )
 
 target_alias(
-	'runner',
+	'genlayer-py-std',
 	runner_target,
 	tags: ['all', 'runner'],
 	inherit_meta: ['expected_hash'],

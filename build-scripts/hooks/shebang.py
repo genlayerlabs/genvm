@@ -7,6 +7,10 @@ exit_code = 0
 for file in files:
 	if file.endswith('.rs'):
 		continue
+	if file.endswith('.py'):
+		continue
+	if 'runners/py-libs' in file:
+		continue
 	with open(file, 'rt') as f:
 		try:
 			s = f.readline()

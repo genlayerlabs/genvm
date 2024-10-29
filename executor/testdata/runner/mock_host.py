@@ -112,8 +112,9 @@ class MockHost(IHost):
 		Path(self.path).unlink(missing_ok=True)
 
 	async def loop_enter(self):
-		assert self.sock_listener is not None
-		self.sock = self.sock_listener.accept()[0]
+		async_loop = asyncio.get_event_loop()
+		self.sock, _addr = await async_loop.sock_accept(self.sock_listener)
+		self.sock.setblocking(False)
 		self.sock_listener.close()
 		self.sock_listener = None
 		return self.sock

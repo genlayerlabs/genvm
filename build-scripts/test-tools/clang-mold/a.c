@@ -4,5 +4,5 @@ foo();
 int
 main()
 {
-    return foo();
+	return foo();
 }

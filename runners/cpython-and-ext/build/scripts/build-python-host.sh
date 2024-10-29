@@ -3,7 +3,8 @@ set -ex
 
 cd /opt/cpython
 
-patch -p1 <"/scripts/cpython.patch"
+patch -p1 < /scripts/cpython.patch
+perl -i -pe 's/pythonapi = /pythonapi = None #/g' ./Lib/ctypes/__init__.py
 
 mkdir -p cross-build/build
 
@@ -17,6 +18,3 @@ make clean || true
 popd
 
 python3 --version
-python3 -m pip install \
-    --no-index --disable-pip-version-check --find-links /opt/whl \
-    /opt/whl/Cython-3.0.11-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl

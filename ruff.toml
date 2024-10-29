@@ -1,5 +1,6 @@
 exclude = [
-    "runners/genlayer-py-std/src/cloudpickle"
+    "runners/genlayer-py-std/src/cloudpickle",
+    "runners/py-libs/**/*"
 ]
 indent-width = 2
 

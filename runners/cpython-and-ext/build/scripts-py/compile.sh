@@ -7,14 +7,6 @@ shift
 
 find "$DIR" -type f -name '*.pyc' -delete
 
-#wasmtime run \
-#    --env PYTHONHOME=/py-std \
-#    --dir /out/py/lib/python3.13::/py-std \
-#    /out/py/bin/python3.13.wasm \
-#        -m compileall \
-#        --invalidation-mode unchecked-hash \
-#        /py-std
-
 python3 -m compileall \
     --invalidation-mode unchecked-hash \
     "$DIR"

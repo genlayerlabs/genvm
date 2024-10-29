@@ -1,4 +1,4 @@
-compile_cpython_ext = find_target(/\/cpython\/extension$/)
+compile_cpython_ext = find_target(/\/cpython-extension-lib$/)
 
 docker_build_files = Dir::glob(cur_src.join('scripts').to_s + '/**/*')
 docker_build_files << cur_src.join('Dockerfile').to_s
@@ -19,7 +19,7 @@ docker_build_dev_container = target_command(
 
 loc_cur_src = cur_src
 
-target_alias('dev-container', docker_build_dev_container) {
+target_alias('cpython-dev-container', docker_build_dev_container) {
 	meta.output_file = docker_build_dev_container.output_file
 	meta.dir = loc_cur_src
 }
@@ -28,16 +28,26 @@ out_dir = cur_build.join('build-out')
 cpython_libs_zip = out_dir.join('cpython.zip')
 cpython_raw_wasm_path = out_dir.join('cpython.raw.wasm')
 
+renamer = find_target /\/rename-wasm-module$/
+
 build_py_raw = target_command(
-	command: [
-		RbConfig.ruby, root_src.join('build-scripts', 'docker-run-in.rb'),
-		'--log', cur_build.join('run-log'),
-		'--id-file', docker_id_file,
-		'--out-dir', out_dir,
-		'--cp', compile_cpython_ext.meta.output_file,
-		'--entrypoint', '/scripts-py/build.sh'
+	commands: [
+		[
+			RbConfig.ruby, root_src.join('build-scripts', 'docker-run-in.rb'),
+			'--log', cur_build.join('run-log'),
+			'--id-file', docker_id_file,
+			'--out-dir', out_dir,
+			'--cp', compile_cpython_ext.meta.output_file,
+			'--entrypoint', '/scripts-py/build.sh'
+		],
+		[renamer.meta.output_file, cpython_raw_wasm_path, cpython_raw_wasm_path, 'libpython.so']
 	],
-	dependencies: docker_compile_files + [docker_build_dev_container, root_src.join('build-scripts', 'docker-run-in.rb'), compile_cpython_ext],
+	dependencies: docker_compile_files + [
+		renamer,
+		compile_cpython_ext,
+		docker_build_dev_container,
+		root_src.join('build-scripts', 'docker-run-in.rb')
+	],
 	cwd: cur_src,
 	output_file: cpython_libs_zip,
 	pool: 'console',
@@ -82,7 +92,7 @@ py_runner_target = target_publish_runner(
 			{ When: { cond: "det", action: { Depends: softfloat_target.meta.runner_dep_id } } },
 			{ AddEnv: { name: "pwd", val: "/" } },
 			{ MapFile: { to: "/py/std", file: "py/" }},
-			{ AddEnv: { name: "PYTHONPATH", val: "/py/std" } },
+			{ AddEnv: { name: "PYTHONPATH", val: "/py/std:/py/libs" } },
 			{ When: { cond: "det", action: { StartWasm: "cpython.wasm" } } },
 			{ When: { cond: "nondet", action: { StartWasm: "cpython.nondet.wasm" } } },
 		],
@@ -93,10 +103,8 @@ py_runner_target = target_publish_runner(
 )
 
 target_alias(
-	'runner',
+	'cpython',
 	py_runner_target,
 	tags: ['all', 'runner'],
-	inherit_meta: ['expected_hash', 'output_file'],
-) {
-	meta.output_file = py_runner_target.output_file
-}
+	inherit_meta: ['expected_hash', 'output_file', 'runner_dep_id'],
+)

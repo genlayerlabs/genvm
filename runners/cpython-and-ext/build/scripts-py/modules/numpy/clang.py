@@ -45,7 +45,7 @@ if '-shared' in args:
 	inp = '\n'.join(inp_lines)
 	print(inp)
 else:
-	cmd = ['/opt/wasi-sdk-24.0/bin/clang'] + args
+	cmd = ['/opt/host-root/bin/clang'] + args
 res = subprocess.run(cmd, check=False, text=True, capture_output=True, input=inp)
 print(res.stdout, end='')
 print(res.stderr, file=sys.stderr, end='')

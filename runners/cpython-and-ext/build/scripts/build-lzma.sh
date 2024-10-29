@@ -4,10 +4,10 @@ source "$SCRIPT_DIR/common.sh"
 
 cd /opt/xz-5.6.2
 
-C_AND_CXX_FLAGS="-O3 --sysroot=/opt/wasi-sdk-24.0/share/wasi-sysroot --target=wasm32-wasi "
+C_AND_CXX_FLAGS="-O3 --sysroot=/opt/host-root/share/wasi-sysroot --target=wasm32-wasi -fPIC "
 env \
-    CC=/opt/wasi-sdk-24.0/bin/clang \
-    CXX=/opt/wasi-sdk-24.0/bin/clang++ \
+    CC=/opt/host-root/bin/clang \
+    CXX=/opt/host-root/bin/clang++ \
     CFLAGS="$C_AND_CXX_FLAGS" \
     CXXFLAGS="$C_AND_CXX_FLAGS" \
     ./configure \

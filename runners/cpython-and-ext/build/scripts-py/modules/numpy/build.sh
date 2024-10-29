@@ -4,15 +4,16 @@ source "/scripts/common.sh"
 
 cd /opt/numpy
 
-python3 vendored-meson/meson/meson.py setup --cross-file /scripts-py/numpy/cross-file.txt build-wasm --prefix /opt/np-built
+patch -p1 <"/scripts-py/modules/numpy/patch"
+
+python3 vendored-meson/meson/meson.py setup --cross-file /scripts-py/modules/numpy/cross-file.txt build-wasm --prefix /opt/np-built
 
 cd build-wasm
 python3 ../vendored-meson/meson/meson.py install --tags runtime,python-runtime
 
 perl -i -pe 's/"args": r".*",/"args": r"",/' /opt/np-built/lib/python3.13/site-packages/numpy/__config__.py
 
-cp /scripts-py/numpy/_multiarray_umath.py /opt/np-built/lib/python3.13/site-packages/numpy/_core/_multiarray_umath.py
-cp /scripts-py/numpy/_umath_linalg.py /opt/np-built/lib/python3.13/site-packages/numpy/linalg/_umath_linalg.py
+cp -r /scripts-py/modules/numpy/py_override/* /opt/np-built/lib/python3.13/site-packages/numpy/
 
 AR_SCRIPT="CREATE /opt/np-built/all.a"
 for f in $(find /opt/np-built/lib/python3.13/site-packages/numpy -name '*.so' | sort)

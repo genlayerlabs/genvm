@@ -1,3 +1,4 @@
 {
-    "py-std": ["runners", "genlayer-py-std", "src"]
+    "py-std": ["runners", "genlayer-py-std", "src"],
+    "pure-py": ["runners", "py-libs", "pure-py"]
 }

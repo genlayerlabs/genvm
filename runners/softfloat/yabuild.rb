@@ -45,8 +45,16 @@ project('softfloat') {
 
 	lib_patcher_build = target_cargo_build(
 		name: 'genvm-softfloat-lib-patcher',
-		dir: cur_src.join('patch-lib')
+		dir: cur_src.join('patch-lib'),
 	)
+
+	target_alias(
+		'rename-wasm-module',
+		lib_patcher_build
+	) {
+		meta.output_file = lib_patcher_build.output_file
+	}
+
 	out = cur_build.join('softfloat.wasm')
 	softfloat_lib = target_alias(
 		"lib",
@@ -56,7 +64,8 @@ project('softfloat') {
 			command: [
 				lib_patcher_build.output_file,
 				raw.output_file,
-				out
+				out,
+				"softfloat"
 			],
 			cwd: cur_src.join('patch-lib')
 		)

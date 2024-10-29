@@ -1,0 +1,116 @@
+diff --git a/numpy/random/_generator.pyx b/numpy/random/_generator.pyx
+index 24111c5..fafd1cd 100644
+--- a/numpy/random/_generator.pyx
++++ b/numpy/random/_generator.pyx
+@@ -13,17 +13,17 @@
+ cimport numpy as np
+ from numpy.lib.array_utils import normalize_axis_index
+
+-from .c_distributions cimport *
++from numpy.random.c_distributions cimport *
+ from libc cimport string
+ from libc.math cimport sqrt
+ from libc.stdint cimport (uint8_t, uint16_t, uint32_t, uint64_t,
+                           int32_t, int64_t, INT64_MAX, SIZE_MAX)
+-from ._bounded_integers cimport (_rand_bool, _rand_int32, _rand_int64,
++from numpy.random._bounded_integers cimport (_rand_bool, _rand_int32, _rand_int64,
+          _rand_int16, _rand_int8, _rand_uint64, _rand_uint32, _rand_uint16,
+          _rand_uint8, _gen_mask)
+-from ._pcg64 import PCG64
++from numpy.random._pcg64 import PCG64
+ from numpy.random cimport bitgen_t
+-from ._common cimport (POISSON_LAM_MAX, CONS_POSITIVE, CONS_NONE,
++from numpy.random._common cimport (POISSON_LAM_MAX, CONS_POSITIVE, CONS_NONE,
+             CONS_NON_NEGATIVE, CONS_BOUNDED_0_1, CONS_BOUNDED_GT_0_1,
+             CONS_BOUNDED_LT_0_1, CONS_GT_1, CONS_POSITIVE_NOT_NAN, CONS_POISSON,
+             double_fill, cont, kahan_sum, cont_broadcast_3, float_fill, cont_f,
+@@ -225,7 +225,7 @@ def __setstate__(self, bit_gen):
+             self.bit_generator.state = bit_gen
+
+     def __reduce__(self):
+-        from ._pickle import __generator_ctor
++        from numpy.random._pickle import __generator_ctor
+         # Requirements of __generator_ctor are (bit_generator, )
+         return __generator_ctor, (self._bit_generator, ), None
+
+diff --git a/numpy/random/_pcg64.pyx b/numpy/random/_pcg64.pyx
+index 250bf96..a7bc6e8 100644
+--- a/numpy/random/_pcg64.pyx
++++ b/numpy/random/_pcg64.pyx
+@@ -4,7 +4,7 @@
+ cimport numpy as np
+
+ from libc.stdint cimport uint32_t, uint64_t
+-from ._common cimport uint64_to_double, wrap_int
++from numpy.random._common cimport uint64_to_double, wrap_int
+ from numpy.random cimport BitGenerator
+
+ __all__ = ['PCG64']
+diff --git a/numpy/random/_philox.pyx b/numpy/random/_philox.pyx
+index a046d94..d25faf9 100644
+--- a/numpy/random/_philox.pyx
++++ b/numpy/random/_philox.pyx
+@@ -6,7 +6,7 @@
+ cimport numpy as np
+
+ from libc.stdint cimport uint32_t, uint64_t
+-from ._common cimport uint64_to_double, int_to_array, wrap_int
++from numpy.random._common cimport uint64_to_double, int_to_array, wrap_int
+ from numpy.random cimport BitGenerator
+
+ __all__ = ['Philox']
+diff --git a/numpy/random/_sfc64.pyx b/numpy/random/_sfc64.pyx
+index 12b4805..9acd52d 100644
+--- a/numpy/random/_sfc64.pyx
++++ b/numpy/random/_sfc64.pyx
+@@ -4,7 +4,7 @@
+ cimport numpy as np
+
+ from libc.stdint cimport uint32_t, uint64_t
+-from ._common cimport uint64_to_double
++from numpy.random._common cimport uint64_to_double
+ from numpy.random cimport BitGenerator
+
+ __all__ = ['SFC64']
+diff --git a/numpy/random/bit_generator.pyx b/numpy/random/bit_generator.pyx
+index c999e6e..e0fa20f 100644
+--- a/numpy/random/bit_generator.pyx
++++ b/numpy/random/bit_generator.pyx
+@@ -46,7 +46,7 @@
+ import numpy as np
+ cimport numpy as np
+
+-from ._common cimport (random_raw, benchmark, prepare_ctypes, prepare_cffi)
++from numpy.random._common cimport (random_raw, benchmark, prepare_ctypes, prepare_cffi)
+
+ __all__ = ['SeedSequence', 'BitGenerator']
+
+@@ -551,7 +551,7 @@ def __setstate__(self, state_seed_seq):
+             self.state = state_seed_seq[0]
+
+     def __reduce__(self):
+-        from ._pickle import __bit_generator_ctor
++        from numpy.random._pickle import __bit_generator_ctor
+
+         return (
+             __bit_generator_ctor,
+diff --git a/numpy/random/mtrand.pyx b/numpy/random/mtrand.pyx
+index 853d791..433b616 100644
+--- a/numpy/random/mtrand.pyx
++++ b/numpy/random/mtrand.pyx
+@@ -13,12 +13,12 @@
+
+ from libc cimport string
+ from libc.stdint cimport int64_t, uint64_t
+-from ._bounded_integers cimport (_rand_bool, _rand_int32, _rand_int64,
++from numpy.random._bounded_integers cimport (_rand_bool, _rand_int32, _rand_int64,
+          _rand_int16, _rand_int8, _rand_uint64, _rand_uint32, _rand_uint16,
+          _rand_uint8,)
+-from ._mt19937 import MT19937 as _MT19937
++from numpy.random._mt19937 import MT19937 as _MT19937
+ from numpy.random cimport bitgen_t
+-from ._common cimport (POISSON_LAM_MAX, CONS_POSITIVE, CONS_NONE,
++from numpy.random._common cimport (POISSON_LAM_MAX, CONS_POSITIVE, CONS_NONE,
+             CONS_NON_NEGATIVE, CONS_BOUNDED_0_1, CONS_BOUNDED_GT_0_1,
+             CONS_BOUNDED_LT_0_1, CONS_GTE_1, CONS_GT_1, LEGACY_CONS_POISSON,
+             LEGACY_CONS_NON_NEGATIVE_INBOUNDS_LONG,

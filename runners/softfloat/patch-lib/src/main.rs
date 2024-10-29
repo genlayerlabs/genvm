@@ -284,7 +284,9 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let in_file = args.get(1).ok_or(anyhow::anyhow!("no input provided"))?;
     let out_file = args.get(2).ok_or(anyhow::anyhow!("no output provided"))?;
-    let mod_name = "softfloat";
+    let mod_name = args
+        .get(3)
+        .ok_or(anyhow::anyhow!("module name not provided"))?;
 
     let mut res_module = wasm_encoder::Module::new();
     let mut encoder = wasm_encoder::reencode::RoundtripReencoder {};

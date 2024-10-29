@@ -19,30 +19,33 @@ docker_build_dev_container = target_command(
 )
 
 out_dir = cur_build.join('out')
+# output_raw_file = out_dir.join('_wasi.raw.so')
 output_file = out_dir.join('libgenvm_cpython_ext.a')
+
+docker_run_script = root_src.join('build-scripts', 'docker-run-in.rb')
+
+renamer = find_target /\/rename-wasm-module$/
 
 compile_cpython_ext = target_command(
 	commands: [
 		[
-			RbConfig.ruby, root_src.join('build-scripts', 'docker-run-in.rb'),
+			RbConfig.ruby, docker_run_script,
 			'--log', cur_build.join('run-log'),
 			'--id-file', docker_id_file,
 			'--out-dir', out_dir,
-			'--network', 'host',
+			'--network', 'none',
 			'--entrypoint', '/opt/genvm/runners/cpython-and-ext/extension/docker-build.sh'
 		],
-		[
-			'diff', cur_src.join('sum.sha256'), out_dir.join('sum')
-		]
+		# [renamer.meta.output_file, output_raw_file, output_file, '_wasi.so'],
 	],
-	dependencies: [docker_build_dev_container, root_src.join('build-scripts', 'docker-run-in.rb')],
+	dependencies: [docker_build_dev_container, docker_run_script, renamer],
 	cwd: cur_src,
 	output_file: output_file,
 	pool: 'console',
 )
 
 compile_cpython_ext = target_alias(
-	'extension', compile_cpython_ext
+	'cpython-extension-lib', compile_cpython_ext
 ) {
 	meta.output_file = compile_cpython_ext.output_file
 }

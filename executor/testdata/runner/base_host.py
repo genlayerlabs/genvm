@@ -2,6 +2,7 @@ import socket
 import typing
 import collections.abc
 import asyncio
+import os
 
 from dataclasses import dataclass
 
@@ -161,18 +162,48 @@ async def run_host_and_program(
 	cwd: Path | None = None,
 	exit_timeout=0.05,
 ) -> RunHostAndProgramRes:
-	# loop = asyncio.get_running_loop()
+	loop = asyncio.get_running_loop()
+
+	async def connect_reader(fd):
+		reader = asyncio.StreamReader(loop=loop)
+		reader_proto = asyncio.StreamReaderProtocol(reader)
+		transport, _ = await loop.connect_read_pipe(
+			lambda: reader_proto, os.fdopen(fd, 'rb')
+		)
+		return reader, transport
+
+	stdout_rfd, stdout_wfd = os.pipe()
+	stderr_rfd, stderr_wfd = os.pipe()
+	stdout_reader, stdout_transport = await connect_reader(stdout_rfd)
+	stderr_reader, stderr_transport = await connect_reader(stderr_rfd)
+
 	process = await asyncio.create_subprocess_exec(
 		program[0],
 		*program[1:],
 		stdin=asyncio.subprocess.DEVNULL,
-		stdout=asyncio.subprocess.PIPE,
-		stderr=asyncio.subprocess.PIPE,
+		stdout=stdout_wfd,
+		stderr=stderr_wfd,
 		cwd=cwd,
 		env=env,
 	)
+	os.close(stdout_wfd)
+	os.close(stderr_wfd)
 	if process.stdin is not None:
 		process.stdin.close()
+
+	async def read_whole(reader, transport, put_to: list[bytes]):
+		try:
+			while True:
+				read = await reader.read(4096)
+				if read is None or len(read) == 0:
+					break
+				put_to.append(read)
+		finally:
+			try:
+				transport.close()
+			except OSError:
+				pass
+			await asyncio.sleep(0)
 
 	async def wrap_host():
 		await host_loop(handler)
@@ -180,9 +211,11 @@ async def run_host_and_program(
 	stdout, stderr = [], []
 
 	async def wrap_proc():
-		got_stdout, got_stderr = await process.communicate()
-		stdout.append(got_stdout)
-		stderr.append(got_stderr)
+		await asyncio.gather(
+			read_whole(stdout_reader, stdout_transport, stdout),
+			read_whole(stderr_reader, stderr_transport, stderr),
+			process.wait(),
+		)
 
 	coro_loop = asyncio.ensure_future(wrap_host())
 	coro_proc = asyncio.ensure_future(wrap_proc())

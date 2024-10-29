@@ -1,4 +1,4 @@
-self.define_singleton_method(:target_publish_runner) do |name_base:, runner_dict:, out_dir:, files:, create_test_runner: config.createTestRunner, dependencies: [], expected_hash: nil|
+self.define_singleton_method(:target_publish_runner) do |name_base:, runner_dict:, out_dir:, files:, create_test_runner: config.createTestRunner, dependencies: [], expected_hash: nil, tags: []|
 	runner_json = cur_build.join("#{name_base}.runner.json")
 	File.write(runner_json, JSON.dump(runner_dict))
 	mark_as_config_generated runner_json
@@ -20,8 +20,11 @@ self.define_singleton_method(:target_publish_runner) do |name_base:, runner_dict
 			f[:read_from]
 		end
 	}
+
 	runner_publish_config_file = cur_build.join("#{name_base}.publish-config.json")
-	File.write(runner_publish_config_file, JSON.dump(runner_publish_config))
+	new_json_data = JSON.dump(runner_publish_config)
+	File.write(runner_publish_config_file, new_json_data)
+
 	mark_as_config_generated runner_publish_config_file
 	publish_script = root_src.join('build-scripts', 'publish-runner.py')
 	if expected_hash.nil?
@@ -34,7 +37,8 @@ self.define_singleton_method(:target_publish_runner) do |name_base:, runner_dict
 		commands: [
 			[config.tools.python3, publish_script, runner_publish_config_file]
 		],
-		dependencies: [publish_script, runner_json] + dependencies + fdeps
+		dependencies: [publish_script, runner_json] + dependencies + fdeps,
+		tags: tags,
 	) {
 		meta.expected_hash = expected_hash
 		meta.runner_dep_id = "#{name_base}:#{expected_hash}"

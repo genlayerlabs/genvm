@@ -1,9 +1,12 @@
 BasedOnStyle: Mozilla
-IndentWidth: 4
-UseTab: AlignWithSpaces
+
+IndentWidth: 2
+TabWidth: 2
+UseTab: ForContinuationAndIndentation
 AllowShortIfStatementsOnASingleLine: false
 IndentCaseLabels: false
 AlignAfterOpenBracket: BlockIndent
 AlignArrayOfStructures: Right
 AlignConsecutiveAssignments: Consecutive
 AlignConsecutiveMacros: Consecutive
+IndentExternBlock: NoIndent

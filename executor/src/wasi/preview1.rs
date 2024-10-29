@@ -1124,7 +1124,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         events: GuestPtr<generated::types::Event>,
         nsubscriptions: generated::types::Size,
     ) -> Result<generated::types::Size, generated::types::Error> {
-        panic!("todo")
+        Err(generated::types::Errno::Io.into())
     }
 
     #[instrument(skip(self, _memory))]

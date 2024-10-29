@@ -190,7 +190,7 @@ pub struct ContractCodeData {
 
 pub struct VM {
     pub store: Store<WasmContext>,
-    pub linker: Linker<WasmContext>,
+    pub linker: Arc<Mutex<Linker<WasmContext>>>,
     pub config_copy: wasi::base::Config,
     pub init_actions: ContractCodeData,
 }
@@ -246,6 +246,7 @@ impl Supervisor {
     pub fn new(modules: Modules, total_gas: u64, host: crate::Host) -> Result<Self> {
         let mut base_conf = wasmtime::Config::default();
         base_conf.cranelift_opt_level(wasmtime::OptLevel::None);
+        base_conf.debug_info(true);
         //base_conf.cranelift_opt_level(wasmtime::OptLevel::Speed);
         base_conf.wasm_tail_call(true);
         base_conf.wasm_bulk_memory(true);
@@ -376,17 +377,23 @@ impl Supervisor {
             WasmContext::new(data, self.shared_data.clone()),
         );
 
-        let mut linker = Linker::new(engine);
+        let linker_shared = Arc::new(Mutex::new(Linker::new(engine)));
+        let linker_shared_cloned = linker_shared.clone();
+        let Ok(ref mut linker) = linker_shared_cloned.lock() else {
+            panic!();
+        };
         linker.allow_unknown_exports(false);
         linker.allow_shadowing(false);
 
-        crate::wasi::add_to_linker_sync(&mut linker, |host: &mut WasmContext| {
-            host.genlayer_ctx_mut()
-        })?;
+        crate::wasi::add_to_linker_sync(
+            linker,
+            linker_shared.clone(),
+            |host: &mut WasmContext| host.genlayer_ctx_mut(),
+        )?;
 
         Ok(VM {
             store,
-            linker,
+            linker: linker_shared,
             config_copy,
             init_actions,
         })
@@ -463,12 +470,18 @@ impl Supervisor {
                 debug_path,
             }) => {
                 let module = self.link_wasm_into(vm, contents.clone(), Some(debug_path))?;
-                let instance = vm.linker.instantiate(&mut vm.store, &module)?;
-                let name = module.name().ok_or(anyhow::anyhow!(
-                    "can't link unnamed module {:?}",
-                    &debug_path
-                ))?;
-                vm.linker.instance(&mut vm.store, name, instance)?;
+                let instance = {
+                    let Ok(ref mut linker) = vm.linker.lock() else {
+                        panic!();
+                    };
+                    let instance = linker.instantiate(&mut vm.store, &module)?;
+                    let name = module.name().ok_or(anyhow::anyhow!(
+                        "can't link unnamed module {:?}",
+                        &debug_path
+                    ))?;
+                    linker.instance(&mut vm.store, name, instance)?;
+                    instance
+                };
                 match instance.get_typed_func::<(), ()>(&mut vm.store, "_initialize") {
                     Err(_) => {}
                     Ok(func) => {
@@ -489,7 +502,10 @@ impl Supervisor {
                     .preview1
                     .set_env(&env)?;
                 let module = self.link_wasm_into(vm, contents.clone(), Some(debug_path))?;
-                Ok(Some(vm.linker.instantiate(&mut vm.store, &module)?))
+                let Ok(ref mut linker) = vm.linker.lock() else {
+                    panic!();
+                };
+                Ok(Some(linker.instantiate(&mut vm.store, &module)?))
             }
             InitAction::When { cond, act } => {
                 if (*cond == WasmMode::Det) != vm.is_det() {

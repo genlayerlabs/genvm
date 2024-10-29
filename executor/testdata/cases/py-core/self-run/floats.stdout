@@ -1,0 +1,1145 @@
+new x
+	nan <built-in function sqrt> nan 7ff8000000000000
+	nan <built-in function sin> nan 7ff8000000000000
+	nan <built-in function exp> nan 7ff8000000000000
+	new y
+		nan <built-in function add> nan nan 7ff8000000000000
+		nan <built-in function sub> nan nan 7ff8000000000000
+		nan <built-in function mul> nan nan 7ff8000000000000
+		nan <built-in function truediv> nan nan 7ff8000000000000
+	nan <built-in function sqrt> nan 7ff8000000000000
+	nan <built-in function sin> nan 7ff8000000000000
+	nan <built-in function exp> nan 7ff8000000000000
+	new y
+		nan <built-in function add> inf nan 7ff8000000000000
+		nan <built-in function sub> inf nan 7ff8000000000000
+		nan <built-in function mul> inf nan 7ff8000000000000
+		nan <built-in function truediv> inf nan 7ff8000000000000
+	nan <built-in function sqrt> nan 7ff8000000000000
+	nan <built-in function sin> nan 7ff8000000000000
+	nan <built-in function exp> nan 7ff8000000000000
+	new y
+		nan <built-in function add> -inf nan 7ff8000000000000
+		nan <built-in function sub> -inf nan 7ff8000000000000
+		nan <built-in function mul> -inf nan 7ff8000000000000
+		nan <built-in function truediv> -inf nan 7ff8000000000000
+	nan <built-in function sqrt> nan 7ff8000000000000
+	nan <built-in function sin> nan 7ff8000000000000
+	nan <built-in function exp> nan 7ff8000000000000
+	new y
+		nan <built-in function add> 1.41421 nan 7ff8000000000000
+		nan <built-in function sub> 1.41421 nan 7ff8000000000000
+		nan <built-in function mul> 1.41421 nan 7ff8000000000000
+		nan <built-in function truediv> 1.41421 nan 7ff8000000000000
+	nan <built-in function sqrt> nan 7ff8000000000000
+	nan <built-in function sin> nan 7ff8000000000000
+	nan <built-in function exp> nan 7ff8000000000000
+	new y
+		nan <built-in function add> -1.41421 nan 7ff8000000000000
+		nan <built-in function sub> -1.41421 nan 7ff8000000000000
+		nan <built-in function mul> -1.41421 nan 7ff8000000000000
+		nan <built-in function truediv> -1.41421 nan 7ff8000000000000
+	nan <built-in function sqrt> nan 7ff8000000000000
+	nan <built-in function sin> nan 7ff8000000000000
+	nan <built-in function exp> nan 7ff8000000000000
+	new y
+		nan <built-in function add> 1.00000 nan 7ff8000000000000
+		nan <built-in function sub> 1.00000 nan 7ff8000000000000
+		nan <built-in function mul> 1.00000 nan 7ff8000000000000
+		nan <built-in function truediv> 1.00000 nan 7ff8000000000000
+	nan <built-in function sqrt> nan 7ff8000000000000
+	nan <built-in function sin> nan 7ff8000000000000
+	nan <built-in function exp> nan 7ff8000000000000
+	new y
+		nan <built-in function add> -1.00000 nan 7ff8000000000000
+		nan <built-in function sub> -1.00000 nan 7ff8000000000000
+		nan <built-in function mul> -1.00000 nan 7ff8000000000000
+		nan <built-in function truediv> -1.00000 nan 7ff8000000000000
+	nan <built-in function sqrt> nan 7ff8000000000000
+	nan <built-in function sin> nan 7ff8000000000000
+	nan <built-in function exp> nan 7ff8000000000000
+	new y
+		nan <built-in function add> 100000.00000 nan 7ff8000000000000
+		nan <built-in function sub> 100000.00000 nan 7ff8000000000000
+		nan <built-in function mul> 100000.00000 nan 7ff8000000000000
+		nan <built-in function truediv> 100000.00000 nan 7ff8000000000000
+	nan <built-in function sqrt> nan 7ff8000000000000
+	nan <built-in function sin> nan 7ff8000000000000
+	nan <built-in function exp> nan 7ff8000000000000
+	new y
+		nan <built-in function add> -100000.00000 nan 7ff8000000000000
+		nan <built-in function sub> -100000.00000 nan 7ff8000000000000
+		nan <built-in function mul> -100000.00000 nan 7ff8000000000000
+		nan <built-in function truediv> -100000.00000 nan 7ff8000000000000
+	nan <built-in function sqrt> nan 7ff8000000000000
+	nan <built-in function sin> nan 7ff8000000000000
+	nan <built-in function exp> nan 7ff8000000000000
+	new y
+		nan <built-in function add> 0.00000 nan 7ff8000000000000
+		nan <built-in function sub> 0.00000 nan 7ff8000000000000
+		nan <built-in function mul> 0.00000 nan 7ff8000000000000
+	nan <built-in function sqrt> nan 7ff8000000000000
+	nan <built-in function sin> nan 7ff8000000000000
+	nan <built-in function exp> nan 7ff8000000000000
+	new y
+		nan <built-in function add> -0.00000 nan 7ff8000000000000
+		nan <built-in function sub> -0.00000 nan 7ff8000000000000
+		nan <built-in function mul> -0.00000 nan 7ff8000000000000
+new x
+	inf <built-in function sqrt> inf 7ff0000000000000
+	inf <built-in function exp> inf 7ff0000000000000
+	new y
+		inf <built-in function add> nan nan 7ff8000000000000
+		inf <built-in function sub> nan nan 7ff8000000000000
+		inf <built-in function mul> nan nan 7ff8000000000000
+		inf <built-in function truediv> nan nan 7ff8000000000000
+	inf <built-in function sqrt> inf 7ff0000000000000
+	inf <built-in function exp> inf 7ff0000000000000
+	new y
+		inf <built-in function add> inf inf 7ff0000000000000
+		inf <built-in function sub> inf nan 7ff8000000000000
+		inf <built-in function mul> inf inf 7ff0000000000000
+		inf <built-in function truediv> inf nan 7ff8000000000000
+	inf <built-in function sqrt> inf 7ff0000000000000
+	inf <built-in function exp> inf 7ff0000000000000
+	new y
+		inf <built-in function add> -inf nan 7ff8000000000000
+		inf <built-in function sub> -inf inf 7ff0000000000000
+		inf <built-in function mul> -inf -inf fff0000000000000
+		inf <built-in function truediv> -inf nan 7ff8000000000000
+	inf <built-in function sqrt> inf 7ff0000000000000
+	inf <built-in function exp> inf 7ff0000000000000
+	new y
+		inf <built-in function add> 1.41421 inf 7ff0000000000000
+		inf <built-in function sub> 1.41421 inf 7ff0000000000000
+		inf <built-in function mul> 1.41421 inf 7ff0000000000000
+		inf <built-in function truediv> 1.41421 inf 7ff0000000000000
+	inf <built-in function sqrt> inf 7ff0000000000000
+	inf <built-in function exp> inf 7ff0000000000000
+	new y
+		inf <built-in function add> -1.41421 inf 7ff0000000000000
+		inf <built-in function sub> -1.41421 inf 7ff0000000000000
+		inf <built-in function mul> -1.41421 -inf fff0000000000000
+		inf <built-in function truediv> -1.41421 -inf fff0000000000000
+	inf <built-in function sqrt> inf 7ff0000000000000
+	inf <built-in function exp> inf 7ff0000000000000
+	new y
+		inf <built-in function add> 1.00000 inf 7ff0000000000000
+		inf <built-in function sub> 1.00000 inf 7ff0000000000000
+		inf <built-in function mul> 1.00000 inf 7ff0000000000000
+		inf <built-in function truediv> 1.00000 inf 7ff0000000000000
+	inf <built-in function sqrt> inf 7ff0000000000000
+	inf <built-in function exp> inf 7ff0000000000000
+	new y
+		inf <built-in function add> -1.00000 inf 7ff0000000000000
+		inf <built-in function sub> -1.00000 inf 7ff0000000000000
+		inf <built-in function mul> -1.00000 -inf fff0000000000000
+		inf <built-in function truediv> -1.00000 -inf fff0000000000000
+	inf <built-in function sqrt> inf 7ff0000000000000
+	inf <built-in function exp> inf 7ff0000000000000
+	new y
+		inf <built-in function add> 100000.00000 inf 7ff0000000000000
+		inf <built-in function sub> 100000.00000 inf 7ff0000000000000
+		inf <built-in function mul> 100000.00000 inf 7ff0000000000000
+		inf <built-in function truediv> 100000.00000 inf 7ff0000000000000
+	inf <built-in function sqrt> inf 7ff0000000000000
+	inf <built-in function exp> inf 7ff0000000000000
+	new y
+		inf <built-in function add> -100000.00000 inf 7ff0000000000000
+		inf <built-in function sub> -100000.00000 inf 7ff0000000000000
+		inf <built-in function mul> -100000.00000 -inf fff0000000000000
+		inf <built-in function truediv> -100000.00000 -inf fff0000000000000
+	inf <built-in function sqrt> inf 7ff0000000000000
+	inf <built-in function exp> inf 7ff0000000000000
+	new y
+		inf <built-in function add> 0.00000 inf 7ff0000000000000
+		inf <built-in function sub> 0.00000 inf 7ff0000000000000
+		inf <built-in function mul> 0.00000 nan 7ff8000000000000
+	inf <built-in function sqrt> inf 7ff0000000000000
+	inf <built-in function exp> inf 7ff0000000000000
+	new y
+		inf <built-in function add> -0.00000 inf 7ff0000000000000
+		inf <built-in function sub> -0.00000 inf 7ff0000000000000
+		inf <built-in function mul> -0.00000 nan 7ff8000000000000
+new x
+	-inf <built-in function exp> 0.00000 0000000000000000
+	new y
+		-inf <built-in function add> nan nan 7ff8000000000000
+		-inf <built-in function sub> nan nan 7ff8000000000000
+		-inf <built-in function mul> nan nan 7ff8000000000000
+		-inf <built-in function truediv> nan nan 7ff8000000000000
+	-inf <built-in function exp> 0.00000 0000000000000000
+	new y
+		-inf <built-in function add> inf nan 7ff8000000000000
+		-inf <built-in function sub> inf -inf fff0000000000000
+		-inf <built-in function mul> inf -inf fff0000000000000
+		-inf <built-in function truediv> inf nan 7ff8000000000000
+	-inf <built-in function exp> 0.00000 0000000000000000
+	new y
+		-inf <built-in function add> -inf -inf fff0000000000000
+		-inf <built-in function sub> -inf nan 7ff8000000000000
+		-inf <built-in function mul> -inf inf 7ff0000000000000
+		-inf <built-in function truediv> -inf nan 7ff8000000000000
+	-inf <built-in function exp> 0.00000 0000000000000000
+	new y
+		-inf <built-in function add> 1.41421 -inf fff0000000000000
+		-inf <built-in function sub> 1.41421 -inf fff0000000000000
+		-inf <built-in function mul> 1.41421 -inf fff0000000000000
+		-inf <built-in function truediv> 1.41421 -inf fff0000000000000
+	-inf <built-in function exp> 0.00000 0000000000000000
+	new y
+		-inf <built-in function add> -1.41421 -inf fff0000000000000
+		-inf <built-in function sub> -1.41421 -inf fff0000000000000
+		-inf <built-in function mul> -1.41421 inf 7ff0000000000000
+		-inf <built-in function truediv> -1.41421 inf 7ff0000000000000
+	-inf <built-in function exp> 0.00000 0000000000000000
+	new y
+		-inf <built-in function add> 1.00000 -inf fff0000000000000
+		-inf <built-in function sub> 1.00000 -inf fff0000000000000
+		-inf <built-in function mul> 1.00000 -inf fff0000000000000
+		-inf <built-in function truediv> 1.00000 -inf fff0000000000000
+	-inf <built-in function exp> 0.00000 0000000000000000
+	new y
+		-inf <built-in function add> -1.00000 -inf fff0000000000000
+		-inf <built-in function sub> -1.00000 -inf fff0000000000000
+		-inf <built-in function mul> -1.00000 inf 7ff0000000000000
+		-inf <built-in function truediv> -1.00000 inf 7ff0000000000000
+	-inf <built-in function exp> 0.00000 0000000000000000
+	new y
+		-inf <built-in function add> 100000.00000 -inf fff0000000000000
+		-inf <built-in function sub> 100000.00000 -inf fff0000000000000
+		-inf <built-in function mul> 100000.00000 -inf fff0000000000000
+		-inf <built-in function truediv> 100000.00000 -inf fff0000000000000
+	-inf <built-in function exp> 0.00000 0000000000000000
+	new y
+		-inf <built-in function add> -100000.00000 -inf fff0000000000000
+		-inf <built-in function sub> -100000.00000 -inf fff0000000000000
+		-inf <built-in function mul> -100000.00000 inf 7ff0000000000000
+		-inf <built-in function truediv> -100000.00000 inf 7ff0000000000000
+	-inf <built-in function exp> 0.00000 0000000000000000
+	new y
+		-inf <built-in function add> 0.00000 -inf fff0000000000000
+		-inf <built-in function sub> 0.00000 -inf fff0000000000000
+		-inf <built-in function mul> 0.00000 nan 7ff8000000000000
+	-inf <built-in function exp> 0.00000 0000000000000000
+	new y
+		-inf <built-in function add> -0.00000 -inf fff0000000000000
+		-inf <built-in function sub> -0.00000 -inf fff0000000000000
+		-inf <built-in function mul> -0.00000 nan 7ff8000000000000
+new x
+	1.41421 <built-in function floor> 1.00000 3ff0000000000000
+	1.41421 <built-in function ceil> 2.00000 4000000000000000
+	1.41421 <built-in function sqrt> 1.18921 3ff306fe0a31a031
+	1.41421 <built-in function sin> 0.98777 3fef9bc75444748f
+	1.41421 <class 'int'> 1.00000 3ff0000000000000
+	1.41421 <built-in function exp> 4.11325 401073f7e8444f79
+	new y
+		1.41421 <built-in function add> nan nan 7ff8000000000000
+		1.41421 <built-in function sub> nan nan 7ff8000000000000
+		1.41421 <built-in function mul> nan nan 7ff8000000000000
+		1.41421 <built-in function truediv> nan nan 7ff8000000000000
+	1.41421 <built-in function floor> 1.00000 3ff0000000000000
+	1.41421 <built-in function ceil> 2.00000 4000000000000000
+	1.41421 <built-in function sqrt> 1.18921 3ff306fe0a31a031
+	1.41421 <built-in function sin> 0.98777 3fef9bc75444748f
+	1.41421 <class 'int'> 1.00000 3ff0000000000000
+	1.41421 <built-in function exp> 4.11325 401073f7e8444f79
+	new y
+		1.41421 <built-in function add> inf inf 7ff0000000000000
+		1.41421 <built-in function sub> inf -inf fff0000000000000
+		1.41421 <built-in function mul> inf inf 7ff0000000000000
+		1.41421 <built-in function truediv> inf 0.00000 0000000000000000
+	1.41421 <built-in function floor> 1.00000 3ff0000000000000
+	1.41421 <built-in function ceil> 2.00000 4000000000000000
+	1.41421 <built-in function sqrt> 1.18921 3ff306fe0a31a031
+	1.41421 <built-in function sin> 0.98777 3fef9bc75444748f
+	1.41421 <class 'int'> 1.00000 3ff0000000000000
+	1.41421 <built-in function exp> 4.11325 401073f7e8444f79
+	new y
+		1.41421 <built-in function add> -inf -inf fff0000000000000
+		1.41421 <built-in function sub> -inf inf 7ff0000000000000
+		1.41421 <built-in function mul> -inf -inf fff0000000000000
+		1.41421 <built-in function truediv> -inf -0.00000 8000000000000000
+	1.41421 <built-in function floor> 1.00000 3ff0000000000000
+	1.41421 <built-in function ceil> 2.00000 4000000000000000
+	1.41421 <built-in function sqrt> 1.18921 3ff306fe0a31a031
+	1.41421 <built-in function sin> 0.98777 3fef9bc75444748f
+	1.41421 <class 'int'> 1.00000 3ff0000000000000
+	1.41421 <built-in function exp> 4.11325 401073f7e8444f79
+	new y
+		1.41421 <built-in function add> 1.41421 2.82843 4006a09e667f055a
+		1.41421 <built-in function sub> 1.41421 0.00000 0000000000000000
+		1.41421 <built-in function mul> 1.41421 2.00000 3fffffffffff6600
+		1.41421 <built-in function truediv> 1.41421 1.00000 3ff0000000000000
+	1.41421 <built-in function floor> 1.00000 3ff0000000000000
+	1.41421 <built-in function ceil> 2.00000 4000000000000000
+	1.41421 <built-in function sqrt> 1.18921 3ff306fe0a31a031
+	1.41421 <built-in function sin> 0.98777 3fef9bc75444748f
+	1.41421 <class 'int'> 1.00000 3ff0000000000000
+	1.41421 <built-in function exp> 4.11325 401073f7e8444f79
+	new y
+		1.41421 <built-in function add> -1.41421 0.00000 0000000000000000
+		1.41421 <built-in function sub> -1.41421 2.82843 4006a09e667f055a
+		1.41421 <built-in function mul> -1.41421 -2.00000 bfffffffffff6600
+		1.41421 <built-in function truediv> -1.41421 -1.00000 bff0000000000000
+	1.41421 <built-in function floor> 1.00000 3ff0000000000000
+	1.41421 <built-in function ceil> 2.00000 4000000000000000
+	1.41421 <built-in function sqrt> 1.18921 3ff306fe0a31a031
+	1.41421 <built-in function sin> 0.98777 3fef9bc75444748f
+	1.41421 <class 'int'> 1.00000 3ff0000000000000
+	1.41421 <built-in function exp> 4.11325 401073f7e8444f79
+	new y
+		1.41421 <built-in function add> 1.00000 2.41421 4003504f333f82ad
+		1.41421 <built-in function sub> 1.00000 0.41421 3fda827999fc1568
+		1.41421 <built-in function mul> 1.00000 1.41421 3ff6a09e667f055a
+		1.41421 <built-in function truediv> 1.00000 1.41421 3ff6a09e667f055a
+	1.41421 <built-in function floor> 1.00000 3ff0000000000000
+	1.41421 <built-in function ceil> 2.00000 4000000000000000
+	1.41421 <built-in function sqrt> 1.18921 3ff306fe0a31a031
+	1.41421 <built-in function sin> 0.98777 3fef9bc75444748f
+	1.41421 <class 'int'> 1.00000 3ff0000000000000
+	1.41421 <built-in function exp> 4.11325 401073f7e8444f79
+	new y
+		1.41421 <built-in function add> -1.00000 0.41421 3fda827999fc1568
+		1.41421 <built-in function sub> -1.00000 2.41421 4003504f333f82ad
+		1.41421 <built-in function mul> -1.00000 -1.41421 bff6a09e667f055a
+		1.41421 <built-in function truediv> -1.00000 -1.41421 bff6a09e667f055a
+	1.41421 <built-in function floor> 1.00000 3ff0000000000000
+	1.41421 <built-in function ceil> 2.00000 4000000000000000
+	1.41421 <built-in function sqrt> 1.18921 3ff306fe0a31a031
+	1.41421 <built-in function sin> 0.98777 3fef9bc75444748f
+	1.41421 <class 'int'> 1.00000 3ff0000000000000
+	1.41421 <built-in function exp> 4.11325 401073f7e8444f79
+	new y
+		1.41421 <built-in function add> 100000.00000 100001.41421 40f86a16a09e667f
+		1.41421 <built-in function sub> 100000.00000 -99998.58579 c0f869e95f619981
+		1.41421 <built-in function mul> 100000.00000 141421.35624 4101436ad992c8c5
+		1.41421 <built-in function truediv> 100000.00000 0.00001 3eeda88051ea3c97
+	1.41421 <built-in function floor> 1.00000 3ff0000000000000
+	1.41421 <built-in function ceil> 2.00000 4000000000000000
+	1.41421 <built-in function sqrt> 1.18921 3ff306fe0a31a031
+	1.41421 <built-in function sin> 0.98777 3fef9bc75444748f
+	1.41421 <class 'int'> 1.00000 3ff0000000000000
+	1.41421 <built-in function exp> 4.11325 401073f7e8444f79
+	new y
+		1.41421 <built-in function add> -100000.00000 -99998.58579 c0f869e95f619981
+		1.41421 <built-in function sub> -100000.00000 100001.41421 40f86a16a09e667f
+		1.41421 <built-in function mul> -100000.00000 -141421.35624 c101436ad992c8c5
+		1.41421 <built-in function truediv> -100000.00000 -0.00001 beeda88051ea3c97
+	1.41421 <built-in function floor> 1.00000 3ff0000000000000
+	1.41421 <built-in function ceil> 2.00000 4000000000000000
+	1.41421 <built-in function sqrt> 1.18921 3ff306fe0a31a031
+	1.41421 <built-in function sin> 0.98777 3fef9bc75444748f
+	1.41421 <class 'int'> 1.00000 3ff0000000000000
+	1.41421 <built-in function exp> 4.11325 401073f7e8444f79
+	new y
+		1.41421 <built-in function add> 0.00000 1.41421 3ff6a09e667f055a
+		1.41421 <built-in function sub> 0.00000 1.41421 3ff6a09e667f055a
+		1.41421 <built-in function mul> 0.00000 0.00000 0000000000000000
+	1.41421 <built-in function floor> 1.00000 3ff0000000000000
+	1.41421 <built-in function ceil> 2.00000 4000000000000000
+	1.41421 <built-in function sqrt> 1.18921 3ff306fe0a31a031
+	1.41421 <built-in function sin> 0.98777 3fef9bc75444748f
+	1.41421 <class 'int'> 1.00000 3ff0000000000000
+	1.41421 <built-in function exp> 4.11325 401073f7e8444f79
+	new y
+		1.41421 <built-in function add> -0.00000 1.41421 3ff6a09e667f055a
+		1.41421 <built-in function sub> -0.00000 1.41421 3ff6a09e667f055a
+		1.41421 <built-in function mul> -0.00000 -0.00000 8000000000000000
+new x
+	-1.41421 <built-in function floor> -2.00000 c000000000000000
+	-1.41421 <built-in function ceil> -1.00000 bff0000000000000
+	-1.41421 <built-in function sin> -0.98777 bfef9bc75444748f
+	-1.41421 <class 'int'> -1.00000 bff0000000000000
+	-1.41421 <built-in function exp> 0.24312 3fcf1e72fbc1167d
+	new y
+		-1.41421 <built-in function add> nan nan 7ff8000000000000
+		-1.41421 <built-in function sub> nan nan 7ff8000000000000
+		-1.41421 <built-in function mul> nan nan 7ff8000000000000
+		-1.41421 <built-in function truediv> nan nan 7ff8000000000000
+	-1.41421 <built-in function floor> -2.00000 c000000000000000
+	-1.41421 <built-in function ceil> -1.00000 bff0000000000000
+	-1.41421 <built-in function sin> -0.98777 bfef9bc75444748f
+	-1.41421 <class 'int'> -1.00000 bff0000000000000
+	-1.41421 <built-in function exp> 0.24312 3fcf1e72fbc1167d
+	new y
+		-1.41421 <built-in function add> inf inf 7ff0000000000000
+		-1.41421 <built-in function sub> inf -inf fff0000000000000
+		-1.41421 <built-in function mul> inf -inf fff0000000000000
+		-1.41421 <built-in function truediv> inf -0.00000 8000000000000000
+	-1.41421 <built-in function floor> -2.00000 c000000000000000
+	-1.41421 <built-in function ceil> -1.00000 bff0000000000000
+	-1.41421 <built-in function sin> -0.98777 bfef9bc75444748f
+	-1.41421 <class 'int'> -1.00000 bff0000000000000
+	-1.41421 <built-in function exp> 0.24312 3fcf1e72fbc1167d
+	new y
+		-1.41421 <built-in function add> -inf -inf fff0000000000000
+		-1.41421 <built-in function sub> -inf inf 7ff0000000000000
+		-1.41421 <built-in function mul> -inf inf 7ff0000000000000
+		-1.41421 <built-in function truediv> -inf 0.00000 0000000000000000
+	-1.41421 <built-in function floor> -2.00000 c000000000000000
+	-1.41421 <built-in function ceil> -1.00000 bff0000000000000
+	-1.41421 <built-in function sin> -0.98777 bfef9bc75444748f
+	-1.41421 <class 'int'> -1.00000 bff0000000000000
+	-1.41421 <built-in function exp> 0.24312 3fcf1e72fbc1167d
+	new y
+		-1.41421 <built-in function add> 1.41421 0.00000 0000000000000000
+		-1.41421 <built-in function sub> 1.41421 -2.82843 c006a09e667f055a
+		-1.41421 <built-in function mul> 1.41421 -2.00000 bfffffffffff6600
+		-1.41421 <built-in function truediv> 1.41421 -1.00000 bff0000000000000
+	-1.41421 <built-in function floor> -2.00000 c000000000000000
+	-1.41421 <built-in function ceil> -1.00000 bff0000000000000
+	-1.41421 <built-in function sin> -0.98777 bfef9bc75444748f
+	-1.41421 <class 'int'> -1.00000 bff0000000000000
+	-1.41421 <built-in function exp> 0.24312 3fcf1e72fbc1167d
+	new y
+		-1.41421 <built-in function add> -1.41421 -2.82843 c006a09e667f055a
+		-1.41421 <built-in function sub> -1.41421 0.00000 0000000000000000
+		-1.41421 <built-in function mul> -1.41421 2.00000 3fffffffffff6600
+		-1.41421 <built-in function truediv> -1.41421 1.00000 3ff0000000000000
+	-1.41421 <built-in function floor> -2.00000 c000000000000000
+	-1.41421 <built-in function ceil> -1.00000 bff0000000000000
+	-1.41421 <built-in function sin> -0.98777 bfef9bc75444748f
+	-1.41421 <class 'int'> -1.00000 bff0000000000000
+	-1.41421 <built-in function exp> 0.24312 3fcf1e72fbc1167d
+	new y
+		-1.41421 <built-in function add> 1.00000 -0.41421 bfda827999fc1568
+		-1.41421 <built-in function sub> 1.00000 -2.41421 c003504f333f82ad
+		-1.41421 <built-in function mul> 1.00000 -1.41421 bff6a09e667f055a
+		-1.41421 <built-in function truediv> 1.00000 -1.41421 bff6a09e667f055a
+	-1.41421 <built-in function floor> -2.00000 c000000000000000
+	-1.41421 <built-in function ceil> -1.00000 bff0000000000000
+	-1.41421 <built-in function sin> -0.98777 bfef9bc75444748f
+	-1.41421 <class 'int'> -1.00000 bff0000000000000
+	-1.41421 <built-in function exp> 0.24312 3fcf1e72fbc1167d
+	new y
+		-1.41421 <built-in function add> -1.00000 -2.41421 c003504f333f82ad
+		-1.41421 <built-in function sub> -1.00000 -0.41421 bfda827999fc1568
+		-1.41421 <built-in function mul> -1.00000 1.41421 3ff6a09e667f055a
+		-1.41421 <built-in function truediv> -1.00000 1.41421 3ff6a09e667f055a
+	-1.41421 <built-in function floor> -2.00000 c000000000000000
+	-1.41421 <built-in function ceil> -1.00000 bff0000000000000
+	-1.41421 <built-in function sin> -0.98777 bfef9bc75444748f
+	-1.41421 <class 'int'> -1.00000 bff0000000000000
+	-1.41421 <built-in function exp> 0.24312 3fcf1e72fbc1167d
+	new y
+		-1.41421 <built-in function add> 100000.00000 99998.58579 40f869e95f619981
+		-1.41421 <built-in function sub> 100000.00000 -100001.41421 c0f86a16a09e667f
+		-1.41421 <built-in function mul> 100000.00000 -141421.35624 c101436ad992c8c5
+		-1.41421 <built-in function truediv> 100000.00000 -0.00001 beeda88051ea3c97
+	-1.41421 <built-in function floor> -2.00000 c000000000000000
+	-1.41421 <built-in function ceil> -1.00000 bff0000000000000
+	-1.41421 <built-in function sin> -0.98777 bfef9bc75444748f
+	-1.41421 <class 'int'> -1.00000 bff0000000000000
+	-1.41421 <built-in function exp> 0.24312 3fcf1e72fbc1167d
+	new y
+		-1.41421 <built-in function add> -100000.00000 -100001.41421 c0f86a16a09e667f
+		-1.41421 <built-in function sub> -100000.00000 99998.58579 40f869e95f619981
+		-1.41421 <built-in function mul> -100000.00000 141421.35624 4101436ad992c8c5
+		-1.41421 <built-in function truediv> -100000.00000 0.00001 3eeda88051ea3c97
+	-1.41421 <built-in function floor> -2.00000 c000000000000000
+	-1.41421 <built-in function ceil> -1.00000 bff0000000000000
+	-1.41421 <built-in function sin> -0.98777 bfef9bc75444748f
+	-1.41421 <class 'int'> -1.00000 bff0000000000000
+	-1.41421 <built-in function exp> 0.24312 3fcf1e72fbc1167d
+	new y
+		-1.41421 <built-in function add> 0.00000 -1.41421 bff6a09e667f055a
+		-1.41421 <built-in function sub> 0.00000 -1.41421 bff6a09e667f055a
+		-1.41421 <built-in function mul> 0.00000 -0.00000 8000000000000000
+	-1.41421 <built-in function floor> -2.00000 c000000000000000
+	-1.41421 <built-in function ceil> -1.00000 bff0000000000000
+	-1.41421 <built-in function sin> -0.98777 bfef9bc75444748f
+	-1.41421 <class 'int'> -1.00000 bff0000000000000
+	-1.41421 <built-in function exp> 0.24312 3fcf1e72fbc1167d
+	new y
+		-1.41421 <built-in function add> -0.00000 -1.41421 bff6a09e667f055a
+		-1.41421 <built-in function sub> -0.00000 -1.41421 bff6a09e667f055a
+		-1.41421 <built-in function mul> -0.00000 0.00000 0000000000000000
+new x
+	1.00000 <built-in function floor> 1.00000 3ff0000000000000
+	1.00000 <built-in function ceil> 1.00000 3ff0000000000000
+	1.00000 <built-in function sqrt> 1.00000 3ff0000000000000
+	1.00000 <built-in function sin> 0.84147 3feaed548f090cee
+	1.00000 <class 'int'> 1.00000 3ff0000000000000
+	1.00000 <built-in function exp> 2.71828 4005bf0a8b145769
+	new y
+		1.00000 <built-in function add> nan nan 7ff8000000000000
+		1.00000 <built-in function sub> nan nan 7ff8000000000000
+		1.00000 <built-in function mul> nan nan 7ff8000000000000
+		1.00000 <built-in function truediv> nan nan 7ff8000000000000
+	1.00000 <built-in function floor> 1.00000 3ff0000000000000
+	1.00000 <built-in function ceil> 1.00000 3ff0000000000000
+	1.00000 <built-in function sqrt> 1.00000 3ff0000000000000
+	1.00000 <built-in function sin> 0.84147 3feaed548f090cee
+	1.00000 <class 'int'> 1.00000 3ff0000000000000
+	1.00000 <built-in function exp> 2.71828 4005bf0a8b145769
+	new y
+		1.00000 <built-in function add> inf inf 7ff0000000000000
+		1.00000 <built-in function sub> inf -inf fff0000000000000
+		1.00000 <built-in function mul> inf inf 7ff0000000000000
+		1.00000 <built-in function truediv> inf 0.00000 0000000000000000
+	1.00000 <built-in function floor> 1.00000 3ff0000000000000
+	1.00000 <built-in function ceil> 1.00000 3ff0000000000000
+	1.00000 <built-in function sqrt> 1.00000 3ff0000000000000
+	1.00000 <built-in function sin> 0.84147 3feaed548f090cee
+	1.00000 <class 'int'> 1.00000 3ff0000000000000
+	1.00000 <built-in function exp> 2.71828 4005bf0a8b145769
+	new y
+		1.00000 <built-in function add> -inf -inf fff0000000000000
+		1.00000 <built-in function sub> -inf inf 7ff0000000000000
+		1.00000 <built-in function mul> -inf -inf fff0000000000000
+		1.00000 <built-in function truediv> -inf -0.00000 8000000000000000
+	1.00000 <built-in function floor> 1.00000 3ff0000000000000
+	1.00000 <built-in function ceil> 1.00000 3ff0000000000000
+	1.00000 <built-in function sqrt> 1.00000 3ff0000000000000
+	1.00000 <built-in function sin> 0.84147 3feaed548f090cee
+	1.00000 <class 'int'> 1.00000 3ff0000000000000
+	1.00000 <built-in function exp> 2.71828 4005bf0a8b145769
+	new y
+		1.00000 <built-in function add> 1.41421 2.41421 4003504f333f82ad
+		1.00000 <built-in function sub> 1.41421 -0.41421 bfda827999fc1568
+		1.00000 <built-in function mul> 1.41421 1.41421 3ff6a09e667f055a
+		1.00000 <built-in function truediv> 1.41421 0.70711 3fe6a09e667f723f
+	1.00000 <built-in function floor> 1.00000 3ff0000000000000
+	1.00000 <built-in function ceil> 1.00000 3ff0000000000000
+	1.00000 <built-in function sqrt> 1.00000 3ff0000000000000
+	1.00000 <built-in function sin> 0.84147 3feaed548f090cee
+	1.00000 <class 'int'> 1.00000 3ff0000000000000
+	1.00000 <built-in function exp> 2.71828 4005bf0a8b145769
+	new y
+		1.00000 <built-in function add> -1.41421 -0.41421 bfda827999fc1568
+		1.00000 <built-in function sub> -1.41421 2.41421 4003504f333f82ad
+		1.00000 <built-in function mul> -1.41421 -1.41421 bff6a09e667f055a
+		1.00000 <built-in function truediv> -1.41421 -0.70711 bfe6a09e667f723f
+	1.00000 <built-in function floor> 1.00000 3ff0000000000000
+	1.00000 <built-in function ceil> 1.00000 3ff0000000000000
+	1.00000 <built-in function sqrt> 1.00000 3ff0000000000000
+	1.00000 <built-in function sin> 0.84147 3feaed548f090cee
+	1.00000 <class 'int'> 1.00000 3ff0000000000000
+	1.00000 <built-in function exp> 2.71828 4005bf0a8b145769
+	new y
+		1.00000 <built-in function add> 1.00000 2.00000 4000000000000000
+		1.00000 <built-in function sub> 1.00000 0.00000 0000000000000000
+		1.00000 <built-in function mul> 1.00000 1.00000 3ff0000000000000
+		1.00000 <built-in function truediv> 1.00000 1.00000 3ff0000000000000
+	1.00000 <built-in function floor> 1.00000 3ff0000000000000
+	1.00000 <built-in function ceil> 1.00000 3ff0000000000000
+	1.00000 <built-in function sqrt> 1.00000 3ff0000000000000
+	1.00000 <built-in function sin> 0.84147 3feaed548f090cee
+	1.00000 <class 'int'> 1.00000 3ff0000000000000
+	1.00000 <built-in function exp> 2.71828 4005bf0a8b145769
+	new y
+		1.00000 <built-in function add> -1.00000 0.00000 0000000000000000
+		1.00000 <built-in function sub> -1.00000 2.00000 4000000000000000
+		1.00000 <built-in function mul> -1.00000 -1.00000 bff0000000000000
+		1.00000 <built-in function truediv> -1.00000 -1.00000 bff0000000000000
+	1.00000 <built-in function floor> 1.00000 3ff0000000000000
+	1.00000 <built-in function ceil> 1.00000 3ff0000000000000
+	1.00000 <built-in function sqrt> 1.00000 3ff0000000000000
+	1.00000 <built-in function sin> 0.84147 3feaed548f090cee
+	1.00000 <class 'int'> 1.00000 3ff0000000000000
+	1.00000 <built-in function exp> 2.71828 4005bf0a8b145769
+	new y
+		1.00000 <built-in function add> 100000.00000 100001.00000 40f86a1000000000
+		1.00000 <built-in function sub> 100000.00000 -99999.00000 c0f869f000000000
+		1.00000 <built-in function mul> 100000.00000 100000.00000 40f86a0000000000
+		1.00000 <built-in function truediv> 100000.00000 0.00001 3ee4f8b588e368f1
+	1.00000 <built-in function floor> 1.00000 3ff0000000000000
+	1.00000 <built-in function ceil> 1.00000 3ff0000000000000
+	1.00000 <built-in function sqrt> 1.00000 3ff0000000000000
+	1.00000 <built-in function sin> 0.84147 3feaed548f090cee
+	1.00000 <class 'int'> 1.00000 3ff0000000000000
+	1.00000 <built-in function exp> 2.71828 4005bf0a8b145769
+	new y
+		1.00000 <built-in function add> -100000.00000 -99999.00000 c0f869f000000000
+		1.00000 <built-in function sub> -100000.00000 100001.00000 40f86a1000000000
+		1.00000 <built-in function mul> -100000.00000 -100000.00000 c0f86a0000000000
+		1.00000 <built-in function truediv> -100000.00000 -0.00001 bee4f8b588e368f1
+	1.00000 <built-in function floor> 1.00000 3ff0000000000000
+	1.00000 <built-in function ceil> 1.00000 3ff0000000000000
+	1.00000 <built-in function sqrt> 1.00000 3ff0000000000000
+	1.00000 <built-in function sin> 0.84147 3feaed548f090cee
+	1.00000 <class 'int'> 1.00000 3ff0000000000000
+	1.00000 <built-in function exp> 2.71828 4005bf0a8b145769
+	new y
+		1.00000 <built-in function add> 0.00000 1.00000 3ff0000000000000
+		1.00000 <built-in function sub> 0.00000 1.00000 3ff0000000000000
+		1.00000 <built-in function mul> 0.00000 0.00000 0000000000000000
+	1.00000 <built-in function floor> 1.00000 3ff0000000000000
+	1.00000 <built-in function ceil> 1.00000 3ff0000000000000
+	1.00000 <built-in function sqrt> 1.00000 3ff0000000000000
+	1.00000 <built-in function sin> 0.84147 3feaed548f090cee
+	1.00000 <class 'int'> 1.00000 3ff0000000000000
+	1.00000 <built-in function exp> 2.71828 4005bf0a8b145769
+	new y
+		1.00000 <built-in function add> -0.00000 1.00000 3ff0000000000000
+		1.00000 <built-in function sub> -0.00000 1.00000 3ff0000000000000
+		1.00000 <built-in function mul> -0.00000 -0.00000 8000000000000000
+new x
+	-1.00000 <built-in function floor> -1.00000 bff0000000000000
+	-1.00000 <built-in function ceil> -1.00000 bff0000000000000
+	-1.00000 <built-in function sin> -0.84147 bfeaed548f090cee
+	-1.00000 <class 'int'> -1.00000 bff0000000000000
+	-1.00000 <built-in function exp> 0.36788 3fd78b56362cef38
+	new y
+		-1.00000 <built-in function add> nan nan 7ff8000000000000
+		-1.00000 <built-in function sub> nan nan 7ff8000000000000
+		-1.00000 <built-in function mul> nan nan 7ff8000000000000
+		-1.00000 <built-in function truediv> nan nan 7ff8000000000000
+	-1.00000 <built-in function floor> -1.00000 bff0000000000000
+	-1.00000 <built-in function ceil> -1.00000 bff0000000000000
+	-1.00000 <built-in function sin> -0.84147 bfeaed548f090cee
+	-1.00000 <class 'int'> -1.00000 bff0000000000000
+	-1.00000 <built-in function exp> 0.36788 3fd78b56362cef38
+	new y
+		-1.00000 <built-in function add> inf inf 7ff0000000000000
+		-1.00000 <built-in function sub> inf -inf fff0000000000000
+		-1.00000 <built-in function mul> inf -inf fff0000000000000
+		-1.00000 <built-in function truediv> inf -0.00000 8000000000000000
+	-1.00000 <built-in function floor> -1.00000 bff0000000000000
+	-1.00000 <built-in function ceil> -1.00000 bff0000000000000
+	-1.00000 <built-in function sin> -0.84147 bfeaed548f090cee
+	-1.00000 <class 'int'> -1.00000 bff0000000000000
+	-1.00000 <built-in function exp> 0.36788 3fd78b56362cef38
+	new y
+		-1.00000 <built-in function add> -inf -inf fff0000000000000
+		-1.00000 <built-in function sub> -inf inf 7ff0000000000000
+		-1.00000 <built-in function mul> -inf inf 7ff0000000000000
+		-1.00000 <built-in function truediv> -inf 0.00000 0000000000000000
+	-1.00000 <built-in function floor> -1.00000 bff0000000000000
+	-1.00000 <built-in function ceil> -1.00000 bff0000000000000
+	-1.00000 <built-in function sin> -0.84147 bfeaed548f090cee
+	-1.00000 <class 'int'> -1.00000 bff0000000000000
+	-1.00000 <built-in function exp> 0.36788 3fd78b56362cef38
+	new y
+		-1.00000 <built-in function add> 1.41421 0.41421 3fda827999fc1568
+		-1.00000 <built-in function sub> 1.41421 -2.41421 c003504f333f82ad
+		-1.00000 <built-in function mul> 1.41421 -1.41421 bff6a09e667f055a
+		-1.00000 <built-in function truediv> 1.41421 -0.70711 bfe6a09e667f723f
+	-1.00000 <built-in function floor> -1.00000 bff0000000000000
+	-1.00000 <built-in function ceil> -1.00000 bff0000000000000
+	-1.00000 <built-in function sin> -0.84147 bfeaed548f090cee
+	-1.00000 <class 'int'> -1.00000 bff0000000000000
+	-1.00000 <built-in function exp> 0.36788 3fd78b56362cef38
+	new y
+		-1.00000 <built-in function add> -1.41421 -2.41421 c003504f333f82ad
+		-1.00000 <built-in function sub> -1.41421 0.41421 3fda827999fc1568
+		-1.00000 <built-in function mul> -1.41421 1.41421 3ff6a09e667f055a
+		-1.00000 <built-in function truediv> -1.41421 0.70711 3fe6a09e667f723f
+	-1.00000 <built-in function floor> -1.00000 bff0000000000000
+	-1.00000 <built-in function ceil> -1.00000 bff0000000000000
+	-1.00000 <built-in function sin> -0.84147 bfeaed548f090cee
+	-1.00000 <class 'int'> -1.00000 bff0000000000000
+	-1.00000 <built-in function exp> 0.36788 3fd78b56362cef38
+	new y
+		-1.00000 <built-in function add> 1.00000 0.00000 0000000000000000
+		-1.00000 <built-in function sub> 1.00000 -2.00000 c000000000000000
+		-1.00000 <built-in function mul> 1.00000 -1.00000 bff0000000000000
+		-1.00000 <built-in function truediv> 1.00000 -1.00000 bff0000000000000
+	-1.00000 <built-in function floor> -1.00000 bff0000000000000
+	-1.00000 <built-in function ceil> -1.00000 bff0000000000000
+	-1.00000 <built-in function sin> -0.84147 bfeaed548f090cee
+	-1.00000 <class 'int'> -1.00000 bff0000000000000
+	-1.00000 <built-in function exp> 0.36788 3fd78b56362cef38
+	new y
+		-1.00000 <built-in function add> -1.00000 -2.00000 c000000000000000
+		-1.00000 <built-in function sub> -1.00000 0.00000 0000000000000000
+		-1.00000 <built-in function mul> -1.00000 1.00000 3ff0000000000000
+		-1.00000 <built-in function truediv> -1.00000 1.00000 3ff0000000000000
+	-1.00000 <built-in function floor> -1.00000 bff0000000000000
+	-1.00000 <built-in function ceil> -1.00000 bff0000000000000
+	-1.00000 <built-in function sin> -0.84147 bfeaed548f090cee
+	-1.00000 <class 'int'> -1.00000 bff0000000000000
+	-1.00000 <built-in function exp> 0.36788 3fd78b56362cef38
+	new y
+		-1.00000 <built-in function add> 100000.00000 99999.00000 40f869f000000000
+		-1.00000 <built-in function sub> 100000.00000 -100001.00000 c0f86a1000000000
+		-1.00000 <built-in function mul> 100000.00000 -100000.00000 c0f86a0000000000
+		-1.00000 <built-in function truediv> 100000.00000 -0.00001 bee4f8b588e368f1
+	-1.00000 <built-in function floor> -1.00000 bff0000000000000
+	-1.00000 <built-in function ceil> -1.00000 bff0000000000000
+	-1.00000 <built-in function sin> -0.84147 bfeaed548f090cee
+	-1.00000 <class 'int'> -1.00000 bff0000000000000
+	-1.00000 <built-in function exp> 0.36788 3fd78b56362cef38
+	new y
+		-1.00000 <built-in function add> -100000.00000 -100001.00000 c0f86a1000000000
+		-1.00000 <built-in function sub> -100000.00000 99999.00000 40f869f000000000
+		-1.00000 <built-in function mul> -100000.00000 100000.00000 40f86a0000000000
+		-1.00000 <built-in function truediv> -100000.00000 0.00001 3ee4f8b588e368f1
+	-1.00000 <built-in function floor> -1.00000 bff0000000000000
+	-1.00000 <built-in function ceil> -1.00000 bff0000000000000
+	-1.00000 <built-in function sin> -0.84147 bfeaed548f090cee
+	-1.00000 <class 'int'> -1.00000 bff0000000000000
+	-1.00000 <built-in function exp> 0.36788 3fd78b56362cef38
+	new y
+		-1.00000 <built-in function add> 0.00000 -1.00000 bff0000000000000
+		-1.00000 <built-in function sub> 0.00000 -1.00000 bff0000000000000
+		-1.00000 <built-in function mul> 0.00000 -0.00000 8000000000000000
+	-1.00000 <built-in function floor> -1.00000 bff0000000000000
+	-1.00000 <built-in function ceil> -1.00000 bff0000000000000
+	-1.00000 <built-in function sin> -0.84147 bfeaed548f090cee
+	-1.00000 <class 'int'> -1.00000 bff0000000000000
+	-1.00000 <built-in function exp> 0.36788 3fd78b56362cef38
+	new y
+		-1.00000 <built-in function add> -0.00000 -1.00000 bff0000000000000
+		-1.00000 <built-in function sub> -0.00000 -1.00000 bff0000000000000
+		-1.00000 <built-in function mul> -0.00000 0.00000 0000000000000000
+new x
+	100000.00000 <built-in function floor> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function ceil> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function sqrt> 316.22777 4073c3a4edfa9759
+	100000.00000 <built-in function sin> 0.03575 3fa24daa9c527e96
+	100000.00000 <class 'int'> 100000.00000 40f86a0000000000
+	new y
+		100000.00000 <built-in function add> nan nan 7ff8000000000000
+		100000.00000 <built-in function sub> nan nan 7ff8000000000000
+		100000.00000 <built-in function mul> nan nan 7ff8000000000000
+		100000.00000 <built-in function truediv> nan nan 7ff8000000000000
+	100000.00000 <built-in function floor> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function ceil> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function sqrt> 316.22777 4073c3a4edfa9759
+	100000.00000 <built-in function sin> 0.03575 3fa24daa9c527e96
+	100000.00000 <class 'int'> 100000.00000 40f86a0000000000
+	new y
+		100000.00000 <built-in function add> inf inf 7ff0000000000000
+		100000.00000 <built-in function sub> inf -inf fff0000000000000
+		100000.00000 <built-in function mul> inf inf 7ff0000000000000
+		100000.00000 <built-in function truediv> inf 0.00000 0000000000000000
+	100000.00000 <built-in function floor> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function ceil> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function sqrt> 316.22777 4073c3a4edfa9759
+	100000.00000 <built-in function sin> 0.03575 3fa24daa9c527e96
+	100000.00000 <class 'int'> 100000.00000 40f86a0000000000
+	new y
+		100000.00000 <built-in function add> -inf -inf fff0000000000000
+		100000.00000 <built-in function sub> -inf inf 7ff0000000000000
+		100000.00000 <built-in function mul> -inf -inf fff0000000000000
+		100000.00000 <built-in function truediv> -inf -0.00000 8000000000000000
+	100000.00000 <built-in function floor> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function ceil> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function sqrt> 316.22777 4073c3a4edfa9759
+	100000.00000 <built-in function sin> 0.03575 3fa24daa9c527e96
+	100000.00000 <class 'int'> 100000.00000 40f86a0000000000
+	new y
+		100000.00000 <built-in function add> 1.41421 100001.41421 40f86a16a09e667f
+		100000.00000 <built-in function sub> 1.41421 99998.58579 40f869e95f619981
+		100000.00000 <built-in function mul> 1.41421 141421.35624 4101436ad992c8c5
+		100000.00000 <built-in function truediv> 1.41421 70710.67812 40f1436ad9931bda
+	100000.00000 <built-in function floor> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function ceil> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function sqrt> 316.22777 4073c3a4edfa9759
+	100000.00000 <built-in function sin> 0.03575 3fa24daa9c527e96
+	100000.00000 <class 'int'> 100000.00000 40f86a0000000000
+	new y
+		100000.00000 <built-in function add> -1.41421 99998.58579 40f869e95f619981
+		100000.00000 <built-in function sub> -1.41421 100001.41421 40f86a16a09e667f
+		100000.00000 <built-in function mul> -1.41421 -141421.35624 c101436ad992c8c5
+		100000.00000 <built-in function truediv> -1.41421 -70710.67812 c0f1436ad9931bda
+	100000.00000 <built-in function floor> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function ceil> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function sqrt> 316.22777 4073c3a4edfa9759
+	100000.00000 <built-in function sin> 0.03575 3fa24daa9c527e96
+	100000.00000 <class 'int'> 100000.00000 40f86a0000000000
+	new y
+		100000.00000 <built-in function add> 1.00000 100001.00000 40f86a1000000000
+		100000.00000 <built-in function sub> 1.00000 99999.00000 40f869f000000000
+		100000.00000 <built-in function mul> 1.00000 100000.00000 40f86a0000000000
+		100000.00000 <built-in function truediv> 1.00000 100000.00000 40f86a0000000000
+	100000.00000 <built-in function floor> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function ceil> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function sqrt> 316.22777 4073c3a4edfa9759
+	100000.00000 <built-in function sin> 0.03575 3fa24daa9c527e96
+	100000.00000 <class 'int'> 100000.00000 40f86a0000000000
+	new y
+		100000.00000 <built-in function add> -1.00000 99999.00000 40f869f000000000
+		100000.00000 <built-in function sub> -1.00000 100001.00000 40f86a1000000000
+		100000.00000 <built-in function mul> -1.00000 -100000.00000 c0f86a0000000000
+		100000.00000 <built-in function truediv> -1.00000 -100000.00000 c0f86a0000000000
+	100000.00000 <built-in function floor> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function ceil> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function sqrt> 316.22777 4073c3a4edfa9759
+	100000.00000 <built-in function sin> 0.03575 3fa24daa9c527e96
+	100000.00000 <class 'int'> 100000.00000 40f86a0000000000
+	new y
+		100000.00000 <built-in function add> 100000.00000 200000.00000 41086a0000000000
+		100000.00000 <built-in function sub> 100000.00000 0.00000 0000000000000000
+		100000.00000 <built-in function mul> 100000.00000 10000000000.00000 4202a05f20000000
+		100000.00000 <built-in function truediv> 100000.00000 1.00000 3ff0000000000000
+	100000.00000 <built-in function floor> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function ceil> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function sqrt> 316.22777 4073c3a4edfa9759
+	100000.00000 <built-in function sin> 0.03575 3fa24daa9c527e96
+	100000.00000 <class 'int'> 100000.00000 40f86a0000000000
+	new y
+		100000.00000 <built-in function add> -100000.00000 0.00000 0000000000000000
+		100000.00000 <built-in function sub> -100000.00000 200000.00000 41086a0000000000
+		100000.00000 <built-in function mul> -100000.00000 -10000000000.00000 c202a05f20000000
+		100000.00000 <built-in function truediv> -100000.00000 -1.00000 bff0000000000000
+	100000.00000 <built-in function floor> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function ceil> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function sqrt> 316.22777 4073c3a4edfa9759
+	100000.00000 <built-in function sin> 0.03575 3fa24daa9c527e96
+	100000.00000 <class 'int'> 100000.00000 40f86a0000000000
+	new y
+		100000.00000 <built-in function add> 0.00000 100000.00000 40f86a0000000000
+		100000.00000 <built-in function sub> 0.00000 100000.00000 40f86a0000000000
+		100000.00000 <built-in function mul> 0.00000 0.00000 0000000000000000
+	100000.00000 <built-in function floor> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function ceil> 100000.00000 40f86a0000000000
+	100000.00000 <built-in function sqrt> 316.22777 4073c3a4edfa9759
+	100000.00000 <built-in function sin> 0.03575 3fa24daa9c527e96
+	100000.00000 <class 'int'> 100000.00000 40f86a0000000000
+	new y
+		100000.00000 <built-in function add> -0.00000 100000.00000 40f86a0000000000
+		100000.00000 <built-in function sub> -0.00000 100000.00000 40f86a0000000000
+		100000.00000 <built-in function mul> -0.00000 -0.00000 8000000000000000
+new x
+	-100000.00000 <built-in function floor> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function ceil> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function sin> -0.03575 bfa24daa9c527e96
+	-100000.00000 <class 'int'> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function exp> 0.00000 0000000000000000
+	new y
+		-100000.00000 <built-in function add> nan nan 7ff8000000000000
+		-100000.00000 <built-in function sub> nan nan 7ff8000000000000
+		-100000.00000 <built-in function mul> nan nan 7ff8000000000000
+		-100000.00000 <built-in function truediv> nan nan 7ff8000000000000
+	-100000.00000 <built-in function floor> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function ceil> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function sin> -0.03575 bfa24daa9c527e96
+	-100000.00000 <class 'int'> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function exp> 0.00000 0000000000000000
+	new y
+		-100000.00000 <built-in function add> inf inf 7ff0000000000000
+		-100000.00000 <built-in function sub> inf -inf fff0000000000000
+		-100000.00000 <built-in function mul> inf -inf fff0000000000000
+		-100000.00000 <built-in function truediv> inf -0.00000 8000000000000000
+	-100000.00000 <built-in function floor> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function ceil> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function sin> -0.03575 bfa24daa9c527e96
+	-100000.00000 <class 'int'> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function exp> 0.00000 0000000000000000
+	new y
+		-100000.00000 <built-in function add> -inf -inf fff0000000000000
+		-100000.00000 <built-in function sub> -inf inf 7ff0000000000000
+		-100000.00000 <built-in function mul> -inf inf 7ff0000000000000
+		-100000.00000 <built-in function truediv> -inf 0.00000 0000000000000000
+	-100000.00000 <built-in function floor> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function ceil> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function sin> -0.03575 bfa24daa9c527e96
+	-100000.00000 <class 'int'> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function exp> 0.00000 0000000000000000
+	new y
+		-100000.00000 <built-in function add> 1.41421 -99998.58579 c0f869e95f619981
+		-100000.00000 <built-in function sub> 1.41421 -100001.41421 c0f86a16a09e667f
+		-100000.00000 <built-in function mul> 1.41421 -141421.35624 c101436ad992c8c5
+		-100000.00000 <built-in function truediv> 1.41421 -70710.67812 c0f1436ad9931bda
+	-100000.00000 <built-in function floor> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function ceil> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function sin> -0.03575 bfa24daa9c527e96
+	-100000.00000 <class 'int'> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function exp> 0.00000 0000000000000000
+	new y
+		-100000.00000 <built-in function add> -1.41421 -100001.41421 c0f86a16a09e667f
+		-100000.00000 <built-in function sub> -1.41421 -99998.58579 c0f869e95f619981
+		-100000.00000 <built-in function mul> -1.41421 141421.35624 4101436ad992c8c5
+		-100000.00000 <built-in function truediv> -1.41421 70710.67812 40f1436ad9931bda
+	-100000.00000 <built-in function floor> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function ceil> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function sin> -0.03575 bfa24daa9c527e96
+	-100000.00000 <class 'int'> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function exp> 0.00000 0000000000000000
+	new y
+		-100000.00000 <built-in function add> 1.00000 -99999.00000 c0f869f000000000
+		-100000.00000 <built-in function sub> 1.00000 -100001.00000 c0f86a1000000000
+		-100000.00000 <built-in function mul> 1.00000 -100000.00000 c0f86a0000000000
+		-100000.00000 <built-in function truediv> 1.00000 -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function floor> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function ceil> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function sin> -0.03575 bfa24daa9c527e96
+	-100000.00000 <class 'int'> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function exp> 0.00000 0000000000000000
+	new y
+		-100000.00000 <built-in function add> -1.00000 -100001.00000 c0f86a1000000000
+		-100000.00000 <built-in function sub> -1.00000 -99999.00000 c0f869f000000000
+		-100000.00000 <built-in function mul> -1.00000 100000.00000 40f86a0000000000
+		-100000.00000 <built-in function truediv> -1.00000 100000.00000 40f86a0000000000
+	-100000.00000 <built-in function floor> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function ceil> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function sin> -0.03575 bfa24daa9c527e96
+	-100000.00000 <class 'int'> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function exp> 0.00000 0000000000000000
+	new y
+		-100000.00000 <built-in function add> 100000.00000 0.00000 0000000000000000
+		-100000.00000 <built-in function sub> 100000.00000 -200000.00000 c1086a0000000000
+		-100000.00000 <built-in function mul> 100000.00000 -10000000000.00000 c202a05f20000000
+		-100000.00000 <built-in function truediv> 100000.00000 -1.00000 bff0000000000000
+	-100000.00000 <built-in function floor> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function ceil> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function sin> -0.03575 bfa24daa9c527e96
+	-100000.00000 <class 'int'> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function exp> 0.00000 0000000000000000
+	new y
+		-100000.00000 <built-in function add> -100000.00000 -200000.00000 c1086a0000000000
+		-100000.00000 <built-in function sub> -100000.00000 0.00000 0000000000000000
+		-100000.00000 <built-in function mul> -100000.00000 10000000000.00000 4202a05f20000000
+		-100000.00000 <built-in function truediv> -100000.00000 1.00000 3ff0000000000000
+	-100000.00000 <built-in function floor> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function ceil> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function sin> -0.03575 bfa24daa9c527e96
+	-100000.00000 <class 'int'> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function exp> 0.00000 0000000000000000
+	new y
+		-100000.00000 <built-in function add> 0.00000 -100000.00000 c0f86a0000000000
+		-100000.00000 <built-in function sub> 0.00000 -100000.00000 c0f86a0000000000
+		-100000.00000 <built-in function mul> 0.00000 -0.00000 8000000000000000
+	-100000.00000 <built-in function floor> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function ceil> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function sin> -0.03575 bfa24daa9c527e96
+	-100000.00000 <class 'int'> -100000.00000 c0f86a0000000000
+	-100000.00000 <built-in function exp> 0.00000 0000000000000000
+	new y
+		-100000.00000 <built-in function add> -0.00000 -100000.00000 c0f86a0000000000
+		-100000.00000 <built-in function sub> -0.00000 -100000.00000 c0f86a0000000000
+		-100000.00000 <built-in function mul> -0.00000 0.00000 0000000000000000
+new x
+	0.00000 <built-in function floor> 0.00000 0000000000000000
+	0.00000 <built-in function ceil> 0.00000 0000000000000000
+	0.00000 <built-in function sqrt> 0.00000 0000000000000000
+	0.00000 <built-in function sin> 0.00000 0000000000000000
+	0.00000 <class 'int'> 0.00000 0000000000000000
+	0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		0.00000 <built-in function add> nan nan 7ff8000000000000
+		0.00000 <built-in function sub> nan nan 7ff8000000000000
+		0.00000 <built-in function mul> nan nan 7ff8000000000000
+		0.00000 <built-in function truediv> nan nan 7ff8000000000000
+	0.00000 <built-in function floor> 0.00000 0000000000000000
+	0.00000 <built-in function ceil> 0.00000 0000000000000000
+	0.00000 <built-in function sqrt> 0.00000 0000000000000000
+	0.00000 <built-in function sin> 0.00000 0000000000000000
+	0.00000 <class 'int'> 0.00000 0000000000000000
+	0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		0.00000 <built-in function add> inf inf 7ff0000000000000
+		0.00000 <built-in function sub> inf -inf fff0000000000000
+		0.00000 <built-in function mul> inf nan 7ff8000000000000
+		0.00000 <built-in function truediv> inf 0.00000 0000000000000000
+	0.00000 <built-in function floor> 0.00000 0000000000000000
+	0.00000 <built-in function ceil> 0.00000 0000000000000000
+	0.00000 <built-in function sqrt> 0.00000 0000000000000000
+	0.00000 <built-in function sin> 0.00000 0000000000000000
+	0.00000 <class 'int'> 0.00000 0000000000000000
+	0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		0.00000 <built-in function add> -inf -inf fff0000000000000
+		0.00000 <built-in function sub> -inf inf 7ff0000000000000
+		0.00000 <built-in function mul> -inf nan 7ff8000000000000
+		0.00000 <built-in function truediv> -inf -0.00000 8000000000000000
+	0.00000 <built-in function floor> 0.00000 0000000000000000
+	0.00000 <built-in function ceil> 0.00000 0000000000000000
+	0.00000 <built-in function sqrt> 0.00000 0000000000000000
+	0.00000 <built-in function sin> 0.00000 0000000000000000
+	0.00000 <class 'int'> 0.00000 0000000000000000
+	0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		0.00000 <built-in function add> 1.41421 1.41421 3ff6a09e667f055a
+		0.00000 <built-in function sub> 1.41421 -1.41421 bff6a09e667f055a
+		0.00000 <built-in function mul> 1.41421 0.00000 0000000000000000
+		0.00000 <built-in function truediv> 1.41421 0.00000 0000000000000000
+	0.00000 <built-in function floor> 0.00000 0000000000000000
+	0.00000 <built-in function ceil> 0.00000 0000000000000000
+	0.00000 <built-in function sqrt> 0.00000 0000000000000000
+	0.00000 <built-in function sin> 0.00000 0000000000000000
+	0.00000 <class 'int'> 0.00000 0000000000000000
+	0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		0.00000 <built-in function add> -1.41421 -1.41421 bff6a09e667f055a
+		0.00000 <built-in function sub> -1.41421 1.41421 3ff6a09e667f055a
+		0.00000 <built-in function mul> -1.41421 -0.00000 8000000000000000
+		0.00000 <built-in function truediv> -1.41421 -0.00000 8000000000000000
+	0.00000 <built-in function floor> 0.00000 0000000000000000
+	0.00000 <built-in function ceil> 0.00000 0000000000000000
+	0.00000 <built-in function sqrt> 0.00000 0000000000000000
+	0.00000 <built-in function sin> 0.00000 0000000000000000
+	0.00000 <class 'int'> 0.00000 0000000000000000
+	0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		0.00000 <built-in function add> 1.00000 1.00000 3ff0000000000000
+		0.00000 <built-in function sub> 1.00000 -1.00000 bff0000000000000
+		0.00000 <built-in function mul> 1.00000 0.00000 0000000000000000
+		0.00000 <built-in function truediv> 1.00000 0.00000 0000000000000000
+	0.00000 <built-in function floor> 0.00000 0000000000000000
+	0.00000 <built-in function ceil> 0.00000 0000000000000000
+	0.00000 <built-in function sqrt> 0.00000 0000000000000000
+	0.00000 <built-in function sin> 0.00000 0000000000000000
+	0.00000 <class 'int'> 0.00000 0000000000000000
+	0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		0.00000 <built-in function add> -1.00000 -1.00000 bff0000000000000
+		0.00000 <built-in function sub> -1.00000 1.00000 3ff0000000000000
+		0.00000 <built-in function mul> -1.00000 -0.00000 8000000000000000
+		0.00000 <built-in function truediv> -1.00000 -0.00000 8000000000000000
+	0.00000 <built-in function floor> 0.00000 0000000000000000
+	0.00000 <built-in function ceil> 0.00000 0000000000000000
+	0.00000 <built-in function sqrt> 0.00000 0000000000000000
+	0.00000 <built-in function sin> 0.00000 0000000000000000
+	0.00000 <class 'int'> 0.00000 0000000000000000
+	0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		0.00000 <built-in function add> 100000.00000 100000.00000 40f86a0000000000
+		0.00000 <built-in function sub> 100000.00000 -100000.00000 c0f86a0000000000
+		0.00000 <built-in function mul> 100000.00000 0.00000 0000000000000000
+		0.00000 <built-in function truediv> 100000.00000 0.00000 0000000000000000
+	0.00000 <built-in function floor> 0.00000 0000000000000000
+	0.00000 <built-in function ceil> 0.00000 0000000000000000
+	0.00000 <built-in function sqrt> 0.00000 0000000000000000
+	0.00000 <built-in function sin> 0.00000 0000000000000000
+	0.00000 <class 'int'> 0.00000 0000000000000000
+	0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		0.00000 <built-in function add> -100000.00000 -100000.00000 c0f86a0000000000
+		0.00000 <built-in function sub> -100000.00000 100000.00000 40f86a0000000000
+		0.00000 <built-in function mul> -100000.00000 -0.00000 8000000000000000
+		0.00000 <built-in function truediv> -100000.00000 -0.00000 8000000000000000
+	0.00000 <built-in function floor> 0.00000 0000000000000000
+	0.00000 <built-in function ceil> 0.00000 0000000000000000
+	0.00000 <built-in function sqrt> 0.00000 0000000000000000
+	0.00000 <built-in function sin> 0.00000 0000000000000000
+	0.00000 <class 'int'> 0.00000 0000000000000000
+	0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		0.00000 <built-in function add> 0.00000 0.00000 0000000000000000
+		0.00000 <built-in function sub> 0.00000 0.00000 0000000000000000
+		0.00000 <built-in function mul> 0.00000 0.00000 0000000000000000
+	0.00000 <built-in function floor> 0.00000 0000000000000000
+	0.00000 <built-in function ceil> 0.00000 0000000000000000
+	0.00000 <built-in function sqrt> 0.00000 0000000000000000
+	0.00000 <built-in function sin> 0.00000 0000000000000000
+	0.00000 <class 'int'> 0.00000 0000000000000000
+	0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		0.00000 <built-in function add> -0.00000 0.00000 0000000000000000
+		0.00000 <built-in function sub> -0.00000 0.00000 0000000000000000
+		0.00000 <built-in function mul> -0.00000 -0.00000 8000000000000000
+new x
+	-0.00000 <built-in function floor> 0.00000 0000000000000000
+	-0.00000 <built-in function ceil> 0.00000 0000000000000000
+	-0.00000 <built-in function sqrt> -0.00000 8000000000000000
+	-0.00000 <built-in function sin> -0.00000 8000000000000000
+	-0.00000 <class 'int'> 0.00000 0000000000000000
+	-0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		-0.00000 <built-in function add> nan nan 7ff8000000000000
+		-0.00000 <built-in function sub> nan nan 7ff8000000000000
+		-0.00000 <built-in function mul> nan nan 7ff8000000000000
+		-0.00000 <built-in function truediv> nan nan 7ff8000000000000
+	-0.00000 <built-in function floor> 0.00000 0000000000000000
+	-0.00000 <built-in function ceil> 0.00000 0000000000000000
+	-0.00000 <built-in function sqrt> -0.00000 8000000000000000
+	-0.00000 <built-in function sin> -0.00000 8000000000000000
+	-0.00000 <class 'int'> 0.00000 0000000000000000
+	-0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		-0.00000 <built-in function add> inf inf 7ff0000000000000
+		-0.00000 <built-in function sub> inf -inf fff0000000000000
+		-0.00000 <built-in function mul> inf nan 7ff8000000000000
+		-0.00000 <built-in function truediv> inf -0.00000 8000000000000000
+	-0.00000 <built-in function floor> 0.00000 0000000000000000
+	-0.00000 <built-in function ceil> 0.00000 0000000000000000
+	-0.00000 <built-in function sqrt> -0.00000 8000000000000000
+	-0.00000 <built-in function sin> -0.00000 8000000000000000
+	-0.00000 <class 'int'> 0.00000 0000000000000000
+	-0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		-0.00000 <built-in function add> -inf -inf fff0000000000000
+		-0.00000 <built-in function sub> -inf inf 7ff0000000000000
+		-0.00000 <built-in function mul> -inf nan 7ff8000000000000
+		-0.00000 <built-in function truediv> -inf 0.00000 0000000000000000
+	-0.00000 <built-in function floor> 0.00000 0000000000000000
+	-0.00000 <built-in function ceil> 0.00000 0000000000000000
+	-0.00000 <built-in function sqrt> -0.00000 8000000000000000
+	-0.00000 <built-in function sin> -0.00000 8000000000000000
+	-0.00000 <class 'int'> 0.00000 0000000000000000
+	-0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		-0.00000 <built-in function add> 1.41421 1.41421 3ff6a09e667f055a
+		-0.00000 <built-in function sub> 1.41421 -1.41421 bff6a09e667f055a
+		-0.00000 <built-in function mul> 1.41421 -0.00000 8000000000000000
+		-0.00000 <built-in function truediv> 1.41421 -0.00000 8000000000000000
+	-0.00000 <built-in function floor> 0.00000 0000000000000000
+	-0.00000 <built-in function ceil> 0.00000 0000000000000000
+	-0.00000 <built-in function sqrt> -0.00000 8000000000000000
+	-0.00000 <built-in function sin> -0.00000 8000000000000000
+	-0.00000 <class 'int'> 0.00000 0000000000000000
+	-0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		-0.00000 <built-in function add> -1.41421 -1.41421 bff6a09e667f055a
+		-0.00000 <built-in function sub> -1.41421 1.41421 3ff6a09e667f055a
+		-0.00000 <built-in function mul> -1.41421 0.00000 0000000000000000
+		-0.00000 <built-in function truediv> -1.41421 0.00000 0000000000000000
+	-0.00000 <built-in function floor> 0.00000 0000000000000000
+	-0.00000 <built-in function ceil> 0.00000 0000000000000000
+	-0.00000 <built-in function sqrt> -0.00000 8000000000000000
+	-0.00000 <built-in function sin> -0.00000 8000000000000000
+	-0.00000 <class 'int'> 0.00000 0000000000000000
+	-0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		-0.00000 <built-in function add> 1.00000 1.00000 3ff0000000000000
+		-0.00000 <built-in function sub> 1.00000 -1.00000 bff0000000000000
+		-0.00000 <built-in function mul> 1.00000 -0.00000 8000000000000000
+		-0.00000 <built-in function truediv> 1.00000 -0.00000 8000000000000000
+	-0.00000 <built-in function floor> 0.00000 0000000000000000
+	-0.00000 <built-in function ceil> 0.00000 0000000000000000
+	-0.00000 <built-in function sqrt> -0.00000 8000000000000000
+	-0.00000 <built-in function sin> -0.00000 8000000000000000
+	-0.00000 <class 'int'> 0.00000 0000000000000000
+	-0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		-0.00000 <built-in function add> -1.00000 -1.00000 bff0000000000000
+		-0.00000 <built-in function sub> -1.00000 1.00000 3ff0000000000000
+		-0.00000 <built-in function mul> -1.00000 0.00000 0000000000000000
+		-0.00000 <built-in function truediv> -1.00000 0.00000 0000000000000000
+	-0.00000 <built-in function floor> 0.00000 0000000000000000
+	-0.00000 <built-in function ceil> 0.00000 0000000000000000
+	-0.00000 <built-in function sqrt> -0.00000 8000000000000000
+	-0.00000 <built-in function sin> -0.00000 8000000000000000
+	-0.00000 <class 'int'> 0.00000 0000000000000000
+	-0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		-0.00000 <built-in function add> 100000.00000 100000.00000 40f86a0000000000
+		-0.00000 <built-in function sub> 100000.00000 -100000.00000 c0f86a0000000000
+		-0.00000 <built-in function mul> 100000.00000 -0.00000 8000000000000000
+		-0.00000 <built-in function truediv> 100000.00000 -0.00000 8000000000000000
+	-0.00000 <built-in function floor> 0.00000 0000000000000000
+	-0.00000 <built-in function ceil> 0.00000 0000000000000000
+	-0.00000 <built-in function sqrt> -0.00000 8000000000000000
+	-0.00000 <built-in function sin> -0.00000 8000000000000000
+	-0.00000 <class 'int'> 0.00000 0000000000000000
+	-0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		-0.00000 <built-in function add> -100000.00000 -100000.00000 c0f86a0000000000
+		-0.00000 <built-in function sub> -100000.00000 100000.00000 40f86a0000000000
+		-0.00000 <built-in function mul> -100000.00000 0.00000 0000000000000000
+		-0.00000 <built-in function truediv> -100000.00000 0.00000 0000000000000000
+	-0.00000 <built-in function floor> 0.00000 0000000000000000
+	-0.00000 <built-in function ceil> 0.00000 0000000000000000
+	-0.00000 <built-in function sqrt> -0.00000 8000000000000000
+	-0.00000 <built-in function sin> -0.00000 8000000000000000
+	-0.00000 <class 'int'> 0.00000 0000000000000000
+	-0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		-0.00000 <built-in function add> 0.00000 0.00000 0000000000000000
+		-0.00000 <built-in function sub> 0.00000 -0.00000 8000000000000000
+		-0.00000 <built-in function mul> 0.00000 -0.00000 8000000000000000
+	-0.00000 <built-in function floor> 0.00000 0000000000000000
+	-0.00000 <built-in function ceil> 0.00000 0000000000000000
+	-0.00000 <built-in function sqrt> -0.00000 8000000000000000
+	-0.00000 <built-in function sin> -0.00000 8000000000000000
+	-0.00000 <class 'int'> 0.00000 0000000000000000
+	-0.00000 <built-in function exp> 1.00000 3ff0000000000000
+	new y
+		-0.00000 <built-in function add> -0.00000 -0.00000 8000000000000000
+		-0.00000 <built-in function sub> -0.00000 0.00000 0000000000000000
+		-0.00000 <built-in function mul> -0.00000 0.00000 0000000000000000
+executed with `Return("\x00")`

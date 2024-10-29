@@ -23,7 +23,7 @@ Required tools:
 ### Simple
 1. `cd $PROJECT_DIR`
 2. `git submodule update --init --recursive --depth 1`
-3. `./build-scripts/install-deps.rb --os --rust --genvm`
+3. `./build-scripts/install/install-deps.rb --os --rust --genvm`
 4. `source env.sh`
 5. `git third-party update --all`
 7. `ya-build config` (for release build pass `--preload .ci/release-conf.rb`)
@@ -37,14 +37,14 @@ It will also require `docker` and `docker-buildx`
 
 1. `cd $PROJECT_DIR`
 2. `git submodule update --init --recursive --depth 1`
-3. `./build-scripts/install-deps.rb --os --rust --genvm --runners`
+3. `./build-scripts/install/install-deps.rb --os --rust --genvm --runners`
 4. `source env.sh`
 5. `ya-build config` (for release build pass `--preload .ci/release-conf.rb`)
 6. `ninja -C build tags/all`
 7. full genvm (including runners) is located at `build/out`
 
 ## Running tests
-As of now there are two test suites, both of which require `./build-scripts/install-deps.rb --test`
+As of now there are two test suites, both of which require `./build-scripts/install/install-deps.rb --test`
 
 ### executor/testdata (mock tests)
 Prerequisites:

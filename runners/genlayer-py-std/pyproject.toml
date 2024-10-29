@@ -2,7 +2,7 @@
 name = "genvm-sdk-python"
 version = "0.1.0"
 description = ""
-authors = ["Kira Prokopenko <kira@yeager.ai>"]
+authors = ["Kira Prokopenko <kira@yeager.ai>", "Yeager AI Corp"]
 #readme = "README.md"
 packages = [
     { include = "genlayer", from = "src" },
@@ -15,8 +15,8 @@ python = "^3.12"
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.2"
 pytest-xdist = "^3.6.1"
-mypy = "^1.11.2"
 pytest-cov = "^5.0.0"
+sentence-transformers = "^3.2.1"
 
 [build-system]
 requires = ["poetry-core"]

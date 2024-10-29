@@ -4,7 +4,8 @@ PYO3_NO_PYTHON = "1"
 
 [build]
 rustflags =[
-    "-Ctarget-feature=-reference-types",
+    # "-Clink-args=-export-all"
+    # "-Ctarget-feature=-reference-types",
 ]
 
 #[unstable]

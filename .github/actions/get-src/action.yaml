@@ -1,20 +1,18 @@
 name: GenVM get source
+description: ""
 inputs:
   install_also:
     description: additional flags for install-deps.rb
     required: false
     default: ""
-    type: string
   load_submodules:
-    description:
+    description: if should update submodules
     required: false
     default: "true"
-    type: string
   third_party:
-    description:
+    description: third-party modules to install
     required: false
     default: --all
-    type: string
 runs:
   using: composite
   steps:
@@ -22,8 +20,8 @@ runs:
       run: |
         cd "$GITHUB_WORKSPACE"
         sudo apt-get update && sudo apt-get install -y ruby
-        (./build-scripts/install-deps.rb --os || true)
-        ./build-scripts/install-deps.rb --os ${{ inputs.install_also }}
+        (./build-scripts/install/install-deps.rb --os || true)
+        ./build-scripts/install/install-deps.rb --os ${{ inputs.install_also }}
         git config --global user.email "worker@ci.ci"
         git config --global user.name "CI worker"
         if [ "${{ inputs.load_submodules }}" == "true" ]

@@ -1,5 +1,5 @@
 int
 dlclose(void* handle)
 {
-    return 0;
+	return 0;
 }

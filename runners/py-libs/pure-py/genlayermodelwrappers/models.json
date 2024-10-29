@@ -1,0 +1,9 @@
+{
+  "all-MiniLM-L6-v2": {
+    "path": "/models/onnx/all-MiniLM-L6-v2.onnx",
+    "rename-outputs": {
+      "last-hidden-state": "unpooled",
+      "924": "embedding"
+    }
+  }
+}
