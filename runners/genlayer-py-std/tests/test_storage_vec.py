@@ -1,4 +1,5 @@
-from genlayer.py.storage import DynArray, storage
+from genlayer.py.storage import DynArray
+from genlayer.py.storage.generate import storage
 
 from .common import *
 

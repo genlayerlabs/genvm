@@ -1,5 +1,5 @@
-from genlayer.py.storage import storage, TreeMap
-from genlayer.py.types import *
+from genlayer import *
+from genlayer.py.storage.generate import storage
 
 
 @storage
