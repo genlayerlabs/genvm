@@ -1,16 +1,16 @@
-# { "Depends": "genlayer-py-std:test" }
-import genlayer.std as std
+# { "Depends": "py-genlayer:test" }
+from genlayer import *
 
 
-@std.contract
+@gl.contract
 class Contract:
 	def __init__(self, foo, bar):
 		pass
 
-	@std.public
+	@gl.public.write
 	def foo(self) -> None:
 		pass
 
-	@std.public
+	@gl.public.write
 	def bar(self) -> int:
 		return 0

@@ -1,16 +1,13 @@
-# { "Depends": "genlayer-py-std:test" }
+# { "Depends": "py-genlayer:test" }
 
-import genlayer.std as gl
-
-from genlayer.py.types import *
-from genlayer.py.storage import *
+from genlayer import *
 
 
 @gl.contract
 class Contract:
 	st: TreeMap[Address, TreeMap[Address, u256]]
 
-	@gl.public
+	@gl.public.view
 	def foo(self):
 		first = self.st.get_or_insert_default(Address(b'\x00' * 20))
 		print({k.as_hex: dict(v.items()) for k, v in self.st.items()})

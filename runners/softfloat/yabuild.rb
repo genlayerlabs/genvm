@@ -76,7 +76,6 @@ project('softfloat') {
 	runner_target = target_publish_runner(
 		name_base: 'softfloat',
 		out_dir: config.runners_dir,
-		create_test_runner: false,
 		files: [
 			{ path: 'softfloat.wasm', read_from: softfloat_lib.meta.output_file },
 		],

@@ -1,10 +1,10 @@
-# { "Depends": "genlayer-py-std:test" }
-import genlayer.std as gl
+# { "Depends": "py-genlayer:test" }
+from genlayer import *
 
 
 @gl.contract
 class Contract:
-	@gl.public
+	@gl.public.view
 	def foo(self, a, b):
 		print('contract to.foo')
 		import json

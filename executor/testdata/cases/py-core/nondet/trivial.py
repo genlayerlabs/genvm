@@ -1,10 +1,10 @@
-# { "Depends": "genlayer-py-std:test" }
-import genlayer.std as gl
+# { "Depends": "py-genlayer:test" }
+from genlayer import *
 
 
 @gl.contract
 class Contract:
-	@gl.public
+	@gl.public.write
 	def init(self):
 		eval("print('init from eval!')")
 
@@ -12,4 +12,4 @@ class Contract:
 			print('wow, nondet')
 			return 'web page?'
 
-		return gl.eq_principle_refl(run).get()
+		return gl.eq_principle_strict_eq(run)

@@ -10,7 +10,6 @@ add_model = Proc.new { |name|
 		},
 		dependencies: [],
 		expected_hash: config.runners.onnx_models.send(name.gsub(/-/, '_')).hash,
-		create_test_runner: false,
 		tags: ['all', 'runner']
 	)
 }

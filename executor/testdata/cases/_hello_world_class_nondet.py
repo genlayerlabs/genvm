@@ -1,11 +1,10 @@
-# { "Depends": "genlayer-py-std:test" }
-import genlayer.std as gl
-import genlayer.advanced as gla
+# { "Depends": "py-genlayer:test" }
+from genlayer import *
 
 
 @gl.contract
 class Contract:
-	@gl.public
+	@gl.public.write
 	def __init__(self):
-		gla.run_nondet(lambda: None, lambda x: True)
+		gl.advanced.run_nondet(lambda: None, lambda x: True)
 		print('hello world')

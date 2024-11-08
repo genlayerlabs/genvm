@@ -1,9 +1,10 @@
+import typing
+
 import genlayer._wasi as wasi
 import genlayer.py.calldata
-import typing
-from genlayer.py.types import Rollback
 
-from genlayer.py.storage.generate import _known_descs
+from ..py.types import Rollback
+from ..py.storage.generate import _known_descs
 
 
 def _give_result(res_fn: typing.Callable[[], typing.Any]):
@@ -33,7 +34,7 @@ def run(contract: type):
 	if entrypoint.startswith(CALL):
 		mem = mem[len(CALL) :]
 		calldata = genlayer.py.calldata.decode(mem)
-		from .std import message
+		from . import message
 
 		if message.is_init:
 			meth = getattr(contract, '__init__')
@@ -46,7 +47,7 @@ def run(contract: type):
 					_give_result(contract.__get_schema__)
 					return
 
-				from .py.get_schema import get_schema
+				from ..py.get_schema import get_schema
 				import json
 
 				_give_result(lambda: json.dumps(get_schema(contract), separators=(',', ':')))

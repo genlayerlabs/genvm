@@ -1,17 +1,17 @@
-# { "Depends": "genlayer-py-std:test" }
-import genlayer.std as gl
+# { "Depends": "py-genlayer:test" }
+from genlayer import *
 
 
 @gl.contract
 class Contract:
-	@gl.public
+	@gl.public.write
 	def main(self):
 		try:
 
 			def run():
 				gl.rollback_immediate("nah, I won't execute")
 
-			res = gl.eq_principle_refl(run).get()
+			res = gl.eq_principle_strict_eq(run).get()
 		except gl.Rollback as r:
 			print('handled', r.msg)
 		else:

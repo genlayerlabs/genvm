@@ -1,12 +1,9 @@
-# { "Depends": "genlayer-py-std:test" }
+# { "Depends": "py-genlayer:test" }
 
 # from __future__ import annotations
 
 import typing
 import types
-
-
-__gl_self_run__ = True
 
 
 class Foo[X]:
@@ -40,3 +37,4 @@ class Test:
 
 
 tst(Test)
+exit(0)

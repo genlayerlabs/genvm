@@ -1,12 +1,12 @@
-# { "Depends": "genlayer-py-std:test" }
-import genlayer.std as gl
+# { "Depends": "py-genlayer:test" }
+from genlayer import *
 
 
 @gl.contract
 class Contract:
-	@gl.public
+	@gl.public.write
 	def main(self):
 		def run():
 			raise gl.Rollback('rollback')
 
-		print(gl.eq_principle_refl(run).get())
+		print(gl.eq_principle_strict_eq(run))

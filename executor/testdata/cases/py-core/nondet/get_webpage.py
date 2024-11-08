@@ -1,12 +1,12 @@
-# { "Depends": "genlayer-py-std:test" }
-import genlayer.std as gl
+# { "Depends": "py-genlayer:test" }
+from genlayer import *
 
 
 @gl.contract
 class Contract:
-	@gl.public
+	@gl.public.write
 	def main(self, mode: str):
 		def run():
-			return gl.get_webpage({'mode': mode}, 'http://127.0.0.1:4242/hello.html').get()
+			return gl.get_webpage('http://127.0.0.1:4242/hello.html', mode=mode)
 
-		print(gl.eq_principle_refl(run).get())
+		print(gl.eq_principle_strict_eq(run))

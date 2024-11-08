@@ -1,10 +1,7 @@
-# { "Depends": "genlayer-py-std:test" }
+# { "Depends": "py-genlayer:test" }
 
-import genlayer.std as gl
-from genlayer.py.types import *
-from genlayer.py.storage import storage, TreeMap
-
-__gl_self_run__ = True
+from genlayer import *
+from genlayer.py.storage.generate import storage
 
 
 @storage
@@ -18,3 +15,5 @@ tst.m['1'] = 12
 tst.m['2'] = 13
 del tst.m['1']
 print('1' in tst.m, tst.m['2'])
+
+exit(0)

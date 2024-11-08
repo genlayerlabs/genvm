@@ -35,28 +35,40 @@ cloudpickle_runner = find_target /runners\/py-libs\/cloudpickle$/
 
 # extension_target = find_target /runners\/cpython-extension-lib$/
 
-raise "Nil hash" if cpython_runner.meta.expected_hash.nil?
-
 runner_target = target_publish_runner(
-	name_base: 'genlayer-py-std',
+	name_base: 'py-genlayer-std',
 	out_dir: config.runners_dir,
 	files: [{ include: out_file }],
 	runner_dict: {
 		Seq: [
-			{ MapFile: { to: "/py/genlayer", file: "src/" }},
-			{ AddEnv: { name: "PYTHONPATH", val: "/py/genlayer" } },
-			{ MapCode: { to: "/contract.py" } },
-			{ SetArgs: ["py", "-u", "-c", "import contract;import genlayer.runner as r;r.run(contract)"] },
-			{ Depends: cloudpickle_runner.meta.runner_dep_id },
-			{ Depends: cpython_runner.meta.runner_dep_id },
+			{ MapFile: { to: "/py/libs/", file: "src/" }},
+			{ AddEnv: { name: "PYTHONPATH", val: "/py/libs" } },
 		],
 	},
 	dependencies: [build_pyc_s],
+	expected_hash: 'test',
+)
+
+all_runner_target = target_publish_runner(
+	name_base: 'py-genlayer',
+	out_dir: config.runners_dir,
+	files: [],
+	runner_dict: {
+		Seq: [
+			{ MapCode: { to: "/contract.py" } },
+			{ SetArgs: ["py", "-u", "-c", "import contract;import genlayer.std.runner as r;r.run(contract)"] },
+			{ Depends: cloudpickle_runner.meta.runner_dep_id },
+			{ Depends: runner_target.meta.runner_dep_id },
+			{ Depends: cpython_runner.meta.runner_dep_id },
+		],
+	},
+	dependencies: [runner_target],
+	expected_hash: 'test',
 )
 
 target_alias(
-	'genlayer-py-std',
-	runner_target,
+	'py-genlayer',
+	all_runner_target,
 	tags: ['all', 'runner'],
 	inherit_meta: ['expected_hash'],
 )

@@ -1,5 +1,5 @@
-# { "Depends": "genlayer-py-std:test" }
-import genlayer.std as std
+# { "Depends": "py-genlayer:test" }
+from genlayer import *
 import typing
 
 
@@ -8,24 +8,24 @@ class MyTDict(typing.TypedDict):
 	b: str
 
 
-@std.contract
+@gl.contract
 class Contract:
 	def __init__(self):
 		pass
 
-	@std.public
+	@gl.public.write
 	def opt(
 		self, a1: list | None, a2: typing.Union[str, bytes], a3: typing.Optional[str]
 	):
 		pass
 
-	@std.public
+	@gl.public.write
 	def lst(
 		self, a1: list[str], a2: typing.Sequence[str], a3: typing.MutableSequence[int]
 	):
 		pass
 
-	@std.public
+	@gl.public.write
 	def dict(
 		self,
 		a1: dict[str, int],

@@ -98,7 +98,6 @@ py_runner_target = target_publish_runner(
 		],
 	},
 	dependencies: [build_py_raw, build_py_softfloat],
-	create_test_runner: false,
 	expected_hash: config.runners.cpython.hash,
 )
 

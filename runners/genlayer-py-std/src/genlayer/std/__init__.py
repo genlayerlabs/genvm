@@ -4,11 +4,13 @@ import typing
 import json
 from types import SimpleNamespace as _SimpleNamespace
 import base64
-import genlayer.advanced
+import importlib
+
+advanced = importlib.import_module('.advanced', __name__)
 
 # reexports
 import genlayer.py.calldata as calldata
-from .py.types import *
+from ..py.types import *
 from ._private import _decode_sub_vm_result, _lazy_from_fd
 
 
@@ -16,18 +18,18 @@ def private(f):
 	return f
 
 
-def public(f):
-	setattr(f, '__public__', True)
-	return f
+class public:
+	@staticmethod
+	def view(f):
+		setattr(f, '__public__', True)
+		setattr(f, '__readonly__', True)
+		return f
 
-
-def _public_view(f):
-	f = public(f)
-	setattr(f, '__readonly__', True)
-	return f
-
-
-public.view = _public_view
+	@staticmethod
+	def write(f):
+		setattr(f, '__public__', True)
+		setattr(f, '__readonly__', False)
+		return f
 
 
 def account_from_b64(x: str) -> bytes:
@@ -48,7 +50,10 @@ class _ContractAtViewMethod:
 		self.addr = addr
 		self.name = name
 
-	def __call__(self, *args, **kwargs) -> Lazy[typing.Any]:
+	def __call__(self, *args, **kwargs) -> typing.Any:
+		return self.lazy(*args, **kwargs).get()
+
+	def lazy(self, *args, **kwargs) -> Lazy[typing.Any]:
 		obj = _make_calldata_obj(self.name, args, kwargs)
 		cd = calldata.encode(obj)
 		return _lazy_from_fd(
@@ -115,19 +120,46 @@ def rollback_immediate(reason: str) -> typing.NoReturn:
 	wasi.rollback(reason)
 
 
-def get_webpage(config: typing.Any, url: str) -> Lazy[str]:
+class _LazyApi[T, **R]:
+	def __init__(self, fn: typing.Callable[R, Lazy[T]]):
+		self.fn = fn
+
+	def __call__(self, *args: R.args, **kwargs: R.kwargs) -> T:
+		return self.fn(*args, **kwargs).get()
+
+	def lazy(self, *args: R.args, **kwargs: R.kwargs) -> Lazy[T]:
+		return self.fn(*args, **kwargs)
+
+
+class _GetWebpageConfig(typing.TypedDict):
+	mode: typing.Literal['html', 'text']
+
+
+def _get_webpage(url: str, **config: typing.Unpack[_GetWebpageConfig]) -> Lazy[str]:
 	return _lazy_from_fd(
 		wasi.get_webpage(json.dumps(config), url), lambda buf: str(buf, 'utf-8')
 	)
 
 
-def exec_prompt(config: typing.Any, prompt: str) -> Lazy[str]:
+get_webpage = _LazyApi(_get_webpage)
+del _get_webpage
+
+
+class _ExecPromptConfig(typing.TypedDict):
+	pass
+
+
+def _exec_prompt(prompt: str, **config: typing.Unpack[_ExecPromptConfig]) -> Lazy[str]:
 	return _lazy_from_fd(
 		wasi.exec_prompt(json.dumps(config), prompt), lambda buf: str(buf, 'utf-8')
 	)
 
 
-def eq_principle_refl[T](fn: typing.Callable[[], T]) -> Lazy[T]:
+exec_prompt = _LazyApi(_exec_prompt)
+del _exec_prompt
+
+
+def _eq_principle_strict_eq[T](fn: typing.Callable[[], T]) -> Lazy[T]:
 	def validator_fn(leaders: typing.Any | Rollback) -> bool:
 		try:
 			my_res = fn()
@@ -139,10 +171,16 @@ def eq_principle_refl[T](fn: typing.Callable[[], T]) -> Lazy[T]:
 				return True
 		return False
 
-	return genlayer.advanced.run_nondet(fn, validator_fn)
+	return advanced.run_nondet(fn, validator_fn)
 
 
-def eq_principle_prompt(principle: str, fn: typing.Callable[[], str]) -> Lazy[str]:
+eq_principle_strict_eq = _LazyApi(_eq_principle_strict_eq)
+del _eq_principle_strict_eq
+
+
+def _eq_principle_prompt_comparative(
+	fn: typing.Callable[[], str], principle: str
+) -> Lazy[str]:
 	def validator_fn(leaders: typing.Any | Rollback) -> bool:
 		if not isinstance(leaders, (str, Rollback)):
 			raise Exception(f'invalid leaders result {leaders}')
@@ -161,11 +199,14 @@ def eq_principle_prompt(principle: str, fn: typing.Callable[[], str]) -> Lazy[st
 		}
 		return wasi.eq_principle_prompt(json.dumps(config))
 
-	return genlayer.advanced.run_nondet(fn, validator_fn)
+	return advanced.run_nondet(fn, validator_fn)
+
+
+eq_principle_prompt_comparative = _LazyApi(_eq_principle_prompt_comparative)
+del _eq_principle_prompt_comparative
 
 
 def contract(t: type) -> type:
-	import genlayer.runner as runner
 	import inspect
 
 	mod = inspect.getmodule(t)
@@ -176,7 +217,7 @@ def contract(t: type) -> type:
 			f'only one @contract is allowed, old {mod.__KNOWN_CONTRACT} new {t}'
 		)
 	t.__contract__ = True
-	from genlayer.py.storage import storage
+	from genlayer.py.storage.generate import storage
 
 	t = storage(t)
 	setattr(mod, '__KNOWN_CONTRACT', t)

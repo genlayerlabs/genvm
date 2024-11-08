@@ -1,4 +1,4 @@
-# { "Depends": "genlayer-py-std:test" }
+# { "Depends": "py-genlayer:test" }
 import math
 
 import operator

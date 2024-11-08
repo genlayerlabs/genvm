@@ -54,20 +54,17 @@ contents_hash = str(base64.b32encode(contents_hash.digest()), encoding='ascii')
 
 print(f'CREATING {contents_hash}.zip')
 
-if conf['expected_hash'] is not None and conf['expected_hash'] != contents_hash:
+assert conf['expected_hash'] is not None
+
+if conf['expected_hash'] != 'test' and conf['expected_hash'] != contents_hash:
 	raise Exception(
 		f'hashes diverge for {conf["out_dir"]}\nexp: {conf["expected_hash"]}\ngot: {contents_hash}\nIf it is desired, update hash at yabuild-default-conf.rb'
 	)
+
+contents_hash = conf['expected_hash']
 
 out_dir = Path(conf['out_dir'])
 out_dir.mkdir(parents=True, exist_ok=True)
 out_name = out_dir.joinpath(f'{contents_hash}.zip')
 with open(out_name, 'wb') as f:
 	f.write(zip_contents)
-
-with open(conf['fake_out'], 'wt') as f:
-	f.write(contents_hash)
-
-if conf['create_test_runner']:
-	out_dir.joinpath('test.zip').unlink(missing_ok=True)
-	out_dir.joinpath('test.zip').symlink_to(out_name.relative_to(out_dir))

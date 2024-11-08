@@ -36,13 +36,11 @@ make_runner = Proc.new { |name, runner_name: name, extra_seq: []|
 		files: [{ include: out_file }],
 		runner_dict: {
 			Seq: extra_seq + [
-				# FIXME
 				{ MapFile: { to: "/py/libs/", file: "src/" }},
 			],
 		},
 		dependencies: [],
 		expected_hash: config.runners.py_libs.send(runner_name).hash,
-		create_test_runner: false,
 	)
 
 	target_alias(

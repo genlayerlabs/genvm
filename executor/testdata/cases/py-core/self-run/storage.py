@@ -1,10 +1,7 @@
-# { "Depends": "genlayer-py-std:test" }
+# { "Depends": "py-genlayer:test" }
 
-import genlayer.std as gl
-from genlayer.py.types import *
-from genlayer.py.storage import storage
-
-__gl_self_run__ = True
+from genlayer import *
+from genlayer.py.storage.generate import storage
 
 
 class Test:
@@ -39,3 +36,5 @@ tst.a = tst.b
 
 stor_man.debug()
 print(tst.a.st, tst.b.st)
+
+exit(0)

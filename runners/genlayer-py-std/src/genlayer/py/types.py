@@ -1,13 +1,21 @@
 import base64
 import typing
 import collections.abc
+import hashlib
+
+from .keccak import Keccak256
 
 
 class Address:
 	SIZE = 20
+
+	__slots__ = ('_as_bytes', '_as_hex')
+
 	_as_bytes: bytes
+	_as_hex: str | None
 
 	def __init__(self, val: str | collections.abc.Buffer):
+		self._as_hex = None
 		if isinstance(val, str):
 			if len(val) == 2 + Address.SIZE * 2 and val.startswith('0x'):
 				val = bytes.fromhex(val[2:])
@@ -25,7 +33,19 @@ class Address:
 
 	@property
 	def as_hex(self) -> str:
-		return '0x' + self._as_bytes.hex()
+		if self._as_hex is None:
+			simple = self._as_bytes.hex()
+			hasher = Keccak256()
+			hasher.update(simple.encode('ascii'))
+			low_up = hasher.digest().hex()
+			res = ['0', 'x']
+			for i in range(len(simple)):
+				if low_up[i] in ['0', '1', '2', '3', '4', '5', '6', '7']:
+					res.append(simple[i])
+				else:
+					res.append(simple[i].upper())
+			self._as_hex = ''.join(res)
+		return self._as_hex
 
 	@property
 	def as_b64(self) -> str:

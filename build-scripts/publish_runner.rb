@@ -1,11 +1,9 @@
-self.define_singleton_method(:target_publish_runner) do |name_base:, runner_dict:, out_dir:, files:, create_test_runner: config.createTestRunner, dependencies: [], expected_hash: nil, tags: []|
+self.define_singleton_method(:target_publish_runner) do |name_base:, runner_dict:, out_dir:, files:, dependencies: [], expected_hash:, tags: []|
+	raise "hash can nott be nil, use 'test'" if expected_hash.nil?
 	runner_json = cur_build.join("#{name_base}.runner.json")
 	File.write(runner_json, JSON.dump(runner_dict))
 	mark_as_config_generated runner_json
-	fake_out = cur_build.join("#{name_base}.runner.trg")
 	runner_publish_config = {
-		create_test_runner: create_test_runner,
-		fake_out: fake_out,
 		out_dir: out_dir.join(name_base),
 		files: files + [{
 			path: "runner.json",
@@ -27,11 +25,9 @@ self.define_singleton_method(:target_publish_runner) do |name_base:, runner_dict
 
 	mark_as_config_generated runner_publish_config_file
 	publish_script = root_src.join('build-scripts', 'publish-runner.py')
-	if expected_hash.nil?
-		out_file = fake_out
-	else
-		out_file = out_dir.join(name_base, "#{expected_hash}.zip")
-	end
+
+	out_file = out_dir.join(name_base, "#{expected_hash}.zip")
+
 	target_command(
 		output_file: out_file,
 		commands: [

@@ -1,11 +1,11 @@
-# { "Depends": "genlayer-py-std:test" }
-import genlayer.std as gl
+# { "Depends": "py-genlayer:test" }
+from genlayer import *
 
 
 @gl.contract
 class Contract:
-	@gl.public
-	def main(self, addr: gl.Address):
+	@gl.public.write
+	def main(self, addr: Address):
 		print('contract from.main')
 		try:
 			res = gl.ContractAt(addr).view().foo(1, 2).get()
