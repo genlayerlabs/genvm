@@ -18,7 +18,6 @@ from genlayer.py.types import Address
 from genlayer.py import calldata as _calldata
 
 import socket
-import threading
 import typing
 import pickle
 import io

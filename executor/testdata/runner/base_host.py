@@ -111,6 +111,7 @@ async def host_loop(handler: IHost):
 				await send_int(gas, 8)
 			case Methods.CONSUME_RESULT:
 				await handler.consume_result(*await read_result())
+				await send_all(b'\x00')
 				return
 			case Methods.GET_LEADER_NONDET_RESULT:
 				call_no = await recv_int()  # call no

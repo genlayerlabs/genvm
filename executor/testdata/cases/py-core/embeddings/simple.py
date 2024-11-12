@@ -1,6 +1,6 @@
 # {
 #   "Seq": [
-#     { "Depends": "py-lib-genlayermodelwrappers:KA27MQRPHZJQKSOOLOHWX2SI5X5C3MDO55H6XENBG72ZA3QKQKY43ZA6ZAHO47FSPFMAHGOOQT2P5RKJTCKPK72AYQU6A5RGN3E5DBA=" },
+#     { "Depends": "py-lib-genlayermodelwrappers:test" },
 #     { "Depends": "py-genlayer:test" }
 #   ]
 # }

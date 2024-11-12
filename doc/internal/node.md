@@ -65,6 +65,8 @@ loop:
       write_u64_le consumed_gas
     json/methods/consume_result:
       host_result := read_result()
+      # this is needed to ensure that genvm doesn't close socket before all data is read
+      write_byte 0x00
       break
     json/methods/get_leader_nondet_result:
       call_no = read_u32_le

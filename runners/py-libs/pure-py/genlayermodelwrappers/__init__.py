@@ -41,8 +41,6 @@ class Model:
 		for k, v in inputs.items():
 			self._inputs[k].set_input(v)
 
-
-
 		return {
 			v: self._outputs[v].compute()
 			for v in outputs
@@ -53,6 +51,9 @@ def prod(x: collections.abc.Sequence[int]):
 	for i in x:
 		res *= i
 	return res
+
+def _unfold(x: np.ndarray):
+	return x.reshape(prod(x.shape))
 
 def SentenceTransformer(model: str) -> typing.Callable[[str], np.ndarray]:
 	from word_piece_tokenizer import WordPieceTokenizer
@@ -66,11 +67,11 @@ def SentenceTransformer(model: str) -> typing.Callable[[str], np.ndarray]:
 		res = tokenizer.tokenize(text)
 		res = np.array(res, np.int64)
 		res = res.reshape(1, prod(res.shape))
-		return nn_model({
+		return _unfold(nn_model({
 			'input_ids': res,
 			'attention_mask': np.zeros(res.shape, res.dtype),
 			'token_type_ids': np.zeros(res.shape, res.dtype),
 		},
-		outputs=['embedding'])['embedding']
+		outputs=['embedding'])['embedding'])
 
 	return ret

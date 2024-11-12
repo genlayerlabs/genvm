@@ -17,7 +17,7 @@ def tst(x):
 	if isinstance(x, types.GenericAlias):
 		print(f'origin={x.__origin__}')
 		print(f'args={x.__args__}')
-	elif isinstance(x, typing._GenericAlias):
+	elif isinstance(x, typing._GenericAlias):  # type: ignore
 		print(f'origin={x.__origin__}')
 		print(f'args={x.__args__}')
 	if not isinstance(x, types.GenericAlias):

@@ -11,8 +11,8 @@ class UserStorage:
 
 tst = UserStorage()
 
-tst.m['1'] = 12
-tst.m['2'] = 13
+tst.m['1'] = u32(12)
+tst.m['2'] = u32(13)
 del tst.m['1']
 print('1' in tst.m, tst.m['2'])
 

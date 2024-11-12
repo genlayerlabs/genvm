@@ -414,7 +414,7 @@ class TreeMap[K: Comparable, V]:
 				idx = _Node.right
 		return not_found()
 
-	def get(self, k: K, dflt=None) -> V | None:
+	def get[G](self, k: K, dflt: G = None) -> V | G:
 		return self.get_fn(k, lambda n: n.value, lambda: dflt)
 
 	def __getitem__(self, k: K) -> V:

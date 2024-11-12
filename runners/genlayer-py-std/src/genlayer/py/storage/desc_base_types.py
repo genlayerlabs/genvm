@@ -46,6 +46,26 @@ class _IntDesc(TypeDesc):
 		return hash(('_IntDesc', self.size, self.signed))
 
 
+class _NoneDesc(TypeDesc[None]):
+	def __init__(self):
+		TypeDesc.__init__(self, 0, [0])
+
+	def get(self, slot: StorageSlot, off: int) -> None:
+		return
+
+	def set(self, slot: StorageSlot, off: int, val: None):
+		pass
+
+	def __repr__(self):
+		return f'_NoneDesc'
+
+	def __eq__(self, r):
+		return isinstance(r, _NoneDesc)
+
+	def __hash__(self):
+		return hash('_NoneDesc')
+
+
 _u32_desc = _IntDesc(4, signed=False)
 
 
@@ -128,3 +148,15 @@ class _BytesDesc(_StrBytesDesc):
 
 	def __repr__(self):
 		return '_BytesDesc'
+
+
+# here is a problem: we can't return actual tuple..
+# class _TupleDesc(TypeDesc[tuple]):
+# 	def __init__(self, subs: tuple[TypeDesc]):
+# 		self._subs = subs
+# 		copy_actions: list[CopyAction] = []
+# 		size = 0
+# 		for x in subs:
+# 			actions_append(copy_actions, x.copy_actions)
+# 			size += x.size
+# 		TypeDesc.__init__(self, size, copy_actions)
