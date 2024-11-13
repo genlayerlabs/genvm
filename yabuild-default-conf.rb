@@ -2,6 +2,7 @@ require 'open3'
 
 conf = {
 	profile: "debug",
+	executor_target: nil,
 	wasiSdk: root_src.join('tools', 'downloaded', 'wasi-sdk-24'),
 	createTestRunner: true,
 	out_dir: root_build.join('out'),

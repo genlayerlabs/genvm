@@ -112,8 +112,9 @@ jobs:
     needs: [pre-commit]
     uses: ./.github/workflows/genvm-build-template.yaml
     with:
-      build_type: debug
       runs_on: ubuntu-latest
+      preloads: ""
+      install_also: ""
     secrets: inherit
 
 #  build-genvm-release-ubuntu-latest:

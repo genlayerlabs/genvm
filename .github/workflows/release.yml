@@ -22,18 +22,28 @@ jobs:
     uses: ./.github/workflows/genvm-build-template.yaml
     secrets: inherit
     with:
-      build_type: release
       runs_on: ubuntu-latest
+      preloads: --preload .ci/release-conf.rb
+      install_also: ""
+
+  release-build-genvm-release-ubuntu-latest-aarch64:
+    uses: ./.github/workflows/genvm-build-template.yaml
+    secrets: inherit
+    with:
+      runs_on: ubuntu-latest
+      preloads: --preload .ci/release-conf.rb --preload .ci/executor-target-linux-aarch64.rb
+      install_also: --cross-linux-aarch64
 
   release-build-genvm-release-macos-latest:
     uses: ./.github/workflows/genvm-build-template.yaml
     secrets: inherit
     with:
-      build_type: release
       runs_on: macos-latest
+      preloads: --preload .ci/release-conf.rb
+      install_also: ""
 
   release-publish:
-    needs: [build-runners, release-build-genvm-release-ubuntu-latest, release-build-genvm-release-macos-latest]
+    needs: [build-runners, release-build-genvm-release-ubuntu-latest, release-build-genvm-release-macos-latest, release-build-genvm-release-ubuntu-latest-aarch64]
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Needed for creating releases
@@ -45,6 +55,8 @@ jobs:
           mv ${{ needs.release-build-genvm-release-ubuntu-latest.outputs.artifact_name }} genvm-linux-amd64.zip && \
           wget -q ${{ needs.release-build-genvm-release-macos-latest.outputs.artifact_url }} && \
           mv ${{ needs.release-build-genvm-release-macos-latest.outputs.artifact_name }} genvm-macos-arm64.zip && \
+          wget -q ${{ needs.release-build-genvm-release-ubuntu-latest-aarch64.outputs.artifact_url }} && \
+          mv ${{ needs.release-build-genvm-release-ubuntu-latest-aarch64.outputs.artifact_name }} genvm-linux-arm64.zip && \
           true
 
       - name: Create Release
@@ -54,6 +66,7 @@ jobs:
           files: |
             genvm-runners.zip
             genvm-linux-amd64.zip
+            genvm-linux-arm64.zip
             genvm-macos-arm64.zip
           name: Release ${{ github.ref_name }}
           draft: false

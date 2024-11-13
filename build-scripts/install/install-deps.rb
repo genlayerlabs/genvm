@@ -22,6 +22,8 @@ options = {
 OptionParser.new do |opts|
 	opts.on '--genvm'
 	opts.on '--rust'
+	opts.on '--cross-linux-aarch64'
+	opts.on '--zig'
 	opts.on '--rust-det'
 	opts.on '--os'
 	opts.on '--wasi'
@@ -90,6 +92,7 @@ rescue
 end.call()
 
 logger.info("detected target is #{TARGET_TRIPLE}")
+$logger = logger
 
 OS = (Proc.new {
 	re = {
@@ -127,6 +130,7 @@ logger.debug("genvm root is #{root}")
 
 download_dir = root.join('tools', 'downloaded')
 download_dir.mkpath()
+$download_dir = download_dir
 
 logger.debug("download dir is #{download_dir}")
 
@@ -148,6 +152,9 @@ end
 
 if options[:os]
 	load_packages_from_lists 'os'
+	#if options[:'cross-linux-aarch64']
+	#	load_packages_from_lists 'os-linux-aarch64'
+	#end
 end
 
 if not RUBY_VERSION =~ /^3\./
@@ -166,6 +173,27 @@ if options[:rust] || options[:'rust-det']
 	raise "rustup not found" if rustup.nil?
 end
 
+if options[:'cross-linux-aarch64']
+	# ZIG
+	# FIXME(kp2pml30) check platform
+	require_relative './src/webget.rb'
+	download_to = download_dir.join('zig.tar.xz')
+	read_file(
+		uri: URI("https://ziglang.org/builds/zig-linux-x86_64-0.14.0-dev.2238+1db8cade5.tar.xz"),
+		path: download_to
+	)
+	extract_tar(download_dir.join('zig'), download_to)
+
+	# openssl
+	download_to = download_dir.join('openssl-aarch.tar.xz')
+	read_file(
+		uri: URI("http://mirror.archlinuxarm.org/aarch64/core/openssl-1.0-1.0.2.u-1-aarch64.pkg.tar.xz"),
+		path: download_to,
+		use_ssl: false,
+	)
+	extract_tar(download_dir.join('cross-aarch64-libs'), download_to, trim_first: false)
+end
+
 if options[:rust]
 	puts `cd "#{root}" && #{rustup} show active-toolchain || #{rustup} toolchain install`
 	run_command(rustup, 'component', 'add', 'rustfmt', chdir: root)
@@ -181,10 +209,19 @@ if options[:'rust-det']
 	run_command(rustup, 'component', 'add', '--toolchain', cur_toolchain, 'rust-std', chdir: ext_path)
 end
 
+if options[:rust] and options[:'cross-linux-aarch64']
+	ext_path = root.join('executor')
+	cur_toolchain = run_command(rustup, 'show', 'active-toolchain', chdir: ext_path)
+	cur_toolchain = cur_toolchain.lines.map { |l| l.strip }.filter { |l| l.size != 0 }.last
+	cur_toolchain = /^([a-zA-Z0-9\-_]+)/.match(cur_toolchain)[1]
+	logger.debug("installing for toolchain #{cur_toolchain}")
+	run_command(rustup, 'target', 'add', '--toolchain', cur_toolchain, 'aarch64-unknown-linux-gnu', chdir: ext_path)
+	run_command(rustup, 'component', 'add', '--toolchain', cur_toolchain, 'rust-std', chdir: ext_path)
+end
+
 if options[:wasi]
 	logger.debug("downloading runners dependencies")
-	src = Pathname.new(__FILE__).parent.join('src', 'wasi-sdk.rb').read
-	eval(src, binding)
+	require_relative './src/wasi-sdk.rb'
 
 	if find_executable('docker').nil?
 		logger.error("docker is required")

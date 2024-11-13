@@ -4,8 +4,8 @@ project('executor') {
 	base_env = {}
 	compiler = config.tools.clang || config.tools.gcc
 	linker = config.tools.mold || config.tools.lld
-	# not config.tools.clang.nil? and
-	if not compiler.nil? and not linker.nil?
+
+	if config.executor_target.nil? and not compiler.nil? and not linker.nil?
 		base_env['RUSTFLAGS'] ||= ''
 		base_env['RUSTFLAGS'] << "-Clinker=#{Shellwords.escape compiler} -Clink-arg=-fuse-ld=#{Shellwords.escape linker}"
 	end
@@ -15,21 +15,32 @@ project('executor') {
 		base_env['RUSTFLAGS'] << " -Cinstrument-coverage"
 	end
 
+	cargo_flags = ['-Zprofile-rustflags']
+	if not config.executor_target.nil?
+		linker_path = root_src.join('build-scripts', 'zig-driver.py')
+		cargo_flags << '--config' << "target.#{config.executor_target}.linker=\"#{linker_path.to_s}\""
+		base_env['CC_aarch64_unknown_linux_gnu'] = linker_path.to_s
+		base_env['AARCH64_UNKNOWN_LINUX_GNU_OPENSSL_LIB_DIR'] = root_src.join('tools/downloaded/cross-aarch64-libs/usr/lib/openssl-1.0').to_s
+		base_env['AARCH64_UNKNOWN_LINUX_GNU_OPENSSL_INCLUDE_DIR'] = root_src.join('tools/downloaded/cross-aarch64-libs/usr/include/openssl-1.0').to_s
+	end
+
 	modules = target_alias('modules',
 		target_cargo_build(
 			name: "dylib",
+			target: config.executor_target,
 			profile: config.profile,
 			out_file: modules_dir.join('libweb.so'),
 			dir: cur_src.join('modules', 'default-impl', 'web-funcs'),
-			flags: ['-Zprofile-rustflags'],
+			flags: cargo_flags,
 			env: base_env,
 		),
 		target_cargo_build(
 			name: "dylib",
+			target: config.executor_target,
 			profile: config.profile,
 			out_file: modules_dir.join('libllm.so'),
 			dir: cur_src.join('modules', 'default-impl', 'llm-funcs'),
-			flags: ['-Zprofile-rustflags'],
+			flags: cargo_flags,
 			env: base_env,
 		)
 	)
@@ -47,9 +58,10 @@ project('executor') {
 		'bin',
 		target_cargo_build(
 			name: "genvm",
+			target: config.executor_target,
 			profile: config.profile,
 			out_file: config.bin_dir.join('genvm'),
-			flags: ['-Zprofile-rustflags'],
+			flags: cargo_flags,
 			env: base_env,
 		) {
 			add_deps codegen
