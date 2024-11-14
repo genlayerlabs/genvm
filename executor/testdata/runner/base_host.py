@@ -25,17 +25,16 @@ class IHost(typing.Protocol):
 	async def get_calldata(self, /) -> bytes: ...
 	async def get_code(self, addr: bytes, /) -> bytes: ...
 	async def storage_read(
-		self, gas_before: int, account: bytes, slot: bytes, index: int, le: int, /
-	) -> tuple[bytes, int]: ...
+		self, account: bytes, slot: bytes, index: int, le: int, /
+	) -> bytes: ...
 	async def storage_write(
 		self,
-		gas_before: int,
 		account: bytes,
 		slot: bytes,
 		index: int,
 		got: collections.abc.Buffer,
 		/,
-	) -> int: ...
+	) -> None: ...
 	async def consume_result(
 		self, type: ResultCode, data: collections.abc.Buffer, /
 	) -> None: ...
@@ -91,24 +90,20 @@ async def host_loop(handler: IHost):
 				await send_int(len(code))
 				await send_all(code)
 			case Methods.STORAGE_READ:
-				gas_before = await recv_int(8)
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
 				slot = await read_exact(GENERIC_ADDR_SIZE)
 				index = await recv_int()
 				le = await recv_int()
-				res, gas = await handler.storage_read(gas_before, account, slot, index, le)
+				res = await handler.storage_read(account, slot, index, le)
 				assert len(res) == le
-				await send_int(gas, 8)
 				await send_all(res)
 			case Methods.STORAGE_WRITE:
-				gas_before = await recv_int(8)
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
 				slot = await read_exact(GENERIC_ADDR_SIZE)
 				index = await recv_int()
 				le = await recv_int()
 				got = await read_exact(le)
-				gas = await handler.storage_write(gas_before, account, slot, index, got)
-				await send_int(gas, 8)
+				await handler.storage_write(account, slot, index, got)
 			case Methods.CONSUME_RESULT:
 				await handler.consume_result(*await read_result())
 				await send_all(b'\x00')

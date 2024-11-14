@@ -108,7 +108,6 @@ class _ContractAtEmit:
 message_raw = json.loads(wasi.get_message_data())
 
 message = _SimpleNamespace(
-	gas=message_raw['gas'],
 	contract_account=Address(message_raw['contract_account']),
 	sender_account=Address(message_raw['sender_account']),
 	value=message_raw.get('value', None),

@@ -182,6 +182,7 @@ def run(jsonnet_rel_path):
 		tmp_dir = config['tmp_dir']
 		cmd = [
 			GENVM,
+			'run',
 			'--host',
 			'unix://' + config['host'].path,
 			'--message',

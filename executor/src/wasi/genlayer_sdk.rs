@@ -286,17 +286,18 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
-        let mut fuel = self.context.shared_data.fuel_descriptor.get_fuel();
-        let init_fuel = fuel;
+
+        let mut fuel = 0;
         let res = supervisor.modules.web.get_webpage(
             &mut fuel,
             config_str.as_bytes().as_ptr(),
             url_str.as_bytes().as_ptr(),
         );
-        self.context
-            .shared_data
-            .fuel_descriptor
-            .consume_fuel(init_fuel - fuel);
+        supervisor
+            .host
+            .consume_fuel(fuel)
+            .map_err(generated::types::Error::trap)?;
+
         if res.err != 0 {
             return Err(generated::types::Errno::Io.into());
         }
@@ -323,17 +324,17 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
-        let mut fuel = self.context.shared_data.fuel_descriptor.get_fuel();
-        let init_fuel = fuel;
+        let mut fuel = 0;
         let res = supervisor.modules.llm.exec_prompt(
             &mut fuel,
             config_str.as_bytes().as_ptr(),
             prompt_str.as_bytes().as_ptr(),
         );
-        self.context
-            .shared_data
-            .fuel_descriptor
-            .consume_fuel(init_fuel - fuel);
+        supervisor
+            .host
+            .consume_fuel(fuel)
+            .map_err(generated::types::Error::trap)?;
+
         if res.err != 0 {
             return Err(generated::types::Errno::Io.into());
         }
@@ -357,16 +358,17 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
-        let mut fuel = self.context.shared_data.fuel_descriptor.get_fuel();
-        let init_fuel = fuel;
+
+        let mut fuel = 0;
         let res = supervisor
             .modules
             .llm
             .eq_principle_prompt(&mut fuel, config_str.as_bytes().as_ptr());
-        self.context
-            .shared_data
-            .fuel_descriptor
-            .consume_fuel(init_fuel - fuel);
+        supervisor
+            .host
+            .consume_fuel(fuel)
+            .map_err(generated::types::Error::trap)?;
+
         if res.err != 0 {
             return Err(generated::types::Errno::Io.into());
         }
@@ -502,7 +504,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             message_data: MessageData {
                 contract_account: called_contract_account,
                 sender_account: my_data.sender_account, // FIXME: is that true?
-                gas: my_data.gas,                       // FIXME: is that true?
                 value: None,
                 is_init: false,
             },
@@ -541,7 +542,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             .host
             .post_message(&address, gas, &calldata, &code)
             .map_err(generated::types::Error::trap)?;
-        self.context.shared_data.fuel_descriptor.consume_fuel(gas);
         Ok(())
     }
 
@@ -567,15 +567,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
-        let mut fuel = self.context.shared_data.fuel_descriptor.get_fuel();
-        let init_fuel = fuel;
-        let res = supervisor
-            .host
-            .storage_read(&mut fuel, account, slot, index, &mut vec);
-        self.context
-            .shared_data
-            .fuel_descriptor
-            .consume_fuel(init_fuel - fuel);
+
+        let res = supervisor.host.storage_read(account, slot, index, &mut vec);
+
         res.map_err(|_e| generated::types::Errno::Io)?;
         mem.copy_from_slice(&vec, dest_buf)?;
         Ok(())
@@ -604,15 +598,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
-        let mut fuel = self.context.shared_data.fuel_descriptor.get_fuel();
-        let init_fuel = fuel;
-        let res = supervisor
-            .host
-            .storage_write(&mut fuel, account, slot, index, &buf);
-        self.context
-            .shared_data
-            .fuel_descriptor
-            .consume_fuel(init_fuel - fuel);
+
+        let res = supervisor.host.storage_write(account, slot, index, &buf);
+
         res.map_err(|_e| generated::types::Errno::Io)?;
         Ok(())
     }

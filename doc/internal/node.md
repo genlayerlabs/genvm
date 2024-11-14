@@ -46,15 +46,12 @@ loop:
       address := read_bytes(ACCOUNT_ADDR_SIZE)
       write_bytes_with_len host_code[address]
     json/methods/storage_read:
-      available_gas := read_u64_le
       address := read_bytes(ACCOUNT_ADDR_SIZE)
       slot := read_bytes(GENERIC_ADDR_SIZE)
       index := read_u32_le
       len := read_u32_le
-      write_u64_le host_consumed_gas
       write_bytes_with_len host_storage[address][slot][index..index+len] # must be exactly len in size
     json/methods/storage_write:
-      available_gas := read_u64_le
       # as per genvm definition this address can be only the address of entrypoint account
       address := read_bytes(ACCOUNT_ADDR_SIZE)
       slot := read_bytes(GENERIC_ADDR_SIZE)
@@ -62,7 +59,6 @@ loop:
       len := read_u32_le
       data := read_bytes(len)
       host_storage[address][slot][index..index+len] = data
-      write_u64_le consumed_gas
     json/methods/consume_result:
       host_result := read_result()
       # this is needed to ensure that genvm doesn't close socket before all data is read

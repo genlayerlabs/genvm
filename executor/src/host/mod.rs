@@ -48,7 +48,6 @@ impl GenericAddress {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MessageData {
-    pub gas: u64,
     pub contract_account: crate::AccountAddress,
     pub sender_account: crate::AccountAddress,
     pub value: Option<u64>,
@@ -147,7 +146,6 @@ impl Host {
 
     pub fn storage_read(
         &mut self,
-        remaining_gas: &mut u64,
         account: AccountAddress,
         slot: GenericAddress,
         index: u32,
@@ -158,14 +156,10 @@ impl Host {
         };
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::StorageRead as u8])?;
-        sock.write_all(&remaining_gas.to_le_bytes())?;
         sock.write_all(&account.raw())?;
         sock.write_all(&slot.raw())?;
         sock.write_all(&index.to_le_bytes())?;
         sock.write_all(&(buf.len() as u32).to_le_bytes())?;
-
-        let new_gas = read_u64(sock)?;
-        *remaining_gas = new_gas;
 
         sock.read_exact(buf)?;
         Ok(())
@@ -173,7 +167,6 @@ impl Host {
 
     pub fn storage_write(
         &mut self,
-        remaining_gas: &mut u64,
         account: AccountAddress,
         slot: GenericAddress,
         index: u32,
@@ -184,15 +177,11 @@ impl Host {
         };
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::StorageWrite as u8])?;
-        sock.write_all(&remaining_gas.to_le_bytes())?;
         sock.write_all(&account.raw())?;
         sock.write_all(&slot.raw())?;
         sock.write_all(&index.to_le_bytes())?;
         sock.write_all(&(buf.len() as u32).to_le_bytes())?;
         sock.write_all(buf)?;
-
-        let new_gas = read_u64(sock)?;
-        *remaining_gas = new_gas;
 
         Ok(())
     }
@@ -274,6 +263,16 @@ impl Host {
 
         sock.write_all(&(code.len() as u32).to_le_bytes())?;
         sock.write_all(code)?;
+        Ok(())
+    }
+
+    pub fn consume_fuel(&mut self, gas: u64) -> Result<()> {
+        let Ok(mut sock) = (*self.sock).lock() else {
+            anyhow::bail!("can't take lock")
+        };
+        let sock: &mut dyn Sock = &mut *sock;
+        sock.write_all(&[host_fns::Methods::ConsumeFuel as u8])?;
+        sock.write_all(&gas.to_le_bytes())?;
         Ok(())
     }
 }
