@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use std::{io::Read, sync::Arc};
+use std::{fs::File, io::Read, sync::Arc};
 use zip::ZipArchive;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -36,6 +36,7 @@ pub enum InitAction {
         act: Box<InitAction>,
     },
     Seq(Vec<InitAction>),
+    Once(Arc<str>, Box<InitAction>),
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -79,6 +80,11 @@ pub enum RunnerJsonInitAction {
         action: Box<RunnerJsonInitAction>,
     },
     Seq(Vec<RunnerJsonInitAction>),
+
+    With {
+        runner: String,
+        action: Box<RunnerJsonInitAction>,
+    },
 }
 
 struct RunnerReaderCacheEntry {
@@ -103,12 +109,19 @@ impl RunnerReaderCacheEntry {
         path_prefix: &str,
         all_files: &Vec<String>,
         action: RunnerJsonInitAction,
+        runners_path: &std::path::PathBuf,
     ) -> Result<InitActionDependable>
     where
         R: std::io::Read + std::io::Seek,
     {
         let mut rec = |action: RunnerJsonInitAction| -> Result<InitActionDependable> {
-            RunnerReaderCacheEntry::transform_action_impl(zip_file, path_prefix, all_files, action)
+            RunnerReaderCacheEntry::transform_action_impl(
+                zip_file,
+                path_prefix,
+                all_files,
+                action,
+                runners_path,
+            )
         };
         match action {
             RunnerJsonInitAction::MapFile { to, file } => {
@@ -195,6 +208,11 @@ impl RunnerReaderCacheEntry {
                     vec.into_iter().map(|x| rec(x)).collect();
                 Ok(InitActionDependable::Seq(r?))
             }
+            RunnerJsonInitAction::With { runner, action } => {
+                let runner_id = Arc::from(runner);
+                let mut arch = Self::get_arch_for(&runner_id, runners_path.clone())?;
+                Self::transform_action(&mut arch, &runner_id, *action, runners_path)
+            }
         }
     }
 
@@ -202,6 +220,7 @@ impl RunnerReaderCacheEntry {
         zip_file: &mut ZipArchive<R>,
         path_prefix: &str,
         action: RunnerJsonInitAction,
+        runners_path: &std::path::PathBuf,
     ) -> Result<InitActionDependable>
     where
         R: std::io::Read + std::io::Seek,
@@ -212,12 +231,19 @@ impl RunnerReaderCacheEntry {
             .map(|f| f.into())
             .sorted()
             .collect();
-        RunnerReaderCacheEntry::transform_action_impl(zip_file, path_prefix, &all_files, action)
+        RunnerReaderCacheEntry::transform_action_impl(
+            zip_file,
+            path_prefix,
+            &all_files,
+            action,
+            runners_path,
+        )
     }
 
     fn make_from_arch<R>(
         path_prefix: &str,
         zip_file: &mut ZipArchive<R>,
+        runners_path: &std::path::PathBuf,
     ) -> Result<RunnerReaderCacheEntry>
     where
         R: std::io::Read + std::io::Seek,
@@ -226,15 +252,19 @@ impl RunnerReaderCacheEntry {
         let runner: RunnerJsonInitAction =
             serde_json::from_str(&runner).with_context(|| format!("json: {runner}"))?;
 
-        let ret = RunnerReaderCacheEntry::transform_action(zip_file, path_prefix, runner)
-            .with_context(|| format!("pre_actions from {}", &path_prefix))?;
+        let ret =
+            RunnerReaderCacheEntry::transform_action(zip_file, path_prefix, runner, runners_path)
+                .with_context(|| format!("pre_actions from {}", &path_prefix))?;
 
         Ok(RunnerReaderCacheEntry {
             action: Arc::new(ret),
         })
     }
 
-    fn make(runner_id: Arc<str>, mut path: std::path::PathBuf) -> Result<RunnerReaderCacheEntry> {
+    fn get_arch_for(
+        runner_id: &Arc<str>,
+        mut path: std::path::PathBuf,
+    ) -> Result<ZipArchive<File>> {
         let res: Vec<&str> = runner_id.split(":").collect();
         if res.len() != 2 {
             anyhow::bail!(
@@ -248,9 +278,13 @@ impl RunnerReaderCacheEntry {
         fname.push_str(".zip");
         path.push(fname);
         let file = std::fs::File::open(&path).with_context(|| format!("reading {:?}", path))?;
-        let mut zip_file = zip::ZipArchive::new(file)?;
+        Ok(zip::ZipArchive::new(file)?)
+    }
 
-        RunnerReaderCacheEntry::make_from_arch(&runner_id, &mut zip_file)
+    fn make(runner_id: &Arc<str>, path: &std::path::PathBuf) -> Result<RunnerReaderCacheEntry> {
+        let mut zip_file = Self::get_arch_for(runner_id, path.clone())?;
+
+        RunnerReaderCacheEntry::make_from_arch(&runner_id, &mut zip_file, &path)
     }
 }
 
@@ -298,12 +332,13 @@ impl RunnerReader {
                 let cache_entry: Arc<RunnerReaderCacheEntry> = match cache_entry {
                     std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
                     std::collections::hash_map::Entry::Vacant(e) => e.insert(Arc::new(
-                        RunnerReaderCacheEntry::make(dep.clone(), self.runners_path.clone())?,
+                        RunnerReaderCacheEntry::make(&dep, &self.runners_path)?,
                     )),
                 }
                 .clone();
 
-                self.unfold(&dep, cache, &*cache_entry.action)
+                let res = self.unfold(&dep, cache, &*cache_entry.action)?;
+                Ok(InitAction::Once(dep.clone(), Box::new(res)))
             }
         }
     }
@@ -317,7 +352,8 @@ impl RunnerReader {
     where
         R: std::io::Read + std::io::Seek,
     {
-        let cache_entry = RunnerReaderCacheEntry::make_from_arch(path_prefix, archive)?;
+        let cache_entry =
+            RunnerReaderCacheEntry::make_from_arch(path_prefix, archive, &self.runners_path)?;
         self.unfold(path_prefix, cache, &*cache_entry.action)
     }
 }

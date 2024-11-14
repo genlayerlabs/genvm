@@ -1,6 +1,6 @@
 use core::str;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     io::Write,
     path::Path,
     sync::atomic::AtomicU32,
@@ -193,6 +193,11 @@ pub struct VM {
     pub linker: Arc<Mutex<Linker<WasmContext>>>,
     pub config_copy: wasi::base::Config,
     pub init_actions: ContractCodeData,
+}
+
+struct ApplyActionCtx {
+    env: BTreeMap<String, String>,
+    visited: BTreeSet<Arc<str>>,
 }
 
 impl VM {
@@ -425,7 +430,7 @@ impl Supervisor {
     fn apply_single_action(
         &mut self,
         vm: &mut VM,
-        ctx: &mut BTreeMap<String, String>,
+        ctx: &mut ApplyActionCtx,
         action: &InitAction,
     ) -> Result<Option<wasmtime::Instance>> {
         match action {
@@ -446,7 +451,7 @@ impl Supervisor {
                 Ok(None)
             }
             InitAction::Trivial(InitActionTrivial::AddEnv { name, val }) => {
-                match ctx.entry(name.clone()) {
+                match ctx.env.entry(name.clone()) {
                     std::collections::btree_map::Entry::Vacant(vacant_entry) => {
                         vacant_entry.insert(val.clone());
                     }
@@ -494,8 +499,11 @@ impl Supervisor {
                 contents,
                 debug_path,
             }) => {
-                let env: Vec<(String, String)> =
-                    ctx.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                let env: Vec<(String, String)> = ctx
+                    .env
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
                 vm.store
                     .data_mut()
                     .genlayer_ctx_mut()
@@ -522,13 +530,22 @@ impl Supervisor {
                 }
                 Ok(None)
             }
+            InitAction::Once(id, action) => {
+                if ctx.visited.insert(id.clone()) {
+                    self.apply_single_action(vm, ctx, action)
+                } else {
+                    Ok(None)
+                }
+            }
         }
     }
 
     pub fn apply_actions(&mut self, vm: &mut VM) -> Result<wasmtime::Instance> {
-        let mut env = BTreeMap::new();
-
-        match self.apply_single_action(vm, &mut env, &vm.init_actions.actions.clone())? {
+        let mut ctx = ApplyActionCtx {
+            env: BTreeMap::new(),
+            visited: BTreeSet::new(),
+        };
+        match self.apply_single_action(vm, &mut ctx, &vm.init_actions.actions.clone())? {
             Some(e) => Ok(e),
             None => Err(anyhow::anyhow!(
                 "actions returned by runner do not have a start instruction"

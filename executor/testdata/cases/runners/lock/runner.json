@@ -1,0 +1,21 @@
+{
+  "Seq": [
+    { "MapFile": { "to": "/contract.py", "file": "contract.py" } },
+    { "SetArgs": ["py", "-u", "-c", "import contract;import genlayer.std.runner as r;r.run(contract)"] },
+    { "Depends": "softfloat:5VML6RYPX3UU3GOE4IESJLJLWHUOTSJK3M6XUEXEL3HDA65DZWCY2YMZ4MYIRGTQKZEDZXAA2X57RA4AMCGV4IK4EF5CKITMTTXWXEQ=" },
+    {"MapFile":{"to":"/py/std/json.py","file":"new_json.py"}},
+    {
+      "With": {
+        "runner": "genvm-cpython:FFAO5GX6KLNP3JQPCU2LUMSJX3LX7A6AMNHMZH5N25DJM35H2REAXUWZWSHAJGI3WLESKEUDXVDAADMK447FABTHVY552G63T2JJBFQ=",
+        "action": {
+          "Seq": [
+            {"MapFile":{"to":"/py/std/encodings","file":"py/encodings/"}},
+            {"MapFile":{"to":"/py/std/linecache.py","file":"py/linecache.py"}},
+            {"AddEnv":{"name":"PYTHONPATH","val":"/py/std:/py/libs"}},
+            {"StartWasm":"cpython.wasm"}
+          ]
+        }
+      }
+    }
+  ]
+}
