@@ -31,30 +31,23 @@ class MockStorage:
 	def __init__(self):
 		self._storages = {}
 
-	def read(
-		self, gas_before: int, account: Address, slot: bytes, index: int, le: int
-	) -> tuple[bytes, int]:
+	def read(self, account: Address, slot: bytes, index: int, le: int) -> bytes:
 		res = self._storages.setdefault(account, {})
 		res = res.setdefault(slot, bytearray())
-		return (
-			res[index : index + le] + b'\x00' * (le - max(0, len(res) - index)),
-			gas_before,
-		)
+		return res[index : index + le] + b'\x00' * (le - max(0, len(res) - index))
 
 	def write(
 		self,
-		gas_before: int,
 		account: Address,
 		slot: bytes,
 		index: int,
 		what: collections.abc.Buffer,
-	) -> int:
+	) -> None:
 		res = self._storages.setdefault(account, {})
 		res = res.setdefault(slot, bytearray())
 		what = memoryview(what)
 		res.extend(b'\x00' * (index + len(what) - len(res)))
 		memoryview(res)[index : index + len(what)] = what
-		return gas_before
 
 
 class MockHost(IHost):
@@ -132,21 +125,20 @@ class MockHost(IHost):
 			return f.read()
 
 	async def storage_read(
-		self, gas_before: int, account: bytes, slot: bytes, index: int, le: int
-	) -> tuple[bytes, int]:
+		self, account: bytes, slot: bytes, index: int, le: int
+	) -> bytes:
 		assert self.storage is not None
-		return self.storage.read(gas_before, Address(account), slot, index, le)
+		return self.storage.read(Address(account), slot, index, le)
 
 	async def storage_write(
 		self,
-		gas_before: int,
 		account: bytes,
 		slot: bytes,
 		index: int,
 		got: collections.abc.Buffer,
-	) -> int:
+	) -> None:
 		assert self.storage is not None
-		return self.storage.write(gas_before, Address(account), slot, index, got)
+		self.storage.write(Address(account), slot, index, got)
 
 	async def consume_result(
 		self, type: ResultCode, data: collections.abc.Buffer

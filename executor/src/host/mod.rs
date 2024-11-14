@@ -84,12 +84,6 @@ fn read_u32(sock: &mut dyn Sock) -> Result<u32> {
     Ok(u32::from_le_bytes(int_buf))
 }
 
-fn read_u64(sock: &mut dyn Sock) -> Result<u64> {
-    let mut int_buf = [0; 8];
-    sock.read_exact(&mut int_buf)?;
-    Ok(u64::from_le_bytes(int_buf))
-}
-
 fn write_result(sock: &mut dyn Sock, res: Result<&vm::RunOk, &anyhow::Error>) -> Result<()> {
     let str: String;
     let data = match res {

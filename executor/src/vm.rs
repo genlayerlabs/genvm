@@ -137,6 +137,7 @@ impl WasmContext {
 pub struct SharedData {
     /// shared across all deterministic VMs
     pub nondet_call_no: AtomicU32,
+    pub should_exit: Arc<AtomicU32>,
     // rust doesn't have aliasing Arc constructor
     //pub fuel_descriptor: Arc<wasmtime::FuelDescriptor>,
 }
@@ -145,6 +146,7 @@ impl SharedData {
     fn new() -> Self {
         Self {
             nondet_call_no: 0.into(),
+            should_exit: Arc::from(AtomicU32::from(0)),
         }
     }
 }
@@ -372,7 +374,11 @@ impl Supervisor {
             &self.non_det_engine
         };
 
-        let store = Store::new(&engine, WasmContext::new(data, self.shared_data.clone()));
+        let store = Store::new(
+            &engine,
+            WasmContext::new(data, self.shared_data.clone()),
+            self.shared_data.should_exit.clone(),
+        );
 
         let linker_shared = Arc::new(Mutex::new(Linker::new(engine)));
         let linker_shared_cloned = linker_shared.clone();

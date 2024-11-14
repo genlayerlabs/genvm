@@ -84,14 +84,14 @@ project('executor') {
 		tags: ['testdata']
 	)
 
-	if config.profile == "debug"
-		target_c(
-			output_file: root_build.join('fake-dlclose.so'),
-			mode: "compile",
-			file: cur_src.join('testdata', 'fake-dlclose.c'),
-			cc: config.cc,
-			flags: ['-g', '-pie', '-shared'],
-			tags: ['testdata']
-		)
-	end
+	#if config.profile == "debug"
+	#	target_c(
+	#		output_file: root_build.join('fake-dlclose.so'),
+	#		mode: "compile",
+	#		file: cur_src.join('testdata', 'fake-dlclose.c'),
+	#		cc: config.cc,
+	#		flags: ['-g', '-pie', '-shared'],
+	#		tags: ['testdata']
+	#	)
+	#end
 }

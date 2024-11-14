@@ -45,6 +45,7 @@ class IHost(typing.Protocol):
 	async def post_message(
 		self, gas: int, account: bytes, calldata: bytes, code: bytes, /
 	) -> None: ...
+	async def consume_gas(self, gas: int, /) -> None: ...
 
 
 async def host_loop(handler: IHost):
@@ -133,6 +134,9 @@ async def host_loop(handler: IHost):
 				code_len = await recv_int()
 				code = await read_exact(code_len)
 				await handler.post_message(gas, account, calldata, code)
+			case Methods.CONSUME_FUEL:
+				gas = await recv_int(8)
+				await handler.consume_gas(gas)
 			case x:
 				raise Exception(f'unknown method {x}')
 
@@ -157,6 +161,7 @@ async def run_host_and_program(
 	env=None,
 	cwd: Path | None = None,
 	exit_timeout=0.05,
+	deadline: float | None = None,
 ) -> RunHostAndProgramRes:
 	loop = asyncio.get_running_loop()
 
@@ -216,8 +221,12 @@ async def run_host_and_program(
 	coro_loop = asyncio.ensure_future(wrap_host())
 	coro_proc = asyncio.ensure_future(wrap_proc())
 
+	all_proc = [coro_loop, coro_proc]
+	if deadline is not None:
+		all_proc.append(asyncio.ensure_future(asyncio.sleep(deadline)))
+
 	done, _pending = await asyncio.wait(
-		[coro_loop, coro_proc],
+		all_proc,
 		return_when=asyncio.FIRST_COMPLETED,
 	)
 
@@ -230,7 +239,7 @@ async def run_host_and_program(
 			errors.append(e)
 
 	# coro_loop must finish first if everything succeeded
-	if not coro_loop.done():
+	if not coro_loop.done() and deadline is None:
 		print('WARNING: genvm finished first')
 		coro_loop.cancel()
 
@@ -262,6 +271,9 @@ async def run_host_and_program(
 
 	await coro_proc
 	exit_code = await process.wait()
+
+	if not coro_loop.done():
+		coro_loop.cancel()
 
 	if exit_code_use and exit_code != 0:
 		errors.append(Exception(f'exit code {exit_code} != 0'))

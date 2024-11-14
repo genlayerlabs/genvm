@@ -172,6 +172,7 @@ def run(jsonnet_rel_path):
 			'mock_host_path': mock_host_path,
 			'messages_path': messages_path,
 			'expected_messages_path': jsonnet_path.with_suffix(f'{suff}.msgs'),
+			'deadline': single_conf_form_file.get('deadline', None),
 		}
 
 	run_configs = [
@@ -205,7 +206,14 @@ def run(jsonnet_rel_path):
 				# _env["LD_DEBUG"] = "libs"
 
 			res = asyncio.run(
-				run_host_and_program(mock_host, cmd, env=_env, cwd=coverage_dir, exit_timeout=2)
+				run_host_and_program(
+					mock_host,
+					cmd,
+					env=_env,
+					cwd=coverage_dir,
+					exit_timeout=2,
+					deadline=config['deadline'],
+				)
 			)
 
 		base = {
