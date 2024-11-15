@@ -4,31 +4,19 @@ use serde::{Deserialize, Serialize};
 use std::{fs::File, io::Read, sync::Arc};
 use zip::ZipArchive;
 
-#[derive(Serialize, Deserialize, Clone)]
+use crate::vm::WasmFileDesc;
+
+#[derive(Clone, Debug)]
 pub enum InitActionTrivial {
-    MapFile {
-        to: String,
-        contents: Arc<[u8]>,
-    },
-    MapCode {
-        to: String,
-    },
-    AddEnv {
-        name: String,
-        val: String,
-    },
+    MapFile { to: String, contents: Arc<[u8]> },
+    MapCode { to: String },
+    AddEnv { name: String, val: String },
     SetArgs(Vec<String>),
-    LinkWasm {
-        contents: Arc<[u8]>,
-        debug_path: String,
-    },
-    StartWasm {
-        contents: Arc<[u8]>,
-        debug_path: String,
-    },
+    LinkWasm(WasmFileDesc),
+    StartWasm(WasmFileDesc),
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug)]
 pub enum InitAction {
     Trivial(InitActionTrivial),
     When {
@@ -39,7 +27,7 @@ pub enum InitAction {
     Once(Arc<str>, Box<InitAction>),
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug)]
 enum InitActionDependable {
     Trivial(InitActionTrivial),
     When {
@@ -106,10 +94,10 @@ impl RunnerReaderCache {
 impl RunnerReaderCacheEntry {
     fn transform_action_impl<R>(
         zip_file: &mut ZipArchive<R>,
-        path_prefix: &str,
         all_files: &Vec<String>,
         action: RunnerJsonInitAction,
         runners_path: &std::path::PathBuf,
+        runner_id: &Arc<str>,
     ) -> Result<InitActionDependable>
     where
         R: std::io::Read + std::io::Seek,
@@ -117,10 +105,10 @@ impl RunnerReaderCacheEntry {
         let mut rec = |action: RunnerJsonInitAction| -> Result<InitActionDependable> {
             RunnerReaderCacheEntry::transform_action_impl(
                 zip_file,
-                path_prefix,
                 all_files,
                 action,
                 runners_path,
+                runner_id,
             )
         };
         match action {
@@ -180,10 +168,14 @@ impl RunnerReaderCacheEntry {
                     .by_name(&file)
                     .with_context(|| format!("linking {file}"))?
                     .read_to_end(&mut buf)?;
-                Ok(InitActionDependable::Trivial(InitActionTrivial::LinkWasm {
-                    contents: Arc::from(buf),
-                    debug_path: format!("{}/{}", path_prefix, file),
-                }))
+                Ok(InitActionDependable::Trivial(InitActionTrivial::LinkWasm(
+                    WasmFileDesc {
+                        contents: Arc::from(buf),
+                        debug_path: format!("{}/{}", runner_id, file),
+                        runner_id: runner_id.clone(),
+                        path_in_arch: Some(file),
+                    },
+                )))
             }
             RunnerJsonInitAction::StartWasm(file) => {
                 let mut buf = Vec::new();
@@ -191,12 +183,14 @@ impl RunnerReaderCacheEntry {
                     .by_name(&file)
                     .with_context(|| format!("starting {file}"))?
                     .read_to_end(&mut buf)?;
-                Ok(InitActionDependable::Trivial(
-                    InitActionTrivial::StartWasm {
+                Ok(InitActionDependable::Trivial(InitActionTrivial::StartWasm(
+                    WasmFileDesc {
                         contents: Arc::from(buf),
-                        debug_path: format!("{}/{}", path_prefix, file),
+                        debug_path: format!("{}/{}", runner_id, file),
+                        runner_id: runner_id.clone(),
+                        path_in_arch: Some(file),
                     },
-                ))
+                )))
             }
             RunnerJsonInitAction::Depends(dep) => Ok(InitActionDependable::Depends(Arc::from(dep))),
             RunnerJsonInitAction::When { cond, action: act } => Ok(InitActionDependable::When {
@@ -211,16 +205,16 @@ impl RunnerReaderCacheEntry {
             RunnerJsonInitAction::With { runner, action } => {
                 let runner_id = Arc::from(runner);
                 let mut arch = Self::get_arch_for(&runner_id, runners_path.clone())?;
-                Self::transform_action(&mut arch, &runner_id, *action, runners_path)
+                Self::transform_action(&mut arch, *action, runners_path, &runner_id)
             }
         }
     }
 
     fn transform_action<R>(
         zip_file: &mut ZipArchive<R>,
-        path_prefix: &str,
         action: RunnerJsonInitAction,
         runners_path: &std::path::PathBuf,
+        runner_id: &Arc<str>,
     ) -> Result<InitActionDependable>
     where
         R: std::io::Read + std::io::Seek,
@@ -233,17 +227,17 @@ impl RunnerReaderCacheEntry {
             .collect();
         RunnerReaderCacheEntry::transform_action_impl(
             zip_file,
-            path_prefix,
             &all_files,
             action,
             runners_path,
+            runner_id,
         )
     }
 
     fn make_from_arch<R>(
-        path_prefix: &str,
         zip_file: &mut ZipArchive<R>,
         runners_path: &std::path::PathBuf,
+        runner_id: &Arc<str>,
     ) -> Result<RunnerReaderCacheEntry>
     where
         R: std::io::Read + std::io::Seek,
@@ -253,8 +247,8 @@ impl RunnerReaderCacheEntry {
             serde_json::from_str(&runner).with_context(|| format!("json: {runner}"))?;
 
         let ret =
-            RunnerReaderCacheEntry::transform_action(zip_file, path_prefix, runner, runners_path)
-                .with_context(|| format!("pre_actions from {}", &path_prefix))?;
+            RunnerReaderCacheEntry::transform_action(zip_file, runner, runners_path, runner_id)
+                .with_context(|| format!("pre_actions from {}", runner_id))?;
 
         Ok(RunnerReaderCacheEntry {
             action: Arc::new(ret),
@@ -272,9 +266,23 @@ impl RunnerReaderCacheEntry {
                 res
             );
         }
+        let runner_id = res[0];
+        let runner_hash = res[1];
 
-        path.push(res[0]);
-        let mut fname = res[1].to_owned();
+        for c in runner_id.chars() {
+            if !c.is_ascii_alphanumeric() && c != '-' && c != '_' {
+                anyhow::bail!("character `{c}` is not allowed in runner id");
+            }
+        }
+
+        for c in runner_hash.chars() {
+            if !c.is_ascii_alphanumeric() && c != '-' && c != '_' && c != '=' {
+                anyhow::bail!("character `{c}` is not allowed in runner hash");
+            }
+        }
+
+        path.push(runner_id);
+        let mut fname = runner_hash.to_owned();
         fname.push_str(".zip");
         path.push(fname);
         let file = std::fs::File::open(&path).with_context(|| format!("reading {:?}", path))?;
@@ -284,7 +292,7 @@ impl RunnerReaderCacheEntry {
     fn make(runner_id: &Arc<str>, path: &std::path::PathBuf) -> Result<RunnerReaderCacheEntry> {
         let mut zip_file = Self::get_arch_for(runner_id, path.clone())?;
 
-        RunnerReaderCacheEntry::make_from_arch(&runner_id, &mut zip_file, &path)
+        RunnerReaderCacheEntry::make_from_arch(&mut zip_file, &path, runner_id)
     }
 }
 
@@ -292,14 +300,19 @@ pub struct RunnerReader {
     runners_path: std::path::PathBuf,
 }
 
+pub fn path() -> Result<std::path::PathBuf> {
+    let mut runners_path = std::env::current_exe()?;
+    runners_path.pop();
+    runners_path.pop();
+    runners_path.push("share");
+    runners_path.push("genvm");
+    runners_path.push("runners");
+    Ok(runners_path)
+}
+
 impl RunnerReader {
     pub fn new() -> Result<RunnerReader> {
-        let mut runners_path = std::env::current_exe()?;
-        runners_path.pop();
-        runners_path.pop();
-        runners_path.push("share");
-        runners_path.push("genvm");
-        runners_path.push("runners");
+        let runners_path = path()?;
         if !runners_path.exists() {
             anyhow::bail!("path {:#?} doesn't exist", &runners_path);
         }
@@ -308,7 +321,6 @@ impl RunnerReader {
 
     fn unfold(
         &mut self,
-        path_prefix: &str,
         cache: &mut RunnerReaderCache,
         action: &InitActionDependable,
     ) -> Result<InitAction> {
@@ -318,13 +330,11 @@ impl RunnerReader {
             }
             InitActionDependable::When { cond, act } => Ok(InitAction::When {
                 cond: *cond,
-                act: Box::new(self.unfold(path_prefix, cache, act)?),
+                act: Box::new(self.unfold(cache, act)?),
             }),
             InitActionDependable::Seq(vec) => {
-                let r: Result<Vec<InitAction>> = vec
-                    .iter()
-                    .map(|x| self.unfold(path_prefix, cache, x))
-                    .collect();
+                let r: Result<Vec<InitAction>> =
+                    vec.iter().map(|x| self.unfold(cache, x)).collect();
                 Ok(InitAction::Seq(r?))
             }
             InitActionDependable::Depends(dep) => {
@@ -337,7 +347,7 @@ impl RunnerReader {
                 }
                 .clone();
 
-                let res = self.unfold(&dep, cache, &*cache_entry.action)?;
+                let res = self.unfold(cache, &*cache_entry.action)?;
                 Ok(InitAction::Once(dep.clone(), Box::new(res)))
             }
         }
@@ -345,7 +355,7 @@ impl RunnerReader {
 
     pub fn get_for_archive<R>(
         &mut self,
-        path_prefix: &str,
+        runner_id: &Arc<str>,
         archive: &mut zip::ZipArchive<R>,
         cache: &mut RunnerReaderCache,
     ) -> Result<InitAction>
@@ -353,7 +363,7 @@ impl RunnerReader {
         R: std::io::Read + std::io::Seek,
     {
         let cache_entry =
-            RunnerReaderCacheEntry::make_from_arch(path_prefix, archive, &self.runners_path)?;
-        self.unfold(path_prefix, cache, &*cache_entry.action)
+            RunnerReaderCacheEntry::make_from_arch(archive, &self.runners_path, runner_id)?;
+        self.unfold(cache, &*cache_entry.action)
     }
 }

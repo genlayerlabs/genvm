@@ -54,6 +54,28 @@ project('executor') {
 		tags: ['codegen'],
 	)
 
+	genvm_id_path = root_build.join('genvm_id.txt')
+	gen_id = target_command(
+		output_file: cur_build.join('genvm_id.trg'),
+		command: [
+			RbConfig.ruby, root_src.join('build-scripts', 'generate-id.rb'), root_src, genvm_id_path.relative_path_from(root_build)
+		],
+		dependencies: [],
+		cwd: root_build,
+		tags: ['all'],
+	)
+
+	base_env['GENVM_PROFILE_PATH'] = genvm_id_path.relative_path_from(cur_src)
+
+	gen_id_first = target_command(
+		output_file: genvm_id_path,
+		command: [
+			RbConfig.ruby, root_src.join('build-scripts', 'generate-id.rb'), root_src, genvm_id_path.relative_path_from(root_build)
+		],
+		dependencies: [],
+		cwd: root_build,
+	)
+
 	bin = target_alias(
 		'bin',
 		target_cargo_build(
@@ -64,7 +86,7 @@ project('executor') {
 			flags: cargo_flags,
 			env: base_env,
 		) {
-			add_deps codegen
+			add_deps codegen, gen_id_first
 		}
 	)
 

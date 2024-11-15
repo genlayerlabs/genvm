@@ -7,6 +7,8 @@ pub mod string_templater;
 pub mod vm;
 pub mod wasi;
 
+pub mod caching;
+
 pub use host::{AccountAddress, GenericAddress, Host, MessageData};
 
 use anyhow::Result;

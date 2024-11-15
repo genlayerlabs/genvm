@@ -58,6 +58,9 @@ jobs:
           key: mock-${{ runner.os }}-buildx-${{ github.sha }}
           restore-keys: |
             mock-${{ runner.os }}-buildx-
+      - name: Precompile
+        run: |
+          ./build/out/bin/genvm precompile
       - name: Run
         env:
           OPENAIKEY: ${{ secrets.OPENAIKEY }}

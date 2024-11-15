@@ -1,17 +1,20 @@
 use core::str;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    io::Write,
-    path::Path,
+    io::{Read, Write},
+    str::FromStr,
     sync::atomic::AtomicU32,
 };
 
 use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
 use itertools::Itertools;
+use once_cell::sync::Lazy;
 use wasmparser::WasmFeatures;
 use wasmtime::{Engine, Linker, Module, Store};
+use zip::ZipArchive;
 
 use crate::{
+    caching,
     runner::{self, InitAction, InitActionTrivial, WasmMode},
     wasi,
 };
@@ -176,8 +179,7 @@ pub struct Supervisor {
     pub host: crate::Host,
     pub shared_data: Arc<SharedData>,
 
-    det_engine: Engine,
-    non_det_engine: Engine,
+    engines: Engines,
     cached_modules: HashMap<Arc<[u8]>, Arc<PrecompiledModule>>,
     runner_cache: runner::RunnerReaderCache,
 }
@@ -247,10 +249,15 @@ impl VM {
     }
 }
 
-impl Supervisor {
-    pub fn new(modules: Modules, host: crate::Host) -> Result<Self> {
+pub struct Engines {
+    pub det: Engine,
+    pub non_det: Engine,
+}
+
+impl Engines {
+    pub fn create(config_base: impl FnOnce(&mut wasmtime::Config) -> Result<()>) -> Result<Self> {
         let mut base_conf = wasmtime::Config::default();
-        base_conf.cranelift_opt_level(wasmtime::OptLevel::None);
+
         base_conf.debug_info(true);
         //base_conf.cranelift_opt_level(wasmtime::OptLevel::Speed);
         base_conf.wasm_tail_call(true);
@@ -265,33 +272,14 @@ impl Supervisor {
         base_conf.wasm_feature(WasmFeatures::SATURATING_FLOAT_TO_INT, false);
         base_conf.wasm_feature(WasmFeatures::MULTI_VALUE, true);
 
-        match directories_next::ProjectDirs::from("", "yagerai", "genvm") {
-            None => {
-                base_conf.disable_cache();
-            }
-            Some(dirs) => {
-                let cache_dir = dirs.cache_dir().join("modules");
-                let cache_conf: wasmtime_cache::CacheConfig =
-                    serde_json::from_value(serde_json::Value::Object(
-                        [
-                            ("enabled".into(), serde_json::Value::Bool(true)),
-                            (
-                                "directory".into(),
-                                cache_dir.into_os_string().into_string().unwrap().into(),
-                            ),
-                        ]
-                        .into_iter()
-                        .collect(),
-                    ))?;
-                base_conf.cache_config_set(cache_conf)?;
-            }
-        }
-
         base_conf.consume_fuel(false);
         //base_conf.wasm_threads(false);
         //base_conf.wasm_reference_types(false);
         base_conf.wasm_simd(false);
         base_conf.relaxed_simd_deterministic(false);
+
+        base_conf.cranelift_opt_level(wasmtime::OptLevel::None);
+        config_base(&mut base_conf)?;
 
         let mut det_conf = base_conf.clone();
         det_conf.async_support(false);
@@ -303,10 +291,57 @@ impl Supervisor {
 
         let det_engine = Engine::new(&det_conf)?;
         let non_det_engine = Engine::new(&non_det_conf)?;
+        Ok(Self {
+            det: det_engine,
+            non_det: non_det_engine,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct WasmFileDesc {
+    pub contents: Arc<[u8]>,
+    pub runner_id: Arc<str>,
+    pub debug_path: String,
+    pub path_in_arch: Option<String>,
+}
+
+impl WasmFileDesc {
+    pub fn special(&self) -> bool {
+        return self.runner_id.is_empty() || self.runner_id.starts_with("<");
+    }
+}
+
+impl Supervisor {
+    pub fn new(modules: Modules, host: crate::Host) -> Result<Self> {
+        let engines = Engines::create(|base_conf| {
+            match Lazy::force(&caching::CACHE_DIR) {
+                None => {
+                    base_conf.disable_cache();
+                }
+                Some(cache_dir) => {
+                    let mut cache_dir = cache_dir.clone();
+                    cache_dir.push("wasmtime");
+                    let cache_conf: wasmtime_cache::CacheConfig =
+                        serde_json::from_value(serde_json::Value::Object(
+                            [
+                                ("enabled".into(), serde_json::Value::Bool(true)),
+                                (
+                                    "directory".into(),
+                                    cache_dir.into_os_string().into_string().unwrap().into(),
+                                ),
+                            ]
+                            .into_iter()
+                            .collect(),
+                        ))?;
+                    base_conf.cache_config_set(cache_conf)?;
+                }
+            }
+            Ok(())
+        })?;
         let shared_data = Arc::new(SharedData::new());
         Ok(Self {
-            det_engine,
-            non_det_engine,
+            engines,
             cached_modules: HashMap::new(),
             runner_cache: runner::RunnerReaderCache::new(),
             modules,
@@ -315,12 +350,8 @@ impl Supervisor {
         })
     }
 
-    pub fn cache_module(
-        &mut self,
-        module_bytes: Arc<[u8]>,
-        path: Option<&Path>,
-    ) -> Result<Arc<PrecompiledModule>> {
-        let entry = self.cached_modules.entry(module_bytes.clone());
+    pub fn cache_module(&mut self, data: &WasmFileDesc) -> Result<Arc<PrecompiledModule>> {
+        let entry = self.cached_modules.entry(data.contents.clone());
         match entry {
             std::collections::hash_map::Entry::Occupied(entry) => Ok(entry.get().clone()),
             std::collections::hash_map::Entry::Vacant(entry) => {
@@ -328,10 +359,10 @@ impl Supervisor {
                 let add_features =
                     WasmFeatures::REFERENCE_TYPES.bits() | WasmFeatures::FLOATS.bits();
 
-                let det_features = self.det_engine.config().get_features().bits() | add_features;
+                let det_features = self.engines.det.config().get_features().bits() | add_features;
 
                 let non_det_features =
-                    self.non_det_engine.config().get_features().bits() | add_features;
+                    self.engines.non_det.config().get_features().bits() | add_features;
 
                 let mut det_validator = wasmparser::Validator::new_with_features(
                     WasmFeatures::from_bits(det_features).unwrap(),
@@ -340,25 +371,73 @@ impl Supervisor {
                     WasmFeatures::from_bits(non_det_features).unwrap(),
                 );
                 det_validator
-                    .validate_all(&module_bytes[..])
+                    .validate_all(&data.contents[..])
                     .with_context(|| {
                         format!(
                             "validating {}",
-                            &String::from_utf8_lossy(&module_bytes[..10.min(module_bytes.len())])
+                            &String::from_utf8_lossy(&data.contents[..10.min(data.contents.len())])
                         )
                     })?;
-                non_det_validator.validate_all(&module_bytes[..])?;
-                let module_det = wasmtime::CodeBuilder::new(&self.det_engine)
-                    .wasm_binary(&module_bytes[..], path)?
-                    .compile_module()?;
+                non_det_validator.validate_all(&data.contents[..])?;
 
-                let module_non_det = wasmtime::CodeBuilder::new(&self.non_det_engine)
-                    .wasm_binary(&module_bytes[..], path)?
-                    .compile_module()?;
-                let ret = PrecompiledModule {
-                    det: module_det,
-                    non_det: module_non_det,
+                let debug_path = std::path::PathBuf::from_str(&data.debug_path)?;
+
+                let compile_here = || -> Result<PrecompiledModule> {
+                    let module_det = wasmtime::CodeBuilder::new(&self.engines.det)
+                        .wasm_binary(&data.contents[..], Some(&debug_path))?
+                        .compile_module()?;
+
+                    let module_non_det = wasmtime::CodeBuilder::new(&self.engines.non_det)
+                        .wasm_binary(&data.contents[..], Some(&debug_path))?
+                        .compile_module()?;
+                    Ok(PrecompiledModule {
+                        det: module_det,
+                        non_det: module_non_det,
+                    })
                 };
+
+                let get_from_runner = || -> Result<PrecompiledModule> {
+                    if data.special() {
+                        anyhow::bail!("special runners are not supported");
+                    }
+                    let path_in_arch = match &data.path_in_arch {
+                        None => anyhow::bail!("no path in arch"),
+                        Some(p) => p,
+                    };
+                    let (result_zip_det_path, result_zip_non_det_path) =
+                        match Lazy::force(&caching::PRECOMPILE_DIR) {
+                            Some(v) => v,
+                            None => anyhow::bail!("cache is absent"),
+                        };
+
+                    let (id, hash) = data
+                        .runner_id
+                        .split(":")
+                        .collect_tuple()
+                        .ok_or(anyhow::anyhow!("invalid runner id"))?;
+                    let hash = format!("{hash}.zip");
+
+                    let process_single =
+                        |base_path: &std::path::PathBuf, engine: &Engine| -> Result<Module> {
+                            let mut base_path = base_path.clone();
+                            base_path.push(id);
+                            base_path.push(&hash);
+                            let mut zip = ZipArchive::new(std::fs::File::open(&base_path)?)?;
+                            let mut buf = Vec::new();
+                            zip.by_name(path_in_arch)?.read_to_end(&mut buf)?;
+                            Ok(unsafe { Module::deserialize(engine, &buf)? })
+                        };
+
+                    let det = process_single(result_zip_det_path, &self.engines.det)?;
+                    let non_det = process_single(result_zip_non_det_path, &self.engines.non_det)?;
+
+                    eprintln!("using precompiled {}", data.debug_path);
+
+                    Ok(PrecompiledModule { det, non_det })
+                };
+
+                let ret = get_from_runner().or_else(|_e| compile_here())?;
+
                 Ok(entry.insert(Arc::new(ret)).clone())
             }
         }
@@ -369,9 +448,9 @@ impl Supervisor {
         let init_actions = data.init_actions.clone();
 
         let engine = if data.conf.is_deterministic {
-            &self.det_engine
+            &self.engines.det
         } else {
-            &self.non_det_engine
+            &self.engines.non_det
         };
 
         let store = Store::new(
@@ -402,22 +481,10 @@ impl Supervisor {
         })
     }
 
-    fn link_wasm_into(
-        &mut self,
-        ret_vm: &mut VM,
-        contents: Arc<[u8]>,
-        debug_path: Option<&str>,
-    ) -> Result<wasmtime::Module> {
-        let is_some = debug_path.is_some();
-        let v = debug_path.clone().unwrap_or_default();
-        let debug_path = if is_some {
-            Some(Path::new(&v[..]))
-        } else {
-            None
-        };
+    fn link_wasm_into(&mut self, ret_vm: &mut VM, data: &WasmFileDesc) -> Result<wasmtime::Module> {
         let precompiled = self
-            .cache_module(contents, debug_path)
-            .with_context(|| format!("caching {:?}", &debug_path))?;
+            .cache_module(data)
+            .with_context(|| format!("caching {:?}", &data.debug_path))?;
         if ret_vm.is_det() {
             Ok(precompiled.det.clone())
         } else {
@@ -468,11 +535,8 @@ impl Supervisor {
                     .set_args(&args[..])?;
                 Ok(None)
             }
-            InitAction::Trivial(InitActionTrivial::LinkWasm {
-                contents,
-                debug_path,
-            }) => {
-                let module = self.link_wasm_into(vm, contents.clone(), Some(debug_path))?;
+            InitAction::Trivial(InitActionTrivial::LinkWasm(data)) => {
+                let module = self.link_wasm_into(vm, data)?;
                 let instance = {
                     let Ok(ref mut linker) = vm.linker.lock() else {
                         panic!();
@@ -480,7 +544,7 @@ impl Supervisor {
                     let instance = linker.instantiate(&mut vm.store, &module)?;
                     let name = module.name().ok_or(anyhow::anyhow!(
                         "can't link unnamed module {:?}",
-                        &debug_path
+                        &data.debug_path
                     ))?;
                     linker.instance(&mut vm.store, name, instance)?;
                     instance
@@ -493,10 +557,7 @@ impl Supervisor {
                 }
                 Ok(None)
             }
-            InitAction::Trivial(InitActionTrivial::StartWasm {
-                contents,
-                debug_path,
-            }) => {
+            InitAction::Trivial(InitActionTrivial::StartWasm(data)) => {
                 let env: Vec<(String, String)> = ctx
                     .env
                     .iter()
@@ -507,7 +568,7 @@ impl Supervisor {
                     .genlayer_ctx_mut()
                     .preview1
                     .set_env(&env)?;
-                let module = self.link_wasm_into(vm, contents.clone(), Some(debug_path))?;
+                let module = self.link_wasm_into(vm, data)?;
                 let Ok(ref mut linker) = vm.linker.lock() else {
                     panic!();
                 };
@@ -558,12 +619,18 @@ impl Supervisor {
         let code = self.host.get_code(contract_account)?;
         let mut runner = runner::RunnerReader::new()?;
         let actions = if wasmparser::Parser::is_core_wasm(&code[..]) {
-            InitAction::Trivial(InitActionTrivial::StartWasm {
+            InitAction::Trivial(InitActionTrivial::StartWasm(WasmFileDesc {
                 contents: code.clone(),
+                runner_id: Arc::from("<contract>"),
                 debug_path: "<contract>".into(),
-            })
+                path_in_arch: None,
+            }))
         } else if let Ok(mut as_contr) = zip::ZipArchive::new(std::io::Cursor::new(&code)) {
-            runner.get_for_archive("<contract>", &mut as_contr, &mut self.runner_cache)?
+            runner.get_for_archive(
+                &Arc::from("<contract>"),
+                &mut as_contr,
+                &mut self.runner_cache,
+            )?
         } else {
             let code_str = str::from_utf8(&code[..])?;
             let code_start = (|| {
@@ -597,7 +664,7 @@ impl Supervisor {
 
             let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&mut buf[..]))?;
             let mut runner = runner::RunnerReader::new()?;
-            runner.get_for_archive("<contract>", &mut zip, &mut self.runner_cache)?
+            runner.get_for_archive(&Arc::from("<contract>"), &mut zip, &mut self.runner_cache)?
         };
 
         Ok(ContractCodeData {
