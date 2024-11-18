@@ -302,7 +302,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::Io.into());
         }
         Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_contents(vec_from_cstr_libc(res.str), 0),
+            FileContentsUnevaluated::from_contents(
+                vec_from_cstr_libc(|d| supervisor.modules.web.free_str(d), res.str),
+                0,
+            ),
         )))
     }
 
@@ -339,7 +342,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::Io.into());
         }
         Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_contents(vec_from_cstr_libc(res.str), 0),
+            FileContentsUnevaluated::from_contents(
+                vec_from_cstr_libc(|d| supervisor.modules.llm.free_str(d), res.str),
+                0,
+            ),
         )))
     }
 
@@ -632,10 +638,8 @@ impl Context {
     }
 }
 
-fn vec_from_cstr_libc(str: *const u8) -> Arc<[u8]> {
+fn vec_from_cstr_libc(free: impl FnOnce(*const u8) -> (), str: *const u8) -> Arc<[u8]> {
     let res = Arc::from(unsafe { CStr::from_ptr(str as *const std::ffi::c_char) }.to_bytes());
-    unsafe {
-        libc::free(str as *mut std::ffi::c_void);
-    }
+    free(str);
     res
 }

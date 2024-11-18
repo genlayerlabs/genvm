@@ -70,6 +70,7 @@ impl From<anyhow::Result<bool>> for BoolResult {
 macro_rules! WebFunctionsApiFns {
     ($cb:path[$($args:tt),*]) => {
         $cb!(($($args),*) {
+            free_str: fn(data: *const u8) -> ();
             get_webpage: fn(gas: &mut u64, config: *const u8, url: *const u8) -> ($crate::interfaces::CStrResult);
         });
     };
@@ -80,9 +81,15 @@ WebFunctionsApiFns!(create_trait[web_functions_api, (Version { major: 0, minor: 
 macro_rules! LLMFunctionsApiFns {
     ($cb:path[$($args:tt),*]) => {
         $cb!(($($args),*) {
+            free_str: fn(data: *const u8) -> ();
             exec_prompt: fn(gas: &mut u64, config: *const u8, prompt: *const u8) -> ($crate::interfaces::CStrResult);
             eq_principle_prompt: fn(gas: &mut u64, config: *const u8) -> ($crate::interfaces::BoolResult);
         });
     };
 }
 LLMFunctionsApiFns!(create_trait[llm_functions_api, (Version { major: 0, minor: 0 })]);
+
+#[no_mangle]
+pub extern "C-unwind" fn free_str(_ctx: *const (), data: *const u8) -> () {
+    unsafe { libc::free(data as *mut std::ffi::c_void) };
+}

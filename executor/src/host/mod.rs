@@ -2,7 +2,7 @@ mod host_fns;
 
 use std::sync::{Arc, Mutex};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
 
@@ -68,11 +68,15 @@ impl Host {
     pub fn new(addr: &str) -> Result<Host> {
         const UNIX: &str = "unix://";
         let sock: Box<Mutex<dyn Sock>> = if addr.starts_with(UNIX) {
-            Box::new(Mutex::new(std::os::unix::net::UnixStream::connect(
-                std::path::Path::new(&addr[UNIX.len()..]),
-            )?))
+            Box::new(Mutex::new(
+                std::os::unix::net::UnixStream::connect(std::path::Path::new(&addr[UNIX.len()..]))
+                    .with_context(|| format!("connecting to {addr}"))?,
+            ))
         } else {
-            Box::new(Mutex::new(std::net::TcpStream::connect(addr)?))
+            Box::new(Mutex::new(
+                std::net::TcpStream::connect(addr)
+                    .with_context(|| format!("connecting to {addr}"))?,
+            ))
         };
         Ok(Host { sock })
     }

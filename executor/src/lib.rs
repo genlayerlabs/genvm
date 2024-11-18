@@ -11,7 +11,7 @@ pub mod caching;
 
 pub use host::{AccountAddress, GenericAddress, Host, MessageData};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -57,7 +57,7 @@ pub fn create_supervisor(config_path: &String, host: Host) -> Result<Arc<Mutex<v
     use plugin_loader::llm_functions_api::Loader as _;
     use plugin_loader::web_functions_api::Loader as _;
 
-    let mut root_path = std::env::current_exe()?;
+    let mut root_path = std::env::current_exe().with_context(|| "getting current exe")?;
     root_path.pop();
     root_path.pop();
     let root_path = root_path

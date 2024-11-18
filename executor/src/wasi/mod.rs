@@ -110,7 +110,6 @@ pub(super) fn add_to_linker_sync<T: Send + 'static>(
             let func_name = str::from_utf8(&func_name)?;
 
             log::trace!(target: "rt", method = "dlsym", module = mod_name, function = func_name; "");
-            eprintln!("LOADING {mod_name} {func_name}");
 
             let linker_shared = linker_shared.clone();
             let Ok(ref mut linker) = linker_shared.lock() else {

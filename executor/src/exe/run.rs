@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::ValueEnum;
 
 #[derive(Debug, Clone, ValueEnum, PartialEq)]
@@ -32,7 +32,8 @@ pub fn handle(args: Args) -> Result<()> {
 
     let host = genvm::Host::new(&args.host)?;
 
-    let supervisor = genvm::create_supervisor(&args.config, host)?;
+    let supervisor =
+        genvm::create_supervisor(&args.config, host).with_context(|| "creating supervisor")?;
 
     let shared_data = {
         let supervisor = supervisor.clone();
@@ -51,7 +52,7 @@ pub fn handle(args: Args) -> Result<()> {
         )?;
     }
 
-    let res = genvm::run_with(message, supervisor);
+    let res = genvm::run_with(message, supervisor).with_context(|| "running genvm");
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,
         (Err(e), PrintOption::Shrink) => {

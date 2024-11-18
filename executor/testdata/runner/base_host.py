@@ -141,9 +141,6 @@ async def host_loop(handler: IHost):
 				raise Exception(f'unknown method {x}')
 
 
-import subprocess
-
-
 @dataclass
 class RunHostAndProgramRes:
 	stdout: str

@@ -11,6 +11,9 @@ rustflags = [
     #"--remap-path-prefix=src/=genvm/executor/src/"
 ]
 
+[profile.release]
+debug = true
+
 [dependencies]
 # 432745aca5ee802255935768125810fcba38dae0
 wasmtime = { path = "third-party/wasmtime/crates/wasmtime", default-features = false, features = ["cranelift", "std", "parallel-compilation", "cache", "demangle"] }
