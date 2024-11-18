@@ -121,12 +121,13 @@ enum FilesTrie {
 }
 
 impl Context {
-    pub fn log(&self, to: &mut dyn std::io::Write) {
-        let _ = to.write_fmt(format_args!(
-            "ENV {}\nARGS {}\n",
-            String::from_utf8_lossy(&self.env_buf),
-            String::from_utf8_lossy(&self.args_buf)
-        ));
+    pub fn log(&self) -> serde_json::Value {
+        serde_json::json!(
+            {
+                "env": String::from_utf8_lossy(&self.env_buf),
+                "args": String::from_utf8_lossy(&self.args_buf)
+            }
+        )
     }
     pub fn set_args(&mut self, args: &[String]) -> Result<(), anyhow::Error> {
         for c in args {

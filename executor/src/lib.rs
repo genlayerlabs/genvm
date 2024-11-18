@@ -140,17 +140,11 @@ pub fn run_with(
         (vm, instance)
     };
 
-    let init_fuel = vm.store.get_fuel().unwrap_or(0);
     let res = vm.run(&instance);
-    let remaining_fuel = vm.store.get_fuel().unwrap_or(0);
-    eprintln!(
-        "remaining fuel: {remaining_fuel}\nconsumed fuel:  {}",
-        u64::wrapping_sub(init_fuel, remaining_fuel)
-    );
 
     {
         let Ok(mut supervisor) = supervisor.lock() else {
-            return Err(anyhow::anyhow!("can't lock supervisor"));
+            anyhow::bail!("can't lock supervisor");
         };
         supervisor.host.consume_result(&res)?;
     }

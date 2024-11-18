@@ -208,22 +208,19 @@ impl VM {
     }
 
     pub fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
-        (|| {
-            let Ok(lck) = self.store.data().genlayer_ctx.lock() else {
-                return;
-            };
-            let mut stderr = std::io::stderr().lock();
-            let _ = stderr.write(b"Spawning genvm\n");
-            lck.preview1.log(&mut stderr);
-            lck.genlayer_sdk.log(&mut stderr);
-            let _ = stderr.flush();
-        })();
+        if let Ok(lck) = self.store.data().genlayer_ctx.lock() {
+            log::info!(target: "vm", method = "run", wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "");
+        }
 
         let func = instance
             .get_typed_func::<(), ()>(&mut self.store, "")
             .or_else(|_| instance.get_typed_func::<(), ()>(&mut self.store, "_start"))
             .with_context(|| "can't find entrypoint")?;
-        let res: RunResult = match func.call(&mut self.store, ()) {
+        log::info!(target: "rt", event = "execution start"; "");
+        let time_start = std::time::Instant::now();
+        let res = func.call(&mut self.store, ());
+        log::info!(target: "rt", event = "execution finished", duration:? = time_start.elapsed(); "");
+        let res: RunResult = match res {
             Ok(()) => Ok(RunOk::empty_return()),
             Err(e) => {
                 let res: Option<RunOk> = [
@@ -284,6 +281,7 @@ impl Engines {
         let mut det_conf = base_conf.clone();
         det_conf.async_support(false);
         det_conf.wasm_floats_enabled(false);
+        det_conf.cranelift_nan_canonicalization(true);
 
         let mut non_det_conf = base_conf.clone();
         non_det_conf.async_support(false);
@@ -353,7 +351,10 @@ impl Supervisor {
     pub fn cache_module(&mut self, data: &WasmFileDesc) -> Result<Arc<PrecompiledModule>> {
         let entry = self.cached_modules.entry(data.contents.clone());
         match entry {
-            std::collections::hash_map::Entry::Occupied(entry) => Ok(entry.get().clone()),
+            std::collections::hash_map::Entry::Occupied(entry) => {
+                log::debug!(target: "cache", cache_method = "rt", path = data.debug_path; "using rt cached");
+                Ok(entry.get().clone())
+            }
             std::collections::hash_map::Entry::Vacant(entry) => {
                 // FIXME: find source of this. why call_indirect requires tables?
                 let add_features =
@@ -383,6 +384,9 @@ impl Supervisor {
                 let debug_path = std::path::PathBuf::from_str(&data.debug_path)?;
 
                 let compile_here = || -> Result<PrecompiledModule> {
+                    log::info!(target: "cache", cache_method = "compiling", status = "start", path = data.debug_path; "");
+
+                    let start_time = std::time::Instant::now();
                     let module_det = wasmtime::CodeBuilder::new(&self.engines.det)
                         .wasm_binary(&data.contents[..], Some(&debug_path))?
                         .compile_module()?;
@@ -390,6 +394,7 @@ impl Supervisor {
                     let module_non_det = wasmtime::CodeBuilder::new(&self.engines.non_det)
                         .wasm_binary(&data.contents[..], Some(&debug_path))?
                         .compile_module()?;
+                    log::info!(target: "cache", cache_method = "compiling", status = "done", duration:? = start_time.elapsed(), path = data.debug_path; "");
                     Ok(PrecompiledModule {
                         det: module_det,
                         non_det: module_non_det,
@@ -404,11 +409,11 @@ impl Supervisor {
                         None => anyhow::bail!("no path in arch"),
                         Some(p) => p,
                     };
-                    let (result_zip_det_path, result_zip_non_det_path) =
-                        match Lazy::force(&caching::PRECOMPILE_DIR) {
-                            Some(v) => v,
-                            None => anyhow::bail!("cache is absent"),
-                        };
+                    let mut result_zip_path = match Lazy::force(&caching::PRECOMPILE_DIR) {
+                        Some(v) => v,
+                        None => anyhow::bail!("cache is absent"),
+                    }
+                    .clone();
 
                     let (id, hash) = data
                         .runner_id
@@ -417,21 +422,28 @@ impl Supervisor {
                         .ok_or(anyhow::anyhow!("invalid runner id"))?;
                     let hash = format!("{hash}.zip");
 
-                    let process_single =
-                        |base_path: &std::path::PathBuf, engine: &Engine| -> Result<Module> {
-                            let mut base_path = base_path.clone();
-                            base_path.push(id);
-                            base_path.push(&hash);
-                            let mut zip = ZipArchive::new(std::fs::File::open(&base_path)?)?;
-                            let mut buf = Vec::new();
-                            zip.by_name(path_in_arch)?.read_to_end(&mut buf)?;
-                            Ok(unsafe { Module::deserialize(engine, &buf)? })
-                        };
+                    result_zip_path.push(id);
+                    result_zip_path.push(&hash);
+                    let mut zip = ZipArchive::new(std::fs::File::open(&result_zip_path)?)?;
 
-                    let det = process_single(result_zip_det_path, &self.engines.det)?;
-                    let non_det = process_single(result_zip_non_det_path, &self.engines.non_det)?;
+                    let mut process_single = |suff: &str, engine: &Engine| -> Result<Module> {
+                        let mut buf = Vec::new();
+                        let mut path_in_arch = path_in_arch.clone();
+                        path_in_arch.push_str(suff);
+                        zip.by_name(&path_in_arch)?.read_to_end(&mut buf)?;
+                        Ok(unsafe { Module::deserialize(engine, &buf)? })
+                    };
 
-                    eprintln!("using precompiled {}", data.debug_path);
+                    let det = process_single(
+                        caching::DET_NON_DET_PRECOMPILED_SUFFIX.det,
+                        &self.engines.det,
+                    )?;
+                    let non_det = process_single(
+                        caching::DET_NON_DET_PRECOMPILED_SUFFIX.non_det,
+                        &self.engines.non_det,
+                    )?;
+
+                    log::debug!(target: "cache", cache_method = "precompiled", path = data.debug_path; "using precompiled");
 
                     Ok(PrecompiledModule { det, non_det })
                 };
@@ -552,6 +564,7 @@ impl Supervisor {
                 match instance.get_typed_func::<(), ()>(&mut vm.store, "_initialize") {
                     Err(_) => {}
                     Ok(func) => {
+                        log::info!(target: "rt", method = "call_initialize", wasm = data.debug_path; "");
                         func.call(&mut vm.store, ())?;
                     }
                 }

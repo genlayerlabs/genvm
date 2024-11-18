@@ -5,10 +5,17 @@ use clap::builder::OsStr;
 use genvm::caching;
 use itertools::Itertools;
 use once_cell::sync::Lazy;
-use zip::{read::ZipFile, ZipWriter};
+use zip::ZipWriter;
 
 #[derive(clap::Args, Debug)]
-pub struct Args {}
+pub struct Args {
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "instead of precompiling show information"
+    )]
+    info: bool,
+}
 
 fn compile_single_file(
     engines: &genvm::vm::Engines,
@@ -19,13 +26,13 @@ fn compile_single_file(
         .strip_prefix(&runners_dir)
         .with_context(|| format!("stripping {runners_dir:?} from {runners_dir:?}"))?;
 
-    let mut zip_det: Option<ZipWriter<std::fs::File>> = None;
-    let mut zip_non_det: Option<ZipWriter<std::fs::File>> = None;
+    let mut zip_all: Option<ZipWriter<std::fs::File>> = None;
 
     let precompile = |arch: &mut Option<ZipWriter<std::fs::File>>,
                       zip_path: &std::path::PathBuf,
                       engine: &wasmtime::Engine,
                       path: &str,
+                      path_suff: &str,
                       wasm_data: &[u8]|
      -> Result<()> {
         match arch {
@@ -47,22 +54,21 @@ fn compile_single_file(
             .with_context(|| "precompiling")?;
         let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::ZSTD);
-        arch.start_file(path, options)
+        let mut path = String::from(path);
+        path.push_str(path_suff);
+        arch.start_file(&path, options)
             .with_context(|| format!("writing {path}"))?;
         arch.write_all(&precompiled)
             .with_context(|| "writing data")?;
         Ok(())
     };
 
-    let (result_zip_det_path, result_zip_non_det_path) = match Lazy::force(&caching::PRECOMPILE_DIR)
-    {
+    let mut result_zip_path = match Lazy::force(&caching::PRECOMPILE_DIR) {
         Some(v) => v,
         None => anyhow::bail!("cache directory is not writable"),
-    };
-    let mut result_zip_det_path = result_zip_det_path.clone();
-    result_zip_det_path.push(base_path);
-    let mut result_zip_non_det_path = result_zip_non_det_path.clone();
-    result_zip_non_det_path.push(base_path);
+    }
+    .clone();
+    result_zip_path.push(base_path);
 
     let mut run = || -> Result<()> {
         let file =
@@ -82,18 +88,20 @@ fn compile_single_file(
             }
 
             precompile(
-                &mut zip_det,
-                &result_zip_det_path,
+                &mut zip_all,
+                &result_zip_path,
                 &engines.det,
                 &entry_name,
+                caching::DET_NON_DET_PRECOMPILED_SUFFIX.det,
                 &wasm_data,
             )
             .with_context(|| format!("processing det {entry_name}"))?;
             precompile(
-                &mut zip_non_det,
-                &result_zip_non_det_path,
+                &mut zip_all,
+                &result_zip_path,
                 &engines.non_det,
                 &entry_name,
+                caching::DET_NON_DET_PRECOMPILED_SUFFIX.non_det,
                 &wasm_data,
             )
             .with_context(|| format!("processing non-det {entry_name}"))?;
@@ -115,8 +123,7 @@ fn compile_single_file(
         Ok(())
     };
 
-    run_res = run_res.and(close_zip(zip_det));
-    run_res = run_res.and(close_zip(zip_non_det));
+    run_res = run_res.and(close_zip(zip_all));
 
     match run_res {
         Ok(()) => {
@@ -127,17 +134,30 @@ fn compile_single_file(
         }
         Err(e) => {
             println!("Failed {zip_path:?}\n{e:?}");
-            zip_det = None;
-            zip_non_det = None;
-            let _ = std::fs::remove_file(&result_zip_det_path);
-            let _ = std::fs::remove_file(&result_zip_non_det_path);
+            zip_all = None;
+            _ = zip_all;
+            let _ = std::fs::remove_file(&result_zip_path);
             Ok(())
         }
     }
 }
 
-pub fn handle(_args: Args) -> Result<()> {
-    let engines = genvm::vm::Engines::create(|_a| Ok(()))?;
+pub fn handle(args: Args) -> Result<()> {
+    let cache_dir = Lazy::force(&caching::CACHE_DIR);
+    let precompile_dir = Lazy::force(&caching::PRECOMPILE_DIR);
+    let out = serde_json::json!({
+        "cache_dir": cache_dir,
+        "precompile_dir": precompile_dir,
+        "build_id": env!("GENVM_BUILD_ID"),
+    });
+    println!("{}", serde_json::to_string(&out)?);
+    if args.info {
+        return Ok(());
+    }
+    let engines = genvm::vm::Engines::create(|conf| {
+        conf.cranelift_opt_level(wasmtime::OptLevel::Speed);
+        Ok(())
+    })?;
 
     let runners_dir = genvm::runner::path()?;
 

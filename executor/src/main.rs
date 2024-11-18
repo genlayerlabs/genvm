@@ -9,15 +9,48 @@ enum Commands {
     Precompile(exe::precompile::Args),
 }
 
+#[cfg(not(debug_assertions))]
+fn default_log_level() -> log::LevelFilter {
+    log::LevelFilter::Info
+}
+
+#[cfg(debug_assertions)]
+fn default_log_level() -> log::LevelFilter {
+    log::LevelFilter::Trace
+}
+
 #[derive(clap::Parser)]
 #[command(version = concat!(env!("CARGO_PKG_VERSION"), " ", env!("PROFILE"), " ", env!("GENVM_BUILD_ID")))]
+#[clap(rename_all = "kebab_case")]
 struct CliArgs {
     #[command(subcommand)]
     command: Commands,
+
+    #[arg(long, default_value_t = default_log_level())]
+    log_level: log::LevelFilter,
+
+    #[arg(long, default_value = "wasmtime*,cranelift*")]
+    log_disable: String,
+}
+
+struct NullWiriter;
+
+impl structured_logger::Writer for NullWiriter {
+    fn write_log(
+        &self,
+        _value: &std::collections::BTreeMap<log::kv::Key, log::kv::Value>,
+    ) -> std::result::Result<(), std::io::Error> {
+        Ok(())
+    }
 }
 
 fn main() -> Result<()> {
     let args = CliArgs::parse();
+
+    structured_logger::Builder::with_level(args.log_level.as_str())
+        .with_default_writer(structured_logger::json::new_writer(std::io::stderr()))
+        .with_target_writer(&args.log_disable, Box::new(NullWiriter))
+        .init();
 
     match args.command {
         Commands::Run(args) => exe::run::handle(args),

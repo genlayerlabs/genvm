@@ -242,6 +242,7 @@ impl RunnerReaderCacheEntry {
     where
         R: std::io::Read + std::io::Seek,
     {
+        log::info!(target: "runner", method = "make_from_arch", id = runner_id; "");
         let runner = std::io::read_to_string(zip_file.by_name("runner.json")?)?;
         let runner: RunnerJsonInitAction =
             serde_json::from_str(&runner).with_context(|| format!("json: {runner}"))?;

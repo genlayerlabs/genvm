@@ -109,6 +109,7 @@ pub(super) fn add_to_linker_sync<T: Send + 'static>(
             let func_name = Vec::from_iter(mem.as_cow(func_name_ptr)?.into_iter().cloned());
             let func_name = str::from_utf8(&func_name)?;
 
+            log::trace!(target: "rt", method = "dlsym", module = mod_name, function = func_name; "");
             eprintln!("LOADING {mod_name} {func_name}");
 
             let linker_shared = linker_shared.clone();
