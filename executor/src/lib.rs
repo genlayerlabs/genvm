@@ -53,7 +53,7 @@ fn fake_thread_pool() -> genvm_modules_common::SharedThreadPoolABI {
     }
 }
 
-pub fn create_supervisor(config_path: &String, host: Host) -> Result<Arc<Mutex<vm::Supervisor>>> {
+fn create_modules(config_path: &String) -> Result<vm::Modules> {
     use plugin_loader::llm_functions_api::Loader as _;
     use plugin_loader::web_functions_api::Loader as _;
 
@@ -101,15 +101,31 @@ pub fn create_supervisor(config_path: &String, host: Host) -> Result<Arc<Mutex<v
         }
     }
 
-    let modules = match (llm, web) {
-        (Some(llm), Some(web)) => vm::Modules { llm, web },
-        _ => anyhow::bail!("some of required modules is not supplied"),
+    match (llm, web) {
+        (Some(llm), Some(web)) => Ok(vm::Modules { llm, web }),
+        _ => Err(anyhow::anyhow!("some of required modules is not supplied")),
+    }
+}
+
+pub fn create_supervisor(
+    config_path: &String,
+    mut host: Host,
+) -> Result<Arc<Mutex<vm::Supervisor>>> {
+    let modules = create_modules(config_path);
+
+    let modules = match modules {
+        Ok(modules) => modules,
+        Err(e) => {
+            let err = Err(e);
+            host.consume_result(&err)?;
+            return Err(err.unwrap_err());
+        }
     };
 
     Ok(Arc::new(Mutex::new(vm::Supervisor::new(modules, host)?)))
 }
 
-pub fn run_with(
+pub fn run_with_impl(
     entry_message: MessageData,
     supervisor: Arc<Mutex<vm::Supervisor>>,
 ) -> vm::RunResult {
@@ -120,7 +136,9 @@ pub fn run_with(
         };
         let mut entrypoint = b"call!".to_vec();
         supervisor.host.append_calldata(&mut entrypoint)?;
-        let init_actions = supervisor.get_actions_for(&entry_message.contract_account)?;
+        let init_actions = supervisor
+            .get_actions_for(&entry_message.contract_account)
+            .with_context(|| "getting runner actions")?;
 
         let essential_data = wasi::genlayer_sdk::SingleVMData {
             conf: wasi::base::Config {
@@ -140,7 +158,14 @@ pub fn run_with(
         (vm, instance)
     };
 
-    let res = vm.run(&instance);
+    vm.run(&instance)
+}
+
+pub fn run_with(
+    entry_message: MessageData,
+    supervisor: Arc<Mutex<vm::Supervisor>>,
+) -> vm::RunResult {
+    let res = run_with_impl(entry_message, supervisor.clone());
 
     {
         let Ok(mut supervisor) = supervisor.lock() else {

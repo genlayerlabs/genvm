@@ -311,7 +311,7 @@ impl WasmFileDesc {
 }
 
 impl Supervisor {
-    pub fn new(modules: Modules, host: crate::Host) -> Result<Self> {
+    pub fn new(modules: Modules, mut host: crate::Host) -> Result<Self> {
         let engines = Engines::create(|base_conf| {
             match Lazy::force(&caching::CACHE_DIR) {
                 None => {
@@ -336,7 +336,15 @@ impl Supervisor {
                 }
             }
             Ok(())
-        })?;
+        });
+        let engines = match engines {
+            Ok(engines) => engines,
+            Err(e) => {
+                let err = Err(e);
+                host.consume_result(&err)?;
+                return Err(err.unwrap_err());
+            }
+        };
         let shared_data = Arc::new(SharedData::new());
         Ok(Self {
             engines,
