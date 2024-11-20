@@ -10,7 +10,7 @@ class _BoolDesc(TypeDesc):
 		TypeDesc.__init__(self, 1, [1])
 
 	def get(self, slot: StorageSlot, off: int) -> bool:
-		return slot.read(off, 1) != 0
+		return slot.read(off, 1)[0] != 0
 
 	def set(self, slot: StorageSlot, off: int, val: bool):
 		slot.write(off, bytes([1 if val else 0]))
