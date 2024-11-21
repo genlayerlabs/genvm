@@ -5,7 +5,7 @@ from .core import _FakeStorageMan
 from .desc_base_types import _u32_desc
 
 
-class DynArray[T](WithStorageSlot):
+class DynArray[T](WithStorageSlot, collections.abc.Sequence):
 	_item_desc: TypeDesc
 
 	def __init__(self):
@@ -120,7 +120,7 @@ class _DynArrayDesc(TypeDesc):
 		return f'_VecDesc[{self._item_desc!r}]'
 
 
-class Array[T, S: int](WithStorageSlot):
+class Array[T, S: int](WithStorageSlot, collections.abc.Sequence):
 	_item_desc: TypeDesc
 	_len: int
 

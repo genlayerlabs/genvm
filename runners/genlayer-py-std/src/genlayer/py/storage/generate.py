@@ -15,6 +15,7 @@ from .desc_base_types import (
 	_u32_desc,
 	_BoolDesc,
 	_NoneDesc,
+	_BigIntDesc,
 )
 from .desc_record import _RecordDesc, WithRecordStorageSlot
 from .vec import DynArray, _DynArrayDesc, Array, _ArrayDesc
@@ -135,6 +136,7 @@ _known_descs: dict[type | _Instantiation, TypeDesc] = {
 	i240: _IntDesc(30),
 	i248: _IntDesc(31),
 	i256: _IntDesc(32),
+	bigint: _BigIntDesc(),
 }
 
 try:

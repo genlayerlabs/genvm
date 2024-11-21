@@ -149,6 +149,8 @@ i240 = typing.NewType('i240', int)
 i248 = typing.NewType('i248', int)
 i256 = typing.NewType('i256', int)
 
+bigint = typing.NewType('bigint', int)
+
 
 class Rollback(Exception):
 	def __init__(self, msg: str):

@@ -121,8 +121,14 @@ class _StrBytesDesc[T](TypeDesc):
 		_u32_desc.set(slot, off, len(enc))
 		contents_at.write(0, enc)
 
+	def __eq__(self, r):
+		return isinstance(r, type(self))
 
-class _StrDesc(_StrBytesDesc):
+	def __hash__(self):
+		return hash(type(self).__name__)
+
+
+class _StrDesc(_StrBytesDesc[str]):
 	def __init__(self):
 		_StrBytesDesc.__init__(self)
 
@@ -136,7 +142,7 @@ class _StrDesc(_StrBytesDesc):
 		return '_StrDesc'
 
 
-class _BytesDesc(_StrBytesDesc):
+class _BytesDesc(_StrBytesDesc[bytes]):
 	def __init__(self):
 		_StrBytesDesc.__init__(self)
 
@@ -148,6 +154,25 @@ class _BytesDesc(_StrBytesDesc):
 
 	def __repr__(self):
 		return '_BytesDesc'
+
+
+class _BigIntDesc(_StrBytesDesc[int]):
+	def __init__(self):
+		_StrBytesDesc.__init__(self)
+
+	def decode(self, val: collections.abc.Buffer) -> int:
+		return int.from_bytes(val, 'little', signed=True)
+
+	def encode(self, val: int) -> memoryview:
+		val_abs = abs(val)
+		log256 = 2
+		while val_abs > 0:
+			log256 += 1
+			val_abs //= 256
+		return memoryview(val.to_bytes(log256, 'little', signed=True))
+
+	def __repr__(self):
+		return '_BigIntDesc'
 
 
 # here is a problem: we can't return actual tuple..

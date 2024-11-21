@@ -35,7 +35,7 @@ class Comparable(typing.Protocol):
 	def __lt__(self, other: typing.Any, /) -> bool: ...
 
 
-class TreeMap[K: Comparable, V]:
+class TreeMap[K: Comparable, V](collections.abc.Mapping):
 	root: u32
 	slots: DynArray[_Node[K, V]]
 	free_slots: DynArray[u32]
