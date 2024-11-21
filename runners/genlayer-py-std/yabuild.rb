@@ -42,7 +42,6 @@ runner_target = target_publish_runner(
 	runner_dict: {
 		Seq: [
 			{ MapFile: { to: "/py/libs/", file: "src/" }},
-			{ AddEnv: { name: "PYTHONPATH", val: "/py/libs" } },
 		],
 	},
 	dependencies: [build_pyc_s],

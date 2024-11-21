@@ -16,7 +16,7 @@ use zip::ZipArchive;
 use crate::{
     caching,
     runner::{self, InitAction, InitActionTrivial, WasmMode},
-    wasi,
+    string_templater, wasi,
 };
 use anyhow::{Context, Result};
 use std::sync::{Arc, Mutex};
@@ -536,15 +536,8 @@ impl Supervisor {
                 Ok(None)
             }
             InitAction::Trivial(InitActionTrivial::AddEnv { name, val }) => {
-                match ctx.env.entry(name.clone()) {
-                    std::collections::btree_map::Entry::Vacant(vacant_entry) => {
-                        vacant_entry.insert(val.clone());
-                    }
-                    std::collections::btree_map::Entry::Occupied(mut occupied_entry) => {
-                        occupied_entry.get_mut().push_str(":");
-                        occupied_entry.get_mut().push_str(val);
-                    }
-                }
+                let new_val = string_templater::patch_str(&ctx.env, val)?;
+                ctx.env.insert(name.clone(), new_val);
                 Ok(None)
             }
             InitAction::Trivial(InitActionTrivial::SetArgs(args)) => {

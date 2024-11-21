@@ -1,5 +1,8 @@
 use anyhow::Result;
-use std::{collections::HashMap, sync::LazyLock};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::LazyLock,
+};
 
 static JSON_UNFOLDER_RE: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r#"\$\{([a-zA-Z0-9_]*)\}"#).unwrap());
@@ -21,10 +24,42 @@ fn replace_all<E>(
     Ok(new)
 }
 
-pub fn patch_str(vars: &HashMap<String, String>, s: &str) -> Result<String> {
+pub trait AnyMap<K, V> {
+    fn get_from_map<Q>(&self, k: &Q) -> Option<&V>
+    where
+        Q: ?Sized,
+        K: std::borrow::Borrow<Q> + Ord,
+        Q: Ord + std::hash::Hash + Eq;
+}
+
+impl<K: Eq + std::hash::Hash, V> AnyMap<K, V> for HashMap<K, V> {
+    fn get_from_map<Q>(&self, k: &Q) -> Option<&V>
+    where
+        Q: ?Sized,
+        K: std::borrow::Borrow<Q>,
+        Q: Ord + std::hash::Hash + Eq,
+    {
+        let zelf: &HashMap<K, V> = self;
+        zelf.get::<Q>(k)
+    }
+}
+
+impl<K: std::cmp::Ord, V> AnyMap<K, V> for BTreeMap<K, V> {
+    fn get_from_map<Q>(&self, k: &Q) -> Option<&V>
+    where
+        Q: ?Sized,
+        K: std::borrow::Borrow<Q> + Ord,
+        Q: Ord + std::hash::Hash + Eq,
+    {
+        let zelf: &BTreeMap<K, V> = self;
+        zelf.get::<Q>(k)
+    }
+}
+
+pub fn patch_str(vars: &impl AnyMap<String, String>, s: &str) -> Result<String> {
     replace_all(&JSON_UNFOLDER_RE, s, |r: &regex::Captures| {
         let r: &str = &r[1];
-        vars.get(r)
+        vars.get_from_map(r)
             .ok_or(anyhow::anyhow!("error"))
             .map(|x| x.clone())
     })
