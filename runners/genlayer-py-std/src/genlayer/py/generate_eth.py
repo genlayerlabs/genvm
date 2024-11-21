@@ -106,6 +106,23 @@ def get_type_eth_name(t: type) -> str:
 	assert False
 
 
+def is_dynamic(param: type):
+	if param is bytes or param is str:
+		return True
+	origin = typing.get_origin(param)
+	if origin is None:
+		return False
+	type_args = typing.get_args(param)
+	if origin is Array or origin is list:
+		return True
+	elif origin is tuple:
+		return any(is_dynamic(x) for x in type_args)
+	return False
+
+
+type _Tails = list[typing.Callable[[_Tails], None]]
+
+
 class EthMethod:
 	name: str
 	params: list[type]
@@ -134,18 +151,30 @@ class EthMethod:
 		result: bytearray = bytearray()
 		result.extend(self.selector)
 
-		queue: deque[typing.Callable[[], None]] = deque()
+		current_off: int = len(result)
 
-		def put_offset_at(off: int) -> None:
-			to_put = len(result) - len(self.selector)
+		def run_seq_with_new_tails(cur: _Tails):
+			nonlocal current_off
+			old_off = current_off
+			current_off = len(result)
+			loc_tails: _Tails = []
+			while len(cur) != 0:
+				for i in cur:
+					i(loc_tails)
+				cur = loc_tails
+				loc_tails = []
+			current_off = old_off
+
+		def put_offset_at(off: int, off0: int) -> None:
+			to_put = len(result) - off0
 			memoryview(result)[off : off + 32] = int.to_bytes(to_put, 32, 'big')
 
-		def put_iloc():
+		def put_iloc(tails: _Tails):
 			off = len(result)
 			result.extend(b'\x00' * 32)
-			queue.append(partial(put_offset_at, off))
+			tails.append(lambda _t: put_offset_at(off, current_off))
 
-		def put_regular(param: type, arg: typing.Any) -> None:
+		def put_regular(param: type, arg: typing.Any, tails: _Tails) -> None:
 			as_int = _integer_types.get(param, None)
 			if as_int is not None:
 				result.extend(int.to_bytes(arg, 32, 'big', signed=as_int.startswith('u')))
@@ -154,51 +183,56 @@ class EthMethod:
 			elif param is Address:
 				result.extend(b'\x00' * 12)
 				result.extend(arg.as_bytes)
-			elif param is bytes:
-				put_iloc()
-				as_bytes = typing.cast(bytes, arg)
+			elif param is bytes or param is str:
+				put_iloc(tails)
+				if param is bytes:
+					as_bytes = typing.cast(bytes, arg)
+				else:
+					as_bytes = typing.cast(str, arg).encode('utf-8')
 
-				def put_bytes():
+				def put_bytes(_tails):
 					result.extend(int.to_bytes(len(as_bytes), 32, 'big'))
 					result.extend(as_bytes)
 					result.extend(b'\x00' * ((32 - len(as_bytes) % 32) % 32))
 
-				queue.append(put_bytes)
-			elif param is str:
-				put_iloc()
-				as_bytes = typing.cast(str, arg).encode('utf-8')
-
-				def put_str():
-					result.extend(int.to_bytes(len(as_bytes), 32, 'big'))
-					result.extend(as_bytes)
-					result.extend(b'\x00' * ((32 - len(as_bytes) % 32) % 32))
-
-				queue.append(put_str)
+				tails.append(put_bytes)
 			elif (origin := typing.get_origin(param)) is not None:
 				type_args = typing.get_args(param)
 				if origin is Array or origin is list:
-					put_iloc()
+					put_iloc(tails)
 					as_seq = typing.cast(collections.abc.Sequence, arg)
 
-					def put_arr():
+					def put_arr(tails: _Tails):
 						result.extend(int.to_bytes(len(as_seq), 32, 'big'))
+						cur: _Tails = []
 						for i in range(len(as_seq)):
-							queue.append(partial(put_regular, type_args[0], as_seq[i]))
+							cur.append(partial(put_regular, type_args[0], as_seq[i]))
+						run_seq_with_new_tails(cur)
 
-					queue.append(put_arr)
+					tails.append(put_arr)
 				elif origin is tuple:
-					# FIXME(kp2pml30) this is likely incorrect for dynamic types
-					for p, a in zip(type_args, arg):
-						put_regular(p, a)
+
+					def put_tuple(_tails):
+						cur: _Tails = []
+						for p, a in zip(type_args, arg):
+							cur.append(partial(put_regular, p, a))
+						run_seq_with_new_tails(cur)
+
+					if is_dynamic(param):
+						put_iloc(tails)
+						tails.append(put_tuple)
+					else:
+						put_tuple(None)
 				else:
 					assert False
 			else:
 				assert False
 
-		queue.extend(partial(put_regular, p, a) for p, a in zip(self.params, args))
+		cur: _Tails = []
+		for p, a in zip(self.params, args):
+			cur.append(partial(put_regular, p, a))
 
-		while len(queue) > 0:
-			queue.popleft()()
+		run_seq_with_new_tails(cur)
 
 		return bytes(result)
 
