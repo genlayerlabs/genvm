@@ -117,6 +117,14 @@ impl Impl {
     fn get_webpage(&mut self, config: &CStr, url: &CStr) -> Result<String> {
         let config: GetWebpageConfig = serde_json::from_str(config.to_str()?)?;
         let url = url::Url::parse(url.to_str()?)?;
+        if url.scheme() == "file" {
+            anyhow::bail!("file scheme is forbidden");
+        }
+
+        const ALLOWED_PORTS: &[Option<u16>] = &[None, Some(80), Some(443), Some(4242)];
+        if !ALLOWED_PORTS.contains(&url.port()) {
+            anyhow::bail!("port {:?} is forbidden", url.port());
+        }
 
         self.init_session()?;
         let session_id = self.get_session()?;
