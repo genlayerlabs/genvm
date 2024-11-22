@@ -1,5 +1,5 @@
 __all__ = ('eth_contract',)
-from .keccak import Keccak256
+from ..keccak import Keccak256
 
 
 from genlayer.py.types import *
@@ -84,8 +84,7 @@ _simple = {
 
 
 def get_type_eth_name(t: type) -> str:
-	simp = _simple.get(t, None)
-	if simp is not None:
+	if (simp := _simple.get(t, None)) is not None:
 		return simp
 
 	origin = typing.get_origin(t)
@@ -103,7 +102,7 @@ def get_type_eth_name(t: type) -> str:
 			return f'{get_type_eth_name(args[0])}[]'
 		elif origin is tuple:
 			return '(' + ','.join(map(get_type_eth_name, args)) + ')'
-	assert False
+	assert False, f'unknown type {t} {type(t)} {t is str} {type(t) is str}'
 
 
 def is_dynamic(param: type):
@@ -123,7 +122,7 @@ def is_dynamic(param: type):
 type _Tails = list[typing.Callable[[_Tails], None]]
 
 
-class EthMethod:
+class EthMethodEncoder:
 	name: str
 	params: list[type]
 	ret: type

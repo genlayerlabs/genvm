@@ -181,7 +181,7 @@ if np is not None:
 			return np.frombuffer(dat, self._type).reshape(()).copy()
 
 		def set(self, slot: StorageSlot, off: int, val):
-			slot.write(off, self._type.tobytes(val))
+			slot.write(off, self._type.tobytes(val))  # type: ignore
 
 	_all_np_types: list[type[np.number]] = [
 		np.uint8,
@@ -195,7 +195,7 @@ if np is not None:
 		np.float32,
 		np.float64,
 	]
-	_known_descs.update({k: _NumpyDesc(k) for k in _all_np_types})
+	_known_descs.update({k: _NumpyDesc(k) for k in _all_np_types})  # type: ignore
 
 
 def _storage_build_handle_special(

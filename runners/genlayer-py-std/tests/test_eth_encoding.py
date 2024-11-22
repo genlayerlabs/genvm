@@ -1,11 +1,11 @@
-from genlayer.py.generate_eth import EthMethod
+from genlayer.py.eth.calldata import EthMethodEncoder
 
 from genlayer.py.types import *
 from genlayer.py.storage import *
 
 
 def test_eth_baz():
-	meth = EthMethod('baz', [u32, bool], bool)
+	meth = EthMethodEncoder('baz', [u32, bool], bool)
 	assert meth.selector.hex() == 'cdcd77c0'
 	assert (
 		meth.encode([69, True]).hex()
@@ -14,14 +14,14 @@ def test_eth_baz():
 
 
 def test_eth_bar():
-	meth = EthMethod(
+	meth = EthMethodEncoder(
 		'bar', [Array[Array[u8, typing.Literal[3]], typing.Literal[2]]], type(None)
 	)
 	assert meth.selector.hex() == 'fce353f6'
 
 
 def test_eth_sam():
-	meth = EthMethod('sam', [bytes, bool, list[u256]], type(None))
+	meth = EthMethodEncoder('sam', [bytes, bool, list[u256]], type(None))
 	assert meth.selector.hex() == 'a5643bf2'
 	assert (
 		meth.encode([b'dave', True, [1, 2, 3]]).hex()
@@ -30,17 +30,17 @@ def test_eth_sam():
 
 
 def test_eth_approve():
-	meth = EthMethod('approve', [Address, u256], type(None))
+	meth = EthMethodEncoder('approve', [Address, u256], type(None))
 	assert meth.selector.hex() == '095ea7b3'
 
 
 def test_with_tuple_1():
-	meth = EthMethod('send', [tuple[u256], Address], type(None))
+	meth = EthMethodEncoder('send', [tuple[u256], Address], type(None))
 	assert meth.selector.hex() == '2e65cae2'
 
 
 def test_nested_array():
-	meth = EthMethod('transfer', [list[list[u256]], list[Address]], type(None))
+	meth = EthMethodEncoder('transfer', [list[list[u256]], list[Address]], type(None))
 	assert meth.selector.hex() == '7a63729a'
 	res = meth.encode(
 		[
@@ -58,7 +58,7 @@ def test_nested_array():
 
 
 def test_dyn_tuple():
-	meth = EthMethod('const', [list[tuple[str, Address, str]]], type(None))
+	meth = EthMethodEncoder('const', [list[tuple[str, Address, str]]], type(None))
 	res = meth.encode(
 		[
 			[
@@ -78,5 +78,5 @@ def test_dyn_tuple():
 
 
 def test_with_tuple_2():
-	meth = EthMethod('send', [tuple[u256, str]], type(None))
+	meth = EthMethodEncoder('send', [tuple[u256, str]], type(None))
 	assert meth.selector.hex() == 'eb0edd92'
