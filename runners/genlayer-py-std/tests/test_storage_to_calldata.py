@@ -61,6 +61,9 @@ class Strange:
 		return 11
 
 
+calldata.CalldataEncodable.register(Strange)
+
+
 def test_class_override():
 	assert calldata.decode(calldata.encode(Strange())) == 11
 

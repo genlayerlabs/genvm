@@ -2,6 +2,7 @@ from .types import Address
 import typing
 import collections.abc
 import dataclasses
+import abc
 
 BITS_IN_TYPE = 3
 
@@ -17,6 +18,11 @@ SPECIAL_NULL = (0 << BITS_IN_TYPE) | TYPE_SPECIAL
 SPECIAL_FALSE = (1 << BITS_IN_TYPE) | TYPE_SPECIAL
 SPECIAL_TRUE = (2 << BITS_IN_TYPE) | TYPE_SPECIAL
 SPECIAL_ADDR = (3 << BITS_IN_TYPE) | TYPE_SPECIAL
+
+
+class CalldataEncodable(metaclass=abc.ABCMeta):
+	@abc.abstractmethod
+	def __to_calldata__(self) -> typing.Any: ...
 
 
 def encode(
@@ -51,8 +57,8 @@ def encode(
 
 	def impl(b: typing.Any):
 		b = default(b)
-		if (to_cd := getattr(b, '__to_calldata__', None)) is not None:
-			b = to_cd()
+		if isinstance(b, CalldataEncodable):
+			b = b.__to_calldata__()
 		if b is None:
 			mem.append(SPECIAL_NULL)
 		elif b is True:
