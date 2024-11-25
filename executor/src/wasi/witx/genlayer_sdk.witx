@@ -39,7 +39,12 @@
         (result $error (expected $fd (error $errno)))
     )
 
-    (@interface func (export "eq_principle_prompt")
+    (@interface func (export "eq_principle_prompt_comparative")
+        (param $config string)
+        (result $error (expected $success (error $errno)))
+    )
+
+    (@interface func (export "eq_principle_prompt_non_comparative")
         (param $config string)
         (result $error (expected $success (error $errno)))
     )

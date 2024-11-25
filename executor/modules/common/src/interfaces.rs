@@ -83,7 +83,8 @@ macro_rules! LLMFunctionsApiFns {
         $cb!(($($args),*) {
             free_str: fn(data: *const u8) -> ();
             exec_prompt: fn(gas: &mut u64, config: *const u8, prompt: *const u8) -> ($crate::interfaces::CStrResult);
-            eq_principle_prompt: fn(gas: &mut u64, config: *const u8) -> ($crate::interfaces::BoolResult);
+            eq_principle_prompt_comparative: fn(gas: &mut u64, config: *const u8) -> ($crate::interfaces::BoolResult);
+            eq_principle_prompt_non_comparative: fn(gas: &mut u64, config: *const u8) -> ($crate::interfaces::BoolResult);
         });
     };
 }

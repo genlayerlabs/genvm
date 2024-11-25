@@ -6,8 +6,7 @@
             "config": {
                 "host": "https://api.openai.com",
                 "provider": "openai",
-                "model": "gpt-4o-mini",
-                "equivalence_prompt": "Given the equivalence principle '#{principle}', decide whether the following two outputs can be considered equivalent.\nLeader's Output: #{leader_answer}\n\nValidator's Output: #{validator_answer}\n\nRespond with: TRUE or FALSE"
+                "model": "gpt-4o-mini"
             }
         },
         {

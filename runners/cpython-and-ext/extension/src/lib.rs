@@ -118,8 +118,15 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfn(m)]
-    fn eq_principle_prompt(config: &str) -> PyResult<bool> {
-        map_error(unsafe { genvm_sdk_rust::eq_principle_prompt(config) }).map(|x| x.raw() != 0)
+    fn eq_principle_prompt_comparative(config: &str) -> PyResult<bool> {
+        map_error(unsafe { genvm_sdk_rust::eq_principle_prompt_comparative(config) })
+            .map(|x| x.raw() != 0)
+    }
+
+    #[pyfn(m)]
+    fn eq_principle_prompt_non_comparative(config: &str) -> PyResult<bool> {
+        map_error(unsafe { genvm_sdk_rust::eq_principle_prompt_non_comparative(config) })
+            .map(|x| x.raw() != 0)
     }
 
     #[pyfn(m)]

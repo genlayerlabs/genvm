@@ -30,7 +30,11 @@ impl Drop for Impl {
 }
 
 fn default_equivalence_prompt() -> String {
-    "Given the equivalence principle '#{principle}', decide whether the following two outputs can be considered equivalent.\nLeader's Output: #{leader_answer}\n\nValidator's Output: #{validator_answer}\n\nRespond with: TRUE or FALSE".into()
+    "Given the equivalence principle '#{principle}', decide whether the following two outputs can be considered equivalent.\nLeader's Output: #{leader_answer}\n\nValidator's Output: #{validator_answer}\n\nRespond with: true or false".into()
+}
+
+fn default_equivalence_prompt_non_comparative() -> String {
+    "Given the following task '#{task}', decide whether the following output is a valid result of doing this task for the given input.\nOutput: #{output}\n\nInput: #{input}\n\nRespond only with: true or false".into()
 }
 
 #[derive(Deserialize)]
@@ -40,13 +44,22 @@ struct Config {
     model: String,
     #[serde(default = "default_equivalence_prompt")]
     equivalence_prompt: String,
+    #[serde(default = "default_equivalence_prompt_non_comparative")]
+    equivalence_prompt_non_comparative: String,
 }
 
 #[derive(Deserialize)]
-struct EqPrinciplePrompt {
+struct EqPrinciplePromptComparative {
     leader_answer: String,
     validator_answer: String,
     principle: String,
+}
+
+#[derive(Deserialize)]
+struct EqPrinciplePromptNonComparative {
+    task: String,
+    input: String,
+    output: String,
 }
 
 impl Impl {
@@ -59,7 +72,7 @@ impl Impl {
         })
     }
 
-    fn exec_prompt(&mut self, gas: &mut u64, _config: &str, prompt: &str) -> Result<String> {
+    fn exec_prompt_impl(&mut self, gas: &mut u64, _config: &str, prompt: &str) -> Result<String> {
         match self.config.provider {
             LLLMProvider::Ollama => {
                 let request = serde_json::json!({
@@ -151,18 +164,46 @@ impl Impl {
         }
     }
 
-    fn eq_principle_prompt(&mut self, gas: &mut u64, prompt: &str) -> Result<bool> {
-        let data: EqPrinciplePrompt = serde_json::from_str(prompt)?;
+    fn exec_prompt(&mut self, gas: &mut u64, config: &str, prompt: &str) -> Result<String> {
+        let res = self.exec_prompt_impl(gas, config, prompt);
+        eprintln!("Prompt {prompt} ===> {res:?}");
+        res
+    }
+
+    fn eq_principle_prompt_comparative(&mut self, gas: &mut u64, data: &str) -> Result<bool> {
+        let data: EqPrinciplePromptComparative = serde_json::from_str(data)?;
         let map = HashMap::from([
             ("leader_answer".into(), data.leader_answer),
             ("validator_answer".into(), data.validator_answer),
             ("principle".into(), data.principle),
         ]);
         let new_prompt = string_templater::patch_str(&map, &self.config.equivalence_prompt)?;
-        let mut res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
-        res.make_ascii_lowercase();
-        Ok(res.contains("true"))
+        let res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
+        answer_is_bool(res)
     }
+
+    fn eq_principle_prompt_non_comparative(&mut self, gas: &mut u64, data: &str) -> Result<bool> {
+        let data: EqPrinciplePromptNonComparative = serde_json::from_str(data)?;
+        let map = HashMap::from([
+            ("task".into(), data.task),
+            ("input".into(), data.input),
+            ("output".into(), data.output),
+        ]);
+        let new_prompt =
+            string_templater::patch_str(&map, &self.config.equivalence_prompt_non_comparative)?;
+        let res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
+        answer_is_bool(res)
+    }
+}
+
+fn answer_is_bool(mut res: String) -> Result<bool> {
+    res.make_ascii_lowercase();
+    let has_true = res.contains("true");
+    let has_false = res.contains("false");
+    if has_true == has_false {
+        anyhow::bail!("contains both true and false");
+    }
+    Ok(has_true)
 }
 
 #[no_mangle]
@@ -188,7 +229,7 @@ pub extern "C-unwind" fn exec_prompt(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn eq_principle_prompt(
+pub extern "C-unwind" fn eq_principle_prompt_comparative(
     ctx: *const (),
     gas: &mut u64,
     data: *const u8,
@@ -197,6 +238,20 @@ pub extern "C-unwind" fn eq_principle_prompt(
     let data = unsafe { CStr::from_ptr(data as *const std::ffi::c_char) };
     data.to_str()
         .map_err(|e| anyhow::Error::from(e))
-        .and_then(|data| ctx.eq_principle_prompt(gas, data))
+        .and_then(|data| ctx.eq_principle_prompt_comparative(gas, data))
+        .into()
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn eq_principle_prompt_non_comparative(
+    ctx: *const (),
+    gas: &mut u64,
+    data: *const u8,
+) -> interfaces::BoolResult {
+    let ctx = get_ptr(ctx);
+    let data = unsafe { CStr::from_ptr(data as *const std::ffi::c_char) };
+    data.to_str()
+        .map_err(|e| anyhow::Error::from(e))
+        .and_then(|data| ctx.eq_principle_prompt_non_comparative(gas, data))
         .into()
 }

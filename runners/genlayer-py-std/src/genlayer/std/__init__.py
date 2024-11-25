@@ -196,13 +196,47 @@ def _eq_principle_prompt_comparative(
 			'validator_answer': my_res,
 			'principle': principle,
 		}
-		return wasi.eq_principle_prompt(json.dumps(config))
+		return wasi.eq_principle_prompt_comparative(json.dumps(config))
 
 	return advanced.run_nondet(fn, validator_fn)
 
 
 eq_principle_prompt_comparative = _LazyApi(_eq_principle_prompt_comparative)
 del _eq_principle_prompt_comparative
+
+
+def _eq_principle_prompt_non_comparative(
+	fn: typing.Callable[[], str], task: str
+) -> Lazy[str]:
+	def leader_fn() -> str:
+		input_res = fn()
+		return exec_prompt(
+			f'Perform task for the input.\n\nTask: {task}\n\nInput: {input_res}'
+		)
+
+	def validator_fn(leaders: typing.Any | Rollback) -> bool:
+		if not isinstance(leaders, (str, Rollback)):
+			raise Exception(f'invalid leaders result {leaders}')
+		try:
+			input_res = fn()
+		except Rollback as r:
+			if not isinstance(leaders, Rollback):
+				return False
+			return leaders.msg == r.msg
+		if isinstance(leaders, Rollback):
+			return False
+		config = {
+			'task': task,
+			'output': leaders,
+			'input': input_res,
+		}
+		return wasi.eq_principle_prompt_non_comparative(json.dumps(config))
+
+	return advanced.run_nondet(leader_fn, validator_fn)
+
+
+eq_principle_prompt_non_comparative = _LazyApi(_eq_principle_prompt_non_comparative)
+del _eq_principle_prompt_non_comparative
 
 
 def contract(t: type) -> type:
