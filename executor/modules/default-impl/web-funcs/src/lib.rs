@@ -74,7 +74,7 @@ impl Impl {
                         "alwaysMatch": {
                             "browserName": "chrome",
                             "goog:chromeOptions": {
-                                "args": ["--headless", "--no-sandbox", "--disable-dev-shm-usage"]
+                                "args": ["--headless", "--disable-dev-shm-usage", "--no-zygote", "--no-sandbox"]
                             }
                         }
                     }
@@ -121,9 +121,11 @@ impl Impl {
             anyhow::bail!("file scheme is forbidden");
         }
 
-        const ALLOWED_PORTS: &[Option<u16>] = &[None, Some(80), Some(443), Some(4242)];
-        if !ALLOWED_PORTS.contains(&url.port()) {
-            anyhow::bail!("port {:?} is forbidden", url.port());
+        if url.host_str() != Some("genvm-test") {
+            const ALLOWED_PORTS: &[Option<u16>] = &[None, Some(80), Some(443)];
+            if !ALLOWED_PORTS.contains(&url.port()) {
+                anyhow::bail!("port {:?} is forbidden", url.port());
+            }
         }
 
         self.init_session()?;

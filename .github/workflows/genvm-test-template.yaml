@@ -66,7 +66,7 @@ jobs:
           OPENAIKEY: ${{ secrets.OPENAIKEY }}
         run: |
           OPENAIKEY="" python3.12 -m pip install -r executor/testdata/runner/requirements.txt && \
-          OPENAIKEY="" docker run --rm -d --network=host $(docker build -q -t genvm/modules-webdriver -f executor/modules/default-impl/web-funcs/webdriver.dockerfile executor/modules/default-impl/web-funcs/) && \
+          OPENAIKEY="" ./executor/testdata/web-container/run-test-docker.sh && \
           sleep 5 && \
           python3.12 -u ./executor/testdata/runner/run.py
       - name: Try to get coverage

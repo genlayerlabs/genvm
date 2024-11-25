@@ -168,6 +168,9 @@ class MockHost(IHost):
 			self.messages_file = open(self.messages_path, 'wt')
 			self.messages_file.write(f'{gas}\n{calldata}\n{code}\n')
 
+	async def consume_gas(self, gas: int):
+		pass
+
 
 if __name__ == '__main__':
 	with pickle.loads(Path(sys.argv[1]).read_bytes()) as host:

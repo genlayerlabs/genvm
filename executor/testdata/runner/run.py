@@ -39,14 +39,6 @@ class MyHTTPHandler(httpserv.SimpleHTTPRequestHandler):
 		)
 
 
-def run_serv():
-	serv = httpserv.HTTPServer(('127.0.0.1', 4242), MyHTTPHandler)
-	serv.serve_forever()
-
-
-http_thread = threading.Thread(target=run_serv, daemon=True)
-http_thread.start()
-
 dir = script_dir.parent.joinpath('cases')
 root_tmp_dir = root_dir.joinpath('build', 'genvm-testdata-out')
 
@@ -191,7 +183,6 @@ def run(jsonnet_rel_path):
 			'--print=shrink',
 		]
 		steps = [
-			[sys.executable, '-m', 'http.server', '--directory', http_dir, '4242'],
 			[
 				sys.executable,
 				Path(__file__).absolute().parent.joinpath('mock_host.py'),

@@ -35,6 +35,6 @@ class Contract:
 		import json
 
 		gl.get_webpage(
-			'http://127.0.0.1:4242/hello.html',
+			'http://genvm-test/hello.html',
 			mode='text',
 		)

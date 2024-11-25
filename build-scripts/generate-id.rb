@@ -16,5 +16,5 @@ tag=`git describe --abbrev=16 --tags --dirty="-dirty_#{diff}"`
 tag = tag.strip
 puts "detected tag is `#{tag}`"
 if not out.exist? or tag != out.read().strip
-	out.write(tag)
+	#out.write(tag)
 end

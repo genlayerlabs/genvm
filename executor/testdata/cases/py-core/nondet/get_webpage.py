@@ -7,6 +7,6 @@ class Contract:
 	@gl.public.write
 	def main(self, mode: str):
 		def run():
-			return gl.get_webpage('http://127.0.0.1:4242/hello.html', mode=mode)  # type: ignore
+			return gl.get_webpage('http://genvm-test/hello.html', mode=mode)  # type: ignore
 
 		print(gl.eq_principle_strict_eq(run))

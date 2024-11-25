@@ -48,8 +48,8 @@ As of now there are two test suites, both of which require `./build-scripts/inst
 
 ### executor/testdata (mock tests)
 Prerequisites:
-- For `get_webpage` tests to work, one needs a compatible webdriver. There is a docker image for simplification: `bash -c 'docker run --rm -d --network=host $(docker build -q -t genvm/modules-webdriver -f executor/modules/default-impl/web-funcs/webdriver.dockerfile executor/modules/default-impl/web-funcs/)'`
-- For the default `exec_prompt` to work `OPENAIKEY` should be set to openai key
+- For `get_webpage` tests to work, one needs a compatible webdriver. There is a docker image for simplification: `./executor/testdata/web-container/run-test-docker.sh`
+- For the default `exec_prompt` to work `OPENAIKEY` env variable should be set to openai key
 
 Generic steps:
 ```bash
