@@ -66,8 +66,10 @@ fn main() -> Result<()> {
         .with_target_writer(&args.log_disable, Box::new(NullWiriter))
         .init();
 
+    let log_fd = args.log_fd;
+
     match args.command {
-        Commands::Run(args) => exe::run::handle(args),
+        Commands::Run(args) => exe::run::handle(args, log_fd),
         Commands::Precompile(args) => exe::precompile::handle(args),
     }
 }

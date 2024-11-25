@@ -3,6 +3,7 @@ import typing
 import collections.abc
 import dataclasses
 import abc
+import json
 
 BITS_IN_TYPE = 3
 
@@ -105,7 +106,7 @@ def encode(
 	return bytes(mem)
 
 
-def decode(mem0: collections.abc.Buffer) -> typing.Any:  # type: ignore
+def decode(mem0: collections.abc.Buffer) -> typing.Any:
 	mem: memoryview = memoryview(mem0)
 
 	def read_uleb128() -> int:
@@ -187,7 +188,7 @@ def to_str(d: typing.Any) -> str:
 		elif d is False:
 			buf.append('false')
 		elif isinstance(d, str):
-			buf.append(f'{d!r}')
+			buf.append(json.dumps(d))
 		elif isinstance(d, bytes):
 			buf.append('b#')
 			buf.append(d.hex())
@@ -198,17 +199,23 @@ def to_str(d: typing.Any) -> str:
 			buf.append(d.as_bytes.hex())
 		elif isinstance(d, dict):
 			buf.append('{')
+			comma = False
 			for k, v in d.items():
-				buf.append(f'{k!r}')
+				if comma:
+					buf.append(',')
+				comma = True
+				buf.append(json.dumps(k))
 				buf.append(':')
 				impl(v)
-				buf.append(',')
 			buf.append('}')
 		elif isinstance(d, list):
 			buf.append('[')
+			comma = False
 			for v in d:
+				if comma:
+					buf.append(',')
+				comma = True
 				impl(v)
-				buf.append(',')
 			buf.append(']')
 		else:
 			raise Exception(f"can't encode {d} to calldata")

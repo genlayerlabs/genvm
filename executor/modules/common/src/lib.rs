@@ -1,3 +1,5 @@
+use std::{io::Write, os::fd::FromRawFd};
+
 pub mod interfaces;
 
 #[repr(C)]
@@ -23,6 +25,7 @@ pub struct CtorArgs {
     pub thread_pool: SharedThreadPoolABI,
     pub module_config: *const u8,
     pub module_config_len: usize,
+    pub log_fd: std::os::fd::RawFd,
 }
 
 impl CtorArgs {
@@ -115,4 +118,13 @@ impl SharedThreadPool {
         }
         (self.abi.submit_task)(self.abi.ctx, ctx, run::<F>);
     }
+}
+
+pub fn write_to_fd(fd: std::os::fd::RawFd, data: &str) {
+    let owned = unsafe { std::os::fd::OwnedFd::from_raw_fd(fd) };
+    let mut file = std::fs::File::from(owned);
+    let _ = file.write_all(data.as_bytes());
+    let _ = file.write_all(b"\n");
+    let _ = file.sync_all();
+    std::mem::forget(file);
 }

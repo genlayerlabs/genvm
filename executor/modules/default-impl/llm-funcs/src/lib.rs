@@ -23,6 +23,7 @@ enum LLLMProvider {
 struct Impl {
     config: Config,
     openai_key: String,
+    log_fd: std::os::fd::RawFd,
 }
 
 impl Drop for Impl {
@@ -68,6 +69,7 @@ impl Impl {
         let config: Config = serde_json::from_str(conf)?;
         Ok(Impl {
             config,
+            log_fd: args.log_fd,
             openai_key: std::env::var("OPENAIKEY").unwrap_or("".into()),
         })
     }
@@ -166,7 +168,13 @@ impl Impl {
 
     fn exec_prompt(&mut self, gas: &mut u64, config: &str, prompt: &str) -> Result<String> {
         let res = self.exec_prompt_impl(gas, config, prompt);
-        eprintln!("Prompt {prompt} ===> {res:?}");
+        match serde_json::to_string(&serde_json::json!({
+            "prompt": prompt,
+            "result": format!("{res:?}"),
+        })) {
+            Ok(log_data) => write_to_fd(self.log_fd, &log_data),
+            Err(_) => {}
+        }
         res
     }
 

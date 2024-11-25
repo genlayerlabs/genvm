@@ -53,7 +53,7 @@ fn fake_thread_pool() -> genvm_modules_common::SharedThreadPoolABI {
     }
 }
 
-fn create_modules(config_path: &String) -> Result<vm::Modules> {
+fn create_modules(config_path: &String, log_fd: std::os::fd::RawFd) -> Result<vm::Modules> {
     use plugin_loader::llm_functions_api::Loader as _;
     use plugin_loader::web_functions_api::Loader as _;
 
@@ -83,6 +83,7 @@ fn create_modules(config_path: &String) -> Result<vm::Modules> {
             module_config: config_str.as_ptr(),
             module_config_len: config_str.len(),
             thread_pool: fake_thread_pool(),
+            log_fd,
         };
         let name = match &c.name {
             Some(v) => v,
@@ -110,8 +111,9 @@ fn create_modules(config_path: &String) -> Result<vm::Modules> {
 pub fn create_supervisor(
     config_path: &String,
     mut host: Host,
+    log_fd: std::os::fd::RawFd,
 ) -> Result<Arc<Mutex<vm::Supervisor>>> {
-    let modules = create_modules(config_path);
+    let modules = create_modules(config_path, log_fd);
 
     let modules = match modules {
         Ok(modules) => modules,

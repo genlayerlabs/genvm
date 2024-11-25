@@ -22,7 +22,7 @@ fn get_full_addr(x: &[u8]) -> PyResult<genvm_sdk_rust::FullAddr> {
 }
 
 fn map_error<T>(res: Result<T, genvm_sdk_rust::Errno>) -> PyResult<T> {
-    res.map_err(|e| PySystemError::new_err(e.raw() as i32))
+    res.map_err(|e| PySystemError::new_err((e.raw() as i32, e.name())))
 }
 
 fn flush_everything() {

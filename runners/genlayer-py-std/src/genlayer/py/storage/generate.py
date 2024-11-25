@@ -66,12 +66,15 @@ class _Instantiation:
 		return f"{self.origin.__name__}[{', '.join(map(repr, self.args))}]"
 
 
+_none_desc = _NoneDesc()
+
 _known_descs: dict[type | _Instantiation, TypeDesc] = {
 	Address: _AddrDesc(),
 	str: _StrDesc(),
 	bytes: _BytesDesc(),
 	bool: _BoolDesc(),
-	type(None): _NoneDesc(),
+	type(None): _none_desc,
+	None: _none_desc,  # type: ignore
 	u8: _IntDesc(1, signed=False),
 	u16: _IntDesc(2, signed=False),
 	u24: _IntDesc(3, signed=False),
@@ -229,8 +232,7 @@ def _storage_build(
 	cls: type | _Instantiation,
 	generics_map: dict[str, TypeDesc | Lit],
 ) -> TypeDesc | Lit:
-	if cls is int:
-		assert False, 'use `bigint` please'
+	assert cls is not int, 'use `bigint` please'
 	if isinstance(cls, typing.TypeVar):
 		return generics_map[cls.__name__]
 

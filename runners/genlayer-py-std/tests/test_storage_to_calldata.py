@@ -1,4 +1,5 @@
 from genlayer.py.storage import DynArray, Array, TreeMap
+from genlayer.py.types import u32, bigint
 from genlayer.py.storage.generate import storage
 from dataclasses import dataclass
 import typing
@@ -70,3 +71,8 @@ def test_class_override():
 
 def test_default():
 	assert calldata.decode(calldata.encode(Strange(), default=lambda _x: 12)) == 12
+
+
+def test_u32():
+	assert calldata.decode(calldata.encode(u32(5))) == 5
+	assert calldata.decode(calldata.encode(bigint(5))) == 5

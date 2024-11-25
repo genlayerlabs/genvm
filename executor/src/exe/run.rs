@@ -27,13 +27,13 @@ pub struct Args {
     print: PrintOption,
 }
 
-pub fn handle(args: Args) -> Result<()> {
+pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
     let message: genvm::MessageData = serde_json::from_str(&args.message)?;
 
     let host = genvm::Host::new(&args.host)?;
 
-    let supervisor =
-        genvm::create_supervisor(&args.config, host).with_context(|| "creating supervisor")?;
+    let supervisor = genvm::create_supervisor(&args.config, host, log_fd)
+        .with_context(|| "creating supervisor")?;
 
     let shared_data = {
         let supervisor = supervisor.clone();
