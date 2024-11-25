@@ -1,5 +1,4 @@
-eval_script('build-scripts/cargo.rb')
-eval_script('build-scripts/publish_runner.rb')
+include_dir 'build-scripts/ya-build-plugins'
 
 config.out_dir.mkpath
 config.bin_dir.mkpath

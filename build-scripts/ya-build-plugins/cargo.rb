@@ -4,10 +4,11 @@ CONFIGURATOR = self
 
 class CargoBuildTarget < Target
 	attr_reader :output_file
-	def initialize(dir, name, target, profile, features, flags, env)
+	def initialize(dir, name, target, profile, features, flags, env, out_file)
 		@env = env
 		@flags = flags
 		@features = features
+		@out_file = out_file
 		@target_dir = CONFIGURATOR.root_build.join('generated', 'rust-target') # dir.join('target')
 		# @target_dir = dir.join('target')
 		cargo_out_dir = @target_dir
@@ -43,72 +44,61 @@ class CargoBuildTarget < Target
 				suff = ""
 			end
 		end
-		@output_file = @cargo_out_dir.join(@name + suff)
-		super(@output_file, [dir.join('Cargo.toml')])
+		@cargo_output_file = @cargo_out_dir.join(@name + suff)
+		@output_file = if @out_file.nil? then @cargo_output_file else @out_file end
+		super(outputs: [@output_file], inputs: [dir.join('Cargo.toml')], rule: 'CARGO_BUILD')
 	end
 
-	protected def dump_rules_impl(buf)
-		buf << "  WD = #{Shellwords.escape @dir}\n"
+	def dump_vars(cb)
+		cb.('CWD', Shellwords.escape(@dir))
 		if @env.size > 0
-			buf << "  ENV = env"
+			buf = String.new
+			buf << 'env'
 			@env.each { |k, v|
 				buf << ' ' << k << '=' << Shellwords.escape(v).gsub(/\\=/, '=')
 			}
-			buf << "\n"
+			cb.('ENV', buf)
 		end
+
+		if not @out_file.nil?
+			cb.("CARGO_MB_COPY", "&& cp #{@cargo_output_file} #{@output_file}")
+		end
+
+		flags = []
+
 		if @is_lib
-			buf << "  FLAGS = --lib"
+			flags << '--lib'
 		else
-			buf << "  FLAGS = --bin #{@name}"
+			flags << '--bin' << @name
 		end
-		buf << " --target-dir " << @target_dir.to_s
+		flags << '--target-dir' << @target_dir
 		if @profile != "debug"
-			buf << " --profile=#{@profile}"
+			flags << '--profile' << @profile
 		end
 		if @target
-			buf << " --target #{@target}"
+			flags << "--target" << @target
 		end
 		if @features.size > 0
-			buf << " --features #{@features.join(',')}"
+			flags << '--features' << @features.join(',')
 		end
-		escape_args_to buf, @flags
-		buf << "\n"
-		buf << "  depfile = #{@cargo_out_dir.join(@name)}.d\n"
-	end
-
-	def mode
-		"CARGO_BUILD"
-	end
-end
-
-class CargoCopyTarget < Target
-	def initialize(to, from, parent)
-		super(to, [from])
-		@parent = parent
-	end
-
-	protected def dump_rules_impl(buf)
-	end
-
-	def mode
-		"COPY"
-	end
-
-	def add_deps(*deps)
-		@parent.add_deps(*deps)
+		flags_val = String.new
+		DefaultTargets::escape_args_to flags_val, flags
+		DefaultTargets::escape_args_to flags_val, @flags
+		cb.('FLAGS', flags_val)
+		cb.('depfile', "#{@cargo_out_dir.join(@name)}.d")
 	end
 end
 
 # editorconfig-checker-disable
-add_rule(<<-EOF
+ninja_files_parts['genvm'] << NinjaPieceRaw.new(<<-EOF
 rule CARGO_BUILD
-  command = cd $WD && env $ENV cargo build $FLAGS && touch $out
+  command = cd $CWD && $ENV cargo build $FLAGS $CARGO_MB_COPY && touch -c $out
   pool = console
-  description = $DESC
 
 EOF
 )
 # editorconfig-checker-enable
+ninja_files_parts[''] << NinjaPieceRaw.new('include genvm.ninja')
 
 self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, name:, target: nil, profile: "debug", features: [], flags: [], env: {}, **kwargs, &blk|
 	if target.nil?
@@ -125,14 +115,6 @@ self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, n
 		dir = cur_src
 	end
 
-	trg = CargoBuildTarget.new(dir, name, target, profile, features, flags, env)
-
-	if out_file.nil?
-		return return_target(trg, **kwargs, &blk)
-	end
-
-	register_target(trg)
-
-	trg_copy = CargoCopyTarget.new(out_file, trg.output_file, trg)
-	return_target(trg_copy, **kwargs, &blk)
+	trg = CargoBuildTarget.new(dir, name, target, profile, features, flags, env, out_file)
+	return_target(trg, **kwargs, &blk)
 end

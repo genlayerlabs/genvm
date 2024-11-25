@@ -86,13 +86,13 @@ project('executor') {
 			flags: cargo_flags,
 			env: base_env,
 		) {
-			add_deps codegen, gen_id_first
+			inputs.push(codegen, gen_id_first)
 		}
 	)
 
 	config_target = target_copy(
 		dest: config.out_dir.join('share', 'genvm', 'default-config.json'),
-		src: cur_src.join('default-config.json'),
+		src: [cur_src.join('default-config.json')],
 	)
 
 	genvm_all = target_alias('all', bin, modules, config_target, tags: ['all'])
@@ -105,15 +105,4 @@ project('executor') {
 		dependencies: [cur_src.join('codegen', 'data', 'host-fns.json')],
 		tags: ['testdata']
 	)
-
-	#if config.profile == "debug"
-	#	target_c(
-	#		output_file: root_build.join('fake-dlclose.so'),
-	#		mode: "compile",
-	#		file: cur_src.join('testdata', 'fake-dlclose.c'),
-	#		cc: config.cc,
-	#		flags: ['-g', '-pie', '-shared'],
-	#		tags: ['testdata']
-	#	)
-	#end
 }

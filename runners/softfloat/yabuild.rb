@@ -9,28 +9,25 @@ project('softfloat') {
 	c_file_targets = c_files.map.with_index { |cf, i|
 		cf = cur_src.join(cf)
 		cf_rel = cf.relative_path_from(cur_src)
-		target_c(
+		target_c_compile(
 			output_file: cur_build.join(cf_rel.sub_ext('.o')),
-			mode: "compile",
 			file: cf,
 			cc: clang,
 			flags: [
-				'-c',
 				'--target=wasm32-wasi', "--sysroot=#{sysroot}",
 				'-flto', '-O3',
 				'-DINLINE_LEVEL=9', '-DSOFTFLOAT_FAST_INT64',
 				'-no-canonical-prefixes',
 				'-Wno-builtin-macro-redefined', '-D__TIME__=0:42:42', '-D__DATE__=Jan 24 2024',
 				"-frandom-seed=#{i}",
-				"-Ispec",
-				"-Iberkeley-softfloat-3/source/include"
+				"-I#{cur_src.join('spec').relative_path_from(root_build)}",
+				"-I#{cur_src.join('berkeley-softfloat-3/source/include').relative_path_from(root_build)}"
 			]
 		)
 	}
 
-	raw = target_c(
+	raw = target_c_link(
 		output_file: cur_build.join('softfloat.raw.wasm'),
-		mode: "link",
 		objs: c_file_targets,
 		cc: clang,
 		flags: [
@@ -50,7 +47,7 @@ project('softfloat') {
 
 	target_alias(
 		'rename-wasm-module',
-		lib_patcher_build
+		lib_patcher_build,
 	) {
 		meta.output_file = lib_patcher_build.output_file
 	}

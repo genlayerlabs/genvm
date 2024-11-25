@@ -1,6 +1,6 @@
 require 'open3'
 
-conf = {
+extend_config({
 	profile: "debug",
 	executor_target: nil,
 	wasiSdk: root_src.join('tools', 'downloaded', 'wasi-sdk-24'),
@@ -50,7 +50,7 @@ conf = {
 		lld: find_executable("lld"),
 		python3: find_executable("python3"),
 	},
-}.to_ostruct
+})
 
 def run_command_success(*cmd, cwd: nil)
 	cmd.map! { |c|
@@ -71,27 +71,25 @@ end
 root_conf = root_build.join('config')
 root_conf.mkpath()
 
-if not conf.tools.clang.nil?
+if not config.tools.clang.nil?
 	begin
-		run_command_success conf.tools.clang, '-c', '-o', root_conf.join('a.o'), root_src.join('build-scripts', 'test-tools', 'clang-mold', 'a.c')
-		run_command_success conf.tools.clang, '-c', '-o', root_conf.join('b.o'), root_src.join('build-scripts', 'test-tools', 'clang-mold', 'b.c')
+		run_command_success config.tools.clang, '-c', '-o', root_conf.join('a.o'), root_src.join('build-scripts', 'test-tools', 'clang-mold', 'a.c')
+		run_command_success config.tools.clang, '-c', '-o', root_conf.join('b.o'), root_src.join('build-scripts', 'test-tools', 'clang-mold', 'b.c')
 	rescue => e
-		logger.warn("clang doesn't work #{conf.tools.clang} #{e}")
-		conf.tools.clang = nil
+		logger.warn("clang doesn't work #{config.tools.clang} #{e}")
+		config.tools.clang = nil
 	else
 		logger.info("clang works")
 	end
 end
-if not conf.tools.clang.nil? and not conf.tools.mold.nil?
+if not config.tools.clang.nil? and not config.tools.mold.nil?
 	begin
-		run_command_success conf.tools.clang, "-fuse-ld=#{conf.tools.mold}", '-o', root_conf.join('ab'), root_conf.join('a.o'), root_conf.join('b.o')
+		run_command_success config.tools.clang, "-fuse-ld=#{config.tools.mold}", '-o', root_conf.join('ab'), root_conf.join('a.o'), root_conf.join('b.o')
 		run_command_success root_conf.join('ab')
 	rescue => e
-		logger.warn("mold doesn't work #{conf.tools.mold} #{e}")
-		conf.tools.mold = nil
+		logger.warn("mold doesn't work #{config.tools.mold} #{e}")
+		config.tools.mold = nil
 	else
 		logger.info("mold works")
 	end
 end
-
-conf
