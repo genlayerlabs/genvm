@@ -1,3 +1,5 @@
+use std::os::fd::FromRawFd;
+
 use anyhow::Result;
 use clap::Parser;
 
@@ -31,6 +33,9 @@ struct CliArgs {
 
     #[arg(long, default_value = "wasmtime*,cranelift*")]
     log_disable: String,
+
+    #[arg(long, default_value = "2")]
+    log_fd: std::os::fd::RawFd,
 }
 
 struct NullWiriter;
@@ -47,8 +52,17 @@ impl structured_logger::Writer for NullWiriter {
 fn main() -> Result<()> {
     let args = CliArgs::parse();
 
+    let log_file: Box<dyn std::io::Write + Sync + Send> = match args.log_fd {
+        1 => Box::new(std::io::stdout()),
+        2 => Box::new(std::io::stderr()),
+        fd => {
+            let log_fd = unsafe { std::os::fd::OwnedFd::from_raw_fd(fd) };
+            Box::new(std::fs::File::from(log_fd))
+        }
+    };
+
     structured_logger::Builder::with_level(args.log_level.as_str())
-        .with_default_writer(structured_logger::json::new_writer(std::io::stderr()))
+        .with_default_writer(structured_logger::json::new_writer(log_file))
         .with_target_writer(&args.log_disable, Box::new(NullWiriter))
         .init();
 

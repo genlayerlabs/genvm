@@ -46,7 +46,12 @@ class CargoBuildTarget < Target
 		end
 		@cargo_output_file = @cargo_out_dir.join(@name + suff)
 		@output_file = if @out_file.nil? then @cargo_output_file else @out_file end
-		super(outputs: [@output_file], inputs: [dir.join('Cargo.toml')], rule: 'CARGO_BUILD')
+		implicit_outputs = if @out_file.nil?
+			[]
+		else
+			[@output_file]
+		end
+		super(outputs: [@cargo_output_file], implicit_outputs: implicit_outputs, inputs: [dir.join('Cargo.toml')], rule: 'CARGO_BUILD')
 	end
 
 	def dump_vars(cb)

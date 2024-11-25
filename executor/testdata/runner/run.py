@@ -211,12 +211,14 @@ def run(jsonnet_rel_path):
 			'steps': steps,
 			'stdout': res.stdout,
 			'stderr': res.stderr,
+			'genvm_log': res.genvm_log,
 		}
 
 		got_stdout_path = tmp_dir.joinpath('stdout.txt')
 		got_stdout_path.parent.mkdir(parents=True, exist_ok=True)
 		got_stdout_path.write_text(res.stdout)
 		tmp_dir.joinpath('stderr.txt').write_text(res.stderr)
+		tmp_dir.joinpath('genvm.log').write_text(res.genvm_log)
 
 		if len(res.exceptions) != 0:
 			return {
