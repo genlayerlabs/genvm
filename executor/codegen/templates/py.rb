@@ -9,13 +9,11 @@ end
 
 # editorconfig-checker-disable
 ENUM_TEMPLATE_STR = <<-EOF
-#[derive(PartialEq)]
-#[repr(<%= size %>)]
-pub enum <%= to_camel name %> {
+class <%= to_camel name %>(IntEnum):
 % values.each { |k, v|
-    <%= to_camel k %> = <%= v %>,
+	<%= k.upcase %> = <%= v %>
 % }
-}
+
 EOF
 # editorconfig-checker-enable
 
@@ -23,7 +21,13 @@ ENUM_TEMPLATE = ERB.new(ENUM_TEMPLATE_STR, trim_mode: "%")
 
 buf = String.new
 
-JSON.load_file(Pathname.new(__dir__).parent.join('data', 'host-fns.json')).each { |t|
+buf << <<-EOF
+from enum import IntEnum
+EOF
+
+json_path, out_path = ARGV
+
+JSON.load_file(Pathname.new(json_path)).each { |t|
 	t_os = OpenStruct.new(t)
 	case t_os.type
 	when "enum"
@@ -33,4 +37,4 @@ JSON.load_file(Pathname.new(__dir__).parent.join('data', 'host-fns.json')).each 
 	end
 }
 
-File.write(Pathname.new(__dir__).parent.parent.join('src', 'host', 'host_fns.rs'), buf)
+File.write(Pathname.new(out_path), buf)

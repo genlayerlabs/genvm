@@ -45,13 +45,29 @@ project('executor') {
 		)
 	)
 
-	codegen = target_command(
-		output_file: cur_src.join('src', 'host', 'host_fns.rs'),
-		command: [
-			RbConfig.ruby, cur_src.join('codegen', 'templates', 'host-rs.rb')
-		],
-		dependencies: [cur_src.join('codegen', 'data', 'host-fns.json')],
-		tags: ['codegen'],
+	run_codegen = Proc.new { |inp, out, type:, tags: [], **kwargs, &blk|
+		if type == "rs"
+			script = cur_src.join('codegen', 'templates', 'rs.rb')
+		elsif type == "py"
+			script = cur_src.join('codegen', 'templates', 'py.rb')
+		else
+			raise "unknown type #{type}"
+		end
+		target_command(
+			output_file: out,
+			command: [
+				RbConfig.ruby, script, inp, out,
+			],
+			dependencies: [inp, script],
+			tags: ['codegen'] + tags,
+			**kwargs, &blk
+		)
+	}
+
+	codegen = target_alias(
+		"codegen",
+		run_codegen.(cur_src.join('codegen', 'data', 'host-fns.json'), cur_src.join('src', 'host', 'host_fns.rs'), type: "rs"),
+		run_codegen.(cur_src.join('codegen', 'data', 'builtin-prompt-templates.json'), cur_src.join('modules', 'default-impl', 'llm-funcs', 'src', 'template_ids.rs'), type: "rs"),
 	)
 
 	genvm_id_path = root_build.join('genvm_id.txt')
@@ -97,12 +113,5 @@ project('executor') {
 
 	genvm_all = target_alias('all', bin, modules, config_target, tags: ['all'])
 
-	target_command(
-		output_file: cur_src.join('testdata', 'runner', 'host_fns.py'),
-		command: [
-			RbConfig.ruby, cur_src.join('codegen', 'templates', 'host-py.rb')
-		],
-		dependencies: [cur_src.join('codegen', 'data', 'host-fns.json')],
-		tags: ['testdata']
-	)
+	run_codegen.(cur_src.join('codegen', 'data', 'host-fns.json'), cur_src.join('testdata', 'runner', 'host_fns.py'), type: "py", tags: ['testdata'])
 }

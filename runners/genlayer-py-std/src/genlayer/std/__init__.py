@@ -6,6 +6,8 @@ from types import SimpleNamespace as _SimpleNamespace
 import base64
 import importlib
 
+from .prompt_ids import *
+
 advanced = importlib.import_module('.advanced', __name__)
 
 # reexports
@@ -191,12 +193,12 @@ def _eq_principle_prompt_comparative(
 			return leaders.msg == r.msg
 		if isinstance(leaders, Rollback):
 			return False
-		config = {
+		vars = {
 			'leader_answer': leaders,
 			'validator_answer': my_res,
 			'principle': principle,
 		}
-		return wasi.eq_principle_prompt_comparative(json.dumps(config))
+		return wasi.eq_principle_prompt(TemplateId.COMPARATIVE, json.dumps(vars))
 
 	return advanced.run_nondet(fn, validator_fn)
 
@@ -225,12 +227,12 @@ def _eq_principle_prompt_non_comparative(
 			return leaders.msg == r.msg
 		if isinstance(leaders, Rollback):
 			return False
-		config = {
+		vars = {
 			'task': task,
 			'output': leaders,
 			'input': input_res,
 		}
-		return wasi.eq_principle_prompt_non_comparative(json.dumps(config))
+		return wasi.eq_principle_prompt(TemplateId.NON_COMPARATIVE, json.dumps(vars))
 
 	return advanced.run_nondet(leader_fn, validator_fn)
 

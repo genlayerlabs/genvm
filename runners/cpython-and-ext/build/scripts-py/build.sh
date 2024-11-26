@@ -16,13 +16,16 @@ mkdir -p /out/py/lib/python3.13
 
 # -fPIC -fvisibility=default
 
+# LDFLAGS="-L$WASM32_WASI_ROOT/lib $WASM32_WASI_ROOT/lib/fake_dl.o" \
+
 env \
     CC=/opt/host-root/bin/clang \
     CFLAGS="-O3 -g --sysroot=/opt/host-root/share/wasi-sysroot --target=wasm32-wasip1 -I$WASM32_WASI_ROOT/include $DETERMINISTIC_C_FLAGS" \
-    LDFLAGS="-L$WASM32_WASI_ROOT/lib $WASM32_WASI_ROOT/lib/fake_dl.o" \
     CONFIG_SITE="/opt/cpython/Tools/wasm/config.site-wasm32-wasi" \
+    LDFLAGS="-L$WASM32_WASI_ROOT/lib" \
     ../../configure \
         --prefix /out/py \
+        --config-cache \
         --host=wasm32-wasi "--build=$(gcc -print-multiarch)" \
         --with-build-python=/opt/cpython/cross-build/build/python \
         --with-ensurepip=no --disable-ipv6 --disable-test-modules

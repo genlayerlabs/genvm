@@ -2,13 +2,13 @@ use anyhow::Result;
 use genvm_modules_common::*;
 use serde_derive::Deserialize;
 
-use std::collections::HashMap;
 use std::ffi::CStr;
 
 use genvm_modules_common::interfaces::web_functions_api;
 
 mod response;
 mod string_templater;
+mod template_ids;
 
 genvm_modules_common::default_base_functions!(web_functions_api, Impl);
 
@@ -30,7 +30,7 @@ impl Drop for Impl {
     fn drop(&mut self) {}
 }
 
-fn default_equivalence_prompt() -> String {
+fn default_equivalence_prompt_comparative() -> String {
     "Given the equivalence principle '#{principle}', decide whether the following two outputs can be considered equivalent.\nLeader's Output: #{leader_answer}\n\nValidator's Output: #{validator_answer}\n\nRespond with: true or false".into()
 }
 
@@ -43,24 +43,10 @@ struct Config {
     host: String,
     provider: LLLMProvider,
     model: String,
-    #[serde(default = "default_equivalence_prompt")]
-    equivalence_prompt: String,
+    #[serde(default = "default_equivalence_prompt_comparative")]
+    equivalence_prompt_comparative: String,
     #[serde(default = "default_equivalence_prompt_non_comparative")]
     equivalence_prompt_non_comparative: String,
-}
-
-#[derive(Deserialize)]
-struct EqPrinciplePromptComparative {
-    leader_answer: String,
-    validator_answer: String,
-    principle: String,
-}
-
-#[derive(Deserialize)]
-struct EqPrinciplePromptNonComparative {
-    task: String,
-    input: String,
-    output: String,
 }
 
 impl Impl {
@@ -178,27 +164,16 @@ impl Impl {
         res
     }
 
-    fn eq_principle_prompt_comparative(&mut self, gas: &mut u64, data: &str) -> Result<bool> {
-        let data: EqPrinciplePromptComparative = serde_json::from_str(data)?;
-        let map = HashMap::from([
-            ("leader_answer".into(), data.leader_answer),
-            ("validator_answer".into(), data.validator_answer),
-            ("principle".into(), data.principle),
-        ]);
-        let new_prompt = string_templater::patch_str(&map, &self.config.equivalence_prompt)?;
-        let res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
-        answer_is_bool(res)
-    }
-
-    fn eq_principle_prompt_non_comparative(&mut self, gas: &mut u64, data: &str) -> Result<bool> {
-        let data: EqPrinciplePromptNonComparative = serde_json::from_str(data)?;
-        let map = HashMap::from([
-            ("task".into(), data.task),
-            ("input".into(), data.input),
-            ("output".into(), data.output),
-        ]);
-        let new_prompt =
-            string_templater::patch_str(&map, &self.config.equivalence_prompt_non_comparative)?;
+    fn eq_principle_prompt(&mut self, gas: &mut u64, template_id: u8, vars: &str) -> Result<bool> {
+        use template_ids::TemplateId;
+        let id = TemplateId::try_from(template_id)
+            .map_err(|_e| anyhow::anyhow!("unknown template id"))?;
+        let template = match id {
+            TemplateId::Comparative => &self.config.equivalence_prompt_comparative,
+            TemplateId::NonComparative => &self.config.equivalence_prompt_non_comparative,
+        };
+        let vars: std::collections::BTreeMap<String, String> = serde_json::from_str(vars)?;
+        let new_prompt = string_templater::patch_str(&vars, &template)?;
         let res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
         answer_is_bool(res)
     }
@@ -237,29 +212,16 @@ pub extern "C-unwind" fn exec_prompt(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn eq_principle_prompt_comparative(
+pub extern "C-unwind" fn eq_principle_prompt(
     ctx: *const (),
     gas: &mut u64,
-    data: *const u8,
+    template_id: u8,
+    vars: *const u8,
 ) -> interfaces::BoolResult {
     let ctx = get_ptr(ctx);
-    let data = unsafe { CStr::from_ptr(data as *const std::ffi::c_char) };
-    data.to_str()
+    let vars = unsafe { CStr::from_ptr(vars as *const std::ffi::c_char) };
+    vars.to_str()
         .map_err(|e| anyhow::Error::from(e))
-        .and_then(|data| ctx.eq_principle_prompt_comparative(gas, data))
-        .into()
-}
-
-#[no_mangle]
-pub extern "C-unwind" fn eq_principle_prompt_non_comparative(
-    ctx: *const (),
-    gas: &mut u64,
-    data: *const u8,
-) -> interfaces::BoolResult {
-    let ctx = get_ptr(ctx);
-    let data = unsafe { CStr::from_ptr(data as *const std::ffi::c_char) };
-    data.to_str()
-        .map_err(|e| anyhow::Error::from(e))
-        .and_then(|data| ctx.eq_principle_prompt_non_comparative(gas, data))
+        .and_then(|vars| ctx.eq_principle_prompt(gas, template_id, vars))
         .into()
 }

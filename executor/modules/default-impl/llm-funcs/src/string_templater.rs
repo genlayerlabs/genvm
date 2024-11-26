@@ -1,5 +1,7 @@
+#![allow(dead_code)]
+
 use anyhow::Result;
-use std::{collections::HashMap, sync::LazyLock};
+use std::{collections::BTreeMap, sync::LazyLock};
 
 static JSON_UNFOLDER_RE: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r#"#\{([a-zA-Z0-9_]*)\}"#).unwrap());
@@ -21,7 +23,7 @@ fn replace_all<E>(
     Ok(new)
 }
 
-pub fn patch_str(vars: &HashMap<String, String>, s: &str) -> Result<String> {
+pub fn patch_str(vars: &BTreeMap<String, String>, s: &str) -> Result<String> {
     replace_all(&JSON_UNFOLDER_RE, s, |r: &regex::Captures| {
         let r: &str = &r[1];
         vars.get(r)
@@ -30,7 +32,7 @@ pub fn patch_str(vars: &HashMap<String, String>, s: &str) -> Result<String> {
     })
 }
 pub fn patch_value(
-    vars: &HashMap<String, String>,
+    vars: &BTreeMap<String, String>,
     v: serde_json::Value,
 ) -> Result<serde_json::Value> {
     Ok(match v {

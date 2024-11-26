@@ -1,0 +1,11 @@
+[
+  {
+    "type": "enum",
+    "name": "template_id",
+    "size": "u8",
+    "values": {
+        "comparative": 0,
+        "non_comparative": 1
+    }
+  }
+]

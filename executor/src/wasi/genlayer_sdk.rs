@@ -210,43 +210,6 @@ impl ContextVFS<'_> {
             len,
         ))
     }
-
-    fn eq_principle_prompt_any(
-        &mut self,
-        mem: &mut wiggle::GuestMemory<'_>,
-        config: wiggle::GuestPtr<str>,
-        prompt_impl: impl FnOnce(
-            &mut dyn genvm_modules_common::interfaces::llm_functions_api::Trait,
-            &mut u64,
-            *const u8,
-        ) -> genvm_modules_common::interfaces::BoolResult,
-    ) -> Result<generated::types::Success, generated::types::Error> {
-        if self.context.data.conf.is_deterministic {
-            return Err(generated::types::Errno::DeterministicViolation.into());
-        }
-        let config_str = read_string(mem, config)?;
-        let config_str = CString::new(config_str).map_err(|e| generated::types::Errno::Inval)?;
-
-        let supervisor = self.context.data.supervisor.clone();
-        let Ok(mut supervisor) = supervisor.lock() else {
-            return Err(generated::types::Errno::Io.into());
-        };
-
-        let mut fuel = 0;
-        let res = {
-            let llm = supervisor.modules.llm.as_mut();
-            prompt_impl(llm, &mut fuel, config_str.as_bytes().as_ptr())
-        };
-        supervisor
-            .host
-            .consume_fuel(fuel)
-            .map_err(generated::types::Error::trap)?;
-
-        if res.err != 0 {
-            return Err(generated::types::Errno::Io.into());
-        }
-        Ok((res.res as i32).try_into().unwrap())
-    }
 }
 
 #[allow(unused_variables)]
@@ -386,24 +349,39 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         )))
     }
 
-    fn eq_principle_prompt_comparative(
+    fn eq_principle_prompt(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        config: wiggle::GuestPtr<str>,
+        id: u8,
+        vars: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::Success, generated::types::Error> {
-        self.eq_principle_prompt_any(mem, config, |x, f, c| {
-            x.eq_principle_prompt_comparative(f, c)
-        })
-    }
+        if self.context.data.conf.is_deterministic {
+            return Err(generated::types::Errno::DeterministicViolation.into());
+        }
+        let vars_str = read_string(mem, vars)?;
+        let vars_str = CString::new(vars_str).map_err(|e| generated::types::Errno::Inval)?;
 
-    fn eq_principle_prompt_non_comparative(
-        &mut self,
-        mem: &mut wiggle::GuestMemory<'_>,
-        config: wiggle::GuestPtr<str>,
-    ) -> Result<generated::types::Success, generated::types::Error> {
-        self.eq_principle_prompt_any(mem, config, |x, f, c| {
-            x.eq_principle_prompt_non_comparative(f, c)
-        })
+        let supervisor = self.context.data.supervisor.clone();
+        let Ok(mut supervisor) = supervisor.lock() else {
+            return Err(generated::types::Errno::Io.into());
+        };
+
+        let mut fuel = 0;
+        let res = supervisor.modules.llm.as_mut().eq_principle_prompt(
+            &mut fuel,
+            id,
+            vars_str.as_bytes().as_ptr(),
+        );
+
+        supervisor
+            .host
+            .consume_fuel(fuel)
+            .map_err(generated::types::Error::trap)?;
+
+        if res.err != 0 {
+            return Err(generated::types::Errno::Io.into());
+        }
+        Ok((res.res as i32).try_into().unwrap())
     }
 
     fn run_nondet(

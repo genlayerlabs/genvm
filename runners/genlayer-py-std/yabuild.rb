@@ -1,5 +1,17 @@
 dev_container = find_target /runners\/cpython-dev-container$/
 
+codegen = target_command(
+	output_file: cur_src.join('src', 'genlayer', 'std', 'prompt_ids.py'),
+	command: [
+		RbConfig.ruby,
+			root_src.join('executor', 'codegen', 'templates', 'py.rb'),
+			root_src.join('executor', 'codegen', 'data', 'builtin-prompt-templates.json'),
+			cur_src.join('src', 'genlayer', 'std', 'prompt_ids.py'),
+	],
+	dependencies: [root_src.join('executor', 'codegen', 'templates', 'py.rb'), root_src.join('executor', 'codegen', 'data', 'builtin-prompt-templates.json')],
+	tags: ['codegen']
+)
+
 base_genlayer_lib_dir = cur_src.join('src')
 lib_files = Dir.glob(base_genlayer_lib_dir.to_s + "/**/*.py")
 
@@ -24,7 +36,7 @@ build_pyc_s = target_command(
 			'/scripts-py/save-compiled.sh', '/out/', 'compiled.zip', 'src',
 		]
 	],
-	dependencies: [dev_container] + lib_files,
+	dependencies: [dev_container, codegen] + lib_files,
 	cwd: cur_src,
 	output_file: out_file,
 	pool: 'console',
