@@ -1,1 +1,6 @@
 *.onnx filter=lfs diff=lfs merge=lfs -text
+*.onnx linguist-vendored
+*.txt linguist-vendored
+*.lock linguist-vendored
+runners/py-libs/pure-py/** linguist-vendored
+runners/onnx-models/** linguist-vendored
