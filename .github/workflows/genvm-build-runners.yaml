@@ -3,9 +3,9 @@ on:
   workflow_call:
     outputs:
       artifact_name:
-        value: ${{ jobs.build.outputs.artifact_name }}
+        value: ${{ jobs.gen_url.outputs.basename }}
       artifact_url:
-        value: ${{ jobs.build.outputs.artifact_url }}
+        value: ${{ jobs.gen_url.outputs.gcs_url }}
 defaults:
   run:
     shell: bash -x {0}
@@ -14,11 +14,37 @@ env:
   GCS_BUCKET: "gh-af"
 
 jobs:
-  build:
+  gen_url:
     runs-on: ubuntu-latest
     outputs:
-      artifact_name: ${{ steps.upload.outputs.basename }}
-      artifact_url: ${{ steps.upload.outputs.gcs_url }}
+      dirname: ${{ steps.gen_url.outputs.dirname }}
+      basename: ${{ steps.gen_url.outputs.basename }}
+      gcs_url: ${{ steps.gen_url.outputs.gcs_url }}
+      already_exists: ${{ steps.gen_url.outputs.already_exists }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Generate upload url
+        id: gen_url
+        run: |
+          SHA="$(git log -1 --format=%H -- runners/)"
+          DIR_NAME="genvm_runners_${SHA}"
+          echo "dirname=$DIR_NAME" >> $GITHUB_OUTPUT
+          BASE_NAME="runners.zip"
+          echo "basename=$BASE_NAME" >> $GITHUB_OUTPUT
+          GCS_URL="https://storage.googleapis.com/$GCS_BUCKET/$DIR_NAME/$BASE_NAME"
+          echo "gcs_url=$GCS_URL" >> $GITHUB_OUTPUT
+          if curl -o/dev/null -sfL -r 0-0 "$GCS_URL"
+          then
+            echo "already_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "already_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [gen_url]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,10 +54,14 @@ jobs:
         with:
           install_also: --wasi --rust
           third_party: sdk-rust/third-party/wasi-rs runners/softfloat/berkeley-softfloat-3
+        if: |
+          needs.gen_url.outputs.already_exists == 'false'
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker
+        if: |
+          needs.gen_url.outputs.already_exists == 'false'
       - name: Cache Docker layers
         uses: actions/cache@v4
         with:
@@ -40,15 +70,21 @@ jobs:
           key: runners-buildx-${{ github.sha }}
           restore-keys: |
             runners-buildx-
+        if: |
+          needs.gen_url.outputs.already_exists == 'false'
       - name: Configure
         run: |
           source env.sh && \
           ya-build config
+        if: |
+          needs.gen_url.outputs.already_exists == 'false'
       - name: Build extension
         run: |
           source env.sh && \
           ninja --verbose -C build genvm/runners/cpython-extension-lib && \
           git diff -U1 --exit-code
+        if: |
+          needs.gen_url.outputs.already_exists == 'false'
       - name: Build
         run: |
           source env.sh && \
@@ -57,25 +93,24 @@ jobs:
           pushd build/out && \
           zip -r -9 ../runners.zip * && \
           popd
+        if: |
+          needs.gen_url.outputs.already_exists == 'false'
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
+        if: |
+          needs.gen_url.outputs.already_exists == 'false'
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
-      - name: Generate upload url
-        id: upload
-        run: |
-          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-          DIR_NAME="genvm_runners_${GITHUB_SHA}_${TIMESTAMP}"
-          echo "dirname=$DIR_NAME" >> $GITHUB_OUTPUT
-          BASE_NAME="runners.zip"
-          echo "basename=$BASE_NAME" >> $GITHUB_OUTPUT
-          echo "gcs_url=https://storage.googleapis.com/$GCS_BUCKET/$DIR_NAME/$BASE_NAME" >> $GITHUB_OUTPUT
+        if: |
+          needs.gen_url.outputs.already_exists == 'false'
       - name: Upload to GCS
         uses: google-github-actions/upload-cloud-storage@v2
         with:
-          path: build/${{ steps.upload.outputs.basename }}
-          destination: ${{ env.GCS_BUCKET }}/${{ steps.upload.outputs.dirname }}
+          path: build/${{ needs.gen_url.outputs.basename }}
+          destination: ${{ env.GCS_BUCKET }}/${{ needs.gen_url.outputs.dirname }}
           parent: false
+        if: |
+          needs.gen_url.outputs.already_exists == 'false'

@@ -25,7 +25,7 @@ impl TryFrom<<%= size %>> for <%= to_camel name %> {
 % values.each { |k, v|
             <%= v %> => Ok(<%= to_camel name %>::<%= to_camel k %>),
 % }
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }

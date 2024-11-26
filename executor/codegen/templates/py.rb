@@ -9,11 +9,12 @@ end
 
 # editorconfig-checker-disable
 ENUM_TEMPLATE_STR = <<-EOF
+
+
 class <%= to_camel name %>(IntEnum):
 % values.each { |k, v|
 	<%= k.upcase %> = <%= v %>
 % }
-
 EOF
 # editorconfig-checker-enable
 
