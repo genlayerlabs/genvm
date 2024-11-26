@@ -1,5 +1,8 @@
 #![allow(unused_parens)]
 
+use serde::{Deserialize, Serialize};
+//use serde_derive::{Deserialize, Serialize};
+
 macro_rules! impl_create_trait_fn {
     ($name:ident : fn ($($arg_name:ident: $arg_t:ty),*) -> $ret_t:tt ;) => {
         fn $name(&mut self, $( $arg_name : $arg_t ),*) -> $ret_t;
@@ -22,47 +25,64 @@ macro_rules! create_trait {
 }
 
 #[repr(C)]
-pub struct CStrResult {
-    pub str: *const u8,
-    pub err: i32,
+pub struct BytesResult {
+    pub ptr: *const u8,
+    pub len: u32,
 }
 
-#[repr(C)]
-pub struct BoolResult {
-    pub res: bool,
-    pub err: i32,
+#[derive(serde_derive::Serialize, serde_derive::Deserialize)]
+pub enum ModuleResult<T> {
+    Success(T),
+    Error(String),
 }
 
-impl<S> From<anyhow::Result<S>> for CStrResult
-where
-    S: AsRef<str>,
-{
-    fn from(value: anyhow::Result<S>) -> Self {
+impl<T> From<anyhow::Result<T>> for ModuleResult<T> {
+    fn from(value: anyhow::Result<T>) -> Self {
         match value {
-            Ok(v) => CStrResult {
-                str: crate::str_to_shared(v.as_ref()),
-                err: 0,
-            },
-            Err(e) => {
-                eprintln!("Module error {}", &e);
-                CStrResult {
-                    str: std::ptr::null(),
-                    err: 1,
-                }
-            }
+            Ok(t) => ModuleResult::Success(t),
+            Err(e) => ModuleResult::Error(format!("{e:?}")),
         }
     }
 }
 
-impl From<anyhow::Result<bool>> for BoolResult {
-    fn from(value: anyhow::Result<bool>) -> Self {
-        match value {
-            Ok(v) => BoolResult { res: v, err: 0 },
-            Err(e) => {
-                eprintln!("Module error {}", &e);
-                BoolResult { res: false, err: 1 }
-            }
+pub fn serialize_result<T: Serialize>(res: anyhow::Result<T>) -> BytesResult {
+    let as_mod_res = ModuleResult::from(res);
+    as_mod_res.to_bytes().unwrap()
+}
+
+impl<T> ModuleResult<T> {
+    pub fn into_anyhow(self) -> anyhow::Result<T> {
+        match self {
+            ModuleResult::Success(val) => Ok(val),
+            ModuleResult::Error(message) => Err(anyhow::format_err!("{}", message)),
         }
+    }
+}
+
+impl<T: Serialize> ModuleResult<T> {
+    pub fn to_bytes(&self) -> anyhow::Result<BytesResult> {
+        let vec = rmp_serde::to_vec(&self)?;
+        let len_u32: u32 = vec.len().try_into()?;
+        let res_arr = unsafe { libc::malloc(vec.len()) } as *mut u8;
+        anyhow::ensure!(res_arr != std::ptr::null_mut());
+        let res = unsafe { std::slice::from_raw_parts_mut(res_arr, vec.len()) };
+        res.copy_from_slice(&vec);
+        Ok(BytesResult {
+            ptr: res_arr,
+            len: len_u32,
+        })
+    }
+}
+
+impl<'a, T: Deserialize<'a>> ModuleResult<T> {
+    pub fn from_bytes(
+        bytes: BytesResult,
+        free: impl FnOnce(*const u8) -> (),
+    ) -> anyhow::Result<Self> {
+        let slice = unsafe { std::slice::from_raw_parts(bytes.ptr, bytes.len as usize) };
+        let res: anyhow::Result<Self> = rmp_serde::from_slice(slice).map_err(Into::into);
+        free(bytes.ptr);
+        res
     }
 }
 
@@ -71,7 +91,7 @@ macro_rules! WebFunctionsApiFns {
     ($cb:path[$($args:tt),*]) => {
         $cb!(($($args),*) {
             free_str: fn(data: *const u8) -> ();
-            get_webpage: fn(gas: &mut u64, config: *const u8, url: *const u8) -> ($crate::interfaces::CStrResult);
+            get_webpage: fn(gas: &mut u64, config: *const u8, url: *const u8) -> ($crate::interfaces::BytesResult); // ModuleResult<String>
         });
     };
 }
@@ -82,8 +102,8 @@ macro_rules! LLMFunctionsApiFns {
     ($cb:path[$($args:tt),*]) => {
         $cb!(($($args),*) {
             free_str: fn(data: *const u8) -> ();
-            exec_prompt: fn(gas: &mut u64, config: *const u8, prompt: *const u8) -> ($crate::interfaces::CStrResult);
-            eq_principle_prompt: fn(gas: &mut u64, id: u8, vars: *const u8) -> ($crate::interfaces::BoolResult);
+            exec_prompt: fn(gas: &mut u64, config: *const u8, prompt: *const u8) -> ($crate::interfaces::BytesResult); // ModuleResult<String>
+            eq_principle_prompt: fn(gas: &mut u64, id: u8, vars: *const u8) -> ($crate::interfaces::BytesResult); // ModuleResult<bool>
         });
     };
 }

@@ -178,9 +178,10 @@ pub extern "C-unwind" fn get_webpage(
     _gas: &mut u64,
     config: *const u8,
     url: *const u8,
-) -> interfaces::CStrResult {
+) -> interfaces::BytesResult {
     let ctx = get_ptr(ctx);
     let config = unsafe { CStr::from_ptr(config as *const std::ffi::c_char) };
     let url = unsafe { CStr::from_ptr(url as *const std::ffi::c_char) };
-    ctx.get_webpage(config, url).into()
+    let res = ctx.get_webpage(config, url);
+    interfaces::serialize_result(res)
 }

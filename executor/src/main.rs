@@ -66,6 +66,8 @@ fn main() -> Result<()> {
         .with_target_writer(&args.log_disable, Box::new(NullWiriter))
         .init();
 
+    log::info!(target: "vm", method = "start", version = env!("GENVM_BUILD_ID"); "");
+
     let log_fd = args.log_fd;
 
     match args.command {

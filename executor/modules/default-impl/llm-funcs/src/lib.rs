@@ -195,11 +195,11 @@ pub extern "C-unwind" fn exec_prompt(
     gas: &mut u64,
     config: *const u8,
     prompt: *const u8,
-) -> interfaces::CStrResult {
+) -> interfaces::BytesResult {
     let ctx = get_ptr(ctx);
     let config = unsafe { CStr::from_ptr(config as *const std::ffi::c_char) };
     let prompt = unsafe { CStr::from_ptr(prompt as *const std::ffi::c_char) };
-    config
+    let res = config
         .to_str()
         .map_err(|e| anyhow::Error::from(e))
         .and_then(|config| {
@@ -207,8 +207,8 @@ pub extern "C-unwind" fn exec_prompt(
                 .to_str()
                 .map_err(|e| anyhow::Error::from(e))
                 .and_then(|prompt| ctx.exec_prompt(gas, config, prompt))
-        })
-        .into()
+        });
+    interfaces::serialize_result(res)
 }
 
 #[no_mangle]
@@ -217,11 +217,12 @@ pub extern "C-unwind" fn eq_principle_prompt(
     gas: &mut u64,
     template_id: u8,
     vars: *const u8,
-) -> interfaces::BoolResult {
+) -> interfaces::BytesResult {
     let ctx = get_ptr(ctx);
     let vars = unsafe { CStr::from_ptr(vars as *const std::ffi::c_char) };
-    vars.to_str()
+    let res = vars
+        .to_str()
         .map_err(|e| anyhow::Error::from(e))
-        .and_then(|vars| ctx.eq_principle_prompt(gas, template_id, vars))
-        .into()
+        .and_then(|vars| ctx.eq_principle_prompt(gas, template_id, vars));
+    interfaces::serialize_result(res)
 }

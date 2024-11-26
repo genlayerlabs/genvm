@@ -1,6 +1,6 @@
 use core::str;
 use std::{
-    ffi::{CStr, CString},
+    ffi::CString,
     sync::{Arc, Mutex},
 };
 
@@ -298,14 +298,17 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             .consume_fuel(fuel)
             .map_err(generated::types::Error::trap)?;
 
-        if res.err != 0 {
-            return Err(generated::types::Errno::Io.into());
-        }
+        let res: String = genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
+            supervisor.modules.web.free_str(x)
+        })
+        .and_then(genvm_modules_common::interfaces::ModuleResult::into_anyhow)
+        .map_err(|err| {
+            log::error!(target: "vm", err:? = err; "web module failed");
+            generated::types::Errno::Io
+        })?;
+
         Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_contents(
-                vec_from_cstr_libc(|d| supervisor.modules.web.free_str(d), res.str),
-                0,
-            ),
+            FileContentsUnevaluated::from_contents(Arc::from(res.as_bytes()), 0),
         )))
     }
 
@@ -338,14 +341,14 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             .consume_fuel(fuel)
             .map_err(generated::types::Error::trap)?;
 
-        if res.err != 0 {
-            return Err(generated::types::Errno::Io.into());
-        }
+        let res: String = genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
+            supervisor.modules.llm.free_str(x)
+        })
+        .and_then(genvm_modules_common::interfaces::ModuleResult::into_anyhow)
+        .map_err(generated::types::Error::trap)?;
+
         Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_contents(
-                vec_from_cstr_libc(|d| supervisor.modules.llm.free_str(d), res.str),
-                0,
-            ),
+            FileContentsUnevaluated::from_contents(Arc::from(res.as_bytes()), 0),
         )))
     }
 
@@ -378,10 +381,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             .consume_fuel(fuel)
             .map_err(generated::types::Error::trap)?;
 
-        if res.err != 0 {
-            return Err(generated::types::Errno::Io.into());
-        }
-        Ok((res.res as i32).try_into().unwrap())
+        let res: bool = genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
+            supervisor.modules.llm.free_str(x)
+        })
+        .and_then(genvm_modules_common::interfaces::ModuleResult::into_anyhow)
+        .map_err(generated::types::Error::trap)?;
+
+        Ok((res as i32).try_into().unwrap())
     }
 
     fn run_nondet(
@@ -639,10 +645,4 @@ impl Context {
         };
         vm.run(&instance)
     }
-}
-
-fn vec_from_cstr_libc(free: impl FnOnce(*const u8) -> (), str: *const u8) -> Arc<[u8]> {
-    let res = Arc::from(unsafe { CStr::from_ptr(str as *const std::ffi::c_char) }.to_bytes());
-    free(str);
-    res
 }
