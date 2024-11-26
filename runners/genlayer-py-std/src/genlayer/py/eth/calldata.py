@@ -1,4 +1,4 @@
-__all__ = ('eth_contract',)
+__all__ = ('MethodEncoder', 'decode')
 from ..keccak import Keccak256
 
 
@@ -112,17 +112,27 @@ def is_dynamic(param: type):
 	if origin is None:
 		return False
 	type_args = typing.get_args(param)
-	if origin is Array or origin is list:
+	if origin is DynArray or origin is list:
 		return True
 	elif origin is tuple:
 		return any(is_dynamic(x) for x in type_args)
+	elif origin is Array:
+		return True
+	return False
+
+
+def calc_size_here(param: type) -> int:
+	if is_dynamic(param):
+		return 32
+	if param in _integer_types:
+		return 32
 	return False
 
 
 type _Tails = list[typing.Callable[[_Tails], None]]
 
 
-class EthMethodEncoder:
+class MethodEncoder:
 	name: str
 	params: list[type]
 	ret: type
@@ -176,7 +186,7 @@ class EthMethodEncoder:
 		def put_regular(param: type, arg: typing.Any, tails: _Tails) -> None:
 			as_int = _integer_types.get(param, None)
 			if as_int is not None:
-				result.extend(int.to_bytes(arg, 32, 'big', signed=as_int.startswith('u')))
+				result.extend(int.to_bytes(arg, 32, 'big', signed=as_int.startswith('i')))
 			elif param is bool:
 				result.extend(int.to_bytes(1 if arg else 0, 32, 'big'))
 			elif param is Address:
@@ -197,7 +207,7 @@ class EthMethodEncoder:
 				tails.append(put_bytes)
 			elif (origin := typing.get_origin(param)) is not None:
 				type_args = typing.get_args(param)
-				if origin is Array or origin is list:
+				if origin is DynArray or origin is list:
 					put_iloc(tails)
 					as_seq = typing.cast(collections.abc.Sequence, arg)
 
@@ -209,6 +219,11 @@ class EthMethodEncoder:
 						run_seq_with_new_tails(cur)
 
 					tails.append(put_arr)
+				elif origin is Array:
+					assert typing.get_origin(type_args[1]) is typing.Literal
+					le = int(*typing.get_args(type_args[1]))
+					for i in range(le):
+						put_regular(type_args[0], arg[i], tails)
 				elif origin is tuple:
 
 					def put_tuple(_tails):
@@ -236,5 +251,95 @@ class EthMethodEncoder:
 		return bytes(result)
 
 
-def eth_contract(cls):
-	return cls
+def decode(params: list[type], data: collections.abc.Buffer) -> list[typing.Any]:
+	mem = memoryview(data)
+
+	current_off: int = 0
+	current_off_0: int = 0
+
+	def with_indirection[T](fn: typing.Callable[[], T], new_self_length) -> T:
+		nonlocal current_off, current_off_0
+
+		off = int.from_bytes(mem[current_off : current_off + 32], 'big', signed=False)
+		current_off += 32
+
+		old_current_off = current_off
+		old_current_off_0 = current_off_0
+
+		# current_off_0 = current_off_0 + self_length + off - 32
+		current_off_0 = current_off_0 + off
+		# current_off_0 = current_off_0 + off
+		current_off = current_off_0
+
+		assert current_off_0 < len(mem)
+
+		res = fn()
+
+		current_off = old_current_off
+		current_off_0 = old_current_off_0
+
+		return res
+
+	def read_regular(param: type) -> typing.Any:
+		nonlocal current_off, current_off_0
+		as_int = _integer_types.get(param, None)
+		if as_int is not None:
+			res = int.from_bytes(
+				mem[current_off : current_off + 32], 'big', signed=as_int.startswith('i')
+			)
+			current_off += 32
+			return res
+		elif param is bool:
+			res = int.from_bytes(mem[current_off : current_off + 32], 'big', signed=False)
+			current_off += 32
+			return res != 0
+		elif param is Address:
+			current_off += 12
+			as_bytes = mem[current_off : current_off + 20]
+			current_off += 20
+			return Address(as_bytes)
+		elif param is bytes or param is str:
+
+			def read_bytes_str() -> bytes | str:
+				nonlocal current_off
+				le = int.from_bytes(mem[current_off : current_off + 32], 'big', signed=False)
+				current_off += 32
+				as_bytes = mem[current_off : current_off + le]
+
+				if param is bytes:
+					return bytes(as_bytes)
+				else:
+					return str(as_bytes, encoding='utf-8')
+
+			return with_indirection(read_bytes_str, -1)
+		elif (origin := typing.get_origin(param)) is not None:
+			type_args = typing.get_args(param)
+
+			if origin is tuple:
+				if is_dynamic(param):
+					return with_indirection(
+						lambda: tuple(read_regular(p) for p in type_args), calc_size_here(param)
+					)
+				else:
+					return tuple(read_regular(p) for p in type_args)
+			elif origin is list or origin is DynArray:
+				[elem] = type_args
+
+				def read_list() -> list:
+					nonlocal current_off, current_off_0
+					le = int.from_bytes(mem[current_off : current_off + 32], 'big', signed=False)
+					current_off_0 += 32
+					current_off += 32
+					return [read_regular(elem) for _i in range(le)]
+
+				return with_indirection(read_list, -1)
+			elif origin is Array:
+				assert typing.get_origin(type_args[1]) is typing.Literal
+				le = int(*typing.get_args(type_args[1]))
+				return [read_regular(type_args[0]) for _i in range(le)]
+			else:
+				assert False
+		else:
+			assert False
+
+	return [read_regular(par) for par in params]

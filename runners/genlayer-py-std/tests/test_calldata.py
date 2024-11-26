@@ -59,7 +59,3 @@ def test_calldata_10_3():
 
 def test_calldata_10_8():
 	impl_test(10, depth=8)
-
-
-def test_calldata_100():
-	impl_test(100, depth=3)

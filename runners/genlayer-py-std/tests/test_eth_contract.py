@@ -3,14 +3,14 @@ from functools import partial
 
 from genlayer.py.types import Address
 
-from genlayer.py.eth.calldata import EthMethodEncoder
-from genlayer.py.eth.generate import eth_contract_generator
+from genlayer.py.eth.calldata import MethodEncoder
+import genlayer.py.eth as genvm_eth
 
 
 def generate_test(
-	name: str, params: list[type], ret: type, dump_to: list
+	name: str, params: list[type], ret: type, *, dump_to: list
 ) -> typing.Any:
-	encoder = EthMethodEncoder(name, params, ret)
+	encoder = MethodEncoder(name, params, ret)
 
 	def result_fn(self, *args):
 		dump_to.append(self.parent.address)
@@ -23,7 +23,7 @@ def test_view_send():
 	tst = []
 	generator = partial(generate_test, dump_to=tst)
 
-	@eth_contract_generator(generate_view=generator, generate_send=generator)
+	@genvm_eth.contract_generator(generate_view=generator, generate_send=generator)
 	class MyContract:
 		class View:
 			def foo(self, param: str, /): ...

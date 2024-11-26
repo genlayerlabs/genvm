@@ -1,4 +1,4 @@
-__all__ = ('eth_contract_generator',)
+__all__ = ('contract_generator',)
 
 import typing
 import inspect
@@ -65,11 +65,11 @@ def _generate_methods(
 			assert param_data.annotation is not inspect.Parameter.empty
 
 			real_params.append(param_data.annotation)
-		ret_annot = sig.return_annotation
-		if ret_annot is inspect.Parameter.empty:
-			ret_annot = type(None)
+		ret_annotation = sig.return_annotation
+		if ret_annotation is inspect.Parameter.empty:
+			ret_annotation = type(None)
 
-		props[name] = factory(name, real_params, ret_annot)
+		props[name] = factory(name, real_params, ret_annotation)
 
 	def new_init(self, parent):
 		self.parent = parent
@@ -86,7 +86,7 @@ def _generate_methods(
 type _EthGenerator = typing.Callable[[str, list[type], type], typing.Any]
 
 
-def eth_contract_generator(generate_view: _EthGenerator, generate_send: _EthGenerator):
+def contract_generator(generate_view: _EthGenerator, generate_send: _EthGenerator):
 	def gen[TView, TSend](
 		contr: EthContractDeclaration[TView, TSend],
 	) -> typing.Callable[[Address], _EthContract[TView, TSend]]:

@@ -1,11 +1,11 @@
-from genlayer.py.eth.calldata import EthMethodEncoder
+import genlayer.py.eth as genvm_eth
 
 from genlayer.py.types import *
 from genlayer.py.storage import *
 
 
 def test_eth_baz():
-	meth = EthMethodEncoder('baz', [u32, bool], bool)
+	meth = genvm_eth.MethodEncoder('baz', [u32, bool], bool)
 	assert meth.selector.hex() == 'cdcd77c0'
 	assert (
 		meth.encode([69, True]).hex()
@@ -14,14 +14,15 @@ def test_eth_baz():
 
 
 def test_eth_bar():
-	meth = EthMethodEncoder(
+	meth = genvm_eth.MethodEncoder(
 		'bar', [Array[Array[u8, typing.Literal[3]], typing.Literal[2]]], type(None)
 	)
 	assert meth.selector.hex() == 'fce353f6'
+	meth.encode([[[1, 2, 3], [4, 5, 6]]])
 
 
 def test_eth_sam():
-	meth = EthMethodEncoder('sam', [bytes, bool, list[u256]], type(None))
+	meth = genvm_eth.MethodEncoder('sam', [bytes, bool, list[u256]], type(None))
 	assert meth.selector.hex() == 'a5643bf2'
 	assert (
 		meth.encode([b'dave', True, [1, 2, 3]]).hex()
@@ -30,17 +31,19 @@ def test_eth_sam():
 
 
 def test_eth_approve():
-	meth = EthMethodEncoder('approve', [Address, u256], type(None))
+	meth = genvm_eth.MethodEncoder('approve', [Address, u256], type(None))
 	assert meth.selector.hex() == '095ea7b3'
 
 
 def test_with_tuple_1():
-	meth = EthMethodEncoder('send', [tuple[u256], Address], type(None))
+	meth = genvm_eth.MethodEncoder('send', [tuple[u256], Address], type(None))
 	assert meth.selector.hex() == '2e65cae2'
 
 
 def test_nested_array():
-	meth = EthMethodEncoder('transfer', [list[list[u256]], list[Address]], type(None))
+	meth = genvm_eth.MethodEncoder(
+		'transfer', [list[list[u256]], list[Address]], type(None)
+	)
 	assert meth.selector.hex() == '7a63729a'
 	res = meth.encode(
 		[
@@ -58,7 +61,7 @@ def test_nested_array():
 
 
 def test_dyn_tuple():
-	meth = EthMethodEncoder('const', [list[tuple[str, Address, str]]], type(None))
+	meth = genvm_eth.MethodEncoder('const', [list[tuple[str, Address, str]]], type(None))
 	res = meth.encode(
 		[
 			[
@@ -78,5 +81,5 @@ def test_dyn_tuple():
 
 
 def test_with_tuple_2():
-	meth = EthMethodEncoder('send', [tuple[u256, str]], type(None))
+	meth = genvm_eth.MethodEncoder('send', [tuple[u256, str]], type(None))
 	assert meth.selector.hex() == 'eb0edd92'
