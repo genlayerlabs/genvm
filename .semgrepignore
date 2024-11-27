@@ -26,7 +26,7 @@ testsuite/
 executor/testdata
 
 # third party paths
-runners/genlayer-py-std/src/cloudpickle
+runners/py-libs/pure-py
 
 # build files
 yabuild.rb
