@@ -15,6 +15,10 @@ diff = diff[...16]
 tag=`git describe --abbrev=16 --tags --dirty="-dirty_#{diff}"`
 tag = tag.strip
 puts "detected tag is `#{tag}`"
-if not out.exist? or tag != out.read().strip
+if not out.exist?
+	out.write(tag)
+elsif ENV["GENVM_DO_NOT_REGEN_ID"] == "true"
+	exit
+elsif tag != out.read().strip
 	out.write(tag)
 end
