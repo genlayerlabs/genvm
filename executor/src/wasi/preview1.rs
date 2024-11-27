@@ -18,6 +18,7 @@ pub struct Context {
     env_offsets: Vec<u32>,
 
     fs: Box<FilesTrie>,
+    unix_timestamp: u64,
 }
 
 pub struct ContextVFS<'a> {
@@ -125,7 +126,9 @@ impl Context {
         serde_json::json!(
             {
                 "env": String::from_utf8_lossy(&self.env_buf),
-                "args": String::from_utf8_lossy(&self.args_buf)
+                "args": String::from_utf8_lossy(&self.args_buf),
+                "datetime_timestamp": self.unix_timestamp,
+                "datetime": chrono::DateTime::<chrono::Utc>::from_timestamp(self.unix_timestamp as i64, 0).map(|x| x.to_rfc3339()),
             }
         )
     }
@@ -249,7 +252,7 @@ where
 }
 
 impl Context {
-    pub fn new() -> Self {
+    pub fn new(datetime: chrono::DateTime<chrono::Utc>) -> Self {
         Self {
             args_buf: Vec::new(),
             args_offsets: Vec::new(),
@@ -258,6 +261,8 @@ impl Context {
             fs: Box::new(FilesTrie::Dir {
                 children: BTreeMap::new(),
             }),
+            unix_timestamp: datetime.timestamp() as u64 * 1_000_000_000
+                + datetime.timestamp_subsec_nanos() as u64,
         }
     }
 }
@@ -353,7 +358,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         id: generated::types::Clockid,
         _precision: generated::types::Timestamp,
     ) -> Result<generated::types::Timestamp, generated::types::Error> {
-        Ok(0)
+        Ok(self.context.unix_timestamp)
     }
 
     #[instrument(skip(self, _memory))]

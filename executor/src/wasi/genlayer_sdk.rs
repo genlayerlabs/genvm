@@ -521,6 +521,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 sender_account: my_data.sender_account, // FIXME: is that true?
                 value: None,
                 is_init: false,
+                datetime: my_data.datetime.clone(),
             },
             entrypoint: res_calldata,
             supervisor: supervisor.clone(),

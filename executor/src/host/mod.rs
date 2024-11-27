@@ -46,12 +46,20 @@ impl GenericAddress {
     }
 }
 
+fn default_datetime() -> chrono::DateTime<chrono::Utc> {
+    chrono::DateTime::parse_from_rfc3339("2024-11-26T06:42:42.424242Z")
+        .unwrap()
+        .to_utc()
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MessageData {
     pub contract_account: crate::AccountAddress,
     pub sender_account: crate::AccountAddress,
     pub value: Option<u64>,
     pub is_init: bool,
+    #[serde(default = "default_datetime")]
+    pub datetime: chrono::DateTime<chrono::Utc>,
 }
 
 trait Sock: std::io::Read + std::io::Write + Send + Sync {}

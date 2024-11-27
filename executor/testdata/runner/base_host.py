@@ -210,9 +210,6 @@ async def run_host_and_program(
 				pass
 			await asyncio.sleep(0)
 
-	async def wrap_host():
-		await host_loop(handler)
-
 	stdout, stderr, genvm_log = [], [], []
 
 	async def wrap_proc():
@@ -223,8 +220,12 @@ async def run_host_and_program(
 			process.wait(),
 		)
 
-	coro_loop = asyncio.ensure_future(wrap_host())
 	coro_proc = asyncio.ensure_future(wrap_proc())
+
+	async def wrap_host():
+		await host_loop(handler)
+
+	coro_loop = asyncio.ensure_future(wrap_host())
 
 	all_proc = [coro_loop, coro_proc]
 	if deadline is not None:

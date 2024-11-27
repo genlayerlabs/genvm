@@ -1,4 +1,3 @@
-use core::str;
 use std::sync::{Arc, Mutex};
 
 use crate::vm;
@@ -18,7 +17,7 @@ impl Context {
     pub fn new(data: genlayer_sdk::SingleVMData, shared_data: Arc<vm::SharedData>) -> Self {
         Self {
             vfs: common::VFS::new(),
-            preview1: preview1::Context::new(),
+            preview1: preview1::Context::new(data.message_data.datetime),
             genlayer_sdk: genlayer_sdk::Context::new(data, shared_data),
         }
     }
@@ -29,6 +28,8 @@ fn add_to_linker_sync_dlsym<T: Send + 'static>(
     linker: &mut wasmtime::Linker<T>,
     linker_shared: Arc<Mutex<wasmtime::Linker<T>>>,
 ) -> anyhow::Result<()> {
+    use core::str;
+
     linker.func_wrap(
         "genlayer_dl",
         "dlsym",
@@ -104,7 +105,7 @@ fn add_to_linker_sync_dlsym<T: Send + 'static>(
 
 pub(super) fn add_to_linker_sync<T: Send + 'static>(
     linker: &mut wasmtime::Linker<T>,
-    linker_shared: Arc<Mutex<wasmtime::Linker<T>>>,
+    _linker_shared: Arc<Mutex<wasmtime::Linker<T>>>,
     f: impl Fn(&mut T) -> &mut Context + Copy + Send + Sync + 'static,
 ) -> anyhow::Result<()> {
     #[derive(Clone, Copy)]

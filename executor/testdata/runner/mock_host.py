@@ -87,6 +87,7 @@ class MockHost(IHost):
 
 		self.sock_listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 		self.sock_listener.bind(self.path)
+		self.sock_listener.setblocking(False)
 		self.sock_listener.listen(1)
 
 		return self
@@ -105,6 +106,7 @@ class MockHost(IHost):
 
 	async def loop_enter(self):
 		async_loop = asyncio.get_event_loop()
+		assert self.sock_listener is not None
 		self.sock, _addr = await async_loop.sock_accept(self.sock_listener)
 		self.sock.setblocking(False)
 		self.sock_listener.close()

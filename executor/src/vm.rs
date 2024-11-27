@@ -122,9 +122,9 @@ impl WasmContext {
         data: crate::wasi::genlayer_sdk::SingleVMData,
         shared_data: Arc<SharedData>,
     ) -> WasmContext {
-        return WasmContext {
+        WasmContext {
             genlayer_ctx: Arc::new(Mutex::new(wasi::Context::new(data, shared_data))),
-        };
+        }
     }
 }
 
