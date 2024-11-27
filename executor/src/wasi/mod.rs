@@ -24,43 +24,11 @@ impl Context {
     }
 }
 
-pub(super) fn add_to_linker_sync<T: Send + 'static>(
+#[cfg(any())]
+fn add_to_linker_sync_dlsym<T: Send + 'static>(
     linker: &mut wasmtime::Linker<T>,
     linker_shared: Arc<Mutex<wasmtime::Linker<T>>>,
-    f: impl Fn(&mut T) -> &mut Context + Copy + Send + Sync + 'static,
 ) -> anyhow::Result<()> {
-    #[derive(Clone, Copy)]
-    struct Fwd<F>(F);
-
-    impl<T, F> preview1::AddToLinkerFn<T> for Fwd<F>
-    where
-        F: Fn(&mut T) -> &mut Context + Copy + Send + Sync + 'static,
-    {
-        fn call<'a>(&self, arg: &'a mut T) -> preview1::ContextVFS<'a> {
-            let r = self.0(arg);
-            preview1::ContextVFS {
-                vfs: &mut r.vfs,
-                context: &mut r.preview1,
-            }
-        }
-    }
-
-    impl<T, F> genlayer_sdk::AddToLinkerFn<T> for Fwd<F>
-    where
-        F: Fn(&mut T) -> &mut Context + Copy + Send + Sync + 'static,
-    {
-        fn call<'a>(&self, arg: &'a mut T) -> genlayer_sdk::ContextVFS<'a> {
-            let r = self.0(arg);
-            genlayer_sdk::ContextVFS {
-                vfs: &mut r.vfs,
-                context: &mut r.genlayer_sdk,
-            }
-        }
-    }
-
-    preview1::add_to_linker_sync(linker, Fwd(f))?;
-    genlayer_sdk::add_to_linker_sync(linker, Fwd(f))?;
-
     linker.func_wrap(
         "genlayer_dl",
         "dlsym",
@@ -131,6 +99,45 @@ pub(super) fn add_to_linker_sync<T: Send + 'static>(
             Ok(res.try_into()?)
         },
     )?;
+    Ok(())
+}
+
+pub(super) fn add_to_linker_sync<T: Send + 'static>(
+    linker: &mut wasmtime::Linker<T>,
+    linker_shared: Arc<Mutex<wasmtime::Linker<T>>>,
+    f: impl Fn(&mut T) -> &mut Context + Copy + Send + Sync + 'static,
+) -> anyhow::Result<()> {
+    #[derive(Clone, Copy)]
+    struct Fwd<F>(F);
+
+    impl<T, F> preview1::AddToLinkerFn<T> for Fwd<F>
+    where
+        F: Fn(&mut T) -> &mut Context + Copy + Send + Sync + 'static,
+    {
+        fn call<'a>(&self, arg: &'a mut T) -> preview1::ContextVFS<'a> {
+            let r = self.0(arg);
+            preview1::ContextVFS {
+                vfs: &mut r.vfs,
+                context: &mut r.preview1,
+            }
+        }
+    }
+
+    impl<T, F> genlayer_sdk::AddToLinkerFn<T> for Fwd<F>
+    where
+        F: Fn(&mut T) -> &mut Context + Copy + Send + Sync + 'static,
+    {
+        fn call<'a>(&self, arg: &'a mut T) -> genlayer_sdk::ContextVFS<'a> {
+            let r = self.0(arg);
+            genlayer_sdk::ContextVFS {
+                vfs: &mut r.vfs,
+                context: &mut r.genlayer_sdk,
+            }
+        }
+    }
+
+    preview1::add_to_linker_sync(linker, Fwd(f))?;
+    genlayer_sdk::add_to_linker_sync(linker, Fwd(f))?;
 
     Ok(())
 }
