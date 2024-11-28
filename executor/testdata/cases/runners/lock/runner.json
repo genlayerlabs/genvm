@@ -6,7 +6,7 @@
     {"MapFile":{"to":"/py/std/json.py","file":"new_json.py"}},
     {
       "With": {
-        "runner": "genvm-cpython:S6WHXK3HT3ZG7YHNHVNZDYLV3627H6POQKYN7FT3TTV5FPVEA5V4BMDT6FTX3NDOP5ZKPJOAKLRNK334NIF7ZW6REJENQGNIYGN342Y=",
+        "runner": "genvm-cpython:FYYR7BKPJFS7JJRXNIG3SF7PFIWW6KCRHK62HBDD4BR3GM4IECDASI3QMMI635EEXKKJVY7RL3GCFUAG7KQ53Y6UDG4RVZOJ3KYBBMI=",
         "action": {
           "Seq": [
             {"MapFile":{"to":"/py/std/encodings","file":"py/encodings/"}},
