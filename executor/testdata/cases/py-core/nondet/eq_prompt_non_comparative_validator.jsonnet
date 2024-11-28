@@ -9,7 +9,7 @@ simple.run('${jsonnetDir}/eq_prompt_non_comparative.py') {
     leader_nondet: [
         {
             "kind": "return",
-            "value": "Rats make great pets due to their affectionate and playful nature. They bond closely with humans, are curious, and enjoy interactive toys. Their intelligence allows them to learn tricks, resembling small dogs, and their charming personalities warrant greater appreciation."
+            "value": "Rats make fantastic pets, being affectionate, intelligent, and playful. They form strong bonds with humans, learn tricks, and possess charming, adaptable personalities."
         }
     ]
 }

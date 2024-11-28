@@ -31,11 +31,15 @@ impl Drop for Impl {
 }
 
 fn default_equivalence_prompt_comparative() -> String {
-    "Given the equivalence principle '#{principle}', decide whether the following two outputs can be considered equivalent.\nLeader's Output: #{leader_answer}\n\nValidator's Output: #{validator_answer}\n\nRespond with: true or false".into()
+    include_str!("prompts/equivalence_prompt_comparative.txt").into()
 }
 
 fn default_equivalence_prompt_non_comparative() -> String {
-    "Given the following task '#{task}', decide whether the following output is a valid result of doing this task for the given input.\nOutput: #{output}\n\nInput: #{input}\n\nRespond only with: true or false".into()
+    include_str!("prompts/equivalence_prompt_non_comparative.txt").into()
+}
+
+fn default_equivalence_prompt_non_comparative_leader() -> String {
+    include_str!("prompts/equivalence_prompt_non_comparative_leader.txt").into()
 }
 
 #[derive(Deserialize)]
@@ -47,6 +51,8 @@ struct Config {
     equivalence_prompt_comparative: String,
     #[serde(default = "default_equivalence_prompt_non_comparative")]
     equivalence_prompt_non_comparative: String,
+    #[serde(default = "default_equivalence_prompt_non_comparative_leader")]
+    equivalence_prompt_non_comparative_leader: String,
 }
 
 impl Impl {
@@ -171,6 +177,7 @@ impl Impl {
         let template = match id {
             TemplateId::Comparative => &self.config.equivalence_prompt_comparative,
             TemplateId::NonComparative => &self.config.equivalence_prompt_non_comparative,
+            TemplateId::NonComparativeLeader => anyhow::bail!("invalid prompt id"),
         };
         let vars: std::collections::BTreeMap<String, String> = serde_json::from_str(vars)?;
         let new_prompt = string_templater::patch_str(&vars, &template)?;
@@ -183,8 +190,9 @@ impl Impl {
         let id = TemplateId::try_from(template_id)
             .map_err(|_e| anyhow::anyhow!("unknown template id"))?;
         let template = match id {
-            TemplateId::Comparative => &self.config.equivalence_prompt_comparative,
-            TemplateId::NonComparative => &self.config.equivalence_prompt_non_comparative,
+            TemplateId::Comparative => anyhow::bail!("invalid prompt id"),
+            TemplateId::NonComparative => anyhow::bail!("invalid prompt id"),
+            TemplateId::NonComparativeLeader => &self.config.equivalence_prompt_non_comparative_leader,
         };
         let vars: std::collections::BTreeMap<String, String> = serde_json::from_str(vars)?;
         let new_prompt = string_templater::patch_str(&vars, &template)?;

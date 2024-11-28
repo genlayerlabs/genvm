@@ -56,13 +56,24 @@ del _eq_principle_prompt_comparative
 
 
 def _eq_principle_prompt_non_comparative(
-	fn: typing.Callable[[], str], task: str
+	fn: typing.Callable[[], str], *, task: str, criteria: str
 ) -> Lazy[str]:
 	def leader_fn() -> str:
 		input_res = fn()
-		return exec_prompt(
-			f'Perform task for the input.\n\nTask: {task}\n\nInput: {input_res}'
-		)
+		assert isinstance(input_res, str)
+		return lazy_from_fd(
+			wasi.exec_prompt_id(
+				TemplateId.NON_COMPARATIVE_LEADER,
+				json.dumps(
+					{
+						'task': task,
+						'input': input_res,
+						'criteria': criteria,
+					}
+				),
+			),
+			lambda buf: str(buf, 'utf-8'),
+		).get()
 
 	def validator_fn(
 		leaders: advanced.ContractReturn | Rollback | advanced.ContractError,
@@ -74,6 +85,7 @@ def _eq_principle_prompt_non_comparative(
 			'task': task,
 			'output': leaders_result,
 			'input': my_input,
+			'criteria': criteria,
 		}
 		return wasi.eq_principle_prompt(TemplateId.NON_COMPARATIVE, json.dumps(vars))
 
