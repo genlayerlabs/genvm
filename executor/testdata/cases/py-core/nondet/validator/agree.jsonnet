@@ -8,7 +8,7 @@ simple.run('${jsonnetDir}/../get_webpage.py') {
     |||,
     leader_nondet: [
         {
-            "ok": true,
+            "kind": "return",
             "value": "Hello world!"
         }
     ]

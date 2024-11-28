@@ -103,6 +103,7 @@ macro_rules! LLMFunctionsApiFns {
         $cb!(($($args),*) {
             free_str: fn(data: *const u8) -> ();
             exec_prompt: fn(gas: &mut u64, config: *const u8, prompt: *const u8) -> ($crate::interfaces::BytesResult); // ModuleResult<String>
+            exec_prompt_id: fn(gas: &mut u64, id: u8, vars: *const u8) -> ($crate::interfaces::BytesResult); // ModuleResult<String>
             eq_principle_prompt: fn(gas: &mut u64, id: u8, vars: *const u8) -> ($crate::interfaces::BytesResult); // ModuleResult<bool>
         });
     };

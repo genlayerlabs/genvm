@@ -68,6 +68,7 @@ impl<I: Iterator<Item = u8>> Iterator for DecodeUtf8<I> {
 pub enum RunOk {
     Return(Vec<u8>),
     Rollback(String),
+    ControlledError(String),
 }
 
 pub type RunResult = Result<RunOk>;
@@ -78,9 +79,17 @@ impl RunOk {
     }
 
     pub fn as_bytes_iter<'a>(&'a self) -> impl Iterator<Item = u8> + use<'a> {
+        use crate::host::ResultCode;
         match self {
-            RunOk::Return(buf) => [0].into_iter().chain(buf.iter().cloned()),
-            RunOk::Rollback(buf) => [1].into_iter().chain(buf.as_bytes().iter().cloned()),
+            RunOk::Return(buf) => [ResultCode::Return as u8]
+                .into_iter()
+                .chain(buf.iter().cloned()),
+            RunOk::Rollback(buf) => [ResultCode::Rollback as u8]
+                .into_iter()
+                .chain(buf.as_bytes().iter().cloned()),
+            RunOk::ControlledError(buf) => [ResultCode::ContractError as u8]
+                .into_iter()
+                .chain(buf.as_bytes().iter().cloned()),
         }
     }
 }
@@ -108,6 +117,7 @@ impl std::fmt::Debug for RunOk {
                 f.write_fmt(format_args!("Return(\"{}\")", str))
             }
             Self::Rollback(r) => f.debug_tuple("Rollback").field(r).finish(),
+            Self::ControlledError(r) => f.debug_tuple("ControlledError").field(r).finish(),
         }
     }
 }
@@ -229,9 +239,13 @@ impl VM {
                             if v.0 == 0 {
                                 Some(RunOk::empty_return())
                             } else {
-                                None
+                                Some(RunOk::ControlledError(format!("exit code {}", v.0)))
                             }
                         }),
+                    e.downcast_ref::<wasmtime::Trap>()
+                        .map(|v| RunOk::ControlledError(v.to_string())),
+                    e.downcast_ref::<crate::wasi::genlayer_sdk::PropagateControlled>()
+                        .map(|v| RunOk::ControlledError(v.0.clone())),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::Rollback>()
                         .map(|v| RunOk::Rollback(v.0.clone())),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::ContractReturn>()
@@ -240,6 +254,20 @@ impl VM {
                 .into_iter()
                 .fold(None, |x, y| if x.is_some() { x } else { y });
                 res.map_or(Err(e), Ok)
+            }
+        };
+        match &res {
+            Ok(RunOk::Return(_)) => {
+                log::info!(target: "rt", event = "execution result unwrapped", result = "Return"; "")
+            }
+            Ok(RunOk::Rollback(_)) => {
+                log::info!(target: "rt", event = "execution result unwrapped", result = "Rollback"; "")
+            }
+            Ok(RunOk::ControlledError(e)) => {
+                log::info!(target: "rt", event = "execution result unwrapped", result = format!("ContractError({e})"); "")
+            }
+            Err(_) => {
+                log::info!(target: "rt", event = "execution result unwrapped", result = "Error"; "")
             }
         };
         res

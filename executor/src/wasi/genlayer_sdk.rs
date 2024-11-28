@@ -140,6 +140,17 @@ impl std::fmt::Display for Rollback {
 }
 
 #[derive(Debug)]
+pub struct PropagateControlled(pub String);
+
+impl std::error::Error for PropagateControlled {}
+
+impl std::fmt::Display for PropagateControlled {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PropagateControlled back with {}", self.0)
+    }
+}
+
+#[derive(Debug)]
 pub struct ContractReturn(pub Vec<u8>);
 
 impl std::error::Error for ContractReturn {}
@@ -200,6 +211,12 @@ impl ContextVFS<'_> {
         &mut self,
         data: vm::RunOk,
     ) -> Result<(generated::types::Fd, usize), generated::types::Error> {
+        let data = match data {
+            RunOk::ControlledError(e) => {
+                return Err(generated::types::Error::trap(PropagateControlled(e).into()))
+            }
+            data => data,
+        };
         let data: Arc<[u8]> = data.as_bytes_iter().collect();
         let len = data.len();
         Ok((
@@ -336,6 +353,46 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             config_str.as_bytes().as_ptr(),
             prompt_str.as_bytes().as_ptr(),
         );
+        supervisor
+            .host
+            .consume_fuel(fuel)
+            .map_err(generated::types::Error::trap)?;
+
+        let res: String = genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
+            supervisor.modules.llm.free_str(x)
+        })
+        .and_then(genvm_modules_common::interfaces::ModuleResult::into_anyhow)
+        .map_err(generated::types::Error::trap)?;
+
+        Ok(generated::types::Fd::from(self.vfs.place_content(
+            FileContentsUnevaluated::from_contents(Arc::from(res.as_bytes()), 0),
+        )))
+    }
+
+    fn exec_prompt_id(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        id: u8,
+        vars: wiggle::GuestPtr<str>,
+    ) -> Result<generated::types::Fd, generated::types::Error> {
+        if self.context.data.conf.is_deterministic {
+            return Err(generated::types::Errno::DeterministicViolation.into());
+        }
+        let vars_str = read_string(mem, vars)?;
+        let vars_str = CString::new(vars_str).map_err(|e| generated::types::Errno::Inval)?;
+
+        let supervisor = self.context.data.supervisor.clone();
+        let Ok(mut supervisor) = supervisor.lock() else {
+            return Err(generated::types::Errno::Io.into());
+        };
+
+        let mut fuel = 0;
+        let res = supervisor.modules.llm.as_mut().exec_prompt_id(
+            &mut fuel,
+            id,
+            vars_str.as_bytes().as_ptr(),
+        );
+
         supervisor
             .host
             .consume_fuel(fuel)
@@ -630,7 +687,6 @@ impl Context {
         })
     }
 
-    /// note: handles fuel itself
     fn spawn_and_run(
         &mut self,
         supervisor: &Arc<Mutex<crate::vm::Supervisor>>,

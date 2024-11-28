@@ -177,6 +177,20 @@ impl Impl {
         let res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
         answer_is_bool(res)
     }
+
+    fn exec_prompt_id(&mut self, gas: &mut u64, template_id: u8, vars: &str) -> Result<String> {
+        use template_ids::TemplateId;
+        let id = TemplateId::try_from(template_id)
+            .map_err(|_e| anyhow::anyhow!("unknown template id"))?;
+        let template = match id {
+            TemplateId::Comparative => &self.config.equivalence_prompt_comparative,
+            TemplateId::NonComparative => &self.config.equivalence_prompt_non_comparative,
+        };
+        let vars: std::collections::BTreeMap<String, String> = serde_json::from_str(vars)?;
+        let new_prompt = string_templater::patch_str(&vars, &template)?;
+        let res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
+        Ok(res)
+    }
 }
 
 fn answer_is_bool(mut res: String) -> Result<bool> {
@@ -224,5 +238,21 @@ pub extern "C-unwind" fn eq_principle_prompt(
         .to_str()
         .map_err(|e| anyhow::Error::from(e))
         .and_then(|vars| ctx.eq_principle_prompt(gas, template_id, vars));
+    interfaces::serialize_result(res)
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn exec_prompt_id(
+    ctx: *const (),
+    gas: &mut u64,
+    template_id: u8,
+    vars: *const u8,
+) -> interfaces::BytesResult {
+    let ctx = get_ptr(ctx);
+    let vars = unsafe { CStr::from_ptr(vars as *const std::ffi::c_char) };
+    let res = vars
+        .to_str()
+        .map_err(|e| anyhow::Error::from(e))
+        .and_then(|vars| ctx.exec_prompt_id(gas, template_id, vars));
     interfaces::serialize_result(res)
 }

@@ -4,16 +4,14 @@ import typing
 import json
 from types import SimpleNamespace as _SimpleNamespace
 import base64
-import importlib
-
-from .prompt_ids import *
-
-advanced = importlib.import_module('.advanced', __name__)
 
 # reexports
 import genlayer.py.calldata as calldata
 from ..py.types import *
-from ._private import _decode_sub_vm_result, _lazy_from_fd
+from .eq_principles import *
+from .nondet_fns import *
+
+from ._private import decode_sub_vm_result, lazy_from_fd
 
 
 def private(f):
@@ -58,8 +56,8 @@ class _ContractAtViewMethod:
 	def lazy(self, *args, **kwargs) -> Lazy[typing.Any]:
 		obj = _make_calldata_obj(self.name, args, kwargs)
 		cd = calldata.encode(obj)
-		return _lazy_from_fd(
-			wasi.call_contract(self.addr.as_bytes, cd), _decode_sub_vm_result
+		return lazy_from_fd(
+			wasi.call_contract(self.addr.as_bytes, cd), decode_sub_vm_result
 		)
 
 
@@ -119,126 +117,6 @@ message = _SimpleNamespace(
 
 def rollback_immediate(reason: str) -> typing.NoReturn:
 	wasi.rollback(reason)
-
-
-class _LazyApi[T, **R]:
-	def __init__(self, fn: typing.Callable[R, Lazy[T]]):
-		self.fn = fn
-
-	def __call__(self, *args: R.args, **kwargs: R.kwargs) -> T:
-		return self.fn(*args, **kwargs).get()
-
-	def lazy(self, *args: R.args, **kwargs: R.kwargs) -> Lazy[T]:
-		return self.fn(*args, **kwargs)
-
-
-class _GetWebpageConfig(typing.TypedDict):
-	mode: typing.Literal['html', 'text']
-
-
-def _get_webpage(url: str, **config: typing.Unpack[_GetWebpageConfig]) -> Lazy[str]:
-	return _lazy_from_fd(
-		wasi.get_webpage(json.dumps(config), url), lambda buf: str(buf, 'utf-8')
-	)
-
-
-get_webpage = _LazyApi(_get_webpage)
-del _get_webpage
-
-
-class _ExecPromptConfig(typing.TypedDict):
-	pass
-
-
-def _exec_prompt(prompt: str, **config: typing.Unpack[_ExecPromptConfig]) -> Lazy[str]:
-	return _lazy_from_fd(
-		wasi.exec_prompt(json.dumps(config), prompt), lambda buf: str(buf, 'utf-8')
-	)
-
-
-exec_prompt = _LazyApi(_exec_prompt)
-del _exec_prompt
-
-
-def _eq_principle_strict_eq[T](fn: typing.Callable[[], T]) -> Lazy[T]:
-	def validator_fn(leaders: typing.Any | Rollback) -> bool:
-		try:
-			my_res = fn()
-		except Rollback as r:
-			if isinstance(leaders, Rollback) and leaders.msg == r.msg:
-				return True
-		else:
-			if not isinstance(leaders, Rollback) and leaders == my_res:
-				return True
-		return False
-
-	return advanced.run_nondet(fn, validator_fn)
-
-
-eq_principle_strict_eq = _LazyApi(_eq_principle_strict_eq)
-del _eq_principle_strict_eq
-
-
-def _eq_principle_prompt_comparative(
-	fn: typing.Callable[[], str], principle: str
-) -> Lazy[str]:
-	def validator_fn(leaders: typing.Any | Rollback) -> bool:
-		if not isinstance(leaders, (str, Rollback)):
-			raise Exception(f'invalid leaders result {leaders}')
-		try:
-			my_res = fn()
-		except Rollback as r:
-			if not isinstance(leaders, Rollback):
-				return False
-			return leaders.msg == r.msg
-		if isinstance(leaders, Rollback):
-			return False
-		vars = {
-			'leader_answer': leaders,
-			'validator_answer': my_res,
-			'principle': principle,
-		}
-		return wasi.eq_principle_prompt(TemplateId.COMPARATIVE, json.dumps(vars))
-
-	return advanced.run_nondet(fn, validator_fn)
-
-
-eq_principle_prompt_comparative = _LazyApi(_eq_principle_prompt_comparative)
-del _eq_principle_prompt_comparative
-
-
-def _eq_principle_prompt_non_comparative(
-	fn: typing.Callable[[], str], task: str
-) -> Lazy[str]:
-	def leader_fn() -> str:
-		input_res = fn()
-		return exec_prompt(
-			f'Perform task for the input.\n\nTask: {task}\n\nInput: {input_res}'
-		)
-
-	def validator_fn(leaders: typing.Any | Rollback) -> bool:
-		if not isinstance(leaders, (str, Rollback)):
-			raise Exception(f'invalid leaders result {leaders}')
-		try:
-			input_res = fn()
-		except Rollback as r:
-			if not isinstance(leaders, Rollback):
-				return False
-			return leaders.msg == r.msg
-		if isinstance(leaders, Rollback):
-			return False
-		vars = {
-			'task': task,
-			'output': leaders,
-			'input': input_res,
-		}
-		return wasi.eq_principle_prompt(TemplateId.NON_COMPARATIVE, json.dumps(vars))
-
-	return advanced.run_nondet(leader_fn, validator_fn)
-
-
-eq_principle_prompt_non_comparative = _LazyApi(_eq_principle_prompt_non_comparative)
-del _eq_principle_prompt_non_comparative
 
 
 def contract(t: type) -> type:

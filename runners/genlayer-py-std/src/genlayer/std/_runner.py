@@ -78,9 +78,9 @@ def run(contract: type):
 		if le == 0:
 			_give_result(runner)
 		else:
-			from ._private import _decode_sub_vm_result_retn
+			from ._private import decode_sub_vm_result_retn
 
-			leaders_res = _decode_sub_vm_result_retn(leaders_res_mem)
+			leaders_res = decode_sub_vm_result_retn(leaders_res_mem)
 			_give_result(lambda: runner(leaders_res))
 	else:
 		raise Exception(f'unknown entrypoint {entrypoint}')

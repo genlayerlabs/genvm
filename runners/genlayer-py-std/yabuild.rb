@@ -1,15 +1,20 @@
 dev_container = find_target /runners\/cpython-dev-container$/
 
-codegen = target_command(
-	output_file: cur_src.join('src', 'genlayer', 'std', 'prompt_ids.py'),
-	command: [
-		RbConfig.ruby,
-			root_src.join('executor', 'codegen', 'templates', 'py.rb'),
-			root_src.join('executor', 'codegen', 'data', 'builtin-prompt-templates.json'),
-			cur_src.join('src', 'genlayer', 'std', 'prompt_ids.py'),
-	],
-	dependencies: [root_src.join('executor', 'codegen', 'templates', 'py.rb'), root_src.join('executor', 'codegen', 'data', 'builtin-prompt-templates.json')],
-	tags: ['codegen']
+run_codegen = Proc.new { |inp, out, tags: [], **kwargs, &blk|
+	script = root_src.join('executor', 'codegen', 'templates', 'py.rb')
+	target_command(
+		output_file: out,
+		command: [
+			RbConfig.ruby, script, inp, out,
+		],
+		dependencies: [inp, script],
+		tags: ['codegen'] + tags,
+		**kwargs, &blk
+	)
+}
+codegen = target_alias("codegen",
+	run_codegen.(root_src.join('executor', 'codegen', 'data', 'builtin-prompt-templates.json'), cur_src.join('src', 'genlayer', 'std', 'prompt_ids.py')),
+	run_codegen.(root_src.join('executor', 'codegen', 'data', 'result-codes.json'), cur_src.join('src', 'genlayer', 'std', 'result_codes.py')),
 )
 
 base_genlayer_lib_dir = cur_src.join('src')

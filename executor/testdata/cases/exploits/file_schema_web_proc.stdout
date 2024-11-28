@@ -1,1 +1,1 @@
-executed with `Error("")`
+executed with `ControlledError("exit code 1")`

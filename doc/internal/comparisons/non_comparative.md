@@ -96,7 +96,7 @@ This result should be perfectly parsable by a JSON parser without errors.
         )
 ```
 
-## @MuncleUscles
+## @MuncleUscles proposal
 
 ```python
     @gl.public.write

@@ -39,6 +39,12 @@
         (result $error (expected $fd (error $errno)))
     )
 
+    (@interface func (export "exec_prompt_id")
+        (param $id u8)
+        (param $vars string)
+        (result $error (expected $fd (error $errno)))
+    )
+
     (@interface func (export "eq_principle_prompt")
         (param $id u8)
         (param $vars string)
