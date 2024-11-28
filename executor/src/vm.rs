@@ -68,7 +68,7 @@ impl<I: Iterator<Item = u8>> Iterator for DecodeUtf8<I> {
 pub enum RunOk {
     Return(Vec<u8>),
     Rollback(String),
-    ControlledError(String),
+    ContractError(String),
 }
 
 pub type RunResult = Result<RunOk>;
@@ -87,7 +87,7 @@ impl RunOk {
             RunOk::Rollback(buf) => [ResultCode::Rollback as u8]
                 .into_iter()
                 .chain(buf.as_bytes().iter().cloned()),
-            RunOk::ControlledError(buf) => [ResultCode::ContractError as u8]
+            RunOk::ContractError(buf) => [ResultCode::ContractError as u8]
                 .into_iter()
                 .chain(buf.as_bytes().iter().cloned()),
         }
@@ -117,7 +117,7 @@ impl std::fmt::Debug for RunOk {
                 f.write_fmt(format_args!("Return(\"{}\")", str))
             }
             Self::Rollback(r) => f.debug_tuple("Rollback").field(r).finish(),
-            Self::ControlledError(r) => f.debug_tuple("ControlledError").field(r).finish(),
+            Self::ContractError(r) => f.debug_tuple("ContractError").field(r).finish(),
         }
     }
 }
@@ -226,10 +226,10 @@ impl VM {
             .get_typed_func::<(), ()>(&mut self.store, "")
             .or_else(|_| instance.get_typed_func::<(), ()>(&mut self.store, "_start"))
             .with_context(|| "can't find entrypoint")?;
-        log::info!(target: "rt", event = "execution start"; "");
+        log::info!(target: "vm", event = "execution start"; "");
         let time_start = std::time::Instant::now();
         let res = func.call(&mut self.store, ());
-        log::info!(target: "rt", event = "execution finished", duration:? = time_start.elapsed(); "");
+        log::info!(target: "vm", event = "execution finished", duration:? = time_start.elapsed(); "");
         let res: RunResult = match res {
             Ok(()) => Ok(RunOk::empty_return()),
             Err(e) => {
@@ -239,13 +239,13 @@ impl VM {
                             if v.0 == 0 {
                                 Some(RunOk::empty_return())
                             } else {
-                                Some(RunOk::ControlledError(format!("exit code {}", v.0)))
+                                Some(RunOk::ContractError(format!("exit_code {}", v.0)))
                             }
                         }),
                     e.downcast_ref::<wasmtime::Trap>()
-                        .map(|v| RunOk::ControlledError(v.to_string())),
+                        .map(|v| RunOk::ContractError(v.to_string())),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::PropagateControlled>()
-                        .map(|v| RunOk::ControlledError(v.0.clone())),
+                        .map(|v| RunOk::ContractError(v.0.clone())),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::Rollback>()
                         .map(|v| RunOk::Rollback(v.0.clone())),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::ContractReturn>()
@@ -258,16 +258,16 @@ impl VM {
         };
         match &res {
             Ok(RunOk::Return(_)) => {
-                log::info!(target: "rt", event = "execution result unwrapped", result = "Return"; "")
+                log::info!(target: "vm", event = "execution result unwrapped", result = "Return"; "")
             }
             Ok(RunOk::Rollback(_)) => {
-                log::info!(target: "rt", event = "execution result unwrapped", result = "Rollback"; "")
+                log::info!(target: "vm", event = "execution result unwrapped", result = "Rollback"; "")
             }
-            Ok(RunOk::ControlledError(e)) => {
-                log::info!(target: "rt", event = "execution result unwrapped", result = format!("ContractError({e})"); "")
+            Ok(RunOk::ContractError(e)) => {
+                log::info!(target: "vm", event = "execution result unwrapped", result = format!("ContractError({e})"); "")
             }
             Err(_) => {
-                log::info!(target: "rt", event = "execution result unwrapped", result = "Error"; "")
+                log::info!(target: "vm", event = "execution result unwrapped", result = "Error"; "")
             }
         };
         res

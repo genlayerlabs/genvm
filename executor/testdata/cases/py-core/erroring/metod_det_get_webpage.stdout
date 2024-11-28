@@ -1,1 +1,1 @@
-executed with `ControlledError("exit code 1")`
+executed with `ContractError("exit_code 1")`

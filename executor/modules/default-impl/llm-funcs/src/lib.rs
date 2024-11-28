@@ -192,7 +192,9 @@ impl Impl {
         let template = match id {
             TemplateId::Comparative => anyhow::bail!("invalid prompt id"),
             TemplateId::NonComparative => anyhow::bail!("invalid prompt id"),
-            TemplateId::NonComparativeLeader => &self.config.equivalence_prompt_non_comparative_leader,
+            TemplateId::NonComparativeLeader => {
+                &self.config.equivalence_prompt_non_comparative_leader
+            }
         };
         let vars: std::collections::BTreeMap<String, String> = serde_json::from_str(vars)?;
         let new_prompt = string_templater::patch_str(&vars, &template)?;

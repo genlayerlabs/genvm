@@ -110,7 +110,7 @@ fn write_result(sock: &mut dyn Sock, res: Result<&vm::RunOk, &anyhow::Error>) ->
             sock.write_all(&[ResultCode::Rollback as u8])?;
             r.as_bytes()
         }
-        Ok(vm::RunOk::ControlledError(r)) => {
+        Ok(vm::RunOk::ContractError(r)) => {
             sock.write_all(&[ResultCode::ContractError as u8])?;
             r.as_bytes()
         }
@@ -238,6 +238,9 @@ impl Host {
         let res = match has_some[0] {
             x if x == ResultCode::Return as u8 => vm::RunOk::Return(buf),
             x if x == ResultCode::Rollback as u8 => vm::RunOk::Rollback(String::from_utf8(buf)?),
+            x if x == ResultCode::ContractError as u8 => {
+                vm::RunOk::ContractError(String::from_utf8(buf)?)
+            }
             x => anyhow::bail!("host returned incorrect result id {}", x),
         };
         Ok(Some(res))

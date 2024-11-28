@@ -212,7 +212,7 @@ impl ContextVFS<'_> {
         data: vm::RunOk,
     ) -> Result<(generated::types::Fd, usize), generated::types::Error> {
         let data = match data {
-            RunOk::ControlledError(e) => {
+            RunOk::ContractError(e) => {
                 return Err(generated::types::Error::trap(PropagateControlled(e).into()))
             }
             data => data,
@@ -530,7 +530,17 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             }
             Some(leaders_res) => match my_res {
                 RunOk::Return(v) if v == [16] => Ok(leaders_res),
-                _ => Err(anyhow::anyhow!("Validator disagrees for call {}", call_no)),
+                RunOk::Return(v) if v == [8] => Err(PropagateControlled(format!("validator_disagrees call {}", call_no)).into()),
+                RunOk::ContractError(my_err) => {
+                    match leaders_res {
+                        RunOk::ContractError(leader_err) => {
+                            log::info!(target: "vm", event = "validator errored for leader error", validator_error = my_err; "AGREE");
+                            Err(PropagateControlled(leader_err).into())
+                        },
+                        _ => Err(PropagateControlled(my_err).into()),
+                    }
+                }
+                _ => Err(PropagateControlled(format!("validator_disagrees call {}", call_no)).into()),
             },
         })()
         .map_err(generated::types::Error::trap)?;

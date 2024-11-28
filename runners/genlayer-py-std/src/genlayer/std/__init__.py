@@ -11,6 +11,8 @@ from ..py.types import *
 from .eq_principles import *
 from .nondet_fns import *
 
+import genlayer.std.advanced as advanced
+
 from ._private import decode_sub_vm_result, lazy_from_fd
 
 
