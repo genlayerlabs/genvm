@@ -13,7 +13,8 @@ class Contract:
 		print(
 			gl.eq_principle_prompt_non_comparative(
 				get_input,
-				'Produce a text summary, it must be at least two times less than the input',
+				task='Produce a text summary',
+				criteria='it must be at least two times less than the input (in words)',
 			),
 			file=sys.stderr,
 		)

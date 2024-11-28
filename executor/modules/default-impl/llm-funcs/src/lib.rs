@@ -31,11 +31,15 @@ impl Drop for Impl {
 }
 
 fn default_equivalence_prompt_comparative() -> String {
-    "Given the equivalence principle '#{principle}', decide whether the following two outputs can be considered equivalent.\nLeader's Output: #{leader_answer}\n\nValidator's Output: #{validator_answer}\n\nRespond with: true or false".into()
+    include_str!("prompts/equivalence_prompt_comparative.txt").into()
 }
 
 fn default_equivalence_prompt_non_comparative() -> String {
-    "Given the following task '#{task}', decide whether the following output is a valid result of doing this task for the given input.\nOutput: #{output}\n\nInput: #{input}\n\nRespond only with: true or false".into()
+    include_str!("prompts/equivalence_prompt_non_comparative.txt").into()
+}
+
+fn default_equivalence_prompt_non_comparative_leader() -> String {
+    include_str!("prompts/equivalence_prompt_non_comparative_leader.txt").into()
 }
 
 #[derive(Deserialize)]
@@ -47,6 +51,8 @@ struct Config {
     equivalence_prompt_comparative: String,
     #[serde(default = "default_equivalence_prompt_non_comparative")]
     equivalence_prompt_non_comparative: String,
+    #[serde(default = "default_equivalence_prompt_non_comparative_leader")]
+    equivalence_prompt_non_comparative_leader: String,
 }
 
 impl Impl {
@@ -171,11 +177,29 @@ impl Impl {
         let template = match id {
             TemplateId::Comparative => &self.config.equivalence_prompt_comparative,
             TemplateId::NonComparative => &self.config.equivalence_prompt_non_comparative,
+            TemplateId::NonComparativeLeader => anyhow::bail!("invalid prompt id"),
         };
         let vars: std::collections::BTreeMap<String, String> = serde_json::from_str(vars)?;
         let new_prompt = string_templater::patch_str(&vars, &template)?;
         let res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
         answer_is_bool(res)
+    }
+
+    fn exec_prompt_id(&mut self, gas: &mut u64, template_id: u8, vars: &str) -> Result<String> {
+        use template_ids::TemplateId;
+        let id = TemplateId::try_from(template_id)
+            .map_err(|_e| anyhow::anyhow!("unknown template id"))?;
+        let template = match id {
+            TemplateId::Comparative => anyhow::bail!("invalid prompt id"),
+            TemplateId::NonComparative => anyhow::bail!("invalid prompt id"),
+            TemplateId::NonComparativeLeader => {
+                &self.config.equivalence_prompt_non_comparative_leader
+            }
+        };
+        let vars: std::collections::BTreeMap<String, String> = serde_json::from_str(vars)?;
+        let new_prompt = string_templater::patch_str(&vars, &template)?;
+        let res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
+        Ok(res)
     }
 }
 
@@ -224,5 +248,21 @@ pub extern "C-unwind" fn eq_principle_prompt(
         .to_str()
         .map_err(|e| anyhow::Error::from(e))
         .and_then(|vars| ctx.eq_principle_prompt(gas, template_id, vars));
+    interfaces::serialize_result(res)
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn exec_prompt_id(
+    ctx: *const (),
+    gas: &mut u64,
+    template_id: u8,
+    vars: *const u8,
+) -> interfaces::BytesResult {
+    let ctx = get_ptr(ctx);
+    let vars = unsafe { CStr::from_ptr(vars as *const std::ffi::c_char) };
+    let res = vars
+        .to_str()
+        .map_err(|e| anyhow::Error::from(e))
+        .and_then(|vars| ctx.exec_prompt_id(gas, template_id, vars));
     interfaces::serialize_result(res)
 }

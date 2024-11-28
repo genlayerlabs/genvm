@@ -4,23 +4,32 @@ import genlayer.py.calldata as calldata
 from ..py.types import Rollback, Lazy
 import collections.abc
 import os
+from .advanced import ContractReturn, ContractError
+from .result_codes import ResultCode
 
 
-def _decode_sub_vm_result_retn(data: collections.abc.Buffer) -> typing.Any | Rollback:
+def decode_sub_vm_result_retn(
+	data: collections.abc.Buffer,
+) -> ContractReturn | Rollback | ContractError:
 	mem = memoryview(data)
-	if mem[0] != 0:
+	if mem[0] == ResultCode.ROLLBACK:
 		return Rollback(str(mem[1:], encoding='utf8'))
-	return calldata.decode(mem[1:])
+	if mem[0] == ResultCode.RETURN:
+		return ContractReturn(calldata.decode(mem[1:]))
+	if mem[0] == ResultCode.CONTRACT_ERROR:
+		return ContractError(str(mem[1:], encoding='utf8'))
+	assert False, f'unknown type {mem[0]}'
 
 
-def _decode_sub_vm_result(data: collections.abc.Buffer) -> typing.Any:
-	dat = _decode_sub_vm_result_retn(data)
+def decode_sub_vm_result(data: collections.abc.Buffer) -> typing.Any:
+	dat = decode_sub_vm_result_retn(data)
 	if isinstance(dat, Rollback):
 		raise dat
-	return dat
+	assert isinstance(dat, ContractReturn)
+	return dat.data
 
 
-def _lazy_from_fd[T](
+def lazy_from_fd[T](
 	fd: int, after: typing.Callable[[collections.abc.Buffer], T]
 ) -> Lazy[T]:
 	def run():
@@ -28,3 +37,14 @@ def _lazy_from_fd[T](
 			return after(f.read())
 
 	return Lazy(run)
+
+
+class _LazyApi[T, **R]:
+	def __init__(self, fn: typing.Callable[R, Lazy[T]]):
+		self.fn = fn
+
+	def __call__(self, *args: R.args, **kwargs: R.kwargs) -> T:
+		return self.fn(*args, **kwargs).get()
+
+	def lazy(self, *args: R.args, **kwargs: R.kwargs) -> Lazy[T]:
+		return self.fn(*args, **kwargs)

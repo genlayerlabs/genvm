@@ -14,16 +14,5 @@
             "post_message": 7,
             "consume_fuel": 8
         }
-    },
-    {
-        "type": "enum",
-        "name": "result_code",
-        "size": "u8",
-        "values": {
-            "return": 0,
-            "rollback": 1,
-            "none": 2,
-            "error": 3
-        }
     }
 ]

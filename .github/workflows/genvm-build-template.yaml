@@ -32,6 +32,8 @@ jobs:
       artifact_url: ${{ steps.upload.outputs.gcs_url }}
     steps:
       - uses: actions/checkout@v4
+      - run: |
+          git fetch origin 'refs/tags/*:refs/tags/*'
       - name: Get source
         uses: ./.github/actions/get-src
         with:

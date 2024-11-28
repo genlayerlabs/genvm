@@ -18,6 +18,7 @@ puts "detected tag is `#{tag}`"
 if not out.exist?
 	out.write(tag)
 elsif ENV["GENVM_DO_NOT_REGEN_ID"] == "true"
+	puts "it won't override #{out.read().strip} because GENVM_DO_NOT_REGEN_ID is set"
 	exit
 elsif tag != out.read().strip
 	out.write(tag)

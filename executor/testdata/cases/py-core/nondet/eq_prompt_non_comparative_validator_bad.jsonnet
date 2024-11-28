@@ -8,7 +8,7 @@ simple.run('${jsonnetDir}/eq_prompt_non_comparative.py') {
     |||,
     leader_nondet: [
         {
-            "ok": true,
+            "kind": "return",
             "value": "Rats are awful and stupid pets."
         }
     ]

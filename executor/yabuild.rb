@@ -67,6 +67,7 @@ project('executor') {
 	codegen = target_alias(
 		"codegen",
 		run_codegen.(cur_src.join('codegen', 'data', 'host-fns.json'), cur_src.join('src', 'host', 'host_fns.rs'), type: "rs"),
+		run_codegen.(cur_src.join('codegen', 'data', 'result-codes.json'), cur_src.join('src', 'host', 'result_codes.rs'), type: "rs"),
 		run_codegen.(cur_src.join('codegen', 'data', 'builtin-prompt-templates.json'), cur_src.join('modules', 'default-impl', 'llm-funcs', 'src', 'template_ids.rs'), type: "rs"),
 	)
 
@@ -114,4 +115,5 @@ project('executor') {
 	genvm_all = target_alias('all', bin, modules, config_target, tags: ['all'])
 
 	run_codegen.(cur_src.join('codegen', 'data', 'host-fns.json'), cur_src.join('testdata', 'runner', 'host_fns.py'), type: "py", tags: ['testdata'])
+	run_codegen.(cur_src.join('codegen', 'data', 'result-codes.json'), cur_src.join('testdata', 'runner', 'result_codes.py'), type: "py", tags: ['testdata'])
 }

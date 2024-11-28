@@ -360,3 +360,71 @@ def _storage_build_struct(
 	):
 		cls.__init__ = new_init
 	return description
+
+
+@storage
+class _DateTime:
+	seconds: u64
+	micros: u32
+	has_tz: bool
+	off_days: i32
+	off_seconds: i32
+	off_micros: i32
+
+
+from functools import partial
+import datetime, time
+
+_dt_desc: TypeDesc[_DateTime] = _known_descs[_DateTime]
+
+
+class _DateTimeDesc(TypeDesc[datetime.datetime]):
+	def __init__(self):
+		super().__init__(_dt_desc.size, _dt_desc.copy_actions)
+
+	def get(self, slot: StorageSlot, off: int) -> datetime.datetime:
+		dt = _dt_desc.get(slot, off)
+
+		def make_date(dt_tuple: time.struct_time, tzinfo):
+			return datetime.datetime(
+				year=dt_tuple.tm_year,
+				month=dt_tuple.tm_mon,
+				day=dt_tuple.tm_mday,
+				hour=dt_tuple.tm_hour,
+				minute=dt_tuple.tm_min,
+				second=dt_tuple.tm_sec,
+				microsecond=dt.micros,
+				tzinfo=tzinfo,
+			)
+
+		if dt.has_tz:
+			tz = datetime.timezone(
+				datetime.timedelta(
+					days=dt.off_days, seconds=dt.off_seconds, microseconds=dt.off_micros
+				)
+			)
+			dt_tuple = time.gmtime(dt.seconds)
+			return make_date(dt_tuple, datetime.UTC).astimezone(tz)
+		else:
+			tz = None
+			dt_tuple = time.localtime(dt.seconds)
+			return make_date(dt_tuple, tzinfo=tz)
+
+	def set(self, slot: StorageSlot, off: int, val: datetime.datetime) -> None:
+		dt = _dt_desc.get(slot, off)
+		tz = val.tzinfo
+		dt.seconds = u64(int(val.timestamp()))
+		dt.micros = u32(val.microsecond)
+		if tz is None:
+			dt.has_tz = False
+		else:
+			dt.has_tz = True
+			tz_off = tz.utcoffset(None)
+			assert tz_off is not None
+
+			dt.off_days = i32(tz_off.days)
+			dt.off_seconds = i32(tz_off.seconds)
+			dt.off_micros = i32(tz_off.microseconds)
+
+
+_known_descs[datetime.datetime] = _DateTimeDesc()

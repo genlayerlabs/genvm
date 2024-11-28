@@ -147,16 +147,19 @@ class MockHost(IHost):
 	) -> None:
 		pass
 
-	async def get_leader_nondet_result(self, call_no: int) -> bytes | str | None:
+	async def get_leader_nondet_result(
+		self, call_no: int, /
+	) -> tuple[ResultCode, collections.abc.Buffer] | None:
 		if self.leader_nondet is None:
 			return None
 		res = self.leader_nondet[call_no]
-		if res['ok']:
-			return _calldata.encode(res['value'])
-		else:
-			val = res['value']
-			assert isinstance(val, str)
-			return val
+		if res['kind'] == 'return':
+			return (ResultCode.RETURN, _calldata.encode(res['value']))
+		if res['kind'] == 'rollback':
+			return (ResultCode.ROLLBACK, res['value'].encode('utf-8'))
+		if res['kind'] == 'contract_error':
+			return (ResultCode.CONTRACT_ERROR, res['value'].encode('utf-8'))
+		assert False
 
 	async def post_nondet_result(
 		self, call_no: int, type: ResultCode, data: collections.abc.Buffer

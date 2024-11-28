@@ -10,10 +10,12 @@ from pathlib import Path
 
 if typing.TYPE_CHECKING:
 	from .host_fns import *
+	from .result_codes import *
 else:
 	from pathlib import Path
 
 	exec(Path(__file__).parent.joinpath('host_fns.py').read_text())
+	exec(Path(__file__).parent.joinpath('result_codes.py').read_text())
 
 ACCOUNT_ADDR_SIZE = 20
 GENERIC_ADDR_SIZE = 32
@@ -38,7 +40,9 @@ class IHost(typing.Protocol):
 	async def consume_result(
 		self, type: ResultCode, data: collections.abc.Buffer, /
 	) -> None: ...
-	async def get_leader_nondet_result(self, call_no: int, /) -> bytes | str | None: ...
+	async def get_leader_nondet_result(
+		self, call_no: int, /
+	) -> tuple[ResultCode, collections.abc.Buffer] | None: ...
 	async def post_nondet_result(
 		self, call_no: int, type: ResultCode, data: collections.abc.Buffer, /
 	) -> None: ...
@@ -110,19 +114,16 @@ async def host_loop(handler: IHost):
 				await send_all(b'\x00')
 				return
 			case Methods.GET_LEADER_NONDET_RESULT:
-				call_no = await recv_int()  # call no
+				call_no = await recv_int()
 				data = await handler.get_leader_nondet_result(call_no)
 				if data is None:
 					await send_all(bytes([ResultCode.NONE]))
-				elif isinstance(data, str):
-					await send_all(bytes([ResultCode.ROLLBACK]))
-					encoded = data.encode('utf-8')
-					await send_int(len(encoded))
-					await send_all(encoded)
-				else:
-					await send_all(bytes([ResultCode.RETURN]))
-					await send_int(len(data))
-					await send_all(data)
+					continue
+				code, as_bytes = data
+				as_bytes = memoryview(as_bytes)
+				await send_all(bytes([code]))
+				await send_int(len(as_bytes))
+				await send_all(as_bytes)
 			case Methods.POST_NONDET_RESULT:
 				call_no = await recv_int()
 				await handler.post_nondet_result(call_no, *await read_result())

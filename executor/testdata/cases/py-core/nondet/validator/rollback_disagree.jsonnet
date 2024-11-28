@@ -8,7 +8,7 @@ simple.run('${jsonnetDir}/rollback.py') {
     |||,
     leader_nondet: [
         {
-            "ok": false,
+            "kind": "rollback",
             "value": "other rollback"
         }
     ]

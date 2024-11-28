@@ -1,4 +1,7 @@
 mod host_fns;
+mod result_codes;
+
+pub use result_codes::ResultCode;
 
 use std::sync::{Arc, Mutex};
 
@@ -100,15 +103,19 @@ fn write_result(sock: &mut dyn Sock, res: Result<&vm::RunOk, &anyhow::Error>) ->
     let str: String;
     let data = match res {
         Ok(vm::RunOk::Return(r)) => {
-            sock.write_all(&[host_fns::ResultCode::Return as u8])?;
+            sock.write_all(&[ResultCode::Return as u8])?;
             &r
         }
         Ok(vm::RunOk::Rollback(r)) => {
-            sock.write_all(&[host_fns::ResultCode::Rollback as u8])?;
+            sock.write_all(&[ResultCode::Rollback as u8])?;
+            r.as_bytes()
+        }
+        Ok(vm::RunOk::ContractError(r)) => {
+            sock.write_all(&[ResultCode::ContractError as u8])?;
             r.as_bytes()
         }
         Err(e) => {
-            sock.write_all(&[host_fns::ResultCode::Error as u8])?;
+            sock.write_all(&[ResultCode::Error as u8])?;
             str = format!("{}", e);
             str.as_bytes()
         }
@@ -219,7 +226,7 @@ impl Host {
         sock.write_all(&call_no.to_le_bytes())?;
         let mut has_some = [0; 1];
         sock.read_exact(&mut has_some)?;
-        if has_some[0] == host_fns::ResultCode::None as u8 {
+        if has_some[0] == ResultCode::None as u8 {
             return Ok(None);
         }
         let len = read_u32(sock)?;
@@ -229,9 +236,10 @@ impl Host {
         }
         sock.read_exact(&mut buf)?;
         let res = match has_some[0] {
-            x if x == host_fns::ResultCode::Return as u8 => vm::RunOk::Return(buf),
-            x if x == host_fns::ResultCode::Rollback as u8 => {
-                vm::RunOk::Rollback(String::from_utf8(buf)?)
+            x if x == ResultCode::Return as u8 => vm::RunOk::Return(buf),
+            x if x == ResultCode::Rollback as u8 => vm::RunOk::Rollback(String::from_utf8(buf)?),
+            x if x == ResultCode::ContractError as u8 => {
+                vm::RunOk::ContractError(String::from_utf8(buf)?)
             }
             x => anyhow::bail!("host returned incorrect result id {}", x),
         };
