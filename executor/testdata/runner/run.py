@@ -196,16 +196,24 @@ def run(jsonnet_rel_path):
 				_env['LD_PRELOAD'] = str(GENVM.parent.parent.parent.joinpath('fake-dlclose.so'))
 				# _env["LD_DEBUG"] = "libs"
 
-			res = asyncio.run(
-				run_host_and_program(
-					mock_host,
-					cmd,
-					env=_env,
-					cwd=coverage_dir,
-					exit_timeout=2,
-					deadline=config['deadline'],
+			try:
+				res = asyncio.run(
+					run_host_and_program(
+						mock_host,
+						cmd,
+						env=_env,
+						cwd=coverage_dir,
+						exit_timeout=2,
+						deadline=config['deadline'],
+					)
 				)
-			)
+			except Exception as e:
+				return {
+					'category': 'fail',
+					'exception': 'internal error',
+					'exc': e,
+					**e.args[-1],
+				}
 
 		base = {
 			'steps': steps,
@@ -219,14 +227,6 @@ def run(jsonnet_rel_path):
 		got_stdout_path.write_text(res.stdout)
 		tmp_dir.joinpath('stderr.txt').write_text(res.stderr)
 		tmp_dir.joinpath('genvm.log').write_text(res.genvm_log)
-
-		if len(res.exceptions) != 0:
-			return {
-				'category': 'fail',
-				'reason': f'some exceptions occured',
-				'exc': res.exceptions,
-				**base,
-			}
 
 		exp_stdout_path = config['expected_output']
 		if exp_stdout_path.exists():
