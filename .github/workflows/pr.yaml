@@ -1,0 +1,90 @@
+name: GenVM pr
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+defaults:
+  run:
+    shell: bash -x {0}
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.changes.outputs.python }}
+      rs: ${{ steps.changes.outputs.rs }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          install_also: --rust
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+          cache: pip
+      - name: configure and run codegen
+        run: |
+          cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \
+          ninja -v -C build tags/codegen
+      - uses: pre-commit/action@v3.0.1
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            python:
+              - runners/genlayer-py-std/src/genlayer/py/**/*.py
+            rs:
+              - '**/*.rs'
+
+### MODULE TESTS
+
+  module-test-cargo:
+    needs: [pre-commit]
+    runs-on: ubuntu-latest
+    if: needs.pre-commit.outputs.rs == 'true' || github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          install_also: --rust
+      - name: configure and run codegen
+        run: |
+          cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \
+          ninja -v -C build tags/codegen
+      - name: check format
+        run: |
+          ./build-scripts/cargo-fmt.sh && \
+          git diff -U1 --exit-code
+      - name: cargo test
+        run: |
+          ./build-scripts/cargo-test.sh
+
+  module-test-python:
+    needs: [pre-commit]
+    runs-on: ubuntu-latest
+    if: needs.pre-commit.outputs.python == 'true' || github.ref == 'refs/heads/main'
+    steps:
+      - run: sudo apt-get install -y python3-poetry
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: poetry
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          load_submodules: "false"
+      - name: install dependencies
+        run: |
+          python3.12 -m pip install poetry && \
+            pushd runners/genlayer-py-std && \
+            poetry install && \
+            popd
+      - name: pytest
+        run: |
+          pushd runners/genlayer-py-std && \
+          poetry run pytest -n auto && \
+          popd
