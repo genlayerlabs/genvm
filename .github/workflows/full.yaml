@@ -43,7 +43,6 @@ jobs:
   module-test-cargo:
     needs: [pre-commit]
     runs-on: ubuntu-latest
-    if: needs.pre-commit.outputs.rs == 'true' || github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - name: Get source
@@ -65,7 +64,6 @@ jobs:
   module-test-python:
     needs: [pre-commit]
     runs-on: ubuntu-latest
-    if: needs.pre-commit.outputs.python == 'true' || github.ref == 'refs/heads/main'
     steps:
       - run: sudo apt-get install -y python3-poetry
       - uses: actions/checkout@v4
@@ -152,7 +150,7 @@ jobs:
       runners_artifact_url: ${{ needs.build-runners.outputs.artifact_url }}
     secrets: inherit
 
-  test-genvm-macos-ubuntu-latest:
+  test-genvm-release-macos-ubuntu-latest:
     needs: [build-runners, build-genvm-release-macos-latest]
     uses: ./.github/workflows/genvm-test-template.yaml
     with:
@@ -162,3 +160,23 @@ jobs:
       runners_artifact_name: ${{ needs.build-runners.outputs.artifact_name }}
       runners_artifact_url: ${{ needs.build-runners.outputs.artifact_url }}
     secrets: inherit
+
+### END
+
+  validate-end:
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs:
+      - pre-commit
+      - build-runners
+      - build-genvm-debug-ubuntu-latest
+      - build-genvm-release-ubuntu-latest
+      - build-genvm-release-macos-latest
+      - test-genvm-debug-ubuntu-latest
+      - test-genvm-release-ubuntu-latest
+      - test-genvm-release-macos-ubuntu-latest
+      - module-test-python
+      - module-test-cargo
+    steps:
+      - run: |
+          echo ${{ join(needs.*.result, ' ') }} | grep -vP 'failure|cancelled'

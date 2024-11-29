@@ -46,6 +46,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     needs: [gen_url]
+    if: ${{ needs.gen_url.outputs.already_exists == 'false' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,14 +56,10 @@ jobs:
         with:
           install_also: --wasi --rust
           third_party: sdk-rust/third-party/wasi-rs runners/softfloat/berkeley-softfloat-3
-        if: |
-          needs.gen_url.outputs.already_exists == 'false'
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker
-        if: |
-          needs.gen_url.outputs.already_exists == 'false'
       - name: Cache Docker layers
         uses: actions/cache@v4
         with:
@@ -71,21 +68,15 @@ jobs:
           key: runners-buildx-${{ github.sha }}
           restore-keys: |
             runners-buildx-
-        if: |
-          needs.gen_url.outputs.already_exists == 'false'
       - name: Configure
         run: |
           source env.sh && \
           ya-build config
-        if: |
-          needs.gen_url.outputs.already_exists == 'false'
       - name: Build extension
         run: |
           source env.sh && \
           ninja --verbose -C build genvm/runners/cpython-extension-lib && \
           git diff -U1 --exit-code
-        if: |
-          needs.gen_url.outputs.already_exists == 'false'
       - name: Build
         run: |
           source env.sh && \
@@ -94,24 +85,26 @@ jobs:
           pushd build/out && \
           zip -r -9 ../runners.zip * && \
           popd
-        if: |
-          needs.gen_url.outputs.already_exists == 'false'
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-        if: |
-          needs.gen_url.outputs.already_exists == 'false'
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
-        if: |
-          needs.gen_url.outputs.already_exists == 'false'
       - name: Upload to GCS
         uses: google-github-actions/upload-cloud-storage@v2
         with:
           path: build/${{ needs.gen_url.outputs.basename }}
           destination: ${{ env.GCS_BUCKET }}/${{ needs.gen_url.outputs.dirname }}
           parent: false
-        if: |
-          needs.gen_url.outputs.already_exists == 'false'
+
+  build-done:
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs:
+      - gen_url
+      - build
+    steps:
+      - run: |
+          echo ${{ join(needs.*.result, ' ') }} | grep -vP 'failure|cancelled'

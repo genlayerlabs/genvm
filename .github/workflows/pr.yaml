@@ -88,3 +88,16 @@ jobs:
           pushd runners/genlayer-py-std && \
           poetry run pytest -n auto && \
           popd
+
+### END
+
+  validate-end:
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs:
+      - pre-commit
+      - module-test-cargo
+      - module-test-python
+    steps:
+      - run: |
+          echo ${{ join(needs.*.result, ' ') }} | grep -vP 'failure|cancelled'
