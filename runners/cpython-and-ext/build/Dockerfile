@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ENV WASM32_WASI_ROOT=/opt/wasm32-wasip1-root/
 ENV HOST_ROOT=/opt/host-root/
