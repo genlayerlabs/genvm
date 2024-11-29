@@ -147,10 +147,6 @@ class RunHostAndProgramRes:
 	stdout: str
 	stderr: str
 	genvm_log: str
-	exceptions: list[Exception]
-
-
-from concurrent.futures import ProcessPoolExecutor
 
 
 async def run_host_and_program(
@@ -250,8 +246,6 @@ async def run_host_and_program(
 		print('WARNING: genvm finished first')
 		coro_loop.cancel()
 
-	exit_code_use = True
-
 	if not coro_proc.done():
 		# genvm is exiting, let it clean all the resources for a bit
 		await asyncio.wait(
@@ -264,7 +258,6 @@ async def run_host_and_program(
 				process.terminate()
 			except:
 				pass
-			exit_code_use = False
 			await asyncio.wait(
 				[coro_proc, asyncio.ensure_future(asyncio.sleep(exit_timeout))],
 				return_when=asyncio.FIRST_COMPLETED,
@@ -282,12 +275,18 @@ async def run_host_and_program(
 	if not coro_loop.done():
 		coro_loop.cancel()
 
-	if exit_code_use and exit_code != 0:
-		errors.append(Exception(f'exit code {exit_code} != 0'))
+	if len(errors) > 0:
+		raise Exception(
+			*errors,
+			{
+				'stdout': b''.join(stdout).decode(),
+				'stderr': b''.join(stderr).decode(),
+				'genvm_log': b''.join(genvm_log).decode(),
+			},
+		) from errors[0]
 
 	return RunHostAndProgramRes(
 		b''.join(stdout).decode(),
 		b''.join(stderr).decode(),
 		b''.join(genvm_log).decode(),
-		errors,
 	)
