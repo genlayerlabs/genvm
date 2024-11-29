@@ -1,4 +1,4 @@
-name: "CodeQL Security Scan"
+name: "CodeQL security scan"
 
 on:
   push:
@@ -21,7 +21,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'python', 'rust' ]
+        # language: [ 'python', 'rust' ] # TODO: wait for GitHub CodeQL to support Rust and enable this
+        language: [ 'python']
 
     steps:
       - name: Checkout repository
