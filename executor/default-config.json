@@ -1,20 +1,19 @@
 {
-    "modules": [
-        {
-            "path": "${genvmRoot}/lib/genvm-modules/",
-            "id": "llm",
-            "config": {
-                "host": "https://api.openai.com",
-                "provider": "openai",
-                "model": "gpt-4o-mini"
-            }
-        },
-        {
-            "path": "${genvmRoot}/lib/genvm-modules/",
-            "id": "web",
-            "config": {
-                "host": "http://127.0.0.1:4444"
-            }
+  "$schema": "https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/default-config.json",
+  "modules": {
+    "llm": {
+        "path": "${genvmRoot}/lib/genvm-modules/",
+        "config": {
+            "host": "https://api.openai.com",
+            "provider": "openai",
+            "model": "gpt-4o-mini"
         }
-    ]
+    },
+    "web": {
+        "path": "${genvmRoot}/lib/genvm-modules/",
+        "config": {
+            "host": "http://127.0.0.1:4444"
+        }
+    }
+  }
 }

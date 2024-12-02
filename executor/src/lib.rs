@@ -15,30 +15,28 @@ pub use host::{AccountAddress, GenericAddress, Host, MessageData};
 
 use anyhow::{Context, Result};
 use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
-#[allow(non_camel_case_types)]
-enum ConfigModuleName {
-    llm,
-    web,
-}
-
 #[derive(Deserialize)]
 struct ConfigModule {
     path: String,
     name: Option<String>,
-    id: ConfigModuleName,
     config: serde_json::Value,
 }
 
 #[derive(Deserialize)]
+struct ConfigModules {
+    llm: ConfigModule,
+    web: ConfigModule,
+}
+
+#[derive(Deserialize)]
 struct ConfigSchema {
-    modules: Vec<ConfigModule>,
+    modules: ConfigModules,
 }
 
 fn fake_thread_pool() -> genvm_modules_common::SharedThreadPoolABI {
@@ -53,6 +51,30 @@ fn fake_thread_pool() -> genvm_modules_common::SharedThreadPoolABI {
         ctx: std::ptr::null(),
         submit_task: exec,
     }
+}
+
+fn load_mod<T>(
+    mc: &ConfigModule,
+    default_name: &str,
+    f: impl FnOnce(&std::path::Path, &str, genvm_modules_common::CtorArgs) -> Result<T>,
+    log_fd: std::os::fd::RawFd,
+) -> Result<T> {
+    let config_str = serde_json::to_string(&mc.config)?;
+    let args = genvm_modules_common::CtorArgs {
+        version: genvm_modules_common::Version { major: 0, minor: 0 },
+        module_config: config_str.as_ptr(),
+        module_config_len: config_str.len(),
+        thread_pool: fake_thread_pool(),
+        log_fd,
+    };
+    f(
+        &std::path::Path::new(&mc.path),
+        match &mc.name {
+            Some(v) => v,
+            None => default_name,
+        },
+        args,
+    )
 }
 
 fn create_modules(config_path: &String, log_fd: std::os::fd::RawFd) -> Result<vm::Modules> {
@@ -75,39 +97,20 @@ fn create_modules(config_path: &String, log_fd: std::os::fd::RawFd) -> Result<vm
     let config = string_templater::patch_value(&vars, config)?;
     let config: ConfigSchema = serde_json::from_value(config)?;
 
-    let mut llm = None;
-    let mut web = None;
-    for c in &config.modules {
-        let path = std::path::Path::new(&c.path);
-        let config_str = serde_json::to_string(&c.config)?;
-        let args = genvm_modules_common::CtorArgs {
-            version: genvm_modules_common::Version { major: 0, minor: 0 },
-            module_config: config_str.as_ptr(),
-            module_config_len: config_str.len(),
-            thread_pool: fake_thread_pool(),
-            log_fd,
-        };
-        let name = match &c.name {
-            Some(v) => v,
-            None => match c.id {
-                ConfigModuleName::llm => "llm",
-                ConfigModuleName::web => "web",
-            },
-        };
-        match c.id {
-            ConfigModuleName::llm => {
-                llm = Some(llm_functions_api::Methods::load_from_lib(path, name, args)?);
-            }
-            ConfigModuleName::web => {
-                web = Some(web_functions_api::Methods::load_from_lib(path, name, args)?);
-            }
-        }
-    }
+    let llm = load_mod(
+        &config.modules.llm,
+        "llm",
+        llm_functions_api::Methods::load_from_lib,
+        log_fd,
+    )?;
+    let web = load_mod(
+        &config.modules.web,
+        "web",
+        web_functions_api::Methods::load_from_lib,
+        log_fd,
+    )?;
 
-    match (llm, web) {
-        (Some(llm), Some(web)) => Ok(vm::Modules { llm, web }),
-        _ => Err(anyhow::anyhow!("some of required modules is not supplied")),
-    }
+    Ok(vm::Modules { llm, web })
 }
 
 pub fn create_supervisor(

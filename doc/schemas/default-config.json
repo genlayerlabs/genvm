@@ -1,0 +1,72 @@
+{
+  "$id": "https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/default-config.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GenVM configuration",
+  "$ref": "#/definitions/body",
+  "definitions": {
+    "body": {
+      "type": "object",
+      "properties": {
+        "$schema": { "type": "string" },
+        "modules": {
+          "type": "object",
+          "properties": {
+            "llm": {
+              "allOf": [
+                { "$ref": "#/definitions/ModuleConfig" },
+                {
+                  "type": "object",
+                  "properties": {
+                    "config": {
+                      "type": "object",
+                      "properties": {
+                        "host": { "type": "string" },
+                        "provider": { "type": "string" },
+                        "model": { "type": "string" }
+                      },
+                      "required": ["host", "provider", "model"]
+                    }
+                  }
+                }
+              ]
+            },
+            "web": {
+              "allOf": [
+                { "$ref": "#/definitions/ModuleConfig" },
+                {
+                  "type": "object",
+                  "properties": {
+                    "config": {
+                      "type": "object",
+                      "properties": {
+                        "host": { "type": "string" }
+                      },
+                      "required": ["host"]
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "required": ["llm", "web"]
+        }
+      }
+    },
+    "ModuleConfig": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "path to .so file, can contain ${} interpolation"
+        },
+        "config": {
+          "type": "object"
+        },
+        "name": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }]
+        }
+      },
+      "required": ["path", "config"]
+    }
+  }
+}

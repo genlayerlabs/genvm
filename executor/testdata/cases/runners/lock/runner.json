@@ -1,4 +1,5 @@
 {
+  "$schema": "https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/runners.json",
   "Seq": [
     { "MapFile": { "to": "/contract.py", "file": "contract.py" } },
     { "SetArgs": ["py", "-u", "-c", "import contract;import genlayer.std.runner as r;r.run(contract)"] },
