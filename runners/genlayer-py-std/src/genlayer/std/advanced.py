@@ -1,6 +1,6 @@
 import typing
 
-import genlayer._wasi as wasi
+import genlayer.std._wasi as wasi
 from ..py.types import Rollback, Lazy
 import genlayer.py.calldata as calldata
 from dataclasses import dataclass

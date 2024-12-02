@@ -1,0 +1,4 @@
+contract from.main
+contract to.foo
+3
+executed with `Return("\x00")`

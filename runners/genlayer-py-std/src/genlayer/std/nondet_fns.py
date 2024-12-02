@@ -3,7 +3,7 @@ __all__ = ('get_webpage', 'exec_prompt')
 import typing
 from ._private import lazy_from_fd, _LazyApi
 from ..py.types import *
-import genlayer._wasi as wasi
+import genlayer.std._wasi as wasi
 import json
 
 

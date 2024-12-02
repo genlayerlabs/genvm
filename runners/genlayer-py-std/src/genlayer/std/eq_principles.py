@@ -6,7 +6,7 @@ __all__ = (
 
 from .prompt_ids import *
 
-import genlayer._wasi as wasi
+import genlayer.std._wasi as wasi
 
 import genlayer.std.advanced as advanced
 import typing
