@@ -18,6 +18,9 @@ def _get_webpage(url: str, **config: typing.Unpack[_GetWebpageConfig]) -> Lazy[s
 
 
 get_webpage = _LazyApi(_get_webpage)
+"""
+API to get a webpage after rendering it
+"""
 del _get_webpage
 
 

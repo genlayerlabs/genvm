@@ -1,3 +1,18 @@
+"""
+This module is responsible for working with genvm calldata
+
+Calldata supports following types:
+#. Primitive types:
+
+	#. python built-in: ``bool``, ``None``, ``int``, ``str``, ``bytes``
+	#. :py:meth:`~genlayer.py.types.Address` type
+
+#. Composite types:
+
+	#. :py:type:`list` and :py:type:`dict`, as well as :py:type:`collections.abc.Sequence` and :py:type:`collections.abc.Mapping`
+	#. :py:type:`CalldataEncodable`
+"""
+
 from .types import Address
 import typing
 import collections.abc
@@ -22,6 +37,12 @@ SPECIAL_ADDR = (3 << BITS_IN_TYPE) | TYPE_SPECIAL
 
 
 class CalldataEncodable(metaclass=abc.ABCMeta):
+	"""
+	Abstract class to support calldata encoding for custom types
+
+	Can be used to simplify code
+	"""
+
 	@abc.abstractmethod
 	def __to_calldata__(self) -> typing.Any: ...
 
@@ -29,6 +50,14 @@ class CalldataEncodable(metaclass=abc.ABCMeta):
 def encode(
 	x: typing.Any, *, default: typing.Callable[[typing.Any], typing.Any] = lambda x: x
 ) -> bytes:
+	"""
+	Encodes python object into calldata bytes
+
+	:param default: function to be applied to each object recursively, it must return object encodable to calldata
+
+	.. warning::
+		All composite types will be coerced to :py:type:`dict` and :py:type:`list`, so custom type information won't be preserved
+	"""
 	mem = bytearray()
 
 	def append_uleb128(i):
@@ -107,6 +136,11 @@ def encode(
 
 
 def decode(mem0: collections.abc.Buffer) -> typing.Any:
+	"""
+	Decodes calldata encoded bytes into python DSL
+
+	Out of composite types it will contain only :py:type:`dict` and :py:type:`list`
+	"""
 	mem: memoryview = memoryview(mem0)
 
 	def read_uleb128() -> int:
@@ -178,6 +212,9 @@ def decode(mem0: collections.abc.Buffer) -> typing.Any:
 
 
 def to_str(d: typing.Any) -> str:
+	"""
+	Transforms calldata DSL into human readable json-like format, should be used for debug purposes only
+	"""
 	buf: list[str] = []
 
 	def impl(d: typing.Any) -> None:

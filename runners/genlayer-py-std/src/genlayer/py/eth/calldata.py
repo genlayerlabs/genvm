@@ -1,3 +1,7 @@
+"""
+Module that provides eth calldata encoding and decoding
+"""
+
 __all__ = ('MethodEncoder', 'decode')
 from ..keccak import Keccak256
 
@@ -133,10 +137,29 @@ type _Tails = list[typing.Callable[[_Tails], None]]
 
 
 class MethodEncoder:
+	"""
+	Type used to encode method call
+	"""
+
 	name: str
+	"""
+	method name
+	"""
+
 	params: list[type]
+	"""
+	method parameter types
+	"""
+
 	ret: type
+	"""
+	return type (can be unused)
+	"""
+
 	selector: bytes
+	"""
+	calculated function "selector", see eth docs
+	"""
 
 	def __init__(self, name: str, params: list[type], ret: type):
 		self.name = name
@@ -146,6 +169,9 @@ class MethodEncoder:
 		self.selector = Keccak256(sig.encode('utf-8')).digest()[:4]
 
 	def make_sig(self) -> str:
+		"""
+		calculates signature that is used for making method selector
+		"""
 		sig: list[str] = [self.name, '(']
 		for i, par in enumerate(self.params):
 			if i != 0:
@@ -155,6 +181,11 @@ class MethodEncoder:
 		return ''.join(sig)
 
 	def encode(self, args: list[typing.Any]) -> bytes:
+		"""
+		encodes ``args`` according to this encoder ``params`` to produce a calldata
+
+		:returns: full calldata encoded call: both selector and arguments
+		"""
 		assert len(args) == len(self.params)
 
 		result: bytearray = bytearray()
@@ -252,6 +283,11 @@ class MethodEncoder:
 
 
 def decode(params: list[type], data: collections.abc.Buffer) -> list[typing.Any]:
+	"""
+	:param params: eth method returns (if it returns a single value, i.e. ``u32``, provide a list of one element)
+	:param data: eth calldata encoded structure that conforms to ``params``, note that it must not contain selector
+	:returns: list of what is encoded in the calldata
+	"""
 	mem = memoryview(data)
 
 	current_off: int = 0

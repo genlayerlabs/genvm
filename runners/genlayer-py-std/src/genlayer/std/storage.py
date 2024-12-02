@@ -35,3 +35,6 @@ class _ActualStorageSlot(StorageSlot):
 
 
 STORAGE_MAN = _ActualStorageMan()
+"""
+Storage slots manager that provides an access to the "Host" (node) state
+"""

@@ -23,19 +23,21 @@ def private(f):
 class public:
 	@staticmethod
 	def view(f):
+		"""
+		Marks contract method as a public view
+		"""
 		setattr(f, '__public__', True)
 		setattr(f, '__readonly__', True)
 		return f
 
 	@staticmethod
 	def write(f):
+		"""
+		Marks contract method as a public write method
+		"""
 		setattr(f, '__public__', True)
 		setattr(f, '__readonly__', False)
 		return f
-
-
-def account_from_b64(x: str) -> bytes:
-	return base64.b64decode(x)
 
 
 message_raw = json.loads(wasi.get_message_data())
@@ -46,13 +48,25 @@ message = _SimpleNamespace(
 	value=message_raw.get('value', None),
 	is_init=message_raw.get('is_init', None),
 )
+"""
+Represents some fields from transaction message that was sent
+"""
 
 
 def rollback_immediate(reason: str) -> typing.NoReturn:
+	"""
+	Performs an immediate rollback, current VM won't be able to handle it, stack unwind will not happen
+	"""
 	wasi.rollback(reason)
 
 
 def contract(t: type) -> type:
+	"""
+	Marks class as a contract
+
+	.. note::
+		There can be only one "contract" at address, so this function must be called at least once
+	"""
 	import inspect
 
 	mod = inspect.getmodule(t)

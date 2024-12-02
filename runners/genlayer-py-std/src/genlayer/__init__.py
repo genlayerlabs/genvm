@@ -1,9 +1,19 @@
+"""
+Common import for all contracts
+
+It exposes most of the types to the top scope and encapsulates other utility under `gl` namespace which is a proxy to :py:mod:`genlayer.std`
+"""
+
 from .py.types import *
 from .py.storage import *
 
+if not typing.TYPE_CHECKING:
 
-def make_gl():
 	class GL:
+		"""
+		proxy to :py:mod:`genlayer.std` used for lazy loading
+		"""
+
 		def __getattr__(self, attr):
 			import genlayer.std as _imp
 
@@ -13,14 +23,7 @@ def make_gl():
 
 			return getattr(_imp, attr)
 
-	return GL()
-
-
-if not typing.TYPE_CHECKING:
-	gl = make_gl()
+	gl = GL()
+	del GL
 else:
 	import genlayer.std as gl
-
-	gl = gl
-
-del make_gl

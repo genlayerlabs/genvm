@@ -63,6 +63,10 @@ class _GenVMContract[TView, TSend](typing.Protocol):
 
 
 class ContractAt(_GenVMContract):
+	"""
+	Provides a way to call view methods and send transactions to GenVM contracts
+	"""
+
 	def __init__(self, addr: Address):
 		if not isinstance(addr, Address):
 			raise Exception('address expected')
@@ -101,4 +105,7 @@ class GenVMContractDeclaration[TView, TEmit](typing.Protocol):
 def contract_interface[TView, TEmit](
 	_contr: GenVMContractDeclaration[TView, TEmit],
 ) -> typing.Callable[[Address], _GenVMContract[TView, TEmit]]:
+	"""
+	This decorator produces an "interface" for other GenVM contracts. It has no semantical value, but can be used for auto completion and type checks
+	"""
 	return ContractAt

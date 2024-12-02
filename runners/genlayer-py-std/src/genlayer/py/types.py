@@ -1,12 +1,15 @@
 import base64
 import typing
 import collections.abc
-import hashlib
 
 from .keccak import Keccak256
 
 
 class Address:
+	"""
+	Represents GenLayer Address
+	"""
+
 	SIZE = 20
 
 	__slots__ = ('_as_bytes', '_as_hex')
@@ -15,6 +18,12 @@ class Address:
 	_as_hex: str | None
 
 	def __init__(self, val: str | collections.abc.Buffer):
+		"""
+		:param val: either a hex encoded address (that starts with '0x'), or base64 encoded address, or buffer of 20 bytes
+
+		.. warning::
+			checksum validation is not performed
+		"""
 		self._as_hex = None
 		if isinstance(val, str):
 			if len(val) == 2 + Address.SIZE * 2 and val.startswith('0x'):
@@ -29,10 +38,16 @@ class Address:
 
 	@property
 	def as_bytes(self) -> bytes:
+		"""
+		:returns: raw bytes of an address (most compact representation)
+		"""
 		return self._as_bytes
 
 	@property
 	def as_hex(self) -> str:
+		"""
+		:returns: checksum string representation
+		"""
 		if self._as_hex is None:
 			simple = self._as_bytes.hex()
 			hasher = Keccak256()
@@ -150,15 +165,26 @@ i248 = typing.NewType('i248', int)
 i256 = typing.NewType('i256', int)
 
 bigint = typing.NewType('bigint', int)
+"""
+Just an alias for :py:type:`int`, it is introduced to prevent accidental use of low-performance big integers in the store
+"""
 
 
 class Rollback(Exception):
+	"""
+	Exception that will be treated as a "Rollback"
+	"""
+
 	def __init__(self, msg: str):
 		self.msg = msg
 		super()
 
 
 class Lazy[T]:
+	"""
+	Base class to support lazy evaluation
+	"""
+
 	_eval: typing.Callable[[], T] | None
 	_exc: Exception | None
 	_res: T | None
@@ -169,6 +195,12 @@ class Lazy[T]:
 		self._res = None
 
 	def get(self) -> T:
+		"""
+		Performs evaluation if necessary (only ones) and stores the result
+
+		:returns: result of evaluating
+		:raises: iff evaluation raised, this outcome is also cached, so subsequent calls will raise same exception
+		"""
 		if self._eval is not None:
 			ev = self._eval
 			self._eval = None

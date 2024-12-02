@@ -1,3 +1,7 @@
+"""
+Module that uses reflections that generates python-friendly views to GenVM storage format (mapping from slot addresses to linear memories)
+"""
+
 __all__ = ('storage',)
 
 from genlayer.py.types import *

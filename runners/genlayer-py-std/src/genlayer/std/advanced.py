@@ -1,3 +1,9 @@
+"""
+This module provides some "advanced" features that can be used for optimizations
+
+If you are using something "advanced" you must know what you do
+"""
+
 import typing
 
 import genlayer.std._wasi as wasi
@@ -7,17 +13,31 @@ from dataclasses import dataclass
 
 
 class AlreadySerializedResult(bytes):
+	"""
+	If contract method returns instance of this class, calldata encoding won't be performed. Instead stored bytes will be passed as is
+	"""
+
 	def __new__(cls, *args, **kwargs):
 		return bytes.__new__(cls, *args, **kwargs)
 
 
 @dataclass
 class ContractReturn:
+	"""
+	Represents a normal "Return" result of a contract that is passed to validator function of :py:func:`genlayer.std.run_nondet`
+	"""
+
 	data: typing.Any
 
 
 @dataclass
 class ContractError:
+	"""
+	Represents "Contract error" result of a contract that is passed to validator function of :py:func:`genlayer.std.run_nondet`
+
+	Validating leader output is the only place where contract can "handle" contract error
+	"""
+
 	data: str
 
 
@@ -25,6 +45,19 @@ def run_nondet(
 	leader_fn: typing.Callable[[], typing.Any],
 	validator_fn: typing.Callable[[ContractReturn | Rollback | ContractError], bool],
 ) -> Lazy[typing.Any]:
+	"""
+	Most generic user-friendly api to execute a non-deterministic block
+
+	:param leader_fn: function that is executed in the leader
+	:param validator_fn: function that is executed in the validator that also checks leader result
+
+	Uses cloudpickle to pass a "function" to sub VM
+
+	.. note:
+		If validator_fn produces an error and leader_fn produces an error, executor itself will set result of this block to "agree" and fail entire contract with leader's error.
+		This is done because not all errors can be caught in code itself (i.e. ``exit``).
+		If this behavior is not desired, just fast return ``False`` for leader error result.
+	"""
 	import cloudpickle
 	from ._private import lazy_from_fd, decode_sub_vm_result
 
@@ -36,6 +69,13 @@ def validator_handle_rollbacks_and_errors_default(
 	fn: typing.Callable[[], typing.Any],
 	leaders_result: ContractReturn | Rollback | ContractError,
 ) -> tuple[typing.Any, typing.Any]:
+	"""
+	Default function to handle rollbacks and contract errors
+
+	Errors and rollbacks are always checked for strict equality, which means that it's user responsibility to dump least possible text in there
+
+	:returns: :py:type:`ContractReturn`.data iff both results are not errors/rollbacks
+	"""
 	try:
 		res = fn()
 		if not isinstance(leaders_result, ContractReturn):

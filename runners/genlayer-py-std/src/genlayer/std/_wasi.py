@@ -32,4 +32,16 @@ if typing.TYPE_CHECKING:
 	def storage_read(slot: bytes, off: int, len: int) -> bytes: ...
 	def storage_write(slot: bytes, off: int, what: collections.abc.Buffer) -> bytes: ...
 else:
-	from _genlayer_wasi import *
+	import os
+
+	if not os.getenv('GENERATING_DOCS', 'false') == 'true':
+		from _genlayer_wasi import *
+	else:
+
+		def get_message_data() -> str:
+			return """
+			{
+				"contract_account": "0x0000000000000000000000000000000000000000",
+				"sender_account": "0x0000000000000000000000000000000000000000"
+			}
+			"""
