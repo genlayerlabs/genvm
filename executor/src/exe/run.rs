@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::ValueEnum;
+use genvm::vm::RunOk;
 
 #[derive(Debug, Clone, ValueEnum, PartialEq)]
 #[clap(rename_all = "kebab_case")]
@@ -55,6 +56,10 @@ pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
     let res = genvm::run_with(message, supervisor).with_context(|| "running genvm");
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,
+        (Ok(RunOk::ContractError(e, cause)), PrintOption::Shrink) => {
+            eprintln!("shrunk contract error {:?}", cause);
+            Some(format!("ContractError(\"{e}\")"))
+        }
         (Err(e), PrintOption::Shrink) => {
             eprintln!("shrunk error {:?}", e);
             match e.downcast_ref::<wasmtime::Trap>() {

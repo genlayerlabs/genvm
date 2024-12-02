@@ -140,17 +140,6 @@ impl std::fmt::Display for Rollback {
 }
 
 #[derive(Debug)]
-pub struct PropagateControlled(pub String);
-
-impl std::error::Error for PropagateControlled {}
-
-impl std::fmt::Display for PropagateControlled {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "PropagateControlled back with {}", self.0)
-    }
-}
-
-#[derive(Debug)]
 pub struct ContractReturn(pub Vec<u8>);
 
 impl std::error::Error for ContractReturn {}
@@ -212,8 +201,10 @@ impl ContextVFS<'_> {
         data: vm::RunOk,
     ) -> Result<(generated::types::Fd, usize), generated::types::Error> {
         let data = match data {
-            RunOk::ContractError(e) => {
-                return Err(generated::types::Error::trap(PropagateControlled(e).into()))
+            RunOk::ContractError(e, cause) => {
+                return Err(generated::types::Error::trap(
+                    crate::errors::ContractError(e, cause).into(),
+                ))
             }
             data => data,
         };
@@ -515,9 +506,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             init_actions: self.context.data.init_actions.clone(),
         };
 
-        let my_res = self
-            .context
-            .spawn_and_run(&supervisor, vm_data)
+        let my_res = self.context.spawn_and_run(&supervisor, vm_data);
+        let my_res = crate::errors::ContractError::unwrap_res(my_res)
             .map_err(generated::types::Error::trap)?;
 
         let ret_res = (|| match leaders_res {
@@ -530,17 +520,30 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             }
             Some(leaders_res) => match my_res {
                 RunOk::Return(v) if v == [16] => Ok(leaders_res),
-                RunOk::Return(v) if v == [8] => Err(PropagateControlled(format!("validator_disagrees call {}", call_no)).into()),
-                RunOk::ContractError(my_err) => {
-                    match leaders_res {
-                        RunOk::ContractError(leader_err) => {
-                            log::info!(target: "vm", event = "validator errored for leader error", validator_error = my_err; "AGREE");
-                            Err(PropagateControlled(leader_err).into())
-                        },
-                        _ => Err(PropagateControlled(my_err).into()),
+                RunOk::Return(v) if v == [8] => Err(crate::errors::ContractError(
+                    format!("validator_disagrees call {}", call_no),
+                    None,
+                )
+                .into()),
+                RunOk::ContractError(my_err, my_cause) => match leaders_res {
+                    RunOk::ContractError(leader_err, leader_cause) => {
+                        log::info!(
+                            target: "vm",
+                            event = "validator errored for leader error",
+                            validator_error = my_err,
+                            my_cause:? = my_cause,
+                            leader_cause:? = leader_cause;
+                            "AGREE"
+                        );
+                        Err(crate::errors::ContractError(leader_err, leader_cause).into())
                     }
-                }
-                _ => Err(PropagateControlled(format!("validator_disagrees call {}", call_no)).into()),
+                    _ => Err(crate::errors::ContractError(my_err, my_cause).into()),
+                },
+                _ => Err(crate::errors::ContractError(
+                    format!("validator_disagrees call {}", call_no),
+                    None,
+                )
+                .into()),
             },
         })()
         .map_err(generated::types::Error::trap)?;

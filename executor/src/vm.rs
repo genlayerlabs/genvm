@@ -68,7 +68,7 @@ impl<I: Iterator<Item = u8>> Iterator for DecodeUtf8<I> {
 pub enum RunOk {
     Return(Vec<u8>),
     Rollback(String),
-    ContractError(String),
+    ContractError(String, Option<anyhow::Error>),
 }
 
 pub type RunResult = Result<RunOk>;
@@ -87,7 +87,7 @@ impl RunOk {
             RunOk::Rollback(buf) => [ResultCode::Rollback as u8]
                 .into_iter()
                 .chain(buf.as_bytes().iter().cloned()),
-            RunOk::ContractError(buf) => [ResultCode::ContractError as u8]
+            RunOk::ContractError(buf, _) => [ResultCode::ContractError as u8]
                 .into_iter()
                 .chain(buf.as_bytes().iter().cloned()),
         }
@@ -117,7 +117,7 @@ impl std::fmt::Debug for RunOk {
                 f.write_fmt(format_args!("Return(\"{}\")", str))
             }
             Self::Rollback(r) => f.debug_tuple("Rollback").field(r).finish(),
-            Self::ContractError(r) => f.debug_tuple("ContractError").field(r).finish(),
+            Self::ContractError(r, _) => f.debug_tuple("ContractError").field(r).finish(),
         }
     }
 }
@@ -239,13 +239,13 @@ impl VM {
                             if v.0 == 0 {
                                 Some(RunOk::empty_return())
                             } else {
-                                Some(RunOk::ContractError(format!("exit_code {}", v.0)))
+                                Some(RunOk::ContractError(format!("exit_code {}", v.0), None))
                             }
                         }),
                     e.downcast_ref::<wasmtime::Trap>()
-                        .map(|v| RunOk::ContractError(v.to_string())),
-                    e.downcast_ref::<crate::wasi::genlayer_sdk::PropagateControlled>()
-                        .map(|v| RunOk::ContractError(v.0.clone())),
+                        .map(|v| RunOk::ContractError(format!("wasm_trap {v:?}"), None)),
+                    e.downcast_ref::<crate::errors::ContractError>()
+                        .map(|v| RunOk::ContractError(v.0.clone(), None)),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::Rollback>()
                         .map(|v| RunOk::Rollback(v.0.clone())),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::ContractReturn>()
@@ -263,8 +263,8 @@ impl VM {
             Ok(RunOk::Rollback(_)) => {
                 log::info!(target: "vm", event = "execution result unwrapped", result = "Rollback"; "")
             }
-            Ok(RunOk::ContractError(e)) => {
-                log::info!(target: "vm", event = "execution result unwrapped", result = format!("ContractError({e})"); "")
+            Ok(RunOk::ContractError(e, cause)) => {
+                log::info!(target: "vm", event = "execution result unwrapped", result = format!("ContractError({e})"), cause:? = cause; "")
             }
             Err(_) => {
                 log::info!(target: "vm", event = "execution result unwrapped", result = "Error"; "")
@@ -681,9 +681,9 @@ impl Supervisor {
                         return Ok(c);
                     }
                 }
-                return Err(anyhow::anyhow!(
-                    "can't detect comment in text contract {}",
-                    &code_str[..10.min(code_str.len())]
+                return Err(crate::errors::ContractError(
+                    "no_runner_comment".into(),
+                    None,
                 ));
             })()?;
             let mut code_comment = String::new();

@@ -1,5 +1,6 @@
 #![feature(once_wait)]
 
+pub mod errors;
 mod host;
 pub mod plugin_loader;
 pub mod runner;
@@ -9,6 +10,7 @@ pub mod wasi;
 
 pub mod caching;
 
+use errors::ContractError;
 pub use host::{AccountAddress, GenericAddress, Host, MessageData};
 
 use anyhow::{Context, Result};
@@ -140,7 +142,8 @@ pub fn run_with_impl(
         supervisor.host.append_calldata(&mut entrypoint)?;
         let init_actions = supervisor
             .get_actions_for(&entry_message.contract_account)
-            .with_context(|| "getting runner actions")?;
+            .with_context(|| "getting runner actions")
+            .map_err(|cause| crate::errors::ContractError::wrap("runner_actions".into(), cause))?;
 
         let essential_data = wasi::genlayer_sdk::SingleVMData {
             conf: wasi::base::Config {
@@ -168,6 +171,7 @@ pub fn run_with(
     supervisor: Arc<Mutex<vm::Supervisor>>,
 ) -> vm::RunResult {
     let res = run_with_impl(entry_message, supervisor.clone());
+    let res = ContractError::unwrap_res(res);
 
     {
         let Ok(mut supervisor) = supervisor.lock() else {
