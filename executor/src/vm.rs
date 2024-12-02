@@ -125,6 +125,7 @@ impl std::fmt::Debug for RunOk {
 #[derive(Clone)]
 pub struct WasmContext {
     genlayer_ctx: Arc<Mutex<wasi::Context>>,
+    limits: wasmtime::StoreLimits,
 }
 
 impl WasmContext {
@@ -134,6 +135,13 @@ impl WasmContext {
     ) -> WasmContext {
         WasmContext {
             genlayer_ctx: Arc::new(Mutex::new(wasi::Context::new(data, shared_data))),
+            limits: wasmtime::StoreLimitsBuilder::new()
+                .memories(100)
+                .memory_size(2usize << 30)
+                .instances(1000)
+                .tables(1000)
+                .table_elements(1usize << 20)
+                .build(),
         }
     }
 }
@@ -501,11 +509,13 @@ impl Supervisor {
             &self.engines.non_det
         };
 
-        let store = Store::new(
+        let mut store = Store::new(
             &engine,
             WasmContext::new(data, self.shared_data.clone()),
             self.shared_data.should_exit.clone(),
         );
+
+        store.limiter(|ctx| &mut ctx.limits);
 
         let linker_shared = Arc::new(Mutex::new(Linker::new(engine)));
         let linker_shared_cloned = linker_shared.clone();
