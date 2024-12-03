@@ -1,2 +1,2 @@
 jsonnet==0.20.0
-numpy==1.26.4
+numpy==2.1.3
