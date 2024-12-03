@@ -71,6 +71,17 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfn(m)]
+    fn sandbox(data: &[u8]) -> PyResult<u32> {
+        flush_everything();
+        map_error(unsafe {
+            genvm_sdk_rust::sandbox(genvm_sdk_rust::Bytes {
+                buf: data.as_ptr(),
+                buf_len: data.len() as u32,
+            })
+        })
+    }
+
+    #[pyfn(m)]
     fn call_contract(address: &[u8], calldata: &[u8]) -> PyResult<u32> {
         flush_everything();
         let address = get_addr(&address)?;

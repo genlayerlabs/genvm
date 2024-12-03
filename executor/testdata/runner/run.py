@@ -87,7 +87,9 @@ def run(jsonnet_rel_path):
 		return {
 			'category': 'skip',
 		}
-	jsonnet_conf = _jsonnet.evaluate_file(str(jsonnet_path))
+	jsonnet_conf = _jsonnet.evaluate_file(
+		str(jsonnet_path), jpathdir=[str(script_dir.parent)]
+	)
 	jsonnet_conf = json.loads(jsonnet_conf)
 	if not isinstance(jsonnet_conf, list):
 		jsonnet_conf = [jsonnet_conf]

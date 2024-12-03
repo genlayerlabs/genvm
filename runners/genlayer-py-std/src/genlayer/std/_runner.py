@@ -31,6 +31,7 @@ def run(contract: type):
 	mem = memoryview(entrypoint)
 	CALL = b'call!'
 	NONDET = b'nondet!'
+	SANDBOX = b'sandbox!'
 	if entrypoint.startswith(CALL):
 		mem = mem[len(CALL) :]
 		calldata = genlayer.py.calldata.decode(mem)
@@ -82,5 +83,11 @@ def run(contract: type):
 
 			leaders_res = decode_sub_vm_result_retn(leaders_res_mem)
 			_give_result(lambda: runner(leaders_res))
+	elif entrypoint.startswith(SANDBOX):
+		mem = mem[len(SANDBOX) :]
+		import cloudpickle
+
+		runner = cloudpickle.loads(mem)
+		_give_result(lambda: cloudpickle.dumps(runner()))
 	else:
 		raise Exception(f'unknown entrypoint {entrypoint}')
