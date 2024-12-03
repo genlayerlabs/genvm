@@ -271,6 +271,9 @@ def _storage_build_generic(
 	# here args are resolved but not instantiated
 	generic_params = cls.origin.__type_params__
 
+	assert cls.origin is not list, 'use DynArray'
+	assert cls.origin is not dict, 'use TreeMap'
+
 	if np is not None and cls.origin is np.ndarray:
 		assert len(cls.args) == 2
 		shape = cls.args[0]

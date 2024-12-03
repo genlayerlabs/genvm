@@ -129,7 +129,7 @@ def encode(
 			assert not isinstance(b, type)
 			impl_dict(dataclasses.asdict(b))
 		else:
-			raise TypeError(f'invalid type {type(b)}', type(b))
+			raise TypeError(f'not calldata encodable', type(b))
 
 	impl(x)
 	return bytes(mem)

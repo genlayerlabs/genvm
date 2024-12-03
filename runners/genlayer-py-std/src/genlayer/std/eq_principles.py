@@ -106,6 +106,7 @@ eq_principle_prompt_non_comparative = _LazyApi(_eq_principle_prompt_non_comparat
 Non-comparative equivalence principle that must cover most common use cases
 
 Both leader and validator finish their execution via NLP, that is used to perform ``task`` on ``input``.
-Leader just executes this task, but the validator checks if task was performed with integrity
+Leader just executes this task, but the validator checks if task was performed with integrity.
+This principle is useful when task is subjective
 """
 del _eq_principle_prompt_non_comparative
