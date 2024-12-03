@@ -88,3 +88,18 @@ target_alias(
 	tags: ['all', 'runner'],
 	inherit_meta: ['expected_hash'],
 )
+
+root_build.join('docs').mkpath
+cur_build.join('docs').mkpath
+
+build_docs = target_command(
+	commands: [
+		['cp', cur_src.join('docs_base', 'conf.py'), cur_build.join('docs')],
+		['poetry', 'run', 'sphinx-apidoc', '-F', '-o', cur_build.join('docs'), 'src'],
+		['poetry', 'run', 'sphinx-build', '-b', 'html', cur_build.join('docs'), root_build.join('docs', 'py')]
+	],
+	cwd: cur_src,
+	output_file: root_build.join('docs', 'py', 'docs.trg'),
+	dependencies: [],
+	tags: ['docs'],
+)

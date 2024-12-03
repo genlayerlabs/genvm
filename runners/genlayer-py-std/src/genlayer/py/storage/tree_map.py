@@ -1,3 +1,5 @@
+__all__ = ('TreeMap',)
+
 import abc
 import collections.abc
 
@@ -36,6 +38,10 @@ class Comparable(typing.Protocol):
 
 
 class TreeMap[K: Comparable, V](collections.abc.Mapping):
+	"""
+	Represents a mapping from keys to values
+	"""
+
 	root: u32
 	slots: DynArray[_Node[K, V]]
 	free_slots: DynArray[u32]

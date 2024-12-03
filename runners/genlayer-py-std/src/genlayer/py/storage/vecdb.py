@@ -36,6 +36,10 @@ def cosine_distance_fast[S, T: np.number](
 
 
 class VecDB[T: np.number, S: int, V]:
+	"""
+	Data structure that supports storing and querying vector data
+	"""
+
 	# FIXME implement production ready *NN structure
 	_keys: DynArray[np.ndarray[tuple[S], np.dtype[T]]]
 	_values: DynArray[V]

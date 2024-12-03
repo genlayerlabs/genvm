@@ -6,6 +6,10 @@ from .desc_base_types import _u32_desc
 
 
 class DynArray[T](WithStorageSlot, collections.abc.Sequence):
+	"""
+	Represents exponentially growing array (:py:type:`list` in python terms) that can be stored in the storage
+	"""
+
 	_item_desc: TypeDesc
 
 	def __init__(self):

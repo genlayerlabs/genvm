@@ -6,7 +6,7 @@ __all__ = (
 
 from .prompt_ids import *
 
-import genlayer._wasi as wasi
+import genlayer.std._wasi as wasi
 
 import genlayer.std.advanced as advanced
 import typing
@@ -29,6 +29,9 @@ def _eq_principle_strict_eq[T](fn: typing.Callable[[], T]) -> Lazy[T]:
 
 
 eq_principle_strict_eq = _LazyApi(_eq_principle_strict_eq)
+"""
+Comparative equivalence principle that checks for strict equality
+"""
 del _eq_principle_strict_eq
 
 
@@ -52,6 +55,12 @@ def _eq_principle_prompt_comparative(
 
 
 eq_principle_prompt_comparative = _LazyApi(_eq_principle_prompt_comparative)
+"""
+Comparative equivalence principle that utilizes NLP for verifying that results are equivalent
+
+.. note::
+	As leader results are encoded as calldata, :py:func:`format` is used for string representation. However, operating on strings by yourself is more safe in general
+"""
 del _eq_principle_prompt_comparative
 
 
@@ -93,4 +102,11 @@ def _eq_principle_prompt_non_comparative(
 
 
 eq_principle_prompt_non_comparative = _LazyApi(_eq_principle_prompt_non_comparative)
+"""
+Non-comparative equivalence principle that must cover most common use cases
+
+Both leader and validator finish their execution via NLP, that is used to perform ``task`` on ``input``.
+Leader just executes this task, but the validator checks if task was performed with integrity.
+This principle is useful when task is subjective
+"""
 del _eq_principle_prompt_non_comparative

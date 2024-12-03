@@ -76,8 +76,21 @@ def actions_append(l: list[CopyAction], r: list[CopyAction]):
 
 
 class TypeDesc[T]:
+	"""
+	Basic type description
+	"""
+
 	size: int
+	"""
+	size that value takes in current slot
+	"""
+
 	copy_actions: list[CopyAction]
+	"""
+	actions that must be executed for copying this data
+
+	:py:type:`int` represents ``memcpy``
+	"""
 	alias_to: typing.Any
 
 	def __init__(self, size: int, copy_actions: list[CopyAction]):
@@ -86,10 +99,18 @@ class TypeDesc[T]:
 		self.alias_to = None
 
 	@abc.abstractmethod
-	def get(self, slot: StorageSlot, off: int) -> T: ...
+	def get(self, slot: StorageSlot, off: int) -> T:
+		"""
+		Method that reads value from slot and offset pair
+		"""
+		...
 
 	@abc.abstractmethod
-	def set(self, slot: StorageSlot, off: int, val: T) -> None: ...
+	def set(self, slot: StorageSlot, off: int, val: T) -> None:
+		"""
+		Method that writes value to slot and offset pair
+		"""
+		...
 
 	def __repr__(self):
 		ret: list[str] = []
@@ -114,6 +135,10 @@ class WithStorageSlot(typing.Protocol):
 
 
 class _FakeStorageSlot(StorageSlot):
+	"""
+	In-memory storage slot which can be used to create storage entities without "Host"
+	"""
+
 	_mem: bytearray
 
 	def __init__(self, addr: u256, manager: StorageMan):

@@ -1,3 +1,7 @@
+"""
+Module that uses reflections that generates python-friendly views to GenVM storage format (mapping from slot addresses to linear memories)
+"""
+
 __all__ = ('storage',)
 
 from genlayer.py.types import *
@@ -266,6 +270,9 @@ def _storage_build_generic(
 ) -> TypeDesc:
 	# here args are resolved but not instantiated
 	generic_params = cls.origin.__type_params__
+
+	assert cls.origin is not list, 'use DynArray'
+	assert cls.origin is not dict, 'use TreeMap'
 
 	if np is not None and cls.origin is np.ndarray:
 		assert len(cls.args) == 2

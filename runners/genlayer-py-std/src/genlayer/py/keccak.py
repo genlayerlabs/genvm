@@ -17,6 +17,13 @@
 
 # NOTE: source code from https://github.com/ctz/keccak
 # some code was truncated for use in this project
+"""
+Implements keccak hash
+
+Source code is taken from `https://github.com/ctz/keccak <https://github.com/ctz/keccak>`_ (Apache 2.0 license)
+"""
+
+__all__ = ('Keccak256',)
 
 from math import log
 from operator import xor

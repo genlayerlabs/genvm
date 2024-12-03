@@ -1,3 +1,7 @@
+"""
+Module that is used to run python contracts in the default way
+"""
+
 KNOWN_CONTRACT = None
 
 

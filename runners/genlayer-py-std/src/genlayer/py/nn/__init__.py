@@ -1,9 +1,13 @@
+"""
+Basic support for generating embeddings
+
+This file is highly inspired by `tinygrad <https://github.com/tinygrad/tinygrad>`_ (MIT license)
+"""
+
 from __future__ import annotations
 
 __all__ = ('get_run_onnx', 'Tensor', 'TensorStorage')
 
-
-# NOTE this file is hardly inspired by [tinygrad](https://github.com/tinygrad/tinygrad) (licensed under MIT license)
 
 from .tensor import Tensor, TensorStorage, ConstTensor, shapeOfNNull
 

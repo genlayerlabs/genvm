@@ -114,6 +114,9 @@ def _get_params(m: types.FunctionType, *, is_ctor: bool) -> dict:
 
 
 def get_schema(contract: type) -> typing.Any:
+	"""
+	Uses python type reflections to produce GenVM ABI schema
+	"""
 	ctor = typing.cast(types.FunctionType, getattr(contract, '__init__', None))
 	if _is_public(ctor):
 		raise Exception('constructor must be private')

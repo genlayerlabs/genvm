@@ -46,7 +46,7 @@ fake_zip.flush()
 
 zip_contents = fake_zip.getvalue()
 
-contents_hash = hashlib.sha3_512()
+contents_hash = hashlib.sha3_224()
 contents_hash.update(zip_contents)
 import base64
 

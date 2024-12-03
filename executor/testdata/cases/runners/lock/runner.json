@@ -1,12 +1,13 @@
 {
+  "$schema": "https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/runners.json",
   "Seq": [
     { "MapFile": { "to": "/contract.py", "file": "contract.py" } },
     { "SetArgs": ["py", "-u", "-c", "import contract;import genlayer.std.runner as r;r.run(contract)"] },
-    { "Depends": "softfloat:5VML6RYPX3UU3GOE4IESJLJLWHUOTSJK3M6XUEXEL3HDA65DZWCY2YMZ4MYIRGTQKZEDZXAA2X57RA4AMCGV4IK4EF5CKITMTTXWXEQ=" },
+    { "Depends": "softfloat:IFXASJIX62HBW2W5YVCR4CZIVQTJDZY2NONWL2R44EXGS===" },
     {"MapFile":{"to":"/py/std/json.py","file":"new_json.py"}},
     {
       "With": {
-        "runner": "genvm-cpython:FYYR7BKPJFS7JJRXNIG3SF7PFIWW6KCRHK62HBDD4BR3GM4IECDASI3QMMI635EEXKKJVY7RL3GCFUAG7KQ53Y6UDG4RVZOJ3KYBBMI=",
+        "runner": "genvm-cpython:XNKMSWIIZ5LWPPSGF5P3GJDVKK24TZJTTTCGXOF6J3GOY===",
         "action": {
           "Seq": [
             {"MapFile":{"to":"/py/std/encodings","file":"py/encodings/"}},

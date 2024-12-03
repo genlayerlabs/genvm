@@ -1,0 +1,8 @@
+1024
+8192
+65536
+524288
+4194304
+33554432
+268435456
+executed with `ContractError("exit_code 1")`
