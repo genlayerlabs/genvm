@@ -124,6 +124,14 @@ def run(jsonnet_rel_path):
 		single_conf_form_file = unfold_conf(
 			single_conf_form_file, single_conf_form_file['vars']
 		)
+		if 'prepare' in single_conf_form_file:
+			subprocess.run(
+				[sys.executable, single_conf_form_file['prepare']],
+				stdin=subprocess.DEVNULL,
+				stdout=sys.stdout,
+				stderr=sys.stderr,
+				check=True,
+			)
 		for acc_val in single_conf_form_file['accounts'].values():
 			code_path = acc_val.get('code', None)
 			if code_path is None:
