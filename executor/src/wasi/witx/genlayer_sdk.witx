@@ -27,6 +27,11 @@
         (result $error (expected $fd (error $errno)))
     )
 
+    (@interface func (export "sandbox")
+        (param $data $bytes)
+        (result $error (expected $fd (error $errno)))
+    )
+
     (@interface func (export "get_webpage")
         (param $config string)
         (param $url string)

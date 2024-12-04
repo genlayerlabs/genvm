@@ -7,41 +7,16 @@ defaults:
     shell: bash -x {0}
 
 jobs:
-  pre-commit:
-    runs-on: ubuntu-latest
-    outputs:
-      python: ${{ steps.changes.outputs.python }}
-      rs: ${{ steps.changes.outputs.rs }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Get source
-        uses: ./.github/actions/get-src
-        with:
-          install_also: --rust
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.12
-          cache: pip
-      - name: configure and run codegen
-        run: |
-          cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \
-          ninja -v -C build tags/codegen
-      - uses: pre-commit/action@v3.0.1
-      - uses: dorny/paths-filter@v3
-        id: changes
-        with:
-          filters: |
-            python:
-              - runners/genlayer-py-std/src/genlayer/py/**/*.py
-            rs:
-              - '**/*.rs'
+  initial:
+    uses: ./.github/workflows/initial-template.yaml
+    secrets: inherit
 
 ### MODULE TESTS
 
   module-test-cargo:
-    needs: [pre-commit]
+    needs: [initial]
     runs-on: ubuntu-latest
-    if: needs.pre-commit.outputs.rs == 'true' || github.ref == 'refs/heads/main'
+    if: needs.initial.outputs.rs-changed == 'true'
     steps:
       - uses: actions/checkout@v4
       - name: Get source
@@ -61,9 +36,9 @@ jobs:
           ./build-scripts/cargo-test.sh
 
   module-test-python:
-    needs: [pre-commit]
+    needs: [initial]
     runs-on: ubuntu-latest
-    if: needs.pre-commit.outputs.python == 'true' || github.ref == 'refs/heads/main'
+    if: needs.pre-commit.outputs.py-changed == 'true'
     steps:
       - run: sudo apt-get install -y python3-poetry
       - uses: actions/checkout@v4
@@ -95,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ always() }}
     needs:
-      - pre-commit
+      - initial
       - module-test-cargo
       - module-test-python
     steps:

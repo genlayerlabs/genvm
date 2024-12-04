@@ -1,11 +1,12 @@
 import typing
+import math
 
 from .core import *
 from .core import _FakeStorageMan
 from .desc_base_types import _u32_desc
 
 
-class DynArray[T](WithStorageSlot, collections.abc.Sequence):
+class DynArray[T](WithStorageSlot, collections.abc.MutableSequence):
 	"""
 	Represents exponentially growing array (:py:type:`list` in python terms) that can be stored in the storage
 	"""
@@ -34,15 +35,115 @@ class DynArray[T](WithStorageSlot, collections.abc.Sequence):
 			raise IndexError(f'index out of range {idx} not in 0..<{le}')
 		return idx
 
-	def __getitem__(self, idx: int) -> T:
-		idx = self._map_index(idx)
-		items_at = self._storage_slot.indirect(self._off)
-		return self._item_desc.get(items_at, idx * self._item_desc.size)
+	@typing.overload
+	def __getitem__(self, idx: int) -> T: ...
+	@typing.overload
+	def __getitem__(self, idx: slice) -> list[T]: ...
 
-	def __setitem__(self, idx: int, val: T) -> None:
+	def __getitem__(self, idx: int | slice) -> T | list[T]:
+		if isinstance(idx, int):
+			idx = self._map_index(idx)
+			items_at = self._storage_slot.indirect(self._off)
+			return self._item_desc.get(items_at, idx * self._item_desc.size)
+		else:
+			start, stop, step = idx.indices(len(self))
+			ret = []
+			step_sign = 1 if step >= 0 else -1
+			while start * step_sign < stop * step_sign:
+				ret.append(self[start])
+				start += step
+			return ret
+
+	@typing.overload
+	def __setitem__(self, idx: int, val: T) -> None: ...
+	@typing.overload
+	def __setitem__(self, idx: slice, val: collections.abc.Sequence[T]) -> None: ...
+
+	def __setitem__(self, idx: int | slice, val: T | collections.abc.Sequence[T]) -> None:
+		if isinstance(idx, int):
+			idx = self._map_index(idx)
+			items_at = self._storage_slot.indirect(self._off)
+			self._item_desc.set(items_at, idx * self._item_desc.size, val)
+			return
+		else:
+			start, stop, step = self._slice_to_idx(idx)
+			new_val = typing.cast(collections.abc.Sequence[T], val)
+			left_in_new = len(new_val)
+			if isinstance(idx.step, int) and idx.step < 0:
+				new_val = reversed(new_val)
+			left_in_range = (stop - start) // step
+			new_it = iter(new_val)
+
+			# just reassign existing values
+			common_values_cnt = min(left_in_new, left_in_range)
+			for i in range(common_values_cnt):
+				self[start + i * step] = next(new_it)
+
+			start += common_values_cnt
+			left_in_range -= common_values_cnt
+			left_in_new -= common_values_cnt
+
+			# if we have other values we must remove them
+			if left_in_range > 0:
+				del self[start:stop:step]
+
+			# if we have some unassigned we must insert it here
+			elif left_in_new > 0:
+				# move current to the right
+				items_at = self._storage_slot.indirect(self._off)
+				for i in range(len(self) - 1, start - 1, -1):
+					self._item_desc.set(
+						items_at, (i + left_in_new) * self._item_desc.size, self[i]
+					)
+				for i in range(left_in_new):
+					self._item_desc.set(
+						items_at, (start + i) * self._item_desc.size, next(new_it)
+					)
+				_u32_desc.set(self._storage_slot, self._off, len(self) + left_in_new)
+
+	def _slice_to_idx(self, s: slice) -> tuple[int, int, int]:
+		start, stop, step = s.indices(len(self))
+		if step < 0:
+			step *= -1
+			start, stop = stop, start
+			# stop += (step - (stop - start) % step) % step
+			start = stop - (stop - start - 1) // step * step
+			stop += 1
+		return start, stop, step
+
+	@typing.overload
+	def __delitem__(self, idx: int) -> None: ...
+	@typing.overload
+	def __delitem__(self, idx: slice) -> None: ...
+
+	def __delitem__(self, idx: int | slice) -> None:
+		if isinstance(idx, int):
+			start = self._map_index(idx)
+			stop = start + 1
+			step = 1
+		else:
+			start, stop, step = self._slice_to_idx(idx)
+		if stop <= start:
+			return
+		next_deletion = start
+		insert_idx = start
+		for i in range(start, len(self)):
+			if i == next_deletion:
+				next_deletion = i + step
+				if next_deletion >= stop:
+					next_deletion = -1
+				continue
+			self[insert_idx] = self[i]
+			insert_idx += 1
+		_u32_desc.set(self._storage_slot, self._off, insert_idx)
+
+	def insert(self, idx: int, val: T) -> None:
 		idx = self._map_index(idx)
-		items_at = self._storage_slot.indirect(self._off)
-		return self._item_desc.set(items_at, idx * self._item_desc.size, val)
+		old_len = len(self)
+		_u32_desc.set(self._storage_slot, self._off, old_len + 1)
+		for i in range(old_len, idx, -1):
+			self[i] = self[i - 1]
+		self[idx] = val
 
 	def __iter__(self) -> typing.Any:
 		for i in range(len(self)):
@@ -65,6 +166,15 @@ class DynArray[T](WithStorageSlot, collections.abc.Sequence):
 		if le == 0:
 			raise Exception("can't pop from empty array")
 		_u32_desc.set(self._storage_slot, self._off, le - 1)
+
+	def __repr__(self) -> str:
+		ret: list[str] = []
+		ret.append('[')
+		for x in self:
+			ret.append(repr(x))
+			ret.append(',')
+		ret.append(']')
+		return ''.join(ret)
 
 
 class _VecCopyAction(ComplexCopyAction):

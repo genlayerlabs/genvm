@@ -2,6 +2,7 @@ __all__ = (
 	'eq_principle_strict_eq',
 	'eq_principle_prompt_comparative',
 	'eq_principle_prompt_non_comparative',
+	'sandbox',
 )
 
 from .prompt_ids import *
@@ -12,7 +13,7 @@ import genlayer.std.advanced as advanced
 import typing
 import json
 from ..py.types import *
-from ._private import decode_sub_vm_result, lazy_from_fd, _LazyApi
+from ._private import decode_sub_vm_result_retn, lazy_from_fd, _LazyApi
 from .nondet_fns import exec_prompt
 
 
@@ -110,3 +111,29 @@ Leader just executes this task, but the validator checks if task was performed w
 This principle is useful when task is subjective
 """
 del _eq_principle_prompt_non_comparative
+
+
+def _sandbox(data: typing.Callable[[], typing.Any]) -> typing.Any:
+	import cloudpickle
+	import genlayer.py.calldata as calldata
+
+	def decode(x: collections.abc.Buffer):
+		res = decode_sub_vm_result_retn(x)
+		if isinstance(res, advanced.ContractReturn):
+			return cloudpickle.loads(res.data)
+		if isinstance(res, advanced.Rollback):
+			raise res
+		if isinstance(res, advanced.ContractError):
+			raise Exception(res)
+
+	return lazy_from_fd(wasi.sandbox(cloudpickle.dumps(data)), decode)
+
+
+sandbox = _LazyApi(_sandbox)
+"""
+Runs function in the sandbox
+
+.. warning::
+	It returns result via pickle, which can be unsafe. If it is not desired wrap it to bytes yourself
+"""
+del _sandbox

@@ -550,6 +550,42 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         self.set_vm_run_result(ret_res).map(|x| x.0)
     }
 
+    fn sandbox(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        data: &generated::types::Bytes,
+    ) -> Result<generated::types::Fd, generated::types::Error> {
+        let mut entrypoint = Vec::from(b"sandbox!");
+        let cow_data = mem.as_cow(data.buf.as_array(data.buf_len))?;
+        entrypoint.extend(cow_data.into_iter());
+
+        let entrypoint = Arc::from(entrypoint);
+
+        let supervisor = self.context.data.supervisor.clone();
+
+        let vm_data = SingleVMData {
+            conf: base::Config {
+                is_deterministic: self.context.data.conf.is_deterministic,
+                can_read_storage: false,
+                can_write_storage: false,
+                can_spawn_nondet: false,
+            },
+            message_data: self.context.data.message_data.clone(),
+            entrypoint,
+            supervisor: supervisor.clone(),
+            init_actions: self.context.data.init_actions.clone(),
+        };
+
+        let my_res = self.context.spawn_and_run(&supervisor, vm_data);
+        let my_res = crate::errors::ContractError::unwrap_res(my_res)
+            .map_err(generated::types::Error::trap)?;
+
+        let data: Arc<[u8]> = my_res.as_bytes_iter().collect();
+        Ok(generated::types::Fd::from(self.vfs.place_content(
+            FileContentsUnevaluated::from_contents(data, 0),
+        )))
+    }
+
     fn call_contract(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,

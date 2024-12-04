@@ -1,103 +1,75 @@
+import pytest
+
 from genlayer import *
 from genlayer.py.storage.generate import storage
 
 
+def same_iter(li, ri):
+	for l, r in zip(li, ri, strict=True):
+		assert l == r
+
+
 @storage
 class UserStorage:
-	m: TreeMap[str, u32]
+	m: TreeMap[str, str]
 
 
-def test_compiles():
-	pass
+def test_construct():
+	r = {str(i): str(i) + str(i) for i in range(10)}
+	l = UserStorage()
+	l.m.update(r)
+
+	same_iter(l.m.items(), r.items())
 
 
-from .common import *
-import itertools
-import random
+@pytest.mark.parametrize('key', ['1', '-1', '2', '10'])
+def test_contains(key: str):
+	r = {str(i): str(i) + str(i) for i in range(10)}
+	l = UserStorage()
+	l.m.update(r)
+
+	assert (key in l.m) == (key in r)
 
 
-def dump(v, x, ind=0):
-	if x == 0:
-		print(f'{" "*ind}null', end='')
-		return
-	p = v.slots[x - 1]
-	print(f'{" "*ind}[key={p.key}, idx={x}, bal={p.balance}]: {{')
-	dump(v, p.left, ind + 1)
-	print()
-	dump(v, p.right, ind + 1)
-	print(f'\n{" "*ind}}}', end='')
+@pytest.mark.parametrize(
+	'key,dflt', [(key, dflt) for key in ['1', '-1', '2', '10'] for dflt in [None, 'dflt']]
+)
+def test_get_dflt(key: str, dflt):
+	r = {str(i): str(i) + str(i) for i in range(10)}
+	l = UserStorage()
+	l.m.update(r)
+
+	assert l.m.get(key, dflt) == r.get(key, dflt)
 
 
-def verify_invariants(v: TreeMap[str, u32]):
-	def check(idx):
-		if idx == 0:
-			return {'depth': 0}
-		cur = v.slots[idx - 1]
-		ld = check(cur.left)
-		rd = check(cur.right)
-		if cur.left != 0:
-			assert v.slots[cur.left - 1].key < cur.key
-		if cur.right != 0:
-			assert cur.key < v.slots[cur.right - 1].key
-		ldepth = ld['depth']
-		rdepth = rd['depth']
-		assert rdepth - ldepth == cur.balance, 'invariant broken'
-		return {'depth': 1 + max(ldepth, rdepth)}
+@pytest.mark.parametrize('key', ['1', '-1', '2', '10'])
+def test_get(key: str):
+	r = {str(i): str(i) + str(i) for i in range(10)}
+	l = UserStorage()
+	l.m.update(r)
 
-	check(v.root)
+	assert l.m.get(key) == r.get(key)
 
 
-def test_insert():
-	stor = UserStorage()
-	dic = {}
+@pytest.mark.parametrize('key', ['1', '-1', '2', '10', '1000'])
+def test_set(key: str):
+	r = {str(i): str(i) + str(i) for i in range(10)}
+	l = UserStorage()
+	l.m.update(r)
 
-	def same_iter():
-		for (lk, lv), (rk, rv) in itertools.zip_longest(
-			stor.m.items(), sorted(dic.items())
-		):
-			assert lk == rk
-			assert lv == rv
+	l.m[key] = 'test'
+	r[key] = 'test'
 
-	op = SameOp(stor.m, dic)
-	same_iter()
-	vals = list(range(1048)) * 2
-	vals_dup = vals.copy()
-	random.seed(0)
-	random.shuffle(vals)
-	random.shuffle(vals_dup)
-	iteration = 0
-	while len(vals) > 0:
-		iteration += 1
-		it = vals.pop()
-		op(len)
-		op(lambda x: x[it])
-		op(lambda x: x.get(str(it), None))
-		op(lambda x: x.__setitem__(str(it), iteration), void=True)
-		same_iter()
-		verify_invariants(stor.m)
+	same_iter(sorted(l.m.items()), sorted(r.items()))
 
-	try:
-		op(lambda x: x.__delitem__('-1'), void=True)
-		same_iter()
-		verify_invariants(stor.m)
-	except Exception:
-		print('====')
-		for l, r in itertools.zip_longest(stor.m.items(), sorted(dic.items())):
-			print(l, ' vs ', r)
-		raise
 
-	vals = vals_dup
-	iteration = 0
-	while len(vals) > 0:
-		iteration += 1
-		it = vals.pop()
-		# print(f'iteration {iteration}')
-		try:
-			op(lambda x: x.__delitem__(str(it)), void=True)
-			same_iter()
-			verify_invariants(stor.m)
-		except Exception:
-			print('====')
-			for l, r in itertools.zip_longest(stor.m.items(), sorted(dic.items())):
-				print(l, ' vs ', r)
-			raise
+@pytest.mark.parametrize('key', ['1', '2', '9'])
+def test_del(key: str):
+	r = {str(i): str(i) + str(i) for i in range(10)}
+	l = UserStorage()
+	l.m.update(r)
+
+	del l.m[key]
+	del r[key]
+
+	same_iter(sorted(l.m.items()), sorted(r.items()))

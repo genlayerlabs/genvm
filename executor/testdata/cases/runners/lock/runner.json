@@ -1,19 +1,54 @@
 {
-  "$schema": "https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/runners.json",
   "Seq": [
-    { "MapFile": { "to": "/contract.py", "file": "contract.py" } },
-    { "SetArgs": ["py", "-u", "-c", "import contract;import genlayer.std.runner as r;r.run(contract)"] },
-    { "Depends": "softfloat:IFXASJIX62HBW2W5YVCR4CZIVQTJDZY2NONWL2R44EXGS===" },
-    {"MapFile":{"to":"/py/std/json.py","file":"new_json.py"}},
+    {
+      "MapFile": {
+        "to": "/contract.py",
+        "file": "contract.py"
+      }
+    },
+    {
+      "SetArgs": [
+        "py",
+        "-u",
+        "-c",
+        "import contract;import genlayer.std.runner as r;r.run(contract)"
+      ]
+    },
+    {
+      "Depends": "softfloat:IFXASJIX62HBW2W5YVCR4CZIVQTJDZY2NONWL2R44EXGS==="
+    },
+    {
+      "MapFile": {
+        "to": "/py/std/json.py",
+        "file": "new_json.py"
+      }
+    },
     {
       "With": {
-        "runner": "genvm-cpython:XNKMSWIIZ5LWPPSGF5P3GJDVKK24TZJTTTCGXOF6J3GOY===",
+        "runner": "genvm-cpython:43CJUQR6XM4QTNMWDZLOBRZYLABFB5NFZZLOSFYTD7DQC===",
         "action": {
           "Seq": [
-            {"MapFile":{"to":"/py/std/encodings","file":"py/encodings/"}},
-            {"MapFile":{"to":"/py/std/linecache.py","file":"py/linecache.py"}},
-            {"AddEnv":{"name":"PYTHONPATH","val":"/py/std:/py/libs"}},
-            {"StartWasm":"cpython.wasm"}
+            {
+              "MapFile": {
+                "to": "/py/std/encodings",
+                "file": "py/encodings/"
+              }
+            },
+            {
+              "MapFile": {
+                "to": "/py/std/linecache.py",
+                "file": "py/linecache.py"
+              }
+            },
+            {
+              "AddEnv": {
+                "name": "PYTHONPATH",
+                "val": "/py/std:/py/libs"
+              }
+            },
+            {
+              "StartWasm": "cpython.wasm"
+            }
           ]
         }
       }

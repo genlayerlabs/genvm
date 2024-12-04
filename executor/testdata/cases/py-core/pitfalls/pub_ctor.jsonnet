@@ -1,4 +1,4 @@
-local simple = import '../../../templates/simple.jsonnet';
+local simple = import 'templates/simple.jsonnet';
 simple.run('${jsonnetDir}/pub_ctor.py') {
     "calldata": |||
         {

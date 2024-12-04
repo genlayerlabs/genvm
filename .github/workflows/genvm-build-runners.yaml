@@ -1,4 +1,4 @@
-name: GenVM build GenVM template
+name: GenVM build runners
 on:
   workflow_call:
     outputs:

@@ -176,6 +176,15 @@ pub unsafe fn run_nondet(data_leader: Bytes, data_validator: Bytes) -> Result<Fd
     }
 }
 
+pub unsafe fn sandbox(data: Bytes) -> Result<Fd, Errno> {
+    let mut rp0 = MaybeUninit::<Fd>::uninit();
+    let ret = genlayer_sdk::sandbox(&data as *const _ as i32, rp0.as_mut_ptr() as i32);
+    match ret {
+        0 => Ok(core::ptr::read(rp0.as_mut_ptr() as i32 as *const Fd)),
+        _ => Err(Errno(ret as u32)),
+    }
+}
+
 pub unsafe fn get_webpage(config: &str, url: &str) -> Result<Fd, Errno> {
     let mut rp0 = MaybeUninit::<Fd>::uninit();
     let ret = genlayer_sdk::get_webpage(
@@ -297,6 +306,7 @@ pub mod genlayer_sdk {
         pub fn get_message_data(arg0: i32) -> i32;
         pub fn get_entrypoint(arg0: i32) -> i32;
         pub fn run_nondet(arg0: i32, arg1: i32, arg2: i32) -> i32;
+        pub fn sandbox(arg0: i32, arg1: i32) -> i32;
         pub fn get_webpage(arg0: i32, arg1: i32, arg2: i32, arg3: i32, arg4: i32) -> i32;
         pub fn exec_prompt(arg0: i32, arg1: i32, arg2: i32, arg3: i32, arg4: i32) -> i32;
         pub fn exec_prompt_id(arg0: i32, arg1: i32, arg2: i32, arg3: i32) -> i32;

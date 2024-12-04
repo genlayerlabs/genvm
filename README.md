@@ -7,6 +7,10 @@ It is a monorepo for GenVM, which consists of the following subprojects:
     - python interpreter with built-in `sdk-rust`
     - python standard library from genlayer
 
+
+## Contributing
+For contributing documentation see [contributing page](./doc/contributing/README.md)
+
 ## Building
 
 Prelude:
@@ -42,37 +46,3 @@ It will also require `docker` and `docker-buildx`
 5. `ya-build config` (for release build pass `--preload .ci/release-conf.rb`)
 6. `ninja -C build tags/all`
 7. full genvm (including runners) is located at `build/out`
-
-## Running tests
-As of now there are two test suites, both of which require `./build-scripts/install/install-deps.rb --test`
-
-### executor/testdata (mock tests)
-Prerequisites:
-- For `get_webpage` tests to work, one needs a compatible webdriver. There is a docker image for simplification: `./executor/testdata/web-container/run-test-docker.sh`
-- For the default `exec_prompt` to work `OPENAIKEY` env variable should be set to openai key
-
-Generic steps:
-```bash
-### install dependencies (once)
-python3 -m pip install -r executor/testdata/runner/requirements.txt
-sudo apt-get install -y wabt
-### run
-./executor/testdata/runner/run.py
-```
-
-### python tests (module tests)
-```bash
-### install python 3.12
-sudo apt install libsqlite3-dev
-# ^ without sqlite-dev further won't have sqlite3 required by tests
-curl https://pyenv.run | bash
-~/.pyenv/bin/pyenv install 3.12
-### install poetry
-python3 -m pip install poetry
-poetry env use ~/.pyenv/versions/3.12.5/bin/python3.12
-### install dependencies (once)
-cd runners/genlayer-std
-poetry install
-### run tests
-poetry run pytest -n auto
-```
