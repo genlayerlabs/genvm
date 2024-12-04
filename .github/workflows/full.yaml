@@ -9,39 +9,14 @@ env:
   GCS_BUCKET: "gh-af"
 
 jobs:
-  pre-commit:
-    runs-on: ubuntu-latest
-    outputs:
-      python: ${{ steps.changes.outputs.python }}
-      rs: ${{ steps.changes.outputs.rs }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Get source
-        uses: ./.github/actions/get-src
-        with:
-          install_also: --rust
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.12
-          cache: pip
-      - name: configure and run codegen
-        run: |
-          cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \
-          ninja -v -C build tags/codegen
-      - uses: pre-commit/action@v3.0.1
-      - uses: dorny/paths-filter@v3
-        id: changes
-        with:
-          filters: |
-            python:
-              - runners/genlayer-py-std/src/genlayer/py/**/*.py
-            rs:
-              - '**/*.rs'
+  initial:
+    uses: ./.github/workflows/initial-template.yaml
+    secrets: inherit
 
 ### MODULE TESTS
 
   module-test-cargo:
-    needs: [pre-commit]
+    needs: [initial]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,7 +37,7 @@ jobs:
           ./build-scripts/cargo-test.sh
 
   module-test-python:
-    needs: [pre-commit]
+    needs: [initial]
     runs-on: ubuntu-latest
     steps:
       - run: sudo apt-get install -y python3-poetry
@@ -92,14 +67,14 @@ jobs:
 ### RUNNERS
 
   build-runners:
-    needs: [pre-commit]
+    needs: [initial]
     uses: ./.github/workflows/genvm-build-runners.yaml
     secrets: inherit
 
 ### GENVMS build
 
   build-genvm-debug-ubuntu-latest:
-    needs: [pre-commit]
+    needs: [initial]
     uses: ./.github/workflows/genvm-build-template.yaml
     with:
       runs_on: ubuntu-latest
@@ -108,7 +83,7 @@ jobs:
     secrets: inherit
 
   build-genvm-release-ubuntu-latest:
-    needs: [pre-commit]
+    needs: [initial]
     uses: ./.github/workflows/genvm-build-template.yaml
     with:
       runs_on: ubuntu-latest
@@ -167,7 +142,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ always() }}
     needs:
-      - pre-commit
+      - initial
       - build-runners
       - build-genvm-debug-ubuntu-latest
       - build-genvm-release-ubuntu-latest

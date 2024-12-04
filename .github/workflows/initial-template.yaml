@@ -1,0 +1,44 @@
+name: GenVM initial checks
+on:
+  workflow_call:
+    outputs:
+      py-changed:
+        value: ${{ jobs.pre-commit.outputs.python }}
+      rs-changed:
+        value: ${{ jobs.pre-commit.outputs.rs }}
+defaults:
+  run:
+    shell: bash -x {0}
+
+env:
+  GCS_BUCKET: "gh-af"
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.changes.outputs.python }}
+      rs: ${{ steps.changes.outputs.rs }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          install_also: --rust
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+          cache: pip
+      - name: configure and run codegen
+        run: |
+          cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \
+          ninja -v -C build tags/codegen
+      - uses: pre-commit/action@v3.0.1
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            python:
+              - runners/genlayer-py-std/src/genlayer/py/**/*.py
+            rs:
+              - '**/*.rs'

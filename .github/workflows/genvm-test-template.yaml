@@ -1,4 +1,4 @@
-name: GenVM build GenVM template
+name: GenVM mock-integration tests
 on:
   workflow_call:
     inputs:
