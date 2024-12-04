@@ -62,7 +62,9 @@ def _repr_type(t: typing.Any, permissive: bool) -> typing.Any:
 		args = typing.get_args(t)
 		if _is_dict(origin, permissive):
 			assert len(args) == 2
-			assert args[0] is str
+			assert (
+				args[0] is str
+			), f'dictionary can have only string keys, got {type(args[0])}'
 			return {'$dict': _repr_type(args[1], permissive)}
 		if _is_list(origin, permissive):
 			assert len(args) == 1

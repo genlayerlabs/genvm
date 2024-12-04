@@ -37,7 +37,7 @@ class Comparable(typing.Protocol):
 	def __lt__(self, other: typing.Any, /) -> bool: ...
 
 
-class TreeMap[K: Comparable, V](collections.abc.Mapping):
+class TreeMap[K: Comparable, V](collections.abc.MutableMapping):
 	"""
 	Represents a mapping from keys to values
 	"""
