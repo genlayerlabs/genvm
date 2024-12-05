@@ -168,6 +168,7 @@ def run(jsonnet_rel_path):
 		return {
 			'host': host,
 			'message': single_conf_form_file['message'],
+			'sync': single_conf_form_file.get('sync', False),
 			'tmp_dir': my_tmp_dir,
 			'expected_output': jsonnet_path.with_suffix(f'{suff}.stdout'),
 			'suff': suff,
@@ -192,6 +193,8 @@ def run(jsonnet_rel_path):
 			json.dumps(config['message']),
 			'--print=shrink',
 		]
+		if config['sync']:
+			cmd.append('--sync')
 		steps = [
 			[
 				sys.executable,

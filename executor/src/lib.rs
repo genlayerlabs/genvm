@@ -117,10 +117,9 @@ pub fn create_supervisor(
     config_path: &String,
     mut host: Host,
     log_fd: std::os::fd::RawFd,
+    is_sync: bool,
 ) -> Result<Arc<Mutex<vm::Supervisor>>> {
-    let modules = create_modules(config_path, log_fd);
-
-    let modules = match modules {
+    let modules = match create_modules(config_path, log_fd) {
         Ok(modules) => modules,
         Err(e) => {
             let err = Err(e);
@@ -129,7 +128,7 @@ pub fn create_supervisor(
         }
     };
 
-    Ok(Arc::new(Mutex::new(vm::Supervisor::new(modules, host)?)))
+    Ok(Arc::new(Mutex::new(vm::Supervisor::new(modules, host, is_sync)?)))
 }
 
 pub fn run_with_impl(

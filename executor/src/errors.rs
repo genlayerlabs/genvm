@@ -27,3 +27,14 @@ impl ContractError {
         }
     }
 }
+
+#[derive(Debug)]
+pub struct Rollback(pub String);
+
+impl std::error::Error for Rollback {}
+
+impl std::fmt::Display for Rollback {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Rollback({:?})", self.0)
+    }
+}
