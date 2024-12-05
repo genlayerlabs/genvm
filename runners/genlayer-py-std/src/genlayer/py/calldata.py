@@ -234,7 +234,7 @@ def to_str(d: typing.Any) -> str:
 		elif isinstance(d, Address):
 			buf.append('addr#')
 			buf.append(d.as_bytes.hex())
-		elif isinstance(d, dict):
+		elif isinstance(d, collections.abc.Mapping):
 			buf.append('{')
 			comma = False
 			for k, v in d.items():
@@ -245,7 +245,7 @@ def to_str(d: typing.Any) -> str:
 				buf.append(':')
 				impl(v)
 			buf.append('}')
-		elif isinstance(d, list):
+		elif isinstance(d, collections.abc.Sequence):
 			buf.append('[')
 			comma = False
 			for v in d:

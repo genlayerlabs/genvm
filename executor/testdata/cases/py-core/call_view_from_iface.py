@@ -7,7 +7,7 @@ class ToIface:
 	class View:
 		def foo(self, a, b): ...
 
-	class Emit:
+	class Write:
 		pass
 
 

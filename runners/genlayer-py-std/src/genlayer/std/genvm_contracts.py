@@ -97,14 +97,14 @@ class _ContractAtEmit:
 		return _ContractAtEmitMethod(self.addr, name, self.gas, self.code)
 
 
-class GenVMContractDeclaration[TView, TEmit](typing.Protocol):
+class GenVMContractDeclaration[TView, TWrite](typing.Protocol):
 	View: type[TView]
-	Emit: type[TEmit]
+	Write: type[TWrite]
 
 
-def contract_interface[TView, TEmit](
-	_contr: GenVMContractDeclaration[TView, TEmit],
-) -> typing.Callable[[Address], _GenVMContract[TView, TEmit]]:
+def contract_interface[TView, TWrite](
+	_contr: GenVMContractDeclaration[TView, TWrite],
+) -> typing.Callable[[Address], _GenVMContract[TView, TWrite]]:
 	"""
 	This decorator produces an "interface" for other GenVM contracts. It has no semantical value, but can be used for auto completion and type checks
 	"""

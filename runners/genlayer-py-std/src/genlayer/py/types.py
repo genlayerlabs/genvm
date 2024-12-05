@@ -95,7 +95,25 @@ class Address:
 		return self._as_bytes > r._as_bytes
 
 	def __repr__(self) -> str:
-		return 'addr#' + ''.join(['{:02x}'.format(x) for x in self._as_bytes])
+		return 'Address("' + self.as_hex + '")'
+
+	def __str__(self) -> str:
+		return self.as_hex
+
+	def __format__(self, fmt: typing.Literal['x', 'b64', 'cd', '']) -> str:
+		match fmt:
+			case 's':
+				return self.__str__()
+			case 'x':
+				return self.as_hex
+			case 'b64':
+				return self.as_b64
+			case 'cd':
+				return 'addr#' + ''.join(['{:02x}'.format(x) for x in self._as_bytes])
+			case '':
+				return repr(self)
+			case fmt:
+				raise TypeError(f'unsupported format {fmt!r}')
 
 
 u8 = typing.NewType('u8', int)

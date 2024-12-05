@@ -8,6 +8,7 @@ use itertools::Itertools;
 use wiggle::GuestError;
 
 use crate::{
+    errors::*,
     vm::{self, ContractCodeData, RunOk},
     AccountAddress, GenericAddress, MessageData,
 };
@@ -129,17 +130,6 @@ where
 }
 
 #[derive(Debug)]
-pub struct Rollback(pub String);
-
-impl std::error::Error for Rollback {}
-
-impl std::fmt::Display for Rollback {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Rolled back with {}", self.0)
-    }
-}
-
-#[derive(Debug)]
 pub struct ContractReturn(pub Vec<u8>);
 
 impl std::error::Error for ContractReturn {}
@@ -203,7 +193,7 @@ impl ContextVFS<'_> {
         let data = match data {
             RunOk::ContractError(e, cause) => {
                 return Err(generated::types::Error::trap(
-                    crate::errors::ContractError(e, cause).into(),
+                    ContractError(e, cause).into(),
                 ))
             }
             data => data,
@@ -464,6 +454,16 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         })()
         .map_err(generated::types::Error::trap)?;
 
+        let leaders_res = match (leaders_res, self.context.shared_data.is_sync) {
+            (leaders_res, false) => leaders_res,
+            (Some(leaders_res), true) => return self.set_vm_run_result(leaders_res).map(|x| x.0),
+            (_, true) => {
+                return Err(generated::types::Error::trap(anyhow::anyhow!(
+                    "absent leader result in sync mode"
+                )))
+            }
+        };
+
         let mut entrypoint = Vec::from(b"nondet!");
         match &leaders_res {
             None => {
@@ -507,8 +507,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         };
 
         let my_res = self.context.spawn_and_run(&supervisor, vm_data);
-        let my_res = crate::errors::ContractError::unwrap_res(my_res)
-            .map_err(generated::types::Error::trap)?;
+        let my_res = ContractError::unwrap_res(my_res).map_err(generated::types::Error::trap)?;
 
         let ret_res = (|| match leaders_res {
             None => {
@@ -520,11 +519,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             }
             Some(leaders_res) => match my_res {
                 RunOk::Return(v) if v == [16] => Ok(leaders_res),
-                RunOk::Return(v) if v == [8] => Err(crate::errors::ContractError(
-                    format!("validator_disagrees call {}", call_no),
-                    None,
-                )
-                .into()),
+                RunOk::Return(v) if v == [8] => {
+                    Err(ContractError(format!("validator_disagrees call {}", call_no), None).into())
+                }
                 RunOk::ContractError(my_err, my_cause) => match leaders_res {
                     RunOk::ContractError(leader_err, leader_cause) => {
                         log::info!(
@@ -535,15 +532,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                             leader_cause:? = leader_cause;
                             "AGREE"
                         );
-                        Err(crate::errors::ContractError(leader_err, leader_cause).into())
+                        Err(ContractError(leader_err, leader_cause).into())
                     }
-                    _ => Err(crate::errors::ContractError(my_err, my_cause).into()),
+                    _ => Err(ContractError(my_err, my_cause).into()),
                 },
-                _ => Err(crate::errors::ContractError(
-                    format!("validator_disagrees call {}", call_no),
-                    None,
-                )
-                .into()),
+                _ => {
+                    Err(ContractError(format!("validator_disagrees call {}", call_no), None).into())
+                }
             },
         })()
         .map_err(generated::types::Error::trap)?;
@@ -577,8 +572,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         };
 
         let my_res = self.context.spawn_and_run(&supervisor, vm_data);
-        let my_res = crate::errors::ContractError::unwrap_res(my_res)
-            .map_err(generated::types::Error::trap)?;
+        let my_res = ContractError::unwrap_res(my_res).map_err(generated::types::Error::trap)?;
 
         let data: Arc<[u8]> = my_res.as_bytes_iter().collect();
         Ok(generated::types::Fd::from(self.vfs.place_content(

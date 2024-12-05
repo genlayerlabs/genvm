@@ -26,6 +26,8 @@ pub struct Args {
     host: String,
     #[clap(long, default_value_t = PrintOption::None)]
     print: PrintOption,
+    #[clap(long, default_value_t = false)]
+    sync: bool,
 }
 
 pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
@@ -33,7 +35,7 @@ pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
 
     let host = genvm::Host::new(&args.host)?;
 
-    let supervisor = genvm::create_supervisor(&args.config, host, log_fd)
+    let supervisor = genvm::create_supervisor(&args.config, host, log_fd, args.sync)
         .with_context(|| "creating supervisor")?;
 
     let shared_data = {

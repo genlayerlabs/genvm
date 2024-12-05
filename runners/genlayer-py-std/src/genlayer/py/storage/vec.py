@@ -6,7 +6,7 @@ from .core import _FakeStorageMan
 from .desc_base_types import _u32_desc
 
 
-class DynArray[T](WithStorageSlot, collections.abc.MutableSequence):
+class DynArray[T](WithStorageSlot, collections.abc.MutableSequence[T]):
 	"""
 	Represents exponentially growing array (:py:type:`list` in python terms) that can be stored in the storage
 	"""
@@ -170,9 +170,12 @@ class DynArray[T](WithStorageSlot, collections.abc.MutableSequence):
 	def __repr__(self) -> str:
 		ret: list[str] = []
 		ret.append('[')
+		comma = False
 		for x in self:
+			if comma:
+				ret.append(',')
+			comma = True
 			ret.append(repr(x))
-			ret.append(',')
 		ret.append(']')
 		return ''.join(ret)
 

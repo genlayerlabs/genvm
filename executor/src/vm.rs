@@ -158,16 +158,17 @@ impl WasmContext {
 pub struct SharedData {
     /// shared across all deterministic VMs
     pub nondet_call_no: AtomicU32,
-    pub should_exit: Arc<AtomicU32>,
     // rust doesn't have aliasing Arc constructor
-    //pub fuel_descriptor: Arc<wasmtime::FuelDescriptor>,
+    pub should_exit: Arc<AtomicU32>,
+    pub is_sync: bool,
 }
 
 impl SharedData {
-    fn new() -> Self {
+    fn new(is_sync: bool) -> Self {
         Self {
             nondet_call_no: 0.into(),
             should_exit: Arc::from(AtomicU32::from(0)),
+            is_sync,
         }
     }
 }
@@ -254,7 +255,7 @@ impl VM {
                         .map(|v| RunOk::ContractError(format!("wasm_trap {v:?}"), None)),
                     e.downcast_ref::<crate::errors::ContractError>()
                         .map(|v| RunOk::ContractError(v.0.clone(), None)),
-                    e.downcast_ref::<crate::wasi::genlayer_sdk::Rollback>()
+                    e.downcast_ref::<crate::errors::Rollback>()
                         .map(|v| RunOk::Rollback(v.0.clone())),
                     e.downcast_ref::<crate::wasi::genlayer_sdk::ContractReturn>()
                         .map(|v| RunOk::Return(v.0.clone())),
@@ -347,7 +348,7 @@ impl WasmFileDesc {
 }
 
 impl Supervisor {
-    pub fn new(modules: Modules, mut host: crate::Host) -> Result<Self> {
+    pub fn new(modules: Modules, mut host: crate::Host, is_sync: bool) -> Result<Self> {
         let engines = Engines::create(|base_conf| {
             match Lazy::force(&caching::CACHE_DIR) {
                 None => {
@@ -381,7 +382,7 @@ impl Supervisor {
                 return Err(err.unwrap_err());
             }
         };
-        let shared_data = Arc::new(SharedData::new());
+        let shared_data = Arc::new(SharedData::new(is_sync));
         Ok(Self {
             engines,
             cached_modules: HashMap::new(),

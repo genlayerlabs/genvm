@@ -1,0 +1,119 @@
+name: GenVM build docs and types
+on:
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      docs_name:
+        value: ${{ jobs.docs.outputs.artifact_name }}
+      docs_url:
+        value: ${{ jobs.docs.outputs.artifact_url }}
+      types_name:
+        value: ${{ jobs.types.outputs.artifact_name }}
+      types_url:
+        value: ${{ jobs.types.outputs.artifact_url }}
+
+defaults:
+  run:
+    shell: bash -x {0}
+env:
+  GCS_BUCKET: "gh-af"
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ steps.upload.outputs.basename }}
+      artifact_url: ${{ steps.upload.outputs.gcs_url }}
+    steps:
+      - run: sudo apt-get install -y python3-poetry
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: poetry
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          load_submodules: "false"
+      - name: install dependencies
+        run: |
+          python3.12 -m pip install poetry && \
+            pushd runners/genlayer-py-std && \
+            poetry install --only=generators && \
+            popd
+      - name: configure and build
+        run: |
+          cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \
+          ninja -v -C build genvm/runners/docs
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Generate upload url
+        id: upload
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          DIR_NAME="genvm_py_docs_${GITHUB_SHA}_${TIMESTAMP}"
+          echo "dirname=$DIR_NAME" >> $GITHUB_OUTPUT
+          BASE_NAME="py-docs.zip"
+          echo "basename=$BASE_NAME" >> $GITHUB_OUTPUT
+          echo "gcs_url=https://storage.googleapis.com/$GCS_BUCKET/$DIR_NAME/$BASE_NAME" >> $GITHUB_OUTPUT
+      - name: Upload to GCS
+        uses: google-github-actions/upload-cloud-storage@v2
+        with:
+          path: build/${{ steps.upload.outputs.basename }}
+          destination: ${{ env.GCS_BUCKET }}/${{ steps.upload.outputs.dirname }}
+          parent: false
+  types:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ steps.upload.outputs.basename }}
+      artifact_url: ${{ steps.upload.outputs.gcs_url }}
+    steps:
+      - run: sudo apt-get install -y python3-poetry
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: poetry
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          load_submodules: "false"
+      - name: install dependencies
+        run: |
+          python3.12 -m pip install poetry && \
+            pushd runners/genlayer-py-std && \
+            poetry install --only=generators && \
+            popd
+      - name: configure and build
+        run: |
+          cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \
+          ninja -v -C build genvm/runners/types
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Generate upload url
+        id: upload
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          DIR_NAME="genvm_py_types_${GITHUB_SHA}_${TIMESTAMP}"
+          echo "dirname=$DIR_NAME" >> $GITHUB_OUTPUT
+          BASE_NAME="py-types.zip"
+          echo "basename=$BASE_NAME" >> $GITHUB_OUTPUT
+          echo "gcs_url=https://storage.googleapis.com/$GCS_BUCKET/$DIR_NAME/$BASE_NAME" >> $GITHUB_OUTPUT
+      - name: Upload to GCS
+        uses: google-github-actions/upload-cloud-storage@v2
+        with:
+          path: build/${{ steps.upload.outputs.basename }}
+          destination: ${{ env.GCS_BUCKET }}/${{ steps.upload.outputs.dirname }}
+          parent: false
