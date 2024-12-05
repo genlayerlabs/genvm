@@ -1,0 +1,24 @@
+{
+  "Seq": [
+    {
+      "MapFile": {
+        "to": "/contract",
+        "file": "src/"
+      }
+    },
+    {
+      "SetArgs": [
+        "py",
+        "-u",
+        "-c",
+        "import contract;import genlayer.std.runner as r;r.run(contract)"
+      ]
+    },
+    {
+      "Depends": "py-genlayer-std:test"
+    },
+    {
+      "Depends": "genvm-cpython:43CJUQR6XM4QTNMWDZLOBRZYLABFB5NFZZLOSFYTD7DQC==="
+    }
+  ]
+}
