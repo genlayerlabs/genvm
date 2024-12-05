@@ -137,23 +137,23 @@ class DynArray[T](WithStorageSlot, collections.abc.MutableSequence[T]):
 			insert_idx += 1
 		_u32_desc.set(self._storage_slot, self._off, insert_idx)
 
-	def insert(self, idx: int, val: T) -> None:
-		idx = self._map_index(idx)
+	def insert(self, index: int, value: T) -> None:
+		index = self._map_index(index)
 		old_len = len(self)
 		_u32_desc.set(self._storage_slot, self._off, old_len + 1)
-		for i in range(old_len, idx, -1):
+		for i in range(old_len, index, -1):
 			self[i] = self[i - 1]
-		self[idx] = val
+		self[index] = value
 
 	def __iter__(self) -> typing.Any:
 		for i in range(len(self)):
 			yield self[i]
 
-	def append(self, item: T) -> None:
+	def append(self, value: T) -> None:
 		le = len(self)
 		_u32_desc.set(self._storage_slot, self._off, le + 1)
 		items_at = self._storage_slot.indirect(self._off)
-		return self._item_desc.set(items_at, le * self._item_desc.size, item)
+		return self._item_desc.set(items_at, le * self._item_desc.size, value)
 
 	def append_new_get(self) -> T:
 		le = len(self)

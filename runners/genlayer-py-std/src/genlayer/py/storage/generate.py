@@ -153,6 +153,9 @@ except:
 	if not typing.TYPE_CHECKING:
 		np = None
 		npt = None
+	else:
+		import numpy as np
+		import numpy.typing as npt
 
 if np is not None:
 

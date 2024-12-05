@@ -1,4 +1,3 @@
-from genlayer.py.types import Address
 import abc
 import collections.abc
 
@@ -29,15 +28,15 @@ class StorageSlot:
 		self.addr = addr
 		self.manager = manager
 
-	def indirect(self, off: int) -> 'StorageSlot':
+	def indirect(self, off: int, /) -> 'StorageSlot':
 		addr = _calculate_indirection_addr(self.addr, off)
 		return self.manager.get_store_slot(addr)
 
 	@abc.abstractmethod
-	def read(self, off: int, len: int) -> bytes: ...
+	def read(self, off: int, len: int, /) -> bytes: ...
 
 	@abc.abstractmethod
-	def write(self, off: int, what: collections.abc.Buffer) -> None: ...
+	def write(self, off: int, what: collections.abc.Buffer, /) -> None: ...
 
 
 class ComplexCopyAction(typing.Protocol):
@@ -145,14 +144,15 @@ class _FakeStorageSlot(StorageSlot):
 		StorageSlot.__init__(self, addr, manager)
 		self._mem = bytearray()
 
-	def read(self, addr: int, le: int) -> bytes:
-		self._mem.extend(b'\x00' * (addr + le - len(self._mem)))
-		return bytes(memoryview(self._mem)[addr : addr + le])
+	def read(self, off: int, le: int) -> bytes:
+		self._mem.extend(b'\x00' * (off + le - len(self._mem)))
+		return bytes(memoryview(self._mem)[off : off + le])
 
-	def write(self, addr: int, what: memoryview) -> None:
+	def write(self, off: int, what: collections.abc.Buffer) -> None:
+		what = memoryview(what)
 		l = len(what)
-		self._mem.extend(b'\x00' * (addr + l - len(self._mem)))
-		memoryview(self._mem)[addr : addr + l] = what
+		self._mem.extend(b'\x00' * (off + l - len(self._mem)))
+		memoryview(self._mem)[off : off + l] = what
 
 
 class _FakeStorageMan(StorageMan):

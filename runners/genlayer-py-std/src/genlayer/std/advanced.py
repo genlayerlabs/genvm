@@ -41,10 +41,10 @@ class ContractError:
 	data: str
 
 
-def run_nondet(
-	leader_fn: typing.Callable[[], typing.Any],
+def run_nondet[T](
+	leader_fn: typing.Callable[[], T],
 	validator_fn: typing.Callable[[ContractReturn | Rollback | ContractError], bool],
-) -> Lazy[typing.Any]:
+) -> Lazy[T]:
 	"""
 	Most generic user-friendly api to execute a non-deterministic block
 

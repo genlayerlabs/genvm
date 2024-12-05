@@ -28,7 +28,8 @@ runs:
         then
           git submodule update --init --recursive --depth 1
           source env.sh
-          if [ "${{ inputs.third_party" != "none" ]
+          if [ "${{ inputs.third_party }}" != "none" ]
+          then
             git third-party update ${{ inputs.third_party }}
           fi
         fi

@@ -5,10 +5,10 @@ Module that provides eth calldata encoding and decoding
 __all__ = ('MethodEncoder', 'decode')
 from ..keccak import Keccak256
 
+import typing
 
 from genlayer.py.types import *
-from genlayer.py.storage import *
-from collections import deque
+from genlayer.py.storage import Array, DynArray
 from functools import partial
 
 _integer_types = {

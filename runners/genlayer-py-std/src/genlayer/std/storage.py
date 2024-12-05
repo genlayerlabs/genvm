@@ -1,9 +1,9 @@
 __all__ = ('STORAGE_MAN', 'ROOT_STORAGE_ADDRESS')
 
-from ..py.storage.core import ROOT_STORAGE_ADDRESS
+from ..py.storage.core import *
+from ..py.types import u256
 
 import genlayer.std._wasi as wasi
-from genlayer.py.storage.core import *
 import collections.abc
 import abc
 
