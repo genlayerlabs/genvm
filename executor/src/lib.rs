@@ -128,7 +128,9 @@ pub fn create_supervisor(
         }
     };
 
-    Ok(Arc::new(Mutex::new(vm::Supervisor::new(modules, host, is_sync)?)))
+    Ok(Arc::new(Mutex::new(vm::Supervisor::new(
+        modules, host, is_sync,
+    )?)))
 }
 
 pub fn run_with_impl(

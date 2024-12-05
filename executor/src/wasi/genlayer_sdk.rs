@@ -456,11 +456,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let leaders_res = match (leaders_res, self.context.shared_data.is_sync) {
             (leaders_res, false) => leaders_res,
-            (Some(leaders_res), true) => {
-                return self.set_vm_run_result(leaders_res).map(|x| x.0)
-            },
+            (Some(leaders_res), true) => return self.set_vm_run_result(leaders_res).map(|x| x.0),
             (_, true) => {
-                return Err(generated::types::Error::trap(anyhow::anyhow!("absent leader result in sync mode")))
+                return Err(generated::types::Error::trap(anyhow::anyhow!(
+                    "absent leader result in sync mode"
+                )))
             }
         };
 
@@ -507,8 +507,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         };
 
         let my_res = self.context.spawn_and_run(&supervisor, vm_data);
-        let my_res = ContractError::unwrap_res(my_res)
-            .map_err(generated::types::Error::trap)?;
+        let my_res = ContractError::unwrap_res(my_res).map_err(generated::types::Error::trap)?;
 
         let ret_res = (|| match leaders_res {
             None => {
@@ -520,11 +519,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             }
             Some(leaders_res) => match my_res {
                 RunOk::Return(v) if v == [16] => Ok(leaders_res),
-                RunOk::Return(v) if v == [8] => Err(ContractError(
-                    format!("validator_disagrees call {}", call_no),
-                    None,
-                )
-                .into()),
+                RunOk::Return(v) if v == [8] => {
+                    Err(ContractError(format!("validator_disagrees call {}", call_no), None).into())
+                }
                 RunOk::ContractError(my_err, my_cause) => match leaders_res {
                     RunOk::ContractError(leader_err, leader_cause) => {
                         log::info!(
@@ -539,11 +536,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                     _ => Err(ContractError(my_err, my_cause).into()),
                 },
-                _ => Err(ContractError(
-                    format!("validator_disagrees call {}", call_no),
-                    None,
-                )
-                .into()),
+                _ => {
+                    Err(ContractError(format!("validator_disagrees call {}", call_no), None).into())
+                }
             },
         })()
         .map_err(generated::types::Error::trap)?;
@@ -577,8 +572,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         };
 
         let my_res = self.context.spawn_and_run(&supervisor, vm_data);
-        let my_res = ContractError::unwrap_res(my_res)
-            .map_err(generated::types::Error::trap)?;
+        let my_res = ContractError::unwrap_res(my_res).map_err(generated::types::Error::trap)?;
 
         let data: Arc<[u8]> = my_res.as_bytes_iter().collect();
         Ok(generated::types::Fd::from(self.vfs.place_content(
