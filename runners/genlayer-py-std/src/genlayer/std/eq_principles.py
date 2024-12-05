@@ -121,7 +121,7 @@ def _sandbox(data: typing.Callable[[], typing.Any]) -> typing.Any:
 		res = decode_sub_vm_result_retn(x)
 		if isinstance(res, advanced.ContractReturn):
 			return cloudpickle.loads(res.data)
-		if isinstance(res, advanced.Rollback):
+		if isinstance(res, Rollback):
 			raise res
 		if isinstance(res, advanced.ContractError):
 			raise Exception(res)

@@ -1,8 +1,9 @@
 # What is a vm exectuion result?
 
 1. Success --- calldata-encoded data that contract provided
-2. Error --- unrecoverable error that makes entire transaction to not be applied ; internal vm failure or `panic` in solidity terms
-3. Rollback --- error that a guest program explicitly produced and can handle
+2. Rollback --- error that a guest program explicitly produced and can handle
+3. Contract error --- error that a guest program caused (i.e. non-zero exit code) and can't handle
+4. Error --- unrecoverable error that makes entire transaction to not be applied ; internal vm failure
 
 Solidity states following about rollback (revert):
 

@@ -17,11 +17,10 @@ def _is_list(t, permissive: bool) -> bool:
 		return True
 	if not permissive:
 		return False
-	return (
-		t is collections.abc.Sequence
-		or t is collections.abc.MutableSequence
-		or t is collections.abc.Iterable
-	)
+	try:
+		return issubclass(t, collections.abc.Sequence)
+	except Exception:
+		return False
 
 
 def _is_dict(t, permissive: bool) -> bool:
@@ -29,7 +28,10 @@ def _is_dict(t, permissive: bool) -> bool:
 		return True
 	if not permissive:
 		return False
-	return t is collections.abc.Mapping or t is collections.abc.MutableMapping
+	try:
+		return issubclass(t, collections.abc.Mapping)
+	except Exception:
+		return False
 
 
 def _repr_type(t: typing.Any, permissive: bool) -> typing.Any:
@@ -70,7 +72,7 @@ def _repr_type(t: typing.Any, permissive: bool) -> typing.Any:
 			assert len(args) == 1
 			return [{'$rep': _repr_type(args[0], permissive)}]
 	# TODO: Literal types, TypedDict or alternatives
-	raise Exception(f'type {t} (of kind {ttype}) is not supported')
+	raise TypeError(f'type {t} (of kind {ttype}) is not supported', t, ttype)
 
 
 def _escape_dict_prop(prop: str) -> str:
@@ -109,7 +111,7 @@ def _get_params(m: types.FunctionType, *, is_ctor: bool) -> dict:
 		ret.update(
 			{
 				'readonly': getattr(m, '__readonly__', False),
-				'ret': _repr_type(signature.return_annotation, False),
+				'ret': _repr_type(signature.return_annotation, True),
 			}
 		)
 	return ret

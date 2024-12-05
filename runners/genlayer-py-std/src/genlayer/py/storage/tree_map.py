@@ -420,8 +420,8 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 				idx = _Node.right
 		return not_found()
 
-	def get[G](self, k: K, dflt: G = None) -> V | G:
-		return self.get_fn(k, lambda n: n.value, lambda: dflt)
+	def get[G](self, k: K, default: G = None) -> V | G:
+		return self.get_fn(k, lambda n: n.value, lambda: default)
 
 	def __getitem__(self, k: K) -> V:
 		def not_found() -> V:
@@ -432,8 +432,10 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 	def __contains__(self, k: K) -> bool:
 		return self.get_fn(k, lambda _: True, lambda: False)
 
-	def visit[T](self, cb: collections.abc.Callable[[_Node[K, V]], T]):
-		def go(idx):
+	def visit[T](
+		self, cb: collections.abc.Callable[[_Node[K, V]], T]
+	) -> typing.Generator[T, None, None]:
+		def go(idx) -> typing.Generator[T, None, None]:
 			if idx == 0:
 				return
 			slot = self.slots[idx - 1]
@@ -462,5 +464,21 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 	def __iter__(self):
 		yield from self.visit(lambda n: n.key)
 
-	def items(self):
-		yield from self.visit(lambda n: (n.key, n.value))
+	def items(self) -> collections.abc.ItemsView[K, V]:
+		return _ItemsView(self)
+
+
+class _ItemsView[K: Comparable, V](collections.abc.ItemsView):
+	__slots__ = ('_parent',)
+
+	def __init__(self, parent: TreeMap[K, V]):
+		self._parent = parent
+
+	def __iter__(self):
+		yield from self._parent.visit(lambda n: (n.key, n.value))
+
+	def __contains__(self, item: object) -> bool:
+		return any(item == x for x in iter(self))
+
+	def __len__(self):
+		return len(self._parent)
