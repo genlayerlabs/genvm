@@ -37,7 +37,7 @@ class Comparable(typing.Protocol):
 	def __lt__(self, other: typing.Any, /) -> bool: ...
 
 
-class TreeMap[K: Comparable, V](collections.abc.MutableMapping):
+class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 	"""
 	Represents a mapping from keys to values
 	"""
@@ -442,6 +442,22 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping):
 			yield from go(slot.right)
 
 		yield from go(self.root)
+
+	def __repr__(self) -> str:
+		import json
+
+		ret: list[str] = []
+		ret.append('{')
+		comma = False
+		for k, v in self.items():
+			if comma:
+				ret.append(',')
+			comma = True
+			ret.append(json.dumps(k))
+			ret.append(':')
+			ret.append(repr(v))
+		ret.append('}')
+		return ''.join(ret)
 
 	def __iter__(self):
 		yield from self.visit(lambda n: n.key)
