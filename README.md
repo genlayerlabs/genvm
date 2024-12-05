@@ -21,6 +21,7 @@ It is a monorepo for GenVM, which consists of the following sub-projects:
 
 For "getting started" documentation please refer to [GenLayer documentation](https://docs.genlayer.com/build-with-genlayer/intelligent-contracts)
 
+For more complex examples you can look into [this](./executor/testdata/cases/py-core) part of test suite
 
 
 ## Building from source
