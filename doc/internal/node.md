@@ -2,27 +2,26 @@
 
 To run a genvm, one must start a genvm process with following arguments:
 - `--host` tcp-it address or `unix://` prefixed unix domain socket
-- `--message` (potential subject to change) message data
-  ```json
+- `--message` (potential subject to change) message data as json
+  ```typescript
   {
     "contract_account": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", // base64 address of contract account
-    "gas": 9007199254740991, // initial gas amout. <= u64::max
-    "is_init": false, // whenever it is contract being instantiated (this allows to call private method)
+    "is_init": false, // whenever it is contract being instantiated (this allows to call a private method)
     "sender_account": "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", // base64 address of who is calling the contract
     "value": null // value attached to message, see solidity msg.value
   }
   ```
 
+## How to ask GenVM to quit?
+Send it `SIGTERM`. If it doesn't quit in some sensible amount of time just `SIGKILL` it
+
 ## How node receives code, message, ... from user
 It is for node to decide. GenVM knows only about the calldata (and potentially message) and nothing else
-
-## Storage format
-Storage can be seen as a mapping from account address to slot address to linear memory. It supports two operations: read and write. Reading undefined memory must return zeroes
 
 ## Communication protocol
 All further communication is done via socket. If genvm process exited before sending the result, it means that genvm crushed. Potential bug should be reported
 
-Method ids list is available as [json](../../executor/codegen/data/host-fns.json)
+Method ids list is available as [json](../../executor/codegen/data/host-fns.json). It is advised to use it in the build system to codegen constants
 
 ```
 const ACCOUNT_ADDR_SIZE = 20
@@ -85,3 +84,32 @@ loop:
 ```
 
 See [mock implementation](../../executor/testdata/runner/mock_host.py)
+
+## Types
+
+### Calldata
+`append_calldata` method must return [calldata encoded](../calldata.md) bytes that conform to ABI:
+```typescript
+{
+  method?: string,  // only for non-consturctors
+  args: Array<any>,
+  kwargs?: { [key: string]: any }
+}
+```
+
+### Read result
+It has code followed by bytes, codes are:
+- return, it is followed by calldata
+- rollback and contract error, followed by a string; from host point of view there is no distinction between them
+- just error, which is internal error, like llm's modules being absent
+
+### Storage format
+Storage can be seen as a mapping from account address to slot address to linear memory. It supports two operations: `read` and `write`. Reading undefined memory **must** return zeroes
+
+Storage can be seen as a file system tree containing directories named as contracts which contain files named as slots, then following implementation is valid:
+```bash
+# read contract_a slot_b 10...100
+cat db/contract_a/slot_b.bytes /dev/null | tail -c +10 | head -c +100
+```
+
+**NOTE**: calculating storage updates, hashes and so on is host's (node's) responsibility. It is [the same in geth](https://github.com/ethereum/go-ethereum/blob/67a3b087951a3f3a8e341ae32b6ec18f3553e5cc/core/state/state_object.go#L232): they have dirty override for the store
