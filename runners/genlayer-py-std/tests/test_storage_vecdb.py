@@ -55,6 +55,30 @@ def test_store_simple_ok():
 # assert seen == set(['0', '2', '-2'])
 
 
+def test_store_ids():
+	db = DB()
+
+	data = {
+		'k1': '1',
+		'k2': '2',
+	}
+
+	id_to_data_key: dict[str, VecDB.Id] = {}
+
+	for k, v in data.items():
+		id_to_data_key[k] = db.x.insert(np.array([0] * 5, dtype=np.int32), v)
+	for k, v in data.items():
+		db.x.get_by_id(id_to_data_key[k]).remove()
+		id_to_data_key[k] = db.x.insert(np.array([0] * 5, dtype=np.int32), v)
+
+	for k, v in id_to_data_key.items():
+		assert db.x.get_by_id(v).id == v
+		assert db.x.get_by_id(v).value == data[k]
+
+	for it in db.x:
+		assert it.value in data.values()
+
+
 def test_store_knn():
 	db = DB()
 

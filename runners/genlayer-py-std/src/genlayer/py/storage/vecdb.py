@@ -35,10 +35,21 @@ def cosine_distance_fast[S, T: np.number](
 	return 1 - similarity
 
 
+Id = typing.NewType('Id', int)
+_Id = Id
+
+
 class VecDB[T: np.number, S: int, V]:
 	"""
 	Data structure that supports storing and querying vector data
+
+	There are two entities that can act as a key:
+
+	#. vector (can have duplicates)
+	#. id (int alias, can't have duplicates)
 	"""
+
+	Id = _Id
 
 	# FIXME implement production ready *NN structure
 	_keys: DynArray[np.ndarray[tuple[S], np.dtype[T]]]
@@ -48,15 +59,27 @@ class VecDB[T: np.number, S: int, V]:
 	def __len__(self) -> int:
 		return len(self._keys) - len(self._free_idx)
 
-	def insert(self, key: np.ndarray[tuple[S], np.dtype[T]], val: V):
+	def get_by_id(self, id: Id) -> VecDBElement[T, S, V, None]:
+		res = self.get_by_id_or_none(id)
+		if res is None:
+			raise KeyError(f'no element with id {id}')
+		return res
+
+	def get_by_id_or_none(self, id: Id) -> VecDBElement[T, S, V, None] | None:
+		if id in self._free_idx:
+			return None
+		return VecDBElement(self, u32(id), None)
+
+	def insert(self, key: np.ndarray[tuple[S], np.dtype[T]], val: V) -> Id:
 		if len(self._free_idx) > 0:
-			idx = next(iter(self._free_idx))
-			del self._free_idx[idx]
+			idx = self._free_idx.popitem()[0]
 			self._keys[idx] = key
 			self._values[idx] = val
+			return Id(idx)
 		else:
 			self._keys.append(key)
 			self._values.append(val)
+			return Id(len(self._keys) - 1)
 
 	def _get_vecs(self, v: np.ndarray[tuple[S], np.dtype[T]]) -> list[tuple[T, int]]:
 		lst: list[tuple[T, int]] = []  # dist, index
@@ -103,6 +126,10 @@ class VecDBElement[T: np.number, S: int, V, Dist]:
 	@property
 	def key(self) -> np.ndarray[tuple[S], np.dtype[T]]:
 		return self._db._keys[self._idx]
+
+	@property
+	def id(self) -> Id:
+		return Id(self._idx)
 
 	@property
 	def value(self) -> V:
