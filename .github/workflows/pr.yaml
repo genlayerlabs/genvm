@@ -56,7 +56,7 @@ jobs:
         run: |
           python3.12 -m pip install poetry && \
             pushd runners/genlayer-py-std && \
-            poetry install && \
+            poetry install --without=generators && \
             popd
       - name: pytest
         run: |

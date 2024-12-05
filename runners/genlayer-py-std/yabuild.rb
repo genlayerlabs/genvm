@@ -92,14 +92,45 @@ target_alias(
 root_build.join('docs').mkpath
 cur_build.join('docs').mkpath
 
-build_docs = target_command(
-	commands: [
-		['cp', cur_src.join('docs_base', 'conf.py'), cur_build.join('docs')],
-		['poetry', 'run', 'sphinx-apidoc', '-F', '-o', cur_build.join('docs'), 'src'],
-		['poetry', 'run', 'sphinx-build', '-b', 'html', cur_build.join('docs'), root_build.join('docs', 'py')]
-	],
-	cwd: cur_src,
-	output_file: root_build.join('docs', 'py', 'docs.trg'),
-	dependencies: [],
-	tags: ['docs'],
+POETRY_RUN = 'poetry', 'run', '-C', cur_src
+
+docs_out = root_build.join('py-docs')
+docs_out.mkpath
+target_alias(
+	"docs",
+	target_command(
+		commands: [
+			['cp', cur_src.join('docs_base', 'conf.py'), docs_out],
+			[*POETRY_RUN, 'sphinx-apidoc', '-F', '-o', docs_out, cur_src.join('src')],
+			[*POETRY_RUN, 'sphinx-build', '-b', 'html', docs_out, docs_out.join('docs')],
+			['zip', '-9', '-r', docs_out.parent.join('py-docs.zip'), 'docs']
+		],
+		cwd: docs_out,
+		output_file: root_build.join('docs', 'py', 'docs.trg'),
+		dependencies: [],
+	)
+)
+
+types_out = root_build.join('py-types')
+types_out.mkpath
+libs = root_src.join('runners', 'py-libs', 'pure-py').children.filter { |c| c.directory? }
+target_alias(
+	"types",
+	target_command(
+		commands: [
+			['cp', '-r', cur_src.join('src', 'genlayer'), types_out],
+			*libs.map { |l| ['cp', '-r', l, types_out] },
+			['touch', types_out.join('google', '__init__.py')],
+			*libs.map { |l| l.basename.to_s }.chain(['genlayer']).map { |name|
+				[*POETRY_RUN, 'python3', '-m', 'pyright', '--createstub', name]
+			},
+			['zip', '-9', '-r', types_out.parent.join('py-types.zip'), 'typings'],
+		],
+		cwd: types_out,
+		output_file: types_out.join('trg'),
+		dependencies: [],
+		tags: ['types'],
+	) {
+		outputs.push types_out.parent.join('py-types.zip')
+	}
 )

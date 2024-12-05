@@ -42,47 +42,9 @@ jobs:
       preloads: --preload .ci/release-conf.rb
       install_also: ""
 
-  release-typing:
-    runs-on: ubuntu-latest
-    outputs:
-      dirname: ${{ steps.gen_url.outputs.dirname }}
-      artifact_name: ${{ steps.gen_url.outputs.basename }}
-      artifact_url: ${{ steps.gen_url.outputs.gcs_url }}
-    steps:
-      - run: |
-          mkdir -p build/py-types && \
-          cp -r runners/genlayer-py-std/src/genlayer/ build/py-types/ && \
-          find runners/py-libs/pure-py/ -mindepth 1 -maxdepth 1 -type d | cat - <(echo "build/py-types/") | xargs cp -r && \
-          pushd build/py-types/ && \
-          printf '#!/usr/bin/env bash\n\npython3 -m pyright --outputjson contract.py\n' > run.sh && \
-          printf 'PLACE CONTRACT HERE\n' > contract.py && \
-          chmod +x run.sh && \
-          find . -name __pycache__ -type d | xargs rm -rf && \
-          cd .. && \
-          zip -r -9 py-types.zip py-types/ && \
-          popd
-      - name: Generate upload url
-        id: gen_url
-        run: |
-          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-          DIR_NAME="genvm_types_${GITHUB_SHA}_${TIMESTAMP}"
-          echo "dirname=$DIR_NAME" >> $GITHUB_OUTPUT
-          BASE_NAME="py-types.zip"
-          echo "basename=$BASE_NAME" >> $GITHUB_OUTPUT
-          GCS_URL="https://storage.googleapis.com/$GCS_BUCKET/$DIR_NAME/$BASE_NAME"
-          echo "gcs_url=$GCS_URL" >> $GITHUB_OUTPUT
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-      - name: Upload to GCS
-        uses: google-github-actions/upload-cloud-storage@v2
-        with:
-          path: build/${{ steps.upload.outputs.basename }}
-          destination: ${{ env.GCS_BUCKET }}/${{ steps.upload.outputs.dirname }}
-          parent: false
+  release-data:
+    uses: ./.github/workflows/genvm-build-data.yaml
+    secrets: inherit
 
   release-publish:
     needs:
@@ -90,22 +52,18 @@ jobs:
       - release-build-genvm-release-ubuntu-latest
       - release-build-genvm-release-macos-latest
       - release-build-genvm-release-ubuntu-latest-aarch64
-      - release-typing
+      - release-data
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Needed for creating releases
     steps:
       - run: |
-          wget -q ${{ needs.build-runners.outputs.artifact_url }} && \
-          mv ${{ needs.build-runners.outputs.artifact_name }} genvm-runners.zip && \
-          wget -q ${{ needs.release-build-genvm-release-ubuntu-latest.outputs.artifact_url }} && \
-          mv ${{ needs.release-build-genvm-release-ubuntu-latest.outputs.artifact_name }} genvm-linux-amd64.zip && \
-          wget -q ${{ needs.release-build-genvm-release-macos-latest.outputs.artifact_url }} && \
-          mv ${{ needs.release-build-genvm-release-macos-latest.outputs.artifact_name }} genvm-macos-arm64.zip && \
-          wget -q ${{ needs.release-build-genvm-release-ubuntu-latest-aarch64.outputs.artifact_url }} && \
-          mv ${{ needs.release-build-genvm-release-ubuntu-latest-aarch64.outputs.artifact_name }} genvm-linux-arm64.zip && \
-          wget -q ${{ needs.release-build-genvm-release-ubuntu-latest-aarch64.outputs.artifact_url }} && \
-          mv ${{ needs.release-typing.outputs.artifact_name }} genvm-py-types.zip && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-runners.zip ${{ needs.build-runners.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-amd64.zip ${{ needs.release-build-genvm-release-ubuntu-latest.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-arm64.zip ${{ needs.release-build-genvm-release-ubuntu-latest-aarch64.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-macos-arm64.zip ${{ needs.release-build-genvm-release-macos-latest.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-py-docs.zip  ${{ needs.release-data.outputs.docs_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-py-types.zip  ${{ needs.release-data.outputs.types_url }} && \
           true
 
       - name: Create Release
@@ -117,6 +75,7 @@ jobs:
             genvm-linux-amd64.zip
             genvm-linux-arm64.zip
             genvm-macos-arm64.zip
+            genvm-py-docs.zip
             genvm-py-types.zip
           name: Release ${{ github.ref_name }}
           draft: false
