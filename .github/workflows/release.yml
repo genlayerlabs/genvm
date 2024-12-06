@@ -1,10 +1,12 @@
 name: GenVM release
 
 on:
-  push:
-    tags:
-      - 'v*'  # Trigger on version tags
-  # workflow_dispatch:
+  workflow_dispatch:
+    inputs:
+      bump:
+        type: string
+        required: true
+        description: "version to bump: "
 
 defaults:
   run:
@@ -14,33 +16,53 @@ env:
   GCS_BUCKET: "gh-af"
 
 jobs:
+  gen-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.bump-semver.outputs.new_version }}
+    steps:
+      - uses: actions-ecosystem/action-get-latest-tag@v1
+        id: get-latest-tag
+
+      - uses: actions-ecosystem/action-bump-semver@v1
+        id: bump-semver
+        with:
+          current_version: ${{ steps.get-latest-tag.outputs.tag }}
+          level: ${{ github.event.inputs.bump }
+
   build-runners:
     uses: ./.github/workflows/genvm-build-runners.yaml
     secrets: inherit
 
   release-build-genvm-release-ubuntu-latest:
+    needs: [gen-tag]
     uses: ./.github/workflows/genvm-build-template.yaml
     secrets: inherit
     with:
       runs_on: ubuntu-latest
       preloads: --preload .ci/release-conf.rb
       install_also: ""
+      tag: needs.gen-tag.outputs.tag
 
   release-build-genvm-release-ubuntu-latest-aarch64:
+    needs: [gen-tag]
     uses: ./.github/workflows/genvm-build-template.yaml
     secrets: inherit
     with:
       runs_on: ubuntu-latest
       preloads: --preload .ci/release-conf.rb --preload .ci/executor-target-linux-aarch64.rb
       install_also: --cross-linux-aarch64
+      tag: needs.gen-tag.outputs.tag
 
   release-build-genvm-release-macos-latest:
+    needs: [gen-tag]
     uses: ./.github/workflows/genvm-build-template.yaml
     secrets: inherit
     with:
       runs_on: macos-latest
       preloads: --preload .ci/release-conf.rb
       install_also: ""
+      tag: needs.gen-tag.outputs.tag
 
   release-data:
     uses: ./.github/workflows/genvm-build-data.yaml
@@ -48,6 +70,7 @@ jobs:
 
   release-publish:
     needs:
+      - gen-tag
       - build-runners
       - release-build-genvm-release-ubuntu-latest
       - release-build-genvm-release-macos-latest
@@ -66,6 +89,10 @@ jobs:
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-py-types.zip  ${{ needs.release-data.outputs.types_url }} && \
           true
 
+      - uses: actions-ecosystem/action-push-tag@v1
+        with:
+          tag: ${{ needs.gen-tag.outputs.tag }}
+
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v2
@@ -78,6 +105,7 @@ jobs:
             genvm-py-docs.zip
             genvm-py-types.zip
           name: Release ${{ github.ref_name }}
+          tag_name: ${{ needs.gen-tag.outputs.tag }}
           draft: false
           prerelease: false
           generate_release_notes: true

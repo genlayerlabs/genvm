@@ -14,6 +14,10 @@ on:
         type: string
         required: true
         description: runner id
+      tag:
+        type: string
+        required: false
+        default: "none"
     outputs:
       artifact_name:
         value: ${{ jobs.build.outputs.artifact_name }}
@@ -39,6 +43,10 @@ jobs:
         with:
           install_also: --genvm --rust ${{ inputs.install_also }}
           third_party: executor/third-party/wasmtime executor/third-party/wasm-tools
+      - name: install tools and configure
+        if: ${{ inputs.tag != "none" }}
+        run: |
+          git tag ${{ inputs.tag }}
       - name: install tools and configure
         run: |
           cd "$GITHUB_WORKSPACE" && \
