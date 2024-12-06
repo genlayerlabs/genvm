@@ -108,7 +108,7 @@ jobs:
             genvm-macos-arm64.zip
             genvm-py-docs.zip
             genvm-py-types.zip
-          name: Release ${{ github.ref_name }}
+          name: Release ${{ needs.gen-tag.outputs.tag }}
           tag_name: ${{ needs.gen-tag.outputs.tag }}
           draft: false
           prerelease: false
