@@ -21,6 +21,7 @@ jobs:
     outputs:
       tag: ${{ steps.bump-semver.outputs.new_version }}
     steps:
+      - uses: actions/checkout@v4
       - uses: actions-ecosystem/action-get-latest-tag@v1
         id: get-latest-tag
 
@@ -28,7 +29,9 @@ jobs:
         id: bump-semver
         with:
           current_version: ${{ steps.get-latest-tag.outputs.tag }}
-          level: ${{ github.event.inputs.bump }
+          level: ${{ github.event.inputs.bump }}
+      - run: |
+          echo "new version will be: ${{ steps.bump-semver.outputs.new_version }}"
 
   build-runners:
     uses: ./.github/workflows/genvm-build-runners.yaml
@@ -65,7 +68,7 @@ jobs:
       tag: needs.gen-tag.outputs.tag
 
   release-data:
-    uses: ./.github/workflows/genvm-build-data.yaml
+    uses: ./.github/workflows/build-data.yaml
     secrets: inherit
 
   release-publish:
@@ -80,6 +83,7 @@ jobs:
     permissions:
       contents: write  # Needed for creating releases
     steps:
+      - uses: actions/checkout@v4
       - run: |
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-runners.zip ${{ needs.build-runners.outputs.artifact_url }} && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-amd64.zip ${{ needs.release-build-genvm-release-ubuntu-latest.outputs.artifact_url }} && \
@@ -89,9 +93,9 @@ jobs:
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-py-types.zip  ${{ needs.release-data.outputs.types_url }} && \
           true
 
-      - uses: actions-ecosystem/action-push-tag@v1
-        with:
-          tag: ${{ needs.gen-tag.outputs.tag }}
+      - run: |
+          git tag ${{ needs.gen-tag.outputs.tag }} && \
+          git push origin ${{ needs.gen-tag.outputs.tag }}
 
       - name: Create Release
         id: create_release
