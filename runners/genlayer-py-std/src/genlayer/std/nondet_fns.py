@@ -1,7 +1,7 @@
 __all__ = ('get_webpage', 'exec_prompt')
 
 import typing
-from ._private import lazy_from_fd, _LazyApi
+from ._internal import lazy_from_fd, _LazyApi
 from ..py.types import *
 import genlayer.std._wasi as wasi
 import json
@@ -35,4 +35,7 @@ def _exec_prompt(prompt: str, **config: typing.Unpack[_ExecPromptConfig]) -> Laz
 
 
 exec_prompt = _LazyApi(_exec_prompt)
+"""
+API to execute a prompt (perform NLP)
+"""
 del _exec_prompt

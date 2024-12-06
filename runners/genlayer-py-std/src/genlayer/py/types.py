@@ -1,3 +1,7 @@
+"""
+Module that provides aliases for storage types and blockchain-specific types
+"""
+
 import base64
 import typing
 import collections.abc
@@ -11,6 +15,9 @@ class Address:
 	"""
 
 	SIZE = 20
+	"""
+	Constant that represents size of a Genlayer address
+	"""
 
 	__slots__ = ('_as_bytes', '_as_hex')
 
@@ -64,10 +71,16 @@ class Address:
 
 	@property
 	def as_b64(self) -> str:
+		"""
+		:returns: base64 representation of an address (most compact string)
+		"""
 		return str(base64.b64encode(self.as_bytes), encoding='ascii')
 
 	@property
 	def as_int(self) -> int:
+		"""
+		:returns: int representation of an address (unsigned little endian)
+		"""
 		return int.from_bytes(self._as_bytes, 'little', signed=False)
 
 	def __hash__(self):
@@ -217,7 +230,7 @@ class Lazy[T]:
 		Performs evaluation if necessary (only ones) and stores the result
 
 		:returns: result of evaluating
-		:raises: iff evaluation raised, this outcome is also cached, so subsequent calls will raise same exception
+		:raises: *iff* evaluation raised, this outcome is also cached, so subsequent calls will raise same exception
 		"""
 		if self._eval is not None:
 			ev = self._eval

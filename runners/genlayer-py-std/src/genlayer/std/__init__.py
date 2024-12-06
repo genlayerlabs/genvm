@@ -1,13 +1,23 @@
-import genlayer.std._wasi as wasi
-
 import typing
 import json
 from types import SimpleNamespace as _SimpleNamespace
-import base64
 
-# reexport short aliases
 import genlayer.py.calldata as calldata
+
+"""
+reexport alias
+"""
 import genlayer.std.advanced as advanced
+
+"""
+reexport alias
+"""
+
+import genlayer.std._wasi as wasi
+
+"""
+reexport alias
+"""
 
 # reexports
 from ..py.types import *
@@ -17,6 +27,9 @@ from .genvm_contracts import *
 
 
 def private(f):
+	"""
+	Decorator that marks method as private. As all methods are private by default it does nothing.
+	"""
 	return f
 
 
@@ -24,7 +37,7 @@ class public:
 	@staticmethod
 	def view(f):
 		"""
-		Marks contract method as a public view
+		Decorator that marks a contract method as a public view
 		"""
 		setattr(f, '__public__', True)
 		setattr(f, '__readonly__', True)
@@ -33,7 +46,7 @@ class public:
 	@staticmethod
 	def write(f):
 		"""
-		Marks contract method as a public write method
+		Decorator that marks a contract method as a public write
 		"""
 		setattr(f, '__public__', True)
 		setattr(f, '__readonly__', False)
@@ -41,6 +54,9 @@ class public:
 
 
 message_raw = json.loads(wasi.get_message_data())
+"""
+Raw message as parsed json
+"""
 
 message = _SimpleNamespace(
 	contract_account=Address(message_raw['contract_account']),
@@ -49,7 +65,7 @@ message = _SimpleNamespace(
 	is_init=message_raw.get('is_init', None),
 )
 """
-Represents some fields from transaction message that was sent
+Represents fields from transaction message that was sent
 """
 
 
@@ -77,7 +93,7 @@ def contract(t: type) -> type:
 			f'only one @contract is allowed, old {mod.__KNOWN_CONTRACT} new {t}'
 		)
 	t.__contract__ = True
-	from genlayer.py.storage.generate import storage
+	from genlayer.py.storage._internal.generate import storage
 
 	t = storage(t)
 	setattr(mod, '__KNOWN_CONTRACT', t)

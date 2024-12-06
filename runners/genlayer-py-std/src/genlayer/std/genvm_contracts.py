@@ -7,7 +7,7 @@ import genlayer.py.calldata as calldata
 import genlayer.std._wasi as wasi
 
 
-from ._private import decode_sub_vm_result, lazy_from_fd
+from ._internal import decode_sub_vm_result, lazy_from_fd
 
 
 def _make_calldata_obj(method, args, kwargs):
@@ -73,9 +73,18 @@ class ContractAt(_GenVMContract):
 		self.addr = addr
 
 	def view(self):
+		"""
+		Namespace with all view methods
+		"""
 		return _ContractAtView(self.addr)
 
 	def emit(self, *, gas: int, code: bytes = b''):
+		"""
+		Namespace with write message
+
+		.. warning::
+			parameters are subject to change!
+		"""
 		return _ContractAtEmit(self.addr, gas, code)
 
 
@@ -99,13 +108,33 @@ class _ContractAtEmit:
 
 class GenVMContractDeclaration[TView, TWrite](typing.Protocol):
 	View: type[TView]
+	"""
+	Class that contains declarations for all view methods
+	"""
 	Write: type[TWrite]
+	"""
+	Class that contains declarations for all write methods
+
+	.. note::
+		all return type annotations must be either empty or ``None``
+	"""
 
 
 def contract_interface[TView, TWrite](
 	_contr: GenVMContractDeclaration[TView, TWrite],
 ) -> typing.Callable[[Address], _GenVMContract[TView, TWrite]]:
+	# editorconfig-checker-disable
 	"""
 	This decorator produces an "interface" for other GenVM contracts. It has no semantical value, but can be used for auto completion and type checks
+
+	.. code-block:: python
+	        @gl.contract_interface
+	        class MyContract:
+	          class View:
+	            def view_meth(self, i: int) -> int: ...
+
+	          class Write:
+	            def write_meth(self, i: int) -> None: ...
 	"""
+	# editorconfig-checker-enable
 	return ContractAt

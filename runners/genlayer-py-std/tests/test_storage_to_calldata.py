@@ -1,6 +1,6 @@
 from genlayer.py.storage import DynArray, Array, TreeMap
 from genlayer.py.types import u32, bigint
-from genlayer.py.storage.generate import storage
+from genlayer.py.storage._internal.generate import storage
 from dataclasses import dataclass
 import typing
 

@@ -13,8 +13,8 @@ run_codegen = Proc.new { |inp, out, tags: [], **kwargs, &blk|
 	)
 }
 codegen = target_alias("codegen",
-	run_codegen.(root_src.join('executor', 'codegen', 'data', 'builtin-prompt-templates.json'), cur_src.join('src', 'genlayer', 'std', 'prompt_ids.py')),
-	run_codegen.(root_src.join('executor', 'codegen', 'data', 'result-codes.json'), cur_src.join('src', 'genlayer', 'std', 'result_codes.py')),
+	run_codegen.(root_src.join('executor', 'codegen', 'data', 'builtin-prompt-templates.json'), cur_src.join('src', 'genlayer', 'std', '_internal', 'prompt_ids.py')),
+	run_codegen.(root_src.join('executor', 'codegen', 'data', 'result-codes.json'), cur_src.join('src', 'genlayer', 'std', '_internal', 'result_codes.py')),
 )
 
 base_genlayer_lib_dir = cur_src.join('src')
@@ -92,32 +92,44 @@ target_alias(
 root_build.join('docs').mkpath
 cur_build.join('docs').mkpath
 
-POETRY_RUN = 'poetry', 'run', '-C', cur_src
+POETRY_RUN = ['poetry', 'run', '-C', root_src.join('build-scripts', 'doctypes')]
 
 docs_out = root_build.join('py-docs')
-docs_out.mkpath
 target_alias(
 	"docs",
 	target_command(
 		commands: [
-			['cp', cur_src.join('docs_base', 'conf.py'), docs_out],
-			[*POETRY_RUN, 'sphinx-apidoc', '-F', '-o', docs_out, cur_src.join('src')],
+			['rm', '-rf', docs_out],
+			['mkdir', '-p', docs_out],
+			['cd', docs_out],
+			['cp', root_src.join('build-scripts', 'doctypes', 'docs_base', 'conf.py'), docs_out],
+			['cp', root_src.join('build-scripts', 'doctypes', 'docs_base', 'index.rst'), docs_out],
+			[
+				*POETRY_RUN,
+				'sphinx-apidoc',
+				'--full',
+				'--follow-links', '--module-first', # '--separate',
+				'--append-syspath',
+				'-o', docs_out,
+				cur_src.join('src')
+			],
 			[*POETRY_RUN, 'sphinx-build', '-b', 'html', docs_out, docs_out.join('docs')],
 			['zip', '-9', '-r', docs_out.parent.join('py-docs.zip'), 'docs']
 		],
-		cwd: docs_out,
+		cwd: cur_src,
 		output_file: root_build.join('docs', 'py', 'docs.trg'),
 		dependencies: [],
 	)
 )
 
 types_out = root_build.join('py-types')
-types_out.mkpath
 libs = root_src.join('runners', 'py-libs', 'pure-py').children.filter { |c| c.directory? }
 target_alias(
 	"types",
 	target_command(
 		commands: [
+			['mkdir', '-p', types_out],
+			['cd', types_out],
 			['cp', '-r', cur_src.join('src', 'genlayer'), types_out],
 			*libs.map { |l| ['cp', '-r', l, types_out] },
 			['touch', types_out.join('google', '__init__.py')],
@@ -126,7 +138,7 @@ target_alias(
 			},
 			['zip', '-9', '-r', types_out.parent.join('py-types.zip'), 'typings'],
 		],
-		cwd: types_out,
+		cwd: cur_src,
 		output_file: types_out.join('trg'),
 		dependencies: [],
 		tags: ['types'],

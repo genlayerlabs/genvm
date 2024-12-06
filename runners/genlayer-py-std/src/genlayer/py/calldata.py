@@ -11,7 +11,11 @@ Calldata supports following types:
 
 	#. :py:type:`list` and :py:type:`dict`, as well as :py:type:`collections.abc.Sequence` and :py:type:`collections.abc.Mapping`
 	#. :py:type:`CalldataEncodable`
+
+For full calldata specification see `genvm repo <https://github.com/yeagerai/genvm/blob/main/doc/calldata.md>`_
 """
+
+__all__ = ('encode', 'decode', 'to_str')
 
 from .types import Address
 import typing

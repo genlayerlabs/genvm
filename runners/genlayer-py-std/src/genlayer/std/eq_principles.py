@@ -5,7 +5,7 @@ __all__ = (
 	'sandbox',
 )
 
-from .prompt_ids import *
+from ._internal.prompt_ids import *
 
 import genlayer.std._wasi as wasi
 
@@ -13,7 +13,7 @@ import genlayer.std.advanced as advanced
 import typing
 import json
 from ..py.types import *
-from ._private import decode_sub_vm_result_retn, lazy_from_fd, _LazyApi
+from ._internal import decode_sub_vm_result_retn, lazy_from_fd, _LazyApi
 from .nondet_fns import exec_prompt
 
 
@@ -32,6 +32,8 @@ def _eq_principle_strict_eq[T](fn: typing.Callable[[], T]) -> Lazy[T]:
 eq_principle_strict_eq = _LazyApi(_eq_principle_strict_eq)
 """
 Comparative equivalence principle that checks for strict equality
+
+:param fn: functions to perform an action
 """
 del _eq_principle_strict_eq
 
@@ -58,6 +60,9 @@ def _eq_principle_prompt_comparative(
 eq_principle_prompt_comparative = _LazyApi(_eq_principle_prompt_comparative)
 """
 Comparative equivalence principle that utilizes NLP for verifying that results are equivalent
+
+:param fn: function that does all the job
+:param principle: principle with which equivalence will be evaluated in the validator
 
 .. note::
 	As leader results are encoded as calldata, :py:func:`format` is used for string representation. However, operating on strings by yourself is more safe in general
