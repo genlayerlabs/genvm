@@ -1,3 +1,5 @@
+__all__ = ('get_schema',)
+
 import typing
 from genlayer.py.types import Address
 import types

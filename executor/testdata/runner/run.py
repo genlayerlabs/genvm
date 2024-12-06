@@ -5,7 +5,6 @@ import os
 import subprocess
 import _jsonnet
 import json
-import threading
 from threading import Lock
 import argparse
 import re

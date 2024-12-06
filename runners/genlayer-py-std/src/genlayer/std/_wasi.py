@@ -1,6 +1,7 @@
 import typing
+import os
 
-if typing.TYPE_CHECKING:
+if typing.TYPE_CHECKING or os.getenv('GENERATING_DOCS', 'false') == 'true':
 	import collections.abc
 
 	type _Fd = int
@@ -17,11 +18,17 @@ if typing.TYPE_CHECKING:
 
 	def post_message(address: bytes, calldata: bytes, gas: int, code: bytes) -> None: ...
 
-	def get_message_data() -> str: ...
-
 	def get_entrypoint() -> bytes: ...
 
 	def get_webpage(config: str, url: str) -> _Fd: ...
+
+	def get_message_data() -> str:
+		return """
+			{
+				"contract_account": "0x0000000000000000000000000000000000000000",
+				"sender_account": "0x0000000000000000000000000000000000000000"
+			}
+			"""
 
 	def exec_prompt(config: str, prompt: str) -> _Fd: ...
 
@@ -32,16 +39,4 @@ if typing.TYPE_CHECKING:
 	def storage_read(slot: bytes, off: int, len: int) -> bytes: ...
 	def storage_write(slot: bytes, off: int, what: collections.abc.Buffer) -> bytes: ...
 else:
-	import os
-
-	if not os.getenv('GENERATING_DOCS', 'false') == 'true':
-		from _genlayer_wasi import *
-	else:
-
-		def get_message_data() -> str:
-			return """
-			{
-				"contract_account": "0x0000000000000000000000000000000000000000",
-				"sender_account": "0x0000000000000000000000000000000000000000"
-			}
-			"""
+	from _genlayer_wasi import *

@@ -1,14 +1,15 @@
+__all__ = ('DynArray', 'Array')
+
 import typing
 import math
 
-from .core import *
-from .core import _FakeStorageMan
-from .desc_base_types import _u32_desc
+from ._internal.core import *
+from ._internal.desc_base_types import _u32_desc
 
 
 class DynArray[T](WithStorageSlot, collections.abc.MutableSequence[T]):
 	"""
-	Represents exponentially growing array (:py:type:`list` in python terms) that can be stored in the storage
+	Represents exponentially growing array (:py:type:`list` in python terms) that can be persisted on the blockchain
 	"""
 
 	_item_desc: TypeDesc
@@ -238,6 +239,10 @@ class _DynArrayDesc(TypeDesc):
 
 
 class Array[T, S: int](WithStorageSlot, collections.abc.Sequence):
+	"""
+	Constantly sized array that can be persisted on the blockchain
+	"""
+
 	_item_desc: TypeDesc
 	_len: int
 

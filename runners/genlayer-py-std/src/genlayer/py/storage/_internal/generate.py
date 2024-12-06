@@ -22,7 +22,7 @@ from .desc_base_types import (
 	_BigIntDesc,
 )
 from .desc_record import _RecordDesc, WithRecordStorageSlot
-from .vec import DynArray, _DynArrayDesc, Array, _ArrayDesc
+from ..vec import DynArray, _DynArrayDesc, Array, _ArrayDesc
 
 
 def storage[T: type](cls: T) -> T:

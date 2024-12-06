@@ -1,5 +1,5 @@
 from genlayer import *
-from genlayer.py.storage.generate import storage
+from genlayer.py.storage._internal.generate import storage
 
 
 @storage
@@ -32,19 +32,19 @@ def verify_invariants(v: TreeMap[str, u32]):
 	def check(idx):
 		if idx == 0:
 			return {'depth': 0}
-		cur = v.slots[idx - 1]
+		cur = v._slots[idx - 1]
 		ld = check(cur.left)
 		rd = check(cur.right)
 		if cur.left != 0:
-			assert v.slots[cur.left - 1].key < cur.key
+			assert v._slots[cur.left - 1].key < cur.key
 		if cur.right != 0:
-			assert cur.key < v.slots[cur.right - 1].key
+			assert cur.key < v._slots[cur.right - 1].key
 		ldepth = ld['depth']
 		rdepth = rd['depth']
 		assert rdepth - ldepth == cur.balance, 'invariant broken'
 		return {'depth': 1 + max(ldepth, rdepth)}
 
-	check(v.root)
+	check(v._root)
 
 
 def test_insert():

@@ -86,7 +86,8 @@ jobs:
       - name: Get source
         uses: ./.github/actions/get-src
         with:
-          load_submodules: "false"
+          load_submodules: "true"
+          third_party: "none"
       - name: install dependencies
         run: |
           python3.12 -m pip install poetry && \

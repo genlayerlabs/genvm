@@ -5,7 +5,7 @@ import numpy as np
 import onnx
 import torch
 
-from genlayer.py.nn import *
+from genlayer.py._nn import *
 
 from . import root_dir
 

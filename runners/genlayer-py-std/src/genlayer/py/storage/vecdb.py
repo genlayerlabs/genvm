@@ -1,29 +1,12 @@
 from __future__ import annotations
 
-from . import Array, DynArray, TreeMap
-from .core import WithStorageSlot
+__all__ = ('VecDB', 'VecDBElement')
+
+from . import DynArray, TreeMap
 from ..types import u32
 
-import abc
 import typing
 import numpy as np
-
-
-class Numeric(typing.Protocol):
-	@abc.abstractmethod
-	def __eq__(self, other: typing.Any, /) -> bool: ...
-
-	@abc.abstractmethod
-	def __lt__(self, other: typing.Any, /) -> bool: ...
-
-	@abc.abstractmethod
-	def __gt__(self, other: typing.Any, /) -> bool: ...
-
-	@abc.abstractmethod
-	def __sub__(self, other: typing.Any, /) -> typing.Any: ...
-
-	@abc.abstractmethod
-	def __mul__(self, other: typing.Any, /) -> typing.Any: ...
 
 
 def cosine_distance_fast[S, T: np.number](
@@ -66,7 +49,7 @@ class VecDB[T: np.number, S: int, V]:
 		return res
 
 	def get_by_id_or_none(self, id: Id) -> VecDBElement[T, S, V, None] | None:
-		if id in self._free_idx:
+		if u32(id) in self._free_idx:
 			return None
 		return VecDBElement(self, u32(id), None)
 
@@ -84,7 +67,7 @@ class VecDB[T: np.number, S: int, V]:
 	def _get_vecs(self, v: np.ndarray[tuple[S], np.dtype[T]]) -> list[tuple[T, int]]:
 		lst: list[tuple[T, int]] = []  # dist, index
 		for i in range(len(self._keys)):
-			if i in self._free_idx:
+			if u32(i) in self._free_idx:
 				continue
 			cur_key = self._keys[i]
 
@@ -112,7 +95,7 @@ class VecDB[T: np.number, S: int, V]:
 
 	def __iter__(self):
 		for i in range(len(self._keys)):
-			if i in self._free_idx:
+			if u32(i) in self._free_idx:
 				continue
 			yield VecDBElement(self, u32(i), None)
 

@@ -1,10 +1,10 @@
 import typing
 import genlayer.std._wasi as wasi
 import genlayer.py.calldata as calldata
-from ..py.types import Rollback, Lazy
+from ...py.types import Rollback, Lazy
 import collections.abc
 import os
-from .advanced import ContractReturn, ContractError
+from ..advanced import ContractReturn, ContractError
 from .result_codes import ResultCode
 
 
@@ -44,7 +44,13 @@ class _LazyApi[T, **R]:
 		self.fn = fn
 
 	def __call__(self, *args: R.args, **kwargs: R.kwargs) -> T:
+		"""
+		Immediately execute and get the result
+		"""
 		return self.fn(*args, **kwargs).get()
 
 	def lazy(self, *args: R.args, **kwargs: R.kwargs) -> Lazy[T]:
+		"""
+		Wrap evaluation into ``Lazy`` and return it
+		"""
 		return self.fn(*args, **kwargs)

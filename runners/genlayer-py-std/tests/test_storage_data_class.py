@@ -1,5 +1,5 @@
 from genlayer.py.storage import DynArray
-from genlayer.py.storage.generate import storage
+from genlayer.py.storage._internal.generate import storage
 from dataclasses import dataclass
 
 

@@ -2,8 +2,8 @@ __all__ = ('Model',)
 
 import numpy as np
 from numpy.typing import DTypeLike
-from genlayer.py.nn.tensor import Tensor, InputTensor, TensorStorage
-from genlayer.py.nn import get_run_onnx
+from genlayer.py._nn.tensor import Tensor, InputTensor, TensorStorage
+from genlayer.py._nn import get_run_onnx
 from pathlib import Path
 import json
 import onnx

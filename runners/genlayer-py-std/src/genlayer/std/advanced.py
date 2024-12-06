@@ -59,7 +59,7 @@ def run_nondet[T](
 		If this behavior is not desired, just fast return ``False`` for leader error result.
 	"""
 	import cloudpickle
-	from ._private import lazy_from_fd, decode_sub_vm_result
+	from ._internal import lazy_from_fd, decode_sub_vm_result
 
 	fd = wasi.run_nondet(cloudpickle.dumps(leader_fn), cloudpickle.dumps(validator_fn))
 	return lazy_from_fd(fd, decode_sub_vm_result)
