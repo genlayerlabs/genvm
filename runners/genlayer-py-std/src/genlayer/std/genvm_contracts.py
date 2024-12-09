@@ -1,4 +1,10 @@
-__all__ = ('ContractAt', 'contract_interface', 'deploy_contract')
+__all__ = (
+	'ContractAt',
+	'contract_interface',
+	'deploy_contract',
+	'TransactionData',
+	'DeploymentTransactionData',
+)
 
 import typing
 import json
@@ -37,12 +43,19 @@ class _ContractAtViewMethod:
 		)
 
 
-class _TransactionData(typing.TypedDict):
+class TransactionData(typing.TypedDict):
+	"""
+	Built-in parameters of all transaction messages that a contract can emit
+
+	.. warning::
+		parameters are subject to change!
+	"""
+
 	gas: int
 
 
 class _ContractAtEmitMethod:
-	def __init__(self, addr: Address, name: str, data: _TransactionData):
+	def __init__(self, addr: Address, name: str, data: TransactionData):
 		self.addr = addr
 		self.name = name
 		self.data = data
@@ -83,12 +96,9 @@ class ContractAt(_GenVMContract):
 		"""
 		return _ContractAtView(self.addr)
 
-	def emit(self, **data: typing.Unpack[_TransactionData]):
+	def emit(self, **data: typing.Unpack[TransactionData]):
 		"""
 		Namespace with write message
-
-		.. warning::
-			parameters are subject to change!
 		"""
 		return _ContractAtEmit(self.addr, data)
 
@@ -102,7 +112,7 @@ class _ContractAtView:
 
 
 class _ContractAtEmit:
-	def __init__(self, addr: Address, data: _TransactionData):
+	def __init__(self, addr: Address, data: TransactionData):
 		self.addr = addr
 		self.data = data
 
@@ -132,6 +142,7 @@ def contract_interface[TView, TWrite](
 	This decorator produces an "interface" for other GenVM contracts. It has no semantical value, but can be used for auto completion and type checks
 
 	.. code-block:: python
+
 	        @gl.contract_interface
 	        class MyContract:
 	          class View:
@@ -144,13 +155,40 @@ def contract_interface[TView, TWrite](
 	return ContractAt
 
 
+from genlayer.py.eth import MethodEncoder as _EthMethodEncoder
+from genlayer.py.types import u8, u256
+
+_pseudo_method_for_encode_packed = _EthMethodEncoder(
+	'', [u8, Address, u256, u256], type(None)
+)
+
+
+class DeploymentTransactionData(TransactionData):
+	"""
+	Class for representing parameters of ``deploy_contract``
+	"""
+
+	salt_nonce: typing.NotRequired[u256]
+	"""
+	*iff* it is provided and does not equal to :math:`0` then ``Address`` of deployed contract will be known ahead of time. It will depend on this field
+	"""
+
+
 def deploy_contract(
 	*,
 	code: bytes,
 	args: collections.abc.Sequence[typing.Any] = [],
 	kwargs: collections.abc.Mapping[str, typing.Any] = {},
-	**data: typing.Unpack[_TransactionData],
-) -> None:
+	**data: typing.Unpack[DeploymentTransactionData],
+) -> Address | None:
+	"""
+	Function for deploying new genvm contracts
+
+	:param code: code (i.e. contents of a python file) of the contract
+
+	:returns: address of new contract
+	"""
+	salt_nonce = data.setdefault('salt_nonce', u256(0))
 	wasi.deploy_contract(
 		calldata.encode(
 			{
@@ -161,3 +199,13 @@ def deploy_contract(
 		code,
 		json.dumps(data),
 	)
+	if salt_nonce == 0:
+		return None
+	import genlayer.std as gl
+
+	hasher = gl.Keccak256()
+	encoded = _pseudo_method_for_encode_packed.encode(
+		[u8(1), gl.message.contract_account, salt_nonce, 0]
+	)[len(_pseudo_method_for_encode_packed.selector) :]
+	hasher.update(encoded)
+	return Address(hasher.digest())

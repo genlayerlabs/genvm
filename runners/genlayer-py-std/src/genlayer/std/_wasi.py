@@ -24,18 +24,7 @@ if typing.TYPE_CHECKING or os.getenv('GENERATING_DOCS', 'false') == 'true':
 
 	def get_webpage(config: str, url: str) -> _Fd: ...
 
-	def get_message_data() -> str:
-		# note below code is written to trick api doc generation
-		import json
-
-		return json.dumps(
-			json.loads("""
-			{
-				"contract_account": "0x0000000000000000000000000000000000000000",
-				"sender_account": "0x0000000000000000000000000000000000000000"
-			}
-			""")
-		)
+	def get_message_data() -> str: ...
 
 	def exec_prompt(config: str, prompt: str) -> _Fd: ...
 
