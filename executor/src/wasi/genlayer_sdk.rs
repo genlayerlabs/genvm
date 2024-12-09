@@ -622,6 +622,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 value: None,
                 is_init: false,
                 datetime: my_data.datetime.clone(),
+                chain_id: my_data.chain_id,
+                origin_account: my_data.origin_account,
             },
             entrypoint: res_calldata,
             supervisor: supervisor.clone(),

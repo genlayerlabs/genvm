@@ -59,6 +59,8 @@ fn default_datetime() -> chrono::DateTime<chrono::Utc> {
 pub struct MessageData {
     pub contract_account: crate::AccountAddress,
     pub sender_account: crate::AccountAddress,
+    pub origin_account: crate::AccountAddress,
+    pub chain_id: Arc<str>,
     pub value: Option<u64>,
     pub is_init: bool,
     #[serde(default = "default_datetime")]
