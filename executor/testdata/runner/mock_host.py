@@ -54,6 +54,7 @@ class MockHost(IHost):
 	sock: socket.socket | None
 	storage: MockStorage | None
 	messages_file: io.TextIOWrapper | None
+	_has_result: bool = False
 
 	def __init__(
 		self,
@@ -145,7 +146,10 @@ class MockHost(IHost):
 	async def consume_result(
 		self, type: ResultCode, data: collections.abc.Buffer
 	) -> None:
-		pass
+		self._has_result = True
+
+	def has_result(self) -> bool:
+		return self._has_result
 
 	async def get_leader_nondet_result(
 		self, call_no: int, /

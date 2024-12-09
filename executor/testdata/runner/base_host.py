@@ -3,6 +3,7 @@ import typing
 import collections.abc
 import asyncio
 import os
+import abc
 
 from dataclasses import dataclass
 
@@ -21,7 +22,7 @@ ACCOUNT_ADDR_SIZE = 20
 GENERIC_ADDR_SIZE = 32
 
 
-class IHost(typing.Protocol):
+class IHost(metaclass=abc.ABCMeta):
 	async def loop_enter(self) -> socket.socket: ...
 
 	async def get_calldata(self, /) -> bytes: ...
@@ -50,6 +51,8 @@ class IHost(typing.Protocol):
 		self, gas: int, account: bytes, calldata: bytes, code: bytes, /
 	) -> None: ...
 	async def consume_gas(self, gas: int, /) -> None: ...
+
+	def has_result(self) -> bool: ...
 
 
 async def host_loop(handler: IHost):
@@ -225,8 +228,10 @@ async def run_host_and_program(
 	coro_loop = asyncio.ensure_future(wrap_host())
 
 	all_proc = [coro_loop, coro_proc]
+	deadline_future: None | asyncio.Task[None] = None
 	if deadline is not None:
-		all_proc.append(asyncio.ensure_future(asyncio.sleep(deadline)))
+		deadline_future = asyncio.ensure_future(asyncio.sleep(deadline))
+		all_proc.append(deadline_future)
 
 	done, _pending = await asyncio.wait(
 		all_proc,
@@ -275,18 +280,27 @@ async def run_host_and_program(
 	if not coro_loop.done():
 		coro_loop.cancel()
 
-	if len(errors) > 0:
-		raise Exception(
-			*errors,
-			{
-				'stdout': b''.join(stdout).decode(),
-				'stderr': b''.join(stderr).decode(),
-				'genvm_log': b''.join(genvm_log).decode(),
-			},
-		) from errors[0]
+	if (
+		deadline_future is not None
+		and deadline_future not in done
+		and not handler.has_result()
+	):
+		errors.append(Exception('no result provided'))
 
-	return RunHostAndProgramRes(
+	result = RunHostAndProgramRes(
 		b''.join(stdout).decode(),
 		b''.join(stderr).decode(),
 		b''.join(genvm_log).decode(),
 	)
+
+	if len(errors) > 0:
+		raise Exception(
+			*errors,
+			{
+				'stdout': result.stdout,
+				'stderr': result.stderr,
+				'genvm_log': result.genvm_log,
+			},
+		) from errors[0]
+
+	return result
