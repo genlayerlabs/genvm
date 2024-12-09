@@ -65,8 +65,14 @@
     (@interface func (export "post_message")
         (param $account $addr)
         (param $calldata $bytes)
-        (param $gas u64)
+        (param $data string)
+        (result $error (expected (error $errno)))
+    )
+
+    (@interface func (export "deploy_contract")
+        (param $calldata $bytes)
         (param $code $bytes)
+        (param $data string)
         (result $error (expected (error $errno)))
     )
 

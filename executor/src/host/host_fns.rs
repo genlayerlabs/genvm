@@ -10,6 +10,7 @@ pub enum Methods {
     PostNondetResult = 6,
     PostMessage = 7,
     ConsumeFuel = 8,
+    DeployContract = 9,
 }
 
 impl TryFrom<u8> for Methods {
@@ -26,6 +27,7 @@ impl TryFrom<u8> for Methods {
             6 => Ok(Methods::PostNondetResult),
             7 => Ok(Methods::PostMessage),
             8 => Ok(Methods::ConsumeFuel),
+            9 => Ok(Methods::DeployContract),
             _ => Err(()),
         }
     }

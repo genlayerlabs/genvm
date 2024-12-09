@@ -260,9 +260,8 @@ impl Host {
     pub fn post_message(
         &mut self,
         account: &AccountAddress,
-        gas: u64,
         calldata: &[u8],
-        code: &[u8],
+        data: &str,
     ) -> Result<()> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
@@ -270,13 +269,30 @@ impl Host {
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::PostMessage as u8])?;
         sock.write_all(&account.raw())?;
-        sock.write_all(&gas.to_le_bytes())?;
+
+        sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
+        sock.write_all(calldata)?;
+
+        sock.write_all(&(data.as_bytes().len() as u32).to_le_bytes())?;
+        sock.write_all(data.as_bytes())?;
+        Ok(())
+    }
+
+    pub fn deploy_contract(&mut self, calldata: &[u8], code: &[u8], data: &str) -> Result<()> {
+        let Ok(mut sock) = (*self.sock).lock() else {
+            anyhow::bail!("can't take lock")
+        };
+        let sock: &mut dyn Sock = &mut *sock;
+        sock.write_all(&[host_fns::Methods::DeployContract as u8])?;
 
         sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
         sock.write_all(calldata)?;
 
         sock.write_all(&(code.len() as u32).to_le_bytes())?;
         sock.write_all(code)?;
+
+        sock.write_all(&(data.as_bytes().len() as u32).to_le_bytes())?;
+        sock.write_all(data.as_bytes())?;
         Ok(())
     }
 

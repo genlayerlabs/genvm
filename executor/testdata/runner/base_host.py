@@ -4,6 +4,7 @@ import collections.abc
 import asyncio
 import os
 import abc
+import json
 
 from dataclasses import dataclass
 
@@ -22,6 +23,10 @@ ACCOUNT_ADDR_SIZE = 20
 GENERIC_ADDR_SIZE = 32
 
 
+class DefaultTransactionData(typing.TypedDict):
+	gas: int
+
+
 class IHost(metaclass=abc.ABCMeta):
 	async def loop_enter(self) -> socket.socket: ...
 
@@ -38,9 +43,12 @@ class IHost(metaclass=abc.ABCMeta):
 		got: collections.abc.Buffer,
 		/,
 	) -> None: ...
+
 	async def consume_result(
 		self, type: ResultCode, data: collections.abc.Buffer, /
 	) -> None: ...
+	def has_result(self) -> bool: ...
+
 	async def get_leader_nondet_result(
 		self, call_no: int, /
 	) -> tuple[ResultCode, collections.abc.Buffer] | None: ...
@@ -48,11 +56,12 @@ class IHost(metaclass=abc.ABCMeta):
 		self, call_no: int, type: ResultCode, data: collections.abc.Buffer, /
 	) -> None: ...
 	async def post_message(
-		self, gas: int, account: bytes, calldata: bytes, code: bytes, /
+		self, account: bytes, calldata: bytes, data: DefaultTransactionData, /
+	) -> None: ...
+	async def deploy_contract(
+		self, calldata: bytes, code: bytes, data: DefaultTransactionData, /
 	) -> None: ...
 	async def consume_gas(self, gas: int, /) -> None: ...
-
-	def has_result(self) -> bool: ...
 
 
 async def host_loop(handler: IHost):
@@ -132,15 +141,34 @@ async def host_loop(handler: IHost):
 				await handler.post_nondet_result(call_no, *await read_result())
 			case Methods.POST_MESSAGE:
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
-				gas = await recv_int(8)
+
 				calldata_len = await recv_int()
 				calldata = await read_exact(calldata_len)
-				code_len = await recv_int()
-				code = await read_exact(code_len)
-				await handler.post_message(gas, account, calldata, code)
+
+				message_data_len = await recv_int()
+				message_data_bytes = await read_exact(message_data_len)
+				message_data: DefaultTransactionData = json.loads(
+					str(message_data_bytes, 'utf-8')
+				)
+
+				await handler.post_message(account, calldata, message_data)
 			case Methods.CONSUME_FUEL:
 				gas = await recv_int(8)
 				await handler.consume_gas(gas)
+			case Methods.DEPLOY_CONTRACT:
+				calldata_len = await recv_int()
+				calldata = await read_exact(calldata_len)
+
+				code_len = await recv_int()
+				code = await read_exact(code_len)
+
+				message_data_len = await recv_int()
+				message_data_bytes = await read_exact(message_data_len)
+				message_data: DefaultTransactionData = json.loads(
+					str(message_data_bytes, 'utf-8')
+				)
+
+				await handler.deploy_contract(calldata, code, message_data)
 			case x:
 				raise Exception(f'unknown method {x}')
 

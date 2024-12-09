@@ -16,19 +16,26 @@ if typing.TYPE_CHECKING or os.getenv('GENERATING_DOCS', 'false') == 'true':
 
 	def call_contract(address: bytes, calldata: bytes) -> _Fd: ...
 
-	def post_message(address: bytes, calldata: bytes, gas: int, code: bytes) -> None: ...
+	def post_message(address: bytes, calldata: bytes, data: str) -> None: ...
+
+	def deploy_contract(calldata: bytes, code: bytes, data: str) -> None: ...
 
 	def get_entrypoint() -> bytes: ...
 
 	def get_webpage(config: str, url: str) -> _Fd: ...
 
 	def get_message_data() -> str:
-		return """
+		# note below code is written to trick api doc generation
+		import json
+
+		return json.dumps(
+			json.loads("""
 			{
 				"contract_account": "0x0000000000000000000000000000000000000000",
 				"sender_account": "0x0000000000000000000000000000000000000000"
 			}
-			"""
+			""")
+		)
 
 	def exec_prompt(config: str, prompt: str) -> _Fd: ...
 

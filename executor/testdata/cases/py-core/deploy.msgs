@@ -1,0 +1,4 @@
+deploy:
+	{'gas': 300}
+	b'\x16\x04args\x05\x06kwargs\x06'
+	b'not really a contract'

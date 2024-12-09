@@ -641,8 +641,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         mem: &mut wiggle::GuestMemory<'_>,
         account: &generated::types::Addr,
         calldata: &generated::types::Bytes,
-        gas: u64,
-        code: &generated::types::Bytes,
+        data: wiggle::GuestPtr<str>,
     ) -> Result<(), generated::types::Error> {
         if !self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
@@ -650,13 +649,37 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let address = AccountAddress::read_from_mem(account, mem)?;
         let supervisor = self.context.data.supervisor.clone();
         let calldata = calldata.read_owned(mem)?;
-        let code = code.read_owned(mem)?;
+        let data = super::common::read_string(mem, data)?;
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
         let res = supervisor
             .host
-            .post_message(&address, gas, &calldata, &code)
+            .post_message(&address, &calldata, &data)
+            .map_err(generated::types::Error::trap)?;
+        Ok(())
+    }
+
+    fn deploy_contract(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        calldata: &generated::types::Bytes,
+        code: &generated::types::Bytes,
+        data: wiggle::GuestPtr<str>,
+    ) -> Result<(), generated::types::Error> {
+        if !self.context.data.conf.is_deterministic {
+            return Err(generated::types::Errno::DeterministicViolation.into());
+        }
+        let supervisor = self.context.data.supervisor.clone();
+        let calldata = calldata.read_owned(mem)?;
+        let code = code.read_owned(mem)?;
+        let data = super::common::read_string(mem, data)?;
+        let Ok(mut supervisor) = supervisor.lock() else {
+            return Err(generated::types::Errno::Io.into());
+        };
+        let res = supervisor
+            .host
+            .deploy_contract(&calldata, &code, &data)
             .map_err(generated::types::Error::trap)?;
         Ok(())
     }

@@ -1,6 +1,8 @@
-__all__ = ('ContractAt', 'contract_interface')
+__all__ = ('ContractAt', 'contract_interface', 'deploy_contract')
 
 import typing
+import json
+import collections.abc
 
 from genlayer.py.types import Address, Lazy
 import genlayer.py.calldata as calldata
@@ -35,17 +37,20 @@ class _ContractAtViewMethod:
 		)
 
 
+class _TransactionData(typing.TypedDict):
+	gas: int
+
+
 class _ContractAtEmitMethod:
-	def __init__(self, addr: Address, name: str, gas: int, code: bytes):
+	def __init__(self, addr: Address, name: str, data: _TransactionData):
 		self.addr = addr
 		self.name = name
-		self.gas = gas
-		self.code = code
+		self.data = data
 
 	def __call__(self, *args, **kwargs) -> None:
 		obj = _make_calldata_obj(self.name, args, kwargs)
 		cd = calldata.encode(obj)
-		wasi.post_message(self.addr.as_bytes, cd, self.gas, self.code)
+		wasi.post_message(self.addr.as_bytes, cd, json.dumps(self.data))
 
 
 class _GenVMContract[TView, TSend](typing.Protocol):
@@ -78,14 +83,14 @@ class ContractAt(_GenVMContract):
 		"""
 		return _ContractAtView(self.addr)
 
-	def emit(self, *, gas: int, code: bytes = b''):
+	def emit(self, **data: typing.Unpack[_TransactionData]):
 		"""
 		Namespace with write message
 
 		.. warning::
 			parameters are subject to change!
 		"""
-		return _ContractAtEmit(self.addr, gas, code)
+		return _ContractAtEmit(self.addr, data)
 
 
 class _ContractAtView:
@@ -97,13 +102,12 @@ class _ContractAtView:
 
 
 class _ContractAtEmit:
-	def __init__(self, addr: Address, gas: int, code: bytes):
+	def __init__(self, addr: Address, data: _TransactionData):
 		self.addr = addr
-		self.gas = gas
-		self.code = code
+		self.data = data
 
 	def __getattr__(self, name):
-		return _ContractAtEmitMethod(self.addr, name, self.gas, self.code)
+		return _ContractAtEmitMethod(self.addr, name, self.data)
 
 
 class GenVMContractDeclaration[TView, TWrite](typing.Protocol):
@@ -138,3 +142,22 @@ def contract_interface[TView, TWrite](
 	"""
 	# editorconfig-checker-enable
 	return ContractAt
+
+
+def deploy_contract(
+	*,
+	code: bytes,
+	args: collections.abc.Sequence[typing.Any] = [],
+	kwargs: collections.abc.Mapping[str, typing.Any] = {},
+	**data: typing.Unpack[_TransactionData],
+) -> None:
+	wasi.deploy_contract(
+		calldata.encode(
+			{
+				'args': args,
+				'kwargs': kwargs,
+			}
+		),
+		code,
+		json.dumps(data),
+	)
