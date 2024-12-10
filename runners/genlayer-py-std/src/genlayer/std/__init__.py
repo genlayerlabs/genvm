@@ -1,6 +1,34 @@
+__all__ = (
+	'DeploymentTransactionData',
+	'ExecPromptKwArgs',
+	'GetWebpageKwArgs',
+	'Lazy',
+	'MessageType',
+	'TransactionData',
+	'wasi',
+	'advanced',
+	'calldata',
+	'private',
+	'public',
+	'contract',
+	'contract_interface',
+	'ContractAt',
+	'deploy_contract',
+	'eq_principle_prompt_comparative',
+	'eq_principle_prompt_non_comparative',
+	'eq_principle_strict_eq',
+	'eq_principles',
+	'exec_prompt',
+	'get_webpage',
+	'message',
+	'message_raw',
+	'rollback_immediate',
+	'sandbox',
+)
+
 import typing
 import json
-from types import SimpleNamespace as _SimpleNamespace
+import os
 
 import genlayer.py.calldata as calldata
 
@@ -53,20 +81,51 @@ class public:
 		return f
 
 
-message_raw = json.loads(wasi.get_message_data())
-"""
-Raw message as parsed json
-"""
+class MessageType(typing.NamedTuple):
+	contract_account: Address
+	"""
+	Address of current Intelligent Contract
+	"""
+	sender_account: Address
+	"""
+	Address of this call initiator
+	"""
+	origin_account: Address
+	"""
+	Entire transaction initiator
+	"""
+	value: int | None
+	is_init: bool
+	"""
+	``True`` *iff* it is a deployment
+	"""
+	chain_id: u256
+	"""
+	Current chain ID
+	"""
 
-message = _SimpleNamespace(
-	contract_account=Address(message_raw['contract_account']),
-	sender_account=Address(message_raw['sender_account']),
-	value=message_raw.get('value', None),
-	is_init=message_raw.get('is_init', None),
-)
-"""
-Represents fields from transaction message that was sent
-"""
+
+if os.getenv('GENERATING_DOCS', 'false') == 'true':
+	message_raw: dict = ...  # type: ignore
+	"""
+	Raw message as parsed json
+	"""
+
+	message: MessageType = ...  # type: ignore
+	"""
+	Represents fields from a transaction message that was sent
+	"""
+else:
+	message_raw = json.loads(wasi.get_message_data())
+
+	message = MessageType(
+		contract_account=Address(message_raw['contract_account']),
+		sender_account=Address(message_raw['sender_account']),
+		origin_account=Address(message_raw['origin_account']),
+		value=message_raw.get('value', None),
+		is_init=message_raw.get('is_init', None),
+		chain_id=u256(int(message_raw['chain_id'])),
+	)
 
 
 def rollback_immediate(reason: str) -> typing.NoReturn:
@@ -78,7 +137,7 @@ def rollback_immediate(reason: str) -> typing.NoReturn:
 
 def contract(t: type) -> type:
 	"""
-	Marks class as a contract
+	Decorator that marks class as a contract
 
 	.. note::
 		There can be only one "contract" at address, so this function must be called at least once

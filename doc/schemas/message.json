@@ -1,0 +1,58 @@
+{
+  "$id": "https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/default-config.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GenVM configuration",
+  "$ref": "#/definitions/body",
+  "definitions": {
+    "body": {
+      "type": "object",
+      "properties": {
+          "$schema": { "type": "string" },
+          "contract_account": {
+            "type": "string",
+            "description": "bas64 encoded (20 bytes)",
+            "pattern": "^[\\-A-Za-z0-9+\\/]{27}=$"
+          },
+          "sender_account": {
+            "type": "string",
+            "description": "bas64 encoded (20 bytes)",
+            "pattern": "^[\\-A-Za-z0-9+\\/]{27}=$"
+          },
+          "origin_account": {
+            "type": "string",
+            "description": "bas64 encoded (20 bytes)",
+            "pattern": "^[\\-A-Za-z0-9+\\/]{27}=$"
+          },
+          "chain_id": {
+            "type": "string",
+            "description": "chain id number, must be a parsable u256"
+          },
+          "value": {
+            "oneOf": [{ "type": "null" }, { "type": "number" }],
+            "description": "amount of GEN attached to message"
+          },
+          "is_init": {
+            "type": "boolean",
+            "description": "whenever contract is being instantiated (this allows to call a private method)"
+          }
+      },
+      "required": ["contract_account", "sender_account", "origin_account", "chain_id", "is_init"]
+    },
+    "ModuleConfig": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "path to .so file, can contain ${} interpolation"
+        },
+        "config": {
+          "type": "object"
+        },
+        "name": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }]
+        }
+      },
+      "required": ["path", "config"]
+    }
+  }
+}

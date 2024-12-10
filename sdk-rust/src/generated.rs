@@ -256,17 +256,25 @@ pub unsafe fn call_contract(account: Addr, calldata: Bytes) -> Result<Fd, Errno>
     }
 }
 
-pub unsafe fn post_message(
-    account: Addr,
-    calldata: Bytes,
-    gas: u64,
-    code: Bytes,
-) -> Result<(), Errno> {
+pub unsafe fn post_message(account: Addr, calldata: Bytes, data: &str) -> Result<(), Errno> {
     let ret = genlayer_sdk::post_message(
         &account as *const _ as i32,
         &calldata as *const _ as i32,
-        gas as i64,
+        data.as_ptr() as i32,
+        data.len() as i32,
+    );
+    match ret {
+        0 => Ok(()),
+        _ => Err(Errno(ret as u32)),
+    }
+}
+
+pub unsafe fn deploy_contract(calldata: Bytes, code: Bytes, data: &str) -> Result<(), Errno> {
+    let ret = genlayer_sdk::deploy_contract(
+        &calldata as *const _ as i32,
         &code as *const _ as i32,
+        data.as_ptr() as i32,
+        data.len() as i32,
     );
     match ret {
         0 => Ok(()),
@@ -312,7 +320,8 @@ pub mod genlayer_sdk {
         pub fn exec_prompt_id(arg0: i32, arg1: i32, arg2: i32, arg3: i32) -> i32;
         pub fn eq_principle_prompt(arg0: i32, arg1: i32, arg2: i32, arg3: i32) -> i32;
         pub fn call_contract(arg0: i32, arg1: i32, arg2: i32) -> i32;
-        pub fn post_message(arg0: i32, arg1: i32, arg2: i64, arg3: i32) -> i32;
+        pub fn post_message(arg0: i32, arg1: i32, arg2: i32, arg3: i32) -> i32;
+        pub fn deploy_contract(arg0: i32, arg1: i32, arg2: i32, arg3: i32) -> i32;
         pub fn storage_read(arg0: i32, arg1: i32, arg2: i32) -> i32;
         pub fn storage_write(arg0: i32, arg1: i32, arg2: i32) -> i32;
     }

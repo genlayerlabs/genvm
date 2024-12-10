@@ -181,6 +181,7 @@ def run(jsonnet_rel_path):
 		step_to_run_config(i, conf_i, len(jsonnet_conf))
 		for i, conf_i in enumerate(jsonnet_conf)
 	]
+	base = {}
 	for config in run_configs:
 		tmp_dir = config['tmp_dir']
 		cmd = [

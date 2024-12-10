@@ -176,7 +176,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfn(m)]
-    fn post_message(addr: &[u8], calldata: &[u8], gas: u64, code: &[u8]) -> PyResult<()> {
+    fn post_message(addr: &[u8], calldata: &[u8], data: &str) -> PyResult<()> {
         let addr = get_addr(&addr)?;
         let res = unsafe {
             genvm_sdk_rust::post_message(
@@ -185,11 +185,25 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
                     buf: calldata.as_ptr() as *const u8,
                     buf_len: calldata.len() as u32,
                 },
-                gas,
+                data,
+            )
+        };
+        map_error(res)
+    }
+
+    #[pyfn(m)]
+    fn deploy_contract(calldata: &[u8], code: &[u8], data: &str) -> PyResult<()> {
+        let res = unsafe {
+            genvm_sdk_rust::deploy_contract(
+                genvm_sdk_rust::Bytes {
+                    buf: calldata.as_ptr() as *const u8,
+                    buf_len: calldata.len() as u32,
+                },
                 genvm_sdk_rust::Bytes {
                     buf: code.as_ptr() as *const u8,
                     buf_len: code.len() as u32,
                 },
+                data,
             )
         };
         map_error(res)

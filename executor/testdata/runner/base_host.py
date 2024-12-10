@@ -3,6 +3,8 @@ import typing
 import collections.abc
 import asyncio
 import os
+import abc
+import json
 
 from dataclasses import dataclass
 
@@ -21,7 +23,11 @@ ACCOUNT_ADDR_SIZE = 20
 GENERIC_ADDR_SIZE = 32
 
 
-class IHost(typing.Protocol):
+class DefaultTransactionData(typing.TypedDict):
+	gas: int
+
+
+class IHost(metaclass=abc.ABCMeta):
 	async def loop_enter(self) -> socket.socket: ...
 
 	async def get_calldata(self, /) -> bytes: ...
@@ -37,9 +43,12 @@ class IHost(typing.Protocol):
 		got: collections.abc.Buffer,
 		/,
 	) -> None: ...
+
 	async def consume_result(
 		self, type: ResultCode, data: collections.abc.Buffer, /
 	) -> None: ...
+	def has_result(self) -> bool: ...
+
 	async def get_leader_nondet_result(
 		self, call_no: int, /
 	) -> tuple[ResultCode, collections.abc.Buffer] | None: ...
@@ -47,7 +56,10 @@ class IHost(typing.Protocol):
 		self, call_no: int, type: ResultCode, data: collections.abc.Buffer, /
 	) -> None: ...
 	async def post_message(
-		self, gas: int, account: bytes, calldata: bytes, code: bytes, /
+		self, account: bytes, calldata: bytes, data: DefaultTransactionData, /
+	) -> None: ...
+	async def deploy_contract(
+		self, calldata: bytes, code: bytes, data: DefaultTransactionData, /
 	) -> None: ...
 	async def consume_gas(self, gas: int, /) -> None: ...
 
@@ -129,15 +141,34 @@ async def host_loop(handler: IHost):
 				await handler.post_nondet_result(call_no, *await read_result())
 			case Methods.POST_MESSAGE:
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
-				gas = await recv_int(8)
+
 				calldata_len = await recv_int()
 				calldata = await read_exact(calldata_len)
-				code_len = await recv_int()
-				code = await read_exact(code_len)
-				await handler.post_message(gas, account, calldata, code)
+
+				message_data_len = await recv_int()
+				message_data_bytes = await read_exact(message_data_len)
+				message_data: DefaultTransactionData = json.loads(
+					str(message_data_bytes, 'utf-8')
+				)
+
+				await handler.post_message(account, calldata, message_data)
 			case Methods.CONSUME_FUEL:
 				gas = await recv_int(8)
 				await handler.consume_gas(gas)
+			case Methods.DEPLOY_CONTRACT:
+				calldata_len = await recv_int()
+				calldata = await read_exact(calldata_len)
+
+				code_len = await recv_int()
+				code = await read_exact(code_len)
+
+				message_data_len = await recv_int()
+				message_data_bytes = await read_exact(message_data_len)
+				message_data: DefaultTransactionData = json.loads(
+					str(message_data_bytes, 'utf-8')
+				)
+
+				await handler.deploy_contract(calldata, code, message_data)
 			case x:
 				raise Exception(f'unknown method {x}')
 
@@ -225,8 +256,10 @@ async def run_host_and_program(
 	coro_loop = asyncio.ensure_future(wrap_host())
 
 	all_proc = [coro_loop, coro_proc]
+	deadline_future: None | asyncio.Task[None] = None
 	if deadline is not None:
-		all_proc.append(asyncio.ensure_future(asyncio.sleep(deadline)))
+		deadline_future = asyncio.ensure_future(asyncio.sleep(deadline))
+		all_proc.append(deadline_future)
 
 	done, _pending = await asyncio.wait(
 		all_proc,
@@ -275,18 +308,27 @@ async def run_host_and_program(
 	if not coro_loop.done():
 		coro_loop.cancel()
 
-	if len(errors) > 0:
-		raise Exception(
-			*errors,
-			{
-				'stdout': b''.join(stdout).decode(),
-				'stderr': b''.join(stderr).decode(),
-				'genvm_log': b''.join(genvm_log).decode(),
-			},
-		) from errors[0]
+	if (
+		deadline_future is not None
+		and deadline_future not in done
+		and not handler.has_result()
+	):
+		errors.append(Exception('no result provided'))
 
-	return RunHostAndProgramRes(
+	result = RunHostAndProgramRes(
 		b''.join(stdout).decode(),
 		b''.join(stderr).decode(),
 		b''.join(genvm_log).decode(),
 	)
+
+	if len(errors) > 0:
+		raise Exception(
+			*errors,
+			{
+				'stdout': result.stdout,
+				'stderr': result.stderr,
+				'genvm_log': result.genvm_log,
+			},
+		) from errors[0]
+
+	return result

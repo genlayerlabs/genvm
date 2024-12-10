@@ -5,12 +5,16 @@ To run a genvm, one must start a genvm process with following arguments:
 - `--message` (potential subject to change) message data as json
   ```typescript
   {
-    "contract_account": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", // base64 address of contract account
-    "is_init": false, // whenever it is contract being instantiated (this allows to call a private method)
-    "sender_account": "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", // base64 address of who is calling the contract
-    "value": null // value attached to message, see solidity msg.value
+    "$schema": "https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/message.json", // optional
+    "contract_account": "AQAAAAAAAAAAAAAAAAAAAAAAAAA=", // base64 address of contract account (callee)
+    "sender_account": "AgAAAAAAAAAAAAAAAAAAAAAAAAA=",   // base64 address of caller
+    "origin_account": "AgAAAAAAAAAAAAAAAAAAAAAAAAA=",   // base64 address of initiator
+    "chain_id": "0",                                    // chain id, see consensus docs
+    "value": null,
+    "is_init": false,                                   // whenever contract is being instantiated (this allows to call a private method)
   }
   ```
+See [example](../../executor/testdata/templates/message.json) that is used in tests
 
 ## How to ask GenVM to quit?
 Send it `SIGTERM`. If it doesn't quit in some sensible amount of time just `SIGKILL` it

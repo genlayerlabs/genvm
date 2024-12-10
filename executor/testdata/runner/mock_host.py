@@ -54,6 +54,7 @@ class MockHost(IHost):
 	sock: socket.socket | None
 	storage: MockStorage | None
 	messages_file: io.TextIOWrapper | None
+	_has_result: bool = False
 
 	def __init__(
 		self,
@@ -145,7 +146,10 @@ class MockHost(IHost):
 	async def consume_result(
 		self, type: ResultCode, data: collections.abc.Buffer
 	) -> None:
-		pass
+		self._has_result = True
+
+	def has_result(self) -> bool:
+		return self._has_result
 
 	async def get_leader_nondet_result(
 		self, call_no: int, /
@@ -167,11 +171,18 @@ class MockHost(IHost):
 		pass
 
 	async def post_message(
-		self, gas: int, account: bytes, calldata: bytes, code: bytes
+		self, account: bytes, calldata: bytes, data: DefaultTransactionData
 	) -> None:
 		if self.messages_file is None:
 			self.messages_file = open(self.messages_path, 'wt')
-			self.messages_file.write(f'{gas}\n{calldata}\n{code}\n')
+		self.messages_file.write(f'send:\n\t{data}\n\t{calldata}\n')
+
+	async def deploy_contract(
+		self, calldata: bytes, code: bytes, data: DefaultTransactionData, /
+	) -> None:
+		if self.messages_file is None:
+			self.messages_file = open(self.messages_path, 'wt')
+		self.messages_file.write(f'deploy:\n\t{data}\n\t{calldata}\n\t{code}\n')
 
 	async def consume_gas(self, gas: int):
 		pass

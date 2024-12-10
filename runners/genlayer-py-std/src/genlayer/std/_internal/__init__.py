@@ -41,7 +41,11 @@ def lazy_from_fd[T](
 
 class _LazyApi[T, **R]:
 	def __init__(self, fn: typing.Callable[R, Lazy[T]]):
+		self.__doc__ = fn.__doc__
 		self.fn = fn
+
+	def __repr__(self):
+		return 'LazyApi(...)'
 
 	def __call__(self, *args: R.args, **kwargs: R.kwargs) -> T:
 		"""

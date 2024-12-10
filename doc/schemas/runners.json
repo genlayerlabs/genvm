@@ -2,7 +2,11 @@
     "$id": "https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/runner.json",
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "GenVM runner.json",
-    "$ref": "#/definitions/InitAction",
+
+    "oneOf": [
+      { "$ref": "#/definitions/InitAction" }
+    ],
+
     "definitions": {
       "WasmMode": {
         "enum": ["det", "nondet"]

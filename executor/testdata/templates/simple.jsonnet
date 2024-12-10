@@ -11,12 +11,7 @@
 				}
 			},
 
-			"message": {
-				"contract_account": "AQAAAAAAAAAAAAAAAAAAAAAAAAA=",
-				"sender_account": "AgAAAAAAAAAAAAAAAAAAAAAAAAA=",
-				"value": null,
-				"is_init": false,
-			},
+			"message": import './message.json',
 
 			"calldata": "{}"
 		}

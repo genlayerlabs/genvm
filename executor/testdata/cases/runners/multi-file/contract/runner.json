@@ -18,7 +18,7 @@
       "Depends": "py-genlayer-std:test"
     },
     {
-      "Depends": "genvm-cpython:43CJUQR6XM4QTNMWDZLOBRZYLABFB5NFZZLOSFYTD7DQC==="
+      "Depends": "genvm-cpython:YOTOKTSLMY4ZVTNGCE2SMI3G6J3RYISK3N7SI7RMI4TAE==="
     }
   ]
 }
