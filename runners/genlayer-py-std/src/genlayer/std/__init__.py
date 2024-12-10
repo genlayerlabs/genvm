@@ -124,7 +124,7 @@ else:
 		origin_account=Address(message_raw['origin_account']),
 		value=message_raw.get('value', None),
 		is_init=message_raw.get('is_init', None),
-		chain_id=u256(message_raw['chain_id']),
+		chain_id=u256(int(message_raw['chain_id'])),
 	)
 
 

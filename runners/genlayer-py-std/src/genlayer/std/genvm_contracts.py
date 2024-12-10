@@ -155,12 +155,7 @@ def contract_interface[TView, TWrite](
 	return ContractAt
 
 
-from genlayer.py.eth import MethodEncoder as _EthMethodEncoder
 from genlayer.py.types import u8, u256
-
-_pseudo_method_for_encode_packed = _EthMethodEncoder(
-	'', [u8, Address, u256, u256], type(None)
-)
 
 
 class DeploymentTransactionData(TransactionData):
@@ -201,11 +196,8 @@ def deploy_contract(
 	)
 	if salt_nonce == 0:
 		return None
-	import genlayer.std as gl
 
-	hasher = gl.Keccak256()
-	encoded = _pseudo_method_for_encode_packed.encode(
-		[u8(1), gl.message.contract_account, salt_nonce, 0]
-	)[len(_pseudo_method_for_encode_packed.selector) :]
-	hasher.update(encoded)
-	return Address(hasher.digest())
+	import genlayer.std as gl
+	from genlayer.py._internal import create2_address
+
+	return create2_address(gl.message.contract_account, salt_nonce, gl.message.chain_id)
