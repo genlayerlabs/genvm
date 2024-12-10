@@ -15,7 +15,7 @@ with zipfile.ZipFile(fake_zip, mode='w', compression=zipfile.ZIP_STORED) as zip_
 		info = zipfile.ZipInfo(dst, date_time=DEFAULT_TIME)
 		zip_file.writestr(info, contents)
 
-	add_file('contract.py', root.joinpath('empty.py'))
+	add_file('file', root.joinpath('empty.py'))
 	add_file('contract.pyc', root.joinpath('contract.pyc'))
 	add_file('runner.json', root.joinpath('runner.json'))
 fake_zip.flush()

@@ -9,7 +9,7 @@ use wiggle::GuestError;
 
 use crate::{
     errors::*,
-    vm::{self, ContractCodeData, RunOk},
+    vm::{self, RunOk},
     AccountAddress, GenericAddress, MessageData,
 };
 
@@ -20,7 +20,6 @@ pub struct SingleVMData {
     pub message_data: MessageData,
     pub entrypoint: Arc<[u8]>,
     pub supervisor: Arc<Mutex<crate::vm::Supervisor>>,
-    pub init_actions: ContractCodeData,
 }
 
 pub struct Context {
@@ -503,7 +502,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             message_data: self.context.data.message_data.clone(),
             entrypoint,
             supervisor: supervisor.clone(),
-            init_actions: self.context.data.init_actions.clone(),
         };
 
         let my_res = self.context.spawn_and_run(&supervisor, vm_data);
@@ -568,7 +566,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             message_data: self.context.data.message_data.clone(),
             entrypoint,
             supervisor: supervisor.clone(),
-            init_actions: self.context.data.init_actions.clone(),
         };
 
         let my_res = self.context.spawn_and_run(&supervisor, vm_data);
@@ -596,17 +593,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let res_calldata = Arc::from(res_calldata);
 
         let supervisor = self.context.data.supervisor.clone();
-        let init_actions = {
-            let Ok(mut supervisor) = supervisor.lock() else {
-                return Err(generated::types::Errno::Io.into());
-            };
-            supervisor
-                .get_actions_for(&called_contract_account)
-                .map_err(|_e| generated::types::Errno::Inval)
-        }?;
 
         let my_conf = self.context.data.conf;
-
         let my_data = self.context.data.message_data.clone();
 
         let vm_data = SingleVMData {
@@ -627,7 +615,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             },
             entrypoint: res_calldata,
             supervisor: supervisor.clone(),
-            init_actions,
         };
 
         let res = self
@@ -765,7 +752,7 @@ impl Context {
                 .lock()
                 .map_err(|_e| anyhow::anyhow!("can't lock supervisor"))?;
             let mut vm = supervisor.spawn(essential_data)?;
-            let instance = supervisor.apply_actions(&mut vm)?;
+            let instance = supervisor.apply_contract_actions(&mut vm)?;
             (vm, instance)
         };
         vm.run(&instance)

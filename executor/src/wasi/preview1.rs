@@ -162,7 +162,7 @@ impl Context {
         Ok(())
     }
 
-    pub fn map_file(&mut self, location: &String, contents: Arc<[u8]>) -> anyhow::Result<()> {
+    pub fn map_file(&mut self, location: &str, contents: Arc<[u8]>) -> anyhow::Result<()> {
         let mut location_patched = String::new();
         let mut last_slash = true;
         for c in location.chars() {

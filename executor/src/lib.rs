@@ -144,10 +144,6 @@ pub fn run_with_impl(
         };
         let mut entrypoint = b"call!".to_vec();
         supervisor.host.append_calldata(&mut entrypoint)?;
-        let init_actions = supervisor
-            .get_actions_for(&entry_message.contract_account)
-            .with_context(|| "getting runner actions")
-            .map_err(|cause| crate::errors::ContractError::wrap("runner_actions".into(), cause))?;
 
         let essential_data = wasi::genlayer_sdk::SingleVMData {
             conf: wasi::base::Config {
@@ -159,11 +155,13 @@ pub fn run_with_impl(
             message_data: entry_message,
             entrypoint: entrypoint.into(),
             supervisor: supervisor_clone,
-            init_actions,
         };
 
         let mut vm = supervisor.spawn(essential_data)?;
-        let instance = supervisor.apply_actions(&mut vm)?;
+        let instance = supervisor
+            .apply_contract_actions(&mut vm)
+            .with_context(|| "getting runner actions")
+            .map_err(|cause| crate::errors::ContractError::wrap("runner_actions".into(), cause))?;
         (vm, instance)
     };
 

@@ -1,5 +1,4 @@
 {
-  "$schema": "https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/runners.json",
   "Seq": [
     { "MapFile": { "file": "contract.pyc", "to": "__pycache__/contract.cpython-313.pyc" } },
     { "Depends": "py-genlayer:test" }
