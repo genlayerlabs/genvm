@@ -158,7 +158,8 @@ pub fn run_with_impl(
         };
 
         let mut vm = supervisor.spawn(essential_data)?;
-        let instance = supervisor.apply_contract_actions(&mut vm)
+        let instance = supervisor
+            .apply_contract_actions(&mut vm)
             .with_context(|| "getting runner actions")
             .map_err(|cause| crate::errors::ContractError::wrap("runner_actions".into(), cause))?;
         (vm, instance)

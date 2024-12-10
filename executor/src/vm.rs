@@ -550,10 +550,16 @@ impl Supervisor {
         match action {
             InitAction::MapFile { to, file } => {
                 if file.as_str().ends_with("/") {
-                    for name in self.runner_cache.get_unsafe(current).get_all_names()?
+                    for name in self
+                        .runner_cache
+                        .get_unsafe(current)
+                        .get_all_names()?
                         .iter()
                         .cloned()
-                        .filter(|name| !name.as_str().ends_with("/") && name.as_str().starts_with(file.as_str()))
+                        .filter(|name| {
+                            !name.as_str().ends_with("/")
+                                && name.as_str().starts_with(file.as_str())
+                        })
                     {
                         let file_contents = self.runner_cache.get_unsafe(current).get_file(name)?;
                         let mut name_in_fs = to.clone();
@@ -569,10 +575,10 @@ impl Supervisor {
                     }
                 } else {
                     vm.store
-                    .data_mut()
-                    .genlayer_ctx_mut()
-                    .preview1
-                    .map_file(&to, self.runner_cache.get_unsafe(current).get_file(*file)?)?;
+                        .data_mut()
+                        .genlayer_ctx_mut()
+                        .preview1
+                        .map_file(&to, self.runner_cache.get_unsafe(current).get_file(*file)?)?;
                 }
                 Ok(None)
             }
@@ -592,20 +598,25 @@ impl Supervisor {
             InitAction::LinkWasm(path) => {
                 let path = *path;
                 let contents = self.runner_cache.get_unsafe(current).get_file(path)?;
-                let module = self.link_wasm_into(vm, &WasmFileDesc {
-                    contents,
-                    runner_id: current,
-                    path_in_arch: path,
-                })?;
+                let module = self.link_wasm_into(
+                    vm,
+                    &WasmFileDesc {
+                        contents,
+                        runner_id: current,
+                        path_in_arch: path,
+                    },
+                )?;
                 let instance = {
                     let Ok(ref mut linker) = vm.linker.lock() else {
                         panic!();
                     };
                     let instance = linker.instantiate(&mut vm.store, &module)?;
-                    let name = module.name().ok_or(anyhow::anyhow!(
-                        "can't link unnamed module {:?}",
-                        current
-                    )).map_err(|e| crate::errors::ContractError("invalid_wasm".into(), Some(e)))?;
+                    let name = module
+                        .name()
+                        .ok_or(anyhow::anyhow!("can't link unnamed module {:?}", current))
+                        .map_err(|e| {
+                            crate::errors::ContractError("invalid_wasm".into(), Some(e))
+                        })?;
                     linker.instance(&mut vm.store, name, instance)?;
                     instance
                 };
@@ -631,11 +642,14 @@ impl Supervisor {
                     .preview1
                     .set_env(&env)?;
                 let contents = self.runner_cache.get_unsafe(current).get_file(path)?;
-                let module = self.link_wasm_into(vm, &WasmFileDesc {
-                    contents,
-                    runner_id: current,
-                    path_in_arch: path,
-                })?;
+                let module = self.link_wasm_into(
+                    vm,
+                    &WasmFileDesc {
+                        contents,
+                        runner_id: current,
+                        path_in_arch: path,
+                    },
+                )?;
                 let Ok(ref mut linker) = vm.linker.lock() else {
                     panic!();
                 };
@@ -658,7 +672,7 @@ impl Supervisor {
             }
             InitAction::With { runner: id, action } => {
                 if id.as_str() == "<contract>" {
-                    return self.apply_action_recursive(vm, ctx, action, ctx.contract_id)
+                    return self.apply_action_recursive(vm, ctx, action, ctx.contract_id);
                 }
                 let mut path = std::path::PathBuf::from(self.runner_cache.path());
                 let make_new_runner = || {
@@ -669,7 +683,8 @@ impl Supervisor {
                     fname.push_str(".zip");
                     path.push(fname);
 
-                    let contents = std::fs::read(&path).with_context(|| format!("reading {:?}", path))?;
+                    let contents =
+                        std::fs::read(&path).with_context(|| format!("reading {:?}", path))?;
                     Ok(zip::ZipArchive::new(std::io::Cursor::new(Arc::from(
                         contents,
                     )))?)
@@ -679,7 +694,7 @@ impl Supervisor {
             }
             InitAction::Depends(id) => {
                 if !ctx.visited.insert(*id) {
-                    return Ok(None)
+                    return Ok(None);
                 }
                 let mut path = std::path::PathBuf::from(self.runner_cache.path());
                 let make_new_runner = || {
@@ -690,7 +705,8 @@ impl Supervisor {
                     fname.push_str(".zip");
                     path.push(fname);
 
-                    let contents = std::fs::read(&path).with_context(|| format!("reading {:?}", path))?;
+                    let contents =
+                        std::fs::read(&path).with_context(|| format!("reading {:?}", path))?;
                     Ok(zip::ZipArchive::new(std::io::Cursor::new(Arc::from(
                         contents,
                     )))?)
@@ -722,11 +738,13 @@ impl Supervisor {
                     .compression_method(zip::CompressionMethod::Stored),
             )?;
             zip.write_all(&code)?;
-        } else  {
-            let code_str = str::from_utf8(&code).map_err(|e| crate::errors::ContractError(
-                "invalid_contract".into(),
-                Some(anyhow::Error::from(e)),
-            ))?;
+        } else {
+            let code_str = str::from_utf8(&code).map_err(|e| {
+                crate::errors::ContractError(
+                    "invalid_contract".into(),
+                    Some(anyhow::Error::from(e)),
+                )
+            })?;
             let code_start = (|| {
                 for c in ["//", "#", "--"] {
                     if code_str.starts_with(c) {
@@ -762,7 +780,9 @@ impl Supervisor {
         }
 
         let zip = zip.finish()?;
-        Ok(zip::ZipArchive::new(std::io::Cursor::new(Arc::from(zip.into_inner())))?)
+        Ok(zip::ZipArchive::new(std::io::Cursor::new(Arc::from(
+            zip.into_inner(),
+        )))?)
     }
 
     pub fn apply_contract_actions(&mut self, vm: &mut VM) -> Result<wasmtime::Instance> {

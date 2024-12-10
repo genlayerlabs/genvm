@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
+use core::str;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use core::str;
 use std::{io::Read, sync::Arc};
 use zip::ZipArchive;
 
@@ -66,7 +66,6 @@ pub enum InitAction {
     },
 }
 
-
 pub struct ZipCache {
     zip: ZipArchive<std::io::Cursor<Arc<[u8]>>>,
     id: symbol_table::GlobalSymbol,
@@ -81,7 +80,10 @@ impl ZipCache {
         self.id
     }
 
-    pub fn new(zip: ZipArchive<std::io::Cursor<Arc<[u8]>>>, id: symbol_table::GlobalSymbol) -> Self {
+    pub fn new(
+        zip: ZipArchive<std::io::Cursor<Arc<[u8]>>>,
+        id: symbol_table::GlobalSymbol,
+    ) -> Self {
         Self {
             zip,
             id,
@@ -108,25 +110,33 @@ impl ZipCache {
 
     pub fn get_file(&mut self, name: symbol_table::GlobalSymbol) -> Result<Arc<[u8]>> {
         match self.files.entry(name) {
-            std::collections::hash_map::Entry::Occupied(occupied_entry) => Ok(occupied_entry.get().clone()),
+            std::collections::hash_map::Entry::Occupied(occupied_entry) => {
+                Ok(occupied_entry.get().clone())
+            }
             std::collections::hash_map::Entry::Vacant(vacant_entry) => {
-                let mut file = self.zip.by_name(name.as_str()).with_context(|| format!("fetching {name}"))?;
+                let mut file = self
+                    .zip
+                    .by_name(name.as_str())
+                    .with_context(|| format!("fetching {name}"))?;
                 let mut buf = Vec::new();
                 file.read_to_end(&mut buf)?;
                 let buf: Arc<[u8]> = Arc::from(buf);
                 vacant_entry.insert(buf.clone());
                 Ok(buf)
-            },
+            }
         }
     }
 
     pub fn get_all_names(&mut self) -> Result<Arc<[symbol_table::GlobalSymbol]>> {
         if self.all_files.is_none() {
-            let v: Vec<symbol_table::GlobalSymbol> = self.zip.file_names().filter(|f| !f.ends_with("/"))
+            let v: Vec<symbol_table::GlobalSymbol> = self
+                .zip
+                .file_names()
+                .filter(|f| !f.ends_with("/"))
                 .map(|f| symbol_table::GlobalSymbol::from(f))
                 .sorted()
                 .collect();
-            self.all_files =  Some(Arc::from(v));
+            self.all_files = Some(Arc::from(v));
         }
 
         match &self.all_files {
@@ -158,15 +168,19 @@ impl RunnerReaderCache {
         std::path::Path::new(&self.path)
     }
 
-    pub fn get_or_create<'a>(&'a mut self, name: symbol_table::GlobalSymbol, arch_provider: impl FnOnce() -> Result<ZipArchive<std::io::Cursor<Arc<[u8]>>>>) -> Result<&'a mut ZipCache> {
+    pub fn get_or_create<'a>(
+        &'a mut self,
+        name: symbol_table::GlobalSymbol,
+        arch_provider: impl FnOnce() -> Result<ZipArchive<std::io::Cursor<Arc<[u8]>>>>,
+    ) -> Result<&'a mut ZipCache> {
         match self.cache.entry(name) {
             std::collections::hash_map::Entry::Occupied(occupied_entry) => {
                 Ok(occupied_entry.into_mut())
-            },
+            }
             std::collections::hash_map::Entry::Vacant(vacant_entry) => {
                 let to_insert = ZipCache::new(arch_provider()?, name);
                 Ok(vacant_entry.insert(to_insert))
-            },
+            }
         }
     }
 
@@ -176,7 +190,10 @@ impl RunnerReaderCache {
 }
 
 pub fn verify_runner<'a>(runner_id: &'a str) -> Result<(&'a str, &'a str)> {
-    let (runner_id, runner_hash) = runner_id.split(":").collect_tuple().ok_or(anyhow::anyhow!("expected <name>:<hash>"))?;
+    let (runner_id, runner_hash) = runner_id
+        .split(":")
+        .collect_tuple()
+        .ok_or(anyhow::anyhow!("expected <name>:<hash>"))?;
 
     for c in runner_id.chars() {
         if !c.is_ascii_alphanumeric() && c != '-' && c != '_' {
@@ -194,17 +211,30 @@ pub fn verify_runner<'a>(runner_id: &'a str) -> Result<(&'a str, &'a str)> {
 
 pub fn transform(from: RunnerJsonInitAction) -> InitAction {
     match from {
-        RunnerJsonInitAction::MapFile { to, file } => InitAction::MapFile { to, file: symbol_table::GlobalSymbol::from(&file) },
+        RunnerJsonInitAction::MapFile { to, file } => InitAction::MapFile {
+            to,
+            file: symbol_table::GlobalSymbol::from(&file),
+        },
         RunnerJsonInitAction::AddEnv { name, val } => InitAction::AddEnv { name, val },
         RunnerJsonInitAction::SetArgs(vec) => InitAction::SetArgs(vec),
         RunnerJsonInitAction::Depends(dep) => {
             InitAction::Depends(symbol_table::GlobalSymbol::from(dep))
+        }
+        RunnerJsonInitAction::LinkWasm(fpath) => {
+            InitAction::LinkWasm(symbol_table::GlobalSymbol::from(fpath))
+        }
+        RunnerJsonInitAction::StartWasm(fpath) => {
+            InitAction::StartWasm(symbol_table::GlobalSymbol::from(fpath))
+        }
+        RunnerJsonInitAction::When { cond, action } => InitAction::When {
+            cond,
+            action: Box::new(transform(*action)),
         },
-        RunnerJsonInitAction::LinkWasm(fpath) => InitAction::LinkWasm(symbol_table::GlobalSymbol::from(fpath)),
-        RunnerJsonInitAction::StartWasm(fpath) => InitAction::StartWasm(symbol_table::GlobalSymbol::from(fpath)),
-        RunnerJsonInitAction::When { cond, action } => InitAction::When { cond, action: Box::new(transform(*action)) },
         RunnerJsonInitAction::Seq(vec) => InitAction::Seq(vec.into_iter().map(transform).collect()),
-        RunnerJsonInitAction::With { runner, action } => InitAction::With { runner: symbol_table::GlobalSymbol::from(runner), action: Box::new(transform(*action)) },
+        RunnerJsonInitAction::With { runner, action } => InitAction::With {
+            runner: symbol_table::GlobalSymbol::from(runner),
+            action: Box::new(transform(*action)),
+        },
     }
 }
 
