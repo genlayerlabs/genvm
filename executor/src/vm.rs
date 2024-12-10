@@ -2,10 +2,10 @@ use core::str;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     io::{Read, Write},
-    str::FromStr,
     sync::atomic::AtomicU32,
 };
 
+use base64::Engine as _;
 use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
@@ -15,7 +15,7 @@ use zip::ZipArchive;
 
 use crate::{
     caching,
-    runner::{self, InitAction, InitActionTrivial, WasmMode},
+    runner::{self, InitAction, WasmMode},
     string_templater, wasi,
 };
 use anyhow::{Context, Result};
@@ -203,22 +203,16 @@ pub struct Supervisor {
     runner_cache: runner::RunnerReaderCache,
 }
 
-#[derive(Clone)]
-pub struct ContractCodeData {
-    pub code: Arc<[u8]>,
-    pub(crate) actions: Arc<InitAction>,
-}
-
 pub struct VM {
     pub store: Store<WasmContext>,
     pub linker: Arc<Mutex<Linker<WasmContext>>>,
     pub config_copy: wasi::base::Config,
-    pub init_actions: ContractCodeData,
 }
 
 struct ApplyActionCtx {
     env: BTreeMap<String, String>,
-    visited: BTreeSet<Arc<str>>,
+    visited: BTreeSet<symbol_table::GlobalSymbol>,
+    contract_id: symbol_table::GlobalSymbol,
 }
 
 impl VM {
@@ -336,14 +330,17 @@ impl Engines {
 #[derive(Clone, Debug)]
 pub struct WasmFileDesc {
     pub contents: Arc<[u8]>,
-    pub runner_id: Arc<str>,
-    pub debug_path: String,
-    pub path_in_arch: Option<String>,
+    pub runner_id: symbol_table::GlobalSymbol,
+    pub path_in_arch: symbol_table::GlobalSymbol,
 }
 
 impl WasmFileDesc {
-    pub fn special(&self) -> bool {
-        return self.runner_id.is_empty() || self.runner_id.starts_with("<");
+    pub fn debug_path(&self) -> String {
+        [self.runner_id.as_str(), self.path_in_arch.as_str()].join("")
+    }
+
+    pub fn is_special(&self) -> bool {
+        self.runner_id.as_str().starts_with("<")
     }
 }
 
@@ -386,7 +383,7 @@ impl Supervisor {
         Ok(Self {
             engines,
             cached_modules: HashMap::new(),
-            runner_cache: runner::RunnerReaderCache::new(),
+            runner_cache: runner::RunnerReaderCache::new()?,
             modules,
             host,
             shared_data,
@@ -397,7 +394,7 @@ impl Supervisor {
         let entry = self.cached_modules.entry(data.contents.clone());
         match entry {
             std::collections::hash_map::Entry::Occupied(entry) => {
-                log::debug!(target: "cache", cache_method = "rt", path = data.debug_path; "using rt cached");
+                log::debug!(target: "cache", cache_method = "rt", path = data.debug_path(); "using rt cached");
                 Ok(entry.get().clone())
             }
             std::collections::hash_map::Entry::Vacant(entry) => {
@@ -426,20 +423,20 @@ impl Supervisor {
                     })?;
                 non_det_validator.validate_all(&data.contents[..])?;
 
-                let debug_path = std::path::PathBuf::from_str(&data.debug_path)?;
+                let debug_path = data.debug_path();
 
                 let compile_here = || -> Result<PrecompiledModule> {
-                    log::info!(target: "cache", cache_method = "compiling", status = "start", path = data.debug_path; "");
+                    log::info!(target: "cache", cache_method = "compiling", status = "start", path = debug_path; "");
 
                     let start_time = std::time::Instant::now();
                     let module_det = wasmtime::CodeBuilder::new(&self.engines.det)
-                        .wasm_binary(&data.contents[..], Some(&debug_path))?
+                        .wasm_binary(&data.contents[..], Some(std::path::Path::new(&debug_path)))?
                         .compile_module()?;
 
                     let module_non_det = wasmtime::CodeBuilder::new(&self.engines.non_det)
-                        .wasm_binary(&data.contents[..], Some(&debug_path))?
+                        .wasm_binary(&data.contents[..], Some(std::path::Path::new(&debug_path)))?
                         .compile_module()?;
-                    log::info!(target: "cache", cache_method = "compiling", status = "done", duration:? = start_time.elapsed(), path = data.debug_path; "");
+                    log::info!(target: "cache", cache_method = "compiling", status = "done", duration:? = start_time.elapsed(), path = debug_path; "");
                     Ok(PrecompiledModule {
                         det: module_det,
                         non_det: module_non_det,
@@ -447,24 +444,18 @@ impl Supervisor {
                 };
 
                 let get_from_runner = || -> Result<PrecompiledModule> {
-                    if data.special() {
+                    if data.is_special() {
                         anyhow::bail!("special runners are not supported");
                     }
-                    let path_in_arch = match &data.path_in_arch {
-                        None => anyhow::bail!("no path in arch"),
-                        Some(p) => p,
-                    };
+                    let (id, hash) = runner::verify_runner(data.runner_id.as_str())?;
+
+                    let path_in_arch = data.path_in_arch.as_str();
                     let mut result_zip_path = match Lazy::force(&caching::PRECOMPILE_DIR) {
                         Some(v) => v,
                         None => anyhow::bail!("cache is absent"),
                     }
                     .clone();
 
-                    let (id, hash) = data
-                        .runner_id
-                        .split(":")
-                        .collect_tuple()
-                        .ok_or(anyhow::anyhow!("invalid runner id"))?;
                     let hash = format!("{hash}.zip");
 
                     result_zip_path.push(id);
@@ -473,7 +464,7 @@ impl Supervisor {
 
                     let mut process_single = |suff: &str, engine: &Engine| -> Result<Module> {
                         let mut buf = Vec::new();
-                        let mut path_in_arch = path_in_arch.clone();
+                        let mut path_in_arch = String::from(path_in_arch);
                         path_in_arch.push_str(suff);
                         zip.by_name(&path_in_arch)?.read_to_end(&mut buf)?;
                         Ok(unsafe { Module::deserialize(engine, &buf)? })
@@ -488,7 +479,7 @@ impl Supervisor {
                         &self.engines.non_det,
                     )?;
 
-                    log::debug!(target: "cache", cache_method = "precompiled", path = data.debug_path; "using precompiled");
+                    log::debug!(target: "cache", cache_method = "precompiled", path = data.debug_path(); "using precompiled");
 
                     Ok(PrecompiledModule { det, non_det })
                 };
@@ -502,7 +493,6 @@ impl Supervisor {
 
     pub fn spawn(&mut self, data: crate::wasi::genlayer_sdk::SingleVMData) -> Result<VM> {
         let config_copy = data.conf.clone();
-        let init_actions = data.init_actions.clone();
 
         let engine = if data.conf.is_deterministic {
             &self.engines.det
@@ -536,14 +526,13 @@ impl Supervisor {
             store,
             linker: linker_shared,
             config_copy,
-            init_actions,
         })
     }
 
     fn link_wasm_into(&mut self, ret_vm: &mut VM, data: &WasmFileDesc) -> Result<wasmtime::Module> {
         let precompiled = self
             .cache_module(data)
-            .with_context(|| format!("caching {:?}", &data.debug_path))?;
+            .with_context(|| format!("caching {:?}", data.debug_path()))?;
         if ret_vm.is_det() {
             Ok(precompiled.det.clone())
         } else {
@@ -551,35 +540,48 @@ impl Supervisor {
         }
     }
 
-    fn apply_single_action(
+    fn apply_action_recursive(
         &mut self,
         vm: &mut VM,
         ctx: &mut ApplyActionCtx,
         action: &InitAction,
+        current: symbol_table::GlobalSymbol,
     ) -> Result<Option<wasmtime::Instance>> {
         match action {
-            InitAction::Trivial(InitActionTrivial::MapFile { to, contents }) => {
-                vm.store
+            InitAction::MapFile { to, file } => {
+                if file.as_str().ends_with("/") {
+                    for name in self.runner_cache.get_unsafe(current).get_all_names()?
+                        .iter()
+                        .cloned()
+                        .filter(|name| !name.as_str().ends_with("/") && name.as_str().starts_with(file.as_str()))
+                    {
+                        let file_contents = self.runner_cache.get_unsafe(current).get_file(name)?;
+                        let mut name_in_fs = to.clone();
+                        if !name_in_fs.ends_with("/") {
+                            name_in_fs.push('/');
+                        }
+                        name_in_fs.push_str(&name.as_str()[file.as_str().len()..]);
+                        vm.store
+                            .data_mut()
+                            .genlayer_ctx_mut()
+                            .preview1
+                            .map_file(&name_in_fs, file_contents)?;
+                    }
+                } else {
+                    vm.store
                     .data_mut()
                     .genlayer_ctx_mut()
                     .preview1
-                    .map_file(&to, contents.clone())?;
+                    .map_file(&to, self.runner_cache.get_unsafe(current).get_file(*file)?)?;
+                }
                 Ok(None)
             }
-            InitAction::Trivial(InitActionTrivial::MapCode { to }) => {
-                vm.store
-                    .data_mut()
-                    .genlayer_ctx_mut()
-                    .preview1
-                    .map_file(&to, vm.init_actions.code.clone())?;
-                Ok(None)
-            }
-            InitAction::Trivial(InitActionTrivial::AddEnv { name, val }) => {
+            InitAction::AddEnv { name, val } => {
                 let new_val = string_templater::patch_str(&ctx.env, val)?;
                 ctx.env.insert(name.clone(), new_val);
                 Ok(None)
             }
-            InitAction::Trivial(InitActionTrivial::SetArgs(args)) => {
+            InitAction::SetArgs(args) => {
                 vm.store
                     .data_mut()
                     .genlayer_ctx_mut()
@@ -587,8 +589,14 @@ impl Supervisor {
                     .set_args(&args[..])?;
                 Ok(None)
             }
-            InitAction::Trivial(InitActionTrivial::LinkWasm(data)) => {
-                let module = self.link_wasm_into(vm, data)?;
+            InitAction::LinkWasm(path) => {
+                let path = *path;
+                let contents = self.runner_cache.get_unsafe(current).get_file(path)?;
+                let module = self.link_wasm_into(vm, &WasmFileDesc {
+                    contents,
+                    runner_id: current,
+                    path_in_arch: path,
+                })?;
                 let instance = {
                     let Ok(ref mut linker) = vm.linker.lock() else {
                         panic!();
@@ -596,21 +604,22 @@ impl Supervisor {
                     let instance = linker.instantiate(&mut vm.store, &module)?;
                     let name = module.name().ok_or(anyhow::anyhow!(
                         "can't link unnamed module {:?}",
-                        &data.debug_path
-                    ))?;
+                        current
+                    )).map_err(|e| crate::errors::ContractError("invalid_wasm".into(), Some(e)))?;
                     linker.instance(&mut vm.store, name, instance)?;
                     instance
                 };
                 match instance.get_typed_func::<(), ()>(&mut vm.store, "_initialize") {
                     Err(_) => {}
                     Ok(func) => {
-                        log::info!(target: "rt", method = "call_initialize", wasm = data.debug_path; "");
+                        log::info!(target: "rt", method = "call_initialize", runner = self.runner_cache.get_unsafe(current).runner_id().as_str(), path = path.as_str(); "");
                         func.call(&mut vm.store, ())?;
                     }
                 }
                 Ok(None)
             }
-            InitAction::Trivial(InitActionTrivial::StartWasm(data)) => {
+            InitAction::StartWasm(path) => {
+                let path = *path;
                 let env: Vec<(String, String)> = ctx
                     .env
                     .iter()
@@ -621,71 +630,103 @@ impl Supervisor {
                     .genlayer_ctx_mut()
                     .preview1
                     .set_env(&env)?;
-                let module = self.link_wasm_into(vm, data)?;
+                let contents = self.runner_cache.get_unsafe(current).get_file(path)?;
+                let module = self.link_wasm_into(vm, &WasmFileDesc {
+                    contents,
+                    runner_id: current,
+                    path_in_arch: path,
+                })?;
                 let Ok(ref mut linker) = vm.linker.lock() else {
                     panic!();
                 };
                 Ok(Some(linker.instantiate(&mut vm.store, &module)?))
             }
-            InitAction::When { cond, act } => {
+            InitAction::When { cond, action } => {
                 if (*cond == WasmMode::Det) != vm.is_det() {
                     return Ok(None);
                 }
-                self.apply_single_action(vm, ctx, act)
+                self.apply_action_recursive(vm, ctx, action, current)
             }
             InitAction::Seq(vec) => {
                 for act in vec {
-                    match self.apply_single_action(vm, ctx, act)? {
+                    match self.apply_action_recursive(vm, ctx, act, current)? {
                         Some(x) => return Ok(Some(x)),
                         None => {}
                     }
                 }
                 Ok(None)
             }
-            InitAction::Once(id, action) => {
-                if ctx.visited.insert(id.clone()) {
-                    self.apply_single_action(vm, ctx, action)
-                } else {
-                    Ok(None)
+            InitAction::With { runner: id, action } => {
+                if id.as_str() == "<contract>" {
+                    return self.apply_action_recursive(vm, ctx, action, ctx.contract_id)
                 }
+                let mut path = std::path::PathBuf::from(self.runner_cache.path());
+                let make_new_runner = || {
+                    let (runner_id, runner_hash) = runner::verify_runner(id.as_str())?;
+
+                    path.push(runner_id);
+                    let mut fname = runner_hash.to_owned();
+                    fname.push_str(".zip");
+                    path.push(fname);
+
+                    let contents = std::fs::read(&path).with_context(|| format!("reading {:?}", path))?;
+                    Ok(zip::ZipArchive::new(std::io::Cursor::new(Arc::from(
+                        contents,
+                    )))?)
+                };
+                let _ = self.runner_cache.get_or_create(*id, make_new_runner)?;
+                self.apply_action_recursive(vm, ctx, action, *id)
+            }
+            InitAction::Depends(id) => {
+                if !ctx.visited.insert(*id) {
+                    return Ok(None)
+                }
+                let mut path = std::path::PathBuf::from(self.runner_cache.path());
+                let make_new_runner = || {
+                    let (runner_id, runner_hash) = runner::verify_runner(id.as_str())?;
+
+                    path.push(runner_id);
+                    let mut fname = runner_hash.to_owned();
+                    fname.push_str(".zip");
+                    path.push(fname);
+
+                    let contents = std::fs::read(&path).with_context(|| format!("reading {:?}", path))?;
+                    Ok(zip::ZipArchive::new(std::io::Cursor::new(Arc::from(
+                        contents,
+                    )))?)
+                };
+                let new_arch = self.runner_cache.get_or_create(*id, make_new_runner)?;
+                let new_action = new_arch.get_actions()?;
+                self.apply_action_recursive(vm, ctx, &new_action, *id)
             }
         }
     }
 
-    pub fn apply_actions(&mut self, vm: &mut VM) -> Result<wasmtime::Instance> {
-        let mut ctx = ApplyActionCtx {
-            env: BTreeMap::new(),
-            visited: BTreeSet::new(),
-        };
-        match self.apply_single_action(vm, &mut ctx, &vm.init_actions.actions.clone())? {
-            Some(e) => Ok(e),
-            None => Err(anyhow::anyhow!(
-                "actions returned by runner do not have a start instruction"
-            )),
+    fn code_to_archive(code: Arc<[u8]>) -> Result<zip::ZipArchive<std::io::Cursor<Arc<[u8]>>>> {
+        if let Ok(as_zip) = zip::ZipArchive::new(std::io::Cursor::new(code.clone())) {
+            return Ok(as_zip);
         }
-    }
+        let buf = std::io::Cursor::new(Vec::new());
+        let mut zip = zip::ZipWriter::new(buf);
 
-    pub fn get_actions_for(
-        &mut self,
-        contract_account: &crate::AccountAddress,
-    ) -> Result<ContractCodeData> {
-        let code = self.host.get_code(contract_account)?;
-        let mut runner = runner::RunnerReader::new()?;
-        let actions = if wasmparser::Parser::is_core_wasm(&code[..]) {
-            InitAction::Trivial(InitActionTrivial::StartWasm(WasmFileDesc {
-                contents: code.clone(),
-                runner_id: Arc::from("<contract>"),
-                debug_path: "<contract>".into(),
-                path_in_arch: None,
-            }))
-        } else if let Ok(mut as_contr) = zip::ZipArchive::new(std::io::Cursor::new(&code)) {
-            runner.get_for_archive(
-                &Arc::from("<contract>"),
-                &mut as_contr,
-                &mut self.runner_cache,
-            )?
-        } else {
-            let code_str = str::from_utf8(&code[..])?;
+        if wasmparser::Parser::is_core_wasm(&code[..]) {
+            zip.start_file(
+                "runner.json",
+                zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Stored),
+            )?;
+            zip.write_all("{ \"StartWasm\": \"file.wasm\" }".as_bytes())?;
+            zip.start_file(
+                "file.wasm",
+                zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Stored),
+            )?;
+            zip.write_all(&code)?;
+        } else  {
+            let code_str = str::from_utf8(&code).map_err(|e| crate::errors::ContractError(
+                "invalid_contract".into(),
+                Some(anyhow::Error::from(e)),
+            ))?;
             let code_start = (|| {
                 for c in ["//", "#", "--"] {
                     if code_str.starts_with(c) {
@@ -705,24 +746,53 @@ impl Supervisor {
                 code_comment.push_str(&l[code_start.len()..])
             }
 
-            let mut buf = [0; 4096];
-            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf[..]));
             zip.start_file(
                 "runner.json",
                 zip::write::SimpleFileOptions::default()
                     .compression_method(zip::CompressionMethod::Stored),
             )?;
             zip.write_all(code_comment.as_bytes())?;
-            zip.finish()?;
 
-            let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&mut buf[..]))?;
-            let mut runner = runner::RunnerReader::new()?;
-            runner.get_for_archive(&Arc::from("<contract>"), &mut zip, &mut self.runner_cache)?
+            zip.start_file(
+                "file",
+                zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Stored),
+            )?;
+            zip.write_all(code_str.as_bytes())?;
+        }
+
+        let zip = zip.finish()?;
+        Ok(zip::ZipArchive::new(std::io::Cursor::new(Arc::from(zip.into_inner())))?)
+    }
+
+    pub fn apply_contract_actions(&mut self, vm: &mut VM) -> Result<wasmtime::Instance> {
+        let contract_address = {
+            let lock = vm.store.data().genlayer_ctx.lock().unwrap();
+            lock.genlayer_sdk.data.message_data.contract_account
         };
 
-        Ok(ContractCodeData {
-            code,
-            actions: Arc::new(actions),
-        })
+        let mut contract_id = String::from("<contract>:");
+        contract_id.push_str(&base64::prelude::BASE64_STANDARD.encode(&contract_address.raw()));
+        let contract_id = symbol_table::GlobalSymbol::from(&contract_id);
+
+        let provide_arch = || {
+            let code = self.host.get_code(&contract_address)?;
+            Self::code_to_archive(code)
+        };
+
+        let cur_arch = self.runner_cache.get_or_create(contract_id, provide_arch)?;
+        let actions = cur_arch.get_actions()?;
+
+        let mut ctx = ApplyActionCtx {
+            env: BTreeMap::new(),
+            visited: BTreeSet::new(),
+            contract_id,
+        };
+        match self.apply_action_recursive(vm, &mut ctx, &actions, contract_id)? {
+            Some(e) => Ok(e),
+            None => Err(anyhow::anyhow!(
+                "actions returned by runner do not have a start instruction"
+            )),
+        }
     }
 }

@@ -71,7 +71,24 @@ all_runner_target = target_publish_runner(
 	files: [],
 	runner_dict: {
 		Seq: [
-			{ MapCode: { to: "/contract.py" } },
+			{ With: { runner: "<contract>", action: { MapFile: { file: "file", to: "/contract.py" } } } },
+			{ SetArgs: ["py", "-u", "-c", "import contract;import genlayer.std.runner as r;r.run(contract)"] },
+			{ Depends: cloudpickle_runner.meta.runner_dep_id },
+			{ Depends: runner_target.meta.runner_dep_id },
+			{ Depends: cpython_runner.meta.runner_dep_id },
+		],
+	},
+	dependencies: [runner_target],
+	expected_hash: 'test',
+)
+
+all_runner_multi_target = target_publish_runner(
+	name_base: 'py-genlayer-multi',
+	out_dir: config.runners_dir,
+	files: [],
+	runner_dict: {
+		Seq: [
+			{ With: { runner: "<contract>", action: { MapFile: { file: "src/", to: "/contract/" } } } },
 			{ SetArgs: ["py", "-u", "-c", "import contract;import genlayer.std.runner as r;r.run(contract)"] },
 			{ Depends: cloudpickle_runner.meta.runner_dep_id },
 			{ Depends: runner_target.meta.runner_dep_id },
@@ -85,6 +102,13 @@ all_runner_target = target_publish_runner(
 target_alias(
 	'py-genlayer',
 	all_runner_target,
+	tags: ['all', 'runner'],
+	inherit_meta: ['expected_hash'],
+)
+
+target_alias(
+	'py-genlayer-multi',
+	all_runner_multi_target,
 	tags: ['all', 'runner'],
 	inherit_meta: ['expected_hash'],
 )

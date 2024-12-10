@@ -1,42 +1,9 @@
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use std::{fs::File, io::Read, sync::Arc};
+use core::str;
+use std::{io::Read, sync::Arc};
 use zip::ZipArchive;
-
-use crate::vm::WasmFileDesc;
-
-#[derive(Clone, Debug)]
-pub enum InitActionTrivial {
-    MapFile { to: String, contents: Arc<[u8]> },
-    MapCode { to: String },
-    AddEnv { name: String, val: String },
-    SetArgs(Vec<String>),
-    LinkWasm(WasmFileDesc),
-    StartWasm(WasmFileDesc),
-}
-
-#[derive(Clone, Debug)]
-pub enum InitAction {
-    Trivial(InitActionTrivial),
-    When {
-        cond: WasmMode,
-        act: Box<InitAction>,
-    },
-    Seq(Vec<InitAction>),
-    Once(Arc<str>, Box<InitAction>),
-}
-
-#[derive(Clone, Debug)]
-enum InitActionDependable {
-    Trivial(InitActionTrivial),
-    When {
-        cond: WasmMode,
-        act: Box<InitActionDependable>,
-    },
-    Seq(Vec<InitActionDependable>),
-    Depends(Arc<str>),
-}
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 #[serde(rename_all = "kebab-case")]
@@ -50,9 +17,6 @@ pub enum RunnerJsonInitAction {
     MapFile {
         to: String,
         file: String,
-    },
-    MapCode {
-        to: String,
     },
     AddEnv {
         name: String,
@@ -75,230 +39,173 @@ pub enum RunnerJsonInitAction {
     },
 }
 
-struct RunnerReaderCacheEntry {
-    action: Arc<InitActionDependable>,
+#[derive(Clone, Debug)]
+pub enum InitAction {
+    MapFile {
+        to: String,
+        file: symbol_table::GlobalSymbol,
+    },
+    AddEnv {
+        name: String,
+        val: String,
+    },
+    SetArgs(Vec<String>),
+    Depends(symbol_table::GlobalSymbol),
+    LinkWasm(symbol_table::GlobalSymbol),
+    StartWasm(symbol_table::GlobalSymbol),
+
+    When {
+        cond: WasmMode,
+        action: Box<InitAction>,
+    },
+    Seq(Vec<InitAction>),
+
+    With {
+        runner: symbol_table::GlobalSymbol,
+        action: Box<InitAction>,
+    },
+}
+
+
+pub struct ZipCache {
+    zip: ZipArchive<std::io::Cursor<Arc<[u8]>>>,
+    id: symbol_table::GlobalSymbol,
+
+    files: std::collections::HashMap<symbol_table::GlobalSymbol, Arc<[u8]>>,
+    all_files: Option<Arc<[symbol_table::GlobalSymbol]>>,
+    extracted_actions: Option<Arc<InitAction>>,
+}
+
+impl ZipCache {
+    pub fn runner_id(&self) -> symbol_table::GlobalSymbol {
+        self.id
+    }
+
+    pub fn new(zip: ZipArchive<std::io::Cursor<Arc<[u8]>>>, id: symbol_table::GlobalSymbol) -> Self {
+        Self {
+            zip,
+            id,
+            files: std::collections::HashMap::new(),
+            all_files: None,
+            extracted_actions: None,
+        }
+    }
+
+    pub fn get_actions(&mut self) -> Result<Arc<InitAction>> {
+        if self.extracted_actions.is_none() {
+            use symbol_table::GlobalSymbol;
+            let contents = self.get_file(symbol_table::static_symbol!("runner.json"))?;
+            let as_init: RunnerJsonInitAction = serde_json::from_str(&str::from_utf8(&contents)?)?;
+
+            self.extracted_actions = Some(Arc::new(transform(as_init)));
+        }
+
+        match &self.extracted_actions {
+            Some(v) => return Ok(v.clone()),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn get_file(&mut self, name: symbol_table::GlobalSymbol) -> Result<Arc<[u8]>> {
+        match self.files.entry(name) {
+            std::collections::hash_map::Entry::Occupied(occupied_entry) => Ok(occupied_entry.get().clone()),
+            std::collections::hash_map::Entry::Vacant(vacant_entry) => {
+                let mut file = self.zip.by_name(name.as_str()).with_context(|| format!("fetching {name}"))?;
+                let mut buf = Vec::new();
+                file.read_to_end(&mut buf)?;
+                let buf: Arc<[u8]> = Arc::from(buf);
+                vacant_entry.insert(buf.clone());
+                Ok(buf)
+            },
+        }
+    }
+
+    pub fn get_all_names(&mut self) -> Result<Arc<[symbol_table::GlobalSymbol]>> {
+        if self.all_files.is_none() {
+            let v: Vec<symbol_table::GlobalSymbol> = self.zip.file_names().filter(|f| !f.ends_with("/"))
+                .map(|f| symbol_table::GlobalSymbol::from(f))
+                .sorted()
+                .collect();
+            self.all_files =  Some(Arc::from(v));
+        }
+
+        match &self.all_files {
+            Some(v) => Ok(v.clone()),
+            None => unreachable!(),
+        }
+    }
 }
 
 pub struct RunnerReaderCache {
-    cache: std::collections::HashMap<Arc<str>, Arc<RunnerReaderCacheEntry>>,
+    cache: std::collections::HashMap<symbol_table::GlobalSymbol, ZipCache>,
+    path: std::path::PathBuf,
 }
 
 impl RunnerReaderCache {
-    pub fn new() -> Self {
-        return Self {
-            cache: std::collections::HashMap::new(),
-        };
-    }
-}
-
-impl RunnerReaderCacheEntry {
-    fn transform_action_impl<R>(
-        zip_file: &mut ZipArchive<R>,
-        all_files: &Vec<String>,
-        action: RunnerJsonInitAction,
-        runners_path: &std::path::PathBuf,
-        runner_id: &Arc<str>,
-    ) -> Result<InitActionDependable>
-    where
-        R: std::io::Read + std::io::Seek,
-    {
-        let mut rec = |action: RunnerJsonInitAction| -> Result<InitActionDependable> {
-            RunnerReaderCacheEntry::transform_action_impl(
-                zip_file,
-                all_files,
-                action,
-                runners_path,
-                runner_id,
-            )
-        };
-        match action {
-            RunnerJsonInitAction::MapFile { to, file } => {
-                let mut read_to_buf = |name: &str, to: String| -> Result<InitActionDependable> {
-                    let mut buf = Vec::new();
-                    zip_file
-                        .by_name(&name)
-                        .with_context(|| format!("reading {name}"))?
-                        .read_to_end(&mut buf)?;
-                    Ok(InitActionDependable::Trivial(InitActionTrivial::MapFile {
-                        to,
-                        contents: Arc::from(buf),
-                    }))
-                };
-                if file.ends_with("/") {
-                    let mut ret = Vec::new();
-                    for f in all_files
-                        .iter()
-                        .filter(|f| !f.ends_with("/") && f.starts_with(&file))
-                    {
-                        let mut name = to.clone();
-                        if !name.ends_with("/") {
-                            name.push_str("/");
-                        }
-                        name.push_str(&f[file.len()..]);
-                        ret.push(read_to_buf(&f, name)?);
-                    }
-                    if ret.len() == 1 {
-                        for x in ret.into_iter() {
-                            return Ok(x);
-                        }
-                        unreachable!()
-                    }
-                    Ok(InitActionDependable::Seq(ret))
-                } else {
-                    read_to_buf(&file, to)
-                }
-            }
-            RunnerJsonInitAction::MapCode { to } => {
-                Ok(InitActionDependable::Trivial(InitActionTrivial::MapCode {
-                    to,
-                }))
-            }
-            RunnerJsonInitAction::AddEnv { name, val } => {
-                Ok(InitActionDependable::Trivial(InitActionTrivial::AddEnv {
-                    name,
-                    val,
-                }))
-            }
-            RunnerJsonInitAction::SetArgs(args) => Ok(InitActionDependable::Trivial(
-                InitActionTrivial::SetArgs(args),
-            )),
-            RunnerJsonInitAction::LinkWasm(file) => {
-                let mut buf = Vec::new();
-                zip_file
-                    .by_name(&file)
-                    .with_context(|| format!("linking {file}"))?
-                    .read_to_end(&mut buf)?;
-                Ok(InitActionDependable::Trivial(InitActionTrivial::LinkWasm(
-                    WasmFileDesc {
-                        contents: Arc::from(buf),
-                        debug_path: format!("{}/{}", runner_id, file),
-                        runner_id: runner_id.clone(),
-                        path_in_arch: Some(file),
-                    },
-                )))
-            }
-            RunnerJsonInitAction::StartWasm(file) => {
-                let mut buf = Vec::new();
-                zip_file
-                    .by_name(&file)
-                    .with_context(|| format!("starting {file}"))?
-                    .read_to_end(&mut buf)?;
-                Ok(InitActionDependable::Trivial(InitActionTrivial::StartWasm(
-                    WasmFileDesc {
-                        contents: Arc::from(buf),
-                        debug_path: format!("{}/{}", runner_id, file),
-                        runner_id: runner_id.clone(),
-                        path_in_arch: Some(file),
-                    },
-                )))
-            }
-            RunnerJsonInitAction::Depends(dep) => Ok(InitActionDependable::Depends(Arc::from(dep))),
-            RunnerJsonInitAction::When { cond, action: act } => Ok(InitActionDependable::When {
-                cond,
-                act: Box::new(rec(*act)?),
-            }),
-            RunnerJsonInitAction::Seq(vec) => {
-                let r: Result<Vec<InitActionDependable>> =
-                    vec.into_iter().map(|x| rec(x)).collect();
-                Ok(InitActionDependable::Seq(r?))
-            }
-            RunnerJsonInitAction::With { runner, action } => {
-                let runner_id = Arc::from(runner);
-                let mut arch = Self::get_arch_for(&runner_id, runners_path.clone())?;
-                Self::transform_action(&mut arch, *action, runners_path, &runner_id)
-            }
+    pub fn new() -> Result<Self> {
+        let runners_path = path()?;
+        if !runners_path.exists() {
+            anyhow::bail!("path {:#?} doesn't exist", &runners_path);
         }
-    }
 
-    fn transform_action<R>(
-        zip_file: &mut ZipArchive<R>,
-        action: RunnerJsonInitAction,
-        runners_path: &std::path::PathBuf,
-        runner_id: &Arc<str>,
-    ) -> Result<InitActionDependable>
-    where
-        R: std::io::Read + std::io::Seek,
-    {
-        let all_files: Vec<String> = zip_file
-            .file_names()
-            .filter(|f| !f.ends_with("/"))
-            .map(|f| f.into())
-            .sorted()
-            .collect();
-        RunnerReaderCacheEntry::transform_action_impl(
-            zip_file,
-            &all_files,
-            action,
-            runners_path,
-            runner_id,
-        )
-    }
-
-    fn make_from_arch<R>(
-        zip_file: &mut ZipArchive<R>,
-        runners_path: &std::path::PathBuf,
-        runner_id: &Arc<str>,
-    ) -> Result<RunnerReaderCacheEntry>
-    where
-        R: std::io::Read + std::io::Seek,
-    {
-        log::info!(target: "runner", method = "make_from_arch", id = runner_id; "");
-        let runner = std::io::read_to_string(zip_file.by_name("runner.json")?)?;
-        let runner: RunnerJsonInitAction =
-            serde_json::from_str(&runner).with_context(|| format!("json: {runner}"))?;
-
-        let ret =
-            RunnerReaderCacheEntry::transform_action(zip_file, runner, runners_path, runner_id)
-                .with_context(|| format!("pre_actions from {}", runner_id))?;
-
-        Ok(RunnerReaderCacheEntry {
-            action: Arc::new(ret),
+        Ok(Self {
+            cache: std::collections::HashMap::new(),
+            path: runners_path,
         })
     }
 
-    fn get_arch_for(
-        runner_id: &Arc<str>,
-        mut path: std::path::PathBuf,
-    ) -> Result<ZipArchive<File>> {
-        let res: Vec<&str> = runner_id.split(":").collect();
-        if res.len() != 2 {
-            anyhow::bail!(
-                "invalid runner, expected <RUNNER>:<VERSION> ; got {:?}",
-                res
-            );
-        }
-        let runner_id = res[0];
-        let runner_hash = res[1];
-
-        for c in runner_id.chars() {
-            if !c.is_ascii_alphanumeric() && c != '-' && c != '_' {
-                anyhow::bail!("character `{c}` is not allowed in runner id");
-            }
-        }
-
-        for c in runner_hash.chars() {
-            if !c.is_ascii_alphanumeric() && c != '-' && c != '_' && c != '=' {
-                anyhow::bail!("character `{c}` is not allowed in runner hash");
-            }
-        }
-
-        path.push(runner_id);
-        let mut fname = runner_hash.to_owned();
-        fname.push_str(".zip");
-        path.push(fname);
-        let file = std::fs::File::open(&path).with_context(|| format!("reading {:?}", path))?;
-        Ok(zip::ZipArchive::new(file)?)
+    pub fn path(&self) -> &std::path::Path {
+        std::path::Path::new(&self.path)
     }
 
-    fn make(runner_id: &Arc<str>, path: &std::path::PathBuf) -> Result<RunnerReaderCacheEntry> {
-        let mut zip_file = Self::get_arch_for(runner_id, path.clone())?;
+    pub fn get_or_create<'a>(&'a mut self, name: symbol_table::GlobalSymbol, arch_provider: impl FnOnce() -> Result<ZipArchive<std::io::Cursor<Arc<[u8]>>>>) -> Result<&'a mut ZipCache> {
+        match self.cache.entry(name) {
+            std::collections::hash_map::Entry::Occupied(occupied_entry) => {
+                Ok(occupied_entry.into_mut())
+            },
+            std::collections::hash_map::Entry::Vacant(vacant_entry) => {
+                let to_insert = ZipCache::new(arch_provider()?, name);
+                Ok(vacant_entry.insert(to_insert))
+            },
+        }
+    }
 
-        RunnerReaderCacheEntry::make_from_arch(&mut zip_file, &path, runner_id)
+    pub fn get_unsafe<'a>(&'a mut self, key: symbol_table::GlobalSymbol) -> &'a mut ZipCache {
+        self.cache.get_mut(&key).unwrap()
     }
 }
 
-pub struct RunnerReader {
-    runners_path: std::path::PathBuf,
+pub fn verify_runner<'a>(runner_id: &'a str) -> Result<(&'a str, &'a str)> {
+    let (runner_id, runner_hash) = runner_id.split(":").collect_tuple().ok_or(anyhow::anyhow!("expected <name>:<hash>"))?;
+
+    for c in runner_id.chars() {
+        if !c.is_ascii_alphanumeric() && c != '-' && c != '_' {
+            anyhow::bail!("character `{c}` is not allowed in runner id");
+        }
+    }
+
+    for c in runner_hash.chars() {
+        if !c.is_ascii_alphanumeric() && c != '-' && c != '_' && c != '=' {
+            anyhow::bail!("character `{c}` is not allowed in runner hash");
+        }
+    }
+    Ok((runner_id, runner_hash))
+}
+
+pub fn transform(from: RunnerJsonInitAction) -> InitAction {
+    match from {
+        RunnerJsonInitAction::MapFile { to, file } => InitAction::MapFile { to, file: symbol_table::GlobalSymbol::from(&file) },
+        RunnerJsonInitAction::AddEnv { name, val } => InitAction::AddEnv { name, val },
+        RunnerJsonInitAction::SetArgs(vec) => InitAction::SetArgs(vec),
+        RunnerJsonInitAction::Depends(dep) => {
+            InitAction::Depends(symbol_table::GlobalSymbol::from(dep))
+        },
+        RunnerJsonInitAction::LinkWasm(fpath) => InitAction::LinkWasm(symbol_table::GlobalSymbol::from(fpath)),
+        RunnerJsonInitAction::StartWasm(fpath) => InitAction::StartWasm(symbol_table::GlobalSymbol::from(fpath)),
+        RunnerJsonInitAction::When { cond, action } => InitAction::When { cond, action: Box::new(transform(*action)) },
+        RunnerJsonInitAction::Seq(vec) => InitAction::Seq(vec.into_iter().map(transform).collect()),
+        RunnerJsonInitAction::With { runner, action } => InitAction::With { runner: symbol_table::GlobalSymbol::from(runner), action: Box::new(transform(*action)) },
+    }
 }
 
 pub fn path() -> Result<std::path::PathBuf> {
@@ -309,62 +216,4 @@ pub fn path() -> Result<std::path::PathBuf> {
     runners_path.push("genvm");
     runners_path.push("runners");
     Ok(runners_path)
-}
-
-impl RunnerReader {
-    pub fn new() -> Result<RunnerReader> {
-        let runners_path = path()?;
-        if !runners_path.exists() {
-            anyhow::bail!("path {:#?} doesn't exist", &runners_path);
-        }
-        Ok(RunnerReader { runners_path })
-    }
-
-    fn unfold(
-        &mut self,
-        cache: &mut RunnerReaderCache,
-        action: &InitActionDependable,
-    ) -> Result<InitAction> {
-        match action {
-            InitActionDependable::Trivial(init_action_trivial) => {
-                Ok(InitAction::Trivial(init_action_trivial.clone()))
-            }
-            InitActionDependable::When { cond, act } => Ok(InitAction::When {
-                cond: *cond,
-                act: Box::new(self.unfold(cache, act)?),
-            }),
-            InitActionDependable::Seq(vec) => {
-                let r: Result<Vec<InitAction>> =
-                    vec.iter().map(|x| self.unfold(cache, x)).collect();
-                Ok(InitAction::Seq(r?))
-            }
-            InitActionDependable::Depends(dep) => {
-                let cache_entry = cache.cache.entry(dep.clone());
-                let cache_entry: Arc<RunnerReaderCacheEntry> = match cache_entry {
-                    std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
-                    std::collections::hash_map::Entry::Vacant(e) => e.insert(Arc::new(
-                        RunnerReaderCacheEntry::make(&dep, &self.runners_path)?,
-                    )),
-                }
-                .clone();
-
-                let res = self.unfold(cache, &*cache_entry.action)?;
-                Ok(InitAction::Once(dep.clone(), Box::new(res)))
-            }
-        }
-    }
-
-    pub fn get_for_archive<R>(
-        &mut self,
-        runner_id: &Arc<str>,
-        archive: &mut zip::ZipArchive<R>,
-        cache: &mut RunnerReaderCache,
-    ) -> Result<InitAction>
-    where
-        R: std::io::Read + std::io::Seek,
-    {
-        let cache_entry =
-            RunnerReaderCacheEntry::make_from_arch(archive, &self.runners_path, runner_id)?;
-        self.unfold(cache, &*cache_entry.action)
-    }
 }

@@ -35,11 +35,6 @@
               },
               {
                 "required": [
-                  "MapCode"
-                ]
-              },
-              {
-                "required": [
                   "SetArgs"
                 ]
               },
@@ -99,16 +94,6 @@
                 "type": "string",
                 "description": "path within an archive, if it ends with `/`, it will map all files in that directory recursively"
               },
-              "to": {
-                "type": "string",
-                "description": "absolute path in genvm fs"
-              }
-            }
-          },
-          "MapCode": {
-            "description": "Makes contract code available at specified path in genvm",
-            "type": "object",
-            "properties": {
               "to": {
                 "type": "string",
                 "description": "absolute path in genvm fs"
