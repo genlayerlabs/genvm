@@ -5,6 +5,7 @@ use std::{
 };
 
 use itertools::Itertools;
+use serde::Deserialize;
 use wiggle::GuestError;
 
 use crate::{
@@ -498,6 +499,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 can_read_storage: false,
                 can_write_storage: false,
                 can_spawn_nondet: false,
+                state_mode: crate::host::StorageType::Default,
             },
             message_data: self.context.data.message_data.clone(),
             entrypoint,
@@ -562,6 +564,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 can_read_storage: false,
                 can_write_storage: false,
                 can_spawn_nondet: false,
+                state_mode: crate::host::StorageType::Default,
             },
             message_data: self.context.data.message_data.clone(),
             entrypoint,
@@ -582,11 +585,24 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         mem: &mut wiggle::GuestMemory<'_>,
         account: &generated::types::Addr,
         calldata: &generated::types::Bytes,
+        data: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if !self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
         let called_contract_account = AccountAddress::read_from_mem(account, mem)?;
+        let data = super::common::read_string(mem, data)?;
+        #[derive(Deserialize)]
+        struct Data {
+            state: u8,
+        }
+        let data: Data =
+            serde_json::from_str(&data).map_err(|_e| generated::types::Errno::Inval)?;
+        let mut state_mode = crate::host::StorageType::try_from(data.state)
+            .map_err(|_e| generated::types::Errno::Inval)?;
+        if state_mode == crate::host::StorageType::Default {
+            state_mode = crate::host::StorageType::LatestNonFinal;
+        }
         let mut res_calldata = b"call!".to_vec();
         let calldata = calldata.buf.as_array(calldata.buf_len);
         res_calldata.extend(mem.as_cow(calldata)?.iter());
@@ -603,6 +619,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 can_read_storage: my_conf.can_read_storage,
                 can_write_storage: false,
                 can_spawn_nondet: my_conf.can_spawn_nondet,
+                state_mode,
             },
             message_data: MessageData {
                 contract_account: called_contract_account,
@@ -696,7 +713,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::Io.into());
         };
 
-        let res = supervisor.host.storage_read(account, slot, index, &mut vec);
+        let res = supervisor.host.storage_read(
+            self.context.data.conf.state_mode,
+            account,
+            slot,
+            index,
+            &mut vec,
+        );
 
         res.map_err(|_e| generated::types::Errno::Io)?;
         mem.copy_from_slice(&vec, dest_buf)?;

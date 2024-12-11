@@ -128,7 +128,7 @@ class MockHost(IHost):
 			return f.read()
 
 	async def storage_read(
-		self, account: bytes, slot: bytes, index: int, le: int
+		self, mode: StorageType, account: bytes, slot: bytes, index: int, le: int
 	) -> bytes:
 		assert self.storage is not None
 		return self.storage.read(Address(account), slot, index, le)

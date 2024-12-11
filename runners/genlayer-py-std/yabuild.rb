@@ -14,6 +14,7 @@ run_codegen = Proc.new { |inp, out, tags: [], **kwargs, &blk|
 }
 codegen = target_alias("codegen",
 	run_codegen.(root_src.join('executor', 'codegen', 'data', 'builtin-prompt-templates.json'), cur_src.join('src', 'genlayer', 'std', '_internal', 'prompt_ids.py')),
+	run_codegen.(root_src.join('executor', 'codegen', 'data', 'result-codes.json'), cur_src.join('src', 'genlayer', 'std', '_internal', 'result_codes.py')),
 )
 
 base_genlayer_lib_dir = cur_src.join('src')

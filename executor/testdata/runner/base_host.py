@@ -33,7 +33,7 @@ class IHost(metaclass=abc.ABCMeta):
 	async def get_calldata(self, /) -> bytes: ...
 	async def get_code(self, addr: bytes, /) -> bytes: ...
 	async def storage_read(
-		self, account: bytes, slot: bytes, index: int, le: int, /
+		self, mode: StorageType, account: bytes, slot: bytes, index: int, le: int, /
 	) -> bytes: ...
 	async def storage_write(
 		self,
@@ -113,11 +113,13 @@ async def host_loop(handler: IHost):
 				await send_int(len(code))
 				await send_all(code)
 			case Methods.STORAGE_READ:
+				mode = await read_exact(1)
+				mode = StorageType(mode[0])
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
 				slot = await read_exact(GENERIC_ADDR_SIZE)
 				index = await recv_int()
 				le = await recv_int()
-				res = await handler.storage_read(account, slot, index, le)
+				res = await handler.storage_read(mode, account, slot, index, le)
 				assert len(res) == le
 				await send_all(res)
 			case Methods.STORAGE_WRITE:

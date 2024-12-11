@@ -151,6 +151,7 @@ pub fn run_with_impl(
                 can_read_storage: true,
                 can_write_storage: true,
                 can_spawn_nondet: true,
+                state_mode: crate::host::StorageType::Default,
             },
             message_data: entry_message,
             entrypoint: entrypoint.into(),

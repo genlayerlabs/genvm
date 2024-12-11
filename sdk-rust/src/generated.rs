@@ -243,11 +243,13 @@ pub unsafe fn eq_principle_prompt(id: u8, vars: &str) -> Result<Success, Errno> 
     }
 }
 
-pub unsafe fn call_contract(account: Addr, calldata: Bytes) -> Result<Fd, Errno> {
+pub unsafe fn call_contract(account: Addr, calldata: Bytes, data: &str) -> Result<Fd, Errno> {
     let mut rp0 = MaybeUninit::<Fd>::uninit();
     let ret = genlayer_sdk::call_contract(
         &account as *const _ as i32,
         &calldata as *const _ as i32,
+        data.as_ptr() as i32,
+        data.len() as i32,
         rp0.as_mut_ptr() as i32,
     );
     match ret {
@@ -347,7 +349,7 @@ pub mod genlayer_sdk {
         pub fn exec_prompt(arg0: i32, arg1: i32, arg2: i32, arg3: i32, arg4: i32) -> i32;
         pub fn exec_prompt_id(arg0: i32, arg1: i32, arg2: i32, arg3: i32) -> i32;
         pub fn eq_principle_prompt(arg0: i32, arg1: i32, arg2: i32, arg3: i32) -> i32;
-        pub fn call_contract(arg0: i32, arg1: i32, arg2: i32) -> i32;
+        pub fn call_contract(arg0: i32, arg1: i32, arg2: i32, arg3: i32, arg4: i32) -> i32;
         pub fn post_message(arg0: i32, arg1: i32, arg2: i32, arg3: i32) -> i32;
         pub fn deploy_contract(arg0: i32, arg1: i32, arg2: i32, arg3: i32) -> i32;
         pub fn storage_read(arg0: i32, arg1: i32, arg2: i32) -> i32;

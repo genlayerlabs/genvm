@@ -82,7 +82,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfn(m)]
-    fn call_contract(address: &[u8], calldata: &[u8]) -> PyResult<u32> {
+    fn call_contract(address: &[u8], calldata: &[u8], data: &str) -> PyResult<u32> {
         flush_everything();
         let address = get_addr(&address)?;
         map_error(unsafe {
@@ -92,6 +92,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
                     buf: calldata.as_ptr(),
                     buf_len: calldata.len() as u32,
                 },
+                data,
             )
         })
     }

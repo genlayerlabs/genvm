@@ -59,6 +59,7 @@
     (@interface func (export "call_contract")
         (param $account $addr)
         (param $calldata $bytes)
+        (param $data string)
         (result $error (expected $fd (error $errno)))
     )
 

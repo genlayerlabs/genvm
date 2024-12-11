@@ -2,6 +2,7 @@ mod host_fns;
 mod result_codes;
 
 pub use result_codes::ResultCode;
+pub use result_codes::StorageType;
 
 use std::sync::{Arc, Mutex};
 
@@ -166,6 +167,7 @@ impl Host {
 
     pub fn storage_read(
         &mut self,
+        mode: StorageType,
         account: AccountAddress,
         slot: GenericAddress,
         index: u32,
@@ -176,6 +178,7 @@ impl Host {
         };
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::StorageRead as u8])?;
+        sock.write_all(&[mode as u8; 1])?;
         sock.write_all(&account.raw())?;
         sock.write_all(&slot.raw())?;
         sock.write_all(&index.to_le_bytes())?;

@@ -1,4 +1,5 @@
-#[derive(PartialEq)]
+use serde_derive::Serialize;
+#[derive(PartialEq, Clone, Copy, Serialize)]
 #[repr(u8)]
 pub enum ResultCode {
     Return = 0,
@@ -18,6 +19,26 @@ impl TryFrom<u8> for ResultCode {
             2 => Ok(ResultCode::None),
             3 => Ok(ResultCode::Error),
             4 => Ok(ResultCode::ContractError),
+            _ => Err(()),
+        }
+    }
+}
+#[derive(PartialEq, Clone, Copy, Serialize)]
+#[repr(u8)]
+pub enum StorageType {
+    Default = 0,
+    LatestFinal = 1,
+    LatestNonFinal = 2,
+}
+
+impl TryFrom<u8> for StorageType {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, ()> {
+        match value {
+            0 => Ok(StorageType::Default),
+            1 => Ok(StorageType::LatestFinal),
+            2 => Ok(StorageType::LatestNonFinal),
             _ => Err(()),
         }
     }
