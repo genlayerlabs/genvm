@@ -51,6 +51,10 @@ jobs:
           ./tools/ya-build/ya-build config
           ninja -v -C build genvm/runners/docs genvm/runners/types
 
+      - run: |
+          ls -la build
+          tree .
+
       - name: Setup pages
         uses: actions/configure-pages@v4
         
