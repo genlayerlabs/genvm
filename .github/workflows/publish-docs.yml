@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - deploy-docs # TODO: remove this after testing
     workflow_dispatch:
 
 permissions:
@@ -53,10 +52,6 @@ jobs:
         run: |
           ./tools/ya-build/ya-build config
           ninja -v -C build genvm/runners/docs genvm/runners/types
-
-      - run: |
-          ls -la build/py-docs
-          tree build/py-docs
 
       - name: Setup pages
         uses: actions/configure-pages@v4
