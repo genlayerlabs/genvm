@@ -67,7 +67,7 @@ jobs:
           mkdir -p _site
 
           # Copy HTML docs
-          cp -r build/py-docs/* _site/
+          cp -r build/py-docs/docs/* _site/
 
           # Create py-types directory and copy py-types
           mkdir -p _site/py-types
