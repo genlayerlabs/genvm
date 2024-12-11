@@ -16,6 +16,9 @@ concurrency:
   group: "pages"
   cancel-in-progress: true
 
+env:
+  DOCS_DOMAIN: 'sdk.genlayer.com'
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -45,7 +48,7 @@ jobs:
             pushd build-scripts/doctypes/ && \
             poetry install && \
             popd
-      
+
       - name: Configure and build documentation
         run: |
           ./tools/ya-build/ya-build config
@@ -57,7 +60,7 @@ jobs:
 
       - name: Setup pages
         uses: actions/configure-pages@v4
-        
+
       - name: Prepare documentation
         run: |
           # Create combined docs directory
@@ -69,6 +72,9 @@ jobs:
           # Create py-types directory and copy py-types
           mkdir -p _site/py-types
           cp -r build/py-types/* _site/py-types/
+
+          # Configure custom domain
+          echo "${{ env.DOCS_DOMAIN }}" > _site/CNAME
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -85,3 +91,10 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+    #   - name: Purge Cloudflare cache
+    #     if: success()
+    #     uses: jakejarvis/cloudflare-purge-action@master
+    #     env:
+    #       CLOUDFLARE_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+    #       CLOUDFLARE_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
