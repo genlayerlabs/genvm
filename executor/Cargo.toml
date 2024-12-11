@@ -11,6 +11,33 @@ rustflags = [
     #"--remap-path-prefix=src/=genvm/executor/src/"
 ]
 
+[profile.dev.package.cranelift-codegen]
+opt-level = 2
+[profile.dev.package.cranelift-entity]
+opt-level = 2
+[profile.dev.package.cranelift-frontend]
+opt-level = 2
+[profile.dev.package.cranelift-codegen-shared]
+opt-level = 2
+[profile.dev.package.cranelift-bforest]
+opt-level = 2
+[profile.dev.package.cranelift-bitset]
+opt-level = 2
+[profile.dev.package.cranelift-control]
+opt-level = 2
+[profile.dev.package.cranelift-wasm]
+opt-level = 2
+[profile.dev.package.cranelift-native]
+opt-level = 2
+[profile.dev.package.wasmtime]
+opt-level = 2
+[profile.dev.package.wasmtime-cranelift]
+opt-level = 2
+[profile.dev.package.wasmparser]
+opt-level = 2
+[profile.dev.package.regalloc2]
+opt-level = 2
+
 [profile.release]
 debug = true
 

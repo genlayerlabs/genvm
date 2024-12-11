@@ -28,3 +28,6 @@ __pycache__
 .DS_Store
 .AppleDouble
 .LSOverride
+
+# perf
+perf.data*

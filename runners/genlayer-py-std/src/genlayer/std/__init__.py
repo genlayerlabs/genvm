@@ -14,6 +14,7 @@ __all__ = (
 	'contract_interface',
 	'ContractAt',
 	'deploy_contract',
+	'eth_contract',
 	'eq_principle_prompt_comparative',
 	'eq_principle_prompt_non_comparative',
 	'eq_principle_strict_eq',
@@ -52,6 +53,7 @@ from ..py.types import *
 from .eq_principles import *
 from .nondet_fns import *
 from .genvm_contracts import *
+from .eth import *
 
 
 def private(f):

@@ -732,6 +732,56 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         res.map_err(|_e| generated::types::Errno::Io)?;
         Ok(())
     }
+
+    fn eth_send(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        account: &generated::types::Addr,
+        calldata: &generated::types::Bytes,
+        data: wiggle::GuestPtr<str>,
+    ) -> Result<(), generated::types::Error> {
+        if !self.context.data.conf.is_deterministic {
+            return Err(generated::types::Errno::DeterministicViolation.into());
+        }
+        let supervisor = self.context.data.supervisor.clone();
+        let address = AccountAddress::read_from_mem(account, mem)?;
+        let calldata = calldata.read_owned(mem)?;
+        let data = super::common::read_string(mem, data)?;
+        let Ok(mut supervisor) = supervisor.lock() else {
+            return Err(generated::types::Errno::Io.into());
+        };
+        let res = supervisor
+            .host
+            .eth_send(address, &calldata, &data)
+            .map_err(generated::types::Error::trap)?;
+        Ok(())
+    }
+
+    fn eth_call(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        account: &generated::types::Addr,
+        calldata: &generated::types::Bytes,
+        data: wiggle::GuestPtr<str>,
+    ) -> Result<generated::types::Fd, generated::types::Error> {
+        if !self.context.data.conf.is_deterministic {
+            return Err(generated::types::Errno::DeterministicViolation.into());
+        }
+        let supervisor = self.context.data.supervisor.clone();
+        let address = AccountAddress::read_from_mem(account, mem)?;
+        let calldata = calldata.read_owned(mem)?;
+        let data = super::common::read_string(mem, data)?;
+        let Ok(mut supervisor) = supervisor.lock() else {
+            return Err(generated::types::Errno::Io.into());
+        };
+        let res = supervisor
+            .host
+            .eth_call(address, &calldata, &data)
+            .map_err(generated::types::Error::trap)?;
+        Ok(generated::types::Fd::from(self.vfs.place_content(
+            FileContentsUnevaluated::from_contents(res, 0),
+        )))
+    }
 }
 
 impl Context {

@@ -62,6 +62,12 @@ class IHost(metaclass=abc.ABCMeta):
 		self, calldata: bytes, code: bytes, data: DefaultTransactionData, /
 	) -> None: ...
 	async def consume_gas(self, gas: int, /) -> None: ...
+	async def eth_send(
+		self, account: bytes, calldata: bytes, data: typing.Any, /
+	) -> None: ...
+	async def eth_call(
+		self, account: bytes, calldata: bytes, data: typing.Any, /
+	) -> bytes: ...
 
 
 async def host_loop(handler: IHost):
@@ -169,6 +175,27 @@ async def host_loop(handler: IHost):
 				)
 
 				await handler.deploy_contract(calldata, code, message_data)
+
+			case Methods.ETH_SEND:
+				account = await read_exact(ACCOUNT_ADDR_SIZE)
+				calldata_len = await recv_int()
+				calldata = await read_exact(calldata_len)
+				data_len = await recv_int()
+				data = await read_exact(data_len)
+				data_str = data.decode('utf-8')
+
+				await handler.eth_send(account, calldata, json.loads(data_str))
+			case Methods.ETH_CALL:
+				account = await read_exact(ACCOUNT_ADDR_SIZE)
+				calldata_len = await recv_int()
+				calldata = await read_exact(calldata_len)
+				data_len = await recv_int()
+				data = await read_exact(data_len)
+				data_str = data.decode('utf-8')
+
+				res = await handler.eth_call(account, calldata, json.loads(data_str))
+				await send_int(len(res))
+				await send_all(res)
 			case x:
 				raise Exception(f'unknown method {x}')
 

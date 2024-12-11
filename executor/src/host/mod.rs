@@ -101,6 +101,15 @@ fn read_u32(sock: &mut dyn Sock) -> Result<u32> {
     Ok(u32::from_le_bytes(int_buf))
 }
 
+fn read_bytes(sock: &mut dyn Sock) -> Result<Arc<[u8]>> {
+    let len = read_u32(sock)?;
+
+    let res = Arc::new_uninit_slice(len as usize);
+    let mut res = unsafe { res.assume_init() };
+    sock.read_exact(Arc::get_mut(&mut res).unwrap())?;
+    Ok(res)
+}
+
 fn write_result(sock: &mut dyn Sock, res: Result<&vm::RunOk, &anyhow::Error>) -> Result<()> {
     let str: String;
     let data = match res {
@@ -152,11 +161,7 @@ impl Host {
         sock.write_all(&[host_fns::Methods::GetCode as u8])?;
         sock.write_all(&account.raw())?;
 
-        let len = read_u32(sock)? as usize;
-        let mut res = Vec::with_capacity(len);
-        unsafe { res.set_len(len) };
-        sock.read_exact(&mut res)?;
-        Ok(Arc::from(res))
+        read_bytes(sock)
     }
 
     pub fn storage_read(
@@ -305,6 +310,46 @@ impl Host {
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::ConsumeFuel as u8])?;
         sock.write_all(&gas.to_le_bytes())?;
+        Ok(())
+    }
+
+    pub fn eth_call(
+        &mut self,
+        address: AccountAddress,
+        calldata: &[u8],
+        data: &str,
+    ) -> Result<Arc<[u8]>> {
+        let Ok(mut sock) = (*self.sock).lock() else {
+            anyhow::bail!("can't take lock")
+        };
+        let sock: &mut dyn Sock = &mut *sock;
+        sock.write_all(&[host_fns::Methods::EthCall as u8])?;
+
+        sock.write_all(&address.raw())?;
+
+        sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
+        sock.write_all(calldata)?;
+
+        sock.write_all(&(data.as_bytes().len() as u32).to_le_bytes())?;
+        sock.write_all(data.as_bytes())?;
+
+        read_bytes(sock)
+    }
+
+    pub fn eth_send(&mut self, address: AccountAddress, calldata: &[u8], data: &str) -> Result<()> {
+        let Ok(mut sock) = (*self.sock).lock() else {
+            anyhow::bail!("can't take lock")
+        };
+        let sock: &mut dyn Sock = &mut *sock;
+        sock.write_all(&[host_fns::Methods::EthSend as u8])?;
+
+        sock.write_all(&address.raw())?;
+
+        sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
+        sock.write_all(calldata)?;
+
+        sock.write_all(&(data.as_bytes().len() as u32).to_le_bytes())?;
+        sock.write_all(data.as_bytes())?;
         Ok(())
     }
 }
