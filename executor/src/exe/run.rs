@@ -44,6 +44,7 @@ pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
         sup.shared_data.clone()
     };
     let action = move || {
+        log::warn!(target = "rt"; "sigterm received");
         shared_data
             .should_exit
             .store(1, std::sync::atomic::Ordering::SeqCst);

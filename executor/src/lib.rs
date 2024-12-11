@@ -58,6 +58,7 @@ fn load_mod<T>(
     default_name: &str,
     f: impl FnOnce(&std::path::Path, &str, genvm_modules_common::CtorArgs) -> Result<T>,
     log_fd: std::os::fd::RawFd,
+    should_quit: *mut u32,
 ) -> Result<T> {
     let config_str = serde_json::to_string(&mc.config)?;
     let args = genvm_modules_common::CtorArgs {
@@ -66,6 +67,7 @@ fn load_mod<T>(
         module_config_len: config_str.len(),
         thread_pool: fake_thread_pool(),
         log_fd,
+        should_quit,
     };
     f(
         &std::path::Path::new(&mc.path),
@@ -77,7 +79,7 @@ fn load_mod<T>(
     )
 }
 
-fn create_modules(config_path: &String, log_fd: std::os::fd::RawFd) -> Result<vm::Modules> {
+fn create_modules(config_path: &String, log_fd: std::os::fd::RawFd, should_quit: *mut u32) -> Result<vm::Modules> {
     use plugin_loader::llm_functions_api::Loader as _;
     use plugin_loader::web_functions_api::Loader as _;
 
@@ -102,12 +104,14 @@ fn create_modules(config_path: &String, log_fd: std::os::fd::RawFd) -> Result<vm
         "llm",
         llm_functions_api::Methods::load_from_lib,
         log_fd,
+        should_quit,
     )?;
     let web = load_mod(
         &config.modules.web,
         "web",
         web_functions_api::Methods::load_from_lib,
         log_fd,
+        should_quit,
     )?;
 
     Ok(vm::Modules { llm, web })
@@ -119,7 +123,9 @@ pub fn create_supervisor(
     log_fd: std::os::fd::RawFd,
     is_sync: bool,
 ) -> Result<Arc<Mutex<vm::Supervisor>>> {
-    let modules = match create_modules(config_path, log_fd) {
+    let shared_data = Arc::new(crate::vm::SharedData::new(is_sync));
+    let should_quit_ptr = shared_data.should_exit.as_ptr();
+    let modules = match create_modules(config_path, log_fd, should_quit_ptr) {
         Ok(modules) => modules,
         Err(e) => {
             let err = Err(e);
@@ -129,7 +135,7 @@ pub fn create_supervisor(
     };
 
     Ok(Arc::new(Mutex::new(vm::Supervisor::new(
-        modules, host, is_sync,
+        modules, host, shared_data,
     )?)))
 }
 

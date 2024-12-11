@@ -26,6 +26,7 @@ pub struct CtorArgs {
     pub module_config: *const u8,
     pub module_config_len: usize,
     pub log_fd: std::os::fd::RawFd,
+    pub should_quit: *mut u32,
 }
 
 impl CtorArgs {

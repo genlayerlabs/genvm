@@ -325,6 +325,7 @@ async def run_host_and_program(
 				return_when=asyncio.FIRST_COMPLETED,
 			)
 			if not coro_proc.done():
+				coro_loop.cancel()
 				# genvm exit takes to long, forcefully quit it
 				try:
 					process.kill()
@@ -337,12 +338,15 @@ async def run_host_and_program(
 	if not coro_loop.done():
 		coro_loop.cancel()
 
-	if (
-		deadline_future is not None
-		and deadline_future not in done
-		and not handler.has_result()
-	):
-		errors.append(Exception('no result provided'))
+	if not handler.has_result():
+		if (
+			deadline_future is None
+			or deadline_future is not None
+			and deadline_future not in done
+		):
+			errors.append(Exception('no result provided'))
+		else:
+			errors.append(Exception('timeout'))
 
 	result = RunHostAndProgramRes(
 		b''.join(stdout).decode(),
