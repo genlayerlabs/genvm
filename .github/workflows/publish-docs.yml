@@ -62,12 +62,14 @@ jobs:
         run: |
           # Create combined docs directory
           mkdir -p _site
+
           # Copy HTML docs
-          cp -r build/docs/* _site/
-          # Create types directory and copy types
-          mkdir -p _site/types
-          cp -r build/types/* _site/types/
-          
+          cp -r build/py-docs/* _site/
+
+          # Create py-types directory and copy py-types
+          mkdir -p _site/py-types
+          cp -r build/py-types/* _site/py-types/
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
