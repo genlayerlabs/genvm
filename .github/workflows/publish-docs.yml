@@ -55,8 +55,8 @@ jobs:
           ninja -v -C build genvm/runners/docs genvm/runners/types
 
       - run: |
-          ls -la build
-          tree .
+          ls -la build/py-docs
+          tree build/py-docs
 
       - name: Setup pages
         uses: actions/configure-pages@v4
