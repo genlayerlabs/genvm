@@ -22,27 +22,36 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+        with:
+          lfs: true
+
+      - run: apt install -y python3-poetry
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip'
-      
+          cache: poetry
+
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          load_submodules: "true"
+          third_party: "none"
+
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install poetry
-          pushd build-scripts/doctypes/
-          poetry install
-          popd
+          python3.12 -m pip install poetry && \
+            pushd build-scripts/doctypes/ && \
+            poetry install && \
+            popd
       
-      - name: Configure and Build Documentation
+      - name: Configure and build documentation
         run: |
           ./tools/ya-build/ya-build config
           ninja -v -C build genvm/runners/docs genvm/runners/types
 
-      - name: Setup Pages
+      - name: Setup pages
         uses: actions/configure-pages@v4
         
       - name: Prepare documentation
