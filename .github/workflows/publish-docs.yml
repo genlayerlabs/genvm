@@ -25,7 +25,7 @@ jobs:
         with:
           lfs: true
 
-      - run: apt install -y python3-poetry
+    #   - run: sudo apt install -y python3-poetry
 
       - name: Setup Python
         uses: actions/setup-python@v5
