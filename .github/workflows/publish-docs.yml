@@ -54,7 +54,7 @@ jobs:
           ninja -v -C build genvm/runners/docs genvm/runners/types
 
       - name: Setup pages
-        uses: actions/configure-pages@v4
+        uses: actions/configure-pages@v5
 
       - name: Prepare documentation
         run: |
