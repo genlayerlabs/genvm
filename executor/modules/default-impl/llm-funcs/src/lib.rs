@@ -1,9 +1,10 @@
 use anyhow::Result;
 use genvm_modules_common::*;
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 
 use std::ffi::CStr;
 
+use crate::interfaces::RecoverableError;
 use genvm_modules_common::interfaces::web_functions_api;
 
 mod response;
@@ -66,14 +67,39 @@ impl Impl {
         })
     }
 
-    fn exec_prompt_impl(&mut self, gas: &mut u64, _config: &str, prompt: &str) -> Result<String> {
+    fn exec_prompt_impl(&mut self, gas: &mut u64, config: &str, prompt: &str) -> Result<String> {
+        #[derive(Clone, Deserialize, Serialize)]
+        #[serde(rename_all = "kebab-case")]
+        enum ExecPromptConfigMode {
+            Text,
+            Json,
+        }
+        #[derive(Deserialize)]
+        struct ExecPromptConfig {
+            response_format: Option<ExecPromptConfigMode>,
+        }
+        let config: ExecPromptConfig =
+            serde_json::from_str(config).map_err(RecoverableError::from_anyhow)?;
+        let response_format = config
+            .response_format
+            .clone()
+            .unwrap_or(ExecPromptConfigMode::Text);
         match self.config.provider {
             LLLMProvider::Ollama => {
-                let request = serde_json::json!({
+                let mut request = serde_json::json!({
                     "model": &self.config.model,
                     "prompt": prompt,
                     "stream": false,
                 });
+                match response_format {
+                    ExecPromptConfigMode::Text => {}
+                    ExecPromptConfigMode::Json => {
+                        request
+                            .as_object_mut()
+                            .unwrap()
+                            .insert("format".into(), "json".into());
+                    }
+                }
                 let mut res = isahc::send(
                     isahc::Request::post(&format!("{}/api/generate", self.config.host))
                         .body(serde_json::to_string(&request)?.as_bytes())?,
@@ -94,7 +120,7 @@ impl Impl {
                 Ok(response.into())
             }
             LLLMProvider::Openai => {
-                let request = serde_json::json!({
+                let mut request = serde_json::json!({
                     "model": &self.config.model,
                     "messages": [{
                         "role": "user",
@@ -104,6 +130,15 @@ impl Impl {
                     "stream": false,
                     "temperature": 0.7,
                 });
+                match response_format {
+                    ExecPromptConfigMode::Text => {}
+                    ExecPromptConfigMode::Json => {
+                        request.as_object_mut().unwrap().insert(
+                            "response_format".into(),
+                            serde_json::json!({"type": "json_object"}),
+                        );
+                    }
+                }
                 let mut res = isahc::send(
                     isahc::Request::post(&format!("{}/v1/chat/completions", self.config.host))
                         .header("Content-Type", "application/json")
@@ -137,7 +172,7 @@ impl Impl {
                 let request = serde_json::json!({
                     "jsonrpc": "2.0",
                     "method": "llm_genvm_module_call",
-                    "params": [&self.config.model, prompt],
+                    "params": [&self.config.model, prompt, serde_json::to_string(&response_format).unwrap()],
                     "id": 1,
                 });
                 let mut res = isahc::send(
@@ -170,16 +205,20 @@ impl Impl {
         res
     }
 
+    fn invalid_prompt_id_err() -> anyhow::Error {
+        RecoverableError(anyhow::anyhow!("invalid prompt id")).into()
+    }
+
     fn eq_principle_prompt(&mut self, gas: &mut u64, template_id: u8, vars: &str) -> Result<bool> {
         use template_ids::TemplateId;
-        let id = TemplateId::try_from(template_id)
-            .map_err(|_e| anyhow::anyhow!("unknown template id"))?;
+        let id = TemplateId::try_from(template_id).map_err(|_e| Self::invalid_prompt_id_err())?;
         let template = match id {
             TemplateId::Comparative => &self.config.equivalence_prompt_comparative,
             TemplateId::NonComparative => &self.config.equivalence_prompt_non_comparative,
-            TemplateId::NonComparativeLeader => anyhow::bail!("invalid prompt id"),
+            TemplateId::NonComparativeLeader => return Err(Self::invalid_prompt_id_err()),
         };
-        let vars: std::collections::BTreeMap<String, String> = serde_json::from_str(vars)?;
+        let vars: std::collections::BTreeMap<String, String> =
+            serde_json::from_str(vars).map_err(RecoverableError::from_anyhow)?;
         let new_prompt = string_templater::patch_str(&vars, &template)?;
         let res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
         answer_is_bool(res)
@@ -187,16 +226,16 @@ impl Impl {
 
     fn exec_prompt_id(&mut self, gas: &mut u64, template_id: u8, vars: &str) -> Result<String> {
         use template_ids::TemplateId;
-        let id = TemplateId::try_from(template_id)
-            .map_err(|_e| anyhow::anyhow!("unknown template id"))?;
+        let id = TemplateId::try_from(template_id).map_err(|_e| Self::invalid_prompt_id_err())?;
         let template = match id {
-            TemplateId::Comparative => anyhow::bail!("invalid prompt id"),
-            TemplateId::NonComparative => anyhow::bail!("invalid prompt id"),
+            TemplateId::Comparative => return Err(Self::invalid_prompt_id_err()),
+            TemplateId::NonComparative => return Err(Self::invalid_prompt_id_err()),
             TemplateId::NonComparativeLeader => {
                 &self.config.equivalence_prompt_non_comparative_leader
             }
         };
-        let vars: std::collections::BTreeMap<String, String> = serde_json::from_str(vars)?;
+        let vars: std::collections::BTreeMap<String, String> =
+            serde_json::from_str(vars).map_err(RecoverableError::from_anyhow)?;
         let new_prompt = string_templater::patch_str(&vars, &template)?;
         let res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
         Ok(res)

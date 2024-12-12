@@ -13,7 +13,9 @@
             "post_nondet_result": 6,
             "post_message": 7,
             "consume_fuel": 8,
-            "deploy_contract": 9
+            "deploy_contract": 9,
+            "eth_call": 10,
+            "eth_send": 11
         }
     }
 ]

@@ -128,7 +128,7 @@ class MockHost(IHost):
 			return f.read()
 
 	async def storage_read(
-		self, account: bytes, slot: bytes, index: int, le: int
+		self, mode: StorageType, account: bytes, slot: bytes, index: int, le: int
 	) -> bytes:
 		assert self.storage is not None
 		return self.storage.read(Address(account), slot, index, le)
@@ -183,6 +183,16 @@ class MockHost(IHost):
 		if self.messages_file is None:
 			self.messages_file = open(self.messages_path, 'wt')
 		self.messages_file.write(f'deploy:\n\t{data}\n\t{calldata}\n\t{code}\n')
+
+	async def eth_send(self, account: bytes, calldata: bytes, /) -> None:
+		if self.messages_file is None:
+			self.messages_file = open(self.messages_path, 'wt')
+		self.messages_file.write(f'eth_send:\n\t{calldata}\n')
+
+	async def eth_call(
+		self, account: bytes, calldata: bytes, data: typing.Any, /
+	) -> bytes:
+		assert False
 
 	async def consume_gas(self, gas: int):
 		pass

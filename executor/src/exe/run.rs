@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use genvm::vm::RunOk;
@@ -44,6 +46,7 @@ pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
         sup.shared_data.clone()
     };
     let action = move || {
+        log::warn!(target = "rt"; "sigterm received");
         shared_data
             .should_exit
             .store(1, std::sync::atomic::Ordering::SeqCst);
@@ -76,6 +79,8 @@ pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
         None => {}
         Some(res) => println!("executed with `{res}`"),
     }
+    let _ = std::io::stdout().flush();
+    let _ = std::io::stderr().flush();
     // FIXME exit code?
     Ok(())
 }

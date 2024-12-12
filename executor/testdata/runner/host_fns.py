@@ -12,3 +12,5 @@ class Methods(IntEnum):
 	POST_MESSAGE = 7
 	CONSUME_FUEL = 8
 	DEPLOY_CONTRACT = 9
+	ETH_CALL = 10
+	ETH_SEND = 11

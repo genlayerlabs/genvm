@@ -1,4 +1,5 @@
-#[derive(PartialEq)]
+use serde_derive::Serialize;
+#[derive(PartialEq, Clone, Copy, Serialize)]
 #[repr(u8)]
 pub enum Methods {
     AppendCalldata = 0,
@@ -11,6 +12,8 @@ pub enum Methods {
     PostMessage = 7,
     ConsumeFuel = 8,
     DeployContract = 9,
+    EthCall = 10,
+    EthSend = 11,
 }
 
 impl TryFrom<u8> for Methods {
@@ -28,6 +31,8 @@ impl TryFrom<u8> for Methods {
             7 => Ok(Methods::PostMessage),
             8 => Ok(Methods::ConsumeFuel),
             9 => Ok(Methods::DeployContract),
+            10 => Ok(Methods::EthCall),
+            11 => Ok(Methods::EthSend),
             _ => Err(()),
         }
     }

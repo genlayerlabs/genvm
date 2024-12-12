@@ -59,6 +59,7 @@
     (@interface func (export "call_contract")
         (param $account $addr)
         (param $calldata $bytes)
+        (param $data string)
         (result $error (expected $fd (error $errno)))
     )
 
@@ -87,6 +88,18 @@
         (param $slot $full_addr)
         (param $index u32)
         (param $buf $bytes)
+        (result $error (expected (error $errno)))
+    )
+
+    (@interface func (export "eth_call")
+        (param $account $addr)
+        (param $calldata $bytes)
+        (result $error (expected $fd (error $errno)))
+    )
+
+    (@interface func (export "eth_send")
+        (param $account $addr)
+        (param $calldata $bytes)
         (result $error (expected (error $errno)))
     )
 )

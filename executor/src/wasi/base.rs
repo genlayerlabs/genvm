@@ -6,4 +6,5 @@ pub struct Config {
     pub can_read_storage: bool,
     pub can_write_storage: bool,
     pub can_spawn_nondet: bool,
+    pub state_mode: crate::host::StorageType,
 }

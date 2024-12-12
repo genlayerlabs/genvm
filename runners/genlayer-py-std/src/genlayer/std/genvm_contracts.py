@@ -27,10 +27,26 @@ def _make_calldata_obj(method, args, kwargs):
 	return ret
 
 
+from ._internal.result_codes import StorageType
+
+
+class GenVMCallKwArgs(typing.TypedDict):
+	"""
+	Built-in parameters of performing a GenVM call view method
+
+	.. warning::
+		parameters are subject to change!
+	"""
+
+	state: typing.NotRequired[StorageType]
+
+
 class _ContractAtViewMethod:
-	def __init__(self, addr: Address, name: str):
+	def __init__(self, addr: Address, name: str, data: GenVMCallKwArgs):
 		self.addr = addr
 		self.name = name
+		data.setdefault('state', StorageType.DEFAULT)
+		self.data = data
 
 	def __call__(self, *args, **kwargs) -> typing.Any:
 		return self.lazy(*args, **kwargs).get()
@@ -39,7 +55,8 @@ class _ContractAtViewMethod:
 		obj = _make_calldata_obj(self.name, args, kwargs)
 		cd = calldata.encode(obj)
 		return lazy_from_fd(
-			wasi.call_contract(self.addr.as_bytes, cd), decode_sub_vm_result
+			wasi.call_contract(self.addr.as_bytes, cd, json.dumps(self.data)),
+			decode_sub_vm_result,
 		)
 
 
@@ -51,7 +68,7 @@ class TransactionData(typing.TypedDict):
 		parameters are subject to change!
 	"""
 
-	gas: int
+	pass
 
 
 class _ContractAtEmitMethod:
@@ -77,7 +94,7 @@ class _GenVMContract[TView, TSend](typing.Protocol):
 
 	def view(self) -> TView: ...
 
-	def emit(self, *, gas: int) -> TSend: ...
+	def emit(self, **kwargs: typing.Unpack[TransactionData]) -> TSend: ...
 
 
 class ContractAt(_GenVMContract):
@@ -94,7 +111,7 @@ class ContractAt(_GenVMContract):
 		"""
 		Namespace with all view methods
 		"""
-		return _ContractAtView(self.addr)
+		return _ContractAtView(self.addr, {})
 
 	def emit(self, **data: typing.Unpack[TransactionData]):
 		"""
@@ -104,11 +121,12 @@ class ContractAt(_GenVMContract):
 
 
 class _ContractAtView:
-	def __init__(self, addr: Address):
+	def __init__(self, addr: Address, data):
 		self.addr = addr
+		self.data = data
 
 	def __getattr__(self, name):
-		return _ContractAtViewMethod(self.addr, name)
+		return _ContractAtViewMethod(self.addr, name, self.data)
 
 
 class _ContractAtEmit:
@@ -163,10 +181,29 @@ class DeploymentTransactionData(TransactionData):
 	Class for representing parameters of ``deploy_contract``
 	"""
 
-	salt_nonce: typing.NotRequired[u256]
+	salt_nonce: typing.NotRequired[u256 | typing.Literal[0]]
 	"""
 	*iff* it is provided and does not equal to :math:`0` then ``Address`` of deployed contract will be known ahead of time. It will depend on this field
 	"""
+
+
+@typing.overload
+def deploy_contract(
+	*,
+	code: bytes,
+	args: collections.abc.Sequence[typing.Any] = [],
+	kwargs: collections.abc.Mapping[str, typing.Any] = {},
+) -> None: ...
+
+
+@typing.overload
+def deploy_contract(
+	*,
+	code: bytes,
+	args: collections.abc.Sequence[typing.Any] = [],
+	salt_nonce: typing.Literal[0],
+	kwargs: collections.abc.Mapping[str, typing.Any] = {},
+) -> Address: ...
 
 
 def deploy_contract(
@@ -181,7 +218,7 @@ def deploy_contract(
 
 	:param code: code (i.e. contents of a python file) of the contract
 
-	:returns: address of new contract
+	:returns: address of new contract *iff* ``salt_nonce`` was provided
 	"""
 	salt_nonce = data.setdefault('salt_nonce', u256(0))
 	wasi.deploy_contract(

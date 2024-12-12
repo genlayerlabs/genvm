@@ -164,7 +164,7 @@ pub struct SharedData {
 }
 
 impl SharedData {
-    fn new(is_sync: bool) -> Self {
+    pub fn new(is_sync: bool) -> Self {
         Self {
             nondet_call_no: 0.into(),
             should_exit: Arc::from(AtomicU32::from(0)),
@@ -345,7 +345,11 @@ impl WasmFileDesc {
 }
 
 impl Supervisor {
-    pub fn new(modules: Modules, mut host: crate::Host, is_sync: bool) -> Result<Self> {
+    pub fn new(
+        modules: Modules,
+        mut host: crate::Host,
+        shared_data: Arc<SharedData>,
+    ) -> Result<Self> {
         let engines = Engines::create(|base_conf| {
             match Lazy::force(&caching::CACHE_DIR) {
                 None => {
@@ -379,7 +383,6 @@ impl Supervisor {
                 return Err(err.unwrap_err());
             }
         };
-        let shared_data = Arc::new(SharedData::new(is_sync));
         Ok(Self {
             engines,
             cached_modules: HashMap::new(),

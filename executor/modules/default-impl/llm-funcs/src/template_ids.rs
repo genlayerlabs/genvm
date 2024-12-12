@@ -1,4 +1,5 @@
-#[derive(PartialEq)]
+use serde_derive::Serialize;
+#[derive(PartialEq, Clone, Copy, Serialize)]
 #[repr(u8)]
 pub enum TemplateId {
     Comparative = 0,

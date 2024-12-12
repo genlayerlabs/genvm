@@ -24,7 +24,11 @@ GENERIC_ADDR_SIZE = 32
 
 
 class DefaultTransactionData(typing.TypedDict):
-	gas: int
+	pass
+
+
+class DeployDefaultTransactionData(DefaultTransactionData):
+	salt_nonce: typing.NotRequired[int]
 
 
 class IHost(metaclass=abc.ABCMeta):
@@ -33,7 +37,7 @@ class IHost(metaclass=abc.ABCMeta):
 	async def get_calldata(self, /) -> bytes: ...
 	async def get_code(self, addr: bytes, /) -> bytes: ...
 	async def storage_read(
-		self, account: bytes, slot: bytes, index: int, le: int, /
+		self, mode: StorageType, account: bytes, slot: bytes, index: int, le: int, /
 	) -> bytes: ...
 	async def storage_write(
 		self,
@@ -59,9 +63,11 @@ class IHost(metaclass=abc.ABCMeta):
 		self, account: bytes, calldata: bytes, data: DefaultTransactionData, /
 	) -> None: ...
 	async def deploy_contract(
-		self, calldata: bytes, code: bytes, data: DefaultTransactionData, /
+		self, calldata: bytes, code: bytes, data: DeployDefaultTransactionData, /
 	) -> None: ...
 	async def consume_gas(self, gas: int, /) -> None: ...
+	async def eth_send(self, account: bytes, calldata: bytes, /) -> None: ...
+	async def eth_call(self, account: bytes, calldata: bytes, /) -> bytes: ...
 
 
 async def host_loop(handler: IHost):
@@ -107,11 +113,13 @@ async def host_loop(handler: IHost):
 				await send_int(len(code))
 				await send_all(code)
 			case Methods.STORAGE_READ:
+				mode = await read_exact(1)
+				mode = StorageType(mode[0])
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
 				slot = await read_exact(GENERIC_ADDR_SIZE)
 				index = await recv_int()
 				le = await recv_int()
-				res = await handler.storage_read(account, slot, index, le)
+				res = await handler.storage_read(mode, account, slot, index, le)
 				assert len(res) == le
 				await send_all(res)
 			case Methods.STORAGE_WRITE:
@@ -147,9 +155,7 @@ async def host_loop(handler: IHost):
 
 				message_data_len = await recv_int()
 				message_data_bytes = await read_exact(message_data_len)
-				message_data: DefaultTransactionData = json.loads(
-					str(message_data_bytes, 'utf-8')
-				)
+				message_data = json.loads(str(message_data_bytes, 'utf-8'))
 
 				await handler.post_message(account, calldata, message_data)
 			case Methods.CONSUME_FUEL:
@@ -164,11 +170,24 @@ async def host_loop(handler: IHost):
 
 				message_data_len = await recv_int()
 				message_data_bytes = await read_exact(message_data_len)
-				message_data: DefaultTransactionData = json.loads(
-					str(message_data_bytes, 'utf-8')
-				)
+				message_data = json.loads(str(message_data_bytes, 'utf-8'))
 
 				await handler.deploy_contract(calldata, code, message_data)
+
+			case Methods.ETH_SEND:
+				account = await read_exact(ACCOUNT_ADDR_SIZE)
+				calldata_len = await recv_int()
+				calldata = await read_exact(calldata_len)
+
+				await handler.eth_send(account, calldata)
+			case Methods.ETH_CALL:
+				account = await read_exact(ACCOUNT_ADDR_SIZE)
+				calldata_len = await recv_int()
+				calldata = await read_exact(calldata_len)
+
+				res = await handler.eth_call(account, calldata)
+				await send_int(len(res))
+				await send_all(res)
 			case x:
 				raise Exception(f'unknown method {x}')
 
@@ -279,28 +298,30 @@ async def run_host_and_program(
 		print('WARNING: genvm finished first')
 		coro_loop.cancel()
 
-	if not coro_proc.done():
-		# genvm is exiting, let it clean all the resources for a bit
-		await asyncio.wait(
-			[coro_proc, asyncio.ensure_future(asyncio.sleep(exit_timeout))],
+	async def wait_all_timeout():
+		timeout = asyncio.ensure_future(asyncio.sleep(exit_timeout))
+		all_futs = [timeout, coro_proc]
+		if not coro_loop.done():
+			all_futs.append(coro_loop)
+		done, _pending = await asyncio.wait(
+			all_futs,
 			return_when=asyncio.FIRST_COMPLETED,
 		)
+		if coro_loop in done:
+			await wait_all_timeout()
+
+	if not coro_proc.done():
+		try:
+			process.terminate()
+		except:
+			pass
+		await wait_all_timeout()
 		if not coro_proc.done():
-			# genvm exit takes to long, maybe it hanged. Politely ask to quit and wait a bit
+			# genvm exit takes to long, forcefully quit it
 			try:
-				process.terminate()
+				process.kill()
 			except:
 				pass
-			await asyncio.wait(
-				[coro_proc, asyncio.ensure_future(asyncio.sleep(exit_timeout))],
-				return_when=asyncio.FIRST_COMPLETED,
-			)
-			if not coro_proc.done():
-				# genvm exit takes to long, forcefully quit it
-				try:
-					process.kill()
-				except:
-					pass
 
 	await coro_proc
 	exit_code = await process.wait()
@@ -308,12 +329,15 @@ async def run_host_and_program(
 	if not coro_loop.done():
 		coro_loop.cancel()
 
-	if (
-		deadline_future is not None
-		and deadline_future not in done
-		and not handler.has_result()
-	):
-		errors.append(Exception('no result provided'))
+	if not handler.has_result():
+		if (
+			deadline_future is None
+			or deadline_future is not None
+			and deadline_future not in done
+		):
+			errors.append(Exception('no result provided'))
+		else:
+			errors.append(Exception('timeout'))
 
 	result = RunHostAndProgramRes(
 		b''.join(stdout).decode(),

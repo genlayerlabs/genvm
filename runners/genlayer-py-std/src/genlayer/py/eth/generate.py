@@ -7,24 +7,14 @@ from functools import partial
 from ..types import Address
 
 
-class _EthViewMethod:
-	__slots__ = ('parent',)
-
-	def __init__(self, parent: '_EthContract'):
-		self.parent = parent
-
-	def __call__(self, *args) -> None:
-		assert False
-
-
-class _EthContract[TView, TSend]:
+class _EthContract[TView, TWrite]:
 	__slots__ = ('_view', '_send', 'address')
 
 	def __init__(
 		self,
 		address: Address,
 		view_impl: typing.Callable[['_EthContract'], TView],
-		send_impl: typing.Callable[['_EthContract'], TSend],
+		send_impl: typing.Callable[['_EthContract'], TWrite],
 	):
 		self.address = address
 		self._view = view_impl
@@ -33,13 +23,13 @@ class _EthContract[TView, TSend]:
 	def view(self) -> TView:
 		return self._view(self)
 
-	def send(self) -> TSend:
+	def emit(self) -> TWrite:
 		return self._send(self)
 
 
-class EthContractDeclaration[TView, TSend](typing.Protocol):
+class EthContractDeclaration[TView, TWrite](typing.Protocol):
 	View: type[TView]
-	Send: type[TSend]
+	Write: type[TWrite]
 
 
 def _generate_methods(
@@ -87,14 +77,14 @@ type _EthGenerator = typing.Callable[[str, list[type], type], typing.Any]
 
 
 def contract_generator(generate_view: _EthGenerator, generate_send: _EthGenerator):
-	def gen[TView, TSend](
-		contr: EthContractDeclaration[TView, TSend],
-	) -> typing.Callable[[Address], _EthContract[TView, TSend]]:
+	def gen[TView, TWrite](
+		contr: EthContractDeclaration[TView, TWrite],
+	) -> typing.Callable[[Address], _EthContract[TView, TWrite]]:
 		view_meths = _generate_methods(
 			contr.View, f'{contr.__qualname__}.ViewProxy', factory=generate_view
 		)
 		send_meths = _generate_methods(
-			contr.Send, f'{contr.__qualname__}.SendProxy', factory=generate_send
+			contr.Write, f'{contr.__qualname__}.WriteProxy', factory=generate_send
 		)
 		return partial(_EthContract, view_impl=view_meths, send_impl=send_meths)
 
