@@ -345,7 +345,11 @@ impl WasmFileDesc {
 }
 
 impl Supervisor {
-    pub fn new(modules: Modules, mut host: crate::Host, shared_data: Arc<SharedData>) -> Result<Self> {
+    pub fn new(
+        modules: Modules,
+        mut host: crate::Host,
+        shared_data: Arc<SharedData>,
+    ) -> Result<Self> {
         let engines = Engines::create(|base_conf| {
             match Lazy::force(&caching::CACHE_DIR) {
                 None => {

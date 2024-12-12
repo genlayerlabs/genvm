@@ -308,29 +308,30 @@ async def run_host_and_program(
 		print('WARNING: genvm finished first')
 		coro_loop.cancel()
 
-	if not coro_proc.done():
-		# genvm is exiting, let it clean all the resources for a bit
-		await asyncio.wait(
-			[coro_proc, asyncio.ensure_future(asyncio.sleep(exit_timeout))],
+	async def wait_all_timeout():
+		timeout = asyncio.ensure_future(asyncio.sleep(exit_timeout))
+		all_futs = [timeout, coro_proc]
+		if not coro_loop.done():
+			all_futs.append(coro_loop)
+		done, _pending = await asyncio.wait(
+			all_futs,
 			return_when=asyncio.FIRST_COMPLETED,
 		)
+		if coro_loop in done:
+			await wait_all_timeout()
+
+	if not coro_proc.done():
+		try:
+			process.terminate()
+		except:
+			pass
+		await wait_all_timeout()
 		if not coro_proc.done():
-			# genvm exit takes to long, maybe it hanged. Politely ask to quit and wait a bit
+			# genvm exit takes to long, forcefully quit it
 			try:
-				process.terminate()
+				process.kill()
 			except:
 				pass
-			await asyncio.wait(
-				[coro_proc, asyncio.ensure_future(asyncio.sleep(exit_timeout))],
-				return_when=asyncio.FIRST_COMPLETED,
-			)
-			if not coro_proc.done():
-				coro_loop.cancel()
-				# genvm exit takes to long, forcefully quit it
-				try:
-					process.kill()
-				except:
-					pass
 
 	await coro_proc
 	exit_code = await process.wait()

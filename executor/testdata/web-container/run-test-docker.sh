@@ -7,7 +7,7 @@ IMAGE_ID="$(docker build -q -t genvm/modules-webdriver -f ./webdriver.dockerfile
 docker run \
     --add-host genvm-test:127.0.0.1 \
     -p 4444:4444 \
-    --rm -d \
+    --rm \
     --name genvm-web-test \
     --volume ./http:/driver/http \
     "$IMAGE_ID"

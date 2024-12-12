@@ -210,6 +210,7 @@ impl Host {
     }
 
     pub fn consume_result(&mut self, res: &vm::RunResult) -> Result<()> {
+        eprintln!("CONSUME RESULT");
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -220,9 +221,12 @@ impl Host {
             Err(e) => Err(e),
         };
         write_result(sock, res)?;
+        eprintln!("WROTE");
 
         let mut int_buf = [0; 1];
+        eprintln!("READING");
         sock.read_exact(&mut int_buf)?;
+        eprintln!("READ");
 
         Ok(())
     }

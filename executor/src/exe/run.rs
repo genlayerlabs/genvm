@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use genvm::vm::RunOk;
@@ -57,6 +59,7 @@ pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
     }
 
     let res = genvm::run_with(message, supervisor).with_context(|| "running genvm");
+    eprintln!("test1");
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,
         (Ok(RunOk::ContractError(e, cause)), PrintOption::Shrink) => {
@@ -77,6 +80,8 @@ pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
         None => {}
         Some(res) => println!("executed with `{res}`"),
     }
+    let _ = std::io::stdout().flush();
+    let _ = std::io::stderr().flush();
     // FIXME exit code?
     Ok(())
 }

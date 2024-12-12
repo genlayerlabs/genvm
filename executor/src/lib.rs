@@ -79,7 +79,11 @@ fn load_mod<T>(
     )
 }
 
-fn create_modules(config_path: &String, log_fd: std::os::fd::RawFd, should_quit: *mut u32) -> Result<vm::Modules> {
+fn create_modules(
+    config_path: &String,
+    log_fd: std::os::fd::RawFd,
+    should_quit: *mut u32,
+) -> Result<vm::Modules> {
     use plugin_loader::llm_functions_api::Loader as _;
     use plugin_loader::web_functions_api::Loader as _;
 
@@ -135,7 +139,9 @@ pub fn create_supervisor(
     };
 
     Ok(Arc::new(Mutex::new(vm::Supervisor::new(
-        modules, host, shared_data,
+        modules,
+        host,
+        shared_data,
     )?)))
 }
 
