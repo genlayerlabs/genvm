@@ -2,8 +2,8 @@ __all__ = (
 	'ContractAt',
 	'contract_interface',
 	'deploy_contract',
-	'TransactionData',
-	'DeploymentTransactionData',
+	'TransactionDataKwArgs',
+	'DeploymentTransactionDataKwArgs',
 )
 
 import typing
@@ -60,7 +60,7 @@ class _ContractAtViewMethod:
 		)
 
 
-class TransactionData(typing.TypedDict):
+class TransactionDataKwArgs(typing.TypedDict):
 	"""
 	Built-in parameters of all transaction messages that a contract can emit
 
@@ -72,7 +72,7 @@ class TransactionData(typing.TypedDict):
 
 
 class _ContractAtEmitMethod:
-	def __init__(self, addr: Address, name: str, data: TransactionData):
+	def __init__(self, addr: Address, name: str, data: TransactionDataKwArgs):
 		self.addr = addr
 		self.name = name
 		self.data = data
@@ -83,8 +83,13 @@ class _ContractAtEmitMethod:
 		wasi.post_message(self.addr.as_bytes, cd, json.dumps(self.data))
 
 
-class _GenVMContract[TView, TSend](typing.Protocol):
+class GenVMContractProxy[TView, TSend](typing.Protocol):
 	__slots__ = ('_view', '_send', 'address')
+
+	address: Address
+	"""
+	Address to which this proxy points
+	"""
 
 	def __init__(
 		self,
@@ -94,10 +99,10 @@ class _GenVMContract[TView, TSend](typing.Protocol):
 
 	def view(self) -> TView: ...
 
-	def emit(self, **kwargs: typing.Unpack[TransactionData]) -> TSend: ...
+	def emit(self, **kwargs: typing.Unpack[TransactionDataKwArgs]) -> TSend: ...
 
 
-class ContractAt(_GenVMContract):
+class ContractAt(GenVMContractProxy):
 	"""
 	Provides a way to call view methods and send transactions to GenVM contracts
 	"""
@@ -113,7 +118,7 @@ class ContractAt(_GenVMContract):
 		"""
 		return _ContractAtView(self.addr, {})
 
-	def emit(self, **data: typing.Unpack[TransactionData]):
+	def emit(self, **data: typing.Unpack[TransactionDataKwArgs]):
 		"""
 		Namespace with write message
 		"""
@@ -130,7 +135,7 @@ class _ContractAtView:
 
 
 class _ContractAtEmit:
-	def __init__(self, addr: Address, data: TransactionData):
+	def __init__(self, addr: Address, data: TransactionDataKwArgs):
 		self.addr = addr
 		self.data = data
 
@@ -154,7 +159,7 @@ class GenVMContractDeclaration[TView, TWrite](typing.Protocol):
 
 def contract_interface[TView, TWrite](
 	_contr: GenVMContractDeclaration[TView, TWrite],
-) -> typing.Callable[[Address], _GenVMContract[TView, TWrite]]:
+) -> typing.Callable[[Address], GenVMContractProxy[TView, TWrite]]:
 	# editorconfig-checker-disable
 	"""
 	This decorator produces an "interface" for other GenVM contracts. It has no semantical value, but can be used for auto completion and type checks
@@ -176,7 +181,7 @@ def contract_interface[TView, TWrite](
 from genlayer.py.types import u8, u256
 
 
-class DeploymentTransactionData(TransactionData):
+class DeploymentTransactionDataKwArgs(TransactionDataKwArgs):
 	"""
 	Class for representing parameters of ``deploy_contract``
 	"""
@@ -211,7 +216,7 @@ def deploy_contract(
 	code: bytes,
 	args: collections.abc.Sequence[typing.Any] = [],
 	kwargs: collections.abc.Mapping[str, typing.Any] = {},
-	**data: typing.Unpack[DeploymentTransactionData],
+	**data: typing.Unpack[DeploymentTransactionDataKwArgs],
 ) -> Address | None:
 	"""
 	Function for deploying new genvm contracts

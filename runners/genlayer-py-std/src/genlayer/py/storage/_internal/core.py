@@ -88,7 +88,7 @@ class TypeDesc[T]:
 	"""
 	actions that must be executed for copying this data
 
-	:py:type:`int` represents ``memcpy``
+	:py:class:`int` represents ``memcpy``
 	"""
 	alias_to: typing.Any
 
@@ -128,7 +128,7 @@ class TypeDesc[T]:
 		return ''.join(ret)
 
 
-class WithStorageSlot(typing.Protocol):
+class _WithStorageSlot(typing.Protocol):
 	_storage_slot: StorageSlot
 	_off: int
 

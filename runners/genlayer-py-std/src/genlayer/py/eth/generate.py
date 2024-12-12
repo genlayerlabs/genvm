@@ -1,4 +1,4 @@
-__all__ = ('contract_generator',)
+__all__ = ('contract_generator', 'EthContractDeclaration', 'EthContractProxy')
 
 import typing
 import inspect
@@ -7,14 +7,14 @@ from functools import partial
 from ..types import Address
 
 
-class _EthContract[TView, TWrite]:
+class EthContractProxy[TView, TWrite]:
 	__slots__ = ('_view', '_send', 'address')
 
 	def __init__(
 		self,
 		address: Address,
-		view_impl: typing.Callable[['_EthContract'], TView],
-		send_impl: typing.Callable[['_EthContract'], TWrite],
+		view_impl: typing.Callable[['EthContractProxy'], TView],
+		send_impl: typing.Callable[['EthContractProxy'], TWrite],
 	):
 		self.address = address
 		self._view = view_impl
@@ -36,7 +36,7 @@ def _generate_methods(
 	f_type: typing.Any,
 	proxy_name,
 	factory: typing.Callable[[str, list, typing.Any], typing.Callable[..., typing.Any]],
-) -> typing.Callable[[_EthContract], typing.Any]:
+) -> typing.Callable[[EthContractProxy], typing.Any]:
 	props: dict[str, typing.Any] = {}
 	for name, val in inspect.getmembers_static(f_type):
 		if not inspect.isfunction(val):
@@ -79,13 +79,13 @@ type _EthGenerator = typing.Callable[[str, list[type], type], typing.Any]
 def contract_generator(generate_view: _EthGenerator, generate_send: _EthGenerator):
 	def gen[TView, TWrite](
 		contr: EthContractDeclaration[TView, TWrite],
-	) -> typing.Callable[[Address], _EthContract[TView, TWrite]]:
+	) -> typing.Callable[[Address], EthContractProxy[TView, TWrite]]:
 		view_meths = _generate_methods(
 			contr.View, f'{contr.__qualname__}.ViewProxy', factory=generate_view
 		)
 		send_meths = _generate_methods(
 			contr.Write, f'{contr.__qualname__}.WriteProxy', factory=generate_send
 		)
-		return partial(_EthContract, view_impl=view_meths, send_impl=send_meths)
+		return partial(EthContractProxy, view_impl=view_meths, send_impl=send_meths)
 
 	return gen

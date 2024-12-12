@@ -1,6 +1,7 @@
 import typing
 
 from .core import *
+from .core import _WithStorageSlot
 
 
 class _RecordDesc[T: WithRecordStorageSlot](TypeDesc):
@@ -41,5 +42,5 @@ class _RecordDesc[T: WithRecordStorageSlot](TypeDesc):
 		return self.hsh
 
 
-class WithRecordStorageSlot(WithStorageSlot):
+class WithRecordStorageSlot(_WithStorageSlot):
 	__type_desc__: _RecordDesc

@@ -44,6 +44,14 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 	_slots: DynArray[_Node[K, V]]
 	_free_slots: DynArray[u32]
 
+	def __init__(self):
+		"""
+		This class can't be created with ``TreeMap()``
+
+		:raises TypeError: always
+		"""
+		raise TypeError("this class can't be instantiated by user")
+
 	def __len__(self) -> int:
 		return len(self._slots) - len(self._free_slots)
 

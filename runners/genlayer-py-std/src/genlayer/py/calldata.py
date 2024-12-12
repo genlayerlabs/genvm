@@ -2,20 +2,21 @@
 This module is responsible for working with genvm calldata
 
 Calldata supports following types:
+
 #. Primitive types:
 
-	#. python built-in: ``bool``, ``None``, ``int``, ``str``, ``bytes``
+	#. python built-in: :py:class:`bool`, :py:obj:`None`, :py:class:`int`, :py:class:`str`, :py:class:`bytes`
 	#. :py:meth:`~genlayer.py.types.Address` type
 
 #. Composite types:
 
-	#. :py:type:`list` and :py:type:`dict`, as well as :py:type:`collections.abc.Sequence` and :py:type:`collections.abc.Mapping`
-	#. :py:type:`CalldataEncodable`
+	#. :py:class:`list` and :py:class:`dict`, as well as :py:class:`collections.abc.Sequence` and :py:class:`collections.abc.Mapping`
+	#. :py:class:`CalldataEncodable`
 
 For full calldata specification see `genvm repo <https://github.com/yeagerai/genvm/blob/main/doc/calldata.md>`_
 """
 
-__all__ = ('encode', 'decode', 'to_str')
+__all__ = ('encode', 'decode', 'to_str', 'CalldataEncodable')
 
 from .types import Address
 import typing
@@ -48,7 +49,14 @@ class CalldataEncodable(metaclass=abc.ABCMeta):
 	"""
 
 	@abc.abstractmethod
-	def __to_calldata__(self) -> typing.Any: ...
+	def __to_calldata__(self) -> typing.Any:
+		"""
+		Override this method to return calldata-compatible type
+
+		.. warning::
+			returning ``self`` may lead to an infinite loop
+		"""
+		...
 
 
 def encode(
@@ -60,7 +68,7 @@ def encode(
 	:param default: function to be applied to each object recursively, it must return object encodable to calldata
 
 	.. warning::
-		All composite types will be coerced to :py:type:`dict` and :py:type:`list`, so custom type information won't be preserved
+		All composite types will be coerced to :py:class:`dict` and :py:class:`list`, so custom type information won't be preserved
 	"""
 	mem = bytearray()
 
@@ -143,7 +151,7 @@ def decode(mem0: collections.abc.Buffer) -> typing.Any:
 	"""
 	Decodes calldata encoded bytes into python DSL
 
-	Out of composite types it will contain only :py:type:`dict` and :py:type:`list`
+	Out of composite types it will contain only :py:class:`dict` and :py:class:`list`
 	"""
 	mem: memoryview = memoryview(mem0)
 

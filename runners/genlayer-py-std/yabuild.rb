@@ -124,19 +124,19 @@ target_alias(
 	target_command(
 		commands: [
 			['rm', '-rf', docs_out],
-			['mkdir', '-p', docs_out],
+			['mkdir', '-p', docs_out.parent],
+			['cp', '-r', root_src.join('build-scripts', 'doctypes', 'docs_base'), docs_out],
 			['cd', docs_out],
-			['cp', root_src.join('build-scripts', 'doctypes', 'docs_base', 'conf.py'), docs_out],
-			['cp', root_src.join('build-scripts', 'doctypes', 'docs_base', 'index.rst'), docs_out],
-			[
-				*POETRY_RUN,
-				'sphinx-apidoc',
-				'--full',
-				'--follow-links', '--module-first', # '--separate',
-				'--append-syspath',
-				'-o', docs_out,
-				cur_src.join('src')
-			],
+			[RbConfig.ruby, root_src.join('build-scripts', 'doctypes', 'generate-other.rb'), cur_src.join('src'), docs_out.join('other.rst')],
+			#[
+			#	*POETRY_RUN,
+			#	'sphinx-apidoc',
+			#	'--full',
+			#	'--follow-links', '--module-first', # '--separate',
+			#	'--append-syspath',
+			#	'-o', docs_out,
+			#	cur_src.join('src')
+			#],
 			[*POETRY_RUN, 'sphinx-build', '-b', 'html', docs_out, docs_out.join('docs')],
 			['zip', '-9', '-r', docs_out.parent.join('py-docs.zip'), 'docs']
 		],

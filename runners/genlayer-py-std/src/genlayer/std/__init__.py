@@ -1,10 +1,10 @@
+"""
+Blockchain specific functionality, that won't work without GenVM
+"""
+
 __all__ = (
-	'DeploymentTransactionData',
-	'ExecPromptKwArgs',
-	'GetWebpageKwArgs',
 	'Lazy',
 	'MessageType',
-	'TransactionData',
 	'wasi',
 	'advanced',
 	'calldata',
@@ -32,21 +32,8 @@ import json
 import os
 
 import genlayer.py.calldata as calldata
-
-"""
-reexport alias
-"""
 import genlayer.std.advanced as advanced
-
-"""
-reexport alias
-"""
-
 import genlayer.std._wasi as wasi
-
-"""
-reexport alias
-"""
 
 # reexports
 from ..py.types import *

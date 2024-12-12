@@ -4,18 +4,24 @@ import typing
 import math
 
 from ._internal.core import *
+from ._internal.core import _WithStorageSlot
 from ._internal.desc_base_types import _u32_desc
 
 
-class DynArray[T](WithStorageSlot, collections.abc.MutableSequence[T]):
+class DynArray[T](_WithStorageSlot, collections.abc.MutableSequence[T]):
 	"""
-	Represents exponentially growing array (:py:type:`list` in python terms) that can be persisted on the blockchain
+	Represents exponentially growing array (:py:class:`list` in python terms) that can be persisted on the blockchain
 	"""
 
 	_item_desc: TypeDesc
 
 	def __init__(self):
-		raise Exception("this class can't be instantiated")
+		"""
+		This class can't be created with ``DynArray()``
+
+		:raises TypeError: always
+		"""
+		raise TypeError("this class can't be instantiated by user")
 
 	@staticmethod
 	def _view_at(item_desc: TypeDesc, slot: StorageSlot, off: int) -> 'DynArray':
@@ -238,13 +244,21 @@ class _DynArrayDesc(TypeDesc):
 		return f'_VecDesc[{self._item_desc!r}]'
 
 
-class Array[T, S: int](WithStorageSlot, collections.abc.Sequence):
+class Array[T, S: int](_WithStorageSlot, collections.abc.Sequence):
 	"""
 	Constantly sized array that can be persisted on the blockchain
 	"""
 
 	_item_desc: TypeDesc
 	_len: int
+
+	def __init__(self):
+		"""
+		This class can't be created with ``Array()``
+
+		:raises TypeError: always
+		"""
+		raise TypeError("this class can't be instantiated by user")
 
 	def __len__(self) -> int:
 		return self._len

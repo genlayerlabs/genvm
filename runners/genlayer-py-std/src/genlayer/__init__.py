@@ -1,7 +1,7 @@
 """
 Common import for all contracts
 
-It exposes most of the types to the top scope and encapsulates other utility under `gl` namespace which is a proxy to :py:mod:`genlayer.std`
+It exposes most of the types to the top scope and encapsulates other utility under :py:obj:`gl` namespace which is a proxy to :py:mod:`genlayer.std`
 """
 
 __all__ = (
