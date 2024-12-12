@@ -11,6 +11,7 @@ extensions = [
 	'sphinx.ext.autodoc',
 	'sphinx.ext.viewcode',
 	'sphinx.ext.todo',
+	'sphinx.ext.intersphinx',
 ]
 
 templates_path = ['_templates']
@@ -35,3 +36,6 @@ MONOREPO_CONF = json.loads(root_dir.joinpath(MONO_REPO_ROOT_FILE).read_text())
 sys.path.append(str(root_dir.joinpath(*MONOREPO_CONF['py-std'])))
 
 os.environ['GENERATING_DOCS'] = 'true'
+
+master_doc = 'index'
+intersphinx_mapping = {'python': ('https://docs.python.org/3.12', None)}

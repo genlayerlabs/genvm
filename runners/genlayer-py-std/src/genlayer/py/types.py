@@ -197,7 +197,7 @@ i256 = typing.NewType('i256', int)
 
 bigint = typing.NewType('bigint', int)
 """
-Just an alias for :py:type:`int`, it is introduced to prevent accidental use of low-performance big integers in the store
+Just an alias for :py:class:`int`, it is introduced to prevent accidental use of low-performance big integers in the store
 """
 
 

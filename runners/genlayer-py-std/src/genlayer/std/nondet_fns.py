@@ -28,7 +28,7 @@ API to get a webpage after rendering it
 :type url: ``str``
 
 :param \\*\\*config: configuration
-:type \\*\\*config: :py:type:`GetWebpageKwArgs`
+:type \\*\\*config: :py:class:`GetWebpageKwArgs`
 
 :rtype: ``str``
 
@@ -56,7 +56,7 @@ API to execute a prompt (perform NLP)
 :type prompt: ``str``
 
 :param \\*\\*config: configuration
-:type \\*\\*config: :py:type:`ExecPromptKwArgs`
+:type \\*\\*config: :py:class:`ExecPromptKwArgs`
 
 :rtype: ``str``
 

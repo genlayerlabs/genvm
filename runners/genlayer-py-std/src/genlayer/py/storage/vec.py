@@ -9,7 +9,7 @@ from ._internal.desc_base_types import _u32_desc
 
 class DynArray[T](WithStorageSlot, collections.abc.MutableSequence[T]):
 	"""
-	Represents exponentially growing array (:py:type:`list` in python terms) that can be persisted on the blockchain
+	Represents exponentially growing array (:py:class:`list` in python terms) that can be persisted on the blockchain
 	"""
 
 	_item_desc: TypeDesc

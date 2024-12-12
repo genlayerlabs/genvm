@@ -74,7 +74,7 @@ def validator_handle_rollbacks_and_errors_default(
 
 	Errors and rollbacks are always checked for strict equality, which means that it's user responsibility to dump least possible text in there
 
-	:returns: :py:type:`ContractReturn`.data iff both results are not errors/rollbacks
+	:returns: :py:class:`ContractReturn`.data iff both results are not errors/rollbacks
 	"""
 	try:
 		res = fn()
