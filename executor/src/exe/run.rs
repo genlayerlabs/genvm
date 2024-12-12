@@ -59,7 +59,6 @@ pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
     }
 
     let res = genvm::run_with(message, supervisor).with_context(|| "running genvm");
-    eprintln!("test1");
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,
         (Ok(RunOk::ContractError(e, cause)), PrintOption::Shrink) => {

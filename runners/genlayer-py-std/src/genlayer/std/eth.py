@@ -15,7 +15,7 @@ def _generate_view(name: str, params: list[type], ret: type) -> typing.Any:
 	def result_fn(self, *args):
 		calldata = encoder.encode(list(args))
 		return lazy_from_fd(
-			wasi.eth_call(self.parent.address, calldata, json.dumps({})),
+			wasi.eth_call(self.parent.address, calldata),
 			lambda x: decode([ret], x),
 		)
 
@@ -27,7 +27,7 @@ def _generate_send(name: str, params: list[type], ret: type) -> typing.Any:
 
 	def result_fn(self, *args):
 		calldata = encoder.encode(list(args))
-		wasi.eth_send(self.parent.address.as_bytes, calldata, json.dumps({}))
+		wasi.eth_send(self.parent.address.as_bytes, calldata)
 
 	return result_fn
 

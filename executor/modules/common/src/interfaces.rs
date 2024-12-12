@@ -1,7 +1,6 @@
 #![allow(unused_parens)]
 
 use serde::{Deserialize, Serialize};
-//use serde_derive::{Deserialize, Serialize};
 
 macro_rules! impl_create_trait_fn {
     ($name:ident : fn ($($arg_name:ident: $arg_t:ty),*) -> $ret_t:tt ;) => {
@@ -24,6 +23,26 @@ macro_rules! create_trait {
     };
 }
 
+#[derive(Debug)]
+pub struct RecoverableError(pub anyhow::Error);
+
+impl RecoverableError {
+    pub fn from_anyhow<T>(x: T) -> Self
+    where
+        T: Into<anyhow::Error>,
+    {
+        RecoverableError(x.into())
+    }
+}
+
+impl std::fmt::Display for RecoverableError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RecoverableError {:?}", self.0)
+    }
+}
+
+impl std::error::Error for RecoverableError {}
+
 #[repr(C)]
 pub struct BytesResult {
     pub ptr: *const u8,
@@ -33,6 +52,7 @@ pub struct BytesResult {
 #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
 pub enum ModuleResult<T> {
     Success(T),
+    RecoverableError,
     Error(String),
 }
 
@@ -40,7 +60,13 @@ impl<T> From<anyhow::Result<T>> for ModuleResult<T> {
     fn from(value: anyhow::Result<T>) -> Self {
         match value {
             Ok(t) => ModuleResult::Success(t),
-            Err(e) => ModuleResult::Error(format!("{e:?}")),
+            Err(e) => match e.downcast::<RecoverableError>() {
+                Ok(v) => {
+                    eprintln!("{:?}", v);
+                    ModuleResult::RecoverableError
+                }
+                Err(e) => ModuleResult::Error(format!("{e:?}")),
+            },
         }
     }
 }
@@ -48,15 +74,6 @@ impl<T> From<anyhow::Result<T>> for ModuleResult<T> {
 pub fn serialize_result<T: Serialize>(res: anyhow::Result<T>) -> BytesResult {
     let as_mod_res = ModuleResult::from(res);
     as_mod_res.to_bytes().unwrap()
-}
-
-impl<T> ModuleResult<T> {
-    pub fn into_anyhow(self) -> anyhow::Result<T> {
-        match self {
-            ModuleResult::Success(val) => Ok(val),
-            ModuleResult::Error(message) => Err(anyhow::format_err!("{}", message)),
-        }
-    }
 }
 
 impl<T: Serialize> ModuleResult<T> {

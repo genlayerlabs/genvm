@@ -211,7 +211,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfn(m)]
-    fn eth_call(addr: &[u8], calldata: &[u8], data: &str) -> PyResult<u32> {
+    fn eth_call(addr: &[u8], calldata: &[u8]) -> PyResult<u32> {
         let addr = get_addr(&addr)?;
         let res = unsafe {
             genvm_sdk_rust::eth_call(
@@ -220,14 +220,13 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
                     buf: calldata.as_ptr() as *const u8,
                     buf_len: calldata.len() as u32,
                 },
-                data,
             )
         };
         map_error(res)
     }
 
     #[pyfn(m)]
-    fn eth_send(addr: &[u8], calldata: &[u8], data: &str) -> PyResult<()> {
+    fn eth_send(addr: &[u8], calldata: &[u8]) -> PyResult<()> {
         let addr = get_addr(&addr)?;
         let res = unsafe {
             genvm_sdk_rust::eth_send(
@@ -236,7 +235,6 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
                     buf: calldata.as_ptr() as *const u8,
                     buf_len: calldata.len() as u32,
                 },
-                data,
             )
         };
         map_error(res)

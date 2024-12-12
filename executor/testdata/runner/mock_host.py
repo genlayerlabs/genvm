@@ -184,12 +184,10 @@ class MockHost(IHost):
 			self.messages_file = open(self.messages_path, 'wt')
 		self.messages_file.write(f'deploy:\n\t{data}\n\t{calldata}\n\t{code}\n')
 
-	async def eth_send(
-		self, account: bytes, calldata: bytes, data: typing.Any, /
-	) -> None:
+	async def eth_send(self, account: bytes, calldata: bytes, /) -> None:
 		if self.messages_file is None:
 			self.messages_file = open(self.messages_path, 'wt')
-		self.messages_file.write(f'eth_send:\n\t{data}\n\t{calldata}\n')
+		self.messages_file.write(f'eth_send:\n\t{calldata}\n')
 
 	async def eth_call(
 		self, account: bytes, calldata: bytes, data: typing.Any, /

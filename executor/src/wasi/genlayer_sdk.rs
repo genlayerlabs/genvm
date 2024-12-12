@@ -4,6 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use genvm_modules_common::interfaces::ModuleResult;
 use itertools::Itertools;
 use serde::Deserialize;
 use wiggle::GuestError;
@@ -185,6 +186,16 @@ impl From<serde_json::Error> for generated::types::Error {
     }
 }
 
+fn into_anyhow<T>(zelf: ModuleResult<T>) -> Result<T, generated::types::Error> {
+    match zelf {
+        ModuleResult::Success(val) => Ok(val),
+        ModuleResult::RecoverableError => Err(generated::types::Errno::Inval.into()),
+        ModuleResult::Error(message) => Err(generated::types::Error::trap(anyhow::format_err!(
+            "{}", message
+        ))),
+    }
+}
+
 impl ContextVFS<'_> {
     fn set_vm_run_result(
         &mut self,
@@ -296,14 +307,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             .consume_fuel(fuel)
             .map_err(generated::types::Error::trap)?;
 
-        let res: String = genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
-            supervisor.modules.web.free_str(x)
-        })
-        .and_then(genvm_modules_common::interfaces::ModuleResult::into_anyhow)
-        .map_err(|err| {
-            log::error!(target: "vm", err:? = err; "web module failed");
-            generated::types::Errno::Io
-        })?;
+        let res: ModuleResult<String> =
+            genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
+                supervisor.modules.web.free_str(x)
+            })
+            .map_err(generated::types::Error::trap)?;
+        let res = into_anyhow(res)?;
 
         Ok(generated::types::Fd::from(self.vfs.place_content(
             FileContentsUnevaluated::from_contents(Arc::from(res.as_bytes()), 0),
@@ -339,11 +348,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             .consume_fuel(fuel)
             .map_err(generated::types::Error::trap)?;
 
-        let res: String = genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
-            supervisor.modules.llm.free_str(x)
-        })
-        .and_then(genvm_modules_common::interfaces::ModuleResult::into_anyhow)
-        .map_err(generated::types::Error::trap)?;
+        let res: ModuleResult<String> =
+            genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
+                supervisor.modules.llm.free_str(x)
+            })
+            .map_err(generated::types::Error::trap)?;
+        let res = into_anyhow(res)?;
 
         Ok(generated::types::Fd::from(self.vfs.place_content(
             FileContentsUnevaluated::from_contents(Arc::from(res.as_bytes()), 0),
@@ -379,11 +389,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             .consume_fuel(fuel)
             .map_err(generated::types::Error::trap)?;
 
-        let res: String = genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
-            supervisor.modules.llm.free_str(x)
-        })
-        .and_then(genvm_modules_common::interfaces::ModuleResult::into_anyhow)
-        .map_err(generated::types::Error::trap)?;
+        let res: ModuleResult<String> =
+            genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
+                supervisor.modules.llm.free_str(x)
+            })
+            .map_err(generated::types::Error::trap)?;
+        let res = into_anyhow(res)?;
 
         Ok(generated::types::Fd::from(self.vfs.place_content(
             FileContentsUnevaluated::from_contents(Arc::from(res.as_bytes()), 0),
@@ -419,11 +430,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             .consume_fuel(fuel)
             .map_err(generated::types::Error::trap)?;
 
-        let res: bool = genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
-            supervisor.modules.llm.free_str(x)
-        })
-        .and_then(genvm_modules_common::interfaces::ModuleResult::into_anyhow)
-        .map_err(generated::types::Error::trap)?;
+        let res: ModuleResult<bool> =
+            genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
+                supervisor.modules.llm.free_str(x)
+            })
+            .map_err(generated::types::Error::trap)?;
+        let res = into_anyhow(res)?;
 
         Ok((res as i32).try_into().unwrap())
     }
@@ -761,7 +773,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         mem: &mut wiggle::GuestMemory<'_>,
         account: &generated::types::Addr,
         calldata: &generated::types::Bytes,
-        data: wiggle::GuestPtr<str>,
     ) -> Result<(), generated::types::Error> {
         if !self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
@@ -769,13 +780,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let supervisor = self.context.data.supervisor.clone();
         let address = AccountAddress::read_from_mem(account, mem)?;
         let calldata = calldata.read_owned(mem)?;
-        let data = super::common::read_string(mem, data)?;
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
         let res = supervisor
             .host
-            .eth_send(address, &calldata, &data)
+            .eth_send(address, &calldata)
             .map_err(generated::types::Error::trap)?;
         Ok(())
     }
@@ -785,7 +795,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         mem: &mut wiggle::GuestMemory<'_>,
         account: &generated::types::Addr,
         calldata: &generated::types::Bytes,
-        data: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if !self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
@@ -793,13 +802,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let supervisor = self.context.data.supervisor.clone();
         let address = AccountAddress::read_from_mem(account, mem)?;
         let calldata = calldata.read_owned(mem)?;
-        let data = super::common::read_string(mem, data)?;
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
         let res = supervisor
             .host
-            .eth_call(address, &calldata, &data)
+            .eth_call(address, &calldata)
             .map_err(generated::types::Error::trap)?;
         Ok(generated::types::Fd::from(self.vfs.place_content(
             FileContentsUnevaluated::from_contents(res, 0),

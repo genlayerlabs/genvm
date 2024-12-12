@@ -111,7 +111,7 @@ class ContractAt(_GenVMContract):
 		"""
 		Namespace with all view methods
 		"""
-		return _ContractAtView(self.addr)
+		return _ContractAtView(self.addr, {})
 
 	def emit(self, **data: typing.Unpack[TransactionData]):
 		"""
@@ -121,11 +121,12 @@ class ContractAt(_GenVMContract):
 
 
 class _ContractAtView:
-	def __init__(self, addr: Address):
+	def __init__(self, addr: Address, data):
 		self.addr = addr
+		self.data = data
 
 	def __getattr__(self, name):
-		return _ContractAtViewMethod(self.addr, name)
+		return _ContractAtViewMethod(self.addr, name, self.data)
 
 
 class _ContractAtEmit:

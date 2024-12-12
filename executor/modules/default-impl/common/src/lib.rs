@@ -1,10 +1,12 @@
-
-pub fn run_with_termination<F>(f: F, timeout_handle: *mut u32) -> anyhow::Result<F::Output>
+pub fn run_with_termination<F>(f: F, timeout_handle: *mut u32) -> Option<F::Output>
 where
     F: core::future::Future + Send,
     F::Output: Send,
 {
-    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
     let should_quit = unsafe { std::sync::atomic::AtomicU32::from_ptr(timeout_handle) };
 
     let selector = async {
@@ -17,15 +19,15 @@ where
 
         loop {
             tokio::select! {
-                val = f => return Ok(val),
+                val = f => return Some(val),
                 _ = waiter => {
-                    anyhow::bail!("timeout")
+                    return None
                 },
             }
         }
     };
 
-    let a = rt.block_on(selector)?;
+    let a = rt.block_on(selector);
     rt.shutdown_background();
-    Ok(a)
+    a
 }

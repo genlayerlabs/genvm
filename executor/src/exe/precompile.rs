@@ -49,17 +49,25 @@ fn compile_single_file(
             Some(arch) => arch,
             None => unreachable!(),
         };
+        let mut path = String::from(path);
+        path.push_str(path_suff);
+
+        let time_start = std::time::Instant::now();
         let precompiled = engine
             .precompile_module(&wasm_data)
             .with_context(|| "precompiling")?;
+        log::info!(target: "precompile", event = "compiled wasm", file = path, duration:? = time_start.elapsed(); "");
+
         let options = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::ZSTD);
-        let mut path = String::from(path);
-        path.push_str(path_suff);
+            .compression_method(zip::CompressionMethod::ZSTD)
+            .compression_level(Some(10));
+
+        let time_start = std::time::Instant::now();
         arch.start_file(&path, options)
             .with_context(|| format!("writing {path}"))?;
         arch.write_all(&precompiled)
             .with_context(|| "writing data")?;
+        log::info!(target: "precompile", event = "wrote file", file = path, duration:? = time_start.elapsed(); "");
         Ok(())
     };
 

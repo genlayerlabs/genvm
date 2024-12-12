@@ -24,7 +24,11 @@ GENERIC_ADDR_SIZE = 32
 
 
 class DefaultTransactionData(typing.TypedDict):
-	gas: int
+	pass
+
+
+class DeployDefaultTransactionData(DefaultTransactionData):
+	salt_nonce: typing.NotRequired[int]
 
 
 class IHost(metaclass=abc.ABCMeta):
@@ -59,15 +63,11 @@ class IHost(metaclass=abc.ABCMeta):
 		self, account: bytes, calldata: bytes, data: DefaultTransactionData, /
 	) -> None: ...
 	async def deploy_contract(
-		self, calldata: bytes, code: bytes, data: DefaultTransactionData, /
+		self, calldata: bytes, code: bytes, data: DeployDefaultTransactionData, /
 	) -> None: ...
 	async def consume_gas(self, gas: int, /) -> None: ...
-	async def eth_send(
-		self, account: bytes, calldata: bytes, data: typing.Any, /
-	) -> None: ...
-	async def eth_call(
-		self, account: bytes, calldata: bytes, data: typing.Any, /
-	) -> bytes: ...
+	async def eth_send(self, account: bytes, calldata: bytes, /) -> None: ...
+	async def eth_call(self, account: bytes, calldata: bytes, /) -> bytes: ...
 
 
 async def host_loop(handler: IHost):
@@ -155,9 +155,7 @@ async def host_loop(handler: IHost):
 
 				message_data_len = await recv_int()
 				message_data_bytes = await read_exact(message_data_len)
-				message_data: DefaultTransactionData = json.loads(
-					str(message_data_bytes, 'utf-8')
-				)
+				message_data = json.loads(str(message_data_bytes, 'utf-8'))
 
 				await handler.post_message(account, calldata, message_data)
 			case Methods.CONSUME_FUEL:
@@ -172,9 +170,7 @@ async def host_loop(handler: IHost):
 
 				message_data_len = await recv_int()
 				message_data_bytes = await read_exact(message_data_len)
-				message_data: DefaultTransactionData = json.loads(
-					str(message_data_bytes, 'utf-8')
-				)
+				message_data = json.loads(str(message_data_bytes, 'utf-8'))
 
 				await handler.deploy_contract(calldata, code, message_data)
 
@@ -182,20 +178,14 @@ async def host_loop(handler: IHost):
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
 				calldata_len = await recv_int()
 				calldata = await read_exact(calldata_len)
-				data_len = await recv_int()
-				data = await read_exact(data_len)
-				data_str = data.decode('utf-8')
 
-				await handler.eth_send(account, calldata, json.loads(data_str))
+				await handler.eth_send(account, calldata)
 			case Methods.ETH_CALL:
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
 				calldata_len = await recv_int()
 				calldata = await read_exact(calldata_len)
-				data_len = await recv_int()
-				data = await read_exact(data_len)
-				data_str = data.decode('utf-8')
 
-				res = await handler.eth_call(account, calldata, json.loads(data_str))
+				res = await handler.eth_call(account, calldata)
 				await send_int(len(res))
 				await send_all(res)
 			case x:

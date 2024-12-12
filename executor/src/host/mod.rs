@@ -210,7 +210,6 @@ impl Host {
     }
 
     pub fn consume_result(&mut self, res: &vm::RunResult) -> Result<()> {
-        eprintln!("CONSUME RESULT");
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -221,12 +220,9 @@ impl Host {
             Err(e) => Err(e),
         };
         write_result(sock, res)?;
-        eprintln!("WROTE");
 
         let mut int_buf = [0; 1];
-        eprintln!("READING");
         sock.read_exact(&mut int_buf)?;
-        eprintln!("READ");
 
         Ok(())
     }
@@ -320,12 +316,7 @@ impl Host {
         Ok(())
     }
 
-    pub fn eth_call(
-        &mut self,
-        address: AccountAddress,
-        calldata: &[u8],
-        data: &str,
-    ) -> Result<Arc<[u8]>> {
+    pub fn eth_call(&mut self, address: AccountAddress, calldata: &[u8]) -> Result<Arc<[u8]>> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -337,13 +328,10 @@ impl Host {
         sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
         sock.write_all(calldata)?;
 
-        sock.write_all(&(data.as_bytes().len() as u32).to_le_bytes())?;
-        sock.write_all(data.as_bytes())?;
-
         read_bytes(sock)
     }
 
-    pub fn eth_send(&mut self, address: AccountAddress, calldata: &[u8], data: &str) -> Result<()> {
+    pub fn eth_send(&mut self, address: AccountAddress, calldata: &[u8]) -> Result<()> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -355,8 +343,6 @@ impl Host {
         sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
         sock.write_all(calldata)?;
 
-        sock.write_all(&(data.as_bytes().len() as u32).to_le_bytes())?;
-        sock.write_all(data.as_bytes())?;
         Ok(())
     }
 }

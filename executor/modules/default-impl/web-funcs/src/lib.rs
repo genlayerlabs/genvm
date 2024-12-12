@@ -8,6 +8,8 @@ use std::{ffi::CStr, sync::Arc};
 use genvm_modules_common::interfaces::web_functions_api;
 use genvm_modules_impl_common::run_with_termination;
 
+use crate::interfaces::RecoverableError;
+
 mod response;
 
 struct MyAlloc;
@@ -37,12 +39,16 @@ impl Drop for Impl {
     fn drop(&mut self) {
         match &self.session_id {
             Some(session_id) => {
-                let builder =
+                let mut builder =
                     isahc::Request::delete(&format!("{}/session/{}", self.config.host, session_id));
-                //if unsafe { std::sync::atomic::AtomicU32::from_ptr(self.should_quit) }.load(std::sync::atomic::Ordering::SeqCst) != 0 {
-                //    // FIXME for some reason webdriver blocks on delete
-                //    //builder = builder.timeout(std::time::Duration::from_millis(2));
-                //}
+                if unsafe { std::sync::atomic::AtomicU32::from_ptr(self.should_quit) }
+                    .load(std::sync::atomic::Ordering::SeqCst)
+                    != 0
+                {
+                    // FIXME for some reason webdriver blocks on delete
+                    use isahc::config::Configurable;
+                    builder = builder.timeout(std::time::Duration::from_millis(2));
+                }
                 let _ = isahc::send(builder.body(()).unwrap());
             }
             None => {}
@@ -119,18 +125,22 @@ impl Impl {
         let config: GetWebpageConfig = serde_json::from_str(config.to_str()?)?;
         let url = url::Url::parse(url.to_str()?)?;
         if url.scheme() == "file" {
-            anyhow::bail!("file scheme is forbidden");
+            return Err(RecoverableError(anyhow::anyhow!("file scheme is forbidden")).into());
         }
 
         if url.host_str() != Some("genvm-test") {
             const ALLOWED_PORTS: &[Option<u16>] = &[None, Some(80), Some(443)];
             if !ALLOWED_PORTS.contains(&url.port()) {
-                anyhow::bail!("port {:?} is forbidden", url.port());
+                return Err(RecoverableError(anyhow::anyhow!(
+                    "port {:?} is forbidden",
+                    url.port()
+                ))
+                .into());
             }
         }
 
         let should_quit = self.should_quit;
-        let res_buf: anyhow::Result<String> = run_with_termination(
+        let res_buf: Option<anyhow::Result<String>> = run_with_termination(
             async move {
                 let session_id = self.get_session()?;
 
@@ -173,7 +183,11 @@ impl Impl {
                 Ok(body)
             },
             should_quit,
-        )?;
+        );
+        let res_buf = match res_buf {
+            Some(res_buf) => res_buf,
+            None => return Err(RecoverableError(anyhow::anyhow!("timeout")).into()),
+        };
         let res_buf = res_buf?;
 
         let val: serde_json::Value = serde_json::from_str(&res_buf)?;
