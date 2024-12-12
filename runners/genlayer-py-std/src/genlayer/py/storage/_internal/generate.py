@@ -193,6 +193,19 @@ if np is not None:
 		def set(self, slot: StorageSlot, off: int, val):
 			slot.write(off, self._type.tobytes(val))  # type: ignore
 
+	class _FloatDesc(TypeDesc[float]):
+		def __init__(self):
+			type = np.dtype(np.float64)
+			TypeDesc.__init__(self, type.itemsize, [type.itemsize])
+			self._type = type
+
+		def get(self, slot: StorageSlot, off: int) -> float:
+			dat = slot.read(off, self.size)
+			return float(np.frombuffer(dat, self._type).reshape(()))
+
+		def set(self, slot: StorageSlot, off: int, val: float):
+			slot.write(off, self._type.tobytes(val))  # type: ignore
+
 	_all_np_types: list[type[np.number]] = [
 		np.uint8,
 		np.uint16,
@@ -206,6 +219,7 @@ if np is not None:
 		np.float64,
 	]
 	_known_descs.update({k: _NumpyDesc(k) for k in _all_np_types})  # type: ignore
+	_known_descs[float] = _FloatDesc()
 
 
 def _storage_build_handle_special(
