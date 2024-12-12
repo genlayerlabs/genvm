@@ -27,6 +27,8 @@ All further communication is done via socket. If genvm process exited before sen
 
 Method ids list is available as [json](../../executor/codegen/data/host-fns.json). It is advised to use it in the build system to codegen constants
 
+Below is pseudo code, but [real code](../../executor/testdata/runner/base_host.py) is always up to date and is as readable as this code is (see `async def host_loop(handler: IHost):`)
+
 ```
 const ACCOUNT_ADDR_SIZE = 20
 const GENERIC_ADDR_SIZE = 32
@@ -49,6 +51,7 @@ loop:
       address := read_bytes(ACCOUNT_ADDR_SIZE)
       write_bytes_with_len host_code[address]
     json/methods/storage_read:
+      read_type := read_byte as json/storage_type
       address := read_bytes(ACCOUNT_ADDR_SIZE)
       slot := read_bytes(GENERIC_ADDR_SIZE)
       index := read_u32_le
