@@ -18,6 +18,9 @@ class AlreadySerializedResult(bytes):
 	"""
 
 	def __new__(cls, *args, **kwargs):
+		"""
+		Forwards all arguments to :py:class:`bytes`
+		"""
 		return bytes.__new__(cls, *args, **kwargs)
 
 

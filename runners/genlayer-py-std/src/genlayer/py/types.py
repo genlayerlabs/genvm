@@ -161,6 +161,9 @@ u232 = typing.NewType('u232', int)
 u240 = typing.NewType('u240', int)
 u248 = typing.NewType('u248', int)
 u256 = typing.NewType('u256', int)
+"""
+Alias for int that is used for typing
+"""
 
 i8 = typing.NewType('i8', int)
 i16 = typing.NewType('i16', int)

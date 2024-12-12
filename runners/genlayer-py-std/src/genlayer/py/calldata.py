@@ -2,6 +2,7 @@
 This module is responsible for working with genvm calldata
 
 Calldata supports following types:
+
 #. Primitive types:
 
 	#. python built-in: :py:class:`bool`, :py:obj:`None`, :py:class:`int`, :py:class:`str`, :py:class:`bytes`

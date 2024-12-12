@@ -128,7 +128,7 @@ class TypeDesc[T]:
 		return ''.join(ret)
 
 
-class WithStorageSlot(typing.Protocol):
+class _WithStorageSlot(typing.Protocol):
 	_storage_slot: StorageSlot
 	_off: int
 
