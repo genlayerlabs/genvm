@@ -27,7 +27,7 @@ class A:
 	def an(self, x: typing.Any): ...
 
 
-def test_schema():
+def test_class():
 	print(get_schema(A))
 	assert get_schema(A) == {
 		'ctor': {'params': [['x', 'int']], 'kwparams': {'y': 'string'}},
@@ -45,5 +45,38 @@ def test_schema():
 				'readonly': True,
 				'ret': 'any',
 			},
+		},
+	}
+
+
+from dataclasses import dataclass
+
+
+@dataclass
+class B_data:
+	x: int
+	y: int
+	z: typing.Literal['str']
+
+
+class B:
+	def __init__(self):
+		pass
+
+	@public_view
+	def tst(self) -> B_data: ...
+
+
+def test_dataclass():
+	print(get_schema(B))
+	assert get_schema(B) == {
+		'ctor': {'params': [], 'kwparams': {}},
+		'methods': {
+			'tst': {
+				'params': [],
+				'kwparams': {},
+				'readonly': True,
+				'ret': {'x': 'int', 'y': 'int', 'z': 'any'},
+			}
 		},
 	}

@@ -1,0 +1,1 @@
+executed with `Return("\e4\x0d{"ctor":{"params":[["foo","any"],["bar","any"]],"kwparams":{}},"methods":{"bar":{"params":[],"kwparams":{},"readonly":false,"ret":[{"$rep":"int"}]},"foo":{"params":[],"kwparams":{},"readonly":false,"ret":["int","int"]}}}")`
