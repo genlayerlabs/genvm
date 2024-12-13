@@ -29,7 +29,7 @@ jobs:
       - name: Generate upload url
         id: gen_url
         run: |
-          SHA="$(git log -1 --format=%H -- runners/)"
+          SHA="$(find runners/genlayer-py-std/ -maxdepth 1 -mindepth 1 -type f | cat - <(echo "runners/genlayer-py-std/tests") | sort | sed -e 's/^/:!/' | xargs git log -1 --format=%H -- runners/)"
           DIR_NAME="genvm_runners_${SHA}"
           echo "dirname=$DIR_NAME" >> $GITHUB_OUTPUT
           BASE_NAME="runners.zip"

@@ -12,6 +12,7 @@ Calldata supports following types:
 
 	#. :py:class:`list` and :py:class:`dict`, as well as :py:class:`collections.abc.Sequence` and :py:class:`collections.abc.Mapping`
 	#. :py:class:`CalldataEncodable`
+	# :py:mod:`dataclasses`
 
 For full calldata specification see `genvm repo <https://github.com/yeagerai/genvm/blob/main/doc/calldata.md>`_
 """
@@ -139,7 +140,10 @@ def encode(
 			impl_dict(b)
 		elif dataclasses.is_dataclass(b):
 			assert not isinstance(b, type)
-			impl_dict(dataclasses.asdict(b))
+			try:
+				impl_dict(dataclasses.asdict(b))
+			except TypeError as e:
+				raise TypeError(f'not calldata encodable', type(b)) from e
 		else:
 			raise TypeError(f'not calldata encodable', type(b))
 

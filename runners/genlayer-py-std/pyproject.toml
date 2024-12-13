@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "genvm-sdk-python"
-version = "0.1.0"
+version = "v0.0.1"
 description = ""
 authors = ["Kira Prokopenko <kira@yeager.ai>", "Yeager AI Corp"]
 #readme = "README.md"
@@ -27,9 +27,3 @@ testpaths = [
     "tests",
 ]
 addopts = "--cov=src/genlayer/py --cov-report term-missing --cov-fail-under=75"
-
-[tool.mypy]
-exclude  = [
-    "tests",
-    "src/cloudpickle",
-]
