@@ -84,13 +84,29 @@ jobs:
       contents: write  # Needed for creating releases
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - run: sudo apt-get install -y python3-poetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: poetry
+      - name: Publish to test pypi
+        run: |
+          python3.12 -m pip install poetry && \
+            pushd runners/genlayer-py-std && \
+            perl -i -pe 's/version = "v0.0.1"/version = "${{ needs.gen-tag.outputs.tag }}"/' pyproject.toml && \
+            poetry build && \
+            poetry config repositories.test-pypi https://test.pypi.org/legacy/ && \
+            poetry config pypi-token.test-pypi ${{ secrets.TEST_PYPI_TOKEN }} && \
+            poetry publish -r test-pypi && \
+            popd
       - run: |
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-runners.zip ${{ needs.build-runners.outputs.artifact_url }} && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-amd64.zip ${{ needs.release-build-genvm-release-ubuntu-latest.outputs.artifact_url }} && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-arm64.zip ${{ needs.release-build-genvm-release-ubuntu-latest-aarch64.outputs.artifact_url }} && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-macos-arm64.zip ${{ needs.release-build-genvm-release-macos-latest.outputs.artifact_url }} && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-py-docs.zip  ${{ needs.release-data.outputs.docs_url }} && \
-          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-py-types.zip  ${{ needs.release-data.outputs.types_url }} && \
           true
 
       - run: |
@@ -107,7 +123,6 @@ jobs:
             genvm-linux-arm64.zip
             genvm-macos-arm64.zip
             genvm-py-docs.zip
-            genvm-py-types.zip
           name: Release ${{ needs.gen-tag.outputs.tag }}
           tag_name: ${{ needs.gen-tag.outputs.tag }}
           draft: false
