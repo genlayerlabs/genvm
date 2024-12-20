@@ -196,6 +196,7 @@ impl Impl {
     fn exec_prompt(&mut self, gas: &mut u64, config: &str, prompt: &str) -> Result<String> {
         let res = self.exec_prompt_impl(gas, config, prompt);
         match serde_json::to_string(&serde_json::json!({
+            "event": "exec_prompt",
             "prompt": prompt,
             "result": format!("{res:?}"),
         })) {

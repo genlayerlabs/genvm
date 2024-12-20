@@ -33,6 +33,7 @@ struct Impl {
     session_id: Option<Arc<str>>,
     config: Config,
     should_quit: *mut u32,
+    log_fd: std::os::fd::RawFd,
 }
 
 impl Drop for Impl {
@@ -88,11 +89,18 @@ impl Impl {
                         }
                     }"#;
 
-            let mut opened_session_res = isahc::send(
-                isahc::Request::post(&format!("{}/session", &self.config.host))
-                    .header("Content-Type", "application/json; charset=utf-8")
-                    .body(INIT_REQUEST)?,
-            )?;
+            let req = isahc::Request::post(&format!("{}/session", &self.config.host))
+                .header("Content-Type", "application/json; charset=utf-8")
+                .body(INIT_REQUEST)?;
+            write_to_fd(
+                self.log_fd,
+                &serde_json::to_string(&serde_json::json!({
+                    "target": "genvm::web-funcs::get_session",
+                    "request": format!("{req:?}"),
+                }))
+                .unwrap(),
+            );
+            let mut opened_session_res = isahc::send(req)?;
             let body = response::read(&mut opened_session_res)?;
             let val: serde_json::Value = serde_json::from_str(&body)?;
             let session_id = val
@@ -118,6 +126,7 @@ impl Impl {
             session_id: None,
             config,
             should_quit: args.should_quit,
+            log_fd: args.log_fd,
         })
     }
 
@@ -145,16 +154,26 @@ impl Impl {
                 let session_id = self.get_session()?;
 
                 let client = reqwest::Client::new();
-                let req = serde_json::json!({
+                let req_body = serde_json::json!({
                     "url": url.as_str()
                 });
-                let req = serde_json::to_string(&req)?;
-                let res = client
+                let req_body = serde_json::to_string(&req_body)?;
+                let req = client
                     .post(&format!("{}/session/{}/url", self.config.host, session_id))
                     .header("Content-Type", "application/json; charset=utf-8")
-                    .body(req)
-                    .send()
-                    .await?;
+                    .body(req_body.clone());
+
+                write_to_fd(
+                    self.log_fd,
+                    &serde_json::to_string(&serde_json::json!({
+                        "target": "genvm::web-funcs::get_webpage",
+                        "request": format!("{req:?}"),
+                        "body": &req_body,
+                    }))
+                    .unwrap(),
+                );
+
+                let res = req.send().await?;
                 let res = res.error_for_status()?;
                 std::mem::drop(res);
 
@@ -167,15 +186,24 @@ impl Impl {
                     }
                 };
 
-                let res = client
+                let req = client
                     .post(&format!(
                         "{}/session/{}/execute/sync",
                         self.config.host, session_id
                     ))
                     .header("Content-Type", "application/json; charset=utf-8")
-                    .body(script)
-                    .send()
-                    .await?;
+                    .body(script);
+                write_to_fd(
+                    self.log_fd,
+                    &serde_json::to_string(&serde_json::json!({
+                        "target": "genvm::web-funcs::get_webpage",
+                        "request": format!("{req:?}"),
+                        "body": script,
+                    }))
+                    .unwrap(),
+                );
+
+                let res = req.send().await?;
 
                 let res = res.error_for_status()?;
 
