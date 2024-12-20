@@ -115,12 +115,19 @@ class ContractAt(GenVMContractProxy):
 	def view(self):
 		"""
 		Namespace with all view methods
+
+		:returns: object supporting ``.name(*args, **kwargs)`` that calls a contract and returns its result (:py:type:`~typing.Any`) or rises its :py:class:`~genlayer.py.types.Rollback`
+
+		.. note::
+			supports ``name.lazy(*args, **kwargs)`` call version
 		"""
 		return _ContractAtView(self.addr, {})
 
 	def emit(self, **data: typing.Unpack[TransactionDataKwArgs]):
 		"""
 		Namespace with write message
+
+		:returns: object supporting ``.name(*args, **kwargs)`` that emits a message and returns :py:obj:`None`
 		"""
 		return _ContractAtEmit(self.addr, data)
 

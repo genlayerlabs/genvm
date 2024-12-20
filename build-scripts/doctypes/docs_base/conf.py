@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import sys
 import typing
+import enum
 
 import sphinx.ext.autodoc
 
@@ -92,7 +93,7 @@ def setup(app):
 
 	def handle_skip_member(app, what, name, obj, skip, options):
 		if what == 'module' and isinstance(obj, type):
-			if any(base in obj.mro() for base in [dict, tuple]):
+			if any(base in obj.mro() for base in [dict, tuple, bytes, enum.Enum]):
 				options['special-members'] = []
 				options['inherited-members'] = False
 				return

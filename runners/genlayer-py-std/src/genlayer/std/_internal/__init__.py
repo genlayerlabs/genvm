@@ -61,6 +61,7 @@ def _lazy_api[T, **R](fn: typing.Callable[R, Lazy[T]]) -> LazyApi[T, R]:
 		annots: dict = dict(fn.__annotations__)
 		annots['return'] = annots['return'].__args__[0]
 		eager.__annotations__ = annots
+		eager.__module__ = fn.__module__
 		import inspect
 		import textwrap
 

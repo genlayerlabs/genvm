@@ -1,4 +1,4 @@
-__all__ = ('TreeMap',)
+__all__ = ('TreeMap', 'Comparable')
 
 import abc
 import typing
@@ -38,6 +38,8 @@ class Comparable(typing.Protocol):
 class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 	"""
 	Represents a mapping from keys to values that can be persisted on the blockchain
+
+	``K`` must implement :py:class:`genlayer.py.storage.tree_map.Comparable` protocol ("<" and "=" are needed)
 	"""
 
 	_root: u32
@@ -51,6 +53,11 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 		:raises TypeError: always
 		"""
 		raise TypeError("this class can't be instantiated by user")
+
+	def clear(self):
+		self._root = u32(0)
+		self._slots.clear()
+		self._free_slots.clear()
 
 	def __len__(self) -> int:
 		return len(self._slots) - len(self._free_slots)

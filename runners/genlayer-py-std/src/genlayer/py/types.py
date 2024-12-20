@@ -9,126 +9,6 @@ import collections.abc
 from .keccak import Keccak256
 
 
-class Address:
-	"""
-	Represents GenLayer Address
-	"""
-
-	SIZE = 20
-	"""
-	Constant that represents size of a Genlayer address
-	"""
-
-	__slots__ = ('_as_bytes', '_as_hex')
-
-	_as_bytes: bytes
-	_as_hex: str | None
-
-	def __init__(self, val: str | collections.abc.Buffer):
-		"""
-		:param val: either a hex encoded address (that starts with '0x'), or base64 encoded address, or buffer of 20 bytes
-
-		.. warning::
-			checksum validation is not performed
-		"""
-		self._as_hex = None
-		if isinstance(val, str):
-			if len(val) == 2 + Address.SIZE * 2 and val.startswith('0x'):
-				val = bytes.fromhex(val[2:])
-			elif len(val) > Address.SIZE:
-				val = base64.b64decode(val)
-		else:
-			val = bytes(val)
-		if not isinstance(val, bytes) or len(val) != Address.SIZE:
-			raise Exception(f'invalid address {val}')
-		self._as_bytes = val
-
-	@property
-	def as_bytes(self) -> bytes:
-		"""
-		:returns: raw bytes of an address (most compact representation)
-		"""
-		return self._as_bytes
-
-	@property
-	def as_hex(self) -> str:
-		"""
-		:returns: checksum string representation
-		"""
-		if self._as_hex is None:
-			simple = self._as_bytes.hex()
-			hasher = Keccak256()
-			hasher.update(simple.encode('ascii'))
-			low_up = hasher.digest().hex()
-			res = ['0', 'x']
-			for i in range(len(simple)):
-				if low_up[i] in ['0', '1', '2', '3', '4', '5', '6', '7']:
-					res.append(simple[i])
-				else:
-					res.append(simple[i].upper())
-			self._as_hex = ''.join(res)
-		return self._as_hex
-
-	@property
-	def as_b64(self) -> str:
-		"""
-		:returns: base64 representation of an address (most compact string)
-		"""
-		return str(base64.b64encode(self.as_bytes), encoding='ascii')
-
-	@property
-	def as_int(self) -> int:
-		"""
-		:returns: int representation of an address (unsigned little endian)
-		"""
-		return int.from_bytes(self._as_bytes, 'little', signed=False)
-
-	def __hash__(self):
-		return hash(self._as_bytes)
-
-	def __lt__(self, r):
-		assert isinstance(r, Address)
-		return self._as_bytes < r._as_bytes
-
-	def __le__(self, r):
-		assert isinstance(r, Address)
-		return self._as_bytes <= r._as_bytes
-
-	def __eq__(self, r):
-		if not isinstance(r, Address):
-			return False
-		return self._as_bytes == r._as_bytes
-
-	def __ge__(self, r):
-		assert isinstance(r, Address)
-		return self._as_bytes >= r._as_bytes
-
-	def __gt__(self, r):
-		assert isinstance(r, Address)
-		return self._as_bytes > r._as_bytes
-
-	def __repr__(self) -> str:
-		return 'Address("' + self.as_hex + '")'
-
-	def __str__(self) -> str:
-		return self.as_hex
-
-	def __format__(self, fmt: typing.Literal['x', 'b64', 'cd', '']) -> str:  # type: ignore
-		match fmt:
-			case 's':
-				return self.__str__()
-			case 'x':
-				return self.as_hex
-			case 'b64':
-				return self.as_b64
-			case 'cd':
-				return 'addr#' + ''.join(['{:02x}'.format(x) for x in self._as_bytes])
-			case '':
-				return repr(self)
-			case fmt:
-				raise TypeError(f'unsupported format {fmt!r}')
-
-
 u8 = typing.NewType('u8', int)
 u16 = typing.NewType('u16', int)
 u24 = typing.NewType('u24', int)
@@ -245,3 +125,138 @@ class Lazy[T]:
 		if self._exc is not None:
 			raise self._exc
 		return self._res  # type: ignore
+
+
+class Address:
+	"""
+	Represents GenLayer Address
+	"""
+
+	SIZE: typing.Final[int] = 20
+	"""
+	Constant that represents size of a Genlayer address
+	"""
+
+	__slots__ = ('_as_bytes', '_as_hex')
+
+	_as_bytes: bytes
+	_as_hex: str | None
+
+	def __init__(self, val: str | collections.abc.Buffer):
+		"""
+		:param val: either a hex encoded address (that starts with '0x'), or base64 encoded address, or buffer of 20 bytes
+
+		.. warning::
+			checksum validation is not performed
+		"""
+		self._as_hex = None
+		if isinstance(val, str):
+			if len(val) == 2 + Address.SIZE * 2 and val.startswith('0x'):
+				val = bytes.fromhex(val[2:])
+			elif len(val) > Address.SIZE:
+				val = base64.b64decode(val)
+		else:
+			val = bytes(val)
+		if not isinstance(val, bytes) or len(val) != Address.SIZE:
+			raise Exception(f'invalid address {val}')
+		self._as_bytes = val
+
+	@property
+	def as_bytes(self) -> bytes:
+		"""
+		>>> Address('0x5b38da6a701c568545dcfcb03fcb875f56beddc4').as_bytes
+		b'[8\\xdajp\\x1cV\\x85E\\xdc\\xfc\\xb0?\\xcb\\x87_V\\xbe\\xdd\\xc4'
+
+		:returns: raw bytes of an address (most compact representation)
+		"""
+		return self._as_bytes
+
+	@property
+	def as_hex(self) -> str:
+		"""
+		>>> Address('0x5b38da6a701c568545dcfcb03fcb875f56beddc4').as_hex
+		'0x5B38Da6a701c568545dCfcB03FcB875f56beddC4'
+
+		:returns: checksum string representation
+		"""
+		if self._as_hex is None:
+			simple = self._as_bytes.hex()
+			hasher = Keccak256()
+			hasher.update(simple.encode('ascii'))
+			low_up = hasher.digest().hex()
+			res = ['0', 'x']
+			for i in range(len(simple)):
+				if low_up[i] in ['0', '1', '2', '3', '4', '5', '6', '7']:
+					res.append(simple[i])
+				else:
+					res.append(simple[i].upper())
+			self._as_hex = ''.join(res)
+		return self._as_hex
+
+	@property
+	def as_b64(self) -> str:
+		"""
+		>>> Address('0x5b38da6a701c568545dcfcb03fcb875f56beddc4').as_b64
+		'WzjaanAcVoVF3PywP8uHX1a+3cQ='
+
+		:returns: base64 representation of an address (most compact string)
+		"""
+		return str(base64.b64encode(self.as_bytes), encoding='ascii')
+
+	@property
+	def as_int(self) -> u160:
+		"""
+		>>> Address('0x5b38da6a701c568545dcfcb03fcb875f56beddc4').as_int
+		1123907236495940146162314350759402901750813440091
+		>>> hex(Address('0x5b38da6a701c568545dcfcb03fcb875f56beddc4').as_int)
+		'0xc4ddbe565f87cb3fb0fcdc4585561c706ada385b'
+
+
+		:returns: int representation of an address (unsigned little endian)
+		"""
+		return u160(int.from_bytes(self._as_bytes, 'little', signed=False))
+
+	def __hash__(self):
+		return hash(self._as_bytes)
+
+	def __lt__(self, r):
+		assert isinstance(r, Address)
+		return self._as_bytes < r._as_bytes
+
+	def __le__(self, r):
+		assert isinstance(r, Address)
+		return self._as_bytes <= r._as_bytes
+
+	def __eq__(self, r):
+		if not isinstance(r, Address):
+			return False
+		return self._as_bytes == r._as_bytes
+
+	def __ge__(self, r):
+		assert isinstance(r, Address)
+		return self._as_bytes >= r._as_bytes
+
+	def __gt__(self, r):
+		assert isinstance(r, Address)
+		return self._as_bytes > r._as_bytes
+
+	def __repr__(self) -> str:
+		return 'Address("' + self.as_hex + '")'
+
+	def __str__(self) -> str:
+		return self.as_hex
+
+	def __format__(self, fmt: typing.Literal['x', 'b64', 'cd', '']) -> str:  # type: ignore
+		match fmt:
+			case 's':
+				return self.__str__()
+			case 'x':
+				return self.as_hex
+			case 'b64':
+				return self.as_b64
+			case 'cd':
+				return 'addr#' + ''.join(['{:02x}'.format(x) for x in self._as_bytes])
+			case '':
+				return repr(self)
+			case fmt:
+				raise TypeError(f'unsupported format {fmt!r}')

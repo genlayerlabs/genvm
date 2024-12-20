@@ -23,12 +23,13 @@ Implements keccak hash
 Source code is taken from `https://github.com/ctz/keccak <https://github.com/ctz/keccak>`_ (Apache 2.0 license)
 """
 
-__all__ = ('Keccak256',)
+__all__ = ('Keccak256', 'KeccakHash')
 
 from math import log
 from operator import xor
 from copy import deepcopy
 from functools import reduce
+import collections.abc
 
 # The Keccak-f round constants.
 RoundConstants = [
@@ -350,6 +351,8 @@ class KeccakHash:
 	The Keccak hash function, with a hashlib-compatible interface.
 	"""
 
+	__slots__ = ('sponge', 'digest_size', 'block_size')
+
 	def __init__(self, bitrate_bits, capacity_bits, output_bits):
 		# our in-absorption sponge. this is never given padding
 		assert bitrate_bits + capacity_bits in (25, 50, 100, 200, 400, 800, 1600)
@@ -373,16 +376,16 @@ class KeccakHash:
 	def copy(self):
 		return deepcopy(self)
 
-	def update(self, s):
+	def update(self, s: collections.abc.Buffer) -> None:
 		self.sponge.absorb(s)
 
-	def digest(self):
+	def digest(self) -> bytes:
 		finalised = self.sponge.copy()
 		finalised.absorb_final()
 		digest = finalised.squeeze(self.digest_size)
 		return KeccakState.ilist2bytes(digest)
 
-	def hexdigest(self):
+	def hexdigest(self) -> str:
 		return self.digest().hex()
 
 	@staticmethod
@@ -392,7 +395,7 @@ class KeccakHash:
 		The function accepts an optional initial input, ala hashlib.
 		"""
 
-		def create(initial_input=None):
+		def create(initial_input: collections.abc.Buffer | None = None):
 			h = KeccakHash(bitrate_bits, capacity_bits, output_bits)
 			if initial_input is not None:
 				h.update(initial_input)
@@ -402,3 +405,6 @@ class KeccakHash:
 
 
 Keccak256 = KeccakHash.preset(1088, 512, 256)
+"""
+Default preset for Keccak hash that is the same as one used in eth
+"""

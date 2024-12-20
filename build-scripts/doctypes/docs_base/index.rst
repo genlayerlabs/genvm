@@ -7,4 +7,5 @@ GenLayer SDK API Documentation
 
    genlayer
    genlayer.std
+   genlayer.std.advanced
    other

@@ -1,8 +1,17 @@
 """
 This module provides some "advanced" features that can be used for optimizations
 
-If you are using something "advanced" you must know what you do
+.. warning::
+	If you are using something "advanced" you must know what you do
 """
+
+__all__ = (
+	'AlreadySerializedResult',
+	'ContractReturn',
+	'ContractError',
+	'run_nondet',
+	'validator_handle_rollbacks_and_errors_default',
+)
 
 import typing
 
@@ -56,7 +65,7 @@ def run_nondet[T](
 
 	Uses cloudpickle to pass a "function" to sub VM
 
-	.. note:
+	.. note::
 		If validator_fn produces an error and leader_fn produces an error, executor itself will set result of this block to "agree" and fail entire contract with leader's error.
 		This is done because not all errors can be caught in code itself (i.e. ``exit``).
 		If this behavior is not desired, just fast return ``False`` for leader error result.
@@ -77,7 +86,7 @@ def validator_handle_rollbacks_and_errors_default(
 
 	Errors and rollbacks are always checked for strict equality, which means that it's user responsibility to dump least possible text in there
 
-	:returns: :py:class:`ContractReturn`.data iff both results are not errors/rollbacks
+	:returns: :py:class:`ContractReturn` data fields as ``(validator, leader)``` *iff* both results are not errors/rollbacks
 	"""
 	try:
 		res = fn()
