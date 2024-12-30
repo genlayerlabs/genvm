@@ -70,10 +70,8 @@ pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
             .store(1, std::sync::atomic::Ordering::SeqCst);
     };
     unsafe {
-        signal_hook::low_level::register(
-            signal_hook::consts::SIGTERM | signal_hook::consts::SIGINT,
-            handle_sigterm,
-        )?;
+        signal_hook::low_level::register(signal_hook::consts::SIGTERM, handle_sigterm.clone())?;
+        signal_hook::low_level::register(signal_hook::consts::SIGINT, handle_sigterm)?;
     }
 
     let res =
