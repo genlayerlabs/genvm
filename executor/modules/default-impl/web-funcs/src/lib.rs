@@ -12,21 +12,6 @@ use crate::interfaces::RecoverableError;
 
 mod response;
 
-struct MyAlloc;
-
-unsafe impl std::alloc::GlobalAlloc for MyAlloc {
-    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-        libc::malloc(layout.size()) as *mut u8
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, _layout: std::alloc::Layout) {
-        libc::free(ptr as *mut std::ffi::c_void)
-    }
-}
-
-#[global_allocator]
-static A: MyAlloc = MyAlloc;
-
 genvm_modules_common::default_base_functions!(web_functions_api, Impl);
 
 struct Impl {

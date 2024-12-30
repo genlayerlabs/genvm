@@ -311,6 +311,7 @@ async def run_host_and_program(
 			await wait_all_timeout()
 
 	if not coro_proc.done():
+		await wait_all_timeout()
 		try:
 			process.terminate()
 		except:
