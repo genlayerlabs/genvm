@@ -92,6 +92,7 @@ py_runner_target = target_publish_runner(
 			{ When: { cond: "det", action: { Depends: softfloat_target.meta.runner_dep_id } } },
 			{ AddEnv: { name: "pwd", val: "/" } },
 			{ MapFile: { to: "/py/std", file: "py/" }},
+			{ AddEnv: { name: "PYTHONHOME", val: "/py/std" } },
 			{ AddEnv: { name: "PYTHONPATH", val: "/py/std:/py/libs" } },
 			{ When: { cond: "det", action: { StartWasm: "cpython.wasm" } } },
 			{ When: { cond: "nondet", action: { StartWasm: "cpython.nondet.wasm" } } },

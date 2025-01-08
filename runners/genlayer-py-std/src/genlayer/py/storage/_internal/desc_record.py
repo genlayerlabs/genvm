@@ -26,7 +26,7 @@ class _RecordDesc[T: WithRecordStorageSlot](TypeDesc):
 		return self.view_ctor(self, slot, off)
 
 	def set(self, slot: StorageSlot, off: int, val: T) -> None:
-		assert val.__type_desc__ == self
+		assert val.__type_desc__ == self, f'Is right a storage type? {type(val)}'
 		actions_apply_copy(self.copy_actions, slot, off, val._storage_slot, val._off)
 
 	def __eq__(self, r):

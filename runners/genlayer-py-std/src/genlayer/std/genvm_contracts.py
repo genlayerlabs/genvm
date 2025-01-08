@@ -235,7 +235,13 @@ def deploy_contract(
 	:param args: arguments to be encoded into calldata
 	:param kwargs: keyword arguments to be encoded into calldata
 
-	:returns: address of new contract *iff* ``salt_nonce`` was provided
+	:returns: address of new contract *iff* non-zero ``salt_nonce`` was provided
+
+	.. info::
+		Refer to consensus documentation for exact specification of
+
+		- ``salt_nonce`` requirements and it's effect on address
+		- order of transactions
 	"""
 	salt_nonce = data.setdefault('salt_nonce', u256(0))
 	wasi.deploy_contract(
