@@ -73,14 +73,17 @@ class VecDB[T: np.number, S: int, V]:
 
 	#. vector (can have duplicates)
 	#. id (int alias, can't have duplicates)
+
+	.. warning::
+		import :py:mod:`numpy` before ``from genlayer import *`` if you wish to use :py:class:`VecDB`!
 	"""
 
-	Id: type = _Id
+	Id: typing.ClassVar[type] = _Id
 	"""
 	:py:class:`int` alias to prevent confusion
 	"""
 
-	Element = VecDBElement
+	Element = typing.ClassVar[VecDBElement]
 	"""
 	Shorthand to prevent global namespace pollution
 	"""

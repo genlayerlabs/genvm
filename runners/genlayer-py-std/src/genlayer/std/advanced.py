@@ -69,6 +69,9 @@ def run_nondet[T](
 		If validator_fn produces an error and leader_fn produces an error, executor itself will set result of this block to "agree" and fail entire contract with leader's error.
 		This is done because not all errors can be caught in code itself (i.e. ``exit``).
 		If this behavior is not desired, just fast return ``False`` for leader error result.
+
+	.. warning::
+		All sub-vm returns go through :py:mod:`genlayer.py.calldata` encoding
 	"""
 	import cloudpickle
 	from ._internal import lazy_from_fd, decode_sub_vm_result

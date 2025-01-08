@@ -121,15 +121,6 @@ def sandbox(data: typing.Callable[[], typing.Any]) -> Lazy[typing.Any]:
 		It returns result via pickle, which can be unsafe. If it is not desired wrap it to bytes yourself
 	"""
 	import cloudpickle
-	import genlayer.py.calldata as calldata
+	from ._internal import decode_sub_vm_result
 
-	def decode(x: collections.abc.Buffer):
-		res = decode_sub_vm_result_retn(x)
-		if isinstance(res, advanced.ContractReturn):
-			return cloudpickle.loads(res.data)
-		if isinstance(res, Rollback):
-			raise res
-		if isinstance(res, advanced.ContractError):
-			raise Exception(res)
-
-	return lazy_from_fd(wasi.sandbox(cloudpickle.dumps(data)), decode)
+	return lazy_from_fd(wasi.sandbox(cloudpickle.dumps(data)), decode_sub_vm_result)

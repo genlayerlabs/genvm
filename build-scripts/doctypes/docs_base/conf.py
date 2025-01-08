@@ -5,6 +5,8 @@ import sys
 import typing
 import enum
 
+import numpy
+
 import sphinx.ext.autodoc
 
 project = 'GenLayer'
@@ -42,7 +44,10 @@ sys.path.append(str(root_dir.joinpath(*MONOREPO_CONF['py-std'])))
 os.environ['GENERATING_DOCS'] = 'true'
 
 master_doc = 'index'
-intersphinx_mapping = {'python': ('https://docs.python.org/3.12', None)}
+intersphinx_mapping = {
+	'python': ('https://docs.python.org/3.12', None),
+	'numpy': ('https://numpy.org/doc/stable/', None),
+}
 
 ignored_special = [
 	'__dict__',

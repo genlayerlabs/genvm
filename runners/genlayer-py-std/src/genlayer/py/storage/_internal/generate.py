@@ -7,6 +7,7 @@ __all__ = ('storage',)
 from genlayer.py.types import *
 
 import typing
+import sys
 import struct
 
 from .core import *
@@ -169,10 +170,10 @@ def _storage_build_handle_special(
 	cls: type | _Instantiation,
 	generics_map: dict[str, TypeDesc | Lit],
 ) -> tuple[bool, type | _Instantiation | Lit | TypeDesc]:
-	# if np is not None and origin is np.dtype:
-	# args = typing.get_args(cls)
-	# assert len(args) == 1
-	# return True, _storage_build(args[0], generics_map)
+	if 'numpy' in sys.modules and origin is sys.modules['numpy'].dtype:
+		args = typing.get_args(cls)
+		assert len(args) == 1
+		return True, _storage_build(args[0], generics_map)
 	if origin is typing.Literal:
 		return True, LitPy(typing.get_args(cls))
 	if origin is tuple:
@@ -191,7 +192,7 @@ def _storage_build_handle_special(
 	return False, cls
 
 
-def _storage_build(
+def _storage_build_inner(
 	cls: type | _Instantiation,
 	generics_map: dict[str, TypeDesc | Lit],
 ) -> TypeDesc | Lit:
@@ -208,7 +209,12 @@ def _storage_build(
 			return new_cls_special
 		new_cls = new_cls_special
 	elif origin is not None:
-		args = [_storage_build(c, generics_map) for c in typing.get_args(cls)]
+		args: list[TypeDesc | Lit] = []
+		for c_i, c in enumerate(typing.get_args(cls)):
+			try:
+				args.append(_storage_build(c, generics_map))
+			except Exception as e:
+				raise Exception(f'during building generic argument (index {c_i}) {c!r}') from e
 		new_cls = _Instantiation(origin, tuple(args))
 	else:
 		new_cls = cls
@@ -222,6 +228,16 @@ def _storage_build(
 		description = _storage_build_struct(new_cls, generics_map)
 	_known_descs[new_cls] = description
 	return description
+
+
+def _storage_build(
+	cls: type | _Instantiation,
+	generics_map: dict[str, TypeDesc | Lit],
+) -> TypeDesc | Lit:
+	try:
+		return _storage_build_inner(cls, generics_map)
+	except Exception as e:
+		raise Exception(f'during building type/instantiation {cls!r}') from e
 
 
 from .numpy import try_handle_np
@@ -270,9 +286,15 @@ def _storage_build_struct(
 	was_generic = False
 
 	for prop_name, prop_value in typing.get_type_hints(cls).items():
+		if typing.get_origin(prop_value) is typing.ClassVar:
+			continue
+
 		cur_offset: int = size
-		prop_desc = _storage_build(prop_value, generics_map)
-		assert isinstance(prop_desc, TypeDesc)
+		try:
+			prop_desc = _storage_build(prop_value, generics_map)
+			assert isinstance(prop_desc, TypeDesc)
+		except Exception as e:
+			raise Exception(f'during generating field {prop_name}: {prop_value}') from e
 		props[prop_name] = (prop_desc, cur_offset)
 
 		if isinstance(prop_value, typing.TypeVar):

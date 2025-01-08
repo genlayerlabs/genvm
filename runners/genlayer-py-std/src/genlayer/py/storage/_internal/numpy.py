@@ -1,3 +1,5 @@
+# NOTE: this file is needed to prevent numpy from loading into every contract
+
 __all__ = ('try_handle_np',)
 
 import sys
@@ -36,14 +38,15 @@ def _populate_np_descs():
 		def __init__(self, typ: np.number):
 			type = np.dtype(typ)
 			TypeDesc.__init__(self, type.itemsize, [type.itemsize])
-			self._type = typ
+			self._type = type
+			self._typ = typ
 
 		def get(self, slot: StorageSlot, off: int):
 			dat = slot.read(off, self.size)
-			return np.frombuffer(dat, self._type).reshape((1,))[0]
+			return np.frombuffer(dat, self._typ).reshape((1,))[0]
 
 		def set(self, slot: StorageSlot, off: int, val):
-			slot.write(off, self._type.tobytes(val))
+			slot.write(off, self._typ.tobytes(val))
 
 	_all_np_types: list[type[np.number]] = [
 		np.uint8,
@@ -95,7 +98,6 @@ else:
 
 	class _NpDetector(importlib.abc.MetaPathFinder):
 		def find_spec(self, fullname, path, target=None):
-			print(fullname, path, target)
 			if fullname == 'numpy':
 				sys.meta_path.remove(self)
 				_populate_np_descs()

@@ -19,7 +19,9 @@ from ._internal import decode_sub_vm_result, lazy_from_fd
 
 
 def _make_calldata_obj(method, args, kwargs):
-	ret = {'method': method}
+	ret = {}
+	if method is not None:
+		ret['method'] = method
 	if len(args) > 0:
 		ret.update({'args': args})
 	if len(kwargs) > 0:
@@ -230,16 +232,14 @@ def deploy_contract(
 
 	:param code: code (i.e. contents of a python file) of the contract
 
+	:param args: arguments to be encoded into calldata
+	:param kwargs: keyword arguments to be encoded into calldata
+
 	:returns: address of new contract *iff* ``salt_nonce`` was provided
 	"""
 	salt_nonce = data.setdefault('salt_nonce', u256(0))
 	wasi.deploy_contract(
-		calldata.encode(
-			{
-				'args': args,
-				'kwargs': kwargs,
-			}
-		),
+		calldata.encode(_make_calldata_obj(None, args, kwargs)),
 		code,
 		json.dumps(data),
 	)

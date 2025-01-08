@@ -1,7 +1,7 @@
 """
 This module is responsible for working with genvm calldata
 
-Calldata supports following types:
+Calldata natively supports following types:
 
 #. Primitive types:
 
@@ -10,9 +10,8 @@ Calldata supports following types:
 
 #. Composite types:
 
-	#. :py:class:`list` and :py:class:`dict`, as well as :py:class:`collections.abc.Sequence` and :py:class:`collections.abc.Mapping`
-	#. :py:class:`CalldataEncodable`
-	# :py:mod:`dataclasses`
+	#. :py:class:`list` (and any other :py:class:`collections.abc.Sequence`)
+	#. :py:class:`dict` with :py:class:`str` keys (and any other :py:class:`collections.abc.Mapping` with :py:class:`str` keys)
 
 For full calldata specification see `genvm repo <https://github.com/yeagerai/genvm/blob/main/doc/calldata.md>`_
 """
@@ -69,7 +68,11 @@ def encode(
 	:param default: function to be applied to each object recursively, it must return object encodable to calldata
 
 	.. warning::
-		All composite types will be coerced to :py:class:`dict` and :py:class:`list`, so custom type information won't be preserved
+		All composite types in the end are coerced to :py:class:`dict` and :py:class:`list`, so custom type information is *not* be preserved.
+		Such types include:
+
+		#. :py:class:`CalldataEncodable`
+		#. :py:mod:`dataclasses`
 	"""
 	mem = bytearray()
 
