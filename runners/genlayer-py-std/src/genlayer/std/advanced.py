@@ -43,11 +43,11 @@ class ContractReturn:
 
 
 @dataclass
-class ContractError:
+class ContractError(Exception):
 	"""
 	Represents "Contract error" result of a contract that is passed to validator function of :py:func:`genlayer.std.run_nondet`
 
-	Validating leader output is the only place where contract can "handle" contract error
+	Validating leader output and sandbox invocation are only places where contract can "handle" contract error
 	"""
 
 	data: str

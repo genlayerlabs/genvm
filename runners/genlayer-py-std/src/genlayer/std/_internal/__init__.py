@@ -23,9 +23,8 @@ def decode_sub_vm_result_retn(
 
 def decode_sub_vm_result(data: collections.abc.Buffer) -> typing.Any:
 	dat = decode_sub_vm_result_retn(data)
-	if isinstance(dat, Rollback):
+	if isinstance(dat, (Rollback, ContractError)):
 		raise dat
-	assert isinstance(dat, ContractReturn)
 	return dat.data
 
 

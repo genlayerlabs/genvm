@@ -154,7 +154,11 @@ def encode(
 	return bytes(mem)
 
 
-def decode(mem0: collections.abc.Buffer) -> typing.Any:
+def decode(
+	mem0: collections.abc.Buffer,
+	*,
+	memview2bytes: typing.Callable[[memoryview], typing.Any] = bytes,
+) -> typing.Any:
 	"""
 	Decodes calldata encoded bytes into python DSL
 
@@ -199,7 +203,7 @@ def decode(mem0: collections.abc.Buffer) -> typing.Any:
 		elif typ == TYPE_BYTES:
 			ret_bytes = mem[:code]
 			mem = mem[code:]
-			return ret_bytes
+			return memview2bytes(ret_bytes)
 		elif typ == TYPE_STR:
 			ret_str = mem[:code]
 			mem = mem[code:]
