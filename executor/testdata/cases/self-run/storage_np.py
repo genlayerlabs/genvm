@@ -3,20 +3,22 @@
 from genlayer import *
 from genlayer.py.storage._internal.generate import storage
 
+import numpy as np
+
 
 @storage
 class Test:
-	foo: float
+	foo: np.float32
 
 	def abc(self):
 		return self.foo
 
 
 tst = Test()
-tst.foo = 0.5
+tst.foo = np.float32(0.5)
 
-assert tst.foo == 0.5
-assert type(tst.foo) is float
+assert tst.foo == 0.5, f'{tst.foo}'
+assert type(tst.foo) is np.float32, f'{type(tst.foo)}'
 print(tst.foo)
 
 exit(0)
