@@ -375,3 +375,131 @@ pub extern "C-unwind" fn exec_prompt_id(
         .and_then(|vars| ctx.exec_prompt_id(gas, template_id, vars));
     interfaces::serialize_result(res)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::AtomicU32;
+
+    use genvm_modules_common::interfaces::llm_functions_api::VERSION;
+
+    use crate::Impl;
+
+    mod conf {
+        pub const openai: &str = r#"{
+            "host": "https://api.openai.com",
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "key_env_name": "OPENAIKEY"
+        }"#;
+
+        pub const heurist: &str = r#"{
+            "host": "https://llm-gateway.heurist.xyz",
+            "provider": "heurist",
+            "model": "mistralai/mixtral-8x7b-instruct",
+            "key_env_name": "HEURISTKEY"
+        }"#;
+
+        pub const anthropic: &str = r#"{
+            "host": "https://api.anthropic.com",
+            "provider": "anthropic",
+            "model": "claude-3-5-sonnet-20241022",
+            "key_env_name": "ANTHROPICKEY"
+        }"#;
+
+        pub const xai: &str = r#"{
+            "host": "https://api.x.ai/v1",
+            "provider": "xai",
+            "model": "grok-2-1212",
+            "key_env_name": "XAIKEY"
+        }"#;
+
+        pub const google: &str = r#"{
+            "host": "https://generativelanguage.googleapis.com",
+            "provider": "google",
+            "model": "gemini-1.5-flash",
+            "key_env_name": "GEMINIKEY"
+        }"#;
+    }
+
+    extern "C-unwind" fn no_thread_pool(
+        _: *const (),
+        _: *const (),
+        _: extern "C-unwind" fn(*const ()),
+    ) {
+    }
+
+    fn do_test_text(conf: &str) {
+        use genvm_modules_common::*;
+        let should_quit = AtomicU32::new(0);
+        let mut imp = Impl::try_new(&CtorArgs {
+            version: VERSION,
+            thread_pool: SharedThreadPoolABI {
+                ctx: std::ptr::null(),
+                submit_task: no_thread_pool,
+            },
+            module_config: conf.as_ptr(),
+            module_config_len: conf.len(),
+            log_fd: 2,
+            should_quit: should_quit.as_ptr(),
+        })
+        .unwrap();
+
+        let mut fake_gas = 0;
+        let res = imp
+            .exec_prompt(
+                &mut fake_gas,
+                "{}",
+                "Respond with \"yes\" (without quotes) and only this word",
+            )
+            .unwrap();
+
+        assert_eq!(res.to_lowercase(), "yes")
+    }
+
+    fn do_test_json(conf: &str) {
+        use genvm_modules_common::*;
+        let should_quit = AtomicU32::new(0);
+        let mut imp = Impl::try_new(&CtorArgs {
+            version: VERSION,
+            thread_pool: SharedThreadPoolABI {
+                ctx: std::ptr::null(),
+                submit_task: no_thread_pool,
+            },
+            module_config: conf.as_ptr(),
+            module_config_len: conf.len(),
+            log_fd: 2,
+            should_quit: should_quit.as_ptr(),
+        })
+        .unwrap();
+
+        let mut fake_gas = 0;
+        let res = imp.exec_prompt(&mut fake_gas, "{\"response_format\": \"json\"}", "respond with json object containing single key \"result\" and associated value being a random integer from 0 to 100 (inclusive)").unwrap();
+
+        let res: serde_json::Value = serde_json::from_str(&res).unwrap();
+        let res = res.as_object().unwrap();
+        assert_eq!(res.len(), 1);
+        let res = res.get("result").unwrap().as_i64().unwrap();
+        assert!(res >= 0 && res <= 100)
+    }
+
+    macro_rules! make_test {
+        ($conf:ident) => {
+            mod $conf {
+                #[test]
+                fn text() {
+                    crate::tests::do_test_text(crate::tests::conf::$conf)
+                }
+                #[test]
+                fn json() {
+                    crate::tests::do_test_json(crate::tests::conf::$conf)
+                }
+            }
+        };
+    }
+
+    make_test!(openai);
+    make_test!(heurist);
+    make_test!(anthropic);
+    make_test!(xai);
+    make_test!(google);
+}
