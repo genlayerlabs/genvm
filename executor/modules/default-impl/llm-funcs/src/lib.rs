@@ -19,11 +19,15 @@ enum LLLMProvider {
     Ollama,
     Openai,
     Simulator,
+    Heurist,
+    Anthropic,
+    Xai,
+    Google,
 }
 
 struct Impl {
     config: Config,
-    openai_key: String,
+    api_key: String,
     log_fd: std::os::fd::RawFd,
 }
 
@@ -48,6 +52,8 @@ struct Config {
     host: String,
     provider: LLLMProvider,
     model: String,
+    #[serde(default = "String::new")]
+    key_env_name: String,
     #[serde(default = "default_equivalence_prompt_comparative")]
     equivalence_prompt_comparative: String,
     #[serde(default = "default_equivalence_prompt_non_comparative")]
@@ -60,10 +66,11 @@ impl Impl {
     fn try_new(args: &CtorArgs) -> Result<Self> {
         let conf: &str = args.config()?;
         let config: Config = serde_json::from_str(conf)?;
+        let api_key = std::env::var(&config.key_env_name).unwrap_or("".into());
         Ok(Impl {
             config,
             log_fd: args.log_fd,
-            openai_key: std::env::var("OPENAIKEY").unwrap_or("".into()),
+            api_key,
         })
     }
 
@@ -119,7 +126,7 @@ impl Impl {
                 *gas -= (eval_duration << 4).min(*gas);
                 Ok(response.into())
             }
-            LLLMProvider::Openai => {
+            LLLMProvider::Openai | LLLMProvider::Heurist => {
                 let mut request = serde_json::json!({
                     "model": &self.config.model,
                     "messages": [{
@@ -142,27 +149,17 @@ impl Impl {
                 let mut res = isahc::send(
                     isahc::Request::post(&format!("{}/v1/chat/completions", self.config.host))
                         .header("Content-Type", "application/json")
-                        .header("Authorization", &format!("Bearer {}", &self.openai_key))
+                        .header("Authorization", &format!("Bearer {}", &self.api_key))
                         .body(serde_json::to_string(&request)?.as_bytes())?,
                 )?;
                 let res = response::read(&mut res)?;
                 let val: serde_json::Value = serde_json::from_str(&res)?;
                 let response = val
-                    .as_object()
-                    .and_then(|v| v.get("choices"))
-                    .and_then(|v| v.as_array())
-                    .and_then(|v| v.get(0))
-                    .and_then(|v| v.as_object())
-                    .and_then(|v| v.get("message"))
-                    .and_then(|v| v.as_object())
-                    .and_then(|v| v.get("content"))
+                    .pointer("/choices/0/message/content")
                     .and_then(|v| v.as_str())
                     .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
                 let total_tokens = val
-                    .as_object()
-                    .and_then(|v| v.get("usage"))
-                    .and_then(|v| v.as_object())
-                    .and_then(|v| v.get("total_tokens"))
+                    .pointer("/usage/total_tokens")
                     .and_then(|v| v.as_u64())
                     .ok_or(anyhow::anyhow!("can't get eval_duration field {}", &res))?;
                 *gas -= (total_tokens << 8).min(*gas);
@@ -189,6 +186,59 @@ impl Impl {
                     .and_then(|v| v.as_str())
                     .map(String::from)
                     .ok_or(anyhow::anyhow!("can't get response field {}", &res))
+            }
+            LLLMProvider::Anthropic => {
+                let mut request = serde_json::json!({
+                    "model": &self.config.model,
+                    "messages": [{
+                        "role": "user",
+                        "content": prompt,
+                    }],
+                    "max_tokens": 1000,
+                    "stream": false,
+                    "temperature": 0.7,
+                });
+                match response_format {
+                    ExecPromptConfigMode::Text => {}
+                    ExecPromptConfigMode::Json => {
+                        request.as_object_mut().unwrap().insert(
+                            "tools".into(),
+                            serde_json::json!([{
+                                "name": "json_out",
+                                "description": "Output a valid json object",
+                                "input_schema": {
+                                    "type": "object"
+                                }
+                            }]),
+                        );
+                        request.as_object_mut().unwrap().insert(
+                            "tool_choice".into(),
+                            serde_json::json!({
+                                "type": "tool",
+                                "name": "json_out"
+                            }),
+                        );
+                    }
+                }
+                let mut res = isahc::send(
+                    isahc::Request::post(&format!("{}/v1/messages", self.config.host))
+                        .header("Content-Type", "application/json")
+                        .header("x-api-key", &format!("Bearer {}", &self.api_key))
+                        .header("anthropic-version", "2023-06-01")
+                        .body(serde_json::to_string(&request)?.as_bytes())?,
+                )?;
+                let res = response::read(&mut res)?;
+                let val: serde_json::Value = serde_json::from_str(&res)?;
+                let response = val
+                    .pointer("/content/0/input")
+                    .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+                Ok(serde_json::to_string(response)?)
+            }
+            LLLMProvider::Xai => {
+                todo!()
+            }
+            LLLMProvider::Google => {
+                todo!()
             }
         }
     }

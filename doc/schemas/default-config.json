@@ -20,9 +20,10 @@
                     "config": {
                       "type": "object",
                       "properties": {
-                        "host": { "type": "string" },
-                        "provider": { "type": "string" },
-                        "model": { "type": "string" }
+                        "host": { "type": "string", "format": "uri" },
+                        "provider": { "enum": ["openai", "ollama", "simulator", "heurist", "anthropic", "xai", "google"] },
+                        "model": { "type": "string" },
+                        "key_env_name": { "type": "string" }
                       },
                       "required": ["host", "provider", "model"]
                     }
