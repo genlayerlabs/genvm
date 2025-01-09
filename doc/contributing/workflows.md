@@ -1,5 +1,11 @@
 # Common workflows
 
+## Adding new LLM provider
+- go to [`executor/modules/default-impl/llm-funcs/src/lib.rs`](../../executor/modules/default-impl/llm-funcs/src/lib.rs)
+- add new value to `enum LLLMProvider`
+- add case to `exec_prompt_impl`<br>
+    **IMPORTANT**: you must implement it for both text and json modes
+
 ## Adding new wasm function
 - `executor/src/wasi/witx/genlayer_sdk.witx`<br>
     add declaration here
