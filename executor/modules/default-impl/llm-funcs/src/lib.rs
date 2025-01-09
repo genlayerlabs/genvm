@@ -126,7 +126,7 @@ impl Impl {
                 *gas -= (eval_duration << 4).min(*gas);
                 Ok(response.into())
             }
-            LLLMProvider::Openai | LLLMProvider::Heurist => {
+            LLLMProvider::Openai | LLLMProvider::Heurist | LLLMProvider::Xai => {
                 let mut request = serde_json::json!({
                     "model": &self.config.model,
                     "messages": [{
@@ -234,11 +234,30 @@ impl Impl {
                     .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
                 Ok(serde_json::to_string(response)?)
             }
-            LLLMProvider::Xai => {
-                todo!()
-            }
             LLLMProvider::Google => {
-                todo!()
+                let request = serde_json::json!({
+                    "contents": [{
+                        "parts": [
+                            {"text": prompt},
+                        ]
+                    }],
+                    "generationConfig": {
+                        "response_mime_type": "application/json",
+                        "temperature": 0.7,
+                        "maxOutputTokens": 800,
+                    }
+                });
+
+                let mut res = isahc::send(
+                    isahc::Request::post(format!(
+                        "{}/v1beta/models/{}:generateContent?key={}",
+                        self.config.host, self.config.model, self.api_key
+                    ))
+                    .header("Content-Type", "application/json")
+                    .body(serde_json::to_string(&request)?.as_bytes())?,
+                )?;
+                let res = response::read(&mut res)?;
+                Ok(res)
             }
         }
     }
