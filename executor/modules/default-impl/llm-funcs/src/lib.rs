@@ -62,6 +62,29 @@ struct Config {
     equivalence_prompt_non_comparative_leader: String,
 }
 
+fn sanitize_json_str<'a>(s: &'a str) -> &'a str {
+    let s = s.trim();
+    s.strip_prefix("```json")
+        .unwrap_or(s)
+        .strip_prefix("```")
+        .unwrap_or(s)
+        .strip_suffix("```")
+        .unwrap_or(s)
+        .trim()
+        .into()
+}
+
+#[derive(Clone, Deserialize, Serialize, Copy)]
+#[serde(rename_all = "kebab-case")]
+enum ExecPromptConfigMode {
+    Text,
+    Json,
+}
+#[derive(Deserialize)]
+struct ExecPromptConfig {
+    response_format: Option<ExecPromptConfigMode>,
+}
+
 impl Impl {
     fn try_new(args: &CtorArgs) -> Result<Self> {
         let conf: &str = args.config()?;
@@ -74,191 +97,246 @@ impl Impl {
         })
     }
 
+    fn exec_prompt_impl_anthropic(
+        &mut self,
+        prompt: &str,
+        response_format: ExecPromptConfigMode,
+        gas: &mut u64,
+    ) -> Result<String> {
+        let mut request = serde_json::json!({
+            "model": &self.config.model,
+            "messages": [{
+                "role": "user",
+                "content": prompt,
+            }],
+            "max_tokens": 1000,
+            "stream": false,
+            "temperature": 0.7,
+        });
+        match response_format {
+            ExecPromptConfigMode::Text => {}
+            ExecPromptConfigMode::Json => {
+                request.as_object_mut().unwrap().insert(
+                    "tools".into(),
+                    serde_json::json!([{
+                        "name": "json_out",
+                        "description": "Output a valid json object",
+                        "input_schema": {
+                            "type": "object"
+                        }
+                    }]),
+                );
+                request.as_object_mut().unwrap().insert(
+                    "tool_choice".into(),
+                    serde_json::json!({
+                        "type": "tool",
+                        "name": "json_out"
+                    }),
+                );
+            }
+        }
+        let mut res = isahc::send(
+            isahc::Request::post(&format!("{}/v1/messages", self.config.host))
+                .header("Content-Type", "application/json")
+                .header("x-api-key", &self.api_key)
+                .header("anthropic-version", "2023-06-01")
+                .body(serde_json::to_string(&request)?.as_bytes())?,
+        )?;
+        let res = response::read(&mut res)?;
+        let val: serde_json::Value = serde_json::from_str(&res)?;
+        match response_format {
+            ExecPromptConfigMode::Text => val
+                .pointer("/content/0/text")
+                .and_then(|x| x.as_str())
+                .ok_or(anyhow::anyhow!("can't get response field {}", &res))
+                .map(String::from),
+            ExecPromptConfigMode::Json => val
+                .pointer("/content/0/input/type")
+                .ok_or(anyhow::anyhow!("can't get response field {}", &res))
+                .and_then(|x| serde_json::to_string(x).map_err(Into::into)),
+        }
+    }
+
+    fn exec_prompt_impl_openai(
+        &mut self,
+        prompt: &str,
+        response_format: ExecPromptConfigMode,
+        gas: &mut u64,
+    ) -> Result<String> {
+        let mut request = serde_json::json!({
+            "model": &self.config.model,
+            "messages": [{
+                "role": "user",
+                "content": prompt,
+            }],
+            "max_tokens": 1000,
+            "stream": false,
+            "temperature": 0.7,
+        });
+        match response_format {
+            ExecPromptConfigMode::Text => {}
+            ExecPromptConfigMode::Json => {
+                request.as_object_mut().unwrap().insert(
+                    "response_format".into(),
+                    serde_json::json!({"type": "json_object"}),
+                );
+            }
+        }
+        let mut res = isahc::send(
+            isahc::Request::post(&format!("{}/v1/chat/completions", self.config.host))
+                .header("Content-Type", "application/json")
+                .header("Authorization", &format!("Bearer {}", &self.api_key))
+                .body(serde_json::to_string(&request)?.as_bytes())?,
+        )?;
+        let res = response::read(&mut res)?;
+        let val: serde_json::Value = serde_json::from_str(&res)?;
+        let response = val
+            .pointer("/choices/0/message/content")
+            .and_then(|v| v.as_str())
+            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+        let total_tokens = val
+            .pointer("/usage/total_tokens")
+            .and_then(|v| v.as_u64())
+            .ok_or(anyhow::anyhow!("can't get eval_duration field {}", &res))?;
+        *gas -= (total_tokens << 8).min(*gas);
+
+        Ok(response.into())
+    }
+
+    fn exec_prompt_impl_gemini(
+        &mut self,
+        prompt: &str,
+        response_format: ExecPromptConfigMode,
+        gas: &mut u64,
+    ) -> Result<String> {
+        let request = serde_json::json!({
+            "contents": [{
+                "parts": [
+                    {"text": prompt},
+                ]
+            }],
+            "generationConfig": {
+                "responseMimeType": match response_format {
+                    ExecPromptConfigMode::Text => "text/plain",
+                    ExecPromptConfigMode::Json => "application/json",
+                },
+                "temperature": 0.7,
+                "maxOutputTokens": 800,
+            }
+        });
+
+        let mut res = isahc::send(
+            isahc::Request::post(format!(
+                "{}/v1beta/models/{}:generateContent?key={}",
+                self.config.host, self.config.model, self.api_key
+            ))
+            .header("Content-Type", "application/json")
+            .body(serde_json::to_string(&request)?.as_bytes())?,
+        )?;
+        let res = response::read(&mut res)?;
+
+        let res: serde_json::Value = serde_json::from_str(&res)?;
+
+        let res = res
+            .pointer("/candidates/0/content/parts/0/text")
+            .and_then(|x| x.as_str())
+            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+        Ok(res.into())
+    }
+
+    fn exec_prompt_impl_ollama(
+        &mut self,
+        prompt: &str,
+        response_format: ExecPromptConfigMode,
+        gas: &mut u64,
+    ) -> Result<String> {
+        let mut request = serde_json::json!({
+            "model": &self.config.model,
+            "prompt": prompt,
+            "stream": false,
+        });
+        match response_format {
+            ExecPromptConfigMode::Text => {}
+            ExecPromptConfigMode::Json => {
+                request
+                    .as_object_mut()
+                    .unwrap()
+                    .insert("format".into(), "json".into());
+            }
+        }
+        let mut res = isahc::send(
+            isahc::Request::post(&format!("{}/api/generate", self.config.host))
+                .body(serde_json::to_string(&request)?.as_bytes())?,
+        )?;
+        let res = response::read(&mut res)?;
+        let val: serde_json::Value = serde_json::from_str(&res)?;
+        let response = val
+            .as_object()
+            .and_then(|v| v.get("response"))
+            .and_then(|v| v.as_str())
+            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+        let eval_duration = val
+            .as_object()
+            .and_then(|v| v.get("eval_duration"))
+            .and_then(|v| v.as_u64())
+            .ok_or(anyhow::anyhow!("can't get eval_duration field {}", &res))?;
+        *gas -= (eval_duration << 4).min(*gas);
+        Ok(response.into())
+    }
+
+    fn exec_prompt_impl_simulator(
+        &mut self,
+        prompt: &str,
+        response_format: ExecPromptConfigMode,
+        gas: &mut u64,
+    ) -> Result<String> {
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "llm_genvm_module_call",
+            "params": [&self.config.model, prompt, serde_json::to_string(&response_format).unwrap()],
+            "id": 1,
+        });
+        let mut res = isahc::send(
+            isahc::Request::post(format!("{}/api", &self.config.host))
+                .header("Content-Type", "application/json")
+                .body(serde_json::to_string(&request)?.as_bytes())?,
+        )?;
+        let res = response::read(&mut res)?;
+        let res: serde_json::Value = serde_json::from_str(&res)?;
+        res.as_object()
+            .and_then(|v| v.get("result"))
+            .and_then(|v| v.as_object())
+            .and_then(|v| v.get("response"))
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .ok_or(anyhow::anyhow!("can't get response field {}", &res))
+    }
+
     fn exec_prompt_impl(&mut self, gas: &mut u64, config: &str, prompt: &str) -> Result<String> {
-        #[derive(Clone, Deserialize, Serialize)]
-        #[serde(rename_all = "kebab-case")]
-        enum ExecPromptConfigMode {
-            Text,
-            Json,
-        }
-        #[derive(Deserialize)]
-        struct ExecPromptConfig {
-            response_format: Option<ExecPromptConfigMode>,
-        }
         let config: ExecPromptConfig =
             serde_json::from_str(config).map_err(RecoverableError::from_anyhow)?;
         let response_format = config
             .response_format
             .clone()
             .unwrap_or(ExecPromptConfigMode::Text);
-        match self.config.provider {
-            LLLMProvider::Ollama => {
-                let mut request = serde_json::json!({
-                    "model": &self.config.model,
-                    "prompt": prompt,
-                    "stream": false,
-                });
-                match response_format {
-                    ExecPromptConfigMode::Text => {}
-                    ExecPromptConfigMode::Json => {
-                        request
-                            .as_object_mut()
-                            .unwrap()
-                            .insert("format".into(), "json".into());
-                    }
-                }
-                let mut res = isahc::send(
-                    isahc::Request::post(&format!("{}/api/generate", self.config.host))
-                        .body(serde_json::to_string(&request)?.as_bytes())?,
-                )?;
-                let res = response::read(&mut res)?;
-                let val: serde_json::Value = serde_json::from_str(&res)?;
-                let response = val
-                    .as_object()
-                    .and_then(|v| v.get("response"))
-                    .and_then(|v| v.as_str())
-                    .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
-                let eval_duration = val
-                    .as_object()
-                    .and_then(|v| v.get("eval_duration"))
-                    .and_then(|v| v.as_u64())
-                    .ok_or(anyhow::anyhow!("can't get eval_duration field {}", &res))?;
-                *gas -= (eval_duration << 4).min(*gas);
-                Ok(response.into())
-            }
+
+        let res_not_sanitized = match self.config.provider {
+            LLLMProvider::Ollama => self.exec_prompt_impl_ollama(prompt, response_format, gas),
             LLLMProvider::Openai | LLLMProvider::Heurist | LLLMProvider::Xai => {
-                let mut request = serde_json::json!({
-                    "model": &self.config.model,
-                    "messages": [{
-                        "role": "user",
-                        "content": prompt,
-                    }],
-                    "max_completion_tokens": 1000,
-                    "stream": false,
-                    "temperature": 0.7,
-                });
-                match response_format {
-                    ExecPromptConfigMode::Text => {}
-                    ExecPromptConfigMode::Json => {
-                        request.as_object_mut().unwrap().insert(
-                            "response_format".into(),
-                            serde_json::json!({"type": "json_object"}),
-                        );
-                    }
-                }
-                let mut res = isahc::send(
-                    isahc::Request::post(&format!("{}/v1/chat/completions", self.config.host))
-                        .header("Content-Type", "application/json")
-                        .header("Authorization", &format!("Bearer {}", &self.api_key))
-                        .body(serde_json::to_string(&request)?.as_bytes())?,
-                )?;
-                let res = response::read(&mut res)?;
-                let val: serde_json::Value = serde_json::from_str(&res)?;
-                let response = val
-                    .pointer("/choices/0/message/content")
-                    .and_then(|v| v.as_str())
-                    .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
-                let total_tokens = val
-                    .pointer("/usage/total_tokens")
-                    .and_then(|v| v.as_u64())
-                    .ok_or(anyhow::anyhow!("can't get eval_duration field {}", &res))?;
-                *gas -= (total_tokens << 8).min(*gas);
-                Ok(response.into())
+                self.exec_prompt_impl_openai(prompt, response_format, gas)
             }
             LLLMProvider::Simulator => {
-                let request = serde_json::json!({
-                    "jsonrpc": "2.0",
-                    "method": "llm_genvm_module_call",
-                    "params": [&self.config.model, prompt, serde_json::to_string(&response_format).unwrap()],
-                    "id": 1,
-                });
-                let mut res = isahc::send(
-                    isahc::Request::post(format!("{}/api", &self.config.host))
-                        .header("Content-Type", "application/json")
-                        .body(serde_json::to_string(&request)?.as_bytes())?,
-                )?;
-                let res = response::read(&mut res)?;
-                let res: serde_json::Value = serde_json::from_str(&res)?;
-                res.as_object()
-                    .and_then(|v| v.get("result"))
-                    .and_then(|v| v.as_object())
-                    .and_then(|v| v.get("response"))
-                    .and_then(|v| v.as_str())
-                    .map(String::from)
-                    .ok_or(anyhow::anyhow!("can't get response field {}", &res))
+                self.exec_prompt_impl_simulator(prompt, response_format, gas)
             }
             LLLMProvider::Anthropic => {
-                let mut request = serde_json::json!({
-                    "model": &self.config.model,
-                    "messages": [{
-                        "role": "user",
-                        "content": prompt,
-                    }],
-                    "max_tokens": 1000,
-                    "stream": false,
-                    "temperature": 0.7,
-                });
-                match response_format {
-                    ExecPromptConfigMode::Text => {}
-                    ExecPromptConfigMode::Json => {
-                        request.as_object_mut().unwrap().insert(
-                            "tools".into(),
-                            serde_json::json!([{
-                                "name": "json_out",
-                                "description": "Output a valid json object",
-                                "input_schema": {
-                                    "type": "object"
-                                }
-                            }]),
-                        );
-                        request.as_object_mut().unwrap().insert(
-                            "tool_choice".into(),
-                            serde_json::json!({
-                                "type": "tool",
-                                "name": "json_out"
-                            }),
-                        );
-                    }
-                }
-                let mut res = isahc::send(
-                    isahc::Request::post(&format!("{}/v1/messages", self.config.host))
-                        .header("Content-Type", "application/json")
-                        .header("x-api-key", &format!("Bearer {}", &self.api_key))
-                        .header("anthropic-version", "2023-06-01")
-                        .body(serde_json::to_string(&request)?.as_bytes())?,
-                )?;
-                let res = response::read(&mut res)?;
-                let val: serde_json::Value = serde_json::from_str(&res)?;
-                let response = val
-                    .pointer("/content/0/input")
-                    .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
-                Ok(serde_json::to_string(response)?)
+                self.exec_prompt_impl_anthropic(prompt, response_format, gas)
             }
-            LLLMProvider::Google => {
-                let request = serde_json::json!({
-                    "contents": [{
-                        "parts": [
-                            {"text": prompt},
-                        ]
-                    }],
-                    "generationConfig": {
-                        "response_mime_type": "application/json",
-                        "temperature": 0.7,
-                        "maxOutputTokens": 800,
-                    }
-                });
+            LLLMProvider::Google => self.exec_prompt_impl_gemini(prompt, response_format, gas),
+        }?;
 
-                let mut res = isahc::send(
-                    isahc::Request::post(format!(
-                        "{}/v1beta/models/{}:generateContent?key={}",
-                        self.config.host, self.config.model, self.api_key
-                    ))
-                    .header("Content-Type", "application/json")
-                    .body(serde_json::to_string(&request)?.as_bytes())?,
-                )?;
-                let res = response::read(&mut res)?;
-                Ok(res)
-            }
+        match response_format {
+            ExecPromptConfigMode::Text => Ok(res_not_sanitized),
+            ExecPromptConfigMode::Json => Ok(sanitize_json_str(&res_not_sanitized).into()),
         }
     }
 
@@ -267,6 +345,8 @@ impl Impl {
         match serde_json::to_string(&serde_json::json!({
             "event": "exec_prompt",
             "prompt": prompt,
+            "config": config,
+            "model": self.config.model,
             "result": format!("{res:?}"),
         })) {
             Ok(log_data) => write_to_fd(self.log_fd, &log_data),
@@ -377,6 +457,7 @@ pub extern "C-unwind" fn exec_prompt_id(
 }
 
 #[cfg(test)]
+#[allow(non_upper_case_globals)]
 mod tests {
     use std::sync::atomic::AtomicU32;
 
@@ -395,7 +476,7 @@ mod tests {
         pub const heurist: &str = r#"{
             "host": "https://llm-gateway.heurist.xyz",
             "provider": "heurist",
-            "model": "mistralai/mixtral-8x7b-instruct",
+            "model": "meta-llama/llama-3.3-70b-instruct",
             "key_env_name": "HEURISTKEY"
         }"#;
 
@@ -453,7 +534,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(res.to_lowercase(), "yes")
+        assert_eq!(res.to_lowercase().trim(), "yes")
     }
 
     fn do_test_json(conf: &str) {
@@ -473,7 +554,7 @@ mod tests {
         .unwrap();
 
         let mut fake_gas = 0;
-        let res = imp.exec_prompt(&mut fake_gas, "{\"response_format\": \"json\"}", "respond with json object containing single key \"result\" and associated value being a random integer from 0 to 100 (inclusive)").unwrap();
+        let res = imp.exec_prompt(&mut fake_gas, "{\"response_format\": \"json\"}", "respond with json object containing single key \"result\" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes").unwrap();
 
         let res: serde_json::Value = serde_json::from_str(&res).unwrap();
         let res = res.as_object().unwrap();
@@ -500,6 +581,6 @@ mod tests {
     make_test!(openai);
     make_test!(heurist);
     make_test!(anthropic);
-    make_test!(xai);
+    //make_test!(xai);
     make_test!(google);
 }

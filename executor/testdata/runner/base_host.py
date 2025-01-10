@@ -324,7 +324,11 @@ async def run_host_and_program(
 			except:
 				pass
 
-	await coro_proc
+	try:
+		await coro_loop
+	except Exception as e:
+		errors.append(e)
+
 	exit_code = await process.wait()
 
 	if not coro_loop.done():
