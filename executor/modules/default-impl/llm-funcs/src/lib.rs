@@ -16,6 +16,7 @@ genvm_modules_common::default_base_functions!(web_functions_api, Impl);
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 enum LLLMProvider {
+    Atoma,
     Ollama,
     Openai,
     Simulator,
@@ -85,6 +86,55 @@ impl Impl {
             .clone()
             .unwrap_or(ExecPromptConfigMode::Text);
         match self.config.provider {
+            LLLMProvider::Atoma => {
+                let mut request = serde_json::json!({
+                    "model": &self.config.model,
+                    "messages": [{
+                        "role": "user",
+                        "content": prompt,
+                    }],
+                    "max_tokens": 1000,
+                    "stream": false,
+                    "temperature": 0.7,
+                });
+                match response_format { 
+                    ExecPromptConfigMode::Text => {}
+                    ExecPromptConfigMode::Json => {
+                        request.as_object_mut().unwrap().insert(
+                            "response_format".into(),
+                            serde_json::json!({"type": "json_object"}),
+                        );
+                    }
+                }
+                let mut res = isahc::send(
+                    isahc::Request::post(&format!("{}/v1/chat/completions", self.config.host))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", &format!("Bearer {}", &self.openai_key))
+                        .body(serde_json::to_string(&request)?.as_bytes())?,
+                )?;
+                let res = response::read(&mut res)?;
+                let val: serde_json::Value = serde_json::from_str(&res)?;
+                let response = val
+                    .as_object()
+                    .and_then(|v| v.get("choices"))
+                    .and_then(|v| v.as_array())
+                    .and_then(|v| v.get(0))
+                    .and_then(|v| v.as_object())
+                    .and_then(|v| v.get("message"))
+                    .and_then(|v| v.as_object())
+                    .and_then(|v| v.get("content"))
+                    .and_then(|v| v.as_str())
+                    .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+                let total_tokens = val
+                    .as_object()
+                    .and_then(|v| v.get("usage"))
+                    .and_then(|v| v.as_object())
+                    .and_then(|v| v.get("total_tokens"))
+                    .and_then(|v| v.as_u64())
+                    .ok_or(anyhow::anyhow!("can't get eval_duration field {}", &res))?;
+                *gas -= (total_tokens << 8).min(*gas);
+                Ok(response.into())
+            }
             LLLMProvider::Ollama => {
                 let mut request = serde_json::json!({
                     "model": &self.config.model,
