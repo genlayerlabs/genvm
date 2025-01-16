@@ -25,7 +25,7 @@ else:
 			)
 
 		class _VecDBMeta(type):
-			def __getattr__(self, name):
+			def __getattr__(cls, name):
 				err()
 
 		class _VecDB(metaclass=_VecDBMeta):

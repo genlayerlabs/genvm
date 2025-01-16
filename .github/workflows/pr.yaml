@@ -34,6 +34,12 @@ jobs:
       - name: cargo test
         run: |
           ./build-scripts/cargo-test.sh
+        env:
+          OPENAIKEY: ${{ secrets.OPENAIKEY }}
+          HEURISTKEY: ${{ secrets.HEURISTKEY }}
+          ANTHROPICKEY: ${{ secrets.ANTHROPICKEY }}
+          XAIKEY: ${{ secrets.XAIKEY }}
+          GEMINIKEY: ${{ secrets.GEMINIKEY }}
 
   module-test-python:
     needs: [initial]

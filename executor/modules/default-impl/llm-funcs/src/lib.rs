@@ -7,7 +7,6 @@ use std::ffi::CStr;
 use crate::interfaces::RecoverableError;
 use genvm_modules_common::interfaces::web_functions_api;
 
-mod response;
 mod string_templater;
 mod template_ids;
 
@@ -64,14 +63,12 @@ struct Config {
 
 fn sanitize_json_str<'a>(s: &'a str) -> &'a str {
     let s = s.trim();
-    s.strip_prefix("```json")
-        .unwrap_or(s)
-        .strip_prefix("```")
-        .unwrap_or(s)
-        .strip_suffix("```")
-        .unwrap_or(s)
-        .trim()
-        .into()
+    let s = s
+        .strip_prefix("```json")
+        .or(s.strip_prefix("```"))
+        .unwrap_or(s);
+    let s = s.strip_suffix("```").unwrap_or(s);
+    s.trim().into()
 }
 
 #[derive(Clone, Deserialize, Serialize, Copy)]
@@ -142,7 +139,7 @@ impl Impl {
                 .header("anthropic-version", "2023-06-01")
                 .body(serde_json::to_string(&request)?.as_bytes())?,
         )?;
-        let res = response::read(&mut res)?;
+        let res = genvm_modules_impl_common::read_response(&mut res)?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
         match response_format {
             ExecPromptConfigMode::Text => val
@@ -188,7 +185,7 @@ impl Impl {
                 .header("Authorization", &format!("Bearer {}", &self.api_key))
                 .body(serde_json::to_string(&request)?.as_bytes())?,
         )?;
-        let res = response::read(&mut res)?;
+        let res = genvm_modules_impl_common::read_response(&mut res)?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
         let response = val
             .pointer("/choices/0/message/content")
@@ -233,7 +230,7 @@ impl Impl {
             .header("Content-Type", "application/json")
             .body(serde_json::to_string(&request)?.as_bytes())?,
         )?;
-        let res = response::read(&mut res)?;
+        let res = genvm_modules_impl_common::read_response(&mut res)?;
 
         let res: serde_json::Value = serde_json::from_str(&res)?;
 
@@ -268,7 +265,7 @@ impl Impl {
             isahc::Request::post(&format!("{}/api/generate", self.config.host))
                 .body(serde_json::to_string(&request)?.as_bytes())?,
         )?;
-        let res = response::read(&mut res)?;
+        let res = genvm_modules_impl_common::read_response(&mut res)?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
         let response = val
             .as_object()
@@ -301,7 +298,7 @@ impl Impl {
                 .header("Content-Type", "application/json")
                 .body(serde_json::to_string(&request)?.as_bytes())?,
         )?;
-        let res = response::read(&mut res)?;
+        let res = genvm_modules_impl_common::read_response(&mut res)?;
         let res: serde_json::Value = serde_json::from_str(&res)?;
         res.as_object()
             .and_then(|v| v.get("result"))
@@ -538,7 +535,9 @@ mod tests {
     }
 
     fn do_test_json(conf: &str) {
+        use anyhow::Context;
         use genvm_modules_common::*;
+
         let should_quit = AtomicU32::new(0);
         let mut imp = Impl::try_new(&CtorArgs {
             version: VERSION,
@@ -556,7 +555,9 @@ mod tests {
         let mut fake_gas = 0;
         let res = imp.exec_prompt(&mut fake_gas, "{\"response_format\": \"json\"}", "respond with json object containing single key \"result\" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes").unwrap();
 
-        let res: serde_json::Value = serde_json::from_str(&res).unwrap();
+        let res: serde_json::Value = serde_json::from_str(&res)
+            .with_context(|| format!("result is {}", &res))
+            .unwrap();
         let res = res.as_object().unwrap();
         assert_eq!(res.len(), 1);
         let res = res.get("result").unwrap().as_i64().unwrap();

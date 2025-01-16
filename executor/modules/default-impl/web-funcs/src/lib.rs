@@ -10,8 +10,6 @@ use genvm_modules_impl_common::run_with_termination;
 
 use crate::interfaces::RecoverableError;
 
-mod response;
-
 genvm_modules_common::default_base_functions!(web_functions_api, Impl);
 
 struct Impl {
@@ -86,7 +84,7 @@ impl Impl {
                 .unwrap(),
             );
             let mut opened_session_res = isahc::send(req)?;
-            let body = response::read(&mut opened_session_res)?;
+            let body = genvm_modules_impl_common::read_response(&mut opened_session_res)?;
             let val: serde_json::Value = serde_json::from_str(&body)?;
             let session_id = val
                 .as_object()
