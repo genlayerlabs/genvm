@@ -25,6 +25,7 @@ enum LLLMProvider {
 struct Impl {
     config: Config,
     openai_key: String,
+    atoma_api_key: String,
     log_fd: std::os::fd::RawFd,
 }
 
@@ -65,6 +66,7 @@ impl Impl {
             config,
             log_fd: args.log_fd,
             openai_key: std::env::var("OPENAIKEY").unwrap_or("".into()),
+            atoma_api_key: std::env::var("ATOMAKEY").unwrap_or("".into()),
         })
     }
 
@@ -109,7 +111,7 @@ impl Impl {
                 let mut res = isahc::send(
                     isahc::Request::post(&format!("{}/v1/chat/completions", self.config.host))
                         .header("Content-Type", "application/json")
-                        .header("Authorization", &format!("Bearer {}", &self.openai_key))
+                        .header("Authorization", &format!("Bearer {}", &self.atoma_api_key))
                         .body(serde_json::to_string(&request)?.as_bytes())?,
                 )?;
                 let res = response::read(&mut res)?;
@@ -192,7 +194,7 @@ impl Impl {
                 let mut res = isahc::send(
                     isahc::Request::post(&format!("{}/v1/chat/completions", self.config.host))
                         .header("Content-Type", "application/json")
-                        .header("Authorization", &format!("Bearer {}", &self.openai_key))
+                        .header("Authorization", &format!("Bearer {}", &self.atoma_api_key))
                         .body(serde_json::to_string(&request)?.as_bytes())?,
                 )?;
                 let res = response::read(&mut res)?;
