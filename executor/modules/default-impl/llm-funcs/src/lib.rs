@@ -99,7 +99,7 @@ impl Impl {
                     "stream": false,
                     "temperature": 0.7,
                 });
-                match response_format { 
+                match response_format {
                     ExecPromptConfigMode::Text => {}
                     ExecPromptConfigMode::Json => {
                         request.as_object_mut().unwrap().insert(
@@ -194,7 +194,7 @@ impl Impl {
                 let mut res = isahc::send(
                     isahc::Request::post(&format!("{}/v1/chat/completions", self.config.host))
                         .header("Content-Type", "application/json")
-                        .header("Authorization", &format!("Bearer {}", &self.atoma_api_key))
+                        .header("Authorization", &format!("Bearer {}", &self.openai_key))
                         .body(serde_json::to_string(&request)?.as_bytes())?,
                 )?;
                 let res = response::read(&mut res)?;
