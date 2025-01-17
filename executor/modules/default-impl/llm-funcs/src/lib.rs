@@ -16,11 +16,9 @@ genvm_modules_common::default_base_functions!(web_functions_api, Impl);
 #[serde(rename_all = "kebab-case")]
 enum LLLMProvider {
     Ollama,
-    Openai,
+    OpenaiCompatible,
     Simulator,
-    Heurist,
     Anthropic,
-    Xai,
     Google,
 }
 
@@ -98,7 +96,7 @@ impl Impl {
         &mut self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
-        gas: &mut u64,
+        _gas: &mut u64,
     ) -> Result<String> {
         let mut request = serde_json::json!({
             "model": &self.config.model,
@@ -204,7 +202,7 @@ impl Impl {
         &mut self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
-        gas: &mut u64,
+        _gas: &mut u64,
     ) -> Result<String> {
         let request = serde_json::json!({
             "contents": [{
@@ -285,7 +283,7 @@ impl Impl {
         &mut self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
-        gas: &mut u64,
+        _gas: &mut u64,
     ) -> Result<String> {
         let request = serde_json::json!({
             "jsonrpc": "2.0",
@@ -319,7 +317,7 @@ impl Impl {
 
         let res_not_sanitized = match self.config.provider {
             LLLMProvider::Ollama => self.exec_prompt_impl_ollama(prompt, response_format, gas),
-            LLLMProvider::Openai | LLLMProvider::Heurist | LLLMProvider::Xai => {
+            LLLMProvider::OpenaiCompatible => {
                 self.exec_prompt_impl_openai(prompt, response_format, gas)
             }
             LLLMProvider::Simulator => {
@@ -465,14 +463,14 @@ mod tests {
     mod conf {
         pub const openai: &str = r#"{
             "host": "https://api.openai.com",
-            "provider": "openai",
+            "provider": "openai-compatible",
             "model": "gpt-4o-mini",
             "key_env_name": "OPENAIKEY"
         }"#;
 
         pub const heurist: &str = r#"{
             "host": "https://llm-gateway.heurist.xyz",
-            "provider": "heurist",
+            "provider": "openai-compatible",
             "model": "meta-llama/llama-3.3-70b-instruct",
             "key_env_name": "HEURISTKEY"
         }"#;
@@ -486,7 +484,7 @@ mod tests {
 
         pub const xai: &str = r#"{
             "host": "https://api.x.ai/v1",
-            "provider": "xai",
+            "provider": "openai-compatible",
             "model": "grok-2-1212",
             "key_env_name": "XAIKEY"
         }"#;
@@ -582,6 +580,6 @@ mod tests {
     make_test!(openai);
     make_test!(heurist);
     make_test!(anthropic);
-    //make_test!(xai);
     make_test!(google);
+    //make_test!(xai);
 }
