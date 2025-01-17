@@ -4,6 +4,7 @@ from genlayer import *
 from genlayer.py.storage._internal.generate import storage
 
 
+@storage
 class Test:
 	foo: float
 

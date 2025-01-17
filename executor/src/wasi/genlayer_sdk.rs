@@ -511,6 +511,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 can_read_storage: false,
                 can_write_storage: false,
                 can_spawn_nondet: false,
+                can_call_others: false,
+                can_send_messages: false,
                 state_mode: crate::host::StorageType::Default,
             },
             message_data: self.context.data.message_data.clone(),
@@ -576,6 +578,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 can_read_storage: false,
                 can_write_storage: false,
                 can_spawn_nondet: false,
+                can_call_others: false,
+                can_send_messages: false,
                 state_mode: crate::host::StorageType::Default,
             },
             message_data: self.context.data.message_data.clone(),
@@ -602,6 +606,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         if !self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
+        if !self.context.data.conf.can_call_others {
+            return Err(generated::types::Errno::Forbidden.into());
+        }
+
         let called_contract_account = AccountAddress::read_from_mem(account, mem)?;
         let data = super::common::read_string(mem, data)?;
         #[derive(Deserialize)]
@@ -631,6 +639,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 can_read_storage: my_conf.can_read_storage,
                 can_write_storage: false,
                 can_spawn_nondet: my_conf.can_spawn_nondet,
+                can_call_others: my_conf.can_call_others,
+                can_send_messages: my_conf.can_send_messages,
                 state_mode,
             },
             message_data: MessageData {
@@ -664,6 +674,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         if !self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
+        if !self.context.data.conf.can_send_messages {
+            return Err(generated::types::Errno::Forbidden.into());
+        }
+
         let address = AccountAddress::read_from_mem(account, mem)?;
         let supervisor = self.context.data.supervisor.clone();
         let calldata = calldata.read_owned(mem)?;
@@ -688,6 +702,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         if !self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
+        if !self.context.data.conf.can_send_messages {
+            return Err(generated::types::Errno::Forbidden.into());
+        }
+
         let supervisor = self.context.data.supervisor.clone();
         let calldata = calldata.read_owned(mem)?;
         let code = code.read_owned(mem)?;
@@ -709,9 +727,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         index: u32,
         buf: &generated::types::MutBytes,
     ) -> Result<(), generated::types::Error> {
-        if !self.context.data.conf.can_read_storage {
+        if !self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
+        if !self.context.data.conf.can_read_storage {
+            return Err(generated::types::Errno::Forbidden.into());
+        }
+
         let dest_buf = buf.buf.as_array(buf.buf_len);
 
         let account = self.context.data.message_data.contract_account;
@@ -745,10 +767,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         index: u32,
         buf: &generated::types::Bytes,
     ) -> Result<(), generated::types::Error> {
-        if !self.context.data.conf.can_write_storage {
+        if !self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
-        if !self.context.data.conf.can_read_storage {
+        if !self.context.data.conf.can_write_storage {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
 
@@ -777,6 +799,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         if !self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
+        if !self.context.data.conf.can_send_messages {
+            return Err(generated::types::Errno::Forbidden.into());
+        }
+
         let supervisor = self.context.data.supervisor.clone();
         let address = AccountAddress::read_from_mem(account, mem)?;
         let calldata = calldata.read_owned(mem)?;
@@ -799,6 +825,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         if !self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
+        if !self.context.data.conf.can_call_others {
+            return Err(generated::types::Errno::Forbidden.into());
+        }
+
         let supervisor = self.context.data.supervisor.clone();
         let address = AccountAddress::read_from_mem(account, mem)?;
         let calldata = calldata.read_owned(mem)?;

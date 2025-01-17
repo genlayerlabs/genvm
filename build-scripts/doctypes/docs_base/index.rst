@@ -7,4 +7,6 @@ GenLayer SDK API Documentation
 
    genlayer
    genlayer.std
+   genlayer.std.advanced
+   genlayer.py.calldata
    other

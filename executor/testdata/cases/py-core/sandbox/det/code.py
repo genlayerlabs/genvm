@@ -13,6 +13,6 @@ class Contract:
 			print(f'{gl.sandbox(lambda: eval(ev, glb))}')
 		except Rollback as rb:
 			print(f'rollback {rb.msg}')
-		except Exception as e:
+		except gl.advanced.ContractError as e:
 			print(f'err {e.args}')
 		print(json.loads.__name__)

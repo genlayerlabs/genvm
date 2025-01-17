@@ -15,6 +15,7 @@ pub const ERRNO_INVAL: Errno = Errno(3);
 pub const ERRNO_FAULT: Errno = Errno(4);
 pub const ERRNO_ILSEQ: Errno = Errno(5);
 pub const ERRNO_IO: Errno = Errno(6);
+pub const ERRNO_FORBIDDEN: Errno = Errno(7);
 impl Errno {
     pub const fn raw(&self) -> u32 {
         self.0
@@ -29,6 +30,7 @@ impl Errno {
             4 => "FAULT",
             5 => "ILSEQ",
             6 => "IO",
+            7 => "FORBIDDEN",
             _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }
@@ -41,6 +43,7 @@ impl Errno {
             4 => "",
             5 => "",
             6 => "",
+            7 => "",
             _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }

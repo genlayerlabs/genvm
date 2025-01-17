@@ -1,4 +1,4 @@
 deploy:
 	{'salt_nonce': 0}
-	b'\x16\x04args\x05\x06kwargs\x06'
+	b'\x06'
 	b'not really a contract'

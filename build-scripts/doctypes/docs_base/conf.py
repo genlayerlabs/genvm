@@ -3,6 +3,9 @@ import json
 from pathlib import Path
 import sys
 import typing
+import enum
+
+import numpy
 
 import sphinx.ext.autodoc
 
@@ -41,7 +44,10 @@ sys.path.append(str(root_dir.joinpath(*MONOREPO_CONF['py-std'])))
 os.environ['GENERATING_DOCS'] = 'true'
 
 master_doc = 'index'
-intersphinx_mapping = {'python': ('https://docs.python.org/3.12', None)}
+intersphinx_mapping = {
+	'python': ('https://docs.python.org/3.12', None),
+	'numpy': ('https://numpy.org/doc/stable/', None),
+}
 
 ignored_special = [
 	'__dict__',
@@ -92,7 +98,7 @@ def setup(app):
 
 	def handle_skip_member(app, what, name, obj, skip, options):
 		if what == 'module' and isinstance(obj, type):
-			if any(base in obj.mro() for base in [dict, tuple]):
+			if any(base in obj.mro() for base in [dict, tuple, bytes, enum.Enum]):
 				options['special-members'] = []
 				options['inherited-members'] = False
 				return

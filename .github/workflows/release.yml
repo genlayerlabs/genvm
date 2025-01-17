@@ -45,7 +45,7 @@ jobs:
       runs_on: ubuntu-latest
       preloads: --preload .ci/release-conf.rb
       install_also: ""
-      tag: needs.gen-tag.outputs.tag
+      tag: ${{ needs.gen-tag.outputs.tag }}
 
   release-build-genvm-release-ubuntu-latest-aarch64:
     needs: [gen-tag]
@@ -55,7 +55,7 @@ jobs:
       runs_on: ubuntu-latest
       preloads: --preload .ci/release-conf.rb --preload .ci/executor-target-linux-aarch64.rb
       install_also: --cross-linux-aarch64
-      tag: needs.gen-tag.outputs.tag
+      tag: ${{ needs.gen-tag.outputs.tag }}
 
   release-build-genvm-release-macos-latest:
     needs: [gen-tag]
@@ -65,7 +65,7 @@ jobs:
       runs_on: macos-latest
       preloads: --preload .ci/release-conf.rb
       install_also: ""
-      tag: needs.gen-tag.outputs.tag
+      tag: ${{ needs.gen-tag.outputs.tag }}
 
   release-data:
     uses: ./.github/workflows/build-data.yaml

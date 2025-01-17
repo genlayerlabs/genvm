@@ -22,6 +22,49 @@ Id = typing.NewType('Id', int)
 _Id = Id
 
 
+class VecDBElement[T: np.number, S: int, V, Dist]:
+	distance: Dist
+	"""
+	Distance from search point to this element, if any
+	"""
+
+	def __init__(self, db: VecDB[T, S, V], idx: u32, distance: Dist):
+		self._idx = idx
+		self._db = db
+		self.distance = distance
+
+	@property
+	def key(self) -> np.ndarray[tuple[S], np.dtype[T]]:
+		"""
+		Key (vector) of this element
+		"""
+		return self._db._keys[self._idx]
+
+	@property
+	def id(self) -> Id:
+		"""
+		Id (unique key) of this element
+		"""
+		return Id(self._idx)
+
+	@property
+	def value(self) -> V:
+		"""
+		Value of this element
+		"""
+		return self._db._values[self._idx]
+
+	@value.setter
+	def value(self, v: V):
+		self._db._values[self._idx] = v
+
+	def remove(self) -> None:
+		"""
+		Removes current element from the db
+		"""
+		self._db._free_idx[self._idx] = None
+
+
 class VecDB[T: np.number, S: int, V]:
 	"""
 	Data structure that supports storing and querying vector data
@@ -30,9 +73,20 @@ class VecDB[T: np.number, S: int, V]:
 
 	#. vector (can have duplicates)
 	#. id (int alias, can't have duplicates)
+
+	.. warning::
+		import :py:mod:`numpy` before ``from genlayer import *`` if you wish to use :py:class:`VecDB`!
 	"""
 
-	Id = _Id
+	Id: typing.ClassVar[type] = _Id
+	"""
+	:py:class:`int` alias to prevent confusion
+	"""
+
+	Element = typing.ClassVar[VecDBElement]
+	"""
+	Shorthand to prevent global namespace pollution
+	"""
 
 	# FIXME implement production ready *NN structure
 	_keys: DynArray[np.ndarray[tuple[S], np.dtype[T]]]
@@ -98,29 +152,3 @@ class VecDB[T: np.number, S: int, V]:
 			if u32(i) in self._free_idx:
 				continue
 			yield VecDBElement(self, u32(i), None)
-
-
-class VecDBElement[T: np.number, S: int, V, Dist]:
-	def __init__(self, db: VecDB[T, S, V], idx: u32, distance: Dist):
-		self._idx = idx
-		self._db = db
-		self.distance = distance
-
-	@property
-	def key(self) -> np.ndarray[tuple[S], np.dtype[T]]:
-		return self._db._keys[self._idx]
-
-	@property
-	def id(self) -> Id:
-		return Id(self._idx)
-
-	@property
-	def value(self) -> V:
-		return self._db._values[self._idx]
-
-	@value.setter
-	def value(self, v: V):
-		self._db._values[self._idx] = v
-
-	def remove(self) -> None:
-		self._db._free_idx[self._idx] = None
