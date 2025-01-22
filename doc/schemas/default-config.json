@@ -21,7 +21,7 @@
                       "type": "object",
                       "properties": {
                         "host": { "type": "string", "format": "uri" },
-                        "provider": { "enum": ["openai", "ollama", "simulator", "heurist", "anthropic", "xai", "google"] },
+                        "provider": { "enum": ["openai-compatible", "ollama", "simulator", "anthropic", "google"] },
                         "model": { "type": "string" },
                         "key_env_name": { "type": "string" }
                       },

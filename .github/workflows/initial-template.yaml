@@ -17,8 +17,8 @@ jobs:
   pre-commit:
     runs-on: ubuntu-latest
     outputs:
-      python: ${{ steps.changes.outputs.python }}
-      rs: ${{ steps.changes.outputs.rs }}
+      python: ${{ contains( github.event.pull_request.labels.*.name, 'test:force:pr') || steps.changes.outputs.python }}
+      rs: ${{ contains( github.event.pull_request.labels.*.name, 'test:force:pr') || steps.changes.outputs.rs }}
     steps:
       - uses: actions/checkout@v4
       - name: Get source
