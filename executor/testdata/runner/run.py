@@ -57,6 +57,7 @@ arg_parser.add_argument(
 )
 arg_parser.add_argument('--filter', metavar='REGEX', default='.*')
 arg_parser.add_argument('--show-steps', default=False, action='store_true')
+arg_parser.add_argument('--ci', default=False, action='store_true')
 arg_parser.add_argument('--nop-dlclose', default=False, action='store_true')
 args_parsed = arg_parser.parse_args()
 GENVM = Path(args_parsed.gen_vm)
@@ -318,10 +319,14 @@ def prnt(path, res):
 
 			def print_lines(st):
 				lines = st.splitlines()
-				for l in lines[:10]:
-					print(f'\t\t{l}')
-				if len(lines) >= 10:
-					print('\t...')
+				if args_parsed.ci:
+					for l in lines:
+						print(f'\t\t{l}')
+				else:
+					for l in lines[:10]:
+						print(f'\t\t{l}')
+					if len(lines) >= 10:
+						print('\t...')
 
 			if 'stdout' in res:
 				print('\t=== stdout ===')
@@ -329,6 +334,9 @@ def prnt(path, res):
 			if 'stderr' in res:
 				print('\t=== stderr ===')
 				print_lines(res['stderr'])
+			if 'genvm_log' in res:
+				print('\t=== genvm_log ===')
+				print_lines(res['genvm_log'])
 
 
 with cfutures.ThreadPoolExecutor(max_workers=(os.cpu_count() or 1)) as executor:
