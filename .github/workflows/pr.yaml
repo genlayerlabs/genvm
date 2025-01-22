@@ -45,6 +45,8 @@ jobs:
     needs: [initial]
     runs-on: ubuntu-latest
     if: needs.initial.outputs.py-changed == 'true'
+    permissions:
+      pull-requests: write   # Needed for posting a comment
     steps:
       - run: sudo apt-get install -y python3-poetry
       - uses: actions/checkout@v4
@@ -67,8 +69,16 @@ jobs:
       - name: pytest
         run: |
           pushd runners/genlayer-py-std && \
-          poetry run pytest -n auto && \
+          echo "_(execution **${{ github.run_id }}** / attempt **${{ github.run_attempt }}**)_" > /tmp/py-cov.log && \
+          echo '```' >> /tmp/py-cov.log && \
+          poetry run pytest -n auto | tee -a /tmp/py-cov.log && \
+          echo '```' >> /tmp/py-cov.log && \
           popd
+      - name: report
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          file-path: /tmp/py-cov.log
+          comment-tag: py-coverage
 
 ### END
 
