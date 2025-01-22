@@ -179,7 +179,7 @@ if options[:'cross-linux-aarch64']
 	require_relative './src/webget.rb'
 	download_to = download_dir.join('zig.tar.xz')
 	read_file(
-		uri: URI("https://ziglang.org/builds/zig-linux-x86_64-0.14.0-dev.2238+1db8cade5.tar.xz"),
+		uri: URI("https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz"),
 		path: download_to
 	)
 	extract_tar(download_dir.join('zig'), download_to)

@@ -3,7 +3,6 @@ name = "genvm-docstypesgen"
 version = "0.0.1"
 description = ""
 authors = ["GenLayer"]
-readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
