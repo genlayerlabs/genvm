@@ -13,7 +13,12 @@ import genlayer.std.advanced as advanced
 import typing
 import json
 from ..py.types import *
-from ._internal import decode_sub_vm_result_retn, lazy_from_fd, _lazy_api
+from ._internal import (
+	decode_sub_vm_result,
+	decode_sub_vm_result_retn,
+	lazy_from_fd,
+	_lazy_api,
+)
 from .nondet_fns import exec_prompt
 
 
@@ -113,23 +118,10 @@ def eq_principle_prompt_non_comparative(
 
 
 @_lazy_api
-def sandbox(data: typing.Callable[[], typing.Any]) -> Lazy[typing.Any]:
+def sandbox(fn: typing.Callable[[], typing.Any]) -> Lazy[typing.Any]:
 	"""
 	Runs function in the sandbox
-
-	.. warning::
-		It returns result via pickle, which can be unsafe. If it is not desired wrap it to bytes yourself
 	"""
 	import cloudpickle
-	import genlayer.py.calldata as calldata
 
-	def decode(x: collections.abc.Buffer):
-		res = decode_sub_vm_result_retn(x)
-		if isinstance(res, advanced.ContractReturn):
-			return cloudpickle.loads(res.data)
-		if isinstance(res, Rollback):
-			raise res
-		if isinstance(res, advanced.ContractError):
-			raise Exception(res)
-
-	return lazy_from_fd(wasi.sandbox(cloudpickle.dumps(data)), decode)
+	return lazy_from_fd(wasi.sandbox(cloudpickle.dumps(fn)), decode_sub_vm_result)

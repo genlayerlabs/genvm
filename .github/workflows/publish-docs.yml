@@ -45,7 +45,7 @@ jobs:
         run: |
           python3.12 -m pip install poetry && \
             pushd build-scripts/doctypes/ && \
-            poetry install && \
+            poetry install --no-root && \
             popd
 
       - name: Configure and build documentation

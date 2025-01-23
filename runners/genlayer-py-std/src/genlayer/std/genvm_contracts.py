@@ -19,7 +19,9 @@ from ._internal import decode_sub_vm_result, lazy_from_fd
 
 
 def _make_calldata_obj(method, args, kwargs):
-	ret = {'method': method}
+	ret = {}
+	if method is not None:
+		ret['method'] = method
 	if len(args) > 0:
 		ret.update({'args': args})
 	if len(kwargs) > 0:
@@ -115,12 +117,19 @@ class ContractAt(GenVMContractProxy):
 	def view(self):
 		"""
 		Namespace with all view methods
+
+		:returns: object supporting ``.name(*args, **kwargs)`` that calls a contract and returns its result (:py:type:`~typing.Any`) or rises its :py:class:`~genlayer.py.types.Rollback`
+
+		.. note::
+			supports ``name.lazy(*args, **kwargs)`` call version
 		"""
 		return _ContractAtView(self.addr, {})
 
 	def emit(self, **data: typing.Unpack[TransactionDataKwArgs]):
 		"""
 		Namespace with write message
+
+		:returns: object supporting ``.name(*args, **kwargs)`` that emits a message and returns :py:obj:`None`
 		"""
 		return _ContractAtEmit(self.addr, data)
 
@@ -223,16 +232,20 @@ def deploy_contract(
 
 	:param code: code (i.e. contents of a python file) of the contract
 
-	:returns: address of new contract *iff* ``salt_nonce`` was provided
+	:param args: arguments to be encoded into calldata
+	:param kwargs: keyword arguments to be encoded into calldata
+
+	:returns: address of new contract *iff* non-zero ``salt_nonce`` was provided
+
+	.. info::
+		Refer to consensus documentation for exact specification of
+
+		- ``salt_nonce`` requirements and it's effect on address
+		- order of transactions
 	"""
 	salt_nonce = data.setdefault('salt_nonce', u256(0))
 	wasi.deploy_contract(
-		calldata.encode(
-			{
-				'args': args,
-				'kwargs': kwargs,
-			}
-		),
+		calldata.encode(_make_calldata_obj(None, args, kwargs)),
 		code,
 		json.dumps(data),
 	)

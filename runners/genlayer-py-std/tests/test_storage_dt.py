@@ -29,3 +29,15 @@ def test_dt(expr: datetime.datetime):
 	st = Store()
 	st.dt = expr
 	assert expr == st.dt
+
+
+from genlayer.py.storage import TreeMap
+
+
+@storage
+class Pr:
+	x: TreeMap[str, str]
+
+
+a = Pr()
+a.x.update({'x': 'y'})

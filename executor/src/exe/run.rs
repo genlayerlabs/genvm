@@ -30,12 +30,29 @@ pub struct Args {
     print: PrintOption,
     #[clap(long, default_value_t = false)]
     sync: bool,
+    #[clap(
+        long,
+        default_value = "rwsc",
+        help = "r?w?s?c?, read/write/send messages/call contracts"
+    )]
+    permissions: String,
 }
 
 pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
     let message: genvm::MessageData = serde_json::from_str(&args.message)?;
 
     let host = genvm::Host::new(&args.host)?;
+
+    let mut perm_size = 0;
+    for perm in ["r", "w", "s", "c"] {
+        if args.permissions.contains(perm) {
+            perm_size += 1;
+        }
+    }
+
+    if perm_size != args.permissions.len() {
+        anyhow::bail!("Invalid permissions {}", &args.permissions)
+    }
 
     let supervisor = genvm::create_supervisor(&args.config, host, log_fd, args.sync)
         .with_context(|| "creating supervisor")?;
@@ -45,20 +62,20 @@ pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
         let Ok(sup) = supervisor.lock() else { panic!() };
         sup.shared_data.clone()
     };
-    let action = move || {
+
+    let handle_sigterm = move || {
         log::warn!(target = "rt"; "sigterm received");
         shared_data
             .should_exit
             .store(1, std::sync::atomic::Ordering::SeqCst);
     };
     unsafe {
-        signal_hook::low_level::register(
-            signal_hook::consts::SIGTERM | signal_hook::consts::SIGINT,
-            action,
-        )?;
+        signal_hook::low_level::register(signal_hook::consts::SIGTERM, handle_sigterm.clone())?;
+        signal_hook::low_level::register(signal_hook::consts::SIGINT, handle_sigterm)?;
     }
 
-    let res = genvm::run_with(message, supervisor).with_context(|| "running genvm");
+    let res =
+        genvm::run_with(message, supervisor, &args.permissions).with_context(|| "running genvm");
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,
         (Ok(RunOk::ContractError(e, cause)), PrintOption::Shrink) => {

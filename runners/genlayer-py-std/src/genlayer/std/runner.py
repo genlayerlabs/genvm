@@ -98,6 +98,6 @@ def run(mod):
 		import cloudpickle
 
 		runner = cloudpickle.loads(mem)
-		_give_result(lambda: cloudpickle.dumps(runner()))
+		_give_result(runner)
 	else:
 		raise Exception(f'unknown entrypoint {entrypoint}')

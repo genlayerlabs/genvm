@@ -7,6 +7,8 @@ __all__ = ('storage',)
 from genlayer.py.types import *
 
 import typing
+import sys
+import struct
 
 from .core import *
 from .core import _FakeStorageMan
@@ -146,80 +148,21 @@ _known_descs: dict[type | _Instantiation, TypeDesc] = {
 	bigint: _BigIntDesc(),
 }
 
-try:
-	import numpy as np
-	import numpy.typing as npt
-except:
-	if not typing.TYPE_CHECKING:
-		np = None
-		npt = None
-	else:
-		import numpy as np
-		import numpy.typing as npt
 
-if np is not None:
+class _FloatDesc(TypeDesc[float]):
+	def __init__(self):
+		TypeDesc.__init__(self, 8, [8])
+		self._type = type
 
-	class _NumpyNDDesc(TypeDesc[np.ndarray]):
-		def __init__(self, typ: TypeDesc, shape: tuple[int, ...]):
-			assert isinstance(typ, _NumpyDesc)
-			type = typ._type
-			dims = 1
-			self.shape = shape
-			for i in shape:
-				dims *= i
-			TypeDesc.__init__(self, type.itemsize * dims, [type.itemsize * dims])
-			self._type = type
+	def get(self, slot: StorageSlot, off: int) -> float:
+		dat = slot.read(off, self.size)
+		return struct.unpack('d', dat)[0]
 
-		def get(self, slot: StorageSlot, off: int) -> np.ndarray:
-			dat = slot.read(off, self.size)
-			return np.frombuffer(dat, self._type).reshape(self.shape).copy()
+	def set(self, slot: StorageSlot, off: int, val: float):
+		slot.write(off, struct.pack('d', val))
 
-		def set(self, slot: StorageSlot, off: int, val: np.ndarray):
-			assert val.dtype == self._type
-			mv = memoryview(val).cast('B')
-			assert len(mv) == self.size, f'invalid len {len(mv)} vs expected {self.size}'
-			slot.write(off, mv)
 
-	class _NumpyDesc(TypeDesc):
-		def __init__(self, typ: np.number):
-			type = np.dtype(typ)
-			TypeDesc.__init__(self, type.itemsize, [type.itemsize])
-			self._type = type
-
-		def get(self, slot: StorageSlot, off: int):
-			dat = slot.read(off, self.size)
-			return np.frombuffer(dat, self._type).reshape(()).copy()
-
-		def set(self, slot: StorageSlot, off: int, val):
-			slot.write(off, self._type.tobytes(val))  # type: ignore
-
-	class _FloatDesc(TypeDesc[float]):
-		def __init__(self):
-			type = np.dtype(np.float64)
-			TypeDesc.__init__(self, type.itemsize, [type.itemsize])
-			self._type = type
-
-		def get(self, slot: StorageSlot, off: int) -> float:
-			dat = slot.read(off, self.size)
-			return float(np.frombuffer(dat, self._type).reshape(()))
-
-		def set(self, slot: StorageSlot, off: int, val: float):
-			slot.write(off, self._type.tobytes(val))  # type: ignore
-
-	_all_np_types: list[type[np.number]] = [
-		np.uint8,
-		np.uint16,
-		np.uint32,
-		np.uint64,
-		np.int8,
-		np.int16,
-		np.int32,
-		np.int64,
-		np.float32,
-		np.float64,
-	]
-	_known_descs.update({k: _NumpyDesc(k) for k in _all_np_types})  # type: ignore
-	_known_descs[float] = _FloatDesc()
+_known_descs[float] = _FloatDesc()
 
 
 def _storage_build_handle_special(
@@ -227,7 +170,7 @@ def _storage_build_handle_special(
 	cls: type | _Instantiation,
 	generics_map: dict[str, TypeDesc | Lit],
 ) -> tuple[bool, type | _Instantiation | Lit | TypeDesc]:
-	if np is not None and origin is np.dtype:
+	if 'numpy' in sys.modules and origin is sys.modules['numpy'].dtype:
 		args = typing.get_args(cls)
 		assert len(args) == 1
 		return True, _storage_build(args[0], generics_map)
@@ -249,7 +192,7 @@ def _storage_build_handle_special(
 	return False, cls
 
 
-def _storage_build(
+def _storage_build_inner(
 	cls: type | _Instantiation,
 	generics_map: dict[str, TypeDesc | Lit],
 ) -> TypeDesc | Lit:
@@ -266,7 +209,12 @@ def _storage_build(
 			return new_cls_special
 		new_cls = new_cls_special
 	elif origin is not None:
-		args = [_storage_build(c, generics_map) for c in typing.get_args(cls)]
+		args: list[TypeDesc | Lit] = []
+		for c_i, c in enumerate(typing.get_args(cls)):
+			try:
+				args.append(_storage_build(c, generics_map))
+			except Exception as e:
+				raise Exception(f'during building generic argument (index {c_i}) {c!r}') from e
 		new_cls = _Instantiation(origin, tuple(args))
 	else:
 		new_cls = cls
@@ -282,6 +230,19 @@ def _storage_build(
 	return description
 
 
+def _storage_build(
+	cls: type | _Instantiation,
+	generics_map: dict[str, TypeDesc | Lit],
+) -> TypeDesc | Lit:
+	try:
+		return _storage_build_inner(cls, generics_map)
+	except Exception as e:
+		raise Exception(f'during building type/instantiation {cls!r}') from e
+
+
+from .numpy import try_handle_np
+
+
 def _storage_build_generic(
 	cls: _Instantiation, generics_map: dict[str, TypeDesc | Lit]
 ) -> TypeDesc:
@@ -291,19 +252,9 @@ def _storage_build_generic(
 	assert cls.origin is not list, 'use DynArray'
 	assert cls.origin is not dict, 'use TreeMap'
 
-	if np is not None and cls.origin is np.ndarray:
-		assert len(cls.args) == 2
-		shape = cls.args[0]
-		assert isinstance(shape, LitTuple)
-		assert all(
-			isinstance(a, LitPy) and len(a.alts) == 1 and isinstance(a.alts[0], int)
-			for a in shape.args
-		)
-		typ = cls.args[1]
-		assert isinstance(typ, TypeDesc)
-		return _NumpyNDDesc(
-			typ, tuple(a.alts[0] for a in typing.cast(tuple[LitPy], shape.args))
-		)
+	if (as_np := try_handle_np(cls)) is not None:
+		return as_np
+
 	if len(generic_params) != len(cls.args):
 		raise Exception(
 			f'incorrect number of generic arguments for {cls.origin} parameters={generic_params}, args={cls.args}'
@@ -335,9 +286,15 @@ def _storage_build_struct(
 	was_generic = False
 
 	for prop_name, prop_value in typing.get_type_hints(cls).items():
+		if typing.get_origin(prop_value) is typing.ClassVar:
+			continue
+
 		cur_offset: int = size
-		prop_desc = _storage_build(prop_value, generics_map)
-		assert isinstance(prop_desc, TypeDesc)
+		try:
+			prop_desc = _storage_build(prop_value, generics_map)
+			assert isinstance(prop_desc, TypeDesc)
+		except Exception as e:
+			raise Exception(f'during generating field {prop_name}: {prop_value}') from e
 		props[prop_name] = (prop_desc, cur_offset)
 
 		if isinstance(prop_value, typing.TypeVar):
@@ -452,3 +409,5 @@ class _DateTimeDesc(TypeDesc[datetime.datetime]):
 
 
 _known_descs[datetime.datetime] = _DateTimeDesc()
+
+import genlayer.py.storage._internal.numpy

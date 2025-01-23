@@ -1,6 +1,7 @@
+import numpy as np
+
 from genlayer import VecDB
 from genlayer.py.storage._internal.generate import storage
-import numpy as np
 import typing
 
 import pytest

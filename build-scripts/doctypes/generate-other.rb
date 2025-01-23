@@ -9,7 +9,7 @@ to = Pathname.new to
 children = from.glob("**/*.py")
 children.map! { |c| c.relative_path_from(from).to_s }
 children.map! { |c| c.gsub(/(\/__init__)?\.py$/, '').gsub(/\//, '.') }
-children.filter! { |c| c != 'genlayer' and c != 'genlayer.std' }
+children.filter! { |c| c != 'genlayer' and c != 'genlayer.std' and c != 'genlayer.std.advanced' and c != 'genlayer.py.calldata' }
 children.sort!
 
 template = <<-EOF

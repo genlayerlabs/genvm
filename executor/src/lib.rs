@@ -148,6 +148,7 @@ pub fn create_supervisor(
 pub fn run_with_impl(
     entry_message: MessageData,
     supervisor: Arc<Mutex<vm::Supervisor>>,
+    permissions: &str,
 ) -> vm::RunResult {
     let (mut vm, instance) = {
         let supervisor_clone = supervisor.clone();
@@ -160,8 +161,10 @@ pub fn run_with_impl(
         let essential_data = wasi::genlayer_sdk::SingleVMData {
             conf: wasi::base::Config {
                 is_deterministic: true,
-                can_read_storage: true,
-                can_write_storage: true,
+                can_read_storage: permissions.contains("r"),
+                can_write_storage: permissions.contains("w"),
+                can_send_messages: permissions.contains("s"),
+                can_call_others: permissions.contains("c"),
                 can_spawn_nondet: true,
                 state_mode: crate::host::StorageType::Default,
             },
@@ -184,8 +187,9 @@ pub fn run_with_impl(
 pub fn run_with(
     entry_message: MessageData,
     supervisor: Arc<Mutex<vm::Supervisor>>,
+    permissions: &str,
 ) -> vm::RunResult {
-    let res = run_with_impl(entry_message, supervisor.clone());
+    let res = run_with_impl(entry_message, supervisor.clone(), permissions);
     let res = ContractError::unwrap_res(res);
 
     {
