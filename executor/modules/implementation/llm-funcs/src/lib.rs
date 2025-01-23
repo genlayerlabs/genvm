@@ -528,6 +528,13 @@ mod tests {
             "model": "gemini-1.5-flash",
             "key_env_name": "GEMINIKEY"
         }"#;
+
+        pub const atoma: &str = r#"{
+            "host": "https://api.atoma.network",
+            "provider": "openai-compatible",
+            "model": "meta-llama/llama-3.3-70B-Instruct",
+            "key_env_name": "ATOMAKEY"
+        }"#;
     }
 
     async fn do_test_text(conf: &str) {
@@ -603,5 +610,6 @@ mod tests {
     make_test!(heurist);
     make_test!(anthropic);
     make_test!(google);
+    make_test!(atoma);
     //make_test!(xai);
 }
