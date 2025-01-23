@@ -225,11 +225,12 @@ async def run_host_and_program(
 	stderr_reader, stderr_transport = await connect_reader(stderr_rfd)
 	genvm_log_reader, genvm_log_transport = await connect_reader(genvm_log_rfd)
 
+	run_idx = program.index('run')
+	program.insert(run_idx, '--log-fd')
+	program.insert(run_idx + 1, str(genvm_log_wfd))
+
 	process = await asyncio.create_subprocess_exec(
-		program[0],
-		'--log-fd',
-		str(genvm_log_wfd),
-		*program[1:],
+		*program,
 		stdin=asyncio.subprocess.DEVNULL,
 		stdout=stdout_wfd,
 		stderr=stderr_wfd,
@@ -310,8 +311,10 @@ async def run_host_and_program(
 		if coro_loop in done:
 			await wait_all_timeout()
 
-	if not coro_proc.done():
+	if handler.has_result():
 		await wait_all_timeout()
+
+	if not coro_proc.done():
 		try:
 			process.terminate()
 		except:
@@ -326,7 +329,7 @@ async def run_host_and_program(
 
 	try:
 		await coro_loop
-	except Exception as e:
+	except (Exception, asyncio.CancelledError) as e:
 		errors.append(e)
 
 	exit_code = await process.wait()

@@ -1,7 +1,7 @@
 use core::str;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    io::{Read, Write},
+    io::Write,
     sync::atomic::AtomicU32,
 };
 
@@ -11,7 +11,6 @@ use itertools::Itertools;
 use once_cell::sync::Lazy;
 use wasmparser::WasmFeatures;
 use wasmtime::{Engine, Linker, Module, Store};
-use zip::ZipArchive;
 
 use crate::{
     caching,
@@ -397,39 +396,16 @@ impl Supervisor {
         let entry = self.cached_modules.entry(data.contents.clone());
         match entry {
             std::collections::hash_map::Entry::Occupied(entry) => {
-                log::debug!(target: "cache", cache_method = "rt", path = data.debug_path(); "using rt cached");
+                log::debug!(target: "cache", cache_method = "rt", path = data.debug_path(); "using cached");
                 Ok(entry.get().clone())
             }
             std::collections::hash_map::Entry::Vacant(entry) => {
-                // FIXME: find source of this. why call_indirect requires tables?
-                let add_features =
-                    WasmFeatures::REFERENCE_TYPES.bits() | WasmFeatures::FLOATS.bits();
-
-                let det_features = self.engines.det.config().get_features().bits() | add_features;
-
-                let non_det_features =
-                    self.engines.non_det.config().get_features().bits() | add_features;
-
-                let mut det_validator = wasmparser::Validator::new_with_features(
-                    WasmFeatures::from_bits(det_features).unwrap(),
-                );
-                let mut non_det_validator = wasmparser::Validator::new_with_features(
-                    WasmFeatures::from_bits(non_det_features).unwrap(),
-                );
-                det_validator
-                    .validate_all(&data.contents[..])
-                    .with_context(|| {
-                        format!(
-                            "validating {}",
-                            &String::from_utf8_lossy(&data.contents[..10.min(data.contents.len())])
-                        )
-                    })?;
-                non_det_validator.validate_all(&data.contents[..])?;
-
                 let debug_path = data.debug_path();
 
                 let compile_here = || -> Result<PrecompiledModule> {
                     log::info!(target: "cache", cache_method = "compiling", status = "start", path = debug_path; "");
+
+                    caching::validate_wasm(&self.engines, &data.contents)?;
 
                     let start_time = std::time::Instant::now();
                     let module_det = wasmtime::CodeBuilder::new(&self.engines.det)
@@ -446,31 +422,23 @@ impl Supervisor {
                     })
                 };
 
-                let get_from_runner = || -> Result<PrecompiledModule> {
+                let get_from_precompiled = || -> Result<PrecompiledModule> {
                     if data.is_special() {
                         anyhow::bail!("special runners are not supported");
                     }
-                    let (id, hash) = runner::verify_runner(data.runner_id.as_str())?;
+                    let _ = runner::verify_runner(data.runner_id.as_str())?;
 
                     let path_in_arch = data.path_in_arch.as_str();
-                    let mut result_zip_path = match Lazy::force(&caching::PRECOMPILE_DIR) {
-                        Some(v) => v,
-                        None => anyhow::bail!("cache is absent"),
-                    }
-                    .clone();
+                    let mut result_zip_path = caching::PRECOMPILE_DIR
+                        .clone()
+                        .ok_or(anyhow::anyhow!("cache is absent"))?;
 
-                    let hash = format!("{hash}.zip");
+                    result_zip_path.push(data.runner_id.as_str());
+                    result_zip_path.push(caching::path_in_zip_to_hash(path_in_arch));
 
-                    result_zip_path.push(id);
-                    result_zip_path.push(&hash);
-                    let mut zip = ZipArchive::new(std::fs::File::open(&result_zip_path)?)?;
-
-                    let mut process_single = |suff: &str, engine: &Engine| -> Result<Module> {
-                        let mut buf = Vec::new();
-                        let mut path_in_arch = String::from(path_in_arch);
-                        path_in_arch.push_str(suff);
-                        zip.by_name(&path_in_arch)?.read_to_end(&mut buf)?;
-                        Ok(unsafe { Module::deserialize(engine, &buf)? })
+                    let process_single = |suff: &str, engine: &Engine| -> Result<Module> {
+                        let path = result_zip_path.with_extension(suff);
+                        unsafe { Module::deserialize_file(engine, &path) }
                     };
 
                     let det = process_single(
@@ -482,12 +450,12 @@ impl Supervisor {
                         &self.engines.non_det,
                     )?;
 
-                    log::debug!(target: "cache", cache_method = "precompiled", path = data.debug_path(); "using precompiled");
+                    log::debug!(target: "cache", cache_method = "precompiled"; "using cached");
 
                     Ok(PrecompiledModule { det, non_det })
                 };
 
-                let ret = get_from_runner().or_else(|_e| compile_here())?;
+                let ret = get_from_precompiled().or_else(|_e| compile_here())?;
 
                 Ok(entry.insert(Arc::new(ret)).clone())
             }

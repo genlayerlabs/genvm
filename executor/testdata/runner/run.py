@@ -58,7 +58,9 @@ arg_parser.add_argument(
 arg_parser.add_argument('--filter', metavar='REGEX', default='.*')
 arg_parser.add_argument('--show-steps', default=False, action='store_true')
 arg_parser.add_argument('--ci', default=False, action='store_true')
+arg_parser.add_argument('--rss-file', metavar='PATH', default='')
 arg_parser.add_argument('--nop-dlclose', default=False, action='store_true')
+arg_parser.add_argument('--no-sequential', default=False, action='store_true')
 args_parsed = arg_parser.parse_args()
 GENVM = Path(args_parsed.gen_vm)
 FILE_RE = re.compile(args_parsed.filter)
@@ -185,15 +187,26 @@ def run(jsonnet_rel_path):
 	base = {}
 	for config in run_configs:
 		tmp_dir = config['tmp_dir']
-		cmd = [
-			GENVM,
-			'run',
-			'--host',
-			'unix://' + config['host'].path,
-			'--message',
-			json.dumps(config['message']),
-			'--print=shrink',
-		]
+		cmd = []
+		# it is impossible to sigterm timed command (in an easy way)
+		# cmd = [
+		# '/usr/bin/time',
+		# '-q',
+		# '-f',
+		# '<RSS>%M-%X</RSS>',
+		# '--',
+		# ]
+		cmd.extend(
+			[
+				GENVM,
+				'run',
+				'--host',
+				'unix://' + config['host'].path,
+				'--message',
+				json.dumps(config['message']),
+				'--print=shrink',
+			]
+		)
 		if config['sync']:
 			cmd.append('--sync')
 		steps = [
@@ -222,8 +235,10 @@ def run(jsonnet_rel_path):
 					)
 				)
 			except Exception as e:
+				print(e.args)
 				return {
 					'category': 'fail',
+					'steps': steps,
 					'exception': 'internal error',
 					'exc': e,
 					**e.args[-1],
@@ -345,6 +360,7 @@ with cfutures.ThreadPoolExecutor(max_workers=(os.cpu_count() or 1)) as executor:
 		'pass': 0,
 		'fail': [],
 	}
+	rss = []
 	sign_by_category = {
 		'skip': '⚠ ',
 		'pass': f'{COLORS.OKGREEN}✓{COLORS.ENDC}',
@@ -364,15 +380,25 @@ with cfutures.ThreadPoolExecutor(max_workers=(os.cpu_count() or 1)) as executor:
 			categories['fail'].append(str(path))
 		else:
 			categories[res['category']] += 1
+		if (
+			'stderr' in res
+			and (m := re.search(r'<RSS>(\d+)-(\d+)</RSS>', res['stderr'])) is not None
+		):
+			rss.append((int(m.group(1)) - int(m.group(2))) * 1024)
+			print(rss[-1], m)
 		prnt(path, res)
 
 	if len(files) > 0:
 		# NOTE this is needed to cache wasm compilation result
-		firsts = [f for f in files if f.name.startswith('_hello')]
-		lasts = [f for f in files if not f.name.startswith('_hello')]
-		if len(firsts) == 0:
-			firsts = [files[0]]
-			lasts = files[1:]
+		if args_parsed.no_sequential:
+			firsts = []
+			lasts = files
+		else:
+			firsts = [f for f in files if f.name.startswith('_hello')]
+			lasts = [f for f in files if not f.name.startswith('_hello')]
+			if len(firsts) == 0:
+				firsts = [files[0]]
+				lasts = files[1:]
 		print(
 			f'running the first test(s) sequentially ({len(firsts)}), it can take a while..'
 		)
@@ -386,6 +412,16 @@ with cfutures.ThreadPoolExecutor(max_workers=(os.cpu_count() or 1)) as executor:
 
 	print(f'coverage data is located at {coverage_dir} (if any)')
 	print(json.dumps(categories))
+
+	if args_parsed.rss_file != '':
+		import plotille
+
+		with open(args_parsed.rss_file, 'wt') as f:
+			rss_mb = [x / (1024 * 1024) for x in rss]
+			f.write('## RSS - Avg shared (in MB)\n```\n')
+			f.write(plotille.hist(rss_mb))
+			f.write('\n```\n')
+
 	if len(categories['fail']) != 0:
 		exit(1)
 	exit(0)
