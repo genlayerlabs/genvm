@@ -1,7 +1,7 @@
 use core::str;
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashMap},
-    io::Write,
     sync::atomic::AtomicU32,
 };
 
@@ -15,7 +15,9 @@ use wasmtime::{Engine, Linker, Module, Store};
 use crate::{
     caching,
     runner::{self, InitAction, WasmMode},
-    string_templater, wasi,
+    string_templater,
+    ustar::{Archive, SharedBytes},
+    wasi,
 };
 use anyhow::{Context, Result};
 use std::sync::{Arc, Mutex};
@@ -198,7 +200,7 @@ pub struct Supervisor {
     pub shared_data: Arc<SharedData>,
 
     engines: Engines,
-    cached_modules: HashMap<Arc<[u8]>, Arc<PrecompiledModule>>,
+    cached_modules: HashMap<SharedBytes, Arc<PrecompiledModule>>,
     runner_cache: runner::RunnerReaderCache,
 }
 
@@ -212,6 +214,25 @@ struct ApplyActionCtx {
     env: BTreeMap<String, String>,
     visited: BTreeSet<symbol_table::GlobalSymbol>,
     contract_id: symbol_table::GlobalSymbol,
+}
+
+fn make_new_runner_arch_from_tar(
+    id: symbol_table::GlobalSymbol,
+    base_path: &std::path::Path,
+) -> Result<Archive> {
+    let (runner_id, runner_hash) = runner::verify_runner(id.as_str())?;
+
+    let mut path = std::path::PathBuf::from(base_path);
+    path.push(runner_id);
+
+    let mut fname = runner_hash.to_owned();
+    fname.push_str(".tar");
+    path.push(fname);
+
+    let contents = crate::mmap::load_file(&path)?;
+
+    crate::ustar::Archive::from_ustar(SharedBytes::new(contents))
+        .with_context(|| format!("path {:?}", path))
 }
 
 impl VM {
@@ -328,14 +349,14 @@ impl Engines {
 
 #[derive(Clone, Debug)]
 pub struct WasmFileDesc {
-    pub contents: Arc<[u8]>,
+    pub contents: SharedBytes,
     pub runner_id: symbol_table::GlobalSymbol,
-    pub path_in_arch: symbol_table::GlobalSymbol,
+    pub path_in_arch: Arc<str>,
 }
 
 impl WasmFileDesc {
     pub fn debug_path(&self) -> String {
-        [self.runner_id.as_str(), self.path_in_arch.as_str()].join("")
+        [self.runner_id.as_str(), &self.path_in_arch].join("")
     }
 
     pub fn is_special(&self) -> bool {
@@ -403,19 +424,25 @@ impl Supervisor {
                 let debug_path = data.debug_path();
 
                 let compile_here = || -> Result<PrecompiledModule> {
-                    log::info!(target: "cache", cache_method = "compiling", status = "start", path = debug_path; "");
+                    log::info!(target: "cache", cache_method = "compiling", status = "start", path = debug_path, runner = data.runner_id.as_str(); "");
 
-                    caching::validate_wasm(&self.engines, &data.contents)?;
+                    caching::validate_wasm(&self.engines, data.contents.as_ref())?;
 
                     let start_time = std::time::Instant::now();
                     let module_det = wasmtime::CodeBuilder::new(&self.engines.det)
-                        .wasm_binary(&data.contents[..], Some(std::path::Path::new(&debug_path)))?
+                        .wasm_binary(
+                            Cow::Borrowed(data.contents.as_ref()),
+                            Some(std::path::Path::new(&debug_path)),
+                        )?
                         .compile_module()?;
 
                     let module_non_det = wasmtime::CodeBuilder::new(&self.engines.non_det)
-                        .wasm_binary(&data.contents[..], Some(std::path::Path::new(&debug_path)))?
+                        .wasm_binary(
+                            Cow::Borrowed(data.contents.as_ref()),
+                            Some(std::path::Path::new(&debug_path)),
+                        )?
                         .compile_module()?;
-                    log::info!(target: "cache", cache_method = "compiling", status = "done", duration:? = start_time.elapsed(), path = debug_path; "");
+                    log::info!(target: "cache", cache_method = "compiling", status = "done", duration:? = start_time.elapsed(), path = debug_path, runner = data.runner_id.as_str(); "");
                     Ok(PrecompiledModule {
                         det: module_det,
                         non_det: module_non_det,
@@ -426,14 +453,15 @@ impl Supervisor {
                     if data.is_special() {
                         anyhow::bail!("special runners are not supported");
                     }
-                    let _ = runner::verify_runner(data.runner_id.as_str())?;
+                    let (id, hash) = runner::verify_runner(data.runner_id.as_str())?;
 
-                    let path_in_arch = data.path_in_arch.as_str();
+                    let path_in_arch = data.path_in_arch.as_ref();
                     let mut result_zip_path = caching::PRECOMPILE_DIR
                         .clone()
                         .ok_or(anyhow::anyhow!("cache is absent"))?;
 
-                    result_zip_path.push(data.runner_id.as_str());
+                    result_zip_path.push(id);
+                    result_zip_path.push(hash);
                     result_zip_path.push(caching::path_in_zip_to_hash(path_in_arch));
 
                     let process_single = |suff: &str, engine: &Engine| -> Result<Module> {
@@ -450,12 +478,15 @@ impl Supervisor {
                         &self.engines.non_det,
                     )?;
 
-                    log::debug!(target: "cache", cache_method = "precompiled"; "using cached");
+                    log::debug!(target: "cache", cache_method = "precompiled", runner = data.runner_id.as_str(); "using cached");
 
                     Ok(PrecompiledModule { det, non_det })
                 };
 
-                let ret = get_from_precompiled().or_else(|_e| compile_here())?;
+                let ret = get_from_precompiled().or_else(|e| {
+                    log::trace!(target: "cache", error:? = e, runner = data.runner_id.as_str(); "could not use precompiled");
+                    compile_here()
+                })?;
 
                 Ok(entry.insert(Arc::new(ret)).clone())
             }
@@ -520,36 +551,38 @@ impl Supervisor {
     ) -> Result<Option<wasmtime::Instance>> {
         match action {
             InitAction::MapFile { to, file } => {
-                if file.as_str().ends_with("/") {
-                    for name in self
-                        .runner_cache
-                        .get_unsafe(current)
-                        .get_all_names()?
-                        .iter()
-                        .cloned()
-                        .filter(|name| {
-                            !name.as_str().ends_with("/")
-                                && name.as_str().starts_with(file.as_str())
-                        })
-                    {
-                        let file_contents = self.runner_cache.get_unsafe(current).get_file(name)?;
-                        let mut name_in_fs = to.clone();
+                if file.ends_with("/") {
+                    let arch = self.runner_cache.get_unsafe(current);
+
+                    let file_name_str = String::from(&file[..]);
+
+                    for (name, file_contents) in arch.files.data.range(file_name_str..) {
+                        if name.ends_with("/") {
+                            continue;
+                        }
+
+                        if !name.starts_with(&file[..]) {
+                            break;
+                        }
+
+                        let mut name_in_fs = String::from(&to[..]);
                         if !name_in_fs.ends_with("/") {
                             name_in_fs.push('/');
                         }
-                        name_in_fs.push_str(&name.as_str()[file.as_str().len()..]);
+                        name_in_fs.push_str(&name[file.len()..]);
+
                         vm.store
                             .data_mut()
                             .genlayer_ctx_mut()
                             .preview1
-                            .map_file(&name_in_fs, file_contents)?;
+                            .map_file(&name_in_fs, file_contents.clone())?;
                     }
                 } else {
                     vm.store
                         .data_mut()
                         .genlayer_ctx_mut()
                         .preview1
-                        .map_file(&to, self.runner_cache.get_unsafe(current).get_file(*file)?)?;
+                        .map_file(&to, self.runner_cache.get_unsafe(current).get_file(file)?)?;
                 }
                 Ok(None)
             }
@@ -567,14 +600,13 @@ impl Supervisor {
                 Ok(None)
             }
             InitAction::LinkWasm(path) => {
-                let path = *path;
-                let contents = self.runner_cache.get_unsafe(current).get_file(path)?;
+                let contents = self.runner_cache.get_unsafe(current).get_file(&path)?;
                 let module = self.link_wasm_into(
                     vm,
                     &WasmFileDesc {
                         contents,
                         runner_id: current,
-                        path_in_arch: path,
+                        path_in_arch: path.clone(),
                     },
                 )?;
                 let instance = {
@@ -594,14 +626,13 @@ impl Supervisor {
                 match instance.get_typed_func::<(), ()>(&mut vm.store, "_initialize") {
                     Err(_) => {}
                     Ok(func) => {
-                        log::info!(target: "rt", method = "call_initialize", runner = self.runner_cache.get_unsafe(current).runner_id().as_str(), path = path.as_str(); "");
+                        log::info!(target: "rt", method = "call_initialize", runner = self.runner_cache.get_unsafe(current).runner_id().as_str(), path = path; "");
                         func.call(&mut vm.store, ())?;
                     }
                 }
                 Ok(None)
             }
             InitAction::StartWasm(path) => {
-                let path = *path;
                 let env: Vec<(String, String)> = ctx
                     .env
                     .iter()
@@ -612,13 +643,13 @@ impl Supervisor {
                     .genlayer_ctx_mut()
                     .preview1
                     .set_env(&env)?;
-                let contents = self.runner_cache.get_unsafe(current).get_file(path)?;
+                let contents = self.runner_cache.get_unsafe(current).get_file(&path)?;
                 let module = self.link_wasm_into(
                     vm,
                     &WasmFileDesc {
                         contents,
                         runner_id: current,
-                        path_in_arch: path,
+                        path_in_arch: path.clone(),
                     },
                 )?;
                 let Ok(ref mut linker) = vm.linker.lock() else {
@@ -645,115 +676,67 @@ impl Supervisor {
                 if id.as_str() == "<contract>" {
                     return self.apply_action_recursive(vm, ctx, action, ctx.contract_id);
                 }
-                let mut path = std::path::PathBuf::from(self.runner_cache.path());
-                let make_new_runner = || {
-                    let (runner_id, runner_hash) = runner::verify_runner(id.as_str())?;
-
-                    path.push(runner_id);
-                    let mut fname = runner_hash.to_owned();
-                    fname.push_str(".zip");
-                    path.push(fname);
-
-                    let contents =
-                        std::fs::read(&path).with_context(|| format!("reading {:?}", path))?;
-                    Ok(zip::ZipArchive::new(std::io::Cursor::new(Arc::from(
-                        contents,
-                    )))?)
-                };
-                let _ = self.runner_cache.get_or_create(*id, make_new_runner)?;
+                let path = self.runner_cache.path().clone();
+                let _ = self
+                    .runner_cache
+                    .get_or_create(*id, || make_new_runner_arch_from_tar(*id, &path))?;
                 self.apply_action_recursive(vm, ctx, action, *id)
             }
             InitAction::Depends(id) => {
                 if !ctx.visited.insert(*id) {
                     return Ok(None);
                 }
-                let mut path = std::path::PathBuf::from(self.runner_cache.path());
-                let make_new_runner = || {
-                    let (runner_id, runner_hash) = runner::verify_runner(id.as_str())?;
 
-                    path.push(runner_id);
-                    let mut fname = runner_hash.to_owned();
-                    fname.push_str(".zip");
-                    path.push(fname);
-
-                    let contents =
-                        std::fs::read(&path).with_context(|| format!("reading {:?}", path))?;
-                    Ok(zip::ZipArchive::new(std::io::Cursor::new(Arc::from(
-                        contents,
-                    )))?)
-                };
-                let new_arch = self.runner_cache.get_or_create(*id, make_new_runner)?;
+                let path = self.runner_cache.path().clone();
+                let new_arch = self
+                    .runner_cache
+                    .get_or_create(*id, || make_new_runner_arch_from_tar(*id, &path))?;
                 let new_action = new_arch.get_actions()?;
                 self.apply_action_recursive(vm, ctx, &new_action, *id)
             }
         }
     }
 
-    fn code_to_archive(code: Arc<[u8]>) -> Result<zip::ZipArchive<std::io::Cursor<Arc<[u8]>>>> {
-        if let Ok(as_zip) = zip::ZipArchive::new(std::io::Cursor::new(code.clone())) {
-            return Ok(as_zip);
+    fn code_to_archive(code: SharedBytes) -> Result<Archive> {
+        if let Ok(mut as_zip) = zip::ZipArchive::new(std::io::Cursor::new(code.clone())) {
+            return Archive::from_zip(&mut as_zip);
         }
-        let buf = std::io::Cursor::new(Vec::new());
-        let mut zip = zip::ZipWriter::new(buf);
 
-        if wasmparser::Parser::is_core_wasm(&code[..]) {
-            zip.start_file(
-                "runner.json",
-                zip::write::SimpleFileOptions::default()
-                    .compression_method(zip::CompressionMethod::Stored),
-            )?;
-            zip.write_all("{ \"StartWasm\": \"file.wasm\" }".as_bytes())?;
-            zip.start_file(
-                "file.wasm",
-                zip::write::SimpleFileOptions::default()
-                    .compression_method(zip::CompressionMethod::Stored),
-            )?;
-            zip.write_all(&code)?;
-        } else {
-            let code_str = str::from_utf8(&code).map_err(|e| {
-                crate::errors::ContractError(
-                    "invalid_contract".into(),
-                    Some(anyhow::Error::from(e)),
-                )
-            })?;
-            let code_start = (|| {
-                for c in ["//", "#", "--"] {
-                    if code_str.starts_with(c) {
-                        return Ok(c);
-                    }
+        if wasmparser::Parser::is_core_wasm(code.as_ref()) {
+            return Ok(Archive::from_file_and_runner(
+                code,
+                SharedBytes::from(&b"{ \"StartWasm\": \"file\" }"[..]),
+            ));
+        }
+        let code_str = str::from_utf8(code.as_ref()).map_err(|e| {
+            crate::errors::ContractError(
+                "invalid_contract non-utf8".into(),
+                Some(anyhow::Error::from(e)),
+            )
+        })?;
+        let code_start = (|| {
+            for c in ["//", "#", "--"] {
+                if code_str.starts_with(c) {
+                    return Ok(c);
                 }
-                return Err(crate::errors::ContractError(
-                    "no_runner_comment".into(),
-                    None,
-                ));
-            })()?;
-            let mut code_comment = String::new();
-            for l in code_str.lines() {
-                if !l.starts_with(code_start) {
-                    break;
-                }
-                code_comment.push_str(&l[code_start.len()..])
             }
-
-            zip.start_file(
-                "runner.json",
-                zip::write::SimpleFileOptions::default()
-                    .compression_method(zip::CompressionMethod::Stored),
-            )?;
-            zip.write_all(code_comment.as_bytes())?;
-
-            zip.start_file(
-                "file",
-                zip::write::SimpleFileOptions::default()
-                    .compression_method(zip::CompressionMethod::Stored),
-            )?;
-            zip.write_all(code_str.as_bytes())?;
+            return Err(crate::errors::ContractError(
+                "no_runner_comment".into(),
+                None,
+            ));
+        })()?;
+        let mut code_comment = String::new();
+        for l in code_str.lines() {
+            if !l.starts_with(code_start) {
+                break;
+            }
+            code_comment.push_str(&l[code_start.len()..])
         }
 
-        let zip = zip.finish()?;
-        Ok(zip::ZipArchive::new(std::io::Cursor::new(Arc::from(
-            zip.into_inner(),
-        )))?)
+        return Ok(Archive::from_file_and_runner(
+            code,
+            SharedBytes::from(code_comment.as_bytes()),
+        ));
     }
 
     pub fn apply_contract_actions(&mut self, vm: &mut VM) -> Result<wasmtime::Instance> {
@@ -768,7 +751,7 @@ impl Supervisor {
 
         let provide_arch = || {
             let code = self.host.get_code(&contract_address)?;
-            Self::code_to_archive(code)
+            Self::code_to_archive(SharedBytes::new(code))
         };
 
         let cur_arch = self.runner_cache.get_or_create(contract_id, provide_arch)?;

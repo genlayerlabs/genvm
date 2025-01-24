@@ -11,6 +11,7 @@ use wiggle::GuestError;
 
 use crate::{
     errors::*,
+    ustar::SharedBytes,
     vm::{self, RunOk},
     AccountAddress, GenericAddress, MessageData,
 };
@@ -20,7 +21,7 @@ use super::{base, common::*};
 pub struct SingleVMData {
     pub conf: base::Config,
     pub message_data: MessageData,
-    pub entrypoint: Arc<[u8]>,
+    pub entrypoint: SharedBytes,
     pub supervisor: Arc<Mutex<crate::vm::Supervisor>>,
 }
 
@@ -209,13 +210,12 @@ impl ContextVFS<'_> {
             }
             data => data,
         };
-        let data: Arc<[u8]> = data.as_bytes_iter().collect();
+        let data: Box<[u8]> = data.as_bytes_iter().collect();
         let len = data.len();
         Ok((
-            generated::types::Fd::from(
-                self.vfs
-                    .place_content(FileContentsUnevaluated::from_contents(data, 0)),
-            ),
+            generated::types::Fd::from(self.vfs.place_content(
+                FileContentsUnevaluated::from_contents(SharedBytes::new(data), 0),
+            )),
             len,
         ))
     }
@@ -228,7 +228,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         mem: &mut wiggle::GuestMemory<'_>,
     ) -> Result<generated::types::ResultNow, generated::types::Error> {
         let res = serde_json::to_vec(&self.context.data.message_data)?;
-        let res: Arc<[u8]> = Arc::from(res);
+        let res: SharedBytes = SharedBytes::new(res);
         let len = res.len().try_into()?;
         let fd = self
             .vfs
@@ -315,7 +315,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let res = into_anyhow(res)?;
 
         Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_contents(Arc::from(res.as_bytes()), 0),
+            FileContentsUnevaluated::from_contents(SharedBytes::from(res.as_bytes()), 0),
         )))
     }
 
@@ -356,7 +356,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let res = into_anyhow(res)?;
 
         Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_contents(Arc::from(res.as_bytes()), 0),
+            FileContentsUnevaluated::from_contents(SharedBytes::from(res.as_bytes()), 0),
         )))
     }
 
@@ -397,7 +397,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let res = into_anyhow(res)?;
 
         Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_contents(Arc::from(res.as_bytes()), 0),
+            FileContentsUnevaluated::from_contents(SharedBytes::from(res.as_bytes()), 0),
         )))
     }
 
@@ -501,7 +501,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 entrypoint.extend(cow_validator.into_iter());
             }
         }
-        let entrypoint = Arc::from(entrypoint);
+        let entrypoint = SharedBytes::new(entrypoint);
 
         let supervisor = self.context.data.supervisor.clone();
 
@@ -568,7 +568,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let cow_data = mem.as_cow(data.buf.as_array(data.buf_len))?;
         entrypoint.extend(cow_data.into_iter());
 
-        let entrypoint = Arc::from(entrypoint);
+        let entrypoint = SharedBytes::new(entrypoint);
 
         let supervisor = self.context.data.supervisor.clone();
 
@@ -590,9 +590,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let my_res = self.context.spawn_and_run(&supervisor, vm_data);
         let my_res = ContractError::unwrap_res(my_res).map_err(generated::types::Error::trap)?;
 
-        let data: Arc<[u8]> = my_res.as_bytes_iter().collect();
+        let data: Box<[u8]> = my_res.as_bytes_iter().collect();
         Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_contents(data, 0),
+            FileContentsUnevaluated::from_contents(SharedBytes::new(data), 0),
         )))
     }
 
@@ -626,7 +626,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let mut res_calldata = b"call!".to_vec();
         let calldata = calldata.buf.as_array(calldata.buf_len);
         res_calldata.extend(mem.as_cow(calldata)?.iter());
-        let res_calldata = Arc::from(res_calldata);
+        let res_calldata = SharedBytes::new(res_calldata);
 
         let supervisor = self.context.data.supervisor.clone();
 
@@ -840,7 +840,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             .eth_call(address, &calldata)
             .map_err(generated::types::Error::trap)?;
         Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_contents(res, 0),
+            FileContentsUnevaluated::from_contents(SharedBytes::new(res), 0),
         )))
     }
 }

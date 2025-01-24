@@ -1,9 +1,6 @@
-use std::io::Read;
-
 use anyhow::{Context, Result};
 use clap::builder::OsStr;
-use genvm::caching;
-use itertools::Itertools;
+use genvm::{caching, ustar::SharedBytes};
 use once_cell::sync::Lazy;
 
 #[derive(clap::Args, Debug)]
@@ -51,24 +48,27 @@ fn compile_single_file(
         .strip_prefix(&runners_dir)
         .with_context(|| format!("stripping {runners_dir:?} from {runners_dir:?}"))?;
 
+    let base_path = if let Some(no_stem) = base_path.file_stem() {
+        base_path.with_file_name(no_stem)
+    } else {
+        base_path.to_owned()
+    };
+
     let mut result_dir_path = Lazy::force(&caching::PRECOMPILE_DIR)
         .clone()
         .ok_or(anyhow::anyhow!("cache directory is not writable"))?;
     result_dir_path.push(base_path);
 
-    let file =
-        std::fs::File::open(&zip_path).with_context(|| format!("reading {:?}", &zip_path))?;
-    let mut zip = zip::ZipArchive::new(file)?;
-    let mut wasm_data = Vec::new();
-    for entry_name in zip
-        .file_names()
-        .filter(|f| f.ends_with(".wasm") || f.ends_with("so"))
-        .map(String::from)
-        .collect_vec()
+    let data = genvm::mmap::load_file(zip_path)?;
+
+    let arch = genvm::ustar::Archive::from_ustar(SharedBytes::new(data))?;
+
+    for (entry_name, contents) in arch
+        .data
+        .iter()
+        .filter(|(k, _v)| k.ends_with(".wasm") || k.ends_with(".so"))
     {
-        wasm_data.clear();
-        zip.by_name(&entry_name)?.read_to_end(&mut wasm_data)?;
-        if !wasmparser::Parser::is_core_wasm(&wasm_data) {
+        if !wasmparser::Parser::is_core_wasm(contents.as_ref()) {
             continue;
         }
 
@@ -80,7 +80,7 @@ fn compile_single_file(
                 .with_extension(caching::DET_NON_DET_PRECOMPILED_SUFFIX.det)
                 .as_path(),
             &engines.det,
-            &wasm_data,
+            contents.as_ref(),
             caching::DET_NON_DET_PRECOMPILED_SUFFIX.det,
             zip_path,
             &entry_name,
@@ -92,7 +92,7 @@ fn compile_single_file(
                 .with_extension(caching::DET_NON_DET_PRECOMPILED_SUFFIX.non_det)
                 .as_path(),
             &engines.non_det,
-            &wasm_data,
+            contents.as_ref(),
             caching::DET_NON_DET_PRECOMPILED_SUFFIX.non_det,
             zip_path,
             &entry_name,
@@ -132,7 +132,7 @@ pub fn handle(args: Args) -> Result<()> {
                 continue;
             }
             let zip_path = zip_path.path();
-            if zip_path.extension() != Some(&OsStr::from("zip")) {
+            if zip_path.extension() != Some(&OsStr::from("tar")) {
                 continue;
             }
 

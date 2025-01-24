@@ -1,10 +1,12 @@
-#![feature(once_wait)]
+#![feature(once_wait, map_try_insert)]
 
 pub mod errors;
 mod host;
+pub mod mmap;
 pub mod plugin_loader;
 pub mod runner;
 pub mod string_templater;
+pub mod ustar;
 pub mod vm;
 pub mod wasi;
 
@@ -20,6 +22,7 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
+use ustar::SharedBytes;
 
 #[derive(Deserialize)]
 struct ConfigModule {
@@ -169,7 +172,7 @@ pub fn run_with_impl(
                 state_mode: crate::host::StorageType::Default,
             },
             message_data: entry_message,
-            entrypoint: entrypoint.into(),
+            entrypoint: SharedBytes::new(entrypoint),
             supervisor: supervisor_clone,
         };
 

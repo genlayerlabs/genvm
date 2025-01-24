@@ -3,10 +3,11 @@ use std::{
     borrow::{Borrow, BorrowMut},
     io::Write,
     iter,
-    sync::Arc,
 };
 use tracing::instrument;
 use wiggle::{GuestError, GuestMemory, GuestPtr};
+
+use crate::ustar::SharedBytes;
 
 use super::common::*;
 use std::collections::BTreeMap;
@@ -117,7 +118,7 @@ enum FilesTrie {
         children: BTreeMap<String, Box<FilesTrie>>,
     },
     File {
-        data: Arc<[u8]>,
+        data: SharedBytes,
     },
 }
 
@@ -162,7 +163,7 @@ impl Context {
         Ok(())
     }
 
-    pub fn map_file(&mut self, location: &str, contents: Arc<[u8]>) -> anyhow::Result<()> {
+    pub fn map_file(&mut self, location: &str, contents: SharedBytes) -> anyhow::Result<()> {
         let mut location_patched = String::new();
         let mut last_slash = true;
         for c in location.chars() {
@@ -600,7 +601,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                         len = remaining_len.try_into().unwrap();
                     }
                     let len_usize: usize = len.try_into()?;
-                    let cont_slice: &[u8] = &contents[*pos..(*pos + len_usize)];
+                    let cont_slice: &[u8] = &contents.as_ref()[*pos..(*pos + len_usize)];
                     memory.copy_from_slice(cont_slice, iov.buf.as_array(len))?;
                     *pos = *pos + len_usize;
                     written += len;

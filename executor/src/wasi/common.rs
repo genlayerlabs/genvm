@@ -1,16 +1,18 @@
-use std::{collections::BTreeMap, mem::swap, sync::Arc};
+use std::{collections::BTreeMap, mem::swap};
 
 use wiggle::{GuestError, GuestMemory, GuestPtr};
 
+use crate::ustar::SharedBytes;
+
 pub struct FileContents {
-    pub contents: Arc<[u8]>,
+    pub contents: SharedBytes,
     pub pos: usize,
 }
 
 pub type FileEvalError = Option<anyhow::Error>;
 
 pub struct FileContentsUnevaluated {
-    data: Result<FileContents, std::sync::OnceLock<Result<Arc<[u8]>, FileEvalError>>>,
+    data: Result<FileContents, std::sync::OnceLock<Result<SharedBytes, FileEvalError>>>,
 }
 
 impl FileContentsUnevaluated {
@@ -19,7 +21,7 @@ impl FileContentsUnevaluated {
             Ok(x) => return Ok(x),
             placed_data => {
                 let mut old_data = Ok(FileContents {
-                    contents: Arc::new([]),
+                    contents: SharedBytes::new(b""),
                     pos: 0,
                 });
                 swap(placed_data, &mut old_data);
@@ -51,7 +53,7 @@ impl FileContentsUnevaluated {
         }
     }
 
-    pub fn from_contents(contents: Arc<[u8]>, pos: usize) -> Self {
+    pub fn from_contents(contents: SharedBytes, pos: usize) -> Self {
         Self {
             data: Ok(FileContents { contents, pos }),
         }
