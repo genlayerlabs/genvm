@@ -1,5 +1,3 @@
-#![feature(once_wait, map_try_insert)]
-
 pub mod errors;
 mod host;
 pub mod mmap;
@@ -41,17 +39,13 @@ struct ConfigSchema {
     modules: ConfigModules,
 }
 
-#[link(name = "genvm_modules_web")]
 extern "Rust" {
-    #[no_mangle]
     fn new_web_module(
         args: genvm_modules_interfaces::CtorArgs<'_>,
     ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Web + Send + Sync>>;
 }
 
-#[link(name = "genvm_modules_llm")]
 extern "Rust" {
-    #[no_mangle]
     fn new_llm_module(
         args: genvm_modules_interfaces::CtorArgs<'_>,
     ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Llm + Send + Sync>>;

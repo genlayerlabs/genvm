@@ -1,15 +1,7 @@
-cargo-features = ["profile-rustflags"]
-
 [package]
 name = "genvm"
 version = "0.1.0"
 edition = "2021"
-
-[profile.dev]
-rustflags = [
-    #"-Zsanitizer=address"
-    #"--remap-path-prefix=src/=genvm/executor/src/"
-]
 
 [profile.dev.package.cranelift-codegen]
 opt-level = 2

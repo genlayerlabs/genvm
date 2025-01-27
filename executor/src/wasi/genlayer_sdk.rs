@@ -1,6 +1,5 @@
 use core::str;
 use std::{
-    ffi::CString,
     sync::{Arc, Mutex},
 };
 

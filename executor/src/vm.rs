@@ -78,7 +78,7 @@ impl RunOk {
         Self::Return([0].into())
     }
 
-    pub fn as_bytes_iter<'a>(&'a self) -> impl Iterator<Item = u8> + use<'a> {
+    pub fn as_bytes_iter<'a>(&'a self) -> impl Iterator<Item = u8> + 'a /*+ use<'a>*/ {
         use crate::host::ResultCode;
         match self {
             RunOk::Return(buf) => [ResultCode::Return as u8]

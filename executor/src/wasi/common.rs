@@ -29,24 +29,25 @@ impl FileContentsUnevaluated {
                     // old data
                     Ok(_) => unreachable!(),
                     Err(fut) => {
-                        fut.wait();
-                        let val = fut.into_inner().unwrap();
-                        match val {
-                            Ok(val) => {
-                                *placed_data = Ok(FileContents {
-                                    contents: val,
-                                    pos: 0,
-                                });
-                                match placed_data {
-                                    Ok(x) => Ok(x),
-                                    _ => unreachable!(),
-                                }
-                            }
-                            Err(e) => {
-                                // data is already nullified
-                                Err(e)
-                            }
-                        }
+                        todo!();
+                        //fut.wait();
+                        //let val = fut.into_inner().unwrap();
+                        //match val {
+                        //    Ok(val) => {
+                        //        *placed_data = Ok(FileContents {
+                        //            contents: val,
+                        //            pos: 0,
+                        //        });
+                        //        match placed_data {
+                        //            Ok(x) => Ok(x),
+                        //            _ => unreachable!(),
+                        //        }
+                        //    }
+                        //    Err(e) => {
+                        //        // data is already nullified
+                        //        Err(e)
+                        //    }
+                        //}
                     }
                 }
             }

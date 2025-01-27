@@ -15,7 +15,7 @@ project('executor') {
 		base_env['RUSTFLAGS'] << " -Cinstrument-coverage"
 	end
 
-	cargo_flags = ['-Zprofile-rustflags']
+	cargo_flags = []
 	if not config.executor_target.nil?
 		linker_path = root_src.join('build-scripts', 'zig-driver.py')
 		cargo_flags << '--config' << "target.#{config.executor_target}.linker=\"#{linker_path.to_s}\""

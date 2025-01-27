@@ -1,5 +1,3 @@
-cargo-features = ["profile-rustflags"]
-
 [package]
 name = "genvm-modules-default-llm"
 version = "0.1.0"
@@ -7,12 +5,6 @@ edition = "2021"
 
 [lib]
 crate-type=["cdylib"]
-
-[profile.dev]
-rustflags = [
-    #"-Zsanitizer=leak",
-    #"--remap-path-prefix=src/=genvm/executor/modules/default-impl/llm-funcs/src/"
-]
 
 [dependencies]
 anyhow = { version = "1.0.86", features = [] }

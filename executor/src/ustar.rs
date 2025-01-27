@@ -89,6 +89,17 @@ pub struct Archive {
     pub data: BTreeMap<String, SharedBytes>,
 }
 
+fn map_try_insert<K, V>(map: &mut BTreeMap<K, V>, key: K, value: V) -> anyhow::Result<&mut V>
+where
+    K: Ord + std::fmt::Display,
+{
+    use std::collections::btree_map::Entry::*;
+    match map.entry(key) {
+        Occupied(entry) => Err(anyhow::anyhow!("entry {} is already occupied", entry.key())),
+        Vacant(entry) => Ok(entry.insert(value)),
+    }
+}
+
 fn trim_zeroes(x: &[u8]) -> &[u8] {
     let mut idx = x.len() - 1;
     while idx > 0 && x[idx - 1] == 0 {
@@ -171,8 +182,7 @@ impl Archive {
 
             let file_contents = data.slice(BLOCK_SIZE, BLOCK_SIZE + file_size);
 
-            res.try_insert(name, file_contents)
-                .map_err(|e| anyhow::anyhow!("duplicate file {}", e.entry.key()))?;
+            map_try_insert(&mut res, name, file_contents)?;
         }
 
         Ok(Self { data: res })
@@ -189,8 +199,7 @@ impl Archive {
             let mut buf = Vec::new();
             file.read_to_end(&mut buf)?;
 
-            res.try_insert(String::from(file.name()), SharedBytes::from(buf.as_slice()))
-                .map_err(|e| anyhow::anyhow!("duplicate file {}", e.entry.key()))?;
+            map_try_insert(&mut res, String::from(file.name()), SharedBytes::from(buf.as_slice()))?;
         }
 
         Ok(Self { data: res })

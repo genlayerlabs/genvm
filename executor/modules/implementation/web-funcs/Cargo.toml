@@ -1,16 +1,7 @@
-cargo-features = ["profile-rustflags"]
-
 [package]
 name = "genvm-modules-default-web"
 version = "0.1.0"
 edition = "2021"
-
-[profile.dev]
-rustflags = [
-    #"-Zsanitizer=memory",
-    #"-Zsanitizer=leak",
-    #"--remap-path-prefix=src/=genvm/executor/modules/default-impl/web-funcs/src/"
-]
 
 [lib]
 crate-type=["cdylib"]
