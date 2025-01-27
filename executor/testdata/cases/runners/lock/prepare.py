@@ -14,6 +14,7 @@ if config_path.exists():
 		dat = json.load(f)
 	with open(test_dir.joinpath('runner.json'), 'rt') as f:
 		cur_contract = json.load(f)
+	cur_contract['Seq'][2]['Depends'] = f"softfloat:{dat['runners']['softfloat']['hash']}"
 	cur_contract['Seq'][4]['With']['runner'] = (
 		f"genvm-cpython:{dat['runners']['cpython']['hash']}"
 	)

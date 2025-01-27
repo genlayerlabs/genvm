@@ -145,13 +145,23 @@ def _get_params(m: types.FunctionType, *, is_ctor: bool) -> dict:
 		) from e
 
 
+def _get_ctor(contract: type) -> types.FunctionType:
+	if not hasattr(contract, '__dict__') or '__init__' not in contract.__dict__:
+		raise TypeError('__init__ is absent', contract)
+	ctor = getattr(contract, '__init__')
+	if not inspect.isfunction(ctor):
+		raise TypeError('__init__ is not a function', contract, ctor)
+	if _is_public(ctor):
+		raise TypeError('__init__ must be private', contract, ctor)
+	return ctor
+
+
 def get_schema(contract: type) -> typing.Any:
 	"""
 	Uses python type reflections to produce GenVM ABI schema
 	"""
-	ctor = typing.cast(types.FunctionType, getattr(contract, '__init__', None))
-	if _is_public(ctor):
-		raise Exception('constructor must be private')
+
+	ctor = _get_ctor(contract)
 
 	meths = {
 		name: meth
