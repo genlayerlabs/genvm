@@ -6,7 +6,6 @@ use std::{
 };
 
 use base64::Engine as _;
-use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
 use wasmparser::WasmFeatures;
@@ -180,8 +179,8 @@ pub struct PrecompiledModule {
 }
 
 pub struct Modules {
-    pub web: Box<dyn web_functions_api::Trait>,
-    pub llm: Box<dyn llm_functions_api::Trait>,
+    pub web: Box<dyn genvm_modules_interfaces::Web + Send + Sync>,
+    pub llm: Box<dyn genvm_modules_interfaces::Llm + Send + Sync>,
 }
 
 // impl Drop for Modules {

@@ -1,16 +1,10 @@
-use anyhow::Result;
-use genvm_modules_common::*;
 use serde_derive::{Deserialize, Serialize};
 
-use std::ffi::CStr;
-
-use crate::interfaces::RecoverableError;
-use genvm_modules_common::interfaces::web_functions_api;
+use genvm_modules_impl_common::*;
+use genvm_modules_interfaces::{CtorArgs, ModuleError, ModuleResult};
 
 mod string_templater;
 mod template_ids;
-
-genvm_modules_common::default_base_functions!(web_functions_api, Impl);
 
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -25,7 +19,6 @@ enum LLLMProvider {
 struct Impl {
     config: Config,
     api_key: String,
-    log_fd: std::os::fd::RawFd,
 }
 
 impl Drop for Impl {
@@ -81,23 +74,18 @@ struct ExecPromptConfig {
 }
 
 impl Impl {
-    fn try_new(args: &CtorArgs) -> Result<Self> {
-        let conf: &str = args.config()?;
-        let config: Config = serde_json::from_str(conf)?;
+    fn try_new(args: CtorArgs<'_>) -> anyhow::Result<Self> {
+        let config: Config = serde_json::from_str(args.config)?;
         let api_key = std::env::var(&config.key_env_name).unwrap_or("".into());
-        Ok(Impl {
-            config,
-            log_fd: args.log_fd,
-            api_key,
-        })
+        Ok(Impl { config, api_key })
     }
 
     fn exec_prompt_impl_anthropic(
-        &mut self,
+        &self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
         _gas: &mut u64,
-    ) -> Result<String> {
+    ) -> ModuleResult<String> {
         let mut request = serde_json::json!({
             "model": &self.config.model,
             "messages": [{
@@ -144,20 +132,22 @@ impl Impl {
                 .pointer("/content/0/text")
                 .and_then(|x| x.as_str())
                 .ok_or(anyhow::anyhow!("can't get response field {}", &res))
-                .map(String::from),
+                .map(String::from)
+                .map_err(Into::into),
             ExecPromptConfigMode::Json => val
                 .pointer("/content/0/input/type")
                 .ok_or(anyhow::anyhow!("can't get response field {}", &res))
-                .and_then(|x| serde_json::to_string(x).map_err(Into::into)),
+                .and_then(|x| serde_json::to_string(x).map_err(Into::into))
+                .map_err(Into::into),
         }
     }
 
     fn exec_prompt_impl_openai(
-        &mut self,
+        &self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
         gas: &mut u64,
-    ) -> Result<String> {
+    ) -> ModuleResult<String> {
         let mut request = serde_json::json!({
             "model": &self.config.model,
             "messages": [{
@@ -199,11 +189,11 @@ impl Impl {
     }
 
     fn exec_prompt_impl_gemini(
-        &mut self,
+        &self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
         _gas: &mut u64,
-    ) -> Result<String> {
+    ) -> ModuleResult<String> {
         let request = serde_json::json!({
             "contents": [{
                 "parts": [
@@ -240,11 +230,11 @@ impl Impl {
     }
 
     fn exec_prompt_impl_ollama(
-        &mut self,
+        &self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
         gas: &mut u64,
-    ) -> Result<String> {
+    ) -> ModuleResult<String> {
         let mut request = serde_json::json!({
             "model": &self.config.model,
             "prompt": prompt,
@@ -280,11 +270,11 @@ impl Impl {
     }
 
     fn exec_prompt_impl_simulator(
-        &mut self,
+        &self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
         _gas: &mut u64,
-    ) -> Result<String> {
+    ) -> ModuleResult<String> {
         let request = serde_json::json!({
             "jsonrpc": "2.0",
             "method": "llm_genvm_module_call",
@@ -298,18 +288,18 @@ impl Impl {
         )?;
         let res = genvm_modules_impl_common::read_response(&mut res)?;
         let res: serde_json::Value = serde_json::from_str(&res)?;
-        res.as_object()
-            .and_then(|v| v.get("result"))
-            .and_then(|v| v.as_object())
-            .and_then(|v| v.get("response"))
+        res.pointer("/result/response")
             .and_then(|v| v.as_str())
             .map(String::from)
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))
+            .ok_or(ModuleError::Fatal(anyhow::anyhow!(
+                "can't get response field {}",
+                &res
+            )))
     }
 
-    fn exec_prompt_impl(&mut self, gas: &mut u64, config: &str, prompt: &str) -> Result<String> {
+    fn exec_prompt_impl(&self, gas: &mut u64, config: &str, prompt: &str) -> ModuleResult<String> {
         let config: ExecPromptConfig =
-            serde_json::from_str(config).map_err(RecoverableError::from_anyhow)?;
+            make_error_recoverable(serde_json::from_str(config), "invalid configuration")?;
         let response_format = config
             .response_format
             .clone()
@@ -334,130 +324,86 @@ impl Impl {
             ExecPromptConfigMode::Json => Ok(sanitize_json_str(&res_not_sanitized).into()),
         }
     }
+}
 
-    fn exec_prompt(&mut self, gas: &mut u64, config: &str, prompt: &str) -> Result<String> {
+impl genvm_modules_interfaces::Llm for Impl {
+    fn exec_prompt(&self, gas: &mut u64, config: &str, prompt: &str) -> ModuleResult<String> {
         let res = self.exec_prompt_impl(gas, config, prompt);
-        match serde_json::to_string(&serde_json::json!({
-            "event": "exec_prompt",
-            "prompt": prompt,
-            "config": config,
-            "model": self.config.model,
-            "result": format!("{res:?}"),
-        })) {
-            Ok(log_data) => write_to_fd(self.log_fd, &log_data),
-            Err(_) => {}
-        }
+        log::info!(event = "exec_prompt", prompt = prompt, config = config, model = self.config.model, result:? = res; "");
         res
     }
 
-    fn invalid_prompt_id_err() -> anyhow::Error {
-        RecoverableError(anyhow::anyhow!("invalid prompt id")).into()
-    }
-
-    fn eq_principle_prompt(&mut self, gas: &mut u64, template_id: u8, vars: &str) -> Result<bool> {
+    fn eq_principle_prompt(
+        &self,
+        gas: &mut u64,
+        template_id: u8,
+        vars: &str,
+    ) -> ModuleResult<bool> {
         use template_ids::TemplateId;
-        let id = TemplateId::try_from(template_id).map_err(|_e| Self::invalid_prompt_id_err())?;
+        let id = make_error_recoverable(
+            TemplateId::try_from(template_id)
+                .map_err(|_e| anyhow::anyhow!("unknown template id {template_id}")),
+            "invalid prompt id",
+        )?;
         let template = match id {
             TemplateId::Comparative => &self.config.equivalence_prompt_comparative,
             TemplateId::NonComparative => &self.config.equivalence_prompt_non_comparative,
-            TemplateId::NonComparativeLeader => return Err(Self::invalid_prompt_id_err()),
+            TemplateId::NonComparativeLeader => {
+                return Err(ModuleError::Recoverable("invalid prompt id"))
+            }
         };
         let vars: std::collections::BTreeMap<String, String> =
-            serde_json::from_str(vars).map_err(RecoverableError::from_anyhow)?;
+            make_error_recoverable(serde_json::from_str(vars), "invalid variables")?;
         let new_prompt = string_templater::patch_str(&vars, &template)?;
         let res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
         answer_is_bool(res)
     }
 
-    fn exec_prompt_id(&mut self, gas: &mut u64, template_id: u8, vars: &str) -> Result<String> {
+    fn exec_prompt_id(&self, gas: &mut u64, template_id: u8, vars: &str) -> ModuleResult<String> {
         use template_ids::TemplateId;
-        let id = TemplateId::try_from(template_id).map_err(|_e| Self::invalid_prompt_id_err())?;
+        let id = make_error_recoverable(
+            TemplateId::try_from(template_id)
+                .map_err(|_e| anyhow::anyhow!("unknown template id {template_id}")),
+            "invalid prompt id",
+        )?;
         let template = match id {
-            TemplateId::Comparative => return Err(Self::invalid_prompt_id_err()),
-            TemplateId::NonComparative => return Err(Self::invalid_prompt_id_err()),
+            TemplateId::Comparative | TemplateId::NonComparative => {
+                return Err(ModuleError::Recoverable("illegal prompt id"))
+            }
             TemplateId::NonComparativeLeader => {
                 &self.config.equivalence_prompt_non_comparative_leader
             }
         };
         let vars: std::collections::BTreeMap<String, String> =
-            serde_json::from_str(vars).map_err(RecoverableError::from_anyhow)?;
+            make_error_recoverable(serde_json::from_str(vars), "invalid vars")?;
         let new_prompt = string_templater::patch_str(&vars, &template)?;
         let res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
         Ok(res)
     }
 }
 
-fn answer_is_bool(mut res: String) -> Result<bool> {
+fn answer_is_bool(mut res: String) -> ModuleResult<bool> {
     res.make_ascii_lowercase();
     let has_true = res.contains("true");
     let has_false = res.contains("false");
     if has_true == has_false {
-        anyhow::bail!("contains both true and false");
+        return Err(ModuleError::Fatal(anyhow::anyhow!(
+            "contains both true and false"
+        )));
     }
     Ok(has_true)
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn exec_prompt(
-    ctx: *const (),
-    gas: &mut u64,
-    config: *const u8,
-    prompt: *const u8,
-) -> interfaces::BytesResult {
-    let ctx = get_ptr(ctx);
-    let config = unsafe { CStr::from_ptr(config as *const std::ffi::c_char) };
-    let prompt = unsafe { CStr::from_ptr(prompt as *const std::ffi::c_char) };
-    let res = config
-        .to_str()
-        .map_err(|e| anyhow::Error::from(e))
-        .and_then(|config| {
-            prompt
-                .to_str()
-                .map_err(|e| anyhow::Error::from(e))
-                .and_then(|prompt| ctx.exec_prompt(gas, config, prompt))
-        });
-    interfaces::serialize_result(res)
-}
-
-#[no_mangle]
-pub extern "C-unwind" fn eq_principle_prompt(
-    ctx: *const (),
-    gas: &mut u64,
-    template_id: u8,
-    vars: *const u8,
-) -> interfaces::BytesResult {
-    let ctx = get_ptr(ctx);
-    let vars = unsafe { CStr::from_ptr(vars as *const std::ffi::c_char) };
-    let res = vars
-        .to_str()
-        .map_err(|e| anyhow::Error::from(e))
-        .and_then(|vars| ctx.eq_principle_prompt(gas, template_id, vars));
-    interfaces::serialize_result(res)
-}
-
-#[no_mangle]
-pub extern "C-unwind" fn exec_prompt_id(
-    ctx: *const (),
-    gas: &mut u64,
-    template_id: u8,
-    vars: *const u8,
-) -> interfaces::BytesResult {
-    let ctx = get_ptr(ctx);
-    let vars = unsafe { CStr::from_ptr(vars as *const std::ffi::c_char) };
-    let res = vars
-        .to_str()
-        .map_err(|e| anyhow::Error::from(e))
-        .and_then(|vars| ctx.exec_prompt_id(gas, template_id, vars));
-    interfaces::serialize_result(res)
+pub fn new_llm_module(
+    args: CtorArgs<'_>,
+) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Llm + Send + Sync>> {
+    Ok(Box::new(Impl::try_new(args)?))
 }
 
 #[cfg(test)]
 #[allow(non_upper_case_globals)]
 mod tests {
-    use std::sync::atomic::AtomicU32;
-
-    use genvm_modules_common::interfaces::llm_functions_api::VERSION;
-
     use crate::Impl;
 
     mod conf {
@@ -497,28 +443,10 @@ mod tests {
         }"#;
     }
 
-    extern "C-unwind" fn no_thread_pool(
-        _: *const (),
-        _: *const (),
-        _: extern "C-unwind" fn(*const ()),
-    ) {
-    }
-
     fn do_test_text(conf: &str) {
-        use genvm_modules_common::*;
-        let should_quit = AtomicU32::new(0);
-        let mut imp = Impl::try_new(&CtorArgs {
-            version: VERSION,
-            thread_pool: SharedThreadPoolABI {
-                ctx: std::ptr::null(),
-                submit_task: no_thread_pool,
-            },
-            module_config: conf.as_ptr(),
-            module_config_len: conf.len(),
-            log_fd: 2,
-            should_quit: should_quit.as_ptr(),
-        })
-        .unwrap();
+        use genvm_modules_interfaces::*;
+
+        let imp = Impl::try_new(CtorArgs { config: conf }).unwrap();
 
         let mut fake_gas = 0;
         let res = imp
@@ -534,21 +462,9 @@ mod tests {
 
     fn do_test_json(conf: &str) {
         use anyhow::Context;
-        use genvm_modules_common::*;
+        use genvm_modules_interfaces::*;
 
-        let should_quit = AtomicU32::new(0);
-        let mut imp = Impl::try_new(&CtorArgs {
-            version: VERSION,
-            thread_pool: SharedThreadPoolABI {
-                ctx: std::ptr::null(),
-                submit_task: no_thread_pool,
-            },
-            module_config: conf.as_ptr(),
-            module_config_len: conf.len(),
-            log_fd: 2,
-            should_quit: should_quit.as_ptr(),
-        })
-        .unwrap();
+        let imp = Impl::try_new(CtorArgs { config: conf }).unwrap();
 
         let mut fake_gas = 0;
         let res = imp.exec_prompt(&mut fake_gas, "{\"response_format\": \"json\"}", "respond with json object containing single key \"result\" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes").unwrap();

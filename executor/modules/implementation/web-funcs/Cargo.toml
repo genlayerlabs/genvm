@@ -19,13 +19,15 @@ crate-type=["cdylib"]
 anyhow = { version = "1.0.86", features = [] }
 encoding_rs = { version = "0.8.34", features = []}
 encoding_rs_io = "0.1.7"
-genvm-modules-common = { path = "../../common" }
-genvm-modules-impl-common = { path = "../common" }
+genvm-modules-interfaces = { path = "../../interfaces" }
+genvm-modules-impl-common ={ path = "../common" }
 isahc = "1.7.2"
 libc = "0.2.158"
 reqwest = "0.12.9"
-serde = "1.0.210"
+serde = { version = "1.0.210", features = ["rc"]}
 serde_derive = "1.0.210"
 serde_json = "1.0.128"
 tokio = { version = "1.42.0", features = ["rt", "rt-multi-thread"] }
 url = "2.5.2"
+log = { version = "0.4.25", features = ["kv_unstable_serde"] }
+crossbeam = "0.8.4"

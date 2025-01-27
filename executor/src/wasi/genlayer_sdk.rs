@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use genvm_modules_common::interfaces::ModuleResult;
+use genvm_modules_interfaces::{ModuleError, ModuleResult};
 use itertools::Itertools;
 use serde::Deserialize;
 use wiggle::GuestError;
@@ -187,13 +187,15 @@ impl From<serde_json::Error> for generated::types::Error {
     }
 }
 
-fn into_anyhow<T>(zelf: ModuleResult<T>) -> Result<T, generated::types::Error> {
+fn module_result_into_result<T>(zelf: ModuleResult<T>) -> Result<T, generated::types::Error> {
     match zelf {
-        ModuleResult::Success(val) => Ok(val),
-        ModuleResult::RecoverableError => Err(generated::types::Errno::Inval.into()),
-        ModuleResult::Error(message) => Err(generated::types::Error::trap(anyhow::format_err!(
-            "{}", message
-        ))),
+        Ok(v) => Ok(v),
+        Err(ModuleError::Recoverable(rec)) => {
+            // TODO: fixme
+            log::warn!(err:? = rec; "recoverable module error");
+            Err(generated::types::Errno::Inval.into())
+        }
+        Err(ModuleError::Fatal(e)) => Err(generated::types::Error::trap(e)),
     }
 }
 
@@ -287,9 +289,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
         let config_str = read_string(mem, config)?;
-        let config_str = CString::new(config_str).map_err(|e| generated::types::Errno::Inval)?;
         let url_str = read_string(mem, url)?;
-        let url_str = CString::new(url_str).map_err(|e| generated::types::Errno::Inval)?;
 
         let supervisor = self.context.data.supervisor.clone();
         let Ok(mut supervisor) = supervisor.lock() else {
@@ -297,22 +297,16 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         };
 
         let mut fuel = 0;
-        let res = supervisor.modules.web.get_webpage(
-            &mut fuel,
-            config_str.as_bytes().as_ptr(),
-            url_str.as_bytes().as_ptr(),
-        );
+        let res = supervisor
+            .modules
+            .web
+            .get_webpage(&mut fuel, &config_str, &url_str);
         supervisor
             .host
             .consume_fuel(fuel)
             .map_err(generated::types::Error::trap)?;
 
-        let res: ModuleResult<String> =
-            genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
-                supervisor.modules.web.free_str(x)
-            })
-            .map_err(generated::types::Error::trap)?;
-        let res = into_anyhow(res)?;
+        let res = module_result_into_result(res)?;
 
         Ok(generated::types::Fd::from(self.vfs.place_content(
             FileContentsUnevaluated::from_contents(SharedBytes::from(res.as_bytes()), 0),
@@ -329,31 +323,23 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
         let config_str = read_string(mem, config)?;
-        let config_str = CString::new(config_str).map_err(|e| generated::types::Errno::Inval)?;
         let prompt_str = read_string(mem, prompt)?;
-        let prompt_str = CString::new(prompt_str).map_err(|e| generated::types::Errno::Inval)?;
 
         let supervisor = self.context.data.supervisor.clone();
         let Ok(mut supervisor) = supervisor.lock() else {
             return Err(generated::types::Errno::Io.into());
         };
         let mut fuel = 0;
-        let res = supervisor.modules.llm.exec_prompt(
-            &mut fuel,
-            config_str.as_bytes().as_ptr(),
-            prompt_str.as_bytes().as_ptr(),
-        );
+        let res = supervisor
+            .modules
+            .llm
+            .exec_prompt(&mut fuel, &config_str, &prompt_str);
         supervisor
             .host
             .consume_fuel(fuel)
             .map_err(generated::types::Error::trap)?;
 
-        let res: ModuleResult<String> =
-            genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
-                supervisor.modules.llm.free_str(x)
-            })
-            .map_err(generated::types::Error::trap)?;
-        let res = into_anyhow(res)?;
+        let res = module_result_into_result(res)?;
 
         Ok(generated::types::Fd::from(self.vfs.place_content(
             FileContentsUnevaluated::from_contents(SharedBytes::from(res.as_bytes()), 0),
@@ -370,7 +356,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
         let vars_str = read_string(mem, vars)?;
-        let vars_str = CString::new(vars_str).map_err(|e| generated::types::Errno::Inval)?;
 
         let supervisor = self.context.data.supervisor.clone();
         let Ok(mut supervisor) = supervisor.lock() else {
@@ -378,23 +363,17 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         };
 
         let mut fuel = 0;
-        let res = supervisor.modules.llm.as_mut().exec_prompt_id(
-            &mut fuel,
-            id,
-            vars_str.as_bytes().as_ptr(),
-        );
+        let res = supervisor
+            .modules
+            .llm
+            .exec_prompt_id(&mut fuel, id, &vars_str);
 
         supervisor
             .host
             .consume_fuel(fuel)
             .map_err(generated::types::Error::trap)?;
 
-        let res: ModuleResult<String> =
-            genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
-                supervisor.modules.llm.free_str(x)
-            })
-            .map_err(generated::types::Error::trap)?;
-        let res = into_anyhow(res)?;
+        let res = module_result_into_result(res)?;
 
         Ok(generated::types::Fd::from(self.vfs.place_content(
             FileContentsUnevaluated::from_contents(SharedBytes::from(res.as_bytes()), 0),
@@ -411,7 +390,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::DeterministicViolation.into());
         }
         let vars_str = read_string(mem, vars)?;
-        let vars_str = CString::new(vars_str).map_err(|e| generated::types::Errno::Inval)?;
 
         let supervisor = self.context.data.supervisor.clone();
         let Ok(mut supervisor) = supervisor.lock() else {
@@ -419,23 +397,17 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         };
 
         let mut fuel = 0;
-        let res = supervisor.modules.llm.as_mut().eq_principle_prompt(
-            &mut fuel,
-            id,
-            vars_str.as_bytes().as_ptr(),
-        );
+        let res = supervisor
+            .modules
+            .llm
+            .eq_principle_prompt(&mut fuel, id, &vars_str);
 
         supervisor
             .host
             .consume_fuel(fuel)
             .map_err(generated::types::Error::trap)?;
 
-        let res: ModuleResult<bool> =
-            genvm_modules_common::interfaces::ModuleResult::from_bytes(res, |x| {
-                supervisor.modules.llm.free_str(x)
-            })
-            .map_err(generated::types::Error::trap)?;
-        let res = into_anyhow(res)?;
+        let res = module_result_into_result(res)?;
 
         Ok((res as i32).try_into().unwrap())
     }

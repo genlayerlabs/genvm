@@ -29,8 +29,8 @@ project('executor') {
 			name: "dylib",
 			target: config.executor_target,
 			profile: config.profile,
-			out_file: modules_dir.join('libweb' + NATIVE_SHARED_LIB_EXT),
-			dir: cur_src.join('modules', 'default-impl', 'web-funcs'),
+			out_file: modules_dir.join('libgenvm_modules_web' + NATIVE_SHARED_LIB_EXT),
+			dir: cur_src.join('modules', 'implementation', 'web-funcs'),
 			flags: cargo_flags,
 			env: base_env,
 		),
@@ -38,8 +38,8 @@ project('executor') {
 			name: "dylib",
 			target: config.executor_target,
 			profile: config.profile,
-			out_file: modules_dir.join('libllm' + NATIVE_SHARED_LIB_EXT),
-			dir: cur_src.join('modules', 'default-impl', 'llm-funcs'),
+			out_file: modules_dir.join('libgenvm_modules_llm' + NATIVE_SHARED_LIB_EXT),
+			dir: cur_src.join('modules', 'implementation', 'llm-funcs'),
 			flags: cargo_flags,
 			env: base_env,
 		)
@@ -68,7 +68,7 @@ project('executor') {
 		"codegen",
 		run_codegen.(cur_src.join('codegen', 'data', 'host-fns.json'), cur_src.join('src', 'host', 'host_fns.rs'), type: "rs"),
 		run_codegen.(cur_src.join('codegen', 'data', 'result-codes.json'), cur_src.join('src', 'host', 'result_codes.rs'), type: "rs"),
-		run_codegen.(cur_src.join('codegen', 'data', 'builtin-prompt-templates.json'), cur_src.join('modules', 'default-impl', 'llm-funcs', 'src', 'template_ids.rs'), type: "rs"),
+		run_codegen.(cur_src.join('codegen', 'data', 'builtin-prompt-templates.json'), cur_src.join('modules', 'implementation', 'llm-funcs', 'src', 'template_ids.rs'), type: "rs"),
 	)
 
 	genvm_id_path = root_build.join('genvm_id.txt')
@@ -101,9 +101,9 @@ project('executor') {
 			profile: config.profile,
 			out_file: config.bin_dir.join('genvm'),
 			flags: cargo_flags,
-			env: base_env,
+			env: { "GENVM_COMPILE_LINK_PATH" => modules_dir, **base_env},
 		) {
-			inputs.push(codegen, gen_id_first)
+			inputs.push(codegen, gen_id_first, modules)
 		}
 	)
 

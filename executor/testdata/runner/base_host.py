@@ -23,6 +23,10 @@ ACCOUNT_ADDR_SIZE = 20
 GENERIC_ADDR_SIZE = 32
 
 
+class GenVMTimeoutException(Exception):
+	"Exception that is raised when time limit is exceeded"
+
+
 class DefaultTransactionData(typing.TypedDict):
 	pass
 
@@ -291,11 +295,13 @@ async def run_host_and_program(
 	for x in done:
 		try:
 			x.result()
+		except ConnectionResetError:
+			pass
 		except Exception as e:
 			errors.append(e)
 
 	# coro_loop must finish first if everything succeeded
-	if not coro_loop.done() and deadline is None:
+	if not coro_loop.done() and not handler.has_result() and deadline is None:
 		print('WARNING: genvm finished first')
 		coro_loop.cancel()
 
@@ -329,13 +335,12 @@ async def run_host_and_program(
 
 	try:
 		await coro_loop
+	except ConnectionResetError:
+		pass
 	except (Exception, asyncio.CancelledError) as e:
 		errors.append(e)
 
 	exit_code = await process.wait()
-
-	if not coro_loop.done():
-		coro_loop.cancel()
 
 	if not handler.has_result():
 		if (
@@ -345,7 +350,7 @@ async def run_host_and_program(
 		):
 			errors.append(Exception('no result provided'))
 		else:
-			errors.append(Exception('timeout'))
+			errors.append(GenVMTimeoutException())
 
 	result = RunHostAndProgramRes(
 		b''.join(stdout).decode(),

@@ -2,7 +2,7 @@ use anyhow::Result;
 use regex::Regex;
 use std::io::Read;
 
-pub fn run_with_termination<F>(f: F, timeout_handle: *mut u32) -> Option<F::Output>
+pub fn run_with_termination<F>(f: F) -> Option<F::Output>
 where
     F: core::future::Future + Send,
     F::Output: Send,
@@ -11,10 +11,11 @@ where
         .enable_all()
         .build()
         .unwrap();
-    let should_quit = unsafe { std::sync::atomic::AtomicU32::from_ptr(timeout_handle) };
+    //let should_quit = unsafe { std::sync::atomic::AtomicU32::from_ptr(timeout_handle) };
 
     let selector = async {
         let tracker_fut = async {
+            let should_quit = std::sync::atomic::AtomicU32::new(0);
             while should_quit.load(std::sync::atomic::Ordering::SeqCst) == 0 {
                 tokio::time::sleep(tokio::time::Duration::new(0, 1_000_000)).await;
             }
@@ -53,4 +54,17 @@ pub fn read_response(res: &mut isahc::Response<isahc::Body>) -> Result<String> {
     }
     res_reader.read_to_string(&mut res_buf)?;
     Ok(res_buf)
+}
+
+pub fn make_error_recoverable<T, E>(
+    res: Result<T, E>,
+    message: &'static str,
+) -> genvm_modules_interfaces::ModuleResult<T>
+where
+    E: std::fmt::Debug,
+{
+    res.map_err(|e| {
+        log::error!(original:? = e, mapped = message; "recoverable module error");
+        genvm_modules_interfaces::ModuleError::Recoverable(message)
+    })
 }

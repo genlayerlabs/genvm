@@ -78,12 +78,12 @@ class VecDB[T: np.number, S: int, V]:
 		import :py:mod:`numpy` before ``from genlayer import *`` if you wish to use :py:class:`VecDB`!
 	"""
 
-	Id: typing.ClassVar[type] = _Id
+	type Id = _Id
 	"""
 	:py:class:`int` alias to prevent confusion
 	"""
 
-	Element = typing.ClassVar[VecDBElement]
+	type Element = VecDBElement
 	"""
 	Shorthand to prevent global namespace pollution
 	"""

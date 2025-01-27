@@ -18,5 +18,12 @@ fn main() -> std::io::Result<()> {
     let profile = std::env::var("PROFILE").unwrap();
     println!("cargo::rustc-env=PROFILE={profile}");
 
+    let link_path = std::env::var("GENVM_COMPILE_LINK_PATH").unwrap();
+    println!("cargo:rustc-link-arg=-L{link_path}");
+
+    println!("cargo:rustc-link-arg=-Wl,-rpath=$ORIGIN/../lib/genvm-modules/");
+    println!("cargo:rustc-link-arg=-lgenvm_modules_web");
+    println!("cargo:rustc-link-arg=-lgenvm_modules_llm");
+
     Ok(())
 }

@@ -16,7 +16,6 @@ use errors::ContractError;
 pub use host::{AccountAddress, GenericAddress, Host, MessageData};
 
 use anyhow::{Context, Result};
-use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -42,44 +41,20 @@ struct ConfigSchema {
     modules: ConfigModules,
 }
 
-fn fake_thread_pool() -> genvm_modules_common::SharedThreadPoolABI {
-    extern "C-unwind" fn exec(
-        _zelf: *const (),
-        ctx: *const (),
-        cb: extern "C-unwind" fn(ctx: *const ()),
-    ) {
-        cb(ctx);
-    }
-    genvm_modules_common::SharedThreadPoolABI {
-        ctx: std::ptr::null(),
-        submit_task: exec,
-    }
+#[link(name = "genvm_modules_web")]
+extern "Rust" {
+    #[no_mangle]
+    fn new_web_module(
+        args: genvm_modules_interfaces::CtorArgs<'_>,
+    ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Web + Send + Sync>>;
 }
 
-fn load_mod<T>(
-    mc: &ConfigModule,
-    default_name: &str,
-    f: impl FnOnce(&std::path::Path, &str, genvm_modules_common::CtorArgs) -> Result<T>,
-    log_fd: std::os::fd::RawFd,
-    should_quit: *mut u32,
-) -> Result<T> {
-    let config_str = serde_json::to_string(&mc.config)?;
-    let args = genvm_modules_common::CtorArgs {
-        version: genvm_modules_common::Version { major: 0, minor: 0 },
-        module_config: config_str.as_ptr(),
-        module_config_len: config_str.len(),
-        thread_pool: fake_thread_pool(),
-        log_fd,
-        should_quit,
-    };
-    f(
-        &std::path::Path::new(&mc.path),
-        match &mc.name {
-            Some(v) => v,
-            None => default_name,
-        },
-        args,
-    )
+#[link(name = "genvm_modules_llm")]
+extern "Rust" {
+    #[no_mangle]
+    fn new_llm_module(
+        args: genvm_modules_interfaces::CtorArgs<'_>,
+    ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Llm + Send + Sync>>;
 }
 
 fn create_modules(
@@ -87,9 +62,6 @@ fn create_modules(
     log_fd: std::os::fd::RawFd,
     should_quit: *mut u32,
 ) -> Result<vm::Modules> {
-    use plugin_loader::llm_functions_api::Loader as _;
-    use plugin_loader::web_functions_api::Loader as _;
-
     let mut root_path = std::env::current_exe().with_context(|| "getting current exe")?;
     root_path.pop();
     root_path.pop();
@@ -106,20 +78,21 @@ fn create_modules(
     let config = string_templater::patch_value(&vars, config)?;
     let config: ConfigSchema = serde_json::from_value(config)?;
 
-    let llm = load_mod(
-        &config.modules.llm,
-        "llm",
-        llm_functions_api::Methods::load_from_lib,
-        log_fd,
-        should_quit,
-    )?;
-    let web = load_mod(
-        &config.modules.web,
-        "web",
-        web_functions_api::Methods::load_from_lib,
-        log_fd,
-        should_quit,
-    )?;
+    let llm_config = serde_json::to_string(&config.modules.llm.config)?;
+    let llm = unsafe {
+        new_llm_module(genvm_modules_interfaces::CtorArgs {
+            config: &llm_config,
+        })
+    }
+    .with_context(|| "creating llm module")?;
+
+    let web_config = serde_json::to_string(&config.modules.web.config)?;
+    let web = unsafe {
+        new_web_module(genvm_modules_interfaces::CtorArgs {
+            config: &web_config,
+        })
+    }
+    .with_context(|| "creating llm module")?;
 
     Ok(vm::Modules { llm, web })
 }

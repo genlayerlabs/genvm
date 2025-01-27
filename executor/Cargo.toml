@@ -37,12 +37,6 @@ opt-level = 2
 opt-level = 2
 [profile.dev.package.regalloc2]
 opt-level = 2
-[profile.dev.package.zstd]
-opt-level = 2
-[profile.dev.package.zstd-safe]
-opt-level = 2
-[profile.dev.package.zstd-sys]
-opt-level = 2
 
 [profile.release]
 debug = true
@@ -63,7 +57,7 @@ serde_with = { version = "3.9.0", features = ["base64"] }
 regex = "1.10.6"
 itertools = "0.13.0"
 libloading = "0.8.5"
-genvm-modules-common = { path = "modules/common" }
+genvm-modules-interfaces = { path = "modules/interfaces" }
 libc = { version = "0.2.158", default-features = false }
 zip = "2.2.0"
 directories-next = "2.0.0"
