@@ -9,7 +9,8 @@ to = Pathname.new to
 children = from.glob("**/*.py")
 children.map! { |c| c.relative_path_from(from).to_s }
 children.map! { |c| c.gsub(/(\/__init__)?\.py$/, '').gsub(/\//, '.') }
-children.filter! { |c| c != 'genlayer' and c != 'genlayer.std' and c != 'genlayer.std.advanced' and c != 'genlayer.py.calldata' }
+has_already = ['genlayer', 'genlayer.std', 'genlayer.std.advanced', 'genlayer.py.calldata']
+children.filter! { |c| not has_already.include?(c) }
 children.sort!
 
 template = <<-EOF

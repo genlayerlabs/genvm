@@ -1,7 +1,5 @@
 use core::str;
-use std::{
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use genvm_modules_interfaces::{ModuleError, ModuleResult};
 use itertools::Itertools;

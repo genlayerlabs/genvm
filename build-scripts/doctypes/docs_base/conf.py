@@ -20,6 +20,8 @@ extensions = [
 	'sphinx.ext.intersphinx',
 ]
 
+autodoc_mock_imports = ['word_piece_tokenizer']
+
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
