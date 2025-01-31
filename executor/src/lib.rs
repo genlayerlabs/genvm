@@ -17,7 +17,7 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{atomic::AtomicU32, Arc},
 };
 use ustar::SharedBytes;
 
@@ -50,6 +50,7 @@ extern "Rust" {
 }
 
 fn create_modules(config_path: &String, should_quit: *mut u32) -> Result<vm::Modules> {
+    _ = should_quit;
     let mut root_path = std::env::current_exe().with_context(|| "getting current exe")?;
     root_path.pop();
     root_path.pop();
@@ -82,16 +83,19 @@ fn create_modules(config_path: &String, should_quit: *mut u32) -> Result<vm::Mod
     }
     .with_context(|| "creating llm module")?;
 
-    Ok(vm::Modules { llm, web })
+    Ok(vm::Modules {
+        llm: Arc::from(llm),
+        web: Arc::from(web),
+    })
 }
 
 pub fn create_supervisor(
     config_path: &String,
     mut host: Host,
     is_sync: bool,
-) -> Result<Arc<Mutex<vm::Supervisor>>> {
-    let shared_data = Arc::new(crate::vm::SharedData::new(is_sync));
-    let should_quit_ptr = shared_data.should_exit.as_ptr();
+) -> Result<Arc<tokio::sync::Mutex<vm::Supervisor>>> {
+    let should_quit = Arc::new(AtomicU32::new(0));
+    let should_quit_ptr = should_quit.as_ptr();
     let modules = match create_modules(config_path, should_quit_ptr) {
         Ok(modules) => modules,
         Err(e) => {
@@ -100,25 +104,24 @@ pub fn create_supervisor(
             return Err(err.unwrap_err());
         }
     };
+    let shared_data = Arc::new(crate::vm::SharedData::new(modules, is_sync, should_quit));
 
-    Ok(Arc::new(Mutex::new(vm::Supervisor::new(
-        modules,
+    Ok(Arc::new(tokio::sync::Mutex::new(vm::Supervisor::new(
         host,
         shared_data,
     )?)))
 }
 
-pub fn run_with_impl(
+pub async fn run_with_impl(
     entry_message: MessageData,
-    supervisor: Arc<Mutex<vm::Supervisor>>,
+    supervisor: Arc<tokio::sync::Mutex<vm::Supervisor>>,
     permissions: &str,
 ) -> vm::RunResult {
     let (mut vm, instance) = {
         let supervisor_clone = supervisor.clone();
-        let Ok(mut supervisor) = supervisor.lock() else {
-            return Err(anyhow::anyhow!("can't lock supervisor"));
-        };
         let mut entrypoint = b"call!".to_vec();
+
+        let mut supervisor = supervisor.lock().await;
         supervisor.host.append_calldata(&mut entrypoint)?;
 
         let essential_data = wasi::genlayer_sdk::SingleVMData {
@@ -136,31 +139,28 @@ pub fn run_with_impl(
             supervisor: supervisor_clone,
         };
 
-        let mut vm = supervisor.spawn(essential_data)?;
+        let mut vm = supervisor.spawn(essential_data).await?;
         let instance = supervisor
             .apply_contract_actions(&mut vm)
+            .await
             .with_context(|| "getting runner actions")
             .map_err(|cause| crate::errors::ContractError::wrap("runner_actions".into(), cause))?;
         (vm, instance)
     };
 
-    vm.run(&instance)
+    vm.run(&instance).await
 }
 
-pub fn run_with(
+pub async fn run_with(
     entry_message: MessageData,
-    supervisor: Arc<Mutex<vm::Supervisor>>,
+    supervisor: Arc<tokio::sync::Mutex<vm::Supervisor>>,
     permissions: &str,
 ) -> vm::RunResult {
-    let res = run_with_impl(entry_message, supervisor.clone(), permissions);
+    let res = run_with_impl(entry_message, supervisor.clone(), permissions).await;
     let res = ContractError::unwrap_res(res);
 
-    {
-        let Ok(mut supervisor) = supervisor.lock() else {
-            anyhow::bail!("can't lock supervisor");
-        };
-        supervisor.host.consume_result(&res)?;
-    }
+    let mut supervisor = supervisor.lock().await;
+    supervisor.host.consume_result(&res)?;
 
     res
 }

@@ -1,9 +1,14 @@
 fn main() -> std::io::Result<()> {
     println!("cargo:rerun-if-env-changed=GENVM_PROFILE_PATH");
-    let path = std::env::var("GENVM_PROFILE_PATH").unwrap();
-    println!("cargo:rerun-if-changed={path}");
-    let tag = std::fs::read_to_string(std::path::PathBuf::from(&path))?;
-    let tag = tag.trim();
+    let tag: String = match std::env::var("GENVM_PROFILE_PATH") {
+        Ok(path) => {
+            println!("cargo:rerun-if-changed={path}");
+            let tag = std::fs::read_to_string(std::path::PathBuf::from(&path))?;
+            tag.trim().into()
+        }
+        Err(_) => "test".into(),
+    };
+
     let target = vec![
         std::env::var("CARGO_CFG_TARGET_ARCH").unwrap(),
         std::env::var("CARGO_CFG_TARGET_VENDOR").unwrap(),
@@ -18,8 +23,12 @@ fn main() -> std::io::Result<()> {
     let profile = std::env::var("PROFILE").unwrap();
     println!("cargo::rustc-env=PROFILE={profile}");
 
-    let link_path = std::env::var("GENVM_COMPILE_LINK_PATH").unwrap();
-    println!("cargo:rustc-link-arg=-L{link_path}");
+    match std::env::var("GENVM_COMPILE_LINK_PATH") {
+        Ok(link_path) => {
+            println!("cargo:rustc-link-arg=-L{link_path}");
+        }
+        Err(_) => {}
+    }
 
     println!("cargo:rustc-link-arg=-Wl,-rpath=$ORIGIN/../lib/genvm-modules/");
     println!("cargo:rustc-link-arg=-lgenvm_modules_web");

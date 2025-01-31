@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::vm;
 
@@ -105,7 +105,7 @@ fn add_to_linker_sync_dlsym<T: Send + 'static>(
 
 pub(super) fn add_to_linker_sync<T: Send + 'static>(
     linker: &mut wasmtime::Linker<T>,
-    _linker_shared: Arc<Mutex<wasmtime::Linker<T>>>,
+    _linker_shared: Arc<tokio::sync::Mutex<wasmtime::Linker<T>>>,
     f: impl Fn(&mut T) -> &mut Context + Copy + Send + Sync + 'static,
 ) -> anyhow::Result<()> {
     #[derive(Clone, Copy)]

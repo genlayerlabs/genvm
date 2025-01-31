@@ -1,5 +1,5 @@
 use core::str;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use genvm_modules_interfaces::{ModuleError, ModuleResult};
 use itertools::Itertools;
@@ -19,7 +19,7 @@ pub struct SingleVMData {
     pub conf: base::Config,
     pub message_data: MessageData,
     pub entrypoint: SharedBytes,
-    pub supervisor: Arc<Mutex<crate::vm::Supervisor>>,
+    pub supervisor: Arc<tokio::sync::Mutex<crate::vm::Supervisor>>,
 }
 
 pub struct Context {
@@ -37,12 +37,34 @@ pub(crate) mod generated {
         witx: ["$CARGO_MANIFEST_DIR/src/wasi/witx/genlayer_sdk.witx"],
         errors: { errno => trappable Error },
         wasmtime: false,
+
+        async: {
+            genlayer_sdk::{
+                call_contract, run_nondet, sandbox,
+                get_webpage,
+                exec_prompt, exec_prompt_id, eq_principle_prompt,
+                deploy_contract, post_message,
+                eth_send, eth_call,
+                storage_read, storage_write,
+            }
+        },
     });
 
     wiggle::wasmtime_integration!({
         witx: ["$CARGO_MANIFEST_DIR/src/wasi/witx/genlayer_sdk.witx"],
         errors: { errno => trappable Error },
         target: self,
+
+        block_on: {
+            genlayer_sdk::{
+                call_contract, run_nondet, sandbox,
+                get_webpage,
+                exec_prompt, exec_prompt_id, eq_principle_prompt,
+                deploy_contract, post_message,
+                eth_send, eth_call,
+                storage_read, storage_write,
+            }
+        },
     });
 }
 
@@ -221,6 +243,7 @@ impl ContextVFS<'_> {
 }
 
 #[allow(unused_variables)]
+#[async_trait::async_trait]
 impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
     fn get_message_data(
         &mut self,
@@ -276,7 +299,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         ContractReturn(res).into()
     }
 
-    fn get_webpage(
+    async fn get_webpage(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         config: wiggle::GuestPtr<str>,
@@ -288,20 +311,23 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let config_str = read_string(mem, config)?;
         let url_str = read_string(mem, url)?;
 
-        let supervisor = self.context.data.supervisor.clone();
-        let Ok(mut supervisor) = supervisor.lock() else {
-            return Err(generated::types::Errno::Io.into());
-        };
-
         let mut fuel = 0;
-        let res = supervisor
-            .modules
-            .web
-            .get_webpage(&mut fuel, &config_str, &url_str);
-        supervisor
-            .host
-            .consume_fuel(fuel)
-            .map_err(generated::types::Error::trap)?;
+        let res =
+            self.context
+                .shared_data
+                .modules
+                .web
+                .get_webpage(&mut fuel, &config_str, &url_str);
+
+        if fuel != 0 {
+            let supervisor = self.context.data.supervisor.clone();
+            supervisor
+                .lock()
+                .await
+                .host
+                .consume_fuel(fuel)
+                .map_err(generated::types::Error::trap)?;
+        }
 
         let res = module_result_into_result(res)?;
 
@@ -310,7 +336,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         )))
     }
 
-    fn exec_prompt(
+    async fn exec_prompt(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         config: wiggle::GuestPtr<str>,
@@ -322,19 +348,23 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let config_str = read_string(mem, config)?;
         let prompt_str = read_string(mem, prompt)?;
 
-        let supervisor = self.context.data.supervisor.clone();
-        let Ok(mut supervisor) = supervisor.lock() else {
-            return Err(generated::types::Errno::Io.into());
-        };
         let mut fuel = 0;
-        let res = supervisor
-            .modules
-            .llm
-            .exec_prompt(&mut fuel, &config_str, &prompt_str);
-        supervisor
-            .host
-            .consume_fuel(fuel)
-            .map_err(generated::types::Error::trap)?;
+        let res =
+            self.context
+                .shared_data
+                .modules
+                .llm
+                .exec_prompt(&mut fuel, &config_str, &prompt_str);
+
+        if fuel != 0 {
+            let supervisor = self.context.data.supervisor.clone();
+            supervisor
+                .lock()
+                .await
+                .host
+                .consume_fuel(fuel)
+                .map_err(generated::types::Error::trap)?;
+        }
 
         let res = module_result_into_result(res)?;
 
@@ -343,7 +373,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         )))
     }
 
-    fn exec_prompt_id(
+    async fn exec_prompt_id(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         id: u8,
@@ -354,21 +384,23 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
         let vars_str = read_string(mem, vars)?;
 
-        let supervisor = self.context.data.supervisor.clone();
-        let Ok(mut supervisor) = supervisor.lock() else {
-            return Err(generated::types::Errno::Io.into());
-        };
-
         let mut fuel = 0;
-        let res = supervisor
+        let res = self
+            .context
+            .shared_data
             .modules
             .llm
             .exec_prompt_id(&mut fuel, id, &vars_str);
 
-        supervisor
-            .host
-            .consume_fuel(fuel)
-            .map_err(generated::types::Error::trap)?;
+        if fuel != 0 {
+            let supervisor = self.context.data.supervisor.clone();
+            supervisor
+                .lock()
+                .await
+                .host
+                .consume_fuel(fuel)
+                .map_err(generated::types::Error::trap)?;
+        }
 
         let res = module_result_into_result(res)?;
 
@@ -377,7 +409,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         )))
     }
 
-    fn eq_principle_prompt(
+    async fn eq_principle_prompt(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         id: u8,
@@ -388,28 +420,30 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
         let vars_str = read_string(mem, vars)?;
 
-        let supervisor = self.context.data.supervisor.clone();
-        let Ok(mut supervisor) = supervisor.lock() else {
-            return Err(generated::types::Errno::Io.into());
-        };
-
         let mut fuel = 0;
-        let res = supervisor
+        let res = self
+            .context
+            .shared_data
             .modules
             .llm
             .eq_principle_prompt(&mut fuel, id, &vars_str);
 
-        supervisor
-            .host
-            .consume_fuel(fuel)
-            .map_err(generated::types::Error::trap)?;
+        if fuel != 0 {
+            let supervisor = self.context.data.supervisor.clone();
+            supervisor
+                .lock()
+                .await
+                .host
+                .consume_fuel(fuel)
+                .map_err(generated::types::Error::trap)?;
+        }
 
         let res = module_result_into_result(res)?;
 
         Ok((res as i32).try_into().unwrap())
     }
 
-    fn run_nondet(
+    async fn run_nondet(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         data_leader: &generated::types::Bytes,
@@ -426,13 +460,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             .nondet_call_no
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-        let leaders_res = (|| -> anyhow::Result<Option<vm::RunOk>> {
+        let leaders_res = {
             let supervisor = self.context.data.supervisor.clone();
-            let Ok(mut supervisor) = supervisor.lock() else {
-                return Err(anyhow::anyhow!("can't lock supervisor"));
-            };
+            let mut supervisor = supervisor.lock().await;
             supervisor.host.get_leader_result(call_no)
-        })()
+        }
         .map_err(generated::types::Error::trap)?;
 
         let leaders_res = match (leaders_res, self.context.shared_data.is_sync) {
@@ -489,15 +521,16 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             supervisor: supervisor.clone(),
         };
 
-        let my_res = self.context.spawn_and_run(&supervisor, vm_data);
+        let my_res = self.context.spawn_and_run(&supervisor, vm_data).await;
         let my_res = ContractError::unwrap_res(my_res).map_err(generated::types::Error::trap)?;
 
-        let ret_res = (|| match leaders_res {
+        let ret_res = match leaders_res {
             None => {
-                let Ok(mut supervisor) = supervisor.lock() else {
-                    anyhow::bail!("can't lock supervisor");
-                };
-                supervisor.host.post_result(call_no, &my_res)?;
+                let mut supervisor = supervisor.lock().await;
+                supervisor
+                    .host
+                    .post_result(call_no, &my_res)
+                    .map_err(generated::types::Error::trap)?;
                 Ok(my_res)
             }
             Some(leaders_res) => match my_res {
@@ -523,12 +556,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     Err(ContractError(format!("validator_disagrees call {}", call_no), None).into())
                 }
             },
-        })()
-        .map_err(generated::types::Error::trap)?;
+        };
+        let ret_res = ret_res.map_err(generated::types::Error::trap)?;
         self.set_vm_run_result(ret_res).map(|x| x.0)
     }
 
-    fn sandbox(
+    async fn sandbox(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         data: &generated::types::Bytes,
@@ -556,7 +589,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             supervisor: supervisor.clone(),
         };
 
-        let my_res = self.context.spawn_and_run(&supervisor, vm_data);
+        let my_res = self.context.spawn_and_run(&supervisor, vm_data).await;
         let my_res = ContractError::unwrap_res(my_res).map_err(generated::types::Error::trap)?;
 
         let data: Box<[u8]> = my_res.as_bytes_iter().collect();
@@ -565,7 +598,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         )))
     }
 
-    fn call_contract(
+    async fn call_contract(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         account: &generated::types::Addr,
@@ -628,12 +661,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let res = self
             .context
             .spawn_and_run(&supervisor, vm_data)
+            .await
             .map_err(generated::types::Error::trap)?;
 
         self.set_vm_run_result(res).map(|x| x.0)
     }
 
-    fn post_message(
+    async fn post_message(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         account: &generated::types::Addr,
@@ -648,12 +682,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
 
         let address = AccountAddress::read_from_mem(account, mem)?;
-        let supervisor = self.context.data.supervisor.clone();
         let calldata = calldata.read_owned(mem)?;
         let data = super::common::read_string(mem, data)?;
-        let Ok(mut supervisor) = supervisor.lock() else {
-            return Err(generated::types::Errno::Io.into());
-        };
+
+        let supervisor = self.context.data.supervisor.clone();
+        let mut supervisor = supervisor.lock().await;
         let res = supervisor
             .host
             .post_message(&address, &calldata, &data)
@@ -661,7 +694,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         Ok(())
     }
 
-    fn deploy_contract(
+    async fn deploy_contract(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         calldata: &generated::types::Bytes,
@@ -675,13 +708,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::Forbidden.into());
         }
 
-        let supervisor = self.context.data.supervisor.clone();
         let calldata = calldata.read_owned(mem)?;
         let code = code.read_owned(mem)?;
         let data = super::common::read_string(mem, data)?;
-        let Ok(mut supervisor) = supervisor.lock() else {
-            return Err(generated::types::Errno::Io.into());
-        };
+
+        let supervisor = self.context.data.supervisor.clone();
+        let mut supervisor = supervisor.lock().await;
         let res = supervisor
             .host
             .deploy_contract(&calldata, &code, &data)
@@ -689,7 +721,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         Ok(())
     }
 
-    fn storage_read(
+    async fn storage_read(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         slot: &generated::types::FullAddr,
@@ -711,10 +743,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let mem_size = buf.buf_len as usize;
         let mut vec = Vec::with_capacity(mem_size);
         unsafe { vec.set_len(mem_size) };
+
         let supervisor = self.context.data.supervisor.clone();
-        let Ok(mut supervisor) = supervisor.lock() else {
-            return Err(generated::types::Errno::Io.into());
-        };
+        let mut supervisor = supervisor.lock().await;
 
         let res = supervisor.host.storage_read(
             self.context.data.conf.state_mode,
@@ -729,7 +760,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         Ok(())
     }
 
-    fn storage_write(
+    async fn storage_write(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         slot: &generated::types::FullAddr,
@@ -749,9 +780,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let slot = GenericAddress::read_from_mem(&slot, mem)?;
 
         let supervisor = self.context.data.supervisor.clone();
-        let Ok(mut supervisor) = supervisor.lock() else {
-            return Err(generated::types::Errno::Io.into());
-        };
+        let mut supervisor = supervisor.lock().await;
 
         let res = supervisor.host.storage_write(account, slot, index, &buf);
 
@@ -759,7 +788,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         Ok(())
     }
 
-    fn eth_send(
+    async fn eth_send(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         account: &generated::types::Addr,
@@ -772,12 +801,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::Forbidden.into());
         }
 
-        let supervisor = self.context.data.supervisor.clone();
         let address = AccountAddress::read_from_mem(account, mem)?;
         let calldata = calldata.read_owned(mem)?;
-        let Ok(mut supervisor) = supervisor.lock() else {
-            return Err(generated::types::Errno::Io.into());
-        };
+
+        let supervisor = self.context.data.supervisor.clone();
+        let mut supervisor = supervisor.lock().await;
         let res = supervisor
             .host
             .eth_send(address, &calldata)
@@ -785,7 +813,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         Ok(())
     }
 
-    fn eth_call(
+    async fn eth_call(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         account: &generated::types::Addr,
@@ -798,12 +826,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::Forbidden.into());
         }
 
-        let supervisor = self.context.data.supervisor.clone();
         let address = AccountAddress::read_from_mem(account, mem)?;
         let calldata = calldata.read_owned(mem)?;
-        let Ok(mut supervisor) = supervisor.lock() else {
-            return Err(generated::types::Errno::Io.into());
-        };
+
+        let supervisor = self.context.data.supervisor.clone();
+        let mut supervisor = supervisor.lock().await;
         let res = supervisor
             .host
             .eth_call(address, &calldata)
@@ -822,19 +849,17 @@ impl Context {
         })
     }
 
-    fn spawn_and_run(
+    async fn spawn_and_run(
         &mut self,
-        supervisor: &Arc<Mutex<crate::vm::Supervisor>>,
+        supervisor: &Arc<tokio::sync::Mutex<crate::vm::Supervisor>>,
         essential_data: SingleVMData,
     ) -> vm::RunResult {
         let (mut vm, instance) = {
-            let mut supervisor = supervisor
-                .lock()
-                .map_err(|_e| anyhow::anyhow!("can't lock supervisor"))?;
-            let mut vm = supervisor.spawn(essential_data)?;
-            let instance = supervisor.apply_contract_actions(&mut vm)?;
+            let mut supervisor = supervisor.lock().await;
+            let mut vm = supervisor.spawn(essential_data).await?;
+            let instance = supervisor.apply_contract_actions(&mut vm).await?;
             (vm, instance)
         };
-        vm.run(&instance)
+        vm.run(&instance).await
     }
 }

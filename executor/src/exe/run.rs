@@ -38,7 +38,7 @@ pub struct Args {
     permissions: String,
 }
 
-pub fn handle(args: Args) -> Result<()> {
+pub async fn handle(args: Args) -> Result<()> {
     let message: genvm::MessageData = serde_json::from_str(&args.message)?;
 
     let host = genvm::Host::new(&args.host)?;
@@ -58,15 +58,14 @@ pub fn handle(args: Args) -> Result<()> {
         .with_context(|| "creating supervisor")?;
 
     let shared_data = {
-        let supervisor = supervisor.clone();
-        let Ok(sup) = supervisor.lock() else { panic!() };
-        sup.shared_data.clone()
+        let supervisor = supervisor.lock().await;
+        supervisor.shared_data.clone()
     };
 
     let handle_sigterm = move || {
         log::warn!(target = "rt"; "sigterm received");
         shared_data
-            .should_exit
+            .should_quit
             .store(1, std::sync::atomic::Ordering::SeqCst);
     };
     unsafe {
@@ -74,8 +73,9 @@ pub fn handle(args: Args) -> Result<()> {
         signal_hook::low_level::register(signal_hook::consts::SIGINT, handle_sigterm)?;
     }
 
-    let res =
-        genvm::run_with(message, supervisor, &args.permissions).with_context(|| "running genvm");
+    let res = genvm::run_with(message, supervisor, &args.permissions)
+        .await
+        .with_context(|| "running genvm");
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,
         (Ok(RunOk::ContractError(e, cause)), PrintOption::Shrink) => {

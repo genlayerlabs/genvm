@@ -159,16 +159,18 @@ pub struct SharedData {
     /// shared across all deterministic VMs
     pub nondet_call_no: AtomicU32,
     // rust doesn't have aliasing Arc constructor
-    pub should_exit: Arc<AtomicU32>,
+    pub should_quit: Arc<AtomicU32>,
     pub is_sync: bool,
+    pub modules: Modules,
 }
 
 impl SharedData {
-    pub fn new(is_sync: bool) -> Self {
+    pub fn new(modules: Modules, is_sync: bool, should_quit: Arc<AtomicU32>) -> Self {
         Self {
             nondet_call_no: 0.into(),
-            should_exit: Arc::from(AtomicU32::from(0)),
+            should_quit,
             is_sync,
+            modules,
         }
     }
 }
@@ -179,8 +181,8 @@ pub struct PrecompiledModule {
 }
 
 pub struct Modules {
-    pub web: Box<dyn genvm_modules_interfaces::Web + Send + Sync>,
-    pub llm: Box<dyn genvm_modules_interfaces::Llm + Send + Sync>,
+    pub web: Arc<dyn genvm_modules_interfaces::Web + Send + Sync>,
+    pub llm: Arc<dyn genvm_modules_interfaces::Llm + Send + Sync>,
 }
 
 // impl Drop for Modules {
@@ -194,7 +196,6 @@ pub struct Modules {
 // }
 
 pub struct Supervisor {
-    pub modules: Modules,
     pub host: crate::Host,
     pub shared_data: Arc<SharedData>,
 
@@ -205,7 +206,7 @@ pub struct Supervisor {
 
 pub struct VM {
     pub store: Store<WasmContext>,
-    pub linker: Arc<Mutex<Linker<WasmContext>>>,
+    pub linker: Arc<tokio::sync::Mutex<Linker<WasmContext>>>,
     pub config_copy: wasi::base::Config,
 }
 
@@ -239,7 +240,7 @@ impl VM {
         self.config_copy.is_deterministic
     }
 
-    pub fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
+    pub async fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
         if let Ok(lck) = self.store.data().genlayer_ctx.lock() {
             log::info!(target: "vm", method = "run", wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "");
         }
@@ -250,7 +251,7 @@ impl VM {
             .with_context(|| "can't find entrypoint")?;
         log::info!(target: "vm", event = "execution start"; "");
         let time_start = std::time::Instant::now();
-        let res = func.call(&mut self.store, ());
+        let res = func.call_async(&mut self.store, ()).await;
         log::info!(target: "vm", event = "execution finished", duration:? = time_start.elapsed(); "");
         let res: RunResult = match res {
             Ok(()) => Ok(RunOk::empty_return()),
@@ -306,6 +307,7 @@ impl Engines {
         let mut base_conf = wasmtime::Config::default();
 
         base_conf.debug_info(true);
+        base_conf.async_support(true);
         //base_conf.cranelift_opt_level(wasmtime::OptLevel::Speed);
         base_conf.wasm_tail_call(true);
         base_conf.wasm_bulk_memory(true);
@@ -329,12 +331,10 @@ impl Engines {
         config_base(&mut base_conf)?;
 
         let mut det_conf = base_conf.clone();
-        det_conf.async_support(false);
         det_conf.wasm_floats_enabled(false);
         det_conf.cranelift_nan_canonicalization(true);
 
         let mut non_det_conf = base_conf.clone();
-        non_det_conf.async_support(false);
         non_det_conf.wasm_floats_enabled(true);
 
         let det_engine = Engine::new(&det_conf)?;
@@ -364,11 +364,7 @@ impl WasmFileDesc {
 }
 
 impl Supervisor {
-    pub fn new(
-        modules: Modules,
-        mut host: crate::Host,
-        shared_data: Arc<SharedData>,
-    ) -> Result<Self> {
+    pub fn new(mut host: crate::Host, shared_data: Arc<SharedData>) -> Result<Self> {
         let engines = Engines::create(|base_conf| {
             match Lazy::force(&caching::CACHE_DIR) {
                 None => {
@@ -406,7 +402,6 @@ impl Supervisor {
             engines,
             cached_modules: HashMap::new(),
             runner_cache: runner::RunnerReaderCache::new()?,
-            modules,
             host,
             shared_data,
         })
@@ -492,7 +487,7 @@ impl Supervisor {
         }
     }
 
-    pub fn spawn(&mut self, data: crate::wasi::genlayer_sdk::SingleVMData) -> Result<VM> {
+    pub async fn spawn(&mut self, data: crate::wasi::genlayer_sdk::SingleVMData) -> Result<VM> {
         let config_copy = data.conf.clone();
 
         let engine = if data.conf.is_deterministic {
@@ -504,24 +499,24 @@ impl Supervisor {
         let mut store = Store::new(
             &engine,
             WasmContext::new(data, self.shared_data.clone()),
-            self.shared_data.should_exit.clone(),
+            self.shared_data.should_quit.clone(),
         );
 
         store.limiter(|ctx| &mut ctx.limits);
 
-        let linker_shared = Arc::new(Mutex::new(Linker::new(engine)));
-        let linker_shared_cloned = linker_shared.clone();
-        let Ok(ref mut linker) = linker_shared_cloned.lock() else {
-            panic!();
-        };
-        linker.allow_unknown_exports(false);
-        linker.allow_shadowing(false);
+        let linker_shared = Arc::new(tokio::sync::Mutex::new(Linker::new(engine)));
 
-        crate::wasi::add_to_linker_sync(
-            linker,
-            linker_shared.clone(),
-            |host: &mut WasmContext| host.genlayer_ctx_mut(),
-        )?;
+        {
+            let mut linker = linker_shared.lock().await;
+            linker.allow_unknown_exports(false);
+            linker.allow_shadowing(false);
+
+            crate::wasi::add_to_linker_sync(
+                &mut linker,
+                linker_shared.clone(),
+                |host: &mut WasmContext| host.genlayer_ctx_mut(),
+            )?;
+        }
 
         Ok(VM {
             store,
@@ -541,7 +536,7 @@ impl Supervisor {
         }
     }
 
-    fn apply_action_recursive(
+    async fn apply_action_recursive(
         &mut self,
         vm: &mut VM,
         ctx: &mut ApplyActionCtx,
@@ -609,10 +604,8 @@ impl Supervisor {
                     },
                 )?;
                 let instance = {
-                    let Ok(ref mut linker) = vm.linker.lock() else {
-                        panic!();
-                    };
-                    let instance = linker.instantiate(&mut vm.store, &module)?;
+                    let mut linker = vm.linker.lock().await;
+                    let instance = linker.instantiate_async(&mut vm.store, &module).await?;
                     let name = module
                         .name()
                         .ok_or(anyhow::anyhow!("can't link unnamed module {:?}", current))
@@ -626,7 +619,7 @@ impl Supervisor {
                     Err(_) => {}
                     Ok(func) => {
                         log::info!(target: "rt", method = "call_initialize", runner = self.runner_cache.get_unsafe(current).runner_id().as_str(), path = path; "");
-                        func.call(&mut vm.store, ())?;
+                        func.call_async(&mut vm.store, ()).await?;
                     }
                 }
                 Ok(None)
@@ -651,20 +644,21 @@ impl Supervisor {
                         path_in_arch: path.clone(),
                     },
                 )?;
-                let Ok(ref mut linker) = vm.linker.lock() else {
-                    panic!();
-                };
-                Ok(Some(linker.instantiate(&mut vm.store, &module)?))
+
+                let linker = vm.linker.lock().await;
+                Ok(Some(
+                    linker.instantiate_async(&mut vm.store, &module).await?,
+                ))
             }
             InitAction::When { cond, action } => {
                 if (*cond == WasmMode::Det) != vm.is_det() {
                     return Ok(None);
                 }
-                self.apply_action_recursive(vm, ctx, action, current)
+                Box::pin(self.apply_action_recursive(vm, ctx, action, current)).await
             }
             InitAction::Seq(vec) => {
                 for act in vec {
-                    match self.apply_action_recursive(vm, ctx, act, current)? {
+                    match Box::pin(self.apply_action_recursive(vm, ctx, act, current)).await? {
                         Some(x) => return Ok(Some(x)),
                         None => {}
                     }
@@ -673,13 +667,14 @@ impl Supervisor {
             }
             InitAction::With { runner: id, action } => {
                 if id.as_str() == "<contract>" {
-                    return self.apply_action_recursive(vm, ctx, action, ctx.contract_id);
+                    return Box::pin(self.apply_action_recursive(vm, ctx, action, ctx.contract_id))
+                        .await;
                 }
                 let path = self.runner_cache.path().clone();
                 let _ = self
                     .runner_cache
                     .get_or_create(*id, || make_new_runner_arch_from_tar(*id, &path))?;
-                self.apply_action_recursive(vm, ctx, action, *id)
+                Box::pin(self.apply_action_recursive(vm, ctx, action, *id)).await
             }
             InitAction::Depends(id) => {
                 if !ctx.visited.insert(*id) {
@@ -691,7 +686,7 @@ impl Supervisor {
                     .runner_cache
                     .get_or_create(*id, || make_new_runner_arch_from_tar(*id, &path))?;
                 let new_action = new_arch.get_actions()?;
-                self.apply_action_recursive(vm, ctx, &new_action, *id)
+                Box::pin(self.apply_action_recursive(vm, ctx, &new_action, *id)).await
             }
         }
     }
@@ -738,7 +733,7 @@ impl Supervisor {
         ));
     }
 
-    pub fn apply_contract_actions(&mut self, vm: &mut VM) -> Result<wasmtime::Instance> {
+    pub async fn apply_contract_actions(&mut self, vm: &mut VM) -> Result<wasmtime::Instance> {
         let contract_address = {
             let lock = vm.store.data().genlayer_ctx.lock().unwrap();
             lock.genlayer_sdk.data.message_data.contract_account
@@ -761,7 +756,10 @@ impl Supervisor {
             visited: BTreeSet::new(),
             contract_id,
         };
-        match self.apply_action_recursive(vm, &mut ctx, &actions, contract_id)? {
+        match self
+            .apply_action_recursive(vm, &mut ctx, &actions, contract_id)
+            .await?
+        {
             Some(e) => Ok(e),
             None => Err(anyhow::anyhow!(
                 "actions returned by runner do not have a start instruction"

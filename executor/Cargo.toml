@@ -64,3 +64,5 @@ serde_derive = "1.0.216"
 sha3 = "0.10.8"
 base32 = "0.5.1"
 rustix = "0.38.44"
+tokio = { version = "1.43.0", features = ["rt", "rt-multi-thread", "time", "macros"] }
+async-trait = "0.1.85"

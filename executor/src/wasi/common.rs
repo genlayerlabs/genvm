@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, mem::swap};
+use std::{collections::BTreeMap, mem::swap, pin::Pin};
 
 use wiggle::{GuestError, GuestMemory, GuestPtr};
 
@@ -9,54 +9,35 @@ pub struct FileContents {
     pub pos: usize,
 }
 
-pub type FileEvalError = Option<anyhow::Error>;
-
 pub struct FileContentsUnevaluated {
-    data: Result<FileContents, std::sync::OnceLock<Result<SharedBytes, FileEvalError>>>,
+    future: Option<
+        Pin<Box<dyn std::future::Future<Output = anyhow::Result<FileContents>> + Send + Sync>>,
+    >,
+    cell: tokio::sync::OnceCell<anyhow::Result<FileContents>>,
 }
 
 impl FileContentsUnevaluated {
-    pub fn get(&mut self) -> Result<&mut FileContents, FileEvalError> {
-        match &mut self.data {
-            Ok(x) => return Ok(x),
-            placed_data => {
-                let mut old_data = Ok(FileContents {
-                    contents: SharedBytes::new(b""),
-                    pos: 0,
-                });
-                swap(placed_data, &mut old_data);
-                match old_data {
-                    // old data
-                    Ok(_) => unreachable!(),
-                    Err(fut) => {
-                        todo!();
-                        //fut.wait();
-                        //let val = fut.into_inner().unwrap();
-                        //match val {
-                        //    Ok(val) => {
-                        //        *placed_data = Ok(FileContents {
-                        //            contents: val,
-                        //            pos: 0,
-                        //        });
-                        //        match placed_data {
-                        //            Ok(x) => Ok(x),
-                        //            _ => unreachable!(),
-                        //        }
-                        //    }
-                        //    Err(e) => {
-                        //        // data is already nullified
-                        //        Err(e)
-                        //    }
-                        //}
-                    }
-                }
+    pub async fn get(&mut self) -> anyhow::Result<&mut FileContents> {
+        self.cell
+            .get_or_init(|| {
+                let fut = self.future.take().unwrap();
+                fut
+            })
+            .await;
+        match self.cell.get_mut().unwrap() {
+            Ok(r) => Ok(r),
+            Err(e) => {
+                let mut err = anyhow::anyhow!("<already consumed>");
+                swap(e, &mut err);
+                Err(err)
             }
         }
     }
 
     pub fn from_contents(contents: SharedBytes, pos: usize) -> Self {
         Self {
-            data: Ok(FileContents { contents, pos }),
+            cell: tokio::sync::OnceCell::new_with(Some(Ok(FileContents { contents, pos }))),
+            future: None,
         }
     }
 }
