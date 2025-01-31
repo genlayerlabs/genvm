@@ -93,13 +93,3 @@ from .generate import _known_descs, _Instantiation, LitTuple, LitPy
 
 if 'numpy' in sys.modules:
 	_populate_np_descs()
-else:
-	import importlib.abc
-
-	class _NpDetector(importlib.abc.MetaPathFinder):
-		def find_spec(self, fullname, path, target=None):
-			if fullname == 'numpy':
-				sys.meta_path.remove(self)
-				_populate_np_descs()
-
-	sys.meta_path.insert(0, _NpDetector())

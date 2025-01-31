@@ -26,4 +26,5 @@ Evaluation rules:
 6. Do not make assumptions about unstated criteria or requirements
 
 Output format:
-Respond only with: true or false and nothing else
+Respond with json object containing single key "result" and associated boolean value,
+representing the result of evaluating above criteria. And nothing else

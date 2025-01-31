@@ -56,18 +56,11 @@
     "ModuleConfig": {
       "type": "object",
       "properties": {
-        "path": {
-          "type": "string",
-          "description": "path to .so file, can contain ${} interpolation"
-        },
         "config": {
           "type": "object"
-        },
-        "name": {
-          "anyOf": [{ "type": "string" }, { "type": "null" }]
         }
       },
-      "required": ["path", "config"]
+      "required": ["config"]
     }
   }
 }

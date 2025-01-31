@@ -38,7 +38,7 @@ pub struct Args {
     permissions: String,
 }
 
-pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
+pub fn handle(args: Args) -> Result<()> {
     let message: genvm::MessageData = serde_json::from_str(&args.message)?;
 
     let host = genvm::Host::new(&args.host)?;
@@ -54,7 +54,7 @@ pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
         anyhow::bail!("Invalid permissions {}", &args.permissions)
     }
 
-    let supervisor = genvm::create_supervisor(&args.config, host, log_fd, args.sync)
+    let supervisor = genvm::create_supervisor(&args.config, host, args.sync)
         .with_context(|| "creating supervisor")?;
 
     let shared_data = {

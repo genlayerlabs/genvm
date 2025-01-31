@@ -6,6 +6,7 @@
 # }
 
 from genlayer import *
+import numpy as np
 import genlayermodelwrappers
 
 

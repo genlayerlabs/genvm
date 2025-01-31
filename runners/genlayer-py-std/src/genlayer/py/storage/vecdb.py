@@ -5,6 +5,8 @@ __all__ = ('VecDB', 'VecDBElement')
 from . import DynArray, TreeMap
 from ..types import u32
 
+from .annotations import allow_storage
+
 import typing
 import numpy as np
 
@@ -65,6 +67,7 @@ class VecDBElement[T: np.number, S: int, V, Dist]:
 		self._db._free_idx[self._idx] = None
 
 
+@allow_storage
 class VecDB[T: np.number, S: int, V]:
 	"""
 	Data structure that supports storing and querying vector data

@@ -326,10 +326,13 @@ impl Impl {
     }
 }
 
+const JSON_PROMPT_CONFIG: &str = r#"{"response_format": "json"}"#;
+
 impl genvm_modules_interfaces::Llm for Impl {
     fn exec_prompt(&self, gas: &mut u64, config: &str, prompt: &str) -> ModuleResult<String> {
+        log::debug!(event = "exec_prompt", prompt = prompt, config = config, model = self.config.model; "start");
         let res = self.exec_prompt_impl(gas, config, prompt);
-        log::info!(event = "exec_prompt", prompt = prompt, config = config, model = self.config.model, result:? = res; "");
+        log::info!(event = "exec_prompt", prompt = prompt, config = config, model = self.config.model, result:? = res; "finished");
         res
     }
 
@@ -355,7 +358,7 @@ impl genvm_modules_interfaces::Llm for Impl {
         let vars: std::collections::BTreeMap<String, String> =
             make_error_recoverable(serde_json::from_str(vars), "invalid variables")?;
         let new_prompt = string_templater::patch_str(&vars, &template)?;
-        let res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
+        let res = self.exec_prompt(gas, JSON_PROMPT_CONFIG, &new_prompt)?;
         answer_is_bool(res)
     }
 
@@ -377,21 +380,16 @@ impl genvm_modules_interfaces::Llm for Impl {
         let vars: std::collections::BTreeMap<String, String> =
             make_error_recoverable(serde_json::from_str(vars), "invalid vars")?;
         let new_prompt = string_templater::patch_str(&vars, &template)?;
-        let res = self.exec_prompt(gas, "{}".into(), &new_prompt)?;
+        let res = self.exec_prompt(gas, &"{}", &new_prompt)?;
         Ok(res)
     }
 }
 
 fn answer_is_bool(mut res: String) -> ModuleResult<bool> {
-    res.make_ascii_lowercase();
-    let has_true = res.contains("true");
-    let has_false = res.contains("false");
-    if has_true == has_false {
-        return Err(ModuleError::Fatal(anyhow::anyhow!(
-            "contains both true and false"
-        )));
-    }
-    Ok(has_true)
+    let val: serde_json::Value = serde_json::from_str(&res)?;
+    val.pointer("/result")
+        .and_then(|x| x.as_bool())
+        .ok_or(ModuleError::Fatal(anyhow::anyhow!("invalid json")))
 }
 
 #[no_mangle]

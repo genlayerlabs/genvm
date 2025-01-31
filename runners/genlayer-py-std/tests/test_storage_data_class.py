@@ -1,8 +1,9 @@
-from genlayer.py.storage import DynArray
+from genlayer.py.storage import allow_storage
 from genlayer.py.storage._internal.generate import storage
 from dataclasses import dataclass
 
 
+@allow_storage
 @dataclass
 class A:
 	x: str

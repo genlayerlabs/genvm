@@ -112,7 +112,7 @@ fn trim_zeroes(x: &[u8]) -> &[u8] {
 impl Archive {
     pub fn from_ustar(original_data: SharedBytes) -> anyhow::Result<Self> {
         const BLOCK_SIZE: usize = 512;
-        const RECORD_SIZE: usize = BLOCK_SIZE * 20;
+        const _RECORD_SIZE: usize = BLOCK_SIZE * 20;
 
         if original_data.len() < BLOCK_SIZE * 2 {
             anyhow::bail!("archive is too short for tar")
@@ -199,7 +199,11 @@ impl Archive {
             let mut buf = Vec::new();
             file.read_to_end(&mut buf)?;
 
-            map_try_insert(&mut res, String::from(file.name()), SharedBytes::from(buf.as_slice()))?;
+            map_try_insert(
+                &mut res,
+                String::from(file.name()),
+                SharedBytes::from(buf.as_slice()),
+            )?;
         }
 
         Ok(Self { data: res })

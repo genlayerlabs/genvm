@@ -23,8 +23,6 @@ use ustar::SharedBytes;
 
 #[derive(Deserialize)]
 struct ConfigModule {
-    path: String,
-    name: Option<String>,
     config: serde_json::Value,
 }
 
@@ -51,11 +49,7 @@ extern "Rust" {
     ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Llm + Send + Sync>>;
 }
 
-fn create_modules(
-    config_path: &String,
-    log_fd: std::os::fd::RawFd,
-    should_quit: *mut u32,
-) -> Result<vm::Modules> {
+fn create_modules(config_path: &String, should_quit: *mut u32) -> Result<vm::Modules> {
     let mut root_path = std::env::current_exe().with_context(|| "getting current exe")?;
     root_path.pop();
     root_path.pop();
@@ -94,12 +88,11 @@ fn create_modules(
 pub fn create_supervisor(
     config_path: &String,
     mut host: Host,
-    log_fd: std::os::fd::RawFd,
     is_sync: bool,
 ) -> Result<Arc<Mutex<vm::Supervisor>>> {
     let shared_data = Arc::new(crate::vm::SharedData::new(is_sync));
     let should_quit_ptr = shared_data.should_exit.as_ptr();
-    let modules = match create_modules(config_path, log_fd, should_quit_ptr) {
+    let modules = match create_modules(config_path, should_quit_ptr) {
         Ok(modules) => modules,
         Err(e) => {
             let err = Err(e);

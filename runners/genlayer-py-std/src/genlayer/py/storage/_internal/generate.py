@@ -27,7 +27,13 @@ from .desc_record import _RecordDesc, WithRecordStorageSlot
 from ..vec import DynArray, _DynArrayDesc, Array, _ArrayDesc
 
 
+def allow_storage[T: type](cls: T) -> T:
+	cls.__allow_storage__ = True
+	return cls
+
+
 def storage[T: type](cls: T) -> T:
+	cls = allow_storage(cls)
 	_storage_build(cls, {})
 	return cls
 
@@ -196,7 +202,10 @@ def _storage_build_inner(
 	cls: type | _Instantiation,
 	generics_map: dict[str, TypeDesc | Lit],
 ) -> TypeDesc | Lit:
-	assert cls is not int, 'use `bigint` please'
+	if cls is int:
+		raise TypeError(
+			'use `bigint` or one of sized integers please, see https://docs.genlayer.com/developers/intelligent-contracts/storage'
+		)
 	if isinstance(cls, typing.TypeVar):
 		return generics_map[cls.__name__]
 
@@ -279,6 +288,13 @@ def _storage_build_struct(
 ) -> TypeDesc:
 	if cls is DynArray:
 		raise Exception('invalid builder')
+
+	if not hasattr(cls, '__allow_storage__'):
+		raise TypeError(
+			f'class is not marked for usage within storage, please, annotate it with @allow_storage',
+			cls,
+		)
+
 	size: int = 0
 	copy_actions: list[CopyAction] = []
 	props: dict[str, tuple[TypeDesc, int]] = {}

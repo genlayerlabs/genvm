@@ -68,10 +68,8 @@ fn main() -> Result<()> {
 
     log::info!(target: "vm", method = "start", version = env!("GENVM_BUILD_ID"); "");
 
-    let log_fd = args.log_fd;
-
     match args.command {
-        Commands::Run(args) => exe::run::handle(args, log_fd),
+        Commands::Run(args) => exe::run::handle(args),
         Commands::Precompile(args) => exe::precompile::handle(args),
     }
 }
