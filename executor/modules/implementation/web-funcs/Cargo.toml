@@ -3,9 +3,6 @@ name = "genvm-modules-default-web"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-crate-type=["cdylib"]
-
 [dependencies]
 anyhow = { version = "1.0.86", features = [] }
 encoding_rs = { version = "0.8.34", features = []}
@@ -22,3 +19,4 @@ tokio = { version = "1.42.0", features = ["rt", "rt-multi-thread"] }
 url = "2.5.2"
 log = { version = "0.4.25", features = ["kv_unstable_serde"] }
 crossbeam = "0.8.4"
+async-trait = "0.1.85"

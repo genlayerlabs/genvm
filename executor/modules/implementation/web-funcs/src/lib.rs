@@ -1,7 +1,4 @@
-use anyhow::Result;
-
-use genvm_modules_impl_common::*;
-use genvm_modules_interfaces::{CtorArgs, ModuleError, ModuleResult};
+use genvm_modules_interfaces::{ModuleError, ModuleResult};
 
 use serde_derive::Deserialize;
 
@@ -80,10 +77,10 @@ impl Impl {
     }
 }
 
-impl genvm_modules_interfaces::Web for Impl {
-    fn get_webpage(&self, _gas: &mut u64, config: &str, url: &str) -> ModuleResult<String> {
-        let config: GetWebpageConfig = serde_json::from_str(config)?;
-        let url = url::Url::parse(url)?;
+impl Impl {
+    async fn get_webpage(&self, config: String, url: String) -> ModuleResult<String> {
+        let config: GetWebpageConfig = serde_json::from_str(&config)?;
+        let url = url::Url::parse(&url)?;
         if url.scheme() == "file" {
             return Err(ModuleError::Recoverable("file scheme is forbidden"));
         }
@@ -96,60 +93,50 @@ impl genvm_modules_interfaces::Web for Impl {
         }
 
         //let should_quit = self.should_quit;
-        let res_buf: Option<ModuleResult<String>> = run_with_termination(
-            async move {
-                let session = self.get_session()?;
+        let session = self.get_session()?;
 
-                let client = reqwest::Client::new();
-                let req_body = serde_json::json!({
-                    "url": url.as_str()
-                });
-                let req_body = serde_json::to_string(&req_body)?;
-                let req = client
-                    .post(&format!("{}/session/{}/url", self.config.host, session.id))
-                    .header("Content-Type", "application/json; charset=utf-8")
-                    .body(req_body.clone());
+        let client = reqwest::Client::new();
+        let req_body = serde_json::json!({
+            "url": url.as_str()
+        });
+        let req_body = serde_json::to_string(&req_body)?;
+        let req = client
+            .post(&format!("{}/session/{}/url", self.config.host, session.id))
+            .header("Content-Type", "application/json; charset=utf-8")
+            .body(req_body.clone());
 
-                log::info!(request:? = req, body = req_body; "sending request");
+        log::info!(request:? = req, body = req_body; "sending request");
 
-                let res = req.send().await?;
-                let res = res.error_for_status()?;
-                std::mem::drop(res);
+        let res = req.send().await?;
+        let res = res.error_for_status()?;
+        std::mem::drop(res);
 
-                let script = match config.mode {
-                    GetWebpageConfigMode::html => {
-                        r#"{ "script": "return document.body.innerHTML", "args": [] }"#
-                    }
-                    GetWebpageConfigMode::text => {
-                        r#"{ "script": "return document.body.innerText.replace(/[\\s\\n]+/g, ' ')", "args": [] }"#
-                    }
-                };
-
-                let req = client
-                    .post(&format!(
-                        "{}/session/{}/execute/sync",
-                        self.config.host, session.id
-                    ))
-                    .header("Content-Type", "application/json; charset=utf-8")
-                    .body(script);
-                log::debug!(request:? = req, body = script; "getting web page data");
-
-                let res = req.send().await?;
-
-                let res = res.error_for_status()?;
-
-                let body = res.text().await?;
-
-                let _ = self.sessions.push(session);
-                Ok(body)
-            },
-            //should_quit,
-        );
-        let res_buf = match res_buf {
-            Some(res_buf) => res_buf,
-            None => return Err(ModuleError::Recoverable("timeout")),
+        let script = match config.mode {
+            GetWebpageConfigMode::html => {
+                r#"{ "script": "return document.body.innerHTML", "args": [] }"#
+            }
+            GetWebpageConfigMode::text => {
+                r#"{ "script": "return document.body.innerText.replace(/[\\s\\n]+/g, ' ')", "args": [] }"#
+            }
         };
-        let res_buf = res_buf?;
+
+        let req = client
+            .post(&format!(
+                "{}/session/{}/execute/sync",
+                self.config.host, session.id
+            ))
+            .header("Content-Type", "application/json; charset=utf-8")
+            .body(script);
+        log::debug!(request:? = req, body = script; "getting web page data");
+
+        let res = req.send().await?;
+
+        let res = res.error_for_status()?;
+
+        let body = res.text().await?;
+
+        let _ = self.sessions.push(session);
+        let res_buf = body;
 
         let val: serde_json::Value = serde_json::from_str(&res_buf)?;
         let val = val
@@ -161,15 +148,35 @@ impl genvm_modules_interfaces::Web for Impl {
     }
 }
 
+struct Proxy(Arc<Impl>);
+
+#[async_trait::async_trait]
+impl genvm_modules_interfaces::Web for Proxy {
+    fn get_webpage(
+        &self,
+        config: String,
+        url: String,
+    ) -> tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>> {
+        async fn forward(zelf: Arc<Impl>, config: String, url: String) -> ModuleResult<String> {
+            zelf.get_webpage(config, url).await
+        }
+        tokio::spawn(genvm_modules_interfaces::module_result_to_future(forward(
+            self.0.clone(),
+            config,
+            url,
+        )))
+    }
+}
+
 #[no_mangle]
 pub fn new_web_module(
     args: genvm_modules_interfaces::CtorArgs<'_>,
 ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Web + Send + Sync>> {
     let config: Config = serde_json::from_str(args.config)?;
     let host = config.host.clone();
-    Ok(Box::new(Impl {
+    Ok(Box::new(Proxy(Arc::new(Impl {
         sessions: crossbeam::queue::ArrayQueue::new(4),
         config,
         host,
-    }))
+    }))))
 }

@@ -2,6 +2,7 @@ use serde_derive::{Deserialize, Serialize};
 
 use genvm_modules_impl_common::*;
 use genvm_modules_interfaces::{CtorArgs, ModuleError, ModuleResult};
+use std::sync::Arc;
 
 mod string_templater;
 mod template_ids;
@@ -80,11 +81,14 @@ impl Impl {
         Ok(Impl { config, api_key })
     }
 
-    fn exec_prompt_impl_anthropic(
+    async fn consume_gas(&self, _amount: u64) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn exec_prompt_impl_anthropic(
         &self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
-        _gas: &mut u64,
     ) -> ModuleResult<String> {
         let mut request = serde_json::json!({
             "model": &self.config.model,
@@ -142,11 +146,10 @@ impl Impl {
         }
     }
 
-    fn exec_prompt_impl_openai(
+    async fn exec_prompt_impl_openai(
         &self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
-        gas: &mut u64,
     ) -> ModuleResult<String> {
         let mut request = serde_json::json!({
             "model": &self.config.model,
@@ -179,20 +182,20 @@ impl Impl {
             .pointer("/choices/0/message/content")
             .and_then(|v| v.as_str())
             .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+
         let total_tokens = val
             .pointer("/usage/total_tokens")
             .and_then(|v| v.as_u64())
             .ok_or(anyhow::anyhow!("can't get eval_duration field {}", &res))?;
-        *gas -= (total_tokens << 8).min(*gas);
+        self.consume_gas(total_tokens << 8).await?;
 
         Ok(response.into())
     }
 
-    fn exec_prompt_impl_gemini(
+    async fn exec_prompt_impl_gemini(
         &self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
-        _gas: &mut u64,
     ) -> ModuleResult<String> {
         let request = serde_json::json!({
             "contents": [{
@@ -229,11 +232,10 @@ impl Impl {
         Ok(res.into())
     }
 
-    fn exec_prompt_impl_ollama(
+    async fn exec_prompt_impl_ollama(
         &self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
-        gas: &mut u64,
     ) -> ModuleResult<String> {
         let mut request = serde_json::json!({
             "model": &self.config.model,
@@ -260,20 +262,13 @@ impl Impl {
             .and_then(|v| v.get("response"))
             .and_then(|v| v.as_str())
             .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
-        let eval_duration = val
-            .as_object()
-            .and_then(|v| v.get("eval_duration"))
-            .and_then(|v| v.as_u64())
-            .ok_or(anyhow::anyhow!("can't get eval_duration field {}", &res))?;
-        *gas -= (eval_duration << 4).min(*gas);
         Ok(response.into())
     }
 
-    fn exec_prompt_impl_simulator(
+    async fn exec_prompt_impl_simulator(
         &self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
-        _gas: &mut u64,
     ) -> ModuleResult<String> {
         let request = serde_json::json!({
             "jsonrpc": "2.0",
@@ -297,7 +292,7 @@ impl Impl {
             )))
     }
 
-    fn exec_prompt_impl(&self, gas: &mut u64, config: &str, prompt: &str) -> ModuleResult<String> {
+    async fn exec_prompt_impl(&self, config: &str, prompt: &str) -> ModuleResult<String> {
         let config: ExecPromptConfig =
             make_error_recoverable(serde_json::from_str(config), "invalid configuration")?;
         let response_format = config
@@ -306,17 +301,19 @@ impl Impl {
             .unwrap_or(ExecPromptConfigMode::Text);
 
         let res_not_sanitized = match self.config.provider {
-            LLLMProvider::Ollama => self.exec_prompt_impl_ollama(prompt, response_format, gas),
+            LLLMProvider::Ollama => self.exec_prompt_impl_ollama(prompt, response_format).await,
             LLLMProvider::OpenaiCompatible => {
-                self.exec_prompt_impl_openai(prompt, response_format, gas)
+                self.exec_prompt_impl_openai(prompt, response_format).await
             }
             LLLMProvider::Simulator => {
-                self.exec_prompt_impl_simulator(prompt, response_format, gas)
+                self.exec_prompt_impl_simulator(prompt, response_format)
+                    .await
             }
             LLLMProvider::Anthropic => {
-                self.exec_prompt_impl_anthropic(prompt, response_format, gas)
+                self.exec_prompt_impl_anthropic(prompt, response_format)
+                    .await
             }
-            LLLMProvider::Google => self.exec_prompt_impl_gemini(prompt, response_format, gas),
+            LLLMProvider::Google => self.exec_prompt_impl_gemini(prompt, response_format).await,
         }?;
 
         match response_format {
@@ -328,20 +325,15 @@ impl Impl {
 
 const JSON_PROMPT_CONFIG: &str = r#"{"response_format": "json"}"#;
 
-impl genvm_modules_interfaces::Llm for Impl {
-    fn exec_prompt(&self, gas: &mut u64, config: &str, prompt: &str) -> ModuleResult<String> {
+impl Impl {
+    async fn exec_prompt(&self, config: &str, prompt: &str) -> ModuleResult<String> {
         log::debug!(event = "exec_prompt", prompt = prompt, config = config, model = self.config.model; "start");
-        let res = self.exec_prompt_impl(gas, config, prompt);
+        let res = self.exec_prompt_impl(config, prompt).await;
         log::info!(event = "exec_prompt", prompt = prompt, config = config, model = self.config.model, result:? = res; "finished");
         res
     }
 
-    fn eq_principle_prompt(
-        &self,
-        gas: &mut u64,
-        template_id: u8,
-        vars: &str,
-    ) -> ModuleResult<bool> {
+    async fn eq_principle_prompt(&self, template_id: u8, vars: &str) -> ModuleResult<bool> {
         use template_ids::TemplateId;
         let id = make_error_recoverable(
             TemplateId::try_from(template_id)
@@ -358,11 +350,11 @@ impl genvm_modules_interfaces::Llm for Impl {
         let vars: std::collections::BTreeMap<String, String> =
             make_error_recoverable(serde_json::from_str(vars), "invalid variables")?;
         let new_prompt = string_templater::patch_str(&vars, &template)?;
-        let res = self.exec_prompt(gas, JSON_PROMPT_CONFIG, &new_prompt)?;
+        let res = self.exec_prompt(JSON_PROMPT_CONFIG, &new_prompt).await?;
         answer_is_bool(res)
     }
 
-    fn exec_prompt_id(&self, gas: &mut u64, template_id: u8, vars: &str) -> ModuleResult<String> {
+    async fn exec_prompt_id(&self, template_id: u8, vars: &str) -> ModuleResult<String> {
         use template_ids::TemplateId;
         let id = make_error_recoverable(
             TemplateId::try_from(template_id)
@@ -380,23 +372,68 @@ impl genvm_modules_interfaces::Llm for Impl {
         let vars: std::collections::BTreeMap<String, String> =
             make_error_recoverable(serde_json::from_str(vars), "invalid vars")?;
         let new_prompt = string_templater::patch_str(&vars, &template)?;
-        let res = self.exec_prompt(gas, &"{}", &new_prompt)?;
+        let res = self.exec_prompt(&"{}", &new_prompt).await?;
         Ok(res)
     }
 }
 
-fn answer_is_bool(mut res: String) -> ModuleResult<bool> {
+fn answer_is_bool(res: String) -> ModuleResult<bool> {
     let val: serde_json::Value = serde_json::from_str(&res)?;
     val.pointer("/result")
         .and_then(|x| x.as_bool())
         .ok_or(ModuleError::Fatal(anyhow::anyhow!("invalid json")))
 }
 
+struct Proxy(Arc<Impl>);
+
+#[async_trait::async_trait]
+impl genvm_modules_interfaces::Llm for Proxy {
+    fn exec_prompt(
+        &self,
+        config: String,
+        prompt: String,
+    ) -> tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>> {
+        async fn forward(zelf: Arc<Impl>, config: String, prompt: String) -> ModuleResult<String> {
+            zelf.exec_prompt(&config, &prompt).await
+        }
+
+        tokio::spawn(genvm_modules_interfaces::module_result_to_future(forward(
+            self.0.clone(),
+            config,
+            prompt,
+        )))
+    }
+    fn exec_prompt_id(
+        &self,
+        id: u8,
+        vars: String,
+    ) -> tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>> {
+        async fn forward(zelf: Arc<Impl>, id: u8, vars: String) -> ModuleResult<String> {
+            zelf.exec_prompt_id(id, &vars).await
+        }
+
+        tokio::spawn(genvm_modules_interfaces::module_result_to_future(forward(
+            self.0.clone(),
+            id,
+            vars,
+        )))
+    }
+
+    fn eq_principle_prompt<'a>(
+        &'a self,
+        id: u8,
+        vars: &'a str,
+    ) -> core::pin::Pin<Box<dyn ::core::future::Future<Output = ModuleResult<bool>> + Send + 'a>>
+    {
+        Box::pin(self.0.eq_principle_prompt(id, vars))
+    }
+}
+
 #[no_mangle]
 pub fn new_llm_module(
     args: CtorArgs<'_>,
 ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Llm + Send + Sync>> {
-    Ok(Box::new(Impl::try_new(args)?))
+    Ok(Box::new(Proxy(Arc::new(Impl::try_new(args)?))))
 }
 
 #[cfg(test)]
@@ -446,10 +483,8 @@ mod tests {
 
         let imp = Impl::try_new(CtorArgs { config: conf }).unwrap();
 
-        let mut fake_gas = 0;
         let res = imp
             .exec_prompt(
-                &mut fake_gas,
                 "{}",
                 "Respond with \"yes\" (without quotes) and only this word",
             )
@@ -464,8 +499,7 @@ mod tests {
 
         let imp = Impl::try_new(CtorArgs { config: conf }).unwrap();
 
-        let mut fake_gas = 0;
-        let res = imp.exec_prompt(&mut fake_gas, "{\"response_format\": \"json\"}", "respond with json object containing single key \"result\" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes").unwrap();
+        let res = imp.exec_prompt("{\"response_format\": \"json\"}", "respond with json object containing single key \"result\" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes").unwrap();
 
         let res: serde_json::Value = serde_json::from_str(&res)
             .with_context(|| format!("result is {}", &res))

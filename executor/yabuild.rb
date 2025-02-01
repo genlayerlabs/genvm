@@ -103,7 +103,7 @@ project('executor') {
 			flags: cargo_flags,
 			env: { "GENVM_COMPILE_LINK_PATH" => modules_dir, **base_env},
 		) {
-			inputs.push(codegen, gen_id_first, modules)
+			inputs.push(codegen, gen_id_first)
 		}
 	)
 

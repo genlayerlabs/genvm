@@ -2,41 +2,6 @@ use anyhow::Result;
 use regex::Regex;
 use std::io::Read;
 
-pub fn run_with_termination<F>(f: F) -> Option<F::Output>
-where
-    F: core::future::Future + Send,
-    F::Output: Send,
-{
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-    //let should_quit = unsafe { std::sync::atomic::AtomicU32::from_ptr(timeout_handle) };
-
-    let selector = async {
-        let tracker_fut = async {
-            let should_quit = std::sync::atomic::AtomicU32::new(0);
-            while should_quit.load(std::sync::atomic::Ordering::SeqCst) == 0 {
-                tokio::time::sleep(tokio::time::Duration::new(0, 1_000_000)).await;
-            }
-        };
-        let waiter = tokio::spawn(tracker_fut);
-
-        loop {
-            tokio::select! {
-                val = f => return Some(val),
-                _ = waiter => {
-                    return None
-                },
-            }
-        }
-    };
-
-    let a = rt.block_on(selector);
-    rt.shutdown_background();
-    a
-}
-
 static CENSOR_RESPONSE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r#""set-cookie": "[^"]*""#).unwrap());
 

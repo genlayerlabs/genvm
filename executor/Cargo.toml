@@ -37,8 +37,12 @@ debug = true
 # 432745aca5ee802255935768125810fcba38dae0
 wasmtime = { path = "third-party/wasmtime/crates/wasmtime", default-features = false, features = ["cranelift", "std", "parallel-compilation", "cache", "demangle"] }
 wasmtime-cache = { path = "third-party/wasmtime/crates/cache" }
-wiggle = { path = "third-party/wasmtime/crates/wiggle" }
+wiggle = { path = "third-party/wasmtime/crates/wiggle", default-features = false, features = ["wasmtime_async"] }
 wasmparser = { path = "third-party/wasm-tools/crates/wasmparser" }
+
+genvm-modules-interfaces = { path = "modules/interfaces" }
+genvm-modules-default-llm = { path = "modules/implementation/llm-funcs" }
+genvm-modules-default-web = { path = "modules/implementation/web-funcs" }
 
 anyhow = { version = "1.0.22", default-features = false }
 tracing = "0.1.26"
@@ -49,7 +53,6 @@ serde_with = { version = "3.9.0", features = ["base64"] }
 regex = "1.10.6"
 itertools = "0.13.0"
 libloading = "0.8.5"
-genvm-modules-interfaces = { path = "modules/interfaces" }
 libc = { version = "0.2.158", default-features = false }
 zip = "2.2.0"
 directories-next = "2.0.0"

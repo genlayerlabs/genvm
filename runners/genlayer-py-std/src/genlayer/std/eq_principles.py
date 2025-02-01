@@ -17,6 +17,7 @@ from ._internal import (
 	decode_sub_vm_result,
 	decode_sub_vm_result_retn,
 	lazy_from_fd,
+	lazy_from_fd_no_check,
 	_lazy_api,
 )
 from .nondet_fns import exec_prompt
@@ -124,4 +125,6 @@ def sandbox(fn: typing.Callable[[], typing.Any]) -> Lazy[typing.Any]:
 	"""
 	import cloudpickle
 
-	return lazy_from_fd(wasi.sandbox(cloudpickle.dumps(fn)), decode_sub_vm_result)
+	return lazy_from_fd_no_check(
+		wasi.sandbox(cloudpickle.dumps(fn)), decode_sub_vm_result
+	)

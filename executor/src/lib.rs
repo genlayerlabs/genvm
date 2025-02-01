@@ -37,17 +37,15 @@ struct ConfigSchema {
     modules: ConfigModules,
 }
 
-extern "Rust" {
-    fn new_web_module(
-        args: genvm_modules_interfaces::CtorArgs<'_>,
-    ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Web + Send + Sync>>;
-}
-
-extern "Rust" {
-    fn new_llm_module(
-        args: genvm_modules_interfaces::CtorArgs<'_>,
-    ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Llm + Send + Sync>>;
-}
+//extern "Rust" {
+//    fn new_web_module(
+//        args: genvm_modules_interfaces::CtorArgs<'_>,
+//    ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Web + Send + Sync>>;
+//
+//    fn new_llm_module(
+//        args: genvm_modules_interfaces::CtorArgs<'_>,
+//    ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Llm + Send + Sync>>;
+//}
 
 fn create_modules(config_path: &String, should_quit: *mut u32) -> Result<vm::Modules> {
     _ = should_quit;
@@ -68,19 +66,15 @@ fn create_modules(config_path: &String, should_quit: *mut u32) -> Result<vm::Mod
     let config: ConfigSchema = serde_json::from_value(config)?;
 
     let llm_config = serde_json::to_string(&config.modules.llm.config)?;
-    let llm = unsafe {
-        new_llm_module(genvm_modules_interfaces::CtorArgs {
-            config: &llm_config,
-        })
-    }
+    let llm = genvm_modules_default_llm::new_llm_module(genvm_modules_interfaces::CtorArgs {
+        config: &llm_config,
+    })
     .with_context(|| "creating llm module")?;
 
     let web_config = serde_json::to_string(&config.modules.web.config)?;
-    let web = unsafe {
-        new_web_module(genvm_modules_interfaces::CtorArgs {
-            config: &web_config,
-        })
-    }
+    let web = genvm_modules_default_web::new_web_module(genvm_modules_interfaces::CtorArgs {
+        config: &web_config,
+    })
     .with_context(|| "creating llm module")?;
 
     Ok(vm::Modules {

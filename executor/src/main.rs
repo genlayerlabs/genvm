@@ -31,7 +31,7 @@ struct CliArgs {
     #[arg(long, default_value_t = default_log_level())]
     log_level: log::LevelFilter,
 
-    #[arg(long, default_value = "wasmtime*,cranelift*")]
+    #[arg(long, default_value = "wasmtime*,cranelift*,tracing*,polling*")]
     log_disable: String,
 
     #[arg(long, default_value = "2")]

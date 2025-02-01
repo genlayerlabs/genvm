@@ -30,9 +30,9 @@ fn main() -> std::io::Result<()> {
         Err(_) => {}
     }
 
-    println!("cargo:rustc-link-arg=-Wl,-rpath=$ORIGIN/../lib/genvm-modules/");
-    println!("cargo:rustc-link-arg=-lgenvm_modules_web");
-    println!("cargo:rustc-link-arg=-lgenvm_modules_llm");
+    //println!("cargo:rustc-link-arg=-Wl,-rpath=$ORIGIN/../lib/genvm-modules/");
+    //println!("cargo:rustc-link-arg=-lgenvm_modules_web");
+    //println!("cargo:rustc-link-arg=-lgenvm_modules_llm");
 
     Ok(())
 }

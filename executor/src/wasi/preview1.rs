@@ -61,6 +61,7 @@ pub(crate) mod generated {
         witx: ["$CARGO_MANIFEST_DIR/src/wasi/witx/wasi_snapshot_preview1.witx"],
         errors: { errno => trappable Error },
         wasmtime: false,
+        tracing: false,
 
         async: {
             wasi_snapshot_preview1::{
@@ -74,8 +75,9 @@ pub(crate) mod generated {
         witx: ["$CARGO_MANIFEST_DIR/src/wasi/witx/wasi_snapshot_preview1.witx"],
         target: super::generated,
         errors: { errno => trappable Error },
+        tracing: false,
 
-        block_on: {
+        async: {
             wasi_snapshot_preview1::{
                 fd_read, fd_pread,
                 fd_filestat_get, fd_seek, fd_tell,
@@ -322,7 +324,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         )
     }
 
-    #[instrument(skip(self, _memory))]
     fn args_sizes_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -348,7 +349,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         )
     }
 
-    #[instrument(skip(self, _memory))]
     fn environ_sizes_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -358,7 +358,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         Ok((count, len))
     }
 
-    #[instrument(skip(self, _memory))]
     fn clock_res_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -367,7 +366,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         panic!("todo")
     }
 
-    #[instrument(skip(self, _memory))]
     fn clock_time_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -377,7 +375,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         Ok(self.context.unix_timestamp)
     }
 
-    #[instrument(skip(self, _memory))]
     fn fd_advise(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -391,7 +388,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Force the allocation of space in a file.
     /// NOTE: This is similar to `posix_fallocate` in POSIX.
-    #[instrument(skip(self, _memory))]
     fn fd_allocate(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -404,7 +400,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Close a file descriptor.
     /// NOTE: This is similar to `close` in POSIX.
-    #[instrument(skip(self, _memory))]
     fn fd_close(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -422,7 +417,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Synchronize the data of a file to disk.
     /// NOTE: This is similar to `fdatasync` in POSIX.
-    #[instrument(skip(self, _memory))]
     fn fd_datasync(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -433,7 +427,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Get the attributes of a file descriptor.
     /// NOTE: This returns similar flags to `fsync(fd, F_GETFL)` in POSIX, as well as additional fields.
-    #[instrument(skip(self, _memory))]
     fn fd_fdstat_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -493,7 +486,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Adjust the flags associated with a file descriptor.
     /// NOTE: This is similar to `fcntl(fd, F_SETFL, flags)` in POSIX.
-    #[instrument(skip(self, _memory))]
     fn fd_fdstat_set_flags(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -504,7 +496,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     /// Does not do anything if `fd` corresponds to a valid descriptor and returns `[stub::types::Errno::Badf]` error otherwise.
-    #[instrument(skip(self, _memory))]
     fn fd_fdstat_set_rights(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -516,7 +507,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     /// Return the attributes of an open file.
-    #[instrument(skip(self, _memory))]
     async fn fd_filestat_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -563,7 +553,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Adjust the size of an open file. If this increases the file's size, the extra bytes are filled with zeros.
     /// NOTE: This is similar to `ftruncate` in POSIX.
-    #[instrument(skip(self, _memory))]
     fn fd_filestat_set_size(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -576,7 +565,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Adjust the timestamps of an open file or directory.
     /// NOTE: This is similar to `futimens` in POSIX.
-    #[instrument(skip(self, _memory))]
     fn fd_filestat_set_times(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -702,7 +690,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     /// Return a description of the given preopened file descriptor.
-    #[instrument(skip(self, _memory))]
     fn fd_prestat_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -754,7 +741,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     /// Atomically replace a file descriptor by renumbering another file descriptor.
-    #[instrument(skip(self, _memory))]
     fn fd_renumber(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -766,7 +752,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Move the offset of a file descriptor.
     /// NOTE: This is similar to `lseek` in POSIX.
-    #[instrument(skip(self, _memory))]
     async fn fd_seek(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -823,7 +808,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Synchronize the data and metadata of a file to disk.
     /// NOTE: This is similar to `fsync` in POSIX.
-    #[instrument(skip(self, _memory))]
     fn fd_sync(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -834,7 +818,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Return the current offset of a file descriptor.
     /// NOTE: This is similar to `lseek(fd, 0, SEEK_CUR)` in POSIX.
-    #[instrument(skip(self, _memory))]
     async fn fd_tell(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -1151,7 +1134,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         Err(generated::types::Errno::Io.into())
     }
 
-    #[instrument(skip(self, _memory))]
     fn proc_exit(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -1164,7 +1146,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         I32Exit(status as i32).into()
     }
 
-    #[instrument(skip(self, _memory))]
     fn proc_raise(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -1173,7 +1154,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         Err(generated::types::Errno::Notsup.into())
     }
 
-    #[instrument(skip(self, _memory))]
     fn sched_yield(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -1199,7 +1179,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     #[allow(unused_variables)]
-    #[instrument(skip(self, _memory))]
     fn sock_accept(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -1210,7 +1189,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     #[allow(unused_variables)]
-    #[instrument(skip(self, _memory))]
     fn sock_recv(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -1222,7 +1200,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     #[allow(unused_variables)]
-    #[instrument(skip(self, _memory))]
     fn sock_send(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -1234,7 +1211,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     #[allow(unused_variables)]
-    #[instrument(skip(self, _memory))]
     fn sock_shutdown(
         &mut self,
         _memory: &mut GuestMemory<'_>,

@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, mem::swap, pin::Pin};
+use std::{collections::BTreeMap, mem::swap};
 
 use wiggle::{GuestError, GuestMemory, GuestPtr};
 
@@ -10,20 +10,37 @@ pub struct FileContents {
 }
 
 pub struct FileContentsUnevaluated {
-    future: Option<
-        Pin<Box<dyn std::future::Future<Output = anyhow::Result<FileContents>> + Send + Sync>>,
-    >,
-    cell: tokio::sync::OnceCell<anyhow::Result<FileContents>>,
+    pub task: Option<tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>>>,
+    pub cell: tokio::sync::OnceCell<anyhow::Result<FileContents>>,
 }
 
 impl FileContentsUnevaluated {
+    pub fn from_task(task: tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>>) -> Self {
+        Self {
+            task: Some(task),
+            cell: tokio::sync::OnceCell::new(),
+        }
+    }
+
     pub async fn get(&mut self) -> anyhow::Result<&mut FileContents> {
+        let task = &mut self.task;
         self.cell
-            .get_or_init(|| {
-                let fut = self.future.take().unwrap();
-                fut
+            .get_or_init(|| async {
+                let task = match task {
+                    Some(task) => task,
+                    None => unreachable!(),
+                };
+                match task.await {
+                    Ok(Ok(v)) => Ok(FileContents {
+                        contents: SharedBytes::new(v),
+                        pos: 0,
+                    }),
+                    Ok(Err(v)) => Err(v),
+                    Err(v) => Err(anyhow::Error::new(v)),
+                }
             })
             .await;
+
         match self.cell.get_mut().unwrap() {
             Ok(r) => Ok(r),
             Err(e) => {
@@ -37,7 +54,7 @@ impl FileContentsUnevaluated {
     pub fn from_contents(contents: SharedBytes, pos: usize) -> Self {
         Self {
             cell: tokio::sync::OnceCell::new_with(Some(Ok(FileContents { contents, pos }))),
-            future: None,
+            task: None,
         }
     }
 }

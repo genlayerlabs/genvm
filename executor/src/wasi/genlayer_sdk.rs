@@ -37,6 +37,7 @@ pub(crate) mod generated {
         witx: ["$CARGO_MANIFEST_DIR/src/wasi/witx/genlayer_sdk.witx"],
         errors: { errno => trappable Error },
         wasmtime: false,
+        tracing: false,
 
         async: {
             genlayer_sdk::{
@@ -54,8 +55,9 @@ pub(crate) mod generated {
         witx: ["$CARGO_MANIFEST_DIR/src/wasi/witx/genlayer_sdk.witx"],
         errors: { errno => trappable Error },
         target: self,
+        tracing: false,
 
-        block_on: {
+        async: {
             genlayer_sdk::{
                 call_contract, run_nondet, sandbox,
                 get_webpage,
@@ -311,28 +313,15 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let config_str = read_string(mem, config)?;
         let url_str = read_string(mem, url)?;
 
-        let mut fuel = 0;
-        let res =
-            self.context
-                .shared_data
-                .modules
-                .web
-                .get_webpage(&mut fuel, &config_str, &url_str);
-
-        if fuel != 0 {
-            let supervisor = self.context.data.supervisor.clone();
-            supervisor
-                .lock()
-                .await
-                .host
-                .consume_fuel(fuel)
-                .map_err(generated::types::Error::trap)?;
-        }
-
-        let res = module_result_into_result(res)?;
+        let result_task = self
+            .context
+            .shared_data
+            .modules
+            .web
+            .get_webpage(config_str, url_str);
 
         Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_contents(SharedBytes::from(res.as_bytes()), 0),
+            FileContentsUnevaluated::from_task(result_task),
         )))
     }
 
@@ -348,28 +337,15 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let config_str = read_string(mem, config)?;
         let prompt_str = read_string(mem, prompt)?;
 
-        let mut fuel = 0;
-        let res =
-            self.context
-                .shared_data
-                .modules
-                .llm
-                .exec_prompt(&mut fuel, &config_str, &prompt_str);
-
-        if fuel != 0 {
-            let supervisor = self.context.data.supervisor.clone();
-            supervisor
-                .lock()
-                .await
-                .host
-                .consume_fuel(fuel)
-                .map_err(generated::types::Error::trap)?;
-        }
-
-        let res = module_result_into_result(res)?;
+        let result_task = self
+            .context
+            .shared_data
+            .modules
+            .llm
+            .exec_prompt(config_str, prompt_str);
 
         Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_contents(SharedBytes::from(res.as_bytes()), 0),
+            FileContentsUnevaluated::from_task(result_task),
         )))
     }
 
@@ -384,28 +360,15 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
         let vars_str = read_string(mem, vars)?;
 
-        let mut fuel = 0;
-        let res = self
+        let result_task = self
             .context
             .shared_data
             .modules
             .llm
-            .exec_prompt_id(&mut fuel, id, &vars_str);
-
-        if fuel != 0 {
-            let supervisor = self.context.data.supervisor.clone();
-            supervisor
-                .lock()
-                .await
-                .host
-                .consume_fuel(fuel)
-                .map_err(generated::types::Error::trap)?;
-        }
-
-        let res = module_result_into_result(res)?;
+            .exec_prompt_id(id, vars_str);
 
         Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_contents(SharedBytes::from(res.as_bytes()), 0),
+            FileContentsUnevaluated::from_task(result_task),
         )))
     }
 
@@ -420,23 +383,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
         let vars_str = read_string(mem, vars)?;
 
-        let mut fuel = 0;
         let res = self
             .context
             .shared_data
             .modules
             .llm
-            .eq_principle_prompt(&mut fuel, id, &vars_str);
-
-        if fuel != 0 {
-            let supervisor = self.context.data.supervisor.clone();
-            supervisor
-                .lock()
-                .await
-                .host
-                .consume_fuel(fuel)
-                .map_err(generated::types::Error::trap)?;
-        }
+            .eq_principle_prompt(id, &vars_str)
+            .await;
 
         let res = module_result_into_result(res)?;
 

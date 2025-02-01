@@ -3,9 +3,6 @@ name = "genvm-modules-default-llm"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-crate-type=["cdylib"]
-
 [dependencies]
 anyhow = { version = "1.0.86", features = [] }
 encoding_rs_io = "0.1.7"
@@ -17,3 +14,5 @@ serde_derive = "1.0.210"
 serde_json = "1.0.128"
 regex = "1.10.6"
 log = { version = "0.4.25", features = ["kv_unstable_serde"] }
+async-trait = "0.1.85"
+tokio = { version = "1.43.0", default-features = false }
