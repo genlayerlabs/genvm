@@ -1,0 +1,5 @@
+{
+  "Seq": [
+    { "MapFile": { "to": "/models/onnx/all-MiniLM-L6-v2.onnx", "file": "model.onnx" }}
+  ]
+}

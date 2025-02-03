@@ -1,0 +1,13 @@
+_multiarray_umath
+_umath_linalg
+lapack_lite
+_pocketfft_umath
+_bounded_integers
+_sfc64
+_pcg64
+bit_generator
+_common
+_generator
+mtrand
+_mt19937
+_philox -lnumpy -lc++ -lc++abi -lc-printscan-long-double

@@ -9,24 +9,18 @@ extend_config({
 	bin_dir: root_build.join('out', 'bin'),
 	runners_dir: root_build.join('out', 'share', 'genvm', 'runners'),
 	runners: {
-		softfloat: {
-			hash: "L7KBTDT2B4LHNVA6UAE5BW4BY3EJ5UGQWB34ZQIBWC2TQUCEZLCQ",
-		},
-		cpython: {
-			hash: "6XYGHSRZL2RVN3ZJVHJ7RNY5KIMNRJD7VUQNLIXR2Q2E2CZ4WZQA",
-		},
 		py_libs: {
 			cloudpickle: {
-				hash: "JAMDV6TTUV3XLLFHD4XVUNFUIF3GFIEBGALMC3KUT3L6NTLCTDBQ",
+				hash: "B6PA2XEWJERJLTPOG525576Y3MBMUTJDK5AVS542SMCJO5MR3GUQ",
 			},
 			protobuf: {
-				hash: "7L6K65E6LQ23GOXLCBEF5DMBG5O4UWEX6FVDQWQ5RKEKBTQOVCCA",
+				hash: "N2WIUENBHXMWXCL53X6ESRT7O3MTVHZMRRLMAQZY72T44IPTFNXQ",
 			},
 			tiny_onnx_reader: {
-				hash: "36TEM4B4HYOZKIWYAEJFKHW7AC24X467MUCJQHNKOB5AMU7VHW6Q",
+				hash: "DVGEU3ON7UGZSGC4CUIBGR4ZY2JMAGHKFY3UR6FO6DRZ52QLLVPQ",
 			},
 			word_piece_tokenizer: {
-				hash: "Z3CLPEEZIMJM2UJLOK5URKI6LVHNW2YQJPISIQBYPL3HQJRTBNDA",
+				hash: "RYS4SQP7KEP7ZMQEDXSZIBOPERNPH2B3WVQ3ISLMV4EFMU34LU3A",
 			},
 			genlayermodelwrappers: {
 				hash: "test"
@@ -34,9 +28,10 @@ extend_config({
 		},
 		onnx_models: {
 			all_MiniLM_L6_v2: {
-				hash: "P4HCCVYAVCYECEBHBG5BHTZCIHHONQFG7HQYU4WWCRHNNRXKA2UQ",
+				hash: "TC2HXK7ZP6Z6YHNTZZ65MHJRHRAUFKOUFWDC4NFAODV2JC72AGDA",
 			}
 		},
+		**JSON.load_file(root_src.join('runners/nix/hashes.json')),
 	},
 
 	executor: {

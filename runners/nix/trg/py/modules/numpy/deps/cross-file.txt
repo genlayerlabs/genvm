@@ -1,0 +1,16 @@
+[binaries]
+c = '/build/deps/stub-clang.py'
+cpp = '/build/deps/stub-clang.py'
+
+[target_machine]
+sys_root = '/build/wasi-sdk/share/wasi-sysroot/'
+cpu_family = 'wasm32'
+cpu = 'wasm32'
+endian = 'big'
+system = 'wasi'
+
+[properties]
+longdouble_format = 'IEEE_QUAD_BE'
+
+[built-in options]
+default_library = 'static'

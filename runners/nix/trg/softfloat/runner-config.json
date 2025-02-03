@@ -1,0 +1,10 @@
+[
+  {
+    "path": "softfloat.wasm",
+    "read_from": "softfloat-patched.wasm"
+  },
+  {
+    "path": "runner.json",
+    "read_from": "runner.json"
+  }
+]
