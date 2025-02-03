@@ -9,7 +9,7 @@ fn main() -> std::io::Result<()> {
         Err(_) => "test".into(),
     };
 
-    let target = vec![
+    let target = [
         std::env::var("CARGO_CFG_TARGET_ARCH").unwrap(),
         std::env::var("CARGO_CFG_TARGET_VENDOR").unwrap(),
         std::env::var("CARGO_CFG_TARGET_OS").unwrap(),
@@ -22,17 +22,6 @@ fn main() -> std::io::Result<()> {
     println!("cargo:rerun-if-env-changed=PROFILE");
     let profile = std::env::var("PROFILE").unwrap();
     println!("cargo::rustc-env=PROFILE={profile}");
-
-    match std::env::var("GENVM_COMPILE_LINK_PATH") {
-        Ok(link_path) => {
-            println!("cargo:rustc-link-arg=-L{link_path}");
-        }
-        Err(_) => {}
-    }
-
-    //println!("cargo:rustc-link-arg=-Wl,-rpath=$ORIGIN/../lib/genvm-modules/");
-    //println!("cargo:rustc-link-arg=-lgenvm_modules_web");
-    //println!("cargo:rustc-link-arg=-lgenvm_modules_llm");
 
     Ok(())
 }

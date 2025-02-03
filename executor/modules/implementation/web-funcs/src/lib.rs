@@ -14,14 +14,17 @@ impl SessionDrop for SessionData {
         true
     }
 
-    fn drop_session(client: reqwest::Client, data: &mut SessionData) -> Pin<Box<dyn Future<Output = ()> + Send + Sync>> {
+    fn drop_session(
+        client: reqwest::Client,
+        data: &mut SessionData,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + Sync>> {
         let mut id = Box::from("");
         swap(&mut data.id, &mut id);
         let host = data.host.clone();
 
-        Box::pin(async move  {
+        Box::pin(async move {
             let _ = client
-                .delete(&format!("{}/session/{}", host, id))
+                .delete(format!("{}/session/{}", host, id))
                 .send()
                 .await;
         })
@@ -55,10 +58,7 @@ unsafe impl Send for Impl {}
 
 impl Impl {
     async fn get_session(&self) -> ModuleResult<Box<Session<SessionData>>> {
-        match self.sessions.get() {
-            Some(s) => return Ok(s),
-            None => {}
-        }
+        if let Some(s) = self.sessions.get() { return Ok(s) }
 
         const INIT_REQUEST: &str = r#"{
             "capabilities": {
@@ -73,7 +73,7 @@ impl Impl {
 
         let client = reqwest::Client::new();
         let opened_session_res = client
-            .post(&format!("{}/session", &self.config.host))
+            .post(format!("{}/session", &self.config.host))
             .header("Content-Type", "application/json; charset=utf-8")
             .body(INIT_REQUEST)
             .send()
@@ -121,7 +121,7 @@ impl Impl {
         let req_body = serde_json::to_string(&req_body)?;
         let req = session
             .client
-            .post(&format!(
+            .post(format!(
                 "{}/session/{}/url",
                 self.config.host, session.data.id
             ))
@@ -145,7 +145,7 @@ impl Impl {
 
         let req = session
             .client
-            .post(&format!(
+            .post(format!(
                 "{}/session/{}/execute/sync",
                 self.config.host, session.data.id
             ))

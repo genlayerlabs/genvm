@@ -1162,6 +1162,3 @@ index 4693086..e79e4c2 100644
  float64_t ui64_to_f64( uint64_t a )
  {
      union ui64_f64 uZ;
--- 
-2.34.1
-

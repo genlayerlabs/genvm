@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::vm;
 
 pub mod base;
-pub(self) mod common;
+mod common;
 pub mod genlayer_sdk;
 pub mod preview1;
 

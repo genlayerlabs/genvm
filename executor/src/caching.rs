@@ -28,10 +28,7 @@ pub static CACHE_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| match get_cache_dir()
     Ok(p) => Some(p),
 });
 
-pub static PRECOMPILE_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| match Lazy::force(&CACHE_DIR) {
-    None => None,
-    Some(dir) => Some(dir.join("precompile").to_path_buf()),
-});
+pub static PRECOMPILE_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| Lazy::force(&CACHE_DIR).as_ref().map(|dir| dir.join("precompile").to_path_buf()));
 
 pub struct DetNonDetSuffixes {
     pub det: &'static str,
@@ -77,7 +74,7 @@ pub fn validate_wasm(engines: &crate::vm::Engines, wasm: &[u8]) -> Result<()> {
             &String::from_utf8_lossy(&wasm[..10.min(wasm.len())])
         )
     })?;
-    non_det_validator.validate_all(&wasm).with_context(|| {
+    non_det_validator.validate_all(wasm).with_context(|| {
         format!(
             "validating {}",
             &String::from_utf8_lossy(&wasm[..10.min(wasm.len())])

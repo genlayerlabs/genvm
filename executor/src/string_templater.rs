@@ -61,7 +61,7 @@ pub fn patch_str(vars: &impl AnyMap<String, String>, s: &str) -> Result<String> 
         let r: &str = &r[1];
         vars.get_from_map(r)
             .ok_or(anyhow::anyhow!("error"))
-            .map(|x| x.clone())
+            .cloned()
     })
 }
 pub fn patch_value(
@@ -82,7 +82,7 @@ pub fn patch_value(
                     Ok((k, patch_value(vars, v)?))
                 })
                 .collect();
-            serde_json::Value::Object(serde_json::Map::from_iter(res?.into_iter()))
+            serde_json::Value::Object(serde_json::Map::from_iter(res?))
         }
         x => x,
     })

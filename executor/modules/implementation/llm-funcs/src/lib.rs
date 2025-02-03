@@ -56,14 +56,14 @@ struct Config {
     equivalence_prompt_non_comparative_leader: String,
 }
 
-fn sanitize_json_str<'a>(s: &'a str) -> &'a str {
+fn sanitize_json_str(s: &str) -> &str {
     let s = s.trim();
     let s = s
         .strip_prefix("```json")
         .or(s.strip_prefix("```"))
         .unwrap_or(s);
     let s = s.strip_suffix("```").unwrap_or(s);
-    s.trim().into()
+    s.trim()
 }
 
 #[derive(Clone, Deserialize, Serialize, Copy)]
@@ -135,7 +135,7 @@ impl Impl {
         let request = serde_json::to_vec(&request)?;
         let res = session
             .client
-            .post(&format!("{}/v1/messages", self.config.host))
+            .post(format!("{}/v1/messages", self.config.host))
             .header("Content-Type", "application/json")
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
@@ -188,7 +188,7 @@ impl Impl {
         let request = serde_json::to_vec(&request)?;
         let res = session
             .client
-            .post(&format!("{}/v1/chat/completions", self.config.host))
+            .post(format!("{}/v1/chat/completions", self.config.host))
             .header("Content-Type", "application/json")
             .header("Authorization", &format!("Bearer {}", &self.api_key))
             .body(request)
@@ -278,7 +278,7 @@ impl Impl {
         let request = serde_json::to_vec(&request)?;
         let res = session
             .client
-            .post(&format!("{}/api/generate", self.config.host))
+            .post(format!("{}/api/generate", self.config.host))
             .body(request)
             .send()
             .await?;
@@ -328,7 +328,6 @@ impl Impl {
             make_error_recoverable(serde_json::from_str(config), "invalid configuration")?;
         let response_format = config
             .response_format
-            .clone()
             .unwrap_or(ExecPromptConfigMode::Text);
 
         let mut session = match self.sessions.get() {
@@ -397,7 +396,7 @@ impl Impl {
         };
         let vars: std::collections::BTreeMap<String, String> =
             make_error_recoverable(serde_json::from_str(vars), "invalid variables")?;
-        let new_prompt = string_templater::patch_str(&vars, &template)?;
+        let new_prompt = string_templater::patch_str(&vars, template)?;
         let res = self.exec_prompt(JSON_PROMPT_CONFIG, &new_prompt).await?;
         answer_is_bool(res)
     }
@@ -419,8 +418,8 @@ impl Impl {
         };
         let vars: std::collections::BTreeMap<String, String> =
             make_error_recoverable(serde_json::from_str(vars), "invalid vars")?;
-        let new_prompt = string_templater::patch_str(&vars, &template)?;
-        let res = self.exec_prompt(&"{}", &new_prompt).await?;
+        let new_prompt = string_templater::patch_str(&vars, template)?;
+        let res = self.exec_prompt("{}", &new_prompt).await?;
         Ok(res)
     }
 }
@@ -538,7 +537,11 @@ mod tests {
 
         let (cancellation, canceller) = make_cancellation();
 
-        let imp = Impl::try_new(CtorArgs { config: conf, cancellation }).unwrap();
+        let imp = Impl::try_new(CtorArgs {
+            config: conf,
+            cancellation,
+        })
+        .unwrap();
 
         let res = imp
             .exec_prompt(
@@ -558,7 +561,11 @@ mod tests {
 
         let (cancellation, canceller) = make_cancellation();
 
-        let imp = Impl::try_new(CtorArgs { config: conf, cancellation }).unwrap();
+        let imp = Impl::try_new(CtorArgs {
+            config: conf,
+            cancellation,
+        })
+        .unwrap();
 
         let res = imp.exec_prompt("{\"response_format\": \"json\"}", "respond with json object containing single key \"result\" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes").unwrap();
 

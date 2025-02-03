@@ -41,7 +41,10 @@ where
         false
     }
 
-    fn drop_session(_client: reqwest::Client, _data: &mut Self) -> Pin<Box<dyn Future<Output = ()> + Send + Sync>> {
+    fn drop_session(
+        _client: reqwest::Client,
+        _data: &mut Self,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + Sync>> {
         Box::pin(async {})
     }
 }
@@ -57,15 +60,13 @@ impl<T: SessionDrop> std::ops::Drop for Session<T> {
             return;
         }
         tokio::spawn(T::drop_session(self.client.clone(), &mut self.data));
-        //let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
-        //rt.block_on(T::drop_session(&mut self.client, &mut self.data));
     }
 }
 
 impl<T: SessionDrop> Session<T> {
     pub fn new(data: T) -> Self {
         Session {
-            client: reqwest::Client::new(),
+            client: reqwest::ClientBuilder::new().cookie_store(true).gzip(true).build().unwrap(),
             data,
         }
     }

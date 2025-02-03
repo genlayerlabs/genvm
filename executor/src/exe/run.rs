@@ -77,7 +77,8 @@ pub fn handle(args: Args) -> Result<()> {
         .max_blocking_threads(args.threads)
         .build()?;
 
-    let res = runtime.block_on(genvm::run_with(message, supervisor, &args.permissions))
+    let res = runtime
+        .block_on(genvm::run_with(message, supervisor, &args.permissions))
         .with_context(|| "running genvm");
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,
@@ -99,6 +100,12 @@ pub fn handle(args: Args) -> Result<()> {
         None => {}
         Some(res) => println!("executed with `{res}`"),
     }
+
+    let _ = std::io::stdout().flush();
+    let _ = std::io::stderr().flush();
+
+    runtime.shutdown_timeout(std::time::Duration::from_millis(30));
+
     let _ = std::io::stdout().flush();
     let _ = std::io::stderr().flush();
     // FIXME exit code?

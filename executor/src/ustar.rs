@@ -30,7 +30,7 @@ impl std::hash::Hash for SharedBytes {
 }
 
 impl AsRef<[u8]> for SharedBytes {
-    fn as_ref<'a>(&'a self) -> &'a [u8] {
+    fn as_ref(&self) -> &[u8] {
         self.as_slice()
     }
 }
@@ -51,7 +51,11 @@ impl SharedBytes {
         self.end - self.begin
     }
 
-    fn as_slice<'a>(&'a self) -> &'a [u8] {
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    fn as_slice(&self) -> &[u8] {
         let as_slice: &[u8] = (*self.bytes).as_ref();
         &as_slice[self.begin..self.end]
     }
@@ -171,7 +175,7 @@ impl Archive {
 
             let mut file_size = 0 as usize;
             for c in file_size_octal.iter().cloned() {
-                if c < b'0' || c > b'9' {
+                if !(b'0'..=b'7').contains(&c) {
                     anyhow::bail!("invalid octal ascii {}", c)
                 }
                 file_size = file_size * 8 + (c - b'0') as usize;

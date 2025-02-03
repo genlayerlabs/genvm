@@ -79,7 +79,7 @@ impl crate::AccountAddress {
             addr.ptr
                 .as_array(crate::AccountAddress::len().try_into().unwrap()),
         )?;
-        let mut ret = AccountAddress::new();
+        let mut ret = AccountAddress::zero();
         for (x, y) in ret.0.iter_mut().zip(cow.iter()) {
             *x = *y;
         }
@@ -96,7 +96,7 @@ impl crate::GenericAddress {
             addr.ptr
                 .as_array(crate::GenericAddress::len().try_into().unwrap()),
         )?;
-        let mut ret = GenericAddress::new();
+        let mut ret = GenericAddress::zero();
         for (x, y) in ret.0.iter_mut().zip(cow.iter()) {
             *x = *y;
         }
@@ -193,10 +193,8 @@ impl From<GuestError> for generated::types::Error {
 }
 
 impl From<std::num::TryFromIntError> for generated::types::Error {
-    fn from(err: std::num::TryFromIntError) -> Self {
-        match err {
-            _ => generated::types::Errno::Overflow.into(),
-        }
+    fn from(_err: std::num::TryFromIntError) -> Self {
+        generated::types::Errno::Overflow.into()
     }
 }
 
@@ -436,7 +434,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 // we are the leader
                 entrypoint.extend_from_slice(&0u32.to_le_bytes());
                 let cow_leader = mem.as_cow(data_leader.buf.as_array(data_leader.buf_len))?;
-                entrypoint.extend(cow_leader.into_iter());
+                entrypoint.extend_from_slice(&cow_leader);
             }
             Some(leaders_res) => {
                 // reserve size to rewrite later
@@ -452,7 +450,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     });
                 let cow_validator =
                     mem.as_cow(data_validator.buf.as_array(data_validator.buf_len))?;
-                entrypoint.extend(cow_validator.into_iter());
+                entrypoint.extend_from_slice(&cow_validator);
             }
         }
         let entrypoint = SharedBytes::new(entrypoint);
@@ -521,7 +519,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
     ) -> Result<generated::types::Fd, generated::types::Error> {
         let mut entrypoint = Vec::from(b"sandbox!");
         let cow_data = mem.as_cow(data.buf.as_array(data.buf_len))?;
-        entrypoint.extend(cow_data.into_iter());
+        entrypoint.extend_from_slice(&cow_data);
 
         let entrypoint = SharedBytes::new(entrypoint);
 
@@ -603,7 +601,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 sender_account: my_data.sender_account, // FIXME: is that true?
                 value: None,
                 is_init: false,
-                datetime: my_data.datetime.clone(),
+                datetime: my_data.datetime,
                 chain_id: my_data.chain_id,
                 origin_account: my_data.origin_account,
             },
@@ -692,7 +690,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let account = self.context.data.message_data.contract_account;
 
-        let slot = GenericAddress::read_from_mem(&slot, mem)?;
+        let slot = GenericAddress::read_from_mem(slot, mem)?;
         let mem_size = buf.buf_len as usize;
         let mut vec = Vec::with_capacity(mem_size);
         unsafe { vec.set_len(mem_size) };
@@ -730,7 +728,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let buf: Vec<u8> = buf.read_owned(mem)?;
 
         let account = self.context.data.message_data.contract_account;
-        let slot = GenericAddress::read_from_mem(&slot, mem)?;
+        let slot = GenericAddress::read_from_mem(slot, mem)?;
 
         let supervisor = self.context.data.supervisor.clone();
         let mut supervisor = supervisor.lock().await;

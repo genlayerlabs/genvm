@@ -13,7 +13,7 @@ pub enum WasmMode {
 
 struct GlobalSymbolDeserializeVisitor;
 
-impl<'de> serde::de::Visitor<'de> for GlobalSymbolDeserializeVisitor {
+impl serde::de::Visitor<'_> for GlobalSymbolDeserializeVisitor {
     type Value = symbol_table::GlobalSymbol;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -90,13 +90,13 @@ impl ZipCache {
         if self.actions.is_none() {
             let contents = self.get_file("runner.json")?;
 
-            let as_init: InitAction = serde_json::from_str(&str::from_utf8(contents.as_ref())?)?;
+            let as_init: InitAction = serde_json::from_str(str::from_utf8(contents.as_ref())?)?;
 
             self.actions = Some(Arc::new(as_init));
         }
 
         match &self.actions {
-            Some(v) => return Ok(v.clone()),
+            Some(v) => Ok(v.clone()),
             _ => unreachable!(),
         }
     }
@@ -134,11 +134,11 @@ impl RunnerReaderCache {
         &self.path
     }
 
-    pub fn get_or_create<'a>(
-        &'a mut self,
+    pub fn get_or_create(
+        &mut self,
         name: symbol_table::GlobalSymbol,
         arch_provider: impl FnOnce() -> Result<Archive>,
-    ) -> Result<&'a mut ZipCache> {
+    ) -> Result<&mut ZipCache> {
         match self.cache.entry(name) {
             std::collections::hash_map::Entry::Occupied(occupied_entry) => {
                 Ok(occupied_entry.into_mut())
@@ -150,12 +150,12 @@ impl RunnerReaderCache {
         }
     }
 
-    pub fn get_unsafe<'a>(&'a mut self, key: symbol_table::GlobalSymbol) -> &'a mut ZipCache {
+    pub fn get_unsafe<'a>(&mut self, key: symbol_table::GlobalSymbol) -> &mut ZipCache {
         self.cache.get_mut(&key).unwrap()
     }
 }
 
-pub fn verify_runner<'a>(runner_id: &'a str) -> Result<(&'a str, &'a str)> {
+pub fn verify_runner<'a>(runner_id: &str) -> Result<(&str, &str)> {
     let (runner_id, runner_hash) = runner_id
         .split(":")
         .collect_tuple()

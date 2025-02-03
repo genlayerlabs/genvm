@@ -55,6 +55,3 @@ index 4f017dc..8d62e06 100644
      /// Disable caching.
      ///
      /// Every call to [`Module::new(my_wasm)`][crate::Module::new] will
--- 
-2.34.1
-

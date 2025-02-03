@@ -22,12 +22,12 @@ impl AccountAddress {
         *r
     }
 
-    pub fn new() -> Self {
+    pub fn zero() -> Self {
         Self([0; 20])
     }
 
     pub const fn len() -> usize {
-        return 20;
+        20
     }
 }
 
@@ -41,12 +41,12 @@ impl GenericAddress {
         *r
     }
 
-    pub fn new() -> Self {
+    pub fn zero() -> Self {
         Self([0; 32])
     }
 
     pub const fn len() -> usize {
-        return 32;
+        32
     }
 }
 
@@ -81,9 +81,9 @@ pub struct Host {
 impl Host {
     pub fn new(addr: &str) -> Result<Host> {
         const UNIX: &str = "unix://";
-        let sock: Box<Mutex<dyn Sock>> = if addr.starts_with(UNIX) {
+        let sock: Box<Mutex<dyn Sock>> = if let Some(addr_suff) = addr.strip_prefix(UNIX) {
             Box::new(Mutex::new(
-                std::os::unix::net::UnixStream::connect(std::path::Path::new(&addr[UNIX.len()..]))
+                std::os::unix::net::UnixStream::connect(std::path::Path::new(addr_suff))
                     .with_context(|| format!("connecting to {addr}"))?,
             ))
         } else {
@@ -116,7 +116,7 @@ fn write_result(sock: &mut dyn Sock, res: Result<&vm::RunOk, &anyhow::Error>) ->
     let data = match res {
         Ok(vm::RunOk::Return(r)) => {
             sock.write_all(&[ResultCode::Return as u8])?;
-            &r
+            r
         }
         Ok(vm::RunOk::Rollback(r)) => {
             sock.write_all(&[ResultCode::Rollback as u8])?;

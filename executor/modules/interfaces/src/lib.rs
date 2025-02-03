@@ -92,14 +92,16 @@ pub fn make_cancellation() -> (Arc<CancellationToken>, impl Clone + Fn() -> ()) 
 
     let cancel = Arc::new(CancellationToken {
         chan: sender,
-        should_quit: Arc::new(AtomicU32::new(0))
+        should_quit: Arc::new(AtomicU32::new(0)),
     });
 
     let cancel_copy = cancel.clone();
     let receiver = Arc::new(std::sync::Mutex::new(receiver));
 
     (cancel, move || {
-        cancel_copy.should_quit.store(1, std::sync::atomic::Ordering::SeqCst);
+        cancel_copy
+            .should_quit
+            .store(1, std::sync::atomic::Ordering::SeqCst);
         if let Ok(mut receiver) = receiver.lock() {
             receiver.close();
         }

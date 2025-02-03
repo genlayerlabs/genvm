@@ -27,8 +27,7 @@ pub fn patch_str(vars: &BTreeMap<String, String>, s: &str) -> Result<String> {
     replace_all(&JSON_UNFOLDER_RE, s, |r: &regex::Captures| {
         let r: &str = &r[1];
         vars.get(r)
-            .ok_or(anyhow::anyhow!("error"))
-            .map(|x| x.clone())
+            .ok_or(anyhow::anyhow!("error")).cloned()
     })
 }
 pub fn patch_value(
@@ -49,7 +48,7 @@ pub fn patch_value(
                     Ok((k, patch_value(vars, v)?))
                 })
                 .collect();
-            serde_json::Value::Object(serde_json::Map::from_iter(res?.into_iter()))
+            serde_json::Value::Object(serde_json::Map::from_iter(res?))
         }
         x => x,
     })

@@ -21,6 +21,3 @@ index e0ed3f2..a8cf961 100644
          self.fuel_increment_var(builder);
          self.fuel_save_from_var(builder);
      }
--- 
-2.34.1
-

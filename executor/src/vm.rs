@@ -12,7 +12,11 @@ use wasmparser::WasmFeatures;
 use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
-    caching, runner::{self, InitAction, WasmMode}, string_templater, ustar::{Archive, SharedBytes}, wasi::{self, preview1::I32Exit}
+    caching,
+    runner::{self, InitAction, WasmMode},
+    string_templater,
+    ustar::{Archive, SharedBytes},
+    wasi::{self, preview1::I32Exit},
 };
 use anyhow::{Context, Result};
 use std::sync::{Arc, Mutex};
@@ -74,7 +78,7 @@ impl RunOk {
         Self::Return([0].into())
     }
 
-    pub fn as_bytes_iter<'a>(&'a self) -> impl Iterator<Item = u8> + 'a /*+ use<'a>*/ {
+    pub fn as_bytes_iter(&self) -> impl Iterator<Item = u8> + '_ {
         use crate::host::ResultCode;
         match self {
             RunOk::Return(buf) => [ResultCode::Return as u8]
@@ -160,7 +164,11 @@ pub struct SharedData {
 }
 
 impl SharedData {
-    pub fn new(modules: Modules, is_sync: bool, cancellation: Arc<genvm_modules_interfaces::CancellationToken>) -> Self {
+    pub fn new(
+        modules: Modules,
+        is_sync: bool,
+        cancellation: Arc<genvm_modules_interfaces::CancellationToken>,
+    ) -> Self {
         Self {
             nondet_call_no: 0.into(),
             cancellation,
@@ -254,20 +262,34 @@ impl VM {
                 let res: Result<RunOk> = [
                     |e: anyhow::Error| match e.downcast::<crate::wasi::preview1::I32Exit>() {
                         Ok(I32Exit(0)) => Ok(RunOk::empty_return()),
-                        Ok(I32Exit(v)) => Ok(RunOk::ContractError(format!("exit_code {}", v), None)),
+                        Ok(I32Exit(v)) => {
+                            Ok(RunOk::ContractError(format!("exit_code {}", v), None))
+                        }
                         Err(e) => Err(e),
                     },
-                    |e: anyhow::Error| e.downcast::<wasmtime::Trap>()
-                        .map(|v| RunOk::ContractError(format!("wasm_trap {v:?}"), Some(v.into()))),
-                    |e: anyhow::Error| e.downcast::<crate::errors::ContractError>()
-                        .map(|crate::errors::ContractError(m, c)| RunOk::ContractError(m, c)),
-                    |e: anyhow::Error| e.downcast::<crate::errors::Rollback>()
-                        .map(|crate::errors::Rollback(v)| RunOk::Rollback(v)),
-                    |e: anyhow::Error| e.downcast::<crate::wasi::genlayer_sdk::ContractReturn>()
-                        .map(|crate::wasi::genlayer_sdk::ContractReturn(v)| RunOk::Return(v)),
+                    |e: anyhow::Error| {
+                        e.downcast::<wasmtime::Trap>().map(|v| {
+                            RunOk::ContractError(format!("wasm_trap {v:?}"), Some(v.into()))
+                        })
+                    },
+                    |e: anyhow::Error| {
+                        e.downcast::<crate::errors::ContractError>()
+                            .map(|crate::errors::ContractError(m, c)| RunOk::ContractError(m, c))
+                    },
+                    |e: anyhow::Error| {
+                        e.downcast::<crate::errors::Rollback>()
+                            .map(|crate::errors::Rollback(v)| RunOk::Rollback(v))
+                    },
+                    |e: anyhow::Error| {
+                        e.downcast::<crate::wasi::genlayer_sdk::ContractReturn>()
+                            .map(|crate::wasi::genlayer_sdk::ContractReturn(v)| RunOk::Return(v))
+                    },
                 ]
                 .into_iter()
-                .fold(Err(e), |acc, func| match acc { Ok(acc) => Ok(acc), Err(e) => func(e), });
+                .fold(Err(e), |acc, func| match acc {
+                    Ok(acc) => Ok(acc),
+                    Err(e) => func(e),
+                });
                 res
             }
         };
@@ -480,7 +502,7 @@ impl Supervisor {
     }
 
     pub async fn spawn(&mut self, data: crate::wasi::genlayer_sdk::SingleVMData) -> Result<VM> {
-        let config_copy = data.conf.clone();
+        let config_copy = data.conf;
 
         let engine = if data.conf.is_deterministic {
             &self.engines.det
@@ -489,7 +511,7 @@ impl Supervisor {
         };
 
         let mut store = Store::new(
-            &engine,
+            engine,
             WasmContext::new(data, self.shared_data.clone()),
             self.shared_data.cancellation.should_quit.clone(),
         );
@@ -568,7 +590,7 @@ impl Supervisor {
                         .data_mut()
                         .genlayer_ctx_mut()
                         .preview1
-                        .map_file(&to, self.runner_cache.get_unsafe(current).get_file(file)?)?;
+                        .map_file(to, self.runner_cache.get_unsafe(current).get_file(file)?)?;
                 }
                 Ok(None)
             }
@@ -586,7 +608,7 @@ impl Supervisor {
                 Ok(None)
             }
             InitAction::LinkWasm(path) => {
-                let contents = self.runner_cache.get_unsafe(current).get_file(&path)?;
+                let contents = self.runner_cache.get_unsafe(current).get_file(path)?;
                 let module = self.link_wasm_into(
                     vm,
                     &WasmFileDesc {
@@ -627,7 +649,7 @@ impl Supervisor {
                     .genlayer_ctx_mut()
                     .preview1
                     .set_env(&env)?;
-                let contents = self.runner_cache.get_unsafe(current).get_file(&path)?;
+                let contents = self.runner_cache.get_unsafe(current).get_file(path)?;
                 let module = self.link_wasm_into(
                     vm,
                     &WasmFileDesc {
@@ -650,9 +672,8 @@ impl Supervisor {
             }
             InitAction::Seq(vec) => {
                 for act in vec {
-                    match Box::pin(self.apply_action_recursive(vm, ctx, act, current)).await? {
-                        Some(x) => return Ok(Some(x)),
-                        None => {}
+                    if let Some(x) = Box::pin(self.apply_action_recursive(vm, ctx, act, current)).await? {
+                        return Ok(Some(x))
                     }
                 }
                 Ok(None)
@@ -706,10 +727,10 @@ impl Supervisor {
                     return Ok(c);
                 }
             }
-            return Err(crate::errors::ContractError(
+            Err(crate::errors::ContractError(
                 "no_runner_comment".into(),
                 None,
-            ));
+            ))
         })()?;
         let mut code_comment = String::new();
         for l in code_str.lines() {
@@ -719,10 +740,10 @@ impl Supervisor {
             code_comment.push_str(&l[code_start.len()..])
         }
 
-        return Ok(Archive::from_file_and_runner(
+        Ok(Archive::from_file_and_runner(
             code,
             SharedBytes::from(code_comment.as_bytes()),
-        ));
+        ))
     }
 
     pub async fn apply_contract_actions(&mut self, vm: &mut VM) -> Result<wasmtime::Instance> {
@@ -732,7 +753,7 @@ impl Supervisor {
         };
 
         let mut contract_id = String::from("<contract>:");
-        contract_id.push_str(&base64::prelude::BASE64_STANDARD.encode(&contract_address.raw()));
+        contract_id.push_str(&base64::prelude::BASE64_STANDARD.encode(contract_address.raw()));
         let contract_id = symbol_table::GlobalSymbol::from(&contract_id);
 
         let provide_arch = || {
