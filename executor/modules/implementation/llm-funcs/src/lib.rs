@@ -20,6 +20,8 @@ enum LLLMProvider {
 struct Impl {
     config: Config,
     api_key: String,
+
+    sessions: SessionPool<()>,
 }
 
 impl Drop for Impl {
@@ -78,7 +80,11 @@ impl Impl {
     fn try_new(args: CtorArgs<'_>) -> anyhow::Result<Self> {
         let config: Config = serde_json::from_str(args.config)?;
         let api_key = std::env::var(&config.key_env_name).unwrap_or("".into());
-        Ok(Impl { config, api_key })
+        Ok(Impl {
+            config,
+            api_key,
+            sessions: SessionPool::new(),
+        })
     }
 
     async fn consume_gas(&self, _amount: u64) -> anyhow::Result<()> {
@@ -89,6 +95,7 @@ impl Impl {
         &self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
+        session: &mut Session<()>,
     ) -> ModuleResult<String> {
         let mut request = serde_json::json!({
             "model": &self.config.model,
@@ -122,14 +129,19 @@ impl Impl {
                 );
             }
         }
-        let mut res = isahc::send(
-            isahc::Request::post(&format!("{}/v1/messages", self.config.host))
-                .header("Content-Type", "application/json")
-                .header("x-api-key", &self.api_key)
-                .header("anthropic-version", "2023-06-01")
-                .body(serde_json::to_string(&request)?.as_bytes())?,
-        )?;
-        let res = genvm_modules_impl_common::read_response(&mut res)?;
+
+        let request = serde_json::to_vec(&request)?;
+        let res = session
+            .client
+            .post(&format!("{}/v1/messages", self.config.host))
+            .header("Content-Type", "application/json")
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .body(request)
+            .send()
+            .await?;
+
+        let res = genvm_modules_impl_common::read_response(res).await?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
         match response_format {
             ExecPromptConfigMode::Text => val
@@ -150,6 +162,7 @@ impl Impl {
         &self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
+        session: &mut Session<()>,
     ) -> ModuleResult<String> {
         let mut request = serde_json::json!({
             "model": &self.config.model,
@@ -170,13 +183,16 @@ impl Impl {
                 );
             }
         }
-        let mut res = isahc::send(
-            isahc::Request::post(&format!("{}/v1/chat/completions", self.config.host))
-                .header("Content-Type", "application/json")
-                .header("Authorization", &format!("Bearer {}", &self.api_key))
-                .body(serde_json::to_string(&request)?.as_bytes())?,
-        )?;
-        let res = genvm_modules_impl_common::read_response(&mut res)?;
+        let request = serde_json::to_vec(&request)?;
+        let res = session
+            .client
+            .post(&format!("{}/v1/chat/completions", self.config.host))
+            .header("Content-Type", "application/json")
+            .header("Authorization", &format!("Bearer {}", &self.api_key))
+            .body(request)
+            .send()
+            .await?;
+        let res = genvm_modules_impl_common::read_response(res).await?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
         let response = val
             .pointer("/choices/0/message/content")
@@ -196,6 +212,7 @@ impl Impl {
         &self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
+        session: &mut Session<()>,
     ) -> ModuleResult<String> {
         let request = serde_json::json!({
             "contents": [{
@@ -213,15 +230,18 @@ impl Impl {
             }
         });
 
-        let mut res = isahc::send(
-            isahc::Request::post(format!(
+        let request = serde_json::to_vec(&request)?;
+        let res = session
+            .client
+            .post(format!(
                 "{}/v1beta/models/{}:generateContent?key={}",
                 self.config.host, self.config.model, self.api_key
             ))
             .header("Content-Type", "application/json")
-            .body(serde_json::to_string(&request)?.as_bytes())?,
-        )?;
-        let res = genvm_modules_impl_common::read_response(&mut res)?;
+            .body(request)
+            .send()
+            .await?;
+        let res = read_response(res).await?;
 
         let res: serde_json::Value = serde_json::from_str(&res)?;
 
@@ -236,6 +256,7 @@ impl Impl {
         &self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
+        session: &mut Session<()>,
     ) -> ModuleResult<String> {
         let mut request = serde_json::json!({
             "model": &self.config.model,
@@ -251,11 +272,15 @@ impl Impl {
                     .insert("format".into(), "json".into());
             }
         }
-        let mut res = isahc::send(
-            isahc::Request::post(&format!("{}/api/generate", self.config.host))
-                .body(serde_json::to_string(&request)?.as_bytes())?,
-        )?;
-        let res = genvm_modules_impl_common::read_response(&mut res)?;
+
+        let request = serde_json::to_vec(&request)?;
+        let res = session
+            .client
+            .post(&format!("{}/api/generate", self.config.host))
+            .body(request)
+            .send()
+            .await?;
+        let res = genvm_modules_impl_common::read_response(res).await?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
         let response = val
             .as_object()
@@ -269,6 +294,7 @@ impl Impl {
         &self,
         prompt: &str,
         response_format: ExecPromptConfigMode,
+        session: &mut Session<()>,
     ) -> ModuleResult<String> {
         let request = serde_json::json!({
             "jsonrpc": "2.0",
@@ -276,12 +302,15 @@ impl Impl {
             "params": [&self.config.model, prompt, serde_json::to_string(&response_format).unwrap()],
             "id": 1,
         });
-        let mut res = isahc::send(
-            isahc::Request::post(format!("{}/api", &self.config.host))
-                .header("Content-Type", "application/json")
-                .body(serde_json::to_string(&request)?.as_bytes())?,
-        )?;
-        let res = genvm_modules_impl_common::read_response(&mut res)?;
+        let request = serde_json::to_vec(&request)?;
+        let res = session
+            .client
+            .post(format!("{}/api", &self.config.host))
+            .header("Content-Type", "application/json")
+            .body(request)
+            .send()
+            .await?;
+        let res = genvm_modules_impl_common::read_response(res).await?;
         let res: serde_json::Value = serde_json::from_str(&res)?;
         res.pointer("/result/response")
             .and_then(|v| v.as_str())
@@ -300,21 +329,38 @@ impl Impl {
             .clone()
             .unwrap_or(ExecPromptConfigMode::Text);
 
+        let mut session = match self.sessions.get() {
+            Some(session) => session,
+            None => Box::new(Session {
+                client: reqwest::Client::new(),
+                data: (),
+            }),
+        };
         let res_not_sanitized = match self.config.provider {
-            LLLMProvider::Ollama => self.exec_prompt_impl_ollama(prompt, response_format).await,
+            LLLMProvider::Ollama => {
+                self.exec_prompt_impl_ollama(prompt, response_format, &mut session)
+                    .await
+            }
             LLLMProvider::OpenaiCompatible => {
-                self.exec_prompt_impl_openai(prompt, response_format).await
+                self.exec_prompt_impl_openai(prompt, response_format, &mut session)
+                    .await
             }
             LLLMProvider::Simulator => {
-                self.exec_prompt_impl_simulator(prompt, response_format)
+                self.exec_prompt_impl_simulator(prompt, response_format, &mut session)
                     .await
             }
             LLLMProvider::Anthropic => {
-                self.exec_prompt_impl_anthropic(prompt, response_format)
+                self.exec_prompt_impl_anthropic(prompt, response_format, &mut session)
                     .await
             }
-            LLLMProvider::Google => self.exec_prompt_impl_gemini(prompt, response_format).await,
-        }?;
+            LLLMProvider::Google => {
+                self.exec_prompt_impl_gemini(prompt, response_format, &mut session)
+                    .await
+            }
+        };
+        self.sessions.retn(session);
+
+        let res_not_sanitized = res_not_sanitized?;
 
         match response_format {
             ExecPromptConfigMode::Text => Ok(res_not_sanitized),

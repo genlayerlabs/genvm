@@ -1,23 +1,25 @@
+use genvm_modules_impl_common::*;
 use genvm_modules_interfaces::{ModuleError, ModuleResult};
-
 use serde_derive::Deserialize;
 
 use std::sync::Arc;
 
-struct Session {
+struct SessionData {
     id: Box<str>,
     host: Arc<str>,
 }
 
-impl Drop for Session {
-    fn drop(&mut self) {
-        let builder = isahc::Request::delete(&format!("{}/session/{}", self.host, self.id));
-        let _ = isahc::send(builder.body(()).unwrap());
+impl SessionDrop for SessionData {
+    async fn drop_session(client: &mut reqwest::Client, data: &mut SessionData) {
+        let _ = client
+            .delete(&format!("{}/session/{}", data.host, data.id))
+            .send()
+            .await;
     }
 }
 
 struct Impl {
-    sessions: crossbeam::queue::ArrayQueue<Session>,
+    sessions: SessionPool<SessionData>,
     config: Config,
     host: Arc<str>,
 }
@@ -41,8 +43,8 @@ struct GetWebpageConfig {
 unsafe impl Send for Impl {}
 
 impl Impl {
-    fn get_session(&self) -> ModuleResult<Session> {
-        match self.sessions.pop() {
+    async fn get_session(&self) -> ModuleResult<Box<Session<SessionData>>> {
+        match self.sessions.get() {
             Some(s) => return Ok(s),
             None => {}
         }
@@ -58,27 +60,37 @@ impl Impl {
             }
         }"#;
 
-        let req = isahc::Request::post(&format!("{}/session", &self.config.host))
+        let client = reqwest::Client::new();
+        let opened_session_res = client
+            .post(&format!("{}/session", &self.config.host))
             .header("Content-Type", "application/json; charset=utf-8")
-            .body(INIT_REQUEST)?;
-        log::debug!(request:? = req; "creating session");
-        let mut opened_session_res = isahc::send(req)?;
-        let body = genvm_modules_impl_common::read_response(&mut opened_session_res)?;
+            .body(INIT_REQUEST)
+            .send()
+            .await?;
+        let body = read_response(opened_session_res).await?;
         let val: serde_json::Value = serde_json::from_str(&body)?;
         let session_id = val
             .pointer("/value/sessionId")
             .and_then(|val| val.as_str())
             .ok_or(anyhow::anyhow!("invalid json {}", val))?;
 
-        Ok(Session {
-            id: Box::from(session_id),
-            host: self.host.clone(),
-        })
+        Ok(Box::new(Session {
+            client,
+            data: SessionData {
+                id: Box::from(session_id),
+                host: self.host.clone(),
+            },
+        }))
     }
 }
 
 impl Impl {
-    async fn get_webpage(&self, config: String, url: String) -> ModuleResult<String> {
+    async fn get_webpage(
+        &self,
+        config: String,
+        url: String,
+        session: &mut Session<SessionData>,
+    ) -> ModuleResult<String> {
         let config: GetWebpageConfig = serde_json::from_str(&config)?;
         let url = url::Url::parse(&url)?;
         if url.scheme() == "file" {
@@ -92,16 +104,16 @@ impl Impl {
             }
         }
 
-        //let should_quit = self.should_quit;
-        let session = self.get_session()?;
-
-        let client = reqwest::Client::new();
         let req_body = serde_json::json!({
             "url": url.as_str()
         });
         let req_body = serde_json::to_string(&req_body)?;
-        let req = client
-            .post(&format!("{}/session/{}/url", self.config.host, session.id))
+        let req = session
+            .client
+            .post(&format!(
+                "{}/session/{}/url",
+                self.config.host, session.data.id
+            ))
             .header("Content-Type", "application/json; charset=utf-8")
             .body(req_body.clone());
 
@@ -120,10 +132,11 @@ impl Impl {
             }
         };
 
-        let req = client
+        let req = session
+            .client
             .post(&format!(
                 "{}/session/{}/execute/sync",
-                self.config.host, session.id
+                self.config.host, session.data.id
             ))
             .header("Content-Type", "application/json; charset=utf-8")
             .body(script);
@@ -135,7 +148,6 @@ impl Impl {
 
         let body = res.text().await?;
 
-        let _ = self.sessions.push(session);
         let res_buf = body;
 
         let val: serde_json::Value = serde_json::from_str(&res_buf)?;
@@ -158,7 +170,10 @@ impl genvm_modules_interfaces::Web for Proxy {
         url: String,
     ) -> tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>> {
         async fn forward(zelf: Arc<Impl>, config: String, url: String) -> ModuleResult<String> {
-            zelf.get_webpage(config, url).await
+            let mut session = zelf.get_session().await?;
+            let res = zelf.get_webpage(config, url, &mut session).await;
+            zelf.sessions.retn(session);
+            res
         }
         tokio::spawn(genvm_modules_interfaces::module_result_to_future(forward(
             self.0.clone(),
@@ -175,7 +190,7 @@ pub fn new_web_module(
     let config: Config = serde_json::from_str(args.config)?;
     let host = config.host.clone();
     Ok(Box::new(Proxy(Arc::new(Impl {
-        sessions: crossbeam::queue::ArrayQueue::new(4),
+        sessions: SessionPool::new(),
         config,
         host,
     }))))

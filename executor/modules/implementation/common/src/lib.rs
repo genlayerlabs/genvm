@@ -1,24 +1,21 @@
 use anyhow::Result;
 use regex::Regex;
-use std::io::Read;
 
 static CENSOR_RESPONSE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r#""set-cookie": "[^"]*""#).unwrap());
 
-pub fn read_response(res: &mut isahc::Response<isahc::Body>) -> Result<String> {
-    let mut res_buf = String::new();
+pub async fn read_response(res: reqwest::Response) -> Result<String> {
     let status = res.status();
-    let mut res_reader = encoding_rs_io::DecodeReaderBytesBuilder::new().build(res.body_mut());
     if status != 200 {
-        let _ = res_reader.read_to_string(&mut res_buf);
+        let debug = format!("{:?}", &res);
+        let text = res.text().await?;
         return Err(anyhow::anyhow!(
-            "can't read response\nresponse: {}\nread:{}",
-            CENSOR_RESPONSE.replace_all(&format!("{:?}", res), "\"set-cookie\": \"<censored>\""),
-            &res_buf
+            "can't read response\nresponse: {}\nbody: {}",
+            CENSOR_RESPONSE.replace_all(&debug, "\"set-cookie\": \"<censored>\""),
+            &text
         ));
     }
-    res_reader.read_to_string(&mut res_buf)?;
-    Ok(res_buf)
+    Ok(res.text().await?)
 }
 
 pub fn make_error_recoverable<T, E>(
@@ -33,3 +30,53 @@ where
         genvm_modules_interfaces::ModuleError::Recoverable(message)
     })
 }
+
+pub trait SessionDrop
+where
+    Self: Sized,
+{
+    async fn drop_session(_client: &mut reqwest::Client, _data: &mut Self) {}
+}
+
+pub struct Session<T: SessionDrop> {
+    pub client: reqwest::Client,
+    pub data: T,
+}
+
+impl<T: SessionDrop> std::ops::Drop for Session<T> {
+    fn drop(&mut self) {
+        let current = tokio::runtime::Handle::current();
+        current.block_on(T::drop_session(&mut self.client, &mut self.data));
+    }
+}
+
+impl<T: SessionDrop> Session<T> {
+    pub fn new(data: T) -> Self {
+        Session {
+            client: reqwest::Client::new(),
+            data,
+        }
+    }
+}
+
+pub struct SessionPool<T: SessionDrop> {
+    pool: crossbeam::queue::ArrayQueue<Box<Session<T>>>,
+}
+
+impl<T: SessionDrop> SessionPool<T> {
+    pub fn new() -> Self {
+        Self {
+            pool: crossbeam::queue::ArrayQueue::new(8),
+        }
+    }
+
+    pub fn get(&self) -> Option<Box<Session<T>>> {
+        self.pool.pop()
+    }
+
+    pub fn retn(&self, obj: Box<Session<T>>) {
+        let _ = self.pool.push(obj);
+    }
+}
+
+impl SessionDrop for () {}

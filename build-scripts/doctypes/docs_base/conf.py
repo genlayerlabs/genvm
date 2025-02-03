@@ -20,7 +20,6 @@ extensions = [
 	'sphinx.ext.intersphinx',
 ]
 
-autodoc_mock_imports = ['word_piece_tokenizer']
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
@@ -33,7 +32,7 @@ html_static_path = ['_static']
 
 todo_include_todos = True
 
-autodoc_mock_imports = ['_genlayer_wasi', 'google', 'onnx']
+autodoc_mock_imports = ['_genlayer_wasi', 'google', 'onnx', 'word_piece_tokenizer']
 
 MONO_REPO_ROOT_FILE = '.genvm-monorepo-root'
 script_dir = Path(__file__).parent
