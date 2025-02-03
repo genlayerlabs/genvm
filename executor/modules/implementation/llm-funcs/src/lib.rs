@@ -1,7 +1,7 @@
 use serde_derive::{Deserialize, Serialize};
 
 use genvm_modules_impl_common::*;
-use genvm_modules_interfaces::{CtorArgs, ModuleError, ModuleResult};
+use genvm_modules_interfaces::*;
 use std::sync::Arc;
 
 mod string_templater;
@@ -22,6 +22,7 @@ struct Impl {
     api_key: String,
 
     sessions: SessionPool<()>,
+    cancellation: Arc<CancellationToken>,
 }
 
 impl Drop for Impl {
@@ -84,6 +85,7 @@ impl Impl {
             config,
             api_key,
             sessions: SessionPool::new(),
+            cancellation: args.cancellation,
         })
     }
 
@@ -440,7 +442,14 @@ impl genvm_modules_interfaces::Llm for Proxy {
         prompt: String,
     ) -> tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>> {
         async fn forward(zelf: Arc<Impl>, config: String, prompt: String) -> ModuleResult<String> {
-            zelf.exec_prompt(&config, &prompt).await
+            tokio::select! {
+                res = zelf.exec_prompt(&config, &prompt) => {
+                    res
+                }
+                _ = zelf.cancellation.chan.closed() => {
+                    Err(ModuleError::Fatal(anyhow::anyhow!("timeout")))
+                }
+            }
         }
 
         tokio::spawn(genvm_modules_interfaces::module_result_to_future(forward(
@@ -527,7 +536,9 @@ mod tests {
     fn do_test_text(conf: &str) {
         use genvm_modules_interfaces::*;
 
-        let imp = Impl::try_new(CtorArgs { config: conf }).unwrap();
+        let (cancellation, canceller) = make_cancellation();
+
+        let imp = Impl::try_new(CtorArgs { config: conf, cancellation }).unwrap();
 
         let res = imp
             .exec_prompt(
@@ -536,6 +547,8 @@ mod tests {
             )
             .unwrap();
 
+        std::mem::drop(canceller); // ensure that it lives up to here
+
         assert_eq!(res.to_lowercase().trim(), "yes")
     }
 
@@ -543,13 +556,18 @@ mod tests {
         use anyhow::Context;
         use genvm_modules_interfaces::*;
 
-        let imp = Impl::try_new(CtorArgs { config: conf }).unwrap();
+        let (cancellation, canceller) = make_cancellation();
+
+        let imp = Impl::try_new(CtorArgs { config: conf, cancellation }).unwrap();
 
         let res = imp.exec_prompt("{\"response_format\": \"json\"}", "respond with json object containing single key \"result\" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes").unwrap();
 
         let res: serde_json::Value = serde_json::from_str(&res)
             .with_context(|| format!("result is {}", &res))
             .unwrap();
+
+        std::mem::drop(canceller); // ensure that it lives up to here
+
         let res = res.as_object().unwrap();
         assert_eq!(res.len(), 1);
         let res = res.get("result").unwrap().as_i64().unwrap();

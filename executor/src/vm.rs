@@ -12,11 +12,7 @@ use wasmparser::WasmFeatures;
 use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
-    caching,
-    runner::{self, InitAction, WasmMode},
-    string_templater,
-    ustar::{Archive, SharedBytes},
-    wasi,
+    caching, runner::{self, InitAction, WasmMode}, string_templater, ustar::{Archive, SharedBytes}, wasi::{self, preview1::I32Exit}
 };
 use anyhow::{Context, Result};
 use std::sync::{Arc, Mutex};
@@ -155,20 +151,19 @@ impl WasmContext {
     }
 }
 
+/// shared across all deterministic VMs
 pub struct SharedData {
-    /// shared across all deterministic VMs
     pub nondet_call_no: AtomicU32,
-    // rust doesn't have aliasing Arc constructor
-    pub should_quit: Arc<AtomicU32>,
+    pub cancellation: Arc<genvm_modules_interfaces::CancellationToken>,
     pub is_sync: bool,
     pub modules: Modules,
 }
 
 impl SharedData {
-    pub fn new(modules: Modules, is_sync: bool, should_quit: Arc<AtomicU32>) -> Self {
+    pub fn new(modules: Modules, is_sync: bool, cancellation: Arc<genvm_modules_interfaces::CancellationToken>) -> Self {
         Self {
             nondet_call_no: 0.into(),
-            should_quit,
+            cancellation,
             is_sync,
             modules,
         }
@@ -256,27 +251,24 @@ impl VM {
         let res: RunResult = match res {
             Ok(()) => Ok(RunOk::empty_return()),
             Err(e) => {
-                let res: Option<RunOk> = [
-                    e.downcast_ref::<crate::wasi::preview1::I32Exit>()
-                        .and_then(|v| {
-                            if v.0 == 0 {
-                                Some(RunOk::empty_return())
-                            } else {
-                                Some(RunOk::ContractError(format!("exit_code {}", v.0), None))
-                            }
-                        }),
-                    e.downcast_ref::<wasmtime::Trap>()
-                        .map(|v| RunOk::ContractError(format!("wasm_trap {v:?}"), None)),
-                    e.downcast_ref::<crate::errors::ContractError>()
-                        .map(|v| RunOk::ContractError(v.0.clone(), None)),
-                    e.downcast_ref::<crate::errors::Rollback>()
-                        .map(|v| RunOk::Rollback(v.0.clone())),
-                    e.downcast_ref::<crate::wasi::genlayer_sdk::ContractReturn>()
-                        .map(|v| RunOk::Return(v.0.clone())),
+                let res: Result<RunOk> = [
+                    |e: anyhow::Error| match e.downcast::<crate::wasi::preview1::I32Exit>() {
+                        Ok(I32Exit(0)) => Ok(RunOk::empty_return()),
+                        Ok(I32Exit(v)) => Ok(RunOk::ContractError(format!("exit_code {}", v), None)),
+                        Err(e) => Err(e),
+                    },
+                    |e: anyhow::Error| e.downcast::<wasmtime::Trap>()
+                        .map(|v| RunOk::ContractError(format!("wasm_trap {v:?}"), Some(v.into()))),
+                    |e: anyhow::Error| e.downcast::<crate::errors::ContractError>()
+                        .map(|crate::errors::ContractError(m, c)| RunOk::ContractError(m, c)),
+                    |e: anyhow::Error| e.downcast::<crate::errors::Rollback>()
+                        .map(|crate::errors::Rollback(v)| RunOk::Rollback(v)),
+                    |e: anyhow::Error| e.downcast::<crate::wasi::genlayer_sdk::ContractReturn>()
+                        .map(|crate::wasi::genlayer_sdk::ContractReturn(v)| RunOk::Return(v)),
                 ]
                 .into_iter()
-                .fold(None, |x, y| if x.is_some() { x } else { y });
-                res.map_or(Err(e), Ok)
+                .fold(Err(e), |acc, func| match acc { Ok(acc) => Ok(acc), Err(e) => func(e), });
+                res
             }
         };
         match &res {
@@ -499,7 +491,7 @@ impl Supervisor {
         let mut store = Store::new(
             &engine,
             WasmContext::new(data, self.shared_data.clone()),
-            self.shared_data.should_quit.clone(),
+            self.shared_data.cancellation.should_quit.clone(),
         );
 
         store.limiter(|ctx| &mut ctx.limits);

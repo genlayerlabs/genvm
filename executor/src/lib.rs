@@ -15,9 +15,10 @@ pub use host::{AccountAddress, GenericAddress, Host, MessageData};
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
+use vm::RunOk;
 use std::{
     collections::HashMap,
-    sync::{atomic::AtomicU32, Arc},
+    sync::Arc,
 };
 use ustar::SharedBytes;
 
@@ -47,8 +48,7 @@ struct ConfigSchema {
 //    ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Llm + Send + Sync>>;
 //}
 
-fn create_modules(config_path: &String, should_quit: *mut u32) -> Result<vm::Modules> {
-    _ = should_quit;
+fn create_modules(config_path: &String, cancellation: Arc<genvm_modules_interfaces::CancellationToken>) -> Result<vm::Modules> {
     let mut root_path = std::env::current_exe().with_context(|| "getting current exe")?;
     root_path.pop();
     root_path.pop();
@@ -68,12 +68,14 @@ fn create_modules(config_path: &String, should_quit: *mut u32) -> Result<vm::Mod
     let llm_config = serde_json::to_string(&config.modules.llm.config)?;
     let llm = genvm_modules_default_llm::new_llm_module(genvm_modules_interfaces::CtorArgs {
         config: &llm_config,
+        cancellation: cancellation.clone(),
     })
     .with_context(|| "creating llm module")?;
 
     let web_config = serde_json::to_string(&config.modules.web.config)?;
     let web = genvm_modules_default_web::new_web_module(genvm_modules_interfaces::CtorArgs {
         config: &web_config,
+        cancellation,
     })
     .with_context(|| "creating llm module")?;
 
@@ -87,10 +89,9 @@ pub fn create_supervisor(
     config_path: &String,
     mut host: Host,
     is_sync: bool,
+    cancellation: Arc<genvm_modules_interfaces::CancellationToken>,
 ) -> Result<Arc<tokio::sync::Mutex<vm::Supervisor>>> {
-    let should_quit = Arc::new(AtomicU32::new(0));
-    let should_quit_ptr = should_quit.as_ptr();
-    let modules = match create_modules(config_path, should_quit_ptr) {
+    let modules = match create_modules(config_path, cancellation.clone()) {
         Ok(modules) => modules,
         Err(e) => {
             let err = Err(e);
@@ -98,7 +99,7 @@ pub fn create_supervisor(
             return Err(err.unwrap_err());
         }
     };
-    let shared_data = Arc::new(crate::vm::SharedData::new(modules, is_sync, should_quit));
+    let shared_data = Arc::new(crate::vm::SharedData::new(modules, is_sync, cancellation));
 
     Ok(Arc::new(tokio::sync::Mutex::new(vm::Supervisor::new(
         host,
@@ -151,9 +152,19 @@ pub async fn run_with(
     permissions: &str,
 ) -> vm::RunResult {
     let res = run_with_impl(entry_message, supervisor.clone(), permissions).await;
-    let res = ContractError::unwrap_res(res);
 
     let mut supervisor = supervisor.lock().await;
+
+    let res = if supervisor.shared_data.cancellation.is_cancelled() {
+        match res {
+            Ok(RunOk::ContractError(msg, cause)) => Ok(RunOk::ContractError("timeout".into(), cause.map(|v| v.context(msg)))),
+            Ok(r) => Ok(r),
+            Err(e) => Ok(RunOk::ContractError("timeout".into(), Some(e))),
+        }
+    } else {
+        ContractError::unwrap_res(res)
+    };
+
     supervisor.host.consume_result(&res)?;
 
     res

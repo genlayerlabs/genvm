@@ -1,8 +1,8 @@
 use genvm_modules_impl_common::*;
-use genvm_modules_interfaces::{ModuleError, ModuleResult};
+use genvm_modules_interfaces::{CancellationToken, ModuleError, ModuleResult};
 use serde_derive::Deserialize;
 
-use std::sync::Arc;
+use std::{future::Future, mem::swap, pin::Pin, sync::Arc};
 
 struct SessionData {
     id: Box<str>,
@@ -10,11 +10,21 @@ struct SessionData {
 }
 
 impl SessionDrop for SessionData {
-    async fn drop_session(client: &mut reqwest::Client, data: &mut SessionData) {
-        let _ = client
-            .delete(&format!("{}/session/{}", data.host, data.id))
-            .send()
-            .await;
+    fn has_drop_session() -> bool {
+        true
+    }
+
+    fn drop_session(client: reqwest::Client, data: &mut SessionData) -> Pin<Box<dyn Future<Output = ()> + Send + Sync>> {
+        let mut id = Box::from("");
+        swap(&mut data.id, &mut id);
+        let host = data.host.clone();
+
+        Box::pin(async move  {
+            let _ = client
+                .delete(&format!("{}/session/{}", host, id))
+                .send()
+                .await;
+        })
     }
 }
 
@@ -22,6 +32,7 @@ struct Impl {
     sessions: SessionPool<SessionData>,
     config: Config,
     host: Arc<str>,
+    cancellation: Arc<CancellationToken>,
 }
 
 #[derive(Deserialize)]
@@ -171,9 +182,15 @@ impl genvm_modules_interfaces::Web for Proxy {
     ) -> tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>> {
         async fn forward(zelf: Arc<Impl>, config: String, url: String) -> ModuleResult<String> {
             let mut session = zelf.get_session().await?;
-            let res = zelf.get_webpage(config, url, &mut session).await;
-            zelf.sessions.retn(session);
-            res
+            tokio::select! {
+                res = zelf.get_webpage(config, url, &mut session) => {
+                    zelf.sessions.retn(session);
+                    res
+                }
+                _ = zelf.cancellation.chan.closed() => {
+                    Err(ModuleError::Fatal(anyhow::anyhow!("timeout")))
+                }
+            }
         }
         tokio::spawn(genvm_modules_interfaces::module_result_to_future(forward(
             self.0.clone(),
@@ -193,5 +210,6 @@ pub fn new_web_module(
         sessions: SessionPool::new(),
         config,
         host,
+        cancellation: args.cancellation,
     }))))
 }

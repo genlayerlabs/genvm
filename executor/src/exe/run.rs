@@ -22,6 +22,8 @@ impl std::fmt::Display for PrintOption {
 pub struct Args {
     #[arg(long, default_value_t = String::from("${genvmRoot}/share/genvm/default-config.json"))]
     config: String,
+    #[arg(long, default_value_t = 4)]
+    threads: usize,
     #[arg(long)]
     message: String,
     #[arg(long)]
@@ -38,7 +40,7 @@ pub struct Args {
     permissions: String,
 }
 
-pub async fn handle(args: Args) -> Result<()> {
+pub fn handle(args: Args) -> Result<()> {
     let message: genvm::MessageData = serde_json::from_str(&args.message)?;
 
     let host = genvm::Host::new(&args.host)?;
@@ -54,27 +56,28 @@ pub async fn handle(args: Args) -> Result<()> {
         anyhow::bail!("Invalid permissions {}", &args.permissions)
     }
 
-    let supervisor = genvm::create_supervisor(&args.config, host, args.sync)
-        .with_context(|| "creating supervisor")?;
+    let (token, canceller) = genvm_modules_interfaces::make_cancellation();
 
-    let shared_data = {
-        let supervisor = supervisor.lock().await;
-        supervisor.shared_data.clone()
-    };
+    let supervisor = genvm::create_supervisor(&args.config, host, args.sync, token)
+        .with_context(|| "creating supervisor")?;
 
     let handle_sigterm = move || {
         log::warn!(target = "rt"; "sigterm received");
-        shared_data
-            .should_quit
-            .store(1, std::sync::atomic::Ordering::SeqCst);
+        canceller();
     };
     unsafe {
         signal_hook::low_level::register(signal_hook::consts::SIGTERM, handle_sigterm.clone())?;
         signal_hook::low_level::register(signal_hook::consts::SIGINT, handle_sigterm)?;
     }
 
-    let res = genvm::run_with(message, supervisor, &args.permissions)
-        .await
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_io()
+        .enable_time()
+        .worker_threads(args.threads)
+        .max_blocking_threads(args.threads)
+        .build()?;
+
+    let res = runtime.block_on(genvm::run_with(message, supervisor, &args.permissions))
         .with_context(|| "running genvm");
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,

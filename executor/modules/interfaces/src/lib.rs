@@ -1,3 +1,5 @@
+use std::sync::{atomic::AtomicU32, Arc};
+
 pub trait Web {
     fn get_webpage(
         &self,
@@ -29,6 +31,7 @@ pub trait Llm {
 #[repr(C)]
 pub struct CtorArgs<'a> {
     pub config: &'a str,
+    pub cancellation: Arc<CancellationToken>,
 }
 
 #[derive(Debug)]
@@ -71,4 +74,34 @@ pub async fn module_result_to_future(
         }
         Err(ModuleError::Fatal(e)) => Err(e),
     }
+}
+
+pub struct CancellationToken {
+    pub chan: tokio::sync::mpsc::Sender<()>,
+    pub should_quit: Arc<AtomicU32>,
+}
+
+impl CancellationToken {
+    pub fn is_cancelled(&self) -> bool {
+        self.should_quit.load(std::sync::atomic::Ordering::SeqCst) != 0
+    }
+}
+
+pub fn make_cancellation() -> (Arc<CancellationToken>, impl Clone + Fn() -> ()) {
+    let (sender, receiver) = tokio::sync::mpsc::channel(1);
+
+    let cancel = Arc::new(CancellationToken {
+        chan: sender,
+        should_quit: Arc::new(AtomicU32::new(0))
+    });
+
+    let cancel_copy = cancel.clone();
+    let receiver = Arc::new(std::sync::Mutex::new(receiver));
+
+    (cancel, move || {
+        cancel_copy.should_quit.store(1, std::sync::atomic::Ordering::SeqCst);
+        if let Ok(mut receiver) = receiver.lock() {
+            receiver.close();
+        }
+    })
 }

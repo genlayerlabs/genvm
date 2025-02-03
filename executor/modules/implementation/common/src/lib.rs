@@ -1,3 +1,5 @@
+use std::{future::Future, pin::Pin};
+
 use anyhow::Result;
 use regex::Regex;
 
@@ -35,7 +37,13 @@ pub trait SessionDrop
 where
     Self: Sized,
 {
-    async fn drop_session(_client: &mut reqwest::Client, _data: &mut Self) {}
+    fn has_drop_session() -> bool {
+        false
+    }
+
+    fn drop_session(_client: reqwest::Client, _data: &mut Self) -> Pin<Box<dyn Future<Output = ()> + Send + Sync>> {
+        Box::pin(async {})
+    }
 }
 
 pub struct Session<T: SessionDrop> {
@@ -45,8 +53,12 @@ pub struct Session<T: SessionDrop> {
 
 impl<T: SessionDrop> std::ops::Drop for Session<T> {
     fn drop(&mut self) {
-        let current = tokio::runtime::Handle::current();
-        current.block_on(T::drop_session(&mut self.client, &mut self.data));
+        if !T::has_drop_session() {
+            return;
+        }
+        tokio::spawn(T::drop_session(self.client.clone(), &mut self.data));
+        //let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        //rt.block_on(T::drop_session(&mut self.client, &mut self.data));
     }
 }
 

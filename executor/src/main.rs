@@ -49,8 +49,7 @@ impl structured_logger::Writer for NullWiriter {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let args = CliArgs::parse();
 
     let log_file: Box<dyn std::io::Write + Sync + Send> = match args.log_fd {
@@ -70,7 +69,7 @@ async fn main() -> Result<()> {
     log::info!(target: "vm", method = "start", version = env!("GENVM_BUILD_ID"); "");
 
     match args.command {
-        Commands::Run(args) => exe::run::handle(args).await,
+        Commands::Run(args) => exe::run::handle(args),
         Commands::Precompile(args) => exe::precompile::handle(args),
     }
 }
