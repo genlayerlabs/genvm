@@ -44,7 +44,6 @@ jobs:
     with:
       runs_on: ubuntu-latest
       preloads: --preload .ci/release-conf.rb
-      install_also: ""
       tag: ${{ needs.gen-tag.outputs.tag }}
 
   release-build-genvm-release-ubuntu-latest-aarch64:
@@ -53,8 +52,8 @@ jobs:
     secrets: inherit
     with:
       runs_on: ubuntu-latest
+      target: aarch64-unknown-linux-gnu
       preloads: --preload .ci/release-conf.rb --preload .ci/executor-target-linux-aarch64.rb
-      install_also: --cross-linux-aarch64
       tag: ${{ needs.gen-tag.outputs.tag }}
 
   release-build-genvm-release-macos-latest:
@@ -62,9 +61,9 @@ jobs:
     uses: ./.github/workflows/genvm-build-template.yaml
     secrets: inherit
     with:
-      runs_on: macos-latest
-      preloads: --preload .ci/release-conf.rb
-      install_also: ""
+      runs_on: ubuntu-latest
+      target: aarch64-apple-darwin
+      preloads: --preload .ci/release-conf.rb --preload .ci/executor-target-macos-aarch64.rb
       tag: ${{ needs.gen-tag.outputs.tag }}
 
   release-data:

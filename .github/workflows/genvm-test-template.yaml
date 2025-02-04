@@ -36,9 +36,9 @@ jobs:
       - name: Get source
         uses: ./.github/actions/get-src
         with:
-          install_also: --test
           load_submodules: "false"
       - run: |
+          sudo apt-get install -y wabt && \
           mkdir -p "$GITHUB_WORKSPACE/build/out" && \
           pushd "$GITHUB_WORKSPACE/build/out" && \
           wget -q ${{ inputs.genvm_artifact_url }} && \

@@ -9,7 +9,7 @@ in pkgs.stdenvNoCC.mkDerivation {
 	name = "genvm-nix-all-runners";
 
 	outputHashMode = "recursive";
-	outputHash = "sha256-5/38YzH5r3isQ0o2nbOUnZdxXVp7DlxstBnDNFsezCY="; #lib.fakeHash;
+	outputHash = "sha256-RQBOKtB8SGq+V8WI4Be/467ZgrNPuMoA6685RB1FVCM="; #lib.fakeHash;
 
 	nativeBuildInputs = [
 		py

@@ -41,7 +41,7 @@ let
 			})
 		];
 
-		outputHash = "sha256-y0GfG28Gohhu65eFiy5zZfMijqIoXH6cqxt2EHI+2Wc=";
+		outputHash = "sha256-LcPO+QHtv0Y/IKobI6Y1cuzbi6YKUf0aOIn7PJrYcbw="; #lib.fakeHash;
 		outputHashMode = "recursive";
 
 		buildInputs = [
@@ -74,7 +74,7 @@ let
 
 			find "$out" -name '*.log' -delete
 			rm -rf "$out/share/man" "$out/bin/rust-gdb"* "$out/bin/rust-lldb"* "$out/lib/rustlib/uninstall.sh" || true
-			find "$out" -type f -name 'manifest-*' -print0 | xargs -0 perl -pe 's/$out/\/rust-toolchain/g' -i
+			find "$out" -type f -name 'manifest-*' -print0 | xargs -0 perl -pe 's/$ENV{out}/\/rust-toolchain/g' -i
 		'';
 
 		dontFixup = true;

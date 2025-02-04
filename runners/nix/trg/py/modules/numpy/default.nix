@@ -61,7 +61,6 @@ wasmShell.stdenv.mkDerivation {
 	];
 
 	configurePhase = ''
-		ls -l /build/genvm-cpython-headers-3.13/include
 		chmod -R +w /build/deps/
 		FROM='#!/usr/bin/env python3' TO='#!${pyShell.py.outPath}/bin/python3' perl -pe 's/$ENV{FROM}/$ENV{TO}/g' -i /build/deps/stub-clang.py
 

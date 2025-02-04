@@ -26,8 +26,7 @@ fn replace_all<E>(
 pub fn patch_str(vars: &BTreeMap<String, String>, s: &str) -> Result<String> {
     replace_all(&JSON_UNFOLDER_RE, s, |r: &regex::Captures| {
         let r: &str = &r[1];
-        vars.get(r)
-            .ok_or(anyhow::anyhow!("error")).cloned()
+        vars.get(r).ok_or(anyhow::anyhow!("error")).cloned()
     })
 }
 pub fn patch_value(

@@ -223,7 +223,8 @@ fn make_new_runner_arch_from_tar(
     id: symbol_table::GlobalSymbol,
     base_path: &std::path::Path,
 ) -> Result<Archive> {
-    let (runner_id, runner_hash) = runner::verify_runner(id.as_str()).with_context(|| format!("verifying {id}"))?;
+    let (runner_id, runner_hash) =
+        runner::verify_runner(id.as_str()).with_context(|| format!("verifying {id}"))?;
 
     let mut path = std::path::PathBuf::from(base_path);
     path.push(runner_id);
@@ -672,8 +673,10 @@ impl Supervisor {
             }
             InitAction::Seq(vec) => {
                 for act in vec {
-                    if let Some(x) = Box::pin(self.apply_action_recursive(vm, ctx, act, current)).await? {
-                        return Ok(Some(x))
+                    if let Some(x) =
+                        Box::pin(self.apply_action_recursive(vm, ctx, act, current)).await?
+                    {
+                        return Ok(Some(x));
                     }
                 }
                 Ok(None)

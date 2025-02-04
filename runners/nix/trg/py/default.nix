@@ -12,7 +12,7 @@ let
 	pyModules = import ./modules args;
 in rec {
 	configurator = {
-		nativeBuildInputs = [ pyDeps ];
+		nativeBuildInputs = [ pyDeps pkgs.perl ];
 		version = "3.13";
 
 		src = pyShell.py.src;
@@ -25,6 +25,7 @@ in rec {
 			export CONFIG_SITE="$(readlink -f Tools/wasm/config.site-wasm32-wasi)"
 			export LDFLAGS="-L${pyDeps.outPath}/lib -Lgenvm-extra"
 
+			readlink -f .
 			mkdir -p /build/out
 
 			./configure \
@@ -58,7 +59,7 @@ in rec {
 	fullDefault = wasmShell.stdenv.mkDerivation (configurator // {
 		pname = "genvm-cpython";
 
-		outputHash = "sha256-33TjsuwBk+d8GQ8LswY3EDiLE64OownbVwWTSHc5Rss="; #lib.fakeHash;
+		outputHash = "sha256-czL3TCzXLVN7PCXppGWfujOm6gYDVBLsSM0aOHjbauw="; #lib.fakeHash;
 		outputHashMode = "recursive";
 
 		nativeBuildInputs = configurator.nativeBuildInputs ++

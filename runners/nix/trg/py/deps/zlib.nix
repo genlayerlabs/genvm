@@ -7,7 +7,7 @@ wasmShell.stdenv.mkDerivation {
 	pname = "genvm-zlib";
 	version = "1.3.1";
 
-	outputHash = "sha256-4Ojlc/yElp364HZcve0/jSfnuNvc4wj/1V9KkUh5pKI=";
+	outputHash = "sha256-qdvdo6vihKpxlOGsaeWUn9QBbBvatB1KJpkp4osdgC8=";
 	outputHashMode = "recursive";
 
 	src = pkgs.fetchzip {
@@ -19,20 +19,18 @@ wasmShell.stdenv.mkDerivation {
 	nativeBuildInputs = [wasmShell.sdk];
 
 	configurePhase = ''
-		set -ex
 		export ${wasmShell.envStr}
-		./configure --prefix="$out"
+		./configure --prefix="$out" --static
 	'';
 
 	buildPhase = ''
-		set -ex
 		make -j
 	'';
 
 	installPhase = ''
-		set -ex
 		make install
 		rm -rf "$out/lib/pkgconfig/" || true
+		rm -rf "$out/share/man" || true
 	'';
 
 	dontPatchELF = true;

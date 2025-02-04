@@ -33,7 +33,6 @@ arg_parser.add_argument(
 
 args_parsed = arg_parser.parse_args()
 
-import sys
 import typing
 import tarfile, zipfile
 import json
@@ -51,7 +50,7 @@ if args_parsed.config == '#all':
 elif args_parsed.config == '#none':
 	read_files_conf = []
 else:
-	read_files_conf = json.load(args_parsed.config)
+	read_files_conf = json.loads(Path(args_parsed.config).read_text())
 
 src_dir = Path(args_parsed.src_dir)
 

@@ -1,9 +1,5 @@
 use anyhow::Context as _;
-use std::{
-    borrow::BorrowMut,
-    io::Write,
-    iter,
-};
+use std::{borrow::BorrowMut, io::Write, iter};
 use tracing::instrument;
 use wiggle::{GuestError, GuestMemory, GuestPtr};
 
@@ -662,8 +658,8 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
             let add_size: u32 = cow.len().try_into()?;
             size += add_size;
             stream
-                    .write_all(&cow)
-                    .unwrap_or_else(|_| panic!("Can't print to terminal"));
+                .write_all(&cow)
+                .unwrap_or_else(|_| panic!("Can't print to terminal"));
         }
         stream
             .flush()

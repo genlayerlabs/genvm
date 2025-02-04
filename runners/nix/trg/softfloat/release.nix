@@ -14,7 +14,7 @@ wasmShell.stdenv.mkDerivation {
 	pname = "genvm-softfloat";
 	version = "0.0.1";
 
-	outputHash = "sha256-cwNr96KJlfjICq0b/s52qI2tZ9IA2VQQjEs7vOo6GNQ=";
+	outputHash = "sha256-JdWCF5kwaPI1mvgoqyRpN4d9RrpP/eIpIZQPZr9nUbA=";
 	outputHashMode = "recursive";
 
 	src = ./.;

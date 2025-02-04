@@ -326,9 +326,7 @@ impl Impl {
     async fn exec_prompt_impl(&self, config: &str, prompt: &str) -> ModuleResult<String> {
         let config: ExecPromptConfig =
             make_error_recoverable(serde_json::from_str(config), "invalid configuration")?;
-        let response_format = config
-            .response_format
-            .unwrap_or(ExecPromptConfigMode::Text);
+        let response_format = config.response_format.unwrap_or(ExecPromptConfigMode::Text);
 
         let mut session = match self.sessions.get() {
             Some(session) => session,
@@ -517,7 +515,7 @@ mod tests {
             "key_env_name": "ANTHROPICKEY"
         }"#;
 
-        pub const xai: &str = r#"{
+        pub const _xai: &str = r#"{
             "host": "https://api.x.ai/v1",
             "provider": "openai-compatible",
             "model": "grok-2-1212",
@@ -532,7 +530,7 @@ mod tests {
         }"#;
     }
 
-    fn do_test_text(conf: &str) {
+    async fn do_test_text(conf: &str) {
         use genvm_modules_interfaces::*;
 
         let (cancellation, canceller) = make_cancellation();
@@ -548,6 +546,7 @@ mod tests {
                 "{}",
                 "Respond with \"yes\" (without quotes) and only this word",
             )
+            .await
             .unwrap();
 
         std::mem::drop(canceller); // ensure that it lives up to here
@@ -555,7 +554,7 @@ mod tests {
         assert_eq!(res.to_lowercase().trim(), "yes")
     }
 
-    fn do_test_json(conf: &str) {
+    async fn do_test_json(conf: &str) {
         use anyhow::Context;
         use genvm_modules_interfaces::*;
 
@@ -567,7 +566,11 @@ mod tests {
         })
         .unwrap();
 
-        let res = imp.exec_prompt("{\"response_format\": \"json\"}", "respond with json object containing single key \"result\" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes").unwrap();
+        const PROMPT: &str = "respond with json object containing single key \"result\" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes";
+        let res = imp
+            .exec_prompt("{\"response_format\": \"json\"}", PROMPT)
+            .await
+            .unwrap();
 
         let res: serde_json::Value = serde_json::from_str(&res)
             .with_context(|| format!("result is {}", &res))
@@ -584,13 +587,13 @@ mod tests {
     macro_rules! make_test {
         ($conf:ident) => {
             mod $conf {
-                #[test]
-                fn text() {
-                    crate::tests::do_test_text(crate::tests::conf::$conf)
+                #[tokio::test]
+                async fn text() {
+                    crate::tests::do_test_text(crate::tests::conf::$conf).await
                 }
-                #[test]
-                fn json() {
-                    crate::tests::do_test_json(crate::tests::conf::$conf)
+                #[tokio::test]
+                async fn json() {
+                    crate::tests::do_test_json(crate::tests::conf::$conf).await
                 }
             }
         };

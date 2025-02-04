@@ -28,7 +28,11 @@ pub static CACHE_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| match get_cache_dir()
     Ok(p) => Some(p),
 });
 
-pub static PRECOMPILE_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| Lazy::force(&CACHE_DIR).as_ref().map(|dir| dir.join("precompile").to_path_buf()));
+pub static PRECOMPILE_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
+    Lazy::force(&CACHE_DIR)
+        .as_ref()
+        .map(|dir| dir.join("precompile").to_path_buf())
+});
 
 pub struct DetNonDetSuffixes {
     pub det: &'static str,

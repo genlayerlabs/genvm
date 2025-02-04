@@ -7,7 +7,7 @@ project('models') {
 			output_file: out.join("#{hash}.tar"),
 			command: $runner_package_command.('--expected-hash', hash, '--src-dir', name, '--out-dir', out),
 			tags: ['all', 'runner'],
-			dependencies: deps,
+			dependencies: deps + [$runner_nix_target],
 		)
 	}
 }

@@ -58,7 +58,9 @@ unsafe impl Send for Impl {}
 
 impl Impl {
     async fn get_session(&self) -> ModuleResult<Box<Session<SessionData>>> {
-        if let Some(s) = self.sessions.get() { return Ok(s) }
+        if let Some(s) = self.sessions.get() {
+            return Ok(s);
+        }
 
         const INIT_REQUEST: &str = r#"{
             "capabilities": {

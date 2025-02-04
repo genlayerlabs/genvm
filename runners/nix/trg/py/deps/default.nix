@@ -16,7 +16,7 @@ let
 in wasmShell.stdenv.mkDerivation {
 	name = "genvm-py-deps";
 
-	outputHash = "sha256-xfYcsxFnnKdejNN8tAVFS8V7D3TypHKiEIdEKqUtW4I=";
+	outputHash = "sha256-bR4Ds30vnQ525VC7adX79HBTW4cUhE7tTozRKIW8fJQ=";
 	outputHashMode = "recursive";
 
 	srcs = ../../none;

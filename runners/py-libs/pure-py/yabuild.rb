@@ -30,7 +30,7 @@ make_runner = Proc.new { |name, runner_name: name, extra_seq: []|
 				'--runner-json', JSON.dump(runner_json),
 			)
 		],
-		dependencies: lib_files,
+		dependencies: lib_files + [$runner_nix_target],
 		output_file: out_dir.join("#{expected_hash}.tar"),
 		tags: ['all', 'runner'],
 	) {

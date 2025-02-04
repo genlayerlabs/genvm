@@ -27,6 +27,7 @@ rustShell.stdenv.mkDerivation {
 		rustShell.rs
 		pkgs.patchelf
 		pkgs.glibc
+		pkgs.perl
 	];
 
 	srcs = [
@@ -52,6 +53,8 @@ rustShell.stdenv.mkDerivation {
 		echo 'Signature: 8a477f597d28d172789f06886806bc55' > ./cargo/registry/CACHEDIR.TAG
 
 		tar -C ./cargo/registry/index/index.crates.io-1949cf8c6b5b557f/ -xf ./registry.tar.xz
+
+		perl -pe 's/^# //' -i Cargo.toml
 	'';
 
 	buildPhase = ''

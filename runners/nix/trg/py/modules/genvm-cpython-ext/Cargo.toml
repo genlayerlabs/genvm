@@ -1,4 +1,4 @@
-cargo-features = ["trim-paths"]
+# cargo-features = ["trim-paths"]
 
 [package]
 name = "genvm-cpython-ext"
@@ -21,4 +21,4 @@ lto = "fat"
 strip = "debuginfo"
 incremental = false
 codegen-units = 1
-trim-paths = "all"
+# trim-paths = "all"

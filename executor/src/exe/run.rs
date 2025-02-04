@@ -108,6 +108,6 @@ pub fn handle(args: Args) -> Result<()> {
 
     let _ = std::io::stdout().flush();
     let _ = std::io::stderr().flush();
-    // FIXME exit code?
+
     Ok(())
 }

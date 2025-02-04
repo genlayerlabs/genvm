@@ -66,7 +66,11 @@ impl<T: SessionDrop> std::ops::Drop for Session<T> {
 impl<T: SessionDrop> Session<T> {
     pub fn new(data: T) -> Self {
         Session {
-            client: reqwest::ClientBuilder::new().cookie_store(true).gzip(true).build().unwrap(),
+            client: reqwest::ClientBuilder::new()
+                .cookie_store(true)
+                .gzip(true)
+                .build()
+                .unwrap(),
             data,
         }
     }

@@ -46,7 +46,7 @@ py_genlayer_std_runner = target_command(
 			'--runner-json', JSON.dump(runner_json),
 		)
 	],
-	dependencies: lib_files,
+	dependencies: lib_files + [$runner_nix_target],
 	output_file: out_dir.join("#{expected_hash}.tar"),
 	tags: ['all', 'runner'],
 ) {
@@ -80,7 +80,7 @@ target_command(
 			'--runner-json', JSON.dump(cum_runner_json),
 		)
 	],
-	dependencies: [],
+	dependencies: [$runner_nix_target],
 	tags: ['all', 'runner'],
 )
 
@@ -108,7 +108,7 @@ target_command(
 			'--runner-json', JSON.dump(cum_runner_json),
 		)
 	],
-	dependencies: [],
+	dependencies: [$runner_nix_target],
 	tags: ['all', 'runner'],
 )
 

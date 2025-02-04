@@ -30,6 +30,7 @@ wasmShell.stdenv.mkDerivation {
 				cp -r "$s"/* .
 			fi
 		done
+		chmod -R +w .
 	'';
 
 	nativeBuildInputs = [wasmShell.sdk];
@@ -37,13 +38,30 @@ wasmShell.stdenv.mkDerivation {
 	configurePhase = ''
 		export ${wasmShell.envStr}
 		export CFLAGS="$CFLAGS -Iinclude -Iwasm32-unknown-wasip1 -Iwasm32-unknown-wasip1/include"
-		echo "$CFLAGS" > .cflags
 		./configure \
 			"--prefix=$out" \
 			--host=wasm32-wasip1
 	'';
 
-	buildPhase = builtins.readFile ./build.sh;
+	buildPhase = ''
+		AR_SCRIPT="CREATE libffi.a"
+
+		for i in stub_ffi.c src/closures.c src/prep_cif.c src/tramp.c src/debug.c src/raw_api.c src/types.c
+		do
+			FNAME="$(basename "$i")"
+			clang ${wasmShell.env.CFLAGS} \
+				-o "$i.o" \
+				-fPIC \
+				-Iinclude -Iwasm32-unknown-wasip1 -Iwasm32-unknown-wasip1/include \
+				-c "$i"
+			AR_SCRIPT="$AR_SCRIPT"$'\n'"ADDMOD $i.o"
+		done
+
+		AR_SCRIPT="$AR_SCRIPT"$'\n'"SAVE"
+		AR_SCRIPT="$AR_SCRIPT"$'\n'"END"
+
+		echo "$AR_SCRIPT" | ar -M
+	'';
 
 	installPhase = ''
 		mkdir -p "$out/lib"
