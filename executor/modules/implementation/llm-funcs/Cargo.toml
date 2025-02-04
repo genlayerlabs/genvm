@@ -15,4 +15,4 @@ regex = "1.10.6"
 log = { version = "0.4.25", features = ["kv_unstable_serde"] }
 async-trait = "0.1.85"
 tokio = { version = "1.43.0", features = ["rt", "rt-multi-thread", "time", "macros", "sync"], default-features = false}
-reqwest = { version = "0.12.12", features = ["cookies", "gzip", "rustls-tls"]}
+reqwest = { version = "0.12.12", features = ["cookies", "gzip", "rustls-tls", "charset", "http2"], default-features = false}

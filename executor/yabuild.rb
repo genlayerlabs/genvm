@@ -15,6 +15,9 @@ project('executor') {
 		base_env['RUSTFLAGS'] << " -Cinstrument-coverage"
 	end
 
+	base_env['RUSTFLAGS'] ||= ''
+	base_env['RUSTFLAGS'] << ' -C target-feature=+crt-static'
+
 	cargo_flags = []
 	if not config.executor_target.nil?
 		linker_path = root_src.join('build-scripts', 'zig-driver.py')
