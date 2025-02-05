@@ -51,7 +51,7 @@ jobs:
       - name: Configure and build documentation
         run: |
           ./tools/ya-build/ya-build config
-          ninja -v -C build genvm/runners/docs genvm/runners/types
+          ninja -v -C build genvm/runners/docs
 
       - name: Setup pages
         uses: actions/configure-pages@v4
@@ -63,10 +63,6 @@ jobs:
 
           # Copy HTML docs
           cp -r build/py-docs/docs/* _site/
-
-          # Create py-types directory and copy py-types
-          mkdir -p _site/py-types
-          cp -r build/py-types/* _site/py-types/
 
           # Configure custom domain
           echo "${{ env.DOCS_DOMAIN }}" > _site/CNAME

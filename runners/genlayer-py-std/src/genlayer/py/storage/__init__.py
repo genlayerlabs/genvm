@@ -3,10 +3,12 @@ __all__ = (
 	'Array',
 	'TreeMap',
 	'VecDB',
+	'allow_storage',
 )
 
 from .vec import DynArray, Array
 from .tree_map import TreeMap
+from .annotations import *
 
 import typing
 

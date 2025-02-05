@@ -1,12 +1,9 @@
 use anyhow::Context as _;
-use std::{
-    borrow::{Borrow, BorrowMut},
-    io::Write,
-    iter,
-    sync::Arc,
-};
+use std::{borrow::BorrowMut, io::Write, iter};
 use tracing::instrument;
 use wiggle::{GuestError, GuestMemory, GuestPtr};
+
+use crate::ustar::SharedBytes;
 
 use super::common::*;
 use std::collections::BTreeMap;
@@ -60,12 +57,28 @@ pub(crate) mod generated {
         witx: ["$CARGO_MANIFEST_DIR/src/wasi/witx/wasi_snapshot_preview1.witx"],
         errors: { errno => trappable Error },
         wasmtime: false,
+        tracing: false,
+
+        async: {
+            wasi_snapshot_preview1::{
+                fd_read, fd_pread,
+                fd_filestat_get, fd_seek, fd_tell,
+            },
+        },
     });
 
     wiggle::wasmtime_integration!({
         witx: ["$CARGO_MANIFEST_DIR/src/wasi/witx/wasi_snapshot_preview1.witx"],
         target: super::generated,
         errors: { errno => trappable Error },
+        tracing: false,
+
+        async: {
+            wasi_snapshot_preview1::{
+                fd_read, fd_pread,
+                fd_filestat_get, fd_seek, fd_tell,
+            },
+        },
     });
 }
 
@@ -76,10 +89,8 @@ impl wiggle::GuestErrorType for generated::types::Errno {
 }
 
 impl From<std::num::TryFromIntError> for generated::types::Error {
-    fn from(err: std::num::TryFromIntError) -> Self {
-        match err {
-            _ => generated::types::Errno::Overflow.into(),
-        }
+    fn from(_err: std::num::TryFromIntError) -> Self {
+        generated::types::Errno::Overflow.into()
     }
 }
 
@@ -117,7 +128,7 @@ enum FilesTrie {
         children: BTreeMap<String, Box<FilesTrie>>,
     },
     File {
-        data: Arc<[u8]>,
+        data: SharedBytes,
     },
 }
 
@@ -162,7 +173,7 @@ impl Context {
         Ok(())
     }
 
-    pub fn map_file(&mut self, location: &str, contents: Arc<[u8]>) -> anyhow::Result<()> {
+    pub fn map_file(&mut self, location: &str, contents: SharedBytes) -> anyhow::Result<()> {
         let mut location_patched = String::new();
         let mut last_slash = true;
         for c in location.chars() {
@@ -240,9 +251,9 @@ where
     where
         F: AddToLinkerFn<T> + Copy + Send + Sync + 'static,
     {
-        fn call<'a>(
+        fn call(
             &self,
-            arg: &'a mut T,
+            arg: &mut T,
         ) -> impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 {
             self.0.call(arg)
         }
@@ -271,13 +282,13 @@ fn args_env_get(
     memory: &mut GuestMemory<'_>,
     mut guest_starts: GuestPtr<GuestPtr<u8>>,
     guest_buf: GuestPtr<u8>,
-    offsets: &Vec<u32>,
-    buf: &Vec<u8>,
+    offsets: &[u32],
+    buf: &[u8],
 ) -> Result<(), generated::types::Error> {
     {
         let len: u32 = buf.len().try_into()?;
         let guest_buf_arr = guest_buf.as_array(len);
-        memory.copy_from_slice(&buf[..], guest_buf_arr)?;
+        memory.copy_from_slice(buf, guest_buf_arr)?;
     }
 
     for off_absolute in offsets.iter() {
@@ -289,6 +300,7 @@ fn args_env_get(
 }
 
 #[allow(unused_variables)]
+#[async_trait::async_trait]
 impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> {
     #[instrument(skip(self, memory))]
     fn args_get(
@@ -306,7 +318,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         )
     }
 
-    #[instrument(skip(self, _memory))]
     fn args_sizes_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -332,7 +343,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         )
     }
 
-    #[instrument(skip(self, _memory))]
     fn environ_sizes_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -342,7 +352,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         Ok((count, len))
     }
 
-    #[instrument(skip(self, _memory))]
     fn clock_res_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -351,7 +360,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         panic!("todo")
     }
 
-    #[instrument(skip(self, _memory))]
     fn clock_time_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -361,7 +369,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         Ok(self.context.unix_timestamp)
     }
 
-    #[instrument(skip(self, _memory))]
     fn fd_advise(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -375,7 +382,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Force the allocation of space in a file.
     /// NOTE: This is similar to `posix_fallocate` in POSIX.
-    #[instrument(skip(self, _memory))]
     fn fd_allocate(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -388,7 +394,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Close a file descriptor.
     /// NOTE: This is similar to `close` in POSIX.
-    #[instrument(skip(self, _memory))]
     fn fd_close(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -406,7 +411,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Synchronize the data of a file to disk.
     /// NOTE: This is similar to `fdatasync` in POSIX.
-    #[instrument(skip(self, _memory))]
     fn fd_datasync(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -417,7 +421,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Get the attributes of a file descriptor.
     /// NOTE: This returns similar flags to `fsync(fd, F_GETFL)` in POSIX, as well as additional fields.
-    #[instrument(skip(self, _memory))]
     fn fd_fdstat_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -477,7 +480,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Adjust the flags associated with a file descriptor.
     /// NOTE: This is similar to `fcntl(fd, F_SETFL, flags)` in POSIX.
-    #[instrument(skip(self, _memory))]
     fn fd_fdstat_set_flags(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -488,7 +490,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     /// Does not do anything if `fd` corresponds to a valid descriptor and returns `[stub::types::Errno::Badf]` error otherwise.
-    #[instrument(skip(self, _memory))]
     fn fd_fdstat_set_rights(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -500,8 +501,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     /// Return the attributes of an open file.
-    #[instrument(skip(self, _memory))]
-    fn fd_filestat_get(
+    async fn fd_filestat_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
@@ -520,7 +520,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                 })
             }
             FileDescriptor::File(file) => {
-                let contents = file.get().map_err(unwrap_file_result)?;
+                let contents = file.get().await.map_err(generated::types::Error::trap)?;
                 Ok(generated::types::Filestat {
                     dev: 0,
                     ino: 0,
@@ -547,7 +547,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Adjust the size of an open file. If this increases the file's size, the extra bytes are filled with zeros.
     /// NOTE: This is similar to `ftruncate` in POSIX.
-    #[instrument(skip(self, _memory))]
     fn fd_filestat_set_size(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -560,7 +559,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Adjust the timestamps of an open file or directory.
     /// NOTE: This is similar to `futimens` in POSIX.
-    #[instrument(skip(self, _memory))]
     fn fd_filestat_set_times(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -576,7 +574,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     /// Read from a file descriptor.
     /// NOTE: This is similar to `readv` in POSIX.
     #[instrument(skip(self, memory))]
-    fn fd_read(
+    async fn fd_read(
         &mut self,
         memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
@@ -588,7 +586,8 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                 Err(generated::types::Errno::Acces.into())
             }
             FileDescriptor::File(file) => {
-                let FileContents { contents, pos } = file.get().map_err(unwrap_file_result)?;
+                let FileContents { contents, pos } =
+                    file.get().await.map_err(generated::types::Error::trap)?;
                 let mut written: u32 = 0;
                 for iov in iovs.iter() {
                     let iov = iov?;
@@ -600,9 +599,9 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                         len = remaining_len.try_into().unwrap();
                     }
                     let len_usize: usize = len.try_into()?;
-                    let cont_slice: &[u8] = &contents[*pos..(*pos + len_usize)];
+                    let cont_slice: &[u8] = &contents.as_ref()[*pos..(*pos + len_usize)];
                     memory.copy_from_slice(cont_slice, iov.buf.as_array(len))?;
-                    *pos = *pos + len_usize;
+                    *pos += len_usize;
                     written += len;
                 }
                 Ok(written)
@@ -614,7 +613,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     /// Read from a file descriptor, without using and updating the file descriptor's offset.
     /// NOTE: This is similar to `preadv` in POSIX.
     #[instrument(skip(self, memory))]
-    fn fd_pread(
+    async fn fd_pread(
         &mut self,
         memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
@@ -656,13 +655,11 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
             }
             let buf_to_rewrite = ciov_read.buf.as_array(ciov_read.buf_len);
             let cow = memory.as_cow(buf_to_rewrite)?;
-            let iter = cow.into_iter();
-            for c in iter {
-                stream
-                    .write(std::slice::from_ref(&c))
-                    .unwrap_or_else(|_| panic!("Can't print to terminal"));
-                size += 1;
-            }
+            let add_size: u32 = cow.len().try_into()?;
+            size += add_size;
+            stream
+                .write_all(&cow)
+                .unwrap_or_else(|_| panic!("Can't print to terminal"));
         }
         stream
             .flush()
@@ -685,7 +682,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     /// Return a description of the given preopened file descriptor.
-    #[instrument(skip(self, _memory))]
     fn fd_prestat_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -719,7 +715,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     ) -> Result<(), generated::types::Error> {
         match self.get_fd_desc(fd)? {
             FileDescriptor::Dir { path: dir_path } => {
-                let path_last = if dir_path.len() == 0 {
+                let path_last = if dir_path.is_empty() {
                     "/"
                 } else {
                     &dir_path[dir_path.len() - 1]
@@ -737,7 +733,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     /// Atomically replace a file descriptor by renumbering another file descriptor.
-    #[instrument(skip(self, _memory))]
     fn fd_renumber(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -749,8 +744,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Move the offset of a file descriptor.
     /// NOTE: This is similar to `lseek` in POSIX.
-    #[instrument(skip(self, _memory))]
-    fn fd_seek(
+    async fn fd_seek(
         &mut self,
         _memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
@@ -765,7 +759,8 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                 const {
                     assert!(std::mem::size_of::<usize>() <= std::mem::size_of::<u64>());
                 }
-                let FileContents { contents, pos } = file.get().map_err(unwrap_file_result)?;
+                let FileContents { contents, pos } =
+                    file.get().await.map_err(generated::types::Error::trap)?;
                 match whence {
                     generated::types::Whence::Cur => {
                         if offset < 0 {
@@ -773,7 +768,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                             if offset > *pos as u64 {
                                 *pos = 0;
                             } else {
-                                *pos = *pos - offset as usize;
+                                *pos -= offset as usize;
                             }
                         } else {
                             let offset = offset as u64;
@@ -781,7 +776,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                             if offset > rem as u64 {
                                 *pos = contents.len();
                             } else {
-                                *pos = *pos + offset as usize;
+                                *pos += offset as usize;
                             }
                         }
                     }
@@ -805,7 +800,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Synchronize the data and metadata of a file to disk.
     /// NOTE: This is similar to `fsync` in POSIX.
-    #[instrument(skip(self, _memory))]
     fn fd_sync(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -816,8 +810,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Return the current offset of a file descriptor.
     /// NOTE: This is similar to `lseek(fd, 0, SEEK_CUR)` in POSIX.
-    #[instrument(skip(self, _memory))]
-    fn fd_tell(
+    async fn fd_tell(
         &mut self,
         _memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
@@ -827,7 +820,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                 Err(generated::types::Errno::Spipe.into())
             }
             FileDescriptor::File(file) => {
-                let file = file.get().map_err(unwrap_file_result)?;
+                let file = file.get().await.map_err(generated::types::Error::trap)?;
                 Ok(file.pos.try_into()?)
             }
             FileDescriptor::Dir { .. } => Err(generated::types::Errno::Notsup.into()),
@@ -850,7 +843,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         let dirent = self.dir_fd_follow_trie(dir_path, &self.context.fs, None)?;
         let FilesTrie::Dir {
             children: direntries,
-        } = &**dirent
+        } = dirent
         else {
             return Err(generated::types::Errno::Badf.into());
         };
@@ -957,7 +950,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         for fname in path.split("/") {
             cur_trie = self.dir_fd_get_trie(fname, cur_trie, &mut Some(&mut result_path))?;
         }
-        match cur_trie.borrow() {
+        match cur_trie {
             FilesTrie::File { data } => Ok(generated::types::Filestat {
                 dev: 0,
                 ino: 0,
@@ -1040,7 +1033,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
             for fname in file_path.split("/") {
                 cur_trie = self.dir_fd_get_trie(fname, cur_trie, &mut Some(&mut resulting_path))?;
             }
-            match &**cur_trie {
+            match cur_trie {
                 FilesTrie::File { data } => {
                     let f = FileDescriptor::File(
                         super::common::FileContentsUnevaluated::from_contents(data.clone(), 0),
@@ -1057,9 +1050,8 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                 }
             }
         }
-        .map_err(|e| {
+        .inspect_err(|e| {
             self.vfs.free_fd(new_fd);
-            e
         })
     }
 
@@ -1133,7 +1125,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         Err(generated::types::Errno::Io.into())
     }
 
-    #[instrument(skip(self, _memory))]
     fn proc_exit(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -1146,7 +1137,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         I32Exit(status as i32).into()
     }
 
-    #[instrument(skip(self, _memory))]
     fn proc_raise(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -1155,7 +1145,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         Err(generated::types::Errno::Notsup.into())
     }
 
-    #[instrument(skip(self, _memory))]
     fn sched_yield(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -1176,12 +1165,11 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         let mem: Vec<u8> = iter::repeat(0)
             .take(usize::try_from(buf_len).unwrap())
             .collect();
-        let _ = memory.copy_from_slice(&mem[..], buf.as_array(buf_len))?;
+        memory.copy_from_slice(&mem, buf.as_array(buf_len))?;
         Ok(())
     }
 
     #[allow(unused_variables)]
-    #[instrument(skip(self, _memory))]
     fn sock_accept(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -1192,7 +1180,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     #[allow(unused_variables)]
-    #[instrument(skip(self, _memory))]
     fn sock_recv(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -1204,7 +1191,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     #[allow(unused_variables)]
-    #[instrument(skip(self, _memory))]
     fn sock_send(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -1216,7 +1202,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     #[allow(unused_variables)]
-    #[instrument(skip(self, _memory))]
     fn sock_shutdown(
         &mut self,
         _memory: &mut GuestMemory<'_>,
@@ -1231,9 +1216,9 @@ impl ContextVFS<'_> {
     fn dir_fd_get_trie<'a>(
         &self,
         dir_path: &str,
-        cur_trie: &'a Box<FilesTrie>,
+        cur_trie: &'a FilesTrie,
         path: &mut Option<&mut Vec<String>>,
-    ) -> Result<&'a Box<FilesTrie>, generated::types::Error> {
+    ) -> Result<&'a FilesTrie, generated::types::Error> {
         if dir_path == "." || dir_path.is_empty() {
             return Ok(cur_trie);
         }
@@ -1247,15 +1232,14 @@ impl ContextVFS<'_> {
                 }
             }
         }
-        match cur_trie.borrow() {
-            FilesTrie::File { .. } => return Err(generated::types::Errno::Badf.into()),
+        match cur_trie {
+            FilesTrie::File { .. } => Err(generated::types::Errno::Badf.into()),
             FilesTrie::Dir { children } => match children.get(dir_path) {
                 Some(new_trie) => {
-                    match path {
-                        Some(rf) => rf.push(dir_path.into()),
-                        None => {}
+                    if let Some(rf) = path {
+                        rf.push(dir_path.into());
                     }
-                    Ok(&new_trie)
+                    Ok(new_trie)
                 }
                 None => Err(generated::types::Errno::Noent.into()),
             },
@@ -1265,13 +1249,13 @@ impl ContextVFS<'_> {
     fn dir_fd_follow_trie<'a>(
         &self,
         dir_path: &Vec<String>,
-        mut cur_trie: &'a Box<FilesTrie>,
+        mut cur_trie: &'a FilesTrie,
         mut path: Option<&mut Vec<String>>,
-    ) -> Result<&'a Box<FilesTrie>, generated::types::Error> {
+    ) -> Result<&'a FilesTrie, generated::types::Error> {
         for dir in dir_path {
             cur_trie = self.dir_fd_get_trie(dir, cur_trie, &mut path)?;
         }
-        return Ok(cur_trie);
+        Ok(cur_trie)
     }
 
     fn get_fd_desc(
@@ -1294,13 +1278,6 @@ impl ContextVFS<'_> {
             Some(x) => Ok(x),
             None => Err(generated::types::Errno::Badf.into()),
         }
-    }
-}
-
-fn unwrap_file_result(err: super::common::FileEvalError) -> generated::types::Error {
-    match err {
-        None => generated::types::Errno::Io.into(),
-        Some(e) => generated::types::Error::trap(e),
     }
 }
 

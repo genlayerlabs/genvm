@@ -1,59 +1,60 @@
-use std::{collections::BTreeMap, mem::swap, sync::Arc};
+use std::{collections::BTreeMap, mem::swap};
 
 use wiggle::{GuestError, GuestMemory, GuestPtr};
 
+use crate::ustar::SharedBytes;
+
 pub struct FileContents {
-    pub contents: Arc<[u8]>,
+    pub contents: SharedBytes,
     pub pos: usize,
 }
 
-pub type FileEvalError = Option<anyhow::Error>;
-
 pub struct FileContentsUnevaluated {
-    data: Result<FileContents, std::sync::OnceLock<Result<Arc<[u8]>, FileEvalError>>>,
+    pub task: Option<tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>>>,
+    pub cell: tokio::sync::OnceCell<anyhow::Result<FileContents>>,
 }
 
 impl FileContentsUnevaluated {
-    pub fn get(&mut self) -> Result<&mut FileContents, FileEvalError> {
-        match &mut self.data {
-            Ok(x) => return Ok(x),
-            placed_data => {
-                let mut old_data = Ok(FileContents {
-                    contents: Arc::new([]),
-                    pos: 0,
-                });
-                swap(placed_data, &mut old_data);
-                match old_data {
-                    // old data
-                    Ok(_) => unreachable!(),
-                    Err(fut) => {
-                        fut.wait();
-                        let val = fut.into_inner().unwrap();
-                        match val {
-                            Ok(val) => {
-                                *placed_data = Ok(FileContents {
-                                    contents: val,
-                                    pos: 0,
-                                });
-                                match placed_data {
-                                    Ok(x) => Ok(x),
-                                    _ => unreachable!(),
-                                }
-                            }
-                            Err(e) => {
-                                // data is already nullified
-                                Err(e)
-                            }
-                        }
-                    }
+    pub fn from_task(task: tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>>) -> Self {
+        Self {
+            task: Some(task),
+            cell: tokio::sync::OnceCell::new(),
+        }
+    }
+
+    pub async fn get(&mut self) -> anyhow::Result<&mut FileContents> {
+        let task = &mut self.task;
+        self.cell
+            .get_or_init(|| async {
+                let task = match task {
+                    Some(task) => task,
+                    None => unreachable!(),
+                };
+                match task.await {
+                    Ok(Ok(v)) => Ok(FileContents {
+                        contents: SharedBytes::new(v),
+                        pos: 0,
+                    }),
+                    Ok(Err(v)) => Err(v),
+                    Err(v) => Err(anyhow::Error::new(v)),
                 }
+            })
+            .await;
+
+        match self.cell.get_mut().unwrap() {
+            Ok(r) => Ok(r),
+            Err(e) => {
+                let mut err = anyhow::anyhow!("<already consumed>");
+                swap(e, &mut err);
+                Err(err)
             }
         }
     }
 
-    pub fn from_contents(contents: Arc<[u8]>, pos: usize) -> Self {
+    pub fn from_contents(contents: SharedBytes, pos: usize) -> Self {
         Self {
-            data: Ok(FileContents { contents, pos }),
+            cell: tokio::sync::OnceCell::new_with(Some(Ok(FileContents { contents, pos }))),
+            task: None,
         }
     }
 }
@@ -66,10 +67,7 @@ pub enum FileDescriptor {
     Dir { path: Vec<String> },
 }
 
-pub fn read_string<'a>(
-    memory: &'a GuestMemory<'_>,
-    ptr: GuestPtr<str>,
-) -> Result<String, GuestError> {
+pub fn read_string(memory: &GuestMemory<'_>, ptr: GuestPtr<str>) -> Result<String, GuestError> {
     Ok(memory.as_cow_str(ptr)?.into_owned())
 }
 

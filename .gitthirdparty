@@ -3,17 +3,12 @@
 		"executor/third-party/wasmtime": {
 			"url": "https://github.com/bytecodealliance/wasmtime.git",
 			"commit": "110e70f30e34b9df5ed4aaf401c8818c23204ca2",
-			"patches": 12
+			"patches": 13
 		},
-		"sdk-rust/third-party/wasi-rs": {
+		"runners/nix/trg/py/modules/genvm-cpython-ext/sdk-rust/third-party/wasi-rs": {
 			"url": "https://github.com/bytecodealliance/wasi-rs/",
 			"commit": "9ec04a7d8ebb1bbb9e3291503425cee1ec38a560",
 			"patches": 1
-		},
-		"runners/softfloat/berkeley-softfloat-3": {
-			"url": "https://github.com/ucb-bar/berkeley-softfloat-3.git",
-			"commit": "3b70b5d8147675932c38b36cd09af6df4eedd919",
-			"patches": 2
 		},
 		"executor/third-party/wasm-tools": {
 			"url": "https://github.com/bytecodealliance/wasm-tools.git",

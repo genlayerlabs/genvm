@@ -1,10 +1,10 @@
-#![feature(once_wait)]
-
 pub mod errors;
 mod host;
+pub mod mmap;
 pub mod plugin_loader;
 pub mod runner;
 pub mod string_templater;
+pub mod ustar;
 pub mod vm;
 pub mod wasi;
 
@@ -14,17 +14,13 @@ use errors::ContractError;
 pub use host::{AccountAddress, GenericAddress, Host, MessageData};
 
 use anyhow::{Context, Result};
-use genvm_modules_common::interfaces::{llm_functions_api, web_functions_api};
 use serde::Deserialize;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, sync::Arc};
+use ustar::SharedBytes;
+use vm::RunOk;
 
 #[derive(Deserialize)]
 struct ConfigModule {
-    path: String,
-    name: Option<String>,
     config: serde_json::Value,
 }
 
@@ -39,54 +35,20 @@ struct ConfigSchema {
     modules: ConfigModules,
 }
 
-fn fake_thread_pool() -> genvm_modules_common::SharedThreadPoolABI {
-    extern "C-unwind" fn exec(
-        _zelf: *const (),
-        ctx: *const (),
-        cb: extern "C-unwind" fn(ctx: *const ()),
-    ) {
-        cb(ctx);
-    }
-    genvm_modules_common::SharedThreadPoolABI {
-        ctx: std::ptr::null(),
-        submit_task: exec,
-    }
-}
-
-fn load_mod<T>(
-    mc: &ConfigModule,
-    default_name: &str,
-    f: impl FnOnce(&std::path::Path, &str, genvm_modules_common::CtorArgs) -> Result<T>,
-    log_fd: std::os::fd::RawFd,
-    should_quit: *mut u32,
-) -> Result<T> {
-    let config_str = serde_json::to_string(&mc.config)?;
-    let args = genvm_modules_common::CtorArgs {
-        version: genvm_modules_common::Version { major: 0, minor: 0 },
-        module_config: config_str.as_ptr(),
-        module_config_len: config_str.len(),
-        thread_pool: fake_thread_pool(),
-        log_fd,
-        should_quit,
-    };
-    f(
-        &std::path::Path::new(&mc.path),
-        match &mc.name {
-            Some(v) => v,
-            None => default_name,
-        },
-        args,
-    )
-}
+//extern "Rust" {
+//    fn new_web_module(
+//        args: genvm_modules_interfaces::CtorArgs<'_>,
+//    ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Web + Send + Sync>>;
+//
+//    fn new_llm_module(
+//        args: genvm_modules_interfaces::CtorArgs<'_>,
+//    ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Llm + Send + Sync>>;
+//}
 
 fn create_modules(
-    config_path: &String,
-    log_fd: std::os::fd::RawFd,
-    should_quit: *mut u32,
+    config_path: &str,
+    cancellation: Arc<genvm_modules_interfaces::CancellationToken>,
 ) -> Result<vm::Modules> {
-    use plugin_loader::llm_functions_api::Loader as _;
-    use plugin_loader::web_functions_api::Loader as _;
-
     let mut root_path = std::env::current_exe().with_context(|| "getting current exe")?;
     root_path.pop();
     root_path.pop();
@@ -97,39 +59,39 @@ fn create_modules(
 
     let vars: HashMap<String, String> = HashMap::from([("genvmRoot".into(), root_path)]);
 
-    let config_path = string_templater::patch_str(&vars, &config_path)?;
+    let config_path = string_templater::patch_str(&vars, config_path)?;
     let config_str = std::fs::read_to_string(std::path::Path::new(&config_path))?;
     let config: serde_json::Value = serde_json::from_str(&config_str)?;
     let config = string_templater::patch_value(&vars, config)?;
     let config: ConfigSchema = serde_json::from_value(config)?;
 
-    let llm = load_mod(
-        &config.modules.llm,
-        "llm",
-        llm_functions_api::Methods::load_from_lib,
-        log_fd,
-        should_quit,
-    )?;
-    let web = load_mod(
-        &config.modules.web,
-        "web",
-        web_functions_api::Methods::load_from_lib,
-        log_fd,
-        should_quit,
-    )?;
+    let llm_config = serde_json::to_string(&config.modules.llm.config)?;
+    let llm = genvm_modules_default_llm::new_llm_module(genvm_modules_interfaces::CtorArgs {
+        config: &llm_config,
+        cancellation: cancellation.clone(),
+    })
+    .with_context(|| "creating llm module")?;
 
-    Ok(vm::Modules { llm, web })
+    let web_config = serde_json::to_string(&config.modules.web.config)?;
+    let web = genvm_modules_default_web::new_web_module(genvm_modules_interfaces::CtorArgs {
+        config: &web_config,
+        cancellation,
+    })
+    .with_context(|| "creating llm module")?;
+
+    Ok(vm::Modules {
+        llm: Arc::from(llm),
+        web: Arc::from(web),
+    })
 }
 
 pub fn create_supervisor(
-    config_path: &String,
+    config_path: &str,
     mut host: Host,
-    log_fd: std::os::fd::RawFd,
     is_sync: bool,
-) -> Result<Arc<Mutex<vm::Supervisor>>> {
-    let shared_data = Arc::new(crate::vm::SharedData::new(is_sync));
-    let should_quit_ptr = shared_data.should_exit.as_ptr();
-    let modules = match create_modules(config_path, log_fd, should_quit_ptr) {
+    cancellation: Arc<genvm_modules_interfaces::CancellationToken>,
+) -> Result<Arc<tokio::sync::Mutex<vm::Supervisor>>> {
+    let modules = match create_modules(config_path, cancellation.clone()) {
         Ok(modules) => modules,
         Err(e) => {
             let err = Err(e);
@@ -137,25 +99,24 @@ pub fn create_supervisor(
             return Err(err.unwrap_err());
         }
     };
+    let shared_data = Arc::new(crate::vm::SharedData::new(modules, is_sync, cancellation));
 
-    Ok(Arc::new(Mutex::new(vm::Supervisor::new(
-        modules,
+    Ok(Arc::new(tokio::sync::Mutex::new(vm::Supervisor::new(
         host,
         shared_data,
     )?)))
 }
 
-pub fn run_with_impl(
+pub async fn run_with_impl(
     entry_message: MessageData,
-    supervisor: Arc<Mutex<vm::Supervisor>>,
+    supervisor: Arc<tokio::sync::Mutex<vm::Supervisor>>,
     permissions: &str,
 ) -> vm::RunResult {
     let (mut vm, instance) = {
         let supervisor_clone = supervisor.clone();
-        let Ok(mut supervisor) = supervisor.lock() else {
-            return Err(anyhow::anyhow!("can't lock supervisor"));
-        };
         let mut entrypoint = b"call!".to_vec();
+
+        let mut supervisor = supervisor.lock().await;
         supervisor.host.append_calldata(&mut entrypoint)?;
 
         let essential_data = wasi::genlayer_sdk::SingleVMData {
@@ -169,35 +130,45 @@ pub fn run_with_impl(
                 state_mode: crate::host::StorageType::Default,
             },
             message_data: entry_message,
-            entrypoint: entrypoint.into(),
+            entrypoint: SharedBytes::new(entrypoint),
             supervisor: supervisor_clone,
         };
 
-        let mut vm = supervisor.spawn(essential_data)?;
+        let mut vm = supervisor.spawn(essential_data).await?;
         let instance = supervisor
             .apply_contract_actions(&mut vm)
+            .await
             .with_context(|| "getting runner actions")
             .map_err(|cause| crate::errors::ContractError::wrap("runner_actions".into(), cause))?;
         (vm, instance)
     };
 
-    vm.run(&instance)
+    vm.run(&instance).await
 }
 
-pub fn run_with(
+pub async fn run_with(
     entry_message: MessageData,
-    supervisor: Arc<Mutex<vm::Supervisor>>,
+    supervisor: Arc<tokio::sync::Mutex<vm::Supervisor>>,
     permissions: &str,
 ) -> vm::RunResult {
-    let res = run_with_impl(entry_message, supervisor.clone(), permissions);
-    let res = ContractError::unwrap_res(res);
+    let res = run_with_impl(entry_message, supervisor.clone(), permissions).await;
 
-    {
-        let Ok(mut supervisor) = supervisor.lock() else {
-            anyhow::bail!("can't lock supervisor");
-        };
-        supervisor.host.consume_result(&res)?;
-    }
+    let mut supervisor = supervisor.lock().await;
+
+    let res = if supervisor.shared_data.cancellation.is_cancelled() {
+        match res {
+            Ok(RunOk::ContractError(msg, cause)) => Ok(RunOk::ContractError(
+                "timeout".into(),
+                cause.map(|v| v.context(msg)),
+            )),
+            Ok(r) => Ok(r),
+            Err(e) => Ok(RunOk::ContractError("timeout".into(), Some(e))),
+        }
+    } else {
+        ContractError::unwrap_res(res)
+    };
+
+    supervisor.host.consume_result(&res)?;
 
     res
 }

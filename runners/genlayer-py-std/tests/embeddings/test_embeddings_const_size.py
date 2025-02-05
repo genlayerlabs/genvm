@@ -9,7 +9,9 @@ from genlayer.py._nn import *
 
 from . import root_dir
 
-onnx_model_path = root_dir.joinpath('runners', 'onnx-models', 'all-MiniLM-L6-v2.onnx')
+onnx_model_path = root_dir.joinpath(
+	*'runners/onnx-models/all-MiniLM-L6-v2/model.onnx'.split('/')
+)
 onnx_model = onnx.load_model(onnx_model_path, load_external_data=False)
 
 genvm_tokenizer = WordPieceTokenizer()

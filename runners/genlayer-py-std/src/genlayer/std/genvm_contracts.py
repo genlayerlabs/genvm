@@ -15,7 +15,7 @@ import genlayer.py.calldata as calldata
 import genlayer.std._wasi as wasi
 
 
-from ._internal import decode_sub_vm_result, lazy_from_fd
+from ._internal import decode_sub_vm_result, lazy_from_fd_no_check
 
 
 def _make_calldata_obj(method, args, kwargs):
@@ -56,7 +56,7 @@ class _ContractAtViewMethod:
 	def lazy(self, *args, **kwargs) -> Lazy[typing.Any]:
 		obj = _make_calldata_obj(self.name, args, kwargs)
 		cd = calldata.encode(obj)
-		return lazy_from_fd(
+		return lazy_from_fd_no_check(
 			wasi.call_contract(self.addr.as_bytes, cd, json.dumps(self.data)),
 			decode_sub_vm_result,
 		)

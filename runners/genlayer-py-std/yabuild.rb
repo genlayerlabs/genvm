@@ -1,5 +1,3 @@
-dev_container = find_target /runners\/cpython-dev-container$/
-
 run_codegen = Proc.new { |inp, out, tags: [], **kwargs, &blk|
 	script = root_src.join('executor', 'codegen', 'templates', 'py.rb')
 	target_command(
@@ -23,94 +21,95 @@ lib_files = Dir.glob(base_genlayer_lib_dir.to_s + "/**/*.py")
 compile_dir = cur_build.join('genlayer_compile_dir')
 compile_dir.mkpath
 
-out_file = compile_dir.join('compiled.zip')
+runner_name = 'py-genlayer-std'
 
-build_pyc_s = target_command(
+out_dir = config.out_dir.join('share', 'genvm', 'runners', runner_name)
+expected_hash = 'test'
+
+runner_json = {
+	Seq: [
+		{ MapFile: { to: "/py/libs/", file: "src/" }},
+	],
+}
+
+py_genlayer_std_runner = target_command(
 	commands: [
 		['rm', '-rf', compile_dir],
 		['mkdir', '-p', compile_dir],
 		['cp', '-r', base_genlayer_lib_dir, compile_dir],
-		[
-			RbConfig.ruby, root_src.join('build-scripts', 'docker-run-in.rb'),
-			'--log', cur_build.join('compile-lib-log'),
-			'--id-file', dev_container.meta.output_file,
-			'--out-dir', compile_dir,
-			'--entrypoint', '/scripts-py/compile.sh',
-			'--',
-			'/out',
-			'/scripts-py/save-compiled.sh', '/out/', 'compiled.zip', 'src',
-		]
+
+		$runner_precompile_command.(compile_dir),
+		$runner_package_command.(
+			'--expected-hash', expected_hash,
+			'--src-dir', compile_dir,
+			'--out-dir', out_dir,
+			'--runner-json', JSON.dump(runner_json),
+		)
 	],
-	dependencies: [dev_container, codegen] + lib_files,
-	cwd: cur_src,
-	output_file: out_file,
-	pool: 'console',
-)
-
-cpython_runner = find_target /runners\/cpython$/
-cloudpickle_runner = find_target /runners\/py-libs\/cloudpickle$/
-
-# extension_target = find_target /runners\/cpython-extension-lib$/
-
-runner_target = target_publish_runner(
-	name_base: 'py-genlayer-std',
-	out_dir: config.runners_dir,
-	files: [{ include: out_file }],
-	runner_dict: {
-		Seq: [
-			{ MapFile: { to: "/py/libs/", file: "src/" }},
-		],
-	},
-	dependencies: [build_pyc_s],
-	expected_hash: 'test',
-)
-
-all_runner_target = target_publish_runner(
-	name_base: 'py-genlayer',
-	out_dir: config.runners_dir,
-	files: [],
-	runner_dict: {
-		Seq: [
-			{ With: { runner: "<contract>", action: { MapFile: { file: "file", to: "/contract.py" } } } },
-			{ SetArgs: ["py", "-u", "-c", "import contract;import genlayer.std.runner as r;r.run(contract)"] },
-			{ Depends: cloudpickle_runner.meta.runner_dep_id },
-			{ Depends: runner_target.meta.runner_dep_id },
-			{ Depends: cpython_runner.meta.runner_dep_id },
-		],
-	},
-	dependencies: [runner_target],
-	expected_hash: 'test',
-)
-
-all_runner_multi_target = target_publish_runner(
-	name_base: 'py-genlayer-multi',
-	out_dir: config.runners_dir,
-	files: [],
-	runner_dict: {
-		Seq: [
-			{ With: { runner: "<contract>", action: { MapFile: { file: "src/", to: "/contract/" } } } },
-			{ SetArgs: ["py", "-u", "-c", "import contract;import genlayer.std.runner as r;r.run(contract)"] },
-			{ Depends: cloudpickle_runner.meta.runner_dep_id },
-			{ Depends: runner_target.meta.runner_dep_id },
-			{ Depends: cpython_runner.meta.runner_dep_id },
-		],
-	},
-	dependencies: [runner_target],
-	expected_hash: 'test',
-)
-
-target_alias(
-	'py-genlayer',
-	all_runner_target,
+	dependencies: lib_files + [$runner_nix_target],
+	output_file: out_dir.join("#{expected_hash}.tar"),
 	tags: ['all', 'runner'],
-	inherit_meta: ['expected_hash'],
+) {
+	meta.expected_hash = expected_hash
+	meta.runner_id = "#{runner_name}:#{expected_hash}"
+}
+
+nix_target = find_target /\/runners\/nix$/
+
+cum_name = 'py-genlayer'
+cum_hash = 'test'
+cum_out_dir = config.out_dir.join('share', 'genvm', 'runners', cum_name)
+cum_runner_json = {
+	Seq: [
+		{ With: { runner: "<contract>", action: { MapFile: { file: "file", to: "/contract.py" } } } },
+		{ SetArgs: ["py", "-u", "-c", "import contract;import genlayer.std.runner as r;r.run(contract)"] },
+		{ Depends: "py-lib-cloudpickle:#{config.runners.py_libs.cloudpickle.hash}" },
+		{ Depends: py_genlayer_std_runner.meta.runner_id },
+		{ Depends: nix_target.meta.cpython_id },
+	],
+}
+
+target_command(
+	output_file: cum_out_dir.join("#{cum_hash}.tar"),
+	commands: [
+		$runner_package_command.(
+			'--expected-hash', cum_hash,
+			'--src-dir', cur_src,
+			'--out-dir', cum_out_dir,
+			'--config', '#none',
+			'--runner-json', JSON.dump(cum_runner_json),
+		)
+	],
+	dependencies: [$runner_nix_target],
+	tags: ['all', 'runner'],
 )
 
-target_alias(
-	'py-genlayer-multi',
-	all_runner_multi_target,
+cum_name = 'py-genlayer-multi'
+cum_hash = 'test'
+cum_out_dir = config.out_dir.join('share', 'genvm', 'runners', cum_name)
+cum_runner_json = {
+	Seq: [
+		{ With: { runner: "<contract>", action: { MapFile: { file: "contract/", to: "/contract/" } } } },
+		{ SetArgs: ["py", "-u", "-c", "import contract;import genlayer.std.runner as r;r.run(contract)"] },
+		{ Depends: "py-lib-cloudpickle:#{config.runners.py_libs.cloudpickle.hash}" },
+		{ Depends: py_genlayer_std_runner.meta.runner_id },
+		{ Depends: nix_target.meta.cpython_id },
+	],
+}
+
+target_command(
+	output_file: cum_out_dir.join("#{cum_hash}.tar"),
+	commands: [
+		$runner_package_command.(
+			'--expected-hash', cum_hash,
+			'--src-dir', cur_src,
+			'--out-dir', cum_out_dir,
+			'--config', '#none',
+			'--runner-json', JSON.dump(cum_runner_json),
+		)
+	],
+	dependencies: [$runner_nix_target],
 	tags: ['all', 'runner'],
-	inherit_meta: ['expected_hash'],
 )
 
 root_build.join('docs').mkpath
@@ -128,15 +127,6 @@ target_alias(
 			['cp', '-r', root_src.join('build-scripts', 'doctypes', 'docs_base'), docs_out],
 			['cd', docs_out],
 			[RbConfig.ruby, root_src.join('build-scripts', 'doctypes', 'generate-other.rb'), cur_src.join('src'), docs_out.join('other.rst')],
-			#[
-			#	*POETRY_RUN,
-			#	'sphinx-apidoc',
-			#	'--full',
-			#	'--follow-links', '--module-first', # '--separate',
-			#	'--append-syspath',
-			#	'-o', docs_out,
-			#	cur_src.join('src')
-			#],
 			[*POETRY_RUN, 'sphinx-build', '-b', 'html', docs_out, docs_out.join('docs')],
 			['zip', '-9', '-r', docs_out.parent.join('py-docs.zip'), 'docs']
 		],

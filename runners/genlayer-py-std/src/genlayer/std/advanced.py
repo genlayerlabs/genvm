@@ -74,10 +74,10 @@ def run_nondet[T](
 		All sub-vm returns go through :py:mod:`genlayer.py.calldata` encoding
 	"""
 	import cloudpickle
-	from ._internal import lazy_from_fd, decode_sub_vm_result
+	from ._internal import lazy_from_fd_no_check, decode_sub_vm_result
 
 	fd = wasi.run_nondet(cloudpickle.dumps(leader_fn), cloudpickle.dumps(validator_fn))
-	return lazy_from_fd(fd, decode_sub_vm_result)
+	return lazy_from_fd_no_check(fd, decode_sub_vm_result)
 
 
 def validator_handle_rollbacks_and_errors_default(

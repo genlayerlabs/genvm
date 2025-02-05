@@ -15,7 +15,10 @@ project('executor') {
 		base_env['RUSTFLAGS'] << " -Cinstrument-coverage"
 	end
 
-	cargo_flags = ['-Zprofile-rustflags']
+	base_env['RUSTFLAGS'] ||= ''
+	base_env['RUSTFLAGS'] << ' -C target-feature=+crt-static'
+
+	cargo_flags = []
 	if not config.executor_target.nil?
 		linker_path = root_src.join('build-scripts', 'zig-driver.py')
 		cargo_flags << '--config' << "target.#{config.executor_target}.linker=\"#{linker_path.to_s}\""
@@ -23,27 +26,6 @@ project('executor') {
 		base_env['AARCH64_UNKNOWN_LINUX_GNU_OPENSSL_LIB_DIR'] = root_src.join('tools/downloaded/cross-aarch64-libs/usr/lib/openssl-1.0').to_s
 		base_env['AARCH64_UNKNOWN_LINUX_GNU_OPENSSL_INCLUDE_DIR'] = root_src.join('tools/downloaded/cross-aarch64-libs/usr/include/openssl-1.0').to_s
 	end
-
-	modules = target_alias('modules',
-		target_cargo_build(
-			name: "dylib",
-			target: config.executor_target,
-			profile: config.profile,
-			out_file: modules_dir.join('libweb' + NATIVE_SHARED_LIB_EXT),
-			dir: cur_src.join('modules', 'default-impl', 'web-funcs'),
-			flags: cargo_flags,
-			env: base_env,
-		),
-		target_cargo_build(
-			name: "dylib",
-			target: config.executor_target,
-			profile: config.profile,
-			out_file: modules_dir.join('libllm' + NATIVE_SHARED_LIB_EXT),
-			dir: cur_src.join('modules', 'default-impl', 'llm-funcs'),
-			flags: cargo_flags,
-			env: base_env,
-		)
-	)
 
 	run_codegen = Proc.new { |inp, out, type:, tags: [], **kwargs, &blk|
 		if type == "rs"
@@ -68,7 +50,7 @@ project('executor') {
 		"codegen",
 		run_codegen.(cur_src.join('codegen', 'data', 'host-fns.json'), cur_src.join('src', 'host', 'host_fns.rs'), type: "rs"),
 		run_codegen.(cur_src.join('codegen', 'data', 'result-codes.json'), cur_src.join('src', 'host', 'result_codes.rs'), type: "rs"),
-		run_codegen.(cur_src.join('codegen', 'data', 'builtin-prompt-templates.json'), cur_src.join('modules', 'default-impl', 'llm-funcs', 'src', 'template_ids.rs'), type: "rs"),
+		run_codegen.(cur_src.join('codegen', 'data', 'builtin-prompt-templates.json'), cur_src.join('modules', 'implementation', 'llm-funcs', 'src', 'template_ids.rs'), type: "rs"),
 	)
 
 	genvm_id_path = root_build.join('genvm_id.txt')
@@ -112,7 +94,7 @@ project('executor') {
 		src: [cur_src.join('default-config.json')],
 	)
 
-	genvm_all = target_alias('all', bin, modules, config_target, tags: ['all'])
+	genvm_all = target_alias('all', bin, config_target, tags: ['all'])
 
 	run_codegen.(cur_src.join('codegen', 'data', 'host-fns.json'), cur_src.join('testdata', 'runner', 'host_fns.py'), type: "py", tags: ['testdata'])
 	run_codegen.(cur_src.join('codegen', 'data', 'result-codes.json'), cur_src.join('testdata', 'runner', 'result_codes.py'), type: "py", tags: ['testdata'])

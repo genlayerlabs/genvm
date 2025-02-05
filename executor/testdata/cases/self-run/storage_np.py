@@ -1,9 +1,9 @@
 # { "Depends": "py-genlayer:test" }
 
+import numpy as np
+
 from genlayer import *
 from genlayer.py.storage._internal.generate import storage
-
-import numpy as np
 
 
 @storage

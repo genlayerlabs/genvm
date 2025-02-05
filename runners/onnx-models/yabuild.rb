@@ -1,19 +1,13 @@
-add_model = Proc.new { |name|
-	runner_target = target_publish_runner(
-		name_base: "onnx-model-#{name}",
-		out_dir: config.runners_dir,
-		files: [{ path: 'model.onnx', read_from: cur_src.join(name + '.onnx') },],
-		runner_dict: {
-			Seq: [
-				{ MapFile: { to: "/models/onnx/#{name}.onnx", file: "model.onnx" }},
-			],
-		},
-		dependencies: [],
-		expected_hash: config.runners.onnx_models.send(name.gsub(/-/, '_')).hash,
-		tags: ['all', 'runner']
-	)
-}
-
 project('models') {
-	add_model.('all-MiniLM-L6-v2')
+	['all-MiniLM-L6-v2'].each { |name|
+		deps = cur_src.join(name).glob('**/*')
+		hash = config.runners.onnx_models.send(name.gsub(/-/, '_')).hash
+		out = config.out_dir.join('share', 'genvm', 'runners', "onnx-model-#{name}")
+		target_command(
+			output_file: out.join("#{hash}.tar"),
+			command: $runner_package_command.('--expected-hash', hash, '--src-dir', name, '--out-dir', out),
+			tags: ['all', 'runner'],
+			dependencies: deps + [$runner_nix_target],
+		)
+	}
 }

@@ -6,11 +6,13 @@ import collections.abc
 
 from .vec import DynArray
 from genlayer.py.types import u32, i8
+from .annotations import allow_storage
 
 
 _NO_OBJ = object()
 
 
+@allow_storage
 class _Node[K, V]:
 	key: K
 	value: V
@@ -29,12 +31,10 @@ class _Node[K, V]:
 
 class Comparable(typing.Protocol):
 	@abc.abstractmethod
-	def __eq__(self, other: typing.Any, /) -> bool: ...
-
-	@abc.abstractmethod
 	def __lt__(self, other: typing.Any, /) -> bool: ...
 
 
+@allow_storage
 class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 	"""
 	Represents a mapping from keys to values that can be persisted on the blockchain
@@ -161,13 +161,14 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 			if cur == 0:
 				break
 			cur_node = self._slots[cur - 1]
-			if cur_node.key == k:
-				break
-			is_less = k < cur_node.key
-			if is_less:
+			if k < cur_node.key:
 				cur = cur_node.left
-			else:
+				is_less = True
+			elif cur_node.key < k:
 				cur = cur_node.right
+				is_less = False
+			else:  # equal
+				break
 		return (seq, is_less)
 
 	def __delitem__(self, k: K):

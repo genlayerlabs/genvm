@@ -1,2 +1,2 @@
-runners/softfloat/berkeley-softfloat-3/*
-runners/py-libs/*
+runners/nix/trg/softfloat/berkeley-softfloat-3/**
+runners/py-libs/**

@@ -7,6 +7,7 @@ It exposes most of the types to the top scope and encapsulates other utility und
 __all__ = (
 	'gl',
 	'Address',
+	'allow_storage',
 	'Array',
 	'DynArray',
 	'Keccak256',

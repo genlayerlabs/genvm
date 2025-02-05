@@ -1,0 +1,36 @@
+name: GenVM build executor
+on:
+  workflow_call:
+defaults:
+  run:
+    shell: bash -x {0}
+
+jobs:
+  module-test-cargo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get source
+        uses: ./.github/actions/get-src
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: 1.84.0
+          components: rustfmt
+          cache: false
+      - name: configure and run codegen
+        run: |
+          cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \
+          ninja -v -C build tags/codegen
+      - name: check format
+        run: |
+          ./build-scripts/cargo-fmt.sh && \
+          git diff -U1 --exit-code
+      - name: cargo test
+        run: |
+          ./build-scripts/cargo-test.sh
+        env:
+          OPENAIKEY: ${{ secrets.OPENAIKEY }}
+          HEURISTKEY: ${{ secrets.HEURISTKEY }}
+          ANTHROPICKEY: ${{ secrets.ANTHROPICKEY }}
+          XAIKEY: ${{ secrets.XAIKEY }}
+          GEMINIKEY: ${{ secrets.GEMINIKEY }}
