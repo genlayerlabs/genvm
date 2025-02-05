@@ -37,6 +37,7 @@ jobs:
           ./build-scripts/cargo-test.sh
         env:
           OPENAIKEY: ${{ secrets.OPENAIKEY }}
+          ATOMAKEY: ${{ secrets.ATOMAKEY }}
           HEURISTKEY: ${{ secrets.HEURISTKEY }}
           ANTHROPICKEY: ${{ secrets.ANTHROPICKEY }}
           XAIKEY: ${{ secrets.XAIKEY }}
