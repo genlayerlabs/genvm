@@ -22,6 +22,8 @@ impl std::fmt::Display for PrintOption {
 pub struct Args {
     #[arg(long, default_value_t = String::from("${genvmRoot}/share/genvm/default-config.json"))]
     config: String,
+    #[arg(long, default_value_t = 4)]
+    threads: usize,
     #[arg(long)]
     message: String,
     #[arg(long)]
@@ -38,7 +40,7 @@ pub struct Args {
     permissions: String,
 }
 
-pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
+pub fn handle(args: Args) -> Result<()> {
     let message: genvm::MessageData = serde_json::from_str(&args.message)?;
 
     let host = genvm::Host::new(&args.host)?;
@@ -54,28 +56,30 @@ pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
         anyhow::bail!("Invalid permissions {}", &args.permissions)
     }
 
-    let supervisor = genvm::create_supervisor(&args.config, host, log_fd, args.sync)
-        .with_context(|| "creating supervisor")?;
+    let (token, canceller) = genvm_modules_interfaces::make_cancellation();
 
-    let shared_data = {
-        let supervisor = supervisor.clone();
-        let Ok(sup) = supervisor.lock() else { panic!() };
-        sup.shared_data.clone()
-    };
+    let supervisor = genvm::create_supervisor(&args.config, host, args.sync, token)
+        .with_context(|| "creating supervisor")?;
 
     let handle_sigterm = move || {
         log::warn!(target = "rt"; "sigterm received");
-        shared_data
-            .should_exit
-            .store(1, std::sync::atomic::Ordering::SeqCst);
+        canceller();
     };
     unsafe {
         signal_hook::low_level::register(signal_hook::consts::SIGTERM, handle_sigterm.clone())?;
         signal_hook::low_level::register(signal_hook::consts::SIGINT, handle_sigterm)?;
     }
 
-    let res =
-        genvm::run_with(message, supervisor, &args.permissions).with_context(|| "running genvm");
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_io()
+        .enable_time()
+        .worker_threads(args.threads)
+        .max_blocking_threads(args.threads)
+        .build()?;
+
+    let res = runtime
+        .block_on(genvm::run_with(message, supervisor, &args.permissions))
+        .with_context(|| "running genvm");
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,
         (Ok(RunOk::ContractError(e, cause)), PrintOption::Shrink) => {
@@ -96,8 +100,14 @@ pub fn handle(args: Args, log_fd: std::os::fd::RawFd) -> Result<()> {
         None => {}
         Some(res) => println!("executed with `{res}`"),
     }
+
     let _ = std::io::stdout().flush();
     let _ = std::io::stderr().flush();
-    // FIXME exit code?
+
+    runtime.shutdown_timeout(std::time::Duration::from_millis(30));
+
+    let _ = std::io::stdout().flush();
+    let _ = std::io::stderr().flush();
+
     Ok(())
 }

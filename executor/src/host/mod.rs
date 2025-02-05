@@ -22,12 +22,12 @@ impl AccountAddress {
         *r
     }
 
-    pub fn new() -> Self {
+    pub fn zero() -> Self {
         Self([0; 20])
     }
 
     pub const fn len() -> usize {
-        return 20;
+        20
     }
 }
 
@@ -41,12 +41,12 @@ impl GenericAddress {
         *r
     }
 
-    pub fn new() -> Self {
+    pub fn zero() -> Self {
         Self([0; 32])
     }
 
     pub const fn len() -> usize {
-        return 32;
+        32
     }
 }
 
@@ -81,9 +81,9 @@ pub struct Host {
 impl Host {
     pub fn new(addr: &str) -> Result<Host> {
         const UNIX: &str = "unix://";
-        let sock: Box<Mutex<dyn Sock>> = if addr.starts_with(UNIX) {
+        let sock: Box<Mutex<dyn Sock>> = if let Some(addr_suff) = addr.strip_prefix(UNIX) {
             Box::new(Mutex::new(
-                std::os::unix::net::UnixStream::connect(std::path::Path::new(&addr[UNIX.len()..]))
+                std::os::unix::net::UnixStream::connect(std::path::Path::new(addr_suff))
                     .with_context(|| format!("connecting to {addr}"))?,
             ))
         } else {
@@ -102,12 +102,12 @@ fn read_u32(sock: &mut dyn Sock) -> Result<u32> {
     Ok(u32::from_le_bytes(int_buf))
 }
 
-fn read_bytes(sock: &mut dyn Sock) -> Result<Arc<[u8]>> {
+fn read_bytes(sock: &mut dyn Sock) -> Result<Box<[u8]>> {
     let len = read_u32(sock)?;
 
-    let res = Arc::new_uninit_slice(len as usize);
+    let res = Box::new_uninit_slice(len as usize);
     let mut res = unsafe { res.assume_init() };
-    sock.read_exact(Arc::get_mut(&mut res).unwrap())?;
+    sock.read_exact(&mut res)?;
     Ok(res)
 }
 
@@ -116,7 +116,7 @@ fn write_result(sock: &mut dyn Sock, res: Result<&vm::RunOk, &anyhow::Error>) ->
     let data = match res {
         Ok(vm::RunOk::Return(r)) => {
             sock.write_all(&[ResultCode::Return as u8])?;
-            &r
+            r
         }
         Ok(vm::RunOk::Rollback(r)) => {
             sock.write_all(&[ResultCode::Rollback as u8])?;
@@ -154,7 +154,7 @@ impl Host {
         Ok(())
     }
 
-    pub fn get_code(&mut self, account: &AccountAddress) -> Result<Arc<[u8]>> {
+    pub fn get_code(&mut self, account: &AccountAddress) -> Result<Box<[u8]>> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -316,7 +316,7 @@ impl Host {
         Ok(())
     }
 
-    pub fn eth_call(&mut self, address: AccountAddress, calldata: &[u8]) -> Result<Arc<[u8]>> {
+    pub fn eth_call(&mut self, address: AccountAddress, calldata: &[u8]) -> Result<Box<[u8]>> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };

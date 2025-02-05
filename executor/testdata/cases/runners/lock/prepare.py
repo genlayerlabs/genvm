@@ -14,9 +14,8 @@ if config_path.exists():
 		dat = json.load(f)
 	with open(test_dir.joinpath('runner.json'), 'rt') as f:
 		cur_contract = json.load(f)
-	cur_contract['Seq'][4]['With']['runner'] = (
-		f"genvm-cpython:{dat['runners']['cpython']['hash']}"
-	)
+	cur_contract['Seq'][2]['Depends'] = f"softfloat:{dat['runners']['softfloat']}"
+	cur_contract['Seq'][4]['With']['runner'] = f"cpython:{dat['runners']['cpython']}"
 	with open(test_dir.joinpath('runner.json'), 'wt') as f:
 		json.dump(cur_contract, f, separators=(',', ': '), indent=2)
 		f.write('\n')

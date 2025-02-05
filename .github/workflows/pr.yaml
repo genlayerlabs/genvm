@@ -8,6 +8,7 @@ defaults:
 
 jobs:
   initial:
+    if: ${{ !contains( github.event.pull_request.labels.*.name, 'test:skip:pr') }}
     uses: ./.github/workflows/initial-template.yaml
     secrets: inherit
 
@@ -15,31 +16,8 @@ jobs:
 
   module-test-cargo:
     needs: [initial]
-    runs-on: ubuntu-latest
-    if: needs.initial.outputs.rs-changed == 'true'
-    steps:
-      - uses: actions/checkout@v4
-      - name: Get source
-        uses: ./.github/actions/get-src
-        with:
-          install_also: --rust
-      - name: configure and run codegen
-        run: |
-          cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \
-          ninja -v -C build tags/codegen
-      - name: check format
-        run: |
-          ./build-scripts/cargo-fmt.sh && \
-          git diff -U1 --exit-code
-      - name: cargo test
-        run: |
-          ./build-scripts/cargo-test.sh
-        env:
-          OPENAIKEY: ${{ secrets.OPENAIKEY }}
-          HEURISTKEY: ${{ secrets.HEURISTKEY }}
-          ANTHROPICKEY: ${{ secrets.ANTHROPICKEY }}
-          XAIKEY: ${{ secrets.XAIKEY }}
-          GEMINIKEY: ${{ secrets.GEMINIKEY }}
+    uses: ./.github/workflows/module-test-cargo.yaml
+    secrets: inherit
 
   module-test-python:
     needs: [initial]
@@ -48,10 +26,11 @@ jobs:
     permissions:
       pull-requests: write   # Needed for posting a comment
     steps:
-      - run: sudo apt-get install -y python3-poetry
       - uses: actions/checkout@v4
         with:
           lfs: true
+      - run: |
+          sudo apt-get install -y python3-poetry
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -62,8 +41,7 @@ jobs:
           load_submodules: "false"
       - name: install dependencies
         run: |
-          python3.12 -m pip install poetry && \
-            pushd runners/genlayer-py-std && \
+          pushd runners/genlayer-py-std && \
             poetry install && \
             popd
       - name: pytest
@@ -90,5 +68,7 @@ jobs:
       - module-test-cargo
       - module-test-python
     steps:
-      - run: |
+      - name: check
+        if: ${{ !contains( github.event.pull_request.labels.*.name, 'test:skip:pr') }}
+        run: |
           echo ${{ join(needs.*.result, ' ') }} | grep -vP 'failure|cancelled'

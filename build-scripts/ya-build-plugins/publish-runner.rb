@@ -26,7 +26,7 @@ self.define_singleton_method(:target_publish_runner) do |name_base:, runner_dict
 	mark_as_config_generated runner_publish_config_file
 	publish_script = root_src.join('build-scripts', 'publish-runner.py')
 
-	out_file = out_dir.join(name_base, "#{expected_hash}.zip")
+	out_file = out_dir.join(name_base, "#{expected_hash}.tar")
 
 	target_command(
 		output_file: out_file,

@@ -31,7 +31,7 @@ struct CliArgs {
     #[arg(long, default_value_t = default_log_level())]
     log_level: log::LevelFilter,
 
-    #[arg(long, default_value = "wasmtime*,cranelift*")]
+    #[arg(long, default_value = "wasmtime*,cranelift*,tracing*,polling*")]
     log_disable: String,
 
     #[arg(long, default_value = "2")]
@@ -68,10 +68,8 @@ fn main() -> Result<()> {
 
     log::info!(target: "vm", method = "start", version = env!("GENVM_BUILD_ID"); "");
 
-    let log_fd = args.log_fd;
-
     match args.command {
-        Commands::Run(args) => exe::run::handle(args, log_fd),
+        Commands::Run(args) => exe::run::handle(args),
         Commands::Precompile(args) => exe::precompile::handle(args),
     }
 }

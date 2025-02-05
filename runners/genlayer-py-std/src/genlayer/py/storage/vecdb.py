@@ -5,6 +5,8 @@ __all__ = ('VecDB', 'VecDBElement')
 from . import DynArray, TreeMap
 from ..types import u32
 
+from .annotations import allow_storage
+
 import typing
 import numpy as np
 
@@ -65,6 +67,7 @@ class VecDBElement[T: np.number, S: int, V, Dist]:
 		self._db._free_idx[self._idx] = None
 
 
+@allow_storage
 class VecDB[T: np.number, S: int, V]:
 	"""
 	Data structure that supports storing and querying vector data
@@ -78,12 +81,12 @@ class VecDB[T: np.number, S: int, V]:
 		import :py:mod:`numpy` before ``from genlayer import *`` if you wish to use :py:class:`VecDB`!
 	"""
 
-	Id: typing.ClassVar[type] = _Id
+	type Id = _Id
 	"""
 	:py:class:`int` alias to prevent confusion
 	"""
 
-	Element = typing.ClassVar[VecDBElement]
+	type Element = VecDBElement
 	"""
 	Shorthand to prevent global namespace pollution
 	"""

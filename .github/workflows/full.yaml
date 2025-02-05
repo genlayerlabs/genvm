@@ -17,39 +17,18 @@ jobs:
 
   module-test-cargo:
     needs: [initial]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Get source
-        uses: ./.github/actions/get-src
-        with:
-          install_also: --rust
-      - name: configure and run codegen
-        run: |
-          cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \
-          ninja -v -C build tags/codegen
-      - name: check format
-        run: |
-          ./build-scripts/cargo-fmt.sh && \
-          git diff -U1 --exit-code
-      - name: cargo test
-        run: |
-          ./build-scripts/cargo-test.sh
-        env:
-          OPENAIKEY: ${{ secrets.OPENAIKEY }}
-          HEURISTKEY: ${{ secrets.HEURISTKEY }}
-          ANTHROPICKEY: ${{ secrets.ANTHROPICKEY }}
-          XAIKEY: ${{ secrets.XAIKEY }}
-          GEMINIKEY: ${{ secrets.GEMINIKEY }}
+    uses: ./.github/workflows/module-test-cargo.yaml
+    secrets: inherit
 
   module-test-python:
     needs: [initial]
     runs-on: ubuntu-latest
     steps:
-      - run: sudo apt-get install -y python3-poetry
       - uses: actions/checkout@v4
         with:
           lfs: true
+      - run: |
+          sudo apt-get install -y python3-poetry
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -60,8 +39,7 @@ jobs:
           load_submodules: "false"
       - name: install dependencies
         run: |
-          python3.12 -m pip install poetry && \
-            pushd runners/genlayer-py-std && \
+          pushd runners/genlayer-py-std && \
             poetry install && \
             popd
       - name: pytest
@@ -85,7 +63,6 @@ jobs:
     with:
       runs_on: ubuntu-latest
       preloads: ""
-      install_also: ""
     secrets: inherit
 
   build-genvm-release-ubuntu-latest:
@@ -94,7 +71,6 @@ jobs:
     with:
       runs_on: ubuntu-latest
       preloads: --preload .ci/release-conf.rb
-      install_also: ""
     secrets: inherit
 
 #  build-genvm-release-macos-latest:

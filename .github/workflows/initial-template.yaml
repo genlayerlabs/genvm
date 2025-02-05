@@ -23,12 +23,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Get source
         uses: ./.github/actions/get-src
-        with:
-          install_also: --rust
       - uses: actions/setup-python@v5
         with:
           python-version: 3.12
           cache: pip
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: 1.84.0
+          components: rustfmt
+          cache: false
       - name: configure and run codegen
         run: |
           cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \

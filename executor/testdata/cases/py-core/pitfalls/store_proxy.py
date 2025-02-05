@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import datetime
 
 
+@allow_storage
 @dataclass
 class User:
 	name: str

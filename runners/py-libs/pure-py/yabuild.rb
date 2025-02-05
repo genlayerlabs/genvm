@@ -1,63 +1,52 @@
-dev_container = find_target /\/cpython-dev-container$/
-
 make_runner = Proc.new { |name, runner_name: name, extra_seq: []|
 	base_lib_dir = cur_src.join(name)
 	raise "#{base_lib_dir} does not exist" if not base_lib_dir.exist?
+
 	lib_files = Dir.glob(base_lib_dir.to_s + "/**/*.py")
+
 	compile_dir = cur_build.join(name)
 	compile_dir.mkpath
-	out_file = compile_dir.join('compiled.zip')
 
-	build_pyc_s = target_command(
+	out_dir = config.out_dir.join('share', 'genvm', 'runners', "py-lib-#{runner_name}")
+	expected_hash = config.runners.py_libs.send(runner_name).hash
+
+	runner_json = {
+		Seq: extra_seq + [
+			{ MapFile: { to: "/py/libs/", file: "src/" }},
+		],
+	}
+
+	target_command(
 		commands: [
 			['rm', '-rf', compile_dir],
 			['mkdir', '-p', compile_dir.join('src')],
 			['cp', '-r', base_lib_dir, compile_dir.join('src')],
-			[
-				RbConfig.ruby, root_src.join('build-scripts', 'docker-run-in.rb'),
-				'--log', cur_build.join('compile-lib-log'),
-				'--id-file', dev_container.meta.output_file,
-				'--out-dir', compile_dir,
-				'--entrypoint', '/scripts-py/compile.sh',
-				'--',
-				'/out',
-				'/scripts-py/save-compiled.sh', '/out/', 'compiled.zip', '.',
-			]
+
+			$runner_precompile_command.(compile_dir),
+			$runner_package_command.(
+				'--expected-hash', expected_hash,
+				'--src-dir', compile_dir,
+				'--out-dir', out_dir,
+				'--runner-json', JSON.dump(runner_json),
+			)
 		],
-		dependencies: [dev_container] + lib_files,
-		cwd: cur_src,
-		output_file: out_file,
-		pool: 'console',
-	)
-
-	runner_target = target_publish_runner(
-		name_base: "py-lib-#{runner_name}",
-		out_dir: config.runners_dir,
-		files: [{ include: out_file }],
-		runner_dict: {
-			Seq: extra_seq + [
-				{ MapFile: { to: "/py/libs/", file: "src/" }},
-			],
-		},
-		dependencies: [],
-		expected_hash: config.runners.py_libs.send(runner_name).hash,
-	)
-
-	target_alias(
-		runner_name,
-		runner_target,
+		dependencies: lib_files + [$runner_nix_target],
+		output_file: out_dir.join("#{expected_hash}.tar"),
 		tags: ['all', 'runner'],
-		inherit_meta: ['expected_hash', 'runner_dep_id'],
-	)
+	) {
+		meta.expected_hash = expected_hash
+		meta.runner_id = "py-lib-#{runner_name}:#{expected_hash}"
+	}
 }
 
-make_runner.('cloudpickle')
-make_runner.('google', runner_name: 'protobuf')
-make_runner.('onnx', runner_name: 'tiny_onnx_reader')
-make_runner.('word_piece_tokenizer')
-make_runner.('genlayermodelwrappers', extra_seq: [
-	{ Depends: "py-lib-tiny_onnx_reader:#{config.runners.py_libs.tiny_onnx_reader.hash}" },
-	{ Depends: "py-lib-protobuf:#{config.runners.py_libs.protobuf.hash}" },
-	{ Depends: "py-lib-word_piece_tokenizer:#{config.runners.py_libs.word_piece_tokenizer.hash}" },
-	{ Depends: "onnx-model-all-MiniLM-L6-v2:#{config.runners.onnx_models.all_MiniLM_L6_v2.hash}" },
-])
+cloudpickle = make_runner.('cloudpickle')
+protobuf = make_runner.('google', runner_name: 'protobuf')
+tiny_onnx = make_runner.('onnx', runner_name: 'tiny_onnx_reader')
+word_piece_tokenizer = make_runner.('word_piece_tokenizer')
+
+make_runner.(
+	'genlayermodelwrappers',
+	extra_seq: [cloudpickle, protobuf, tiny_onnx, word_piece_tokenizer].map { |v|
+		{ Depends: v.meta.runner_id }
+	} + [{ Depends: "onnx-model-all-MiniLM-L6-v2:#{config.runners.onnx_models.all_MiniLM_L6_v2.hash}" }],
+)

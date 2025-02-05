@@ -5,7 +5,7 @@ import sys
 if len(sys.argv) != 2:
 	print(f'invalid argv. expected [config], got {sys.argv[1:]}', file=sys.stderr)
 
-import zipfile
+import tarfile, zipfile
 import json
 import io
 import hashlib
@@ -16,43 +16,55 @@ with open(sys.argv[1]) as f:
 
 DEFAULT_TIME = (1980, 1, 1, 0, 0, 0)
 
-fake_zip = io.BytesIO()
-with zipfile.ZipFile(fake_zip, mode='w', compression=zipfile.ZIP_STORED) as zip_file:
+fake_tar_io = io.BytesIO()
+with tarfile.TarFile(
+	fileobj=fake_tar_io, mode='w', format=tarfile.USTAR_FORMAT, encoding='utf-8'
+) as inmem_tar_file:
 
-	def add_file(name: str, contents, ctx={}):
+	def add_file(name: str, contents: bytes, ctx={}):
 		contents_hash = hashlib.sha3_256()
 		contents_hash.update(contents)
 		print(f'\tADDING {contents_hash.digest().hex()} {name}\t{ctx}')
-		zip_file.writestr(zipfile.ZipInfo(name, date_time=DEFAULT_TIME), contents)
+		info = tarfile.TarInfo()
+		info.name = name
+		info.size = len(contents)
+		inmem_tar_file.addfile(info, io.BytesIO(contents))
 
 	for file_conf in conf['files']:
 		if 'include' in file_conf:
-			with zipfile.ZipFile(file_conf['include']) as incl_zip:
-				files = incl_zip.namelist()
-				files.sort()
-				for f in files:
-					info = incl_zip.getinfo(f)
-					if info.is_dir():
-						pass  # zip_file.mkdir(zipfile.ZipInfo(f, DEFAULT_TIME), 444)
-					else:
-						add_file(f, incl_zip.read(f))
+			if file_conf['include'].endswith('.zip'):
+				with zipfile.ZipFile(file_conf['include'], mode='r') as incl_zip:
+					for f in sorted(incl_zip.filelist, key=lambda k: k.filename):
+						contents = incl_zip.read(f)
+						add_file(f.filename, contents)
+			else:
+				with tarfile.open(
+					file_conf['include'], mode='r|', format=tarfile.USTAR_FORMAT
+				) as incl_tar:
+					for f in sorted(incl_tar, key=lambda x: x.name):
+						data = incl_tar.extractfile(f)
+						assert data is not None
+						contents = data.read(f.size)
+						add_file(f.name, contents)
 			continue
 		read_from = file_conf['read_from']
 		with open(read_from, 'rb') as f:
 			contents = f.read()
 		path = file_conf['path']
 		add_file(path, contents, {'read_from': read_from})
-fake_zip.flush()
+fake_tar_io.flush()
 
-zip_contents = fake_zip.getvalue()
+tar_contents = fake_tar_io.getvalue()
 
-contents_hash = hashlib.sha3_224()
-contents_hash.update(zip_contents)
+contents_hash = hashlib.sha3_256()
+contents_hash.update(tar_contents)
 import base64
 
 contents_hash = str(base64.b32encode(contents_hash.digest()), encoding='ascii')
 
-print(f'CREATING {contents_hash}.zip')
+contents_hash = contents_hash.replace('=', '')
+
+print(f'CREATING {contents_hash}.tar')
 
 assert conf['expected_hash'] is not None
 
@@ -65,6 +77,6 @@ contents_hash = conf['expected_hash']
 
 out_dir = Path(conf['out_dir'])
 out_dir.mkdir(parents=True, exist_ok=True)
-out_name = out_dir.joinpath(f'{contents_hash}.zip')
+out_name = out_dir.joinpath(f'{contents_hash}.tar')
 with open(out_name, 'wb') as f:
-	f.write(zip_contents)
+	f.write(tar_contents)

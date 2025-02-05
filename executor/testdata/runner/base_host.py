@@ -23,6 +23,10 @@ ACCOUNT_ADDR_SIZE = 20
 GENERIC_ADDR_SIZE = 32
 
 
+class GenVMTimeoutException(Exception):
+	"Exception that is raised when time limit is exceeded"
+
+
 class DefaultTransactionData(typing.TypedDict):
 	pass
 
@@ -225,11 +229,12 @@ async def run_host_and_program(
 	stderr_reader, stderr_transport = await connect_reader(stderr_rfd)
 	genvm_log_reader, genvm_log_transport = await connect_reader(genvm_log_rfd)
 
+	run_idx = program.index('run')
+	program.insert(run_idx, '--log-fd')
+	program.insert(run_idx + 1, str(genvm_log_wfd))
+
 	process = await asyncio.create_subprocess_exec(
-		program[0],
-		'--log-fd',
-		str(genvm_log_wfd),
-		*program[1:],
+		*program,
 		stdin=asyncio.subprocess.DEVNULL,
 		stdout=stdout_wfd,
 		stderr=stderr_wfd,
@@ -290,11 +295,13 @@ async def run_host_and_program(
 	for x in done:
 		try:
 			x.result()
+		except ConnectionResetError:
+			pass
 		except Exception as e:
 			errors.append(e)
 
 	# coro_loop must finish first if everything succeeded
-	if not coro_loop.done() and deadline is None:
+	if not coro_loop.done() and not handler.has_result() and deadline is None:
 		print('WARNING: genvm finished first')
 		coro_loop.cancel()
 
@@ -310,8 +317,10 @@ async def run_host_and_program(
 		if coro_loop in done:
 			await wait_all_timeout()
 
-	if not coro_proc.done():
+	if handler.has_result():
 		await wait_all_timeout()
+
+	if not coro_proc.done():
 		try:
 			process.terminate()
 		except:
@@ -326,13 +335,12 @@ async def run_host_and_program(
 
 	try:
 		await coro_loop
-	except Exception as e:
+	except ConnectionResetError:
+		pass
+	except (Exception, asyncio.CancelledError) as e:
 		errors.append(e)
 
 	exit_code = await process.wait()
-
-	if not coro_loop.done():
-		coro_loop.cancel()
 
 	if not handler.has_result():
 		if (
@@ -342,7 +350,7 @@ async def run_host_and_program(
 		):
 			errors.append(Exception('no result provided'))
 		else:
-			errors.append(Exception('timeout'))
+			errors.append(GenVMTimeoutException())
 
 	result = RunHostAndProgramRes(
 		b''.join(stdout).decode(),

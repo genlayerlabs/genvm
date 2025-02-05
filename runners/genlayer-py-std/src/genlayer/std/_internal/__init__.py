@@ -33,6 +33,19 @@ def lazy_from_fd[T](
 ) -> Lazy[T]:
 	def run():
 		with os.fdopen(fd, 'rb') as f:
+			code = f.read(1)
+			if code != b'\x00':
+				raise Exception('recoverable error', f.read().decode('utf-8'))
+			return after(f.read())
+
+	return Lazy(run)
+
+
+def lazy_from_fd_no_check[T](
+	fd: int, after: typing.Callable[[collections.abc.Buffer], T]
+) -> Lazy[T]:
+	def run():
+		with os.fdopen(fd, 'rb') as f:
 			return after(f.read())
 
 	return Lazy(run)

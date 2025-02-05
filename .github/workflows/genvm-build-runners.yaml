@@ -48,37 +48,30 @@ jobs:
     needs: [gen_url]
     if: ${{ needs.gen_url.outputs.already_exists == 'false' }}
     steps:
+      - uses: cachix/install-nix-action@v27
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@v4
         with:
           lfs: true
       - name: Get source
         uses: ./.github/actions/get-src
         with:
-          install_also: --wasi --rust
-          third_party: sdk-rust/third-party/wasi-rs runners/softfloat/berkeley-softfloat-3
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+          third_party: runners/nix/trg/py/modules/genvm-cpython-ext/sdk-rust/third-party/wasi-rs
+      - name: Restore and cache Nix store
+        uses: nix-community/cache-nix-action@v5
         with:
-          driver: docker
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          save-always: true
-          path: /tmp/.buildx-cache
-          key: runners-buildx-${{ github.sha }}
-          restore-keys: |
-            runners-buildx-
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          gc-max-store-size-linux: 1073741824
+          purge: false
       - name: Configure
         run: |
           source env.sh && \
           ya-build config
       - name: Build extension
         run: |
-          source env.sh && \
-          ninja --verbose -C build genvm/runners/cpython-extension-lib && \
-          git diff -U1 --exit-code
-      - name: Build
-        run: |
+          (sudo rm -rf /usr/local/lib/android || true) &
           source env.sh && \
           ninja --verbose -C build tags/runner && \
           tree build/out && \

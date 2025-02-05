@@ -4,6 +4,7 @@ from genlayer import *
 from genlayer.py.storage._internal.generate import storage
 
 
+@allow_storage
 class Test:
 	foo: i64
 	bar: i64

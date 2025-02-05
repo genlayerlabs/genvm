@@ -1,15 +1,7 @@
-cargo-features = ["profile-rustflags"]
-
 [package]
 name = "genvm"
 version = "0.1.0"
 edition = "2021"
-
-[profile.dev]
-rustflags = [
-    #"-Zsanitizer=address"
-    #"--remap-path-prefix=src/=genvm/executor/src/"
-]
 
 [profile.dev.package.cranelift-codegen]
 opt-level = 2
@@ -37,12 +29,6 @@ opt-level = 2
 opt-level = 2
 [profile.dev.package.regalloc2]
 opt-level = 2
-[profile.dev.package.zstd]
-opt-level = 2
-[profile.dev.package.zstd-safe]
-opt-level = 2
-[profile.dev.package.zstd-sys]
-opt-level = 2
 
 [profile.release]
 debug = true
@@ -51,8 +37,12 @@ debug = true
 # 432745aca5ee802255935768125810fcba38dae0
 wasmtime = { path = "third-party/wasmtime/crates/wasmtime", default-features = false, features = ["cranelift", "std", "parallel-compilation", "cache", "demangle"] }
 wasmtime-cache = { path = "third-party/wasmtime/crates/cache" }
-wiggle = { path = "third-party/wasmtime/crates/wiggle" }
+wiggle = { path = "third-party/wasmtime/crates/wiggle", default-features = false, features = ["wasmtime_async"] }
 wasmparser = { path = "third-party/wasm-tools/crates/wasmparser" }
+
+genvm-modules-interfaces = { path = "modules/interfaces" }
+genvm-modules-default-llm = { path = "modules/implementation/llm-funcs" }
+genvm-modules-default-web = { path = "modules/implementation/web-funcs" }
 
 anyhow = { version = "1.0.22", default-features = false }
 tracing = "0.1.26"
@@ -63,7 +53,6 @@ serde_with = { version = "3.9.0", features = ["base64"] }
 regex = "1.10.6"
 itertools = "0.13.0"
 libloading = "0.8.5"
-genvm-modules-common = { path = "modules/common" }
 libc = { version = "0.2.158", default-features = false }
 zip = "2.2.0"
 directories-next = "2.0.0"
@@ -75,3 +64,8 @@ chrono = { version = "0.4.38", features = ["serde"] }
 base64 = "0.22.1"
 symbol_table = { version = "0.4.0", features = ["global"] }
 serde_derive = "1.0.216"
+sha3 = "0.10.8"
+base32 = "0.5.1"
+rustix = "0.38.44"
+tokio = { version = "1.43.0", features = ["rt", "rt-multi-thread", "time", "macros", "sync"], default-features = false}
+async-trait = "0.1.85"
