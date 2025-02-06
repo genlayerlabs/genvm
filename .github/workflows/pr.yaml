@@ -71,4 +71,5 @@ jobs:
       - name: check
         if: ${{ !contains( github.event.pull_request.labels.*.name, 'test:skip:pr') }}
         run: |
+          echo '${{ toJSON(github.event.pull_request.labels.*.name) }}'
           echo ${{ join(needs.*.result, ' ') }} | grep -vP 'failure|cancelled'
