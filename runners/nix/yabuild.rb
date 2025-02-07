@@ -1,3 +1,7 @@
+include_dir 'trg/py/modules/genvm-cpython-ext/sdk-rust'
+
+reconfigure_on_change cur_src.join('hashes.json')
+
 base_target = target_command(
 	output_file: cur_build.join('nix-tools-done'),
 	commands: [
@@ -17,6 +21,8 @@ deps = Dir.glob(cur_src.to_s + "/**/*")
 
 hashes = JSON.load_file(cur_src.join('hashes.json'))
 
+sdk_rust = find_target /\/sdk-rust$/
+
 command_target = target_command(
 	output_file: [
 		config.out_dir.join('share', 'genvm', 'runners', 'cpython', hashes['cpython'] + '.tar'),
@@ -28,10 +34,10 @@ command_target = target_command(
 			'-o', cur_build.join('nix-out'),
 			'--print-build-logs', '--show-trace'
 		],
-		['cp', '--preserve=timestamps', '--no-preserve=mode,ownership', '-r', cur_build.join('nix-out', 'share'), config.out_dir]
+		['cp', '--no-preserve=timestamps,mode,ownership', '-r', cur_build.join('nix-out', 'share'), config.out_dir]
 	],
 	tags: ['all', 'runner'],
-	dependencies: deps + [base_target],
+	dependencies: deps + [base_target, sdk_rust],
 	pool: 'console',
 )
 

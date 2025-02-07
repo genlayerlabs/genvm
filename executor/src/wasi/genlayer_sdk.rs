@@ -15,6 +15,36 @@ use crate::{
 
 use super::{base, common::*};
 
+fn default_tx_value() -> primitive_types::U256 {
+    primitive_types::U256::zero()
+}
+
+fn default_tx_on() -> InternalTxOn {
+    InternalTxOn::Final
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum InternalTxOn {
+    Final,
+    Accepted,
+}
+
+#[derive(Deserialize)]
+struct InternalTxData {
+    #[serde(default = "default_tx_value")]
+    value: primitive_types::U256,
+    #[allow(dead_code)]
+    #[serde(default = "default_tx_on")]
+    on: InternalTxOn,
+}
+
+#[derive(Deserialize)]
+struct ExternalTxData {
+    #[serde(default = "default_tx_value")]
+    value: primitive_types::U256,
+}
+
 pub struct SingleVMData {
     pub conf: base::Config,
     pub message_data: MessageData,
@@ -25,6 +55,7 @@ pub struct SingleVMData {
 pub struct Context {
     pub data: SingleVMData,
     pub shared_data: Arc<vm::SharedData>,
+    pub messages_decremented: primitive_types::U256,
 }
 
 pub struct ContextVFS<'a> {
@@ -47,6 +78,7 @@ pub(crate) mod generated {
                 deploy_contract, post_message,
                 eth_send, eth_call,
                 storage_read, storage_write,
+                get_balance, get_self_balance,
             }
         },
     });
@@ -65,6 +97,7 @@ pub(crate) mod generated {
                 deploy_contract, post_message,
                 eth_send, eth_call,
                 storage_read, storage_write,
+                get_balance, get_self_balance,
             }
         },
     });
@@ -116,7 +149,11 @@ impl generated::types::Bytes {
 
 impl Context {
     pub fn new(data: SingleVMData, shared_data: Arc<vm::SharedData>) -> Self {
-        Self { data, shared_data }
+        Self {
+            data,
+            shared_data,
+            messages_decremented: primitive_types::U256::zero(),
+        }
     }
 }
 
@@ -201,7 +238,7 @@ impl From<std::num::TryFromIntError> for generated::types::Error {
 impl From<serde_json::Error> for generated::types::Error {
     fn from(err: serde_json::Error) -> Self {
         match err {
-            _ => generated::types::Errno::Io.into(),
+            _ => generated::types::Errno::Inval.into(),
         }
     }
 }
@@ -306,7 +343,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         url: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if self.context.data.conf.is_deterministic {
-            return Err(generated::types::Errno::DeterministicViolation.into());
+            return Err(generated::types::Errno::Forbidden.into());
         }
         let config_str = read_string(mem, config)?;
         let url_str = read_string(mem, url)?;
@@ -330,7 +367,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         prompt: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if self.context.data.conf.is_deterministic {
-            return Err(generated::types::Errno::DeterministicViolation.into());
+            return Err(generated::types::Errno::Forbidden.into());
         }
         let config_str = read_string(mem, config)?;
         let prompt_str = read_string(mem, prompt)?;
@@ -354,7 +391,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         vars: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if self.context.data.conf.is_deterministic {
-            return Err(generated::types::Errno::DeterministicViolation.into());
+            return Err(generated::types::Errno::Forbidden.into());
         }
         let vars_str = read_string(mem, vars)?;
 
@@ -377,7 +414,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         vars: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::Success, generated::types::Error> {
         if self.context.data.conf.is_deterministic {
-            return Err(generated::types::Errno::DeterministicViolation.into());
+            return Err(generated::types::Errno::Forbidden.into());
         }
         let vars_str = read_string(mem, vars)?;
 
@@ -401,7 +438,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         data_validator: &generated::types::Bytes,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if !self.context.data.conf.can_spawn_nondet {
-            return Err(generated::types::Errno::DeterministicViolation.into());
+            return Err(generated::types::Errno::Forbidden.into());
         }
 
         // relaxed reason: here is no actual race possible, only the deterministic vm can call it, and it has no concurrency
@@ -557,7 +594,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         data: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if !self.context.data.conf.is_deterministic {
-            return Err(generated::types::Errno::DeterministicViolation.into());
+            return Err(generated::types::Errno::Forbidden.into());
         }
         if !self.context.data.conf.can_call_others {
             return Err(generated::types::Errno::Forbidden.into());
@@ -626,22 +663,37 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         data: wiggle::GuestPtr<str>,
     ) -> Result<(), generated::types::Error> {
         if !self.context.data.conf.is_deterministic {
-            return Err(generated::types::Errno::DeterministicViolation.into());
+            return Err(generated::types::Errno::Forbidden.into());
         }
         if !self.context.data.conf.can_send_messages {
             return Err(generated::types::Errno::Forbidden.into());
         }
 
+        let data_str = super::common::read_string(mem, data)?;
+        let data: InternalTxData =
+            serde_json::from_str(&data_str).map_err(|_e| generated::types::Errno::Inval)?;
+        if !data.value.is_zero() {
+            let my_balance = self
+                .context
+                .get_balance_impl(self.context.data.message_data.contract_account)
+                .await?;
+
+            if data.value + self.context.messages_decremented > my_balance {
+                return Err(generated::types::Errno::Inbalance.into());
+            }
+        }
+
         let address = AccountAddress::read_from_mem(account, mem)?;
         let calldata = calldata.read_owned(mem)?;
-        let data = super::common::read_string(mem, data)?;
 
         let supervisor = self.context.data.supervisor.clone();
         let mut supervisor = supervisor.lock().await;
         let res = supervisor
             .host
-            .post_message(&address, &calldata, &data)
+            .post_message(&address, &calldata, &data_str)
             .map_err(generated::types::Error::trap)?;
+
+        self.context.messages_decremented += data.value;
         Ok(())
     }
 
@@ -653,22 +705,37 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         data: wiggle::GuestPtr<str>,
     ) -> Result<(), generated::types::Error> {
         if !self.context.data.conf.is_deterministic {
-            return Err(generated::types::Errno::DeterministicViolation.into());
+            return Err(generated::types::Errno::Forbidden.into());
         }
         if !self.context.data.conf.can_send_messages {
             return Err(generated::types::Errno::Forbidden.into());
         }
 
+        let data_str = super::common::read_string(mem, data)?;
+        let data: InternalTxData =
+            serde_json::from_str(&data_str).map_err(|_e| generated::types::Errno::Inval)?;
+        if !data.value.is_zero() {
+            let my_balance = self
+                .context
+                .get_balance_impl(self.context.data.message_data.contract_account)
+                .await?;
+
+            if data.value + self.context.messages_decremented > my_balance {
+                return Err(generated::types::Errno::Inbalance.into());
+            }
+        }
+
         let calldata = calldata.read_owned(mem)?;
         let code = code.read_owned(mem)?;
-        let data = super::common::read_string(mem, data)?;
 
         let supervisor = self.context.data.supervisor.clone();
         let mut supervisor = supervisor.lock().await;
         let res = supervisor
             .host
-            .deploy_contract(&calldata, &code, &data)
+            .deploy_contract(&calldata, &code, &data_str)
             .map_err(generated::types::Error::trap)?;
+
+        self.context.messages_decremented += data.value;
         Ok(())
     }
 
@@ -680,7 +747,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         buf: &generated::types::MutBytes,
     ) -> Result<(), generated::types::Error> {
         if !self.context.data.conf.is_deterministic {
-            return Err(generated::types::Errno::DeterministicViolation.into());
+            return Err(generated::types::Errno::Forbidden.into());
         }
         if !self.context.data.conf.can_read_storage {
             return Err(generated::types::Errno::Forbidden.into());
@@ -698,15 +765,17 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let supervisor = self.context.data.supervisor.clone();
         let mut supervisor = supervisor.lock().await;
 
-        let res = supervisor.host.storage_read(
-            self.context.data.conf.state_mode,
-            account,
-            slot,
-            index,
-            &mut vec,
-        );
+        supervisor
+            .host
+            .storage_read(
+                self.context.data.conf.state_mode,
+                account,
+                slot,
+                index,
+                &mut vec,
+            )
+            .map_err(generated::types::Error::trap)?;
 
-        res.map_err(|_e| generated::types::Errno::Io)?;
         mem.copy_from_slice(&vec, dest_buf)?;
         Ok(())
     }
@@ -719,10 +788,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         buf: &generated::types::Bytes,
     ) -> Result<(), generated::types::Error> {
         if !self.context.data.conf.is_deterministic {
-            return Err(generated::types::Errno::DeterministicViolation.into());
+            return Err(generated::types::Errno::Forbidden.into());
         }
         if !self.context.data.conf.can_write_storage {
-            return Err(generated::types::Errno::DeterministicViolation.into());
+            return Err(generated::types::Errno::Forbidden.into());
         }
 
         let buf: Vec<u8> = buf.read_owned(mem)?;
@@ -733,10 +802,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let supervisor = self.context.data.supervisor.clone();
         let mut supervisor = supervisor.lock().await;
 
-        let res = supervisor.host.storage_write(account, slot, index, &buf);
-
-        res.map_err(|_e| generated::types::Errno::Io)?;
-        Ok(())
+        supervisor
+            .host
+            .storage_write(account, slot, index, &buf)
+            .map_err(generated::types::Error::trap)
     }
 
     async fn eth_send(
@@ -744,12 +813,27 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         mem: &mut wiggle::GuestMemory<'_>,
         account: &generated::types::Addr,
         calldata: &generated::types::Bytes,
+        data: wiggle::GuestPtr<str>,
     ) -> Result<(), generated::types::Error> {
         if !self.context.data.conf.is_deterministic {
-            return Err(generated::types::Errno::DeterministicViolation.into());
+            return Err(generated::types::Errno::Forbidden.into());
         }
         if !self.context.data.conf.can_send_messages {
             return Err(generated::types::Errno::Forbidden.into());
+        }
+
+        let data_str = super::common::read_string(mem, data)?;
+        let data: ExternalTxData =
+            serde_json::from_str(&data_str).map_err(|_e| generated::types::Errno::Inval)?;
+        if !data.value.is_zero() {
+            let my_balance = self
+                .context
+                .get_balance_impl(self.context.data.message_data.contract_account)
+                .await?;
+
+            if data.value + self.context.messages_decremented > my_balance {
+                return Err(generated::types::Errno::Inbalance.into());
+            }
         }
 
         let address = AccountAddress::read_from_mem(account, mem)?;
@@ -771,7 +855,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         calldata: &generated::types::Bytes,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if !self.context.data.conf.is_deterministic {
-            return Err(generated::types::Errno::DeterministicViolation.into());
+            return Err(generated::types::Errno::Forbidden.into());
         }
         if !self.context.data.conf.can_call_others {
             return Err(generated::types::Errno::Forbidden.into());
@@ -790,9 +874,80 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             FileContentsUnevaluated::from_contents(SharedBytes::new(res), 0),
         )))
     }
+
+    async fn get_balance(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        account: &generated::types::Addr,
+        result: wiggle::GuestPtr<u8>,
+    ) -> Result<(), generated::types::Error> {
+        let address = AccountAddress::read_from_mem(account, mem)?;
+
+        self.context
+            .get_balance_impl_wasi(mem, address, result, false)
+            .await
+    }
+
+    async fn get_self_balance(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        result: wiggle::GuestPtr<u8>,
+    ) -> Result<(), generated::types::Error> {
+        if !self.context.data.conf.is_deterministic {
+            return Err(generated::types::Errno::Forbidden.into());
+        }
+
+        self.context
+            .get_balance_impl_wasi(
+                mem,
+                self.context.data.message_data.contract_account,
+                result,
+                true,
+            )
+            .await
+    }
 }
 
 impl Context {
+    async fn get_balance_impl_wasi(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        address: AccountAddress,
+        result: wiggle::GuestPtr<u8>,
+        is_self: bool,
+    ) -> Result<(), generated::types::Error> {
+        let mut res = self.get_balance_impl(address).await?;
+
+        if is_self && self.data.conf.is_main() {
+            res -= self.messages_decremented;
+        }
+
+        let res = res.to_little_endian();
+        mem.copy_from_slice(&res, result.as_array(32))?;
+
+        Ok(())
+    }
+
+    pub async fn get_balance_impl(
+        &mut self,
+        address: AccountAddress,
+    ) -> Result<primitive_types::U256, generated::types::Error> {
+        if let Some(res) = self.shared_data.balances.get(&address) {
+            return Ok(res.clone());
+        }
+
+        let supervisor = self.data.supervisor.clone();
+        let mut supervisor = supervisor.lock().await;
+        let res = supervisor
+            .host
+            .get_balance(address)
+            .map_err(generated::types::Error::trap)?;
+
+        let _ = self.shared_data.balances.insert(address, res.clone());
+
+        Ok(res)
+    }
+
     pub fn log(&self) -> serde_json::Value {
         serde_json::json!({
             "config": &self.data.conf,

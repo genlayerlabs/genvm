@@ -27,7 +27,10 @@ def _generate_send(name: str, params: list[type], ret: type) -> typing.Any:
 
 	def result_fn(self, *args):
 		calldata = encoder.encode(list(args))
-		wasi.eth_send(self.parent.address.as_bytes, calldata)
+		assert len(self._proxy_args) == 1
+		assert len(self._proxy_kwargs) == 0
+		data = json.dumps(self._proxy_args[0])
+		wasi.eth_send(self._proxy_parent.address.as_bytes, calldata, data)
 
 	return result_fn
 

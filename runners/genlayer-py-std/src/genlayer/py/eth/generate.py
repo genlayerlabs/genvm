@@ -4,7 +4,18 @@ import typing
 import inspect
 from functools import partial
 
-from ..types import Address
+from ..types import Address, u256
+
+
+class TransactionDataKwArgs(typing.TypedDict):
+	"""
+	Built-in parameters of all transaction messages that a contract can emit
+
+	.. warning::
+		parameters are subject to change!
+	"""
+
+	value: typing.NotRequired[u256]
 
 
 class EthContractProxy[TView, TWrite]:
@@ -14,7 +25,7 @@ class EthContractProxy[TView, TWrite]:
 		self,
 		address: Address,
 		view_impl: typing.Callable[['EthContractProxy'], TView],
-		send_impl: typing.Callable[['EthContractProxy'], TWrite],
+		send_impl: typing.Callable[['EthContractProxy', TransactionDataKwArgs], TWrite],
 	):
 		self.address = address
 		self._view = view_impl
@@ -23,8 +34,8 @@ class EthContractProxy[TView, TWrite]:
 	def view(self) -> TView:
 		return self._view(self)
 
-	def emit(self) -> TWrite:
-		return self._send(self)
+	def emit(self, **data: typing.Unpack[TransactionDataKwArgs]) -> TWrite:
+		return self._send(self, data)
 
 
 class EthContractDeclaration[TView, TWrite](typing.Protocol):
@@ -32,11 +43,14 @@ class EthContractDeclaration[TView, TWrite](typing.Protocol):
 	Write: type[TWrite]
 
 
+_generate_spec = typing.ParamSpec('_generate_spec')
+
+
 def _generate_methods(
 	f_type: typing.Any,
 	proxy_name,
 	factory: typing.Callable[[str, list, typing.Any], typing.Callable[..., typing.Any]],
-) -> typing.Callable[[EthContractProxy], typing.Any]:
+) -> typing.Callable[typing.Concatenate[EthContractProxy, _generate_spec], typing.Any]:
 	props: dict[str, typing.Any] = {}
 	for name, val in inspect.getmembers_static(f_type):
 		if not inspect.isfunction(val):
@@ -61,13 +75,17 @@ def _generate_methods(
 
 		props[name] = factory(name, real_params, ret_annotation)
 
-	def new_init(self, parent):
-		self.parent = parent
+	def new_init(
+		self, parent, *args: _generate_spec.args, **kwargs: _generate_spec.kwargs
+	):
+		self._proxy_parent = parent
+		self._proxy_args = args
+		self._proxy_kwargs = kwargs
 
 	props.update(
 		{
 			'__init__': new_init,
-			'__slots__': ('parent',),
+			'__slots__': ('_proxy_parent', '_proxy_args', '_proxy_kwargs'),
 		}
 	)
 	return type(proxy_name, (object,), props)
@@ -83,7 +101,9 @@ def contract_generator(generate_view: _EthGenerator, generate_send: _EthGenerato
 		view_meths = _generate_methods(
 			contr.View, f'{contr.__qualname__}.ViewProxy', factory=generate_view
 		)
-		send_meths = _generate_methods(
+		send_meths: typing.Callable[
+			[EthContractProxy, TransactionDataKwArgs], typing.Any
+		] = _generate_methods(
 			contr.Write, f'{contr.__qualname__}.WriteProxy', factory=generate_send
 		)
 		return partial(EthContractProxy, view_impl=view_meths, send_impl=send_meths)

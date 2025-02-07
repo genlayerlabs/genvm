@@ -2,13 +2,11 @@
 from genlayer import *
 
 
-@gl.contract
-class Contract1:
+class Contract1(gl.Contract):
 	def __init__(self):
 		print('hello world')
 
 
-@gl.contract
-class Contract2:
+class Contract2(gl.Contract):
 	def __init__(self):
 		print('hello world')

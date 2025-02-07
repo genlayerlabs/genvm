@@ -17,6 +17,7 @@ use crate::{
     string_templater,
     ustar::{Archive, SharedBytes},
     wasi::{self, preview1::I32Exit},
+    AccountAddress,
 };
 use anyhow::{Context, Result};
 use std::sync::{Arc, Mutex};
@@ -161,6 +162,7 @@ pub struct SharedData {
     pub cancellation: Arc<genvm_modules_interfaces::CancellationToken>,
     pub is_sync: bool,
     pub modules: Modules,
+    pub balances: dashmap::DashMap<AccountAddress, primitive_types::U256>,
 }
 
 impl SharedData {
@@ -174,6 +176,7 @@ impl SharedData {
             cancellation,
             is_sync,
             modules,
+            balances: dashmap::DashMap::new(),
         }
     }
 }

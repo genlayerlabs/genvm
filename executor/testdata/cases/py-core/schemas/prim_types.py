@@ -5,8 +5,7 @@ from genlayer import *
 import typing
 
 
-@gl.contract
-class Contract:
+class Contract(gl.Contract):
 	def __init__(self):
 		pass
 

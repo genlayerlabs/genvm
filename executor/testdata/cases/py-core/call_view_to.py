@@ -2,8 +2,7 @@
 from genlayer import *
 
 
-@gl.contract
-class Contract:
+class Contract(gl.Contract):
 	@gl.public.view
 	def foo(self, a, b):
 		print('contract to.foo')

@@ -38,7 +38,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[pyfn(m)]
     fn rollback(s: &str) -> PyResult<()> {
         flush_everything();
-        unsafe { genvm_sdk_rust::rollback(s.as_ref()) };
+        unsafe { genvm_sdk_rust::rollback(s) };
         Ok(())
     }
 
@@ -84,7 +84,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[pyfn(m)]
     fn call_contract(address: &[u8], calldata: &[u8], data: &str) -> PyResult<u32> {
         flush_everything();
-        let address = get_addr(&address)?;
+        let address = get_addr(address)?;
         map_error(unsafe {
             genvm_sdk_rust::call_contract(
                 address,
@@ -146,7 +146,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
         off: u32,
         len: u32,
     ) -> PyResult<Bound<'a, PyBytes>> {
-        let addr = get_full_addr(&addr)?;
+        let addr = get_full_addr(addr)?;
         PyBytes::new_bound_with(py, len as usize, |byts| unsafe {
             map_error(genvm_sdk_rust::storage_read(
                 addr,
@@ -161,7 +161,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     #[pyfn(m)]
     fn storage_write(py: Python<'_>, addr: &[u8], off: u32, buf: PyBuffer<u8>) -> PyResult<()> {
-        let addr = get_full_addr(&addr)?;
+        let addr = get_full_addr(addr)?;
         let buf = buf.as_slice(py).unwrap();
         let res = unsafe {
             genvm_sdk_rust::storage_write(
@@ -178,7 +178,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     #[pyfn(m)]
     fn post_message(addr: &[u8], calldata: &[u8], data: &str) -> PyResult<()> {
-        let addr = get_addr(&addr)?;
+        let addr = get_addr(addr)?;
         let res = unsafe {
             genvm_sdk_rust::post_message(
                 addr,
@@ -212,7 +212,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     #[pyfn(m)]
     fn eth_call(addr: &[u8], calldata: &[u8]) -> PyResult<u32> {
-        let addr = get_addr(&addr)?;
+        let addr = get_addr(addr)?;
         let res = unsafe {
             genvm_sdk_rust::eth_call(
                 addr,
@@ -226,8 +226,8 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfn(m)]
-    fn eth_send(addr: &[u8], calldata: &[u8]) -> PyResult<()> {
-        let addr = get_addr(&addr)?;
+    fn eth_send(addr: &[u8], calldata: &[u8], data: &str) -> PyResult<()> {
+        let addr = get_addr(addr)?;
         let res = unsafe {
             genvm_sdk_rust::eth_send(
                 addr,
@@ -235,9 +235,27 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
                     buf: calldata.as_ptr() as *const u8,
                     buf_len: calldata.len() as u32,
                 },
+                data,
             )
         };
         map_error(res)
+    }
+
+    #[pyfn(m)]
+    fn get_balance(addr: &[u8]) -> PyResult<num_bigint::BigUint> {
+        let addr = get_addr(addr)?;
+        let mut result: [u8; 32] = [0; 32];
+        let res = unsafe { genvm_sdk_rust::get_balance(addr, (&mut result) as *mut u8) };
+        map_error(res)?;
+        Ok(num_bigint::BigUint::from_bytes_le(&result))
+    }
+
+    #[pyfn(m)]
+    fn get_self_balance() -> PyResult<num_bigint::BigUint> {
+        let mut result: [u8; 32] = [0; 32];
+        let res = unsafe { genvm_sdk_rust::get_self_balance((&mut result) as *mut u8) };
+        map_error(res)?;
+        Ok(num_bigint::BigUint::from_bytes_le(&result))
     }
 
     Ok(())

@@ -2,9 +2,8 @@
 from genlayer import *
 
 
-@gl.contract
-class Contract:
+class Contract(gl.Contract):
 	@gl.public.write
-	def __init__(self):
+	def foo(self):
 		gl.advanced.run_nondet(lambda: None, lambda x: True)
 		print('hello world')

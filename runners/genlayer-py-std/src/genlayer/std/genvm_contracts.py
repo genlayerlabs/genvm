@@ -4,13 +4,14 @@ __all__ = (
 	'deploy_contract',
 	'TransactionDataKwArgs',
 	'DeploymentTransactionDataKwArgs',
+	'Contract',
 )
 
 import typing
 import json
 import collections.abc
 
-from genlayer.py.types import Address, Lazy
+from genlayer.py.types import Address, Lazy, u256
 import genlayer.py.calldata as calldata
 import genlayer.std._wasi as wasi
 
@@ -70,7 +71,8 @@ class TransactionDataKwArgs(typing.TypedDict):
 		parameters are subject to change!
 	"""
 
-	pass
+	value: typing.NotRequired[u256]
+	on: typing.NotRequired[typing.Literal['accepted', 'final']]
 
 
 class _ContractAtEmitMethod:
@@ -103,6 +105,11 @@ class GenVMContractProxy[TView, TSend](typing.Protocol):
 
 	def emit(self, **kwargs: typing.Unpack[TransactionDataKwArgs]) -> TSend: ...
 
+	@property
+	def balance(self) -> u256: ...
+
+	def emit_transfer(self, **data: typing.Unpack[TransactionDataKwArgs]): ...
+
 
 class ContractAt(GenVMContractProxy):
 	"""
@@ -132,6 +139,18 @@ class ContractAt(GenVMContractProxy):
 		:returns: object supporting ``.name(*args, **kwargs)`` that emits a message and returns :py:obj:`None`
 		"""
 		return _ContractAtEmit(self.addr, data)
+
+	def emit_transfer(self, **data: typing.Unpack[TransactionDataKwArgs]):
+		"""
+		Method to emit a message that transfers native tokens
+		"""
+		if 'value' not in data:
+			raise TypeError('for emit_transfer value is required')
+		_ContractAtEmitMethod(self.addr, '', data)()
+
+	@property
+	def balance(self) -> u256:
+		raise Exception('todo')
 
 
 class _ContractAtView:
@@ -256,3 +275,47 @@ def deploy_contract(
 	from genlayer.py._internal import create2_address
 
 	return create2_address(gl.message.contract_account, salt_nonce, gl.message.chain_id)
+
+
+import abc
+
+
+class Contract:
+	def __init_subclass__(cls) -> None:
+		global __known_contact__
+		if __known_contact__ is not None:
+			raise TypeError(
+				f'only one contract is allowed; first: `{__known_contact__}` second: `{cls}`'
+			)
+
+		cls.__contract__ = True
+		from genlayer.py.storage._internal.generate import storage
+
+		storage(cls)
+		__known_contact__ = cls
+
+	@property
+	def balance(self) -> u256:
+		raise Exception('todo')
+
+	@abc.abstractmethod
+	def __handle_undefined_method__(
+		self, method_name: str, args: list[typing.Any], kwargs: dict[str, typing.Any]
+	):
+		"""
+		Method that is called for no-method calls, must be either ``@gl.public.write`` or ``@gl.public.write.payable``
+		"""
+		...
+
+	@abc.abstractmethod
+	def __receive__(self):
+		"""
+		Method that is called for no-method transfers, must be ``@gl.public.write.payable``
+		"""
+		...
+
+
+Contract.__handle_undefined_method__ = None  # type: ignore
+Contract.__receive__ = None  # type: ignore
+
+__known_contact__: type[Contract] | None = None

@@ -125,7 +125,9 @@ def _get_params(m: types.FunctionType, *, is_ctor: bool) -> dict:
 				case 'KEYWORD_ONLY':
 					kwparams[_escape_dict_prop(name)] = _repr_type(par.annotation, True)
 				case kind:
-					raise TypeError(f'unsupported parameter type {kind} {type(kind)}')
+					raise TypeError(
+						f'unsupported parameter type {kind} {type(kind)} for `{name}: {par}`'
+					)
 
 		ret = {
 			'params': params,
@@ -168,6 +170,10 @@ def get_schema(contract: type) -> typing.Any:
 		for name, meth in sorted(inspect.getmembers(contract))
 		if inspect.isfunction(meth) and _is_public(meth)
 	}
+
+	for k in meths:
+		if k.startswith('__'):
+			raise TypeError(f'public method names should not start with `__`, `{k}`')
 
 	return {
 		'ctor': _get_params(ctor, is_ctor=True),

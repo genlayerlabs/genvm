@@ -2,13 +2,16 @@
     (enum (@witx tag u32)
         ;;; Success
         $success
-        $deterministic_violation
+
         $overflow
         $inval
         $fault
         $ilseq
+
         $io
+
         $forbidden
+        $inbalance
     )
 )
 

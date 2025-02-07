@@ -2,8 +2,7 @@
 from genlayer import *
 
 
-@gl.contract
-class Contract:
+class Contract(gl.Contract):
 	def __init__(self, foo, bar):
 		pass
 

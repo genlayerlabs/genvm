@@ -10,3 +10,9 @@ pub struct Config {
     pub can_call_others: bool,
     pub state_mode: crate::host::StorageType,
 }
+
+impl Config {
+    pub fn is_main(&self) -> bool {
+        self.state_mode == crate::host::StorageType::Default
+    }
+}

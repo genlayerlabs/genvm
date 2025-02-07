@@ -59,7 +59,7 @@ in rec {
 	fullDefault = wasmShell.stdenv.mkDerivation (configurator // {
 		pname = "genvm-cpython";
 
-		outputHash = "sha256-czL3TCzXLVN7PCXppGWfujOm6gYDVBLsSM0aOHjbauw="; #lib.fakeHash;
+		outputHash = "sha256-3I6J7pQFqQbDg4j1zSTs4zcLa205SDXhLoKGbX0pFnU="; #lib.fakeHash;
 		outputHashMode = "recursive";
 
 		nativeBuildInputs = configurator.nativeBuildInputs ++

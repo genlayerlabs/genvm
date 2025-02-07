@@ -17,7 +17,7 @@ rustShell.stdenv.mkDerivation {
 	name = "genvm-cpython-ext";
 	version = "0.0.1";
 
-	outputHash = "sha256-ruKZP6DLrHeHuJIWTDAQQ/3CUvPnSrQ3PV0G3AamRr4=";
+	outputHash = "sha256-OtB0BEQQ29+gmVUan1hqD0zwVcRo6ZtLYlttgOeBNBY="; #lib.fakeHash;
 	outputHashMode = "recursive";
 
 	buildInputs = [

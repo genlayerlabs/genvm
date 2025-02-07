@@ -72,6 +72,7 @@ class IHost(metaclass=abc.ABCMeta):
 	async def consume_gas(self, gas: int, /) -> None: ...
 	async def eth_send(self, account: bytes, calldata: bytes, /) -> None: ...
 	async def eth_call(self, account: bytes, calldata: bytes, /) -> bytes: ...
+	async def get_balance(self, account: bytes, /) -> int: ...
 
 
 async def host_loop(handler: IHost):
@@ -107,7 +108,7 @@ async def host_loop(handler: IHost):
 	while True:
 		meth_id = Methods(await recv_int(1))
 		match meth_id:
-			case Methods.APPEND_CALLDATA:
+			case Methods.GET_CALLDATA:
 				cd = await handler.get_calldata()
 				await send_int(len(cd))
 				await send_all(cd)
@@ -192,6 +193,10 @@ async def host_loop(handler: IHost):
 				res = await handler.eth_call(account, calldata)
 				await send_int(len(res))
 				await send_all(res)
+			case Methods.GET_BALANCE:
+				account = await read_exact(ACCOUNT_ADDR_SIZE)
+				res = await handler.get_balance(account)
+				await send_all(res.to_bytes(32, byteorder='little', signed=False))
 			case x:
 				raise Exception(f'unknown method {x}')
 

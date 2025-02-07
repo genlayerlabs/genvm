@@ -117,7 +117,7 @@ pub async fn run_with_impl(
         let mut entrypoint = b"call!".to_vec();
 
         let mut supervisor = supervisor.lock().await;
-        supervisor.host.append_calldata(&mut entrypoint)?;
+        supervisor.host.get_calldata(&mut entrypoint)?;
 
         let essential_data = wasi::genlayer_sdk::SingleVMData {
             conf: wasi::base::Config {

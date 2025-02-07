@@ -138,12 +138,12 @@ fn write_result(sock: &mut dyn Sock, res: Result<&vm::RunOk, &anyhow::Error>) ->
 }
 
 impl Host {
-    pub fn append_calldata(&mut self, calldata: &mut Vec<u8>) -> Result<()> {
+    pub fn get_calldata(&mut self, calldata: &mut Vec<u8>) -> Result<()> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
         let sock: &mut dyn Sock = &mut *sock;
-        sock.write_all(&[host_fns::Methods::AppendCalldata as u8])?;
+        sock.write_all(&[host_fns::Methods::GetCalldata as u8])?;
         let len = read_u32(sock)? as usize;
         calldata.reserve(len);
         let index = calldata.len();
@@ -344,5 +344,19 @@ impl Host {
         sock.write_all(calldata)?;
 
         Ok(())
+    }
+
+    pub fn get_balance(&mut self, address: AccountAddress) -> Result<primitive_types::U256> {
+        let Ok(mut sock) = (*self.sock).lock() else {
+            anyhow::bail!("can't take lock")
+        };
+        let sock: &mut dyn Sock = &mut *sock;
+        sock.write_all(&[host_fns::Methods::GetBalance as u8])?;
+
+        sock.write_all(&address.raw())?;
+
+        let mut buf: [u8; 32] = [0; 32];
+        sock.read_exact(&mut buf)?;
+        Ok(primitive_types::U256::from_little_endian(&buf))
     }
 }

@@ -3,8 +3,7 @@ from genlayer import *
 import sys
 
 
-@gl.contract
-class Contract:
+class Contract(gl.Contract):
 	@gl.public.write
 	def main(self):
 		def get_input():

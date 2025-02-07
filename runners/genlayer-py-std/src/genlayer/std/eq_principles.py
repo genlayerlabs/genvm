@@ -2,7 +2,6 @@ __all__ = (
 	'eq_principle_strict_eq',
 	'eq_principle_prompt_comparative',
 	'eq_principle_prompt_non_comparative',
-	'sandbox',
 )
 
 from ._internal.prompt_ids import *
@@ -116,15 +115,3 @@ def eq_principle_prompt_non_comparative(
 		return wasi.eq_principle_prompt(TemplateId.NON_COMPARATIVE, json.dumps(vars))
 
 	return advanced.run_nondet(leader_fn, validator_fn)
-
-
-@_lazy_api
-def sandbox(fn: typing.Callable[[], typing.Any]) -> Lazy[typing.Any]:
-	"""
-	Runs function in the sandbox
-	"""
-	import cloudpickle
-
-	return lazy_from_fd_no_check(
-		wasi.sandbox(cloudpickle.dumps(fn)), decode_sub_vm_result
-	)

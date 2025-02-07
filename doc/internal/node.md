@@ -45,7 +45,7 @@ fn read_result():
 loop:
   method_id := read_byte
   match method_id
-    json/methods/append_calldata:
+    json/methods/get_calldata:
       write_bytes_with_len host_calldata
     json/methods/get_code:
       address := read_bytes(ACCOUNT_ADDR_SIZE)
@@ -95,7 +95,7 @@ See [mock implementation](../../executor/testdata/runner/mock_host.py)
 ## Types
 
 ### Calldata
-`append_calldata` method must return [calldata encoded](../calldata.md) bytes that conform to ABI:
+`get_calldata` method must return [calldata encoded](../calldata.md) bytes that conform to ABI:
 ```typescript
 {
   method?: string,  // only for non-consturctors

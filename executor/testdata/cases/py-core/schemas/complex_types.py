@@ -8,8 +8,7 @@ class MyTDict(typing.TypedDict):
 	b: str
 
 
-@gl.contract
-class Contract:
+class Contract(gl.Contract):
 	def __init__(self):
 		pass
 

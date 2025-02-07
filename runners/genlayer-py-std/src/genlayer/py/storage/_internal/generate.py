@@ -310,7 +310,7 @@ def _storage_build_struct(
 			prop_desc = _storage_build(prop_value, generics_map)
 			assert isinstance(prop_desc, TypeDesc)
 		except Exception as e:
-			raise Exception(f'during generating field {prop_name}: {prop_value}') from e
+			raise Exception(f'during generating field `{prop_name}: {prop_value}`') from e
 		props[prop_name] = (prop_desc, cur_offset)
 
 		if isinstance(prop_value, typing.TypeVar):
@@ -350,7 +350,7 @@ def _storage_build_struct(
 			self.__type_desc__ = description
 		old_init(self, *args, **kwargs)
 
-	new_init.__storage_patched__ = True
+	new_init.__storage_patched__ = True  # type: ignore
 
 	if not hasattr(cls, '__contract__') and not getattr(
 		old_init, '__storage_patched__', False

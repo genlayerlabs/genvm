@@ -10,7 +10,7 @@ __all__ = (
 	'calldata',
 	'private',
 	'public',
-	'contract',
+	'Contract',
 	'contract_interface',
 	'ContractAt',
 	'deploy_contract',
@@ -24,7 +24,6 @@ __all__ = (
 	'message',
 	'message_raw',
 	'rollback_immediate',
-	'sandbox',
 )
 
 import typing
@@ -50,6 +49,18 @@ def private(f):
 	return f
 
 
+class _write:
+	def payable[T](self, f: T) -> T:
+		self(f)
+		setattr(f, '__payable__', True)
+		return f
+
+	def __call__[T](self, f: T) -> T:
+		setattr(f, '__public__', True)
+		setattr(f, '__readonly__', False)
+		return f
+
+
 class public:
 	@staticmethod
 	def view(f):
@@ -60,14 +71,21 @@ class public:
 		setattr(f, '__readonly__', True)
 		return f
 
-	@staticmethod
-	def write(f):
-		"""
-		Decorator that marks a contract method as a public write
-		"""
-		setattr(f, '__public__', True)
-		setattr(f, '__readonly__', False)
-		return f
+	write = _write()
+	"""
+	Decorator that marks a contract method as a public write. Has `.payable`
+
+	.. code:: python
+
+		@gl.public.write
+		def foo(self) -> None: ...
+
+		@gl.public.write.payable
+		def bar(self) -> None: ...
+	"""
+
+
+del _write
 
 
 class MessageType(typing.NamedTuple):
@@ -83,7 +101,7 @@ class MessageType(typing.NamedTuple):
 	"""
 	Entire transaction initiator
 	"""
-	value: int | None
+	value: u256
 	is_init: bool
 	"""
 	``True`` *iff* it is a deployment
@@ -111,7 +129,7 @@ else:
 		contract_account=Address(message_raw['contract_account']),
 		sender_account=Address(message_raw['sender_account']),
 		origin_account=Address(message_raw['origin_account']),
-		value=message_raw.get('value', None),
+		value=u256(message_raw.get('value', None) or 0),
 		is_init=message_raw.get('is_init', None),
 		chain_id=u256(int(message_raw['chain_id'])),
 	)
@@ -122,27 +140,3 @@ def rollback_immediate(reason: str) -> typing.NoReturn:
 	Performs an immediate rollback, current VM won't be able to handle it, stack unwind will not happen
 	"""
 	wasi.rollback(reason)
-
-
-def contract(t: type) -> type:
-	"""
-	Decorator that marks class as a contract
-
-	.. note::
-		There can be only one "contract" at address, so this function must be called at least once
-	"""
-	import inspect
-
-	mod = inspect.getmodule(t)
-	if mod is None:
-		raise Exception(f"can't detect module where {t} is declared")
-	if hasattr(mod, '__KNOWN_CONTRACT'):
-		raise Exception(
-			f'only one @contract is allowed, old {mod.__KNOWN_CONTRACT} new {t}'
-		)
-	t.__contract__ = True
-	from genlayer.py.storage._internal.generate import storage
-
-	t = storage(t)
-	setattr(mod, '__KNOWN_CONTRACT', t)
-	return t

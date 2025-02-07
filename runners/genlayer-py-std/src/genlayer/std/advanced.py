@@ -11,6 +11,7 @@ __all__ = (
 	'ContractError',
 	'run_nondet',
 	'validator_handle_rollbacks_and_errors_default',
+	'sandbox',
 )
 
 import typing
@@ -104,3 +105,15 @@ def validator_handle_rollbacks_and_errors_default(
 		)
 	except Exception:
 		wasi.contract_return(calldata.encode(isinstance(leaders_result, ContractError)))
+
+
+def sandbox(fn: typing.Callable[[], typing.Any]) -> Lazy[typing.Any]:
+	"""
+	Runs function in the sandbox
+	"""
+	import cloudpickle
+	from ._internal import lazy_from_fd_no_check, decode_sub_vm_result
+
+	return lazy_from_fd_no_check(
+		wasi.sandbox(cloudpickle.dumps(fn)), decode_sub_vm_result
+	)
