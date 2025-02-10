@@ -634,13 +634,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 state_mode,
             },
             message_data: MessageData {
-                contract_account: called_contract_account,
-                sender_account: my_data.sender_account, // FIXME: is that true?
+                contract_address: called_contract_account,
+                sender_address: my_data.sender_address, // FIXME: is that true?
                 value: None,
                 is_init: false,
                 datetime: my_data.datetime,
                 chain_id: my_data.chain_id,
-                origin_account: my_data.origin_account,
+                origin_address: my_data.origin_address,
             },
             entrypoint: res_calldata,
             supervisor: supervisor.clone(),
@@ -680,7 +680,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         if !data.value.is_zero() {
             let my_balance = self
                 .context
-                .get_balance_impl(self.context.data.message_data.contract_account)
+                .get_balance_impl(self.context.data.message_data.contract_address)
                 .await?;
 
             if data.value + self.context.messages_decremented > my_balance {
@@ -722,7 +722,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         if !data.value.is_zero() {
             let my_balance = self
                 .context
-                .get_balance_impl(self.context.data.message_data.contract_account)
+                .get_balance_impl(self.context.data.message_data.contract_address)
                 .await?;
 
             if data.value + self.context.messages_decremented > my_balance {
@@ -764,7 +764,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let dest_buf = buf.buf.as_array(buf.buf_len);
 
-        let account = self.context.data.message_data.contract_account;
+        let account = self.context.data.message_data.contract_address;
 
         let slot = GenericAddress::read_from_mem(slot, mem)?;
         let mem_size = buf.buf_len as usize;
@@ -809,7 +809,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let buf: Vec<u8> = buf.read_owned(mem)?;
 
-        let account = self.context.data.message_data.contract_account;
+        let account = self.context.data.message_data.contract_address;
         let slot = GenericAddress::read_from_mem(slot, mem)?;
 
         let supervisor = self.context.data.supervisor.clone();
@@ -846,7 +846,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         if !data.value.is_zero() {
             let my_balance = self
                 .context
-                .get_balance_impl(self.context.data.message_data.contract_account)
+                .get_balance_impl(self.context.data.message_data.contract_address)
                 .await?;
 
             if data.value + self.context.messages_decremented > my_balance {
@@ -920,7 +920,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         self.context
             .get_balance_impl_wasi(
                 mem,
-                self.context.data.message_data.contract_account,
+                self.context.data.message_data.contract_address,
                 result,
                 true,
             )

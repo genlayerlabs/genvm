@@ -8,17 +8,17 @@
       "type": "object",
       "properties": {
           "$schema": { "type": "string" },
-          "contract_account": {
+          "contract_address": {
             "type": "string",
             "description": "bas64 encoded (20 bytes)",
             "pattern": "^[\\-A-Za-z0-9+\\/]{27}=$"
           },
-          "sender_account": {
+          "sender_address": {
             "type": "string",
             "description": "bas64 encoded (20 bytes)",
             "pattern": "^[\\-A-Za-z0-9+\\/]{27}=$"
           },
-          "origin_account": {
+          "origin_address": {
             "type": "string",
             "description": "bas64 encoded (20 bytes)",
             "pattern": "^[\\-A-Za-z0-9+\\/]{27}=$"
@@ -36,7 +36,7 @@
             "description": "whenever contract is being instantiated (this allows to call a private method)"
           }
       },
-      "required": ["contract_account", "sender_account", "origin_account", "chain_id", "is_init"]
+      "required": ["contract_address", "sender_address", "origin_address", "chain_id", "is_init"]
     },
     "ModuleConfig": {
       "type": "object",

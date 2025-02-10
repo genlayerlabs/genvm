@@ -755,7 +755,7 @@ impl Supervisor {
     pub async fn apply_contract_actions(&mut self, vm: &mut VM) -> Result<wasmtime::Instance> {
         let contract_address = {
             let lock = vm.store.data().genlayer_ctx.lock().unwrap();
-            lock.genlayer_sdk.data.message_data.contract_account
+            lock.genlayer_sdk.data.message_data.contract_address
         };
 
         let mut contract_id = String::from("<contract>:");

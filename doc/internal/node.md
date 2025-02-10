@@ -6,9 +6,9 @@ To run a genvm, one must start a genvm process with following arguments:
   ```typescript
   {
     "$schema": "https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/message.json", // optional
-    "contract_account": "AQAAAAAAAAAAAAAAAAAAAAAAAAA=", // base64 address of contract account (callee)
-    "sender_account": "AgAAAAAAAAAAAAAAAAAAAAAAAAA=",   // base64 address of caller
-    "origin_account": "AgAAAAAAAAAAAAAAAAAAAAAAAAA=",   // base64 address of initiator
+    "contract_address": "AQAAAAAAAAAAAAAAAAAAAAAAAAA=", // base64 address of contract account (callee)
+    "sender_address": "AgAAAAAAAAAAAAAAAAAAAAAAAAA=",   // base64 address of caller
+    "origin_address": "AgAAAAAAAAAAAAAAAAAAAAAAAAA=",   // base64 address of initiator
     "chain_id": "0",                                    // chain id, see consensus docs
     "value": null,
     "is_init": false,                                   // whenever contract is being instantiated (this allows to call a private method)

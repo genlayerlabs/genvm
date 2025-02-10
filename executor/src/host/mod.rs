@@ -58,9 +58,9 @@ fn default_datetime() -> chrono::DateTime<chrono::Utc> {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MessageData {
-    pub contract_account: crate::AccountAddress,
-    pub sender_account: crate::AccountAddress,
-    pub origin_account: crate::AccountAddress,
+    pub contract_address: crate::AccountAddress,
+    pub sender_address: crate::AccountAddress,
+    pub origin_address: crate::AccountAddress,
     pub chain_id: Arc<str>,
     pub value: Option<u64>,
     pub is_init: bool,

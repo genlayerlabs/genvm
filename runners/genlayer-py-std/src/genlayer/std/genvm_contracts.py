@@ -285,7 +285,7 @@ def deploy_contract(
 	import genlayer.std as gl
 	from genlayer.py._internal import create2_address
 
-	return create2_address(gl.message.contract_account, salt_nonce, gl.message.chain_id)
+	return create2_address(gl.message.contract_address, salt_nonce, gl.message.chain_id)
 
 
 import abc

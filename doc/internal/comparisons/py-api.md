@@ -13,7 +13,7 @@ class Contract(IContract):
 
 
   def __init__(self):
-    self.deployer = message.sender_account
+    self.deployer = message.sender_address
 
   @public
   def foo(self):
@@ -33,7 +33,7 @@ class Storage:
 storage = genlayer.get_storage(Storage)
 
 def init():
-  storage.deployer = message.sender_account
+  storage.deployer = message.sender_address
 
 @public
 def foo():

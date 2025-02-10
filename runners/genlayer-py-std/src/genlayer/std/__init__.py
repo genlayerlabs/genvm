@@ -89,15 +89,15 @@ del _write
 
 
 class MessageType(typing.NamedTuple):
-	contract_account: Address
+	contract_address: Address
 	"""
 	Address of current Intelligent Contract
 	"""
-	sender_account: Address
+	sender_address: Address
 	"""
 	Address of this call initiator
 	"""
-	origin_account: Address
+	origin_address: Address
 	"""
 	Entire transaction initiator
 	"""
@@ -126,9 +126,9 @@ else:
 	message_raw = json.loads(wasi.get_message_data())
 
 	message = MessageType(
-		contract_account=Address(message_raw['contract_account']),
-		sender_account=Address(message_raw['sender_account']),
-		origin_account=Address(message_raw['origin_account']),
+		contract_address=Address(message_raw['contract_address']),
+		sender_address=Address(message_raw['sender_address']),
+		origin_address=Address(message_raw['origin_address']),
 		value=u256(message_raw.get('value', None) or 0),
 		is_init=message_raw.get('is_init', None),
 		chain_id=u256(int(message_raw['chain_id'])),
