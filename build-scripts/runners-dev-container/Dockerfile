@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 nixos/nix@sha256:4bfe741027f0bfbef745862cbf3b5f424ee99801c04138146c0000a28759636d
+FROM --platform=linux/amd64 nixos/nix@sha256:42d51ae5882b7d9a6ad3237d356025445dc75903b1bfe4eb007a3426356e6c42
 
 RUN \
 	nix-channel --list && \
