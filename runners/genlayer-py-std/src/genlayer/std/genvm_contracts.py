@@ -76,10 +76,14 @@ class TransactionDataKwArgs(typing.TypedDict):
 
 
 class _ContractAtEmitMethod:
-	def __init__(self, addr: Address, name: str, data: TransactionDataKwArgs):
+	data: dict
+
+	def __init__(self, addr: Address, name: str | None, data: TransactionDataKwArgs):
 		self.addr = addr
 		self.name = name
-		self.data = data
+		self.data = dict(data)
+		if 'value' in data:
+			self.data['value'] = hex(data['value'])
 
 	def __call__(self, *args, **kwargs) -> None:
 		obj = _make_calldata_obj(self.name, args, kwargs)
@@ -146,11 +150,11 @@ class ContractAt(GenVMContractProxy):
 		"""
 		if 'value' not in data:
 			raise TypeError('for emit_transfer value is required')
-		_ContractAtEmitMethod(self.addr, '', data)()
+		_ContractAtEmitMethod(self.addr, None, data)()
 
 	@property
 	def balance(self) -> u256:
-		raise Exception('todo')
+		return u256(wasi.get_balance(self.addr.as_bytes))
 
 
 class _ContractAtView:
@@ -296,7 +300,7 @@ class Contract:
 
 	@property
 	def balance(self) -> u256:
-		raise Exception('todo')
+		return u256(wasi.get_self_balance())
 
 	@abc.abstractmethod
 	def __handle_undefined_method__(
