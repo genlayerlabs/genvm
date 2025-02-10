@@ -12,24 +12,24 @@ import genlayer.std._wasi as wasi
 from genlayer.py.eth.generate import transaction_data_kw_args_serialize
 
 
-def _generate_view(name: str, params: list[type], ret: type) -> typing.Any:
+def _generate_view(name: str, params: tuple[type], ret: type) -> typing.Any:
 	encoder = MethodEncoder(name, params, ret)
 
 	def result_fn(self, *args):
-		calldata = encoder.encode(list(args))
+		calldata = encoder.encode_call(args)
 		return lazy_from_fd(
 			wasi.eth_call(self.parent.address, calldata),
-			lambda x: decode([ret], x),
+			lambda x: decode(x, ret),
 		)
 
 	return _lazy_api(result_fn)
 
 
-def _generate_send(name: str, params: list[type], ret: type) -> typing.Any:
+def _generate_send(name: str, params: tuple[type], ret: type) -> typing.Any:
 	encoder = MethodEncoder(name, params, ret)
 
 	def result_fn(self, *args):
-		calldata = encoder.encode(list(args))
+		calldata = encoder.encode_call(args)
 		assert len(self._proxy_args) == 1
 		assert len(self._proxy_kwargs) == 0
 		data = json.dumps(self._proxy_args[0])

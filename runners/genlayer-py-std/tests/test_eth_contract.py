@@ -8,13 +8,13 @@ import genlayer.py.eth as genvm_eth
 
 
 def generate_test(
-	name: str, params: list[type], ret: type, *, dump_to: list
+	name: str, params: tuple[type], ret: type, *, dump_to: list
 ) -> typing.Any:
 	encoder = MethodEncoder(name, params, ret)
 
 	def result_fn(self, *args):
-		dump_to.append(self.parent.address)
-		dump_to.append(encoder.encode(list(args)))
+		dump_to.append(self._proxy_parent.address)
+		dump_to.append(encoder.encode_call(args))
 
 	return result_fn
 

@@ -5,6 +5,8 @@ import inspect
 import json
 from functools import partial
 
+import genlayer.py._internal.reflect as reflect
+
 from ..types import Address, u256
 
 
@@ -69,7 +71,7 @@ _generate_spec = typing.ParamSpec('_generate_spec')
 def _generate_methods(
 	f_type: typing.Any,
 	proxy_name,
-	factory: typing.Callable[[str, list, typing.Any], typing.Callable[..., typing.Any]],
+	factory: typing.Callable[[str, tuple, typing.Any], typing.Callable[..., typing.Any]],
 ) -> typing.Callable[typing.Concatenate[EthContractProxy, _generate_spec], typing.Any]:
 	props: dict[str, typing.Any] = {}
 	for name, val in inspect.getmembers_static(f_type):
@@ -93,7 +95,7 @@ def _generate_methods(
 		if ret_annotation is inspect.Parameter.empty:
 			ret_annotation = type(None)
 
-		props[name] = factory(name, real_params, ret_annotation)
+		props[name] = factory(name, tuple(real_params), ret_annotation)
 
 	def new_init(
 		self, parent, *args: _generate_spec.args, **kwargs: _generate_spec.kwargs
@@ -111,7 +113,7 @@ def _generate_methods(
 	return type(proxy_name, (object,), props)
 
 
-type _EthGenerator = typing.Callable[[str, list[type], type], typing.Any]
+type _EthGenerator = typing.Callable[[str, tuple[type], type], typing.Any]
 
 
 def contract_generator(
@@ -123,20 +125,23 @@ def contract_generator(
 	def gen[TView, TWrite](
 		contr: EthContractDeclaration[TView, TWrite],
 	) -> typing.Callable[[Address], EthContractProxy[TView, TWrite]]:
-		view_meths = _generate_methods(
-			contr.View, f'{contr.__qualname__}.ViewProxy', factory=generate_view
-		)
-		send_meths: typing.Callable[
-			[EthContractProxy, TransactionDataKwArgs], typing.Any
-		] = _generate_methods(
-			contr.Write, f'{contr.__qualname__}.WriteProxy', factory=generate_send
-		)
-		return partial(
-			EthContractProxy,
-			view_impl=view_meths,
-			send_impl=send_meths,
-			balance_impl=balance_getter,
-			transfer_impl=transfer,
-		)
+		with reflect.context_type(contr):  # type: ignore
+			with reflect.context_notes('while generating view methods'):
+				view_meths = _generate_methods(
+					contr.View, f'{contr.__qualname__}.ViewProxy', factory=generate_view
+				)
+			with reflect.context_notes('while generating write methods'):
+				send_meths: typing.Callable[
+					[EthContractProxy, TransactionDataKwArgs], typing.Any
+				] = _generate_methods(
+					contr.Write, f'{contr.__qualname__}.WriteProxy', factory=generate_send
+				)
+			return partial(
+				EthContractProxy,
+				view_impl=view_meths,
+				send_impl=send_meths,
+				balance_impl=balance_getter,
+				transfer_impl=transfer,
+			)
 
 	return gen

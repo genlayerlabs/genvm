@@ -5,54 +5,54 @@ from genlayer.py.storage import *
 
 
 def test_eth_baz():
-	meth = genvm_eth.MethodEncoder('baz', [u32, bool], bool)
-	assert meth.selector.hex() == 'cdcd77c0'
+	meth = genvm_eth.MethodEncoder('baz', (u32, bool), bool)
+	assert meth._selector.hex() == 'cdcd77c0'
 	assert (
-		meth.encode([69, True]).hex()
+		meth.encode_call((69, True)).hex()
 		== 'cdcd77c000000000000000000000000000000000000000000000000000000000000000450000000000000000000000000000000000000000000000000000000000000001'
 	)
 
 
 def test_eth_bar():
 	meth = genvm_eth.MethodEncoder(
-		'bar', [Array[Array[u8, typing.Literal[3]], typing.Literal[2]]], type(None)
+		'bar', (Array[genvm_eth.bytes3, typing.Literal[2]],), type(None)
 	)
-	assert meth.selector.hex() == 'fce353f6'
-	meth.encode([[[1, 2, 3], [4, 5, 6]]])
+	assert meth._selector.hex() == 'fce353f6'
+	meth.encode_call(([[1, 2, 3], [4, 5, 6]],))
 
 
 def test_eth_sam():
-	meth = genvm_eth.MethodEncoder('sam', [bytes, bool, list[u256]], type(None))
-	assert meth.selector.hex() == 'a5643bf2'
+	meth = genvm_eth.MethodEncoder('sam', (bytes, bool, list[u256]), type(None))
+	assert meth._selector.hex() == 'a5643bf2'
 	assert (
-		meth.encode([b'dave', True, [1, 2, 3]]).hex()
+		meth.encode_call((b'dave', True, [1, 2, 3])).hex()
 		== 'a5643bf20000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000000000000464617665000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000003'
 	)
 
 
 def test_eth_approve():
-	meth = genvm_eth.MethodEncoder('approve', [Address, u256], type(None))
-	assert meth.selector.hex() == '095ea7b3'
+	meth = genvm_eth.MethodEncoder('approve', (Address, u256), type(None))
+	assert meth._selector.hex() == '095ea7b3'
 
 
 def test_with_tuple_1():
-	meth = genvm_eth.MethodEncoder('send', [tuple[u256], Address], type(None))
-	assert meth.selector.hex() == '2e65cae2'
+	meth = genvm_eth.MethodEncoder('send', (tuple[u256], Address), type(None))
+	assert meth._selector.hex() == '2e65cae2'
 
 
 def test_nested_array():
 	meth = genvm_eth.MethodEncoder(
-		'transfer', [list[list[u256]], list[Address]], type(None)
+		'transfer', (list[list[u256]], list[Address]), type(None)
 	)
-	assert meth.selector.hex() == '7a63729a'
-	res = meth.encode(
-		[
+	assert meth._selector.hex() == '7a63729a'
+	res = meth.encode_call(
+		(
 			[[123, 456], [789]],
 			[
 				Address('0x5B38Da6a701c568545dCfcB03FcB875f56beddC4'),
 				Address('0x7b38da6a701c568545dcfcb03fcb875f56bedfb3'),
 			],
-		]
+		)
 	)
 	assert (
 		res.hex()
@@ -61,9 +61,9 @@ def test_nested_array():
 
 
 def test_dyn_tuple():
-	meth = genvm_eth.MethodEncoder('const', [list[tuple[str, Address, str]]], type(None))
-	res = meth.encode(
-		[
+	meth = genvm_eth.MethodEncoder('const', (list[tuple[str, Address, str]],), type(None))
+	res = meth.encode_call(
+		(
 			[
 				('str1', Address('0x5B38Da6a701c568545dCfcB03FcB875f56beddC4'), 'str2'),
 				(
@@ -72,7 +72,7 @@ def test_dyn_tuple():
 					'my last string' * 20,
 				),
 			],
-		]
+		)
 	)
 	assert (
 		res.hex()
@@ -81,5 +81,5 @@ def test_dyn_tuple():
 
 
 def test_with_tuple_2():
-	meth = genvm_eth.MethodEncoder('send', [tuple[u256, str]], type(None))
-	assert meth.selector.hex() == 'eb0edd92'
+	meth = genvm_eth.MethodEncoder('send', (tuple[u256, str],), type(None))
+	assert meth._selector.hex() == 'eb0edd92'

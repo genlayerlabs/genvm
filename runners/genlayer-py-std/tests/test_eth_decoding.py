@@ -25,35 +25,35 @@ from genlayer.py.storage import *
 	],
 )
 def test_eth_decoding_for_type(typ: type, data: list[typing.Any]):
-	meth = genvm_eth.MethodEncoder('test', [typ], type(None))
+	meth = genvm_eth.MethodEncoder('test', (typ,), type(None))
 	for d in data:
-		print(f'============ {typ} {d}')
-		encoded = meth.encode([d])[4:]
+		print(f'============ {typ} {d!r}')
+		encoded = meth.encode_call((d,))[4:]
 		for i in range(0, len(encoded), 32):
 			print(f'{i}\t{encoded[i:i+32].hex()}')
-		assert [d] == genvm_eth.decode([typ], encoded)
+		assert d == genvm_eth.decode(encoded, typ)
 
 
 @pytest.mark.parametrize(
 	'params,data',
 	[
-		([u32, u256, i32, Address], [8, 18, 32, Address(b'\x30' * 20)]),
-		([str, str], ['first', 'second']),
-		([str, str], ['first' * 29, 'second' * 29]),
-		([str, u32, bytes], ['first' * 29, 18, b'second' * 29]),
+		((u32, u256, i32, Address), (8, 18, 32, Address(b'\x30' * 20))),
+		((str, str), ('first', 'second')),
+		((str, str), ('first' * 29, 'second' * 29)),
+		((str, u32, bytes), ('first' * 29, 18, b'second' * 29)),
 		(
-			[list[list[u256]], list[Address]],
-			[
+			(list[list[u256]], list[Address]),
+			(
 				[[123, 456], [789]],
 				[
 					Address('0x5B38Da6a701c568545dCfcB03FcB875f56beddC4'),
 					Address('0x7b38da6a701c568545dcfcb03fcb875f56bedfb3'),
 				],
-			],
+			),
 		),
 		(
-			[list[tuple[str, Address, str]]],
-			[
+			(list[tuple[str, Address, str]],),
+			(
 				[
 					('str1', Address('0x5B38Da6a701c568545dCfcB03FcB875f56beddC4'), 'str2'),
 					(
@@ -62,12 +62,12 @@ def test_eth_decoding_for_type(typ: type, data: list[typing.Any]):
 						'my last string' * 20,
 					),
 				],
-			],
+			),
 		),
 	],
 )
-def test_eth_decoding_inverse(params: list[type], data: list[typing.Any]):
+def test_eth_decoding_inverse(params: tuple[type], data: tuple[typing.Any]):
 	assert len(params) == len(data)
 	meth = genvm_eth.MethodEncoder('test', params, type(None))
-	encoded = meth.encode(data)[4:]
-	assert data == genvm_eth.decode(params, encoded)
+	encoded = meth.encode_call(data)[4:]
+	assert data == genvm_eth.decode(encoded, tuple[genvm_eth.InplaceTuple, *params])
