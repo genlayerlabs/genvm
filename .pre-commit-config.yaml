@@ -51,6 +51,6 @@ repos:
 
       - id: cargo-fmt
         name: cargo fmt
-        entry: sh build-scripts/cargo-fmt.sh
+        entry: bash build-scripts/cargo-fmt.sh
         language: system
-        files: ".*\\.rs$"
+        files: .*\.rs$

@@ -670,14 +670,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
 
         let data_str = super::common::read_string(mem, data)?;
-        let data: InternalTxData =
-            match serde_json::from_str(&data_str) {
-                Ok(v) => v,
-                Err(err) => {
-                    log::warn!(str = data_str, err:? = err; "parsing InternalTxData failed");
-                    return Err(generated::types::Errno::Inval.into());
-                }
-            };
+        let data: InternalTxData = match serde_json::from_str(&data_str) {
+            Ok(v) => v,
+            Err(err) => {
+                log::warn!(str = data_str, err:? = err; "parsing InternalTxData failed");
+                return Err(generated::types::Errno::Inval.into());
+            }
+        };
         if !data.value.is_zero() {
             let my_balance = self
                 .context
@@ -837,14 +836,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
 
         let data_str = super::common::read_string(mem, data)?;
-        let data: ExternalTxData =
-            match serde_json::from_str(&data_str) {
-                Ok(v) => v,
-                Err(err) => {
-                    log::warn!(str = data_str, err:? = err; "parsing ExternalTxData failed");
-                    return Err(generated::types::Errno::Inval.into());
-                }
-            };
+        let data: ExternalTxData = match serde_json::from_str(&data_str) {
+            Ok(v) => v,
+            Err(err) => {
+                log::warn!(str = data_str, err:? = err; "parsing ExternalTxData failed");
+                return Err(generated::types::Errno::Inval.into());
+            }
+        };
         if !data.value.is_zero() {
             let my_balance = self
                 .context

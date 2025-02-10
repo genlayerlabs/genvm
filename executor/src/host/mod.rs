@@ -84,14 +84,15 @@ impl Host {
         let sock: Box<Mutex<dyn Sock>> = if let Some(addr_suff) = addr.strip_prefix(UNIX) {
             Box::new(Mutex::new(
                 bufreaderwriter::seq::BufReaderWriterSeq::new_writer(
-                std::os::unix::net::UnixStream::connect(std::path::Path::new(addr_suff))
-                    .with_context(|| format!("connecting to {addr}"))?,
-            )))
+                    std::os::unix::net::UnixStream::connect(std::path::Path::new(addr_suff))
+                        .with_context(|| format!("connecting to {addr}"))?,
+                ),
+            ))
         } else {
             Box::new(Mutex::new(
                 bufreaderwriter::seq::BufReaderWriterSeq::new_writer(
-                std::net::TcpStream::connect(addr)
-                    .with_context(|| format!("connecting to {addr}"))?,
+                    std::net::TcpStream::connect(addr)
+                        .with_context(|| format!("connecting to {addr}"))?,
                 ),
             ))
         };
