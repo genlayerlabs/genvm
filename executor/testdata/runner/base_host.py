@@ -36,13 +36,18 @@ class DeployDefaultTransactionData(DefaultTransactionData):
 
 
 class IHost(metaclass=abc.ABCMeta):
+	@abc.abstractmethod
 	async def loop_enter(self) -> socket.socket: ...
 
+	@abc.abstractmethod
 	async def get_calldata(self, /) -> bytes: ...
+	@abc.abstractmethod
 	async def get_code(self, addr: bytes, /) -> bytes: ...
+	@abc.abstractmethod
 	async def storage_read(
 		self, mode: StorageType, account: bytes, slot: bytes, index: int, le: int, /
 	) -> bytes: ...
+	@abc.abstractmethod
 	async def storage_write(
 		self,
 		account: bytes,
@@ -52,26 +57,36 @@ class IHost(metaclass=abc.ABCMeta):
 		/,
 	) -> None: ...
 
+	@abc.abstractmethod
 	async def consume_result(
 		self, type: ResultCode, data: collections.abc.Buffer, /
 	) -> None: ...
+	@abc.abstractmethod
 	def has_result(self) -> bool: ...
 
+	@abc.abstractmethod
 	async def get_leader_nondet_result(
 		self, call_no: int, /
 	) -> tuple[ResultCode, collections.abc.Buffer] | None: ...
+	@abc.abstractmethod
 	async def post_nondet_result(
 		self, call_no: int, type: ResultCode, data: collections.abc.Buffer, /
 	) -> None: ...
+	@abc.abstractmethod
 	async def post_message(
 		self, account: bytes, calldata: bytes, data: DefaultTransactionData, /
 	) -> None: ...
+	@abc.abstractmethod
 	async def deploy_contract(
 		self, calldata: bytes, code: bytes, data: DeployDefaultTransactionData, /
 	) -> None: ...
+	@abc.abstractmethod
 	async def consume_gas(self, gas: int, /) -> None: ...
+	@abc.abstractmethod
 	async def eth_send(self, account: bytes, calldata: bytes, /) -> None: ...
+	@abc.abstractmethod
 	async def eth_call(self, account: bytes, calldata: bytes, /) -> bytes: ...
+	@abc.abstractmethod
 	async def get_balance(self, account: bytes, /) -> int: ...
 
 

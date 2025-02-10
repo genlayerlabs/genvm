@@ -49,8 +49,8 @@ repos:
         entry: ./build-scripts/hooks/shebang.py
         language: system
 
-#      - id: cargo-fmt
-#        name: cargo fmt
-#        entry: sh build-scripts/cargo-fmt.sh
-#        language: system
-#        files: ".*\\.rs$"
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: sh build-scripts/cargo-fmt.sh
+        language: system
+        files: ".*\\.rs$"

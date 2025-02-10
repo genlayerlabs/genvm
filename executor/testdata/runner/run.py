@@ -164,6 +164,9 @@ def run(jsonnet_rel_path):
 			storage_path_pre=pre_storage,
 			leader_nondet=single_conf_form_file.get('leader_nondet', None),
 			messages_path=messages_path,
+			balances={
+				Address(k): v for k, v in single_conf_form_file.get('balances', {}).items()
+			},
 		)
 		mock_host_path = my_tmp_dir.joinpath('mock-host.pickle')
 		mock_host_path.write_bytes(pickle.dumps(host))

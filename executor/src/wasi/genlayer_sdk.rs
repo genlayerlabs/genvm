@@ -753,6 +753,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::Forbidden.into());
         }
 
+        if index.checked_add(buf.buf_len).is_none() {
+            return Err(generated::types::Errno::Inval.into());
+        }
+
         let dest_buf = buf.buf.as_array(buf.buf_len);
 
         let account = self.context.data.message_data.contract_account;
@@ -792,6 +796,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
         if !self.context.data.conf.can_write_storage {
             return Err(generated::types::Errno::Forbidden.into());
+        }
+
+        if index.checked_add(buf.buf_len).is_none() {
+            return Err(generated::types::Errno::Inval.into());
         }
 
         let buf: Vec<u8> = buf.read_owned(mem)?;
