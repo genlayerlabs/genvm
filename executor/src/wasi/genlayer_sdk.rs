@@ -517,7 +517,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let mut supervisor = supervisor.lock().await;
                 supervisor
                     .host
-                    .post_result(call_no, &my_res)
+                    .post_nondet_result(call_no, &my_res)
                     .map_err(generated::types::Error::trap)?;
                 Ok(my_res)
             }

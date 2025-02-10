@@ -237,6 +237,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bufreaderwriter"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ece5ad97cde626d9fb807bf2dd4b4c4d13d7317a93a2ee0f8f9ef6389850a49e"
+
+[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -945,6 +951,7 @@ dependencies = [
  "async-trait",
  "base32",
  "base64 0.22.1",
+ "bufreaderwriter",
  "chrono",
  "clap",
  "dashmap",
