@@ -532,7 +532,7 @@ mod tests {
         pub const atoma: &str = r#"{
             "host": "https://api.atoma.network",
             "provider": "openai-compatible",
-            "model": "meta-llama/llama-3.3-70B-Instruct",
+            "model": "meta-llama/Llama-3.3-70B-Instruct",
             "key_env_name": "ATOMAKEY"
         }"#;
     }
