@@ -15,6 +15,7 @@ from genlayer.py.types import Address, Lazy, u256
 import genlayer.py.calldata as calldata
 import genlayer.std._wasi as wasi
 
+from genlayer.py.eth.generate import transaction_data_kw_args_serialize
 
 from ._internal import decode_sub_vm_result, lazy_from_fd_no_check
 
@@ -76,19 +77,19 @@ class TransactionDataKwArgs(typing.TypedDict):
 
 
 class _ContractAtEmitMethod:
-	data: dict
+	__slots__ = ('addr', 'name', 'data')
 
 	def __init__(self, addr: Address, name: str | None, data: TransactionDataKwArgs):
 		self.addr = addr
 		self.name = name
-		self.data = dict(data)
-		if 'value' in data:
-			self.data['value'] = hex(data['value'])
+		self.data = data
 
 	def __call__(self, *args, **kwargs) -> None:
 		obj = _make_calldata_obj(self.name, args, kwargs)
 		cd = calldata.encode(obj)
-		wasi.post_message(self.addr.as_bytes, cd, json.dumps(self.data))
+		wasi.post_message(
+			self.addr.as_bytes, cd, transaction_data_kw_args_serialize(dict(self.data))
+		)
 
 
 class GenVMContractProxy[TView, TSend](typing.Protocol):
@@ -120,10 +121,12 @@ class ContractAt(GenVMContractProxy):
 	Provides a way to call view methods and send transactions to GenVM contracts
 	"""
 
+	__slots__ = ('address',)
+
 	def __init__(self, addr: Address):
 		if not isinstance(addr, Address):
 			raise Exception('address expected')
-		self.addr = addr
+		self.address = addr
 
 	def view(self):
 		"""
@@ -134,7 +137,7 @@ class ContractAt(GenVMContractProxy):
 		.. note::
 			supports ``name.lazy(*args, **kwargs)`` call version
 		"""
-		return _ContractAtView(self.addr, {})
+		return _ContractAtView(self.address, {})
 
 	def emit(self, **data: typing.Unpack[TransactionDataKwArgs]):
 		"""
@@ -142,7 +145,7 @@ class ContractAt(GenVMContractProxy):
 
 		:returns: object supporting ``.name(*args, **kwargs)`` that emits a message and returns :py:obj:`None`
 		"""
-		return _ContractAtEmit(self.addr, data)
+		return _ContractAtEmit(self.address, data)
 
 	def emit_transfer(self, **data: typing.Unpack[TransactionDataKwArgs]):
 		"""
@@ -150,14 +153,16 @@ class ContractAt(GenVMContractProxy):
 		"""
 		if 'value' not in data:
 			raise TypeError('for emit_transfer value is required')
-		_ContractAtEmitMethod(self.addr, None, data)()
+		_ContractAtEmitMethod(self.address, None, data)()
 
 	@property
 	def balance(self) -> u256:
-		return u256(wasi.get_balance(self.addr.as_bytes))
+		return u256(wasi.get_balance(self.address.as_bytes))
 
 
 class _ContractAtView:
+	__slots__ = ('addr', 'data')
+
 	def __init__(self, addr: Address, data):
 		self.addr = addr
 		self.data = data
@@ -167,6 +172,8 @@ class _ContractAtView:
 
 
 class _ContractAtEmit:
+	__slots__ = ('addr', 'data')
+
 	def __init__(self, addr: Address, data: TransactionDataKwArgs):
 		self.addr = addr
 		self.data = data

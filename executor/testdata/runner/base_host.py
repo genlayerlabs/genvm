@@ -27,12 +27,17 @@ class GenVMTimeoutException(Exception):
 	"Exception that is raised when time limit is exceeded"
 
 
+class DefaultEthTransactionData(typing.TypedDict):
+	value: str
+
+
 class DefaultTransactionData(typing.TypedDict):
-	pass
+	value: str
+	on: str
 
 
 class DeployDefaultTransactionData(DefaultTransactionData):
-	salt_nonce: typing.NotRequired[int]
+	salt_nonce: typing.NotRequired[str]
 
 
 class IHost(metaclass=abc.ABCMeta):
@@ -83,7 +88,9 @@ class IHost(metaclass=abc.ABCMeta):
 	@abc.abstractmethod
 	async def consume_gas(self, gas: int, /) -> None: ...
 	@abc.abstractmethod
-	async def eth_send(self, account: bytes, calldata: bytes, /) -> None: ...
+	async def eth_send(
+		self, account: bytes, calldata: bytes, data: DefaultEthTransactionData, /
+	) -> None: ...
 	@abc.abstractmethod
 	async def eth_call(self, account: bytes, calldata: bytes, /) -> bytes: ...
 	@abc.abstractmethod
@@ -199,7 +206,11 @@ async def host_loop(handler: IHost):
 				calldata_len = await recv_int()
 				calldata = await read_exact(calldata_len)
 
-				await handler.eth_send(account, calldata)
+				message_data_len = await recv_int()
+				message_data_bytes = await read_exact(message_data_len)
+				message_data = json.loads(str(message_data_bytes, 'utf-8'))
+
+				await handler.eth_send(account, calldata, message_data)
 			case Methods.ETH_CALL:
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
 				calldata_len = await recv_int()

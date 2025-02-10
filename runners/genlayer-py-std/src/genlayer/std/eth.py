@@ -3,10 +3,13 @@ __all__ = ('eth_contract',)
 import typing
 import json
 
+from genlayer.py.types import u256
 from genlayer.py.eth.generate import contract_generator
 from genlayer.py.eth.calldata import MethodEncoder, decode
 from ._internal import lazy_from_fd, _lazy_api
 import genlayer.std._wasi as wasi
+
+from genlayer.py.eth.generate import transaction_data_kw_args_serialize
 
 
 def _generate_view(name: str, params: list[type], ret: type) -> typing.Any:
@@ -35,8 +38,17 @@ def _generate_send(name: str, params: list[type], ret: type) -> typing.Any:
 	return result_fn
 
 
-eth_contract = contract_generator(_generate_view, _generate_send)
+eth_contract = contract_generator(
+	_generate_view,
+	_generate_send,
+	lambda p: u256(wasi.get_balance(p.address.as_bytes)),
+	lambda p, d: wasi.eth_send(
+		p.address.as_bytes, b'', transaction_data_kw_args_serialize(dict(d))
+	),
+)
 """
+Decorator that is used to declare eth contract interface
+
 .. code:: python
 
 	@gl.eth_contract

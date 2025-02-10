@@ -331,7 +331,7 @@ impl Host {
         read_bytes(sock)
     }
 
-    pub fn eth_send(&mut self, address: AccountAddress, calldata: &[u8]) -> Result<()> {
+    pub fn eth_send(&mut self, address: AccountAddress, calldata: &[u8], data: &str) -> Result<()> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -342,6 +342,9 @@ impl Host {
 
         sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
         sock.write_all(calldata)?;
+
+        sock.write_all(&(data.as_bytes().len() as u32).to_le_bytes())?;
+        sock.write_all(data.as_bytes())?;
 
         Ok(())
     }

@@ -1,6 +1,5 @@
 use std::{collections::BTreeMap, mem::swap};
 
-use primitive_types::U256;
 use wiggle::{GuestError, GuestMemory, GuestPtr};
 
 use crate::ustar::SharedBytes;

@@ -838,7 +838,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let data_str = super::common::read_string(mem, data)?;
         let data: ExternalTxData =
-            serde_json::from_str(&data_str).map_err(|_e| generated::types::Errno::Inval)?;
+            match serde_json::from_str(&data_str) {
+                Ok(v) => v,
+                Err(err) => {
+                    log::warn!(str = data_str, err:? = err; "parsing ExternalTxData failed");
+                    return Err(generated::types::Errno::Inval.into());
+                }
+            };
         if !data.value.is_zero() {
             let my_balance = self
                 .context
@@ -857,8 +863,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let mut supervisor = supervisor.lock().await;
         let res = supervisor
             .host
-            .eth_send(address, &calldata)
+            .eth_send(address, &calldata, &data_str)
             .map_err(generated::types::Error::trap)?;
+
+        self.context.messages_decremented += data.value;
         Ok(())
     }
 
