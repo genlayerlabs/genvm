@@ -39,10 +39,12 @@ def storage[T: type](cls: T) -> T:
 
 
 class Lit:
-	pass
+	__slots__ = ()
 
 
 class LitPy(Lit):
+	__slots__ = ('alts',)
+
 	def __init__(self, alts: tuple):
 		self.alts = alts
 
@@ -51,6 +53,8 @@ class LitPy(Lit):
 
 
 class LitTuple(Lit):
+	__slots__ = ('args',)
+
 	def __init__(self, args: tuple[Lit]):
 		self.args = args
 
@@ -61,6 +65,8 @@ class LitTuple(Lit):
 class _Instantiation:
 	origin: type
 	args: tuple[TypeDesc | Lit, ...]
+
+	__slots__ = ('origin', 'args')
 
 	def __init__(self, origin: type, args: tuple[TypeDesc | Lit, ...]):
 		self.origin = origin
@@ -156,6 +162,8 @@ _known_descs: dict[type | _Instantiation, TypeDesc] = {
 
 
 class _FloatDesc(TypeDesc[float]):
+	__slots__ = ('_type',)
+
 	def __init__(self):
 		TypeDesc.__init__(self, 8, [8])
 		self._type = type
@@ -376,6 +384,8 @@ _dt_desc: TypeDesc[_DateTime] = _known_descs[_DateTime]
 
 
 class _DateTimeDesc(TypeDesc[datetime.datetime]):
+	__slots__ = ()
+
 	def __init__(self):
 		super().__init__(_dt_desc.size, _dt_desc.copy_actions)
 

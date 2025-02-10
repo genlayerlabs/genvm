@@ -188,6 +188,8 @@ class DynArray[T](_WithStorageSlot, collections.abc.MutableSequence[T]):
 
 
 class _VecCopyAction(ComplexCopyAction):
+	__slots__ = ('_item_desc',)
+
 	def __init__(self, item_desc: TypeDesc):
 		self._item_desc = item_desc
 
@@ -212,6 +214,8 @@ class _VecCopyAction(ComplexCopyAction):
 
 class _DynArrayDesc(TypeDesc):
 	_item_desc: TypeDesc
+
+	__slots__ = ('_item_desc', '_cop')
 
 	def __init__(self, it_desc: TypeDesc):
 		self._item_desc = it_desc
@@ -251,6 +255,8 @@ class Array[T, S: int](_WithStorageSlot, collections.abc.Sequence):
 
 	_item_desc: TypeDesc
 	_len: int
+
+	__slots__ = ('_item_desc', '_len', '_off', '_storage_slot')
 
 	def __init__(self):
 		"""
@@ -298,6 +304,8 @@ class Array[T, S: int](_WithStorageSlot, collections.abc.Sequence):
 class _ArrayDesc(TypeDesc):
 	_item_desc: TypeDesc
 	_len: int
+
+	__slots__ = ('_item_desc', '_len')
 
 	def __init__(self, it_desc: TypeDesc, le: int):
 		self._item_desc = it_desc

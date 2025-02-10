@@ -46,6 +46,8 @@ class GenVMCallKwArgs(typing.TypedDict):
 
 
 class _ContractAtViewMethod:
+	__slots__ = ('addr', 'name', 'data')
+
 	def __init__(self, addr: Address, name: str, data: GenVMCallKwArgs):
 		self.addr = addr
 		self.name = name

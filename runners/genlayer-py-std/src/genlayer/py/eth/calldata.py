@@ -161,6 +161,8 @@ class MethodEncoder:
 	calculated function "selector", see eth docs
 	"""
 
+	__slots__ = ('name', 'params', 'ret', 'selector')
+
 	def __init__(self, name: str, params: list[type], ret: type):
 		self.name = name
 		self.params = params

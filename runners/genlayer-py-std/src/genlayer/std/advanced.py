@@ -27,6 +27,8 @@ class AlreadySerializedResult(bytes):
 	If contract method returns instance of this class, calldata encoding won't be performed. Instead stored bytes will be passed as is
 	"""
 
+	__slots__ = ()
+
 	def __new__(cls, *args, **kwargs):
 		"""
 		Forwards all arguments to :py:class:`bytes`
@@ -39,6 +41,8 @@ class ContractReturn:
 	"""
 	Represents a normal "Return" result of a contract that is passed to validator function of :py:func:`genlayer.std.run_nondet`
 	"""
+
+	__slots__ = ('data',)
 
 	data: typing.Any
 

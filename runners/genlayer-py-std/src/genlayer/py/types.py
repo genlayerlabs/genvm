@@ -99,6 +99,8 @@ class Lazy[T]:
 	Base class to support lazy evaluation
 	"""
 
+	__slots__ = ('_eval', '_exc', '_res')
+
 	_eval: typing.Callable[[], T] | None
 	_exc: Exception | None
 	_res: T | None

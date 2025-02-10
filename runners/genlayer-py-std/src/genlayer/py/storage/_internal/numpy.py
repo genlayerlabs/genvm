@@ -14,6 +14,8 @@ def _populate_np_descs():
 	import numpy as np
 
 	class _NumpyNDDesc(TypeDesc[np.ndarray]):
+		__slots__ = ('shape', '_type')
+
 		def __init__(self, typ: TypeDesc, shape: tuple[int, ...]):
 			assert isinstance(typ, _NumpyDesc)
 			type = typ._type
@@ -35,6 +37,8 @@ def _populate_np_descs():
 			slot.write(off, mv)
 
 	class _NumpyDesc(TypeDesc):
+		__slots__ = ('_type', '_typ')
+
 		def __init__(self, typ: np.number):
 			type = np.dtype(typ)
 			TypeDesc.__init__(self, type.itemsize, [type.itemsize])

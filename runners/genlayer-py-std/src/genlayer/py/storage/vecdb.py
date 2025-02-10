@@ -30,6 +30,8 @@ class VecDBElement[T: np.number, S: int, V, Dist]:
 	Distance from search point to this element, if any
 	"""
 
+	__slots__ = ('_idx', '_db', 'distance')
+
 	def __init__(self, db: VecDB[T, S, V], idx: u32, distance: Dist):
 		self._idx = idx
 		self._db = db
