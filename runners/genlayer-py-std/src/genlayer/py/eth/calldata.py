@@ -42,7 +42,7 @@ def encode[T](params: typing.Type[T], args: T) -> bytes:
 	return bytes(state.result)
 
 
-def decode[T](encoded: collections.abc.Buffer, expected: typing.Type[T]) -> T:
+def decode[T](expected: typing.Type[T], encoded: collections.abc.Buffer) -> T:
 	encoder = build(expected)
 	state = DecoderState(memoryview(encoded), 0, 0)
 	return encoder.decode(state)

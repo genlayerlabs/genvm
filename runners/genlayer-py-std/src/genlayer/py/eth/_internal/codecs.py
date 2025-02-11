@@ -5,8 +5,7 @@ import collections.abc
 from functools import partial
 from dataclasses import dataclass
 
-from genlayer.py.types import Address
-from genlayer.py.storage import Array
+from genlayer.py.types import Address, SizedArray
 
 type Tails = list[typing.Callable[[EncodeState], None]]
 
@@ -68,7 +67,7 @@ class DecoderState:
 		)
 
 
-class Encoder[T](metaclass=abc.ABCMeta):
+class Codec[T](metaclass=abc.ABCMeta):
 	@property
 	@abc.abstractmethod
 	def is_dynamic(self) -> bool: ...
@@ -91,7 +90,7 @@ class Encoder[T](metaclass=abc.ABCMeta):
 		return self.name
 
 
-class IntEncoder[T: int](Encoder[T]):
+class IntCodec[T: int](Codec[T]):
 	@property
 	def is_dynamic(self) -> bool:
 		return False
@@ -118,7 +117,7 @@ class IntEncoder[T: int](Encoder[T]):
 		return int.from_bytes(state.fetch_head(32), 'big', signed=self.signed)
 
 
-class BoolEncoder(Encoder[bool]):
+class BoolCodec(Codec[bool]):
 	@property
 	def is_dynamic(self) -> bool:
 		return False
@@ -138,7 +137,7 @@ class BoolEncoder(Encoder[bool]):
 		return state.fetch_head(32) != b'\x00' * 32
 
 
-class AddressEncoder(Encoder[Address]):
+class AddressCodec(Codec[Address]):
 	@property
 	def is_dynamic(self) -> bool:
 		return False
@@ -160,7 +159,7 @@ class AddressEncoder(Encoder[Address]):
 		return Address(state.fetch_head(20))
 
 
-class BytesN(Encoder):
+class BytesNCodec(Codec):
 	def __init__(self, bytes: int):
 		self.bytes = bytes
 
@@ -187,7 +186,7 @@ class BytesN(Encoder):
 		return res
 
 
-class BytesStrEncoder[T: str | bytes](Encoder[T]):
+class BytesStrCodec[T: str | bytes](Codec[T]):
 	def __init__(self, t: typing.Type[T]):
 		self.type = t
 
@@ -232,8 +231,8 @@ class BytesStrEncoder[T: str | bytes](Encoder[T]):
 			return bytes(as_bytes)  # type: ignore
 
 
-class DynArrayEncoder[T](Encoder[collections.abc.Sequence[T]]):
-	def __init__(self, elem_encoder: Encoder[T]):
+class DynArrayCodec[T](Codec[collections.abc.Sequence[T]]):
+	def __init__(self, elem_encoder: Codec[T]):
 		self.elem_encoder = elem_encoder
 
 	@property
@@ -270,36 +269,51 @@ class DynArrayEncoder[T](Encoder[collections.abc.Sequence[T]]):
 		return res
 
 
-class ArrayEncoder[T, S: int](Encoder[Array[T, S]]):
-	def __init__(self, elem_encoder: Encoder[T], elem_count: S):
+class ArrayCodec[T, S: int](Codec[SizedArray[T, S]]):
+	def __init__(self, elem_encoder: Codec[T], elem_count: S):
 		self.elem_encoder = elem_encoder
 		self.elem_count = elem_count
 
 	@property
 	def is_dynamic(self) -> bool:
-		return False
+		return self.elem_encoder.is_dynamic
 
 	@property
 	def size_here(self) -> int:
+		if self.is_dynamic:
+			return 32
 		return self.elem_encoder.size_here * self.elem_count
 
 	@property
 	def name(self) -> str:
 		return self.elem_encoder.name + f'[{self.elem_count}]'
 
-	def encode(self, state: EncodeState, val: Array[T, S]):
+	def _encode_now(self, state: EncodeState, val: SizedArray[T, S]):
+		if self.is_dynamic:
+			state = state.derived()
 		for v in val:
 			self.elem_encoder.encode(state, v)
+		if self.is_dynamic:
+			state.run_tails()
 
-	def decode(self, state: DecoderState) -> Array[T, S]:
-		res = []
+	def encode(self, state: EncodeState, val: SizedArray[T, S]):
+		if self.is_dynamic:
+			state.put_iloc()
+			state.tails.append(partial(self._encode_now, val=val))
+		else:
+			self._encode_now(state, val)
+
+	def decode(self, state: DecoderState) -> SizedArray[T, S]:
+		res: list[T] = []
+		if self.is_dynamic:
+			state = state.indirected()
 		for i in range(self.elem_count):
 			res.append(self.elem_encoder.decode(state))
 		return res  # type: ignore
 
 
-class TupleEncoder[*T](Encoder[tuple[*T]]):
-	def __init__(self, elem_encoders: tuple[Encoder, ...], force_inplace: bool):
+class TupleCodec[*T](Codec[tuple[*T]]):
+	def __init__(self, elem_encoders: tuple[Codec, ...], force_inplace: bool):
 		self.elem_encoders = elem_encoders
 		if force_inplace:
 			self._is_dynamic = False
@@ -331,7 +345,8 @@ class TupleEncoder[*T](Encoder[tuple[*T]]):
 			der = state
 		for p, a in zip(self.elem_encoders, val):
 			der.tails.append(partial(p.encode, val=a))
-		der.run_tails()
+		if self._is_dynamic:
+			der.run_tails()
 
 	def encode(self, state: EncodeState, val: tuple[*T]):
 		assert len(val) == len(self.elem_encoders)
