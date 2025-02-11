@@ -13,8 +13,7 @@ class User:
 	birthday: datetime.datetime
 
 
-@gl.contract
-class Contract:
+class Contract(gl.Contract):
 	users: DynArray[User]
 
 	@gl.public.write

@@ -4,9 +4,10 @@ use serde_derive::Serialize;
 pub enum ResultCode {
     Return = 0,
     Rollback = 1,
-    None = 2,
+    ContractError = 2,
     Error = 3,
-    ContractError = 4,
+    None = 4,
+    NoLeaders = 5,
 }
 
 impl TryFrom<u8> for ResultCode {
@@ -16,9 +17,10 @@ impl TryFrom<u8> for ResultCode {
         match value {
             0 => Ok(ResultCode::Return),
             1 => Ok(ResultCode::Rollback),
-            2 => Ok(ResultCode::None),
+            2 => Ok(ResultCode::ContractError),
             3 => Ok(ResultCode::Error),
-            4 => Ok(ResultCode::ContractError),
+            4 => Ok(ResultCode::None),
+            5 => Ok(ResultCode::NoLeaders),
             _ => Err(()),
         }
     }

@@ -3,10 +3,15 @@
 ## Adding new LLM provider
 **IMPORTANT**: If your provider is compatible with openai API no additional work is needed
 
-- go to [`executor/modules/default-impl/llm-funcs/src/lib.rs`](../../executor/modules/default-impl/llm-funcs/src/lib.rs)
+- go to [`executor/modules/implementation/llm-funcs/src/lib.rs`](../../executor/modules/implementation/llm-funcs/src/lib.rs)
 - add new value to `enum LLLMProvider`
 - add case to `exec_prompt_impl`<br>
     **IMPORTANT**: you must implement it for both text and json modes
+
+### Adding test
+- add test case to [`executor/modules/implementation/llm-funcs/src/lib.rs`](../../executor/modules/implementation/llm-funcs/src/lib.rs)
+- patch [workflow](../../.github/workflows/module-test-cargo.yaml) to pass secret
+- provide api key to repository owners
 
 ## Adding new wasm function
 - `executor/src/wasi/witx/genlayer_sdk.witx`<br>

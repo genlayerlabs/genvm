@@ -25,6 +25,8 @@ import dataclasses
 import abc
 import json
 
+import genlayer.py._internal.reflect as reflect
+
 BITS_IN_TYPE = 3
 
 TYPE_SPECIAL = 0
@@ -94,12 +96,13 @@ def encode(
 		le = (le << 3) | TYPE_MAP
 		append_uleb128(le)
 		for k in keys:
-			if not isinstance(k, str):
-				raise Exception(f'key is not string {type(k)}')
-			bts = k.encode('utf-8')
-			append_uleb128(len(bts))
-			mem.extend(bts)
-			impl(b[k])
+			with reflect.context_notes(f'key {k!r}'):
+				if not isinstance(k, str):
+					raise TypeError(f'key is not string {reflect.repr_type(type(k))}')
+				bts = k.encode('utf-8')
+				append_uleb128(len(bts))
+				mem.extend(bts)
+				impl(b[k])
 
 	def impl(b: typing.Any):
 		b = default(b)
@@ -143,12 +146,10 @@ def encode(
 			impl_dict(b)
 		elif dataclasses.is_dataclass(b):
 			assert not isinstance(b, type)
-			try:
+			with reflect.context_type(type(b)):
 				impl_dict(dataclasses.asdict(b))
-			except TypeError as e:
-				raise TypeError(f'not calldata encodable', type(b)) from e
 		else:
-			raise TypeError(f'not calldata encodable', type(b))
+			raise TypeError(f'not calldata encodable', reflect.repr_type(type(b)))
 
 	impl(x)
 	return bytes(mem)

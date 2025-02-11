@@ -24,6 +24,8 @@ class StorageMan(typing.Protocol):
 class StorageSlot:
 	manager: StorageMan
 
+	__slots__ = ('manager', 'addr')
+
 	def __init__(self, addr: u256, manager: StorageMan):
 		self.addr = addr
 		self.manager = manager
@@ -92,6 +94,8 @@ class TypeDesc[T]:
 	"""
 	alias_to: typing.Any
 
+	__slots__ = ('size', 'copy_actions', 'alias_to')
+
 	def __init__(self, size: int, copy_actions: list[CopyAction]):
 		self.copy_actions = copy_actions
 		self.size = size
@@ -138,6 +142,8 @@ class _FakeStorageSlot(StorageSlot):
 	In-memory storage slot which can be used to create storage entities without "Host"
 	"""
 
+	__slots__ = ('_mem',)
+
 	_mem: bytearray
 
 	def __init__(self, addr: u256, manager: StorageMan):
@@ -157,6 +163,8 @@ class _FakeStorageSlot(StorageSlot):
 
 class _FakeStorageMan(StorageMan):
 	_parts: dict[u256, _FakeStorageSlot]
+
+	__slots__ = ('_parts',)
 
 	def __init__(self):
 		self._parts = {}

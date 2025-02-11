@@ -10,8 +10,7 @@ import numpy as np
 import genlayermodelwrappers
 
 
-@gl.contract
-class Contract:
+class Contract(gl.Contract):
 	@gl.public.write
 	def main(self, det: bool):
 		embeddings_generator = genlayermodelwrappers.SentenceTransformer('all-MiniLM-L6-v2')

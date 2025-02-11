@@ -11,6 +11,7 @@ pub mod wasi;
 pub mod caching;
 
 use errors::ContractError;
+use host::AbsentLeaderResult;
 pub use host::{AccountAddress, GenericAddress, Host, MessageData};
 
 use anyhow::{Context, Result};
@@ -117,7 +118,7 @@ pub async fn run_with_impl(
         let mut entrypoint = b"call!".to_vec();
 
         let mut supervisor = supervisor.lock().await;
-        supervisor.host.append_calldata(&mut entrypoint)?;
+        supervisor.host.get_calldata(&mut entrypoint)?;
 
         let essential_data = wasi::genlayer_sdk::SingleVMData {
             conf: wasi::base::Config {
@@ -126,7 +127,7 @@ pub async fn run_with_impl(
                 can_write_storage: permissions.contains("w"),
                 can_send_messages: permissions.contains("s"),
                 can_call_others: permissions.contains("c"),
-                can_spawn_nondet: true,
+                can_spawn_nondet: permissions.contains("n"),
                 state_mode: crate::host::StorageType::Default,
             },
             message_data: entry_message,
@@ -166,6 +167,16 @@ pub async fn run_with(
         }
     } else {
         ContractError::unwrap_res(res)
+    };
+
+    let res = match res {
+        Err(e) => match e.downcast() {
+            Ok(AbsentLeaderResult) => {
+                Ok(RunOk::ContractError("deterministic_violation".into(), None))
+            }
+            Err(e) => Err(e),
+        },
+        e => e,
     };
 
     supervisor.host.consume_result(&res)?;

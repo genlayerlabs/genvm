@@ -62,7 +62,7 @@ cum_out_dir = config.out_dir.join('share', 'genvm', 'runners', cum_name)
 cum_runner_json = {
 	Seq: [
 		{ With: { runner: "<contract>", action: { MapFile: { file: "file", to: "/contract.py" } } } },
-		{ SetArgs: ["py", "-u", "-c", "import contract;import genlayer.std.runner as r;r.run(contract)"] },
+		{ SetArgs: ["py", "-u", "-c", "import genlayer.std._internal.runner"] },
 		{ Depends: "py-lib-cloudpickle:#{config.runners.py_libs.cloudpickle.hash}" },
 		{ Depends: py_genlayer_std_runner.meta.runner_id },
 		{ Depends: nix_target.meta.cpython_id },
@@ -90,7 +90,7 @@ cum_out_dir = config.out_dir.join('share', 'genvm', 'runners', cum_name)
 cum_runner_json = {
 	Seq: [
 		{ With: { runner: "<contract>", action: { MapFile: { file: "contract/", to: "/contract/" } } } },
-		{ SetArgs: ["py", "-u", "-c", "import contract;import genlayer.std.runner as r;r.run(contract)"] },
+		{ SetArgs: ["py", "-u", "-c", "import genlayer.std._internal.runner"] },
 		{ Depends: "py-lib-cloudpickle:#{config.runners.py_libs.cloudpickle.hash}" },
 		{ Depends: py_genlayer_std_runner.meta.runner_id },
 		{ Depends: nix_target.meta.cpython_id },
@@ -126,7 +126,7 @@ target_alias(
 			['mkdir', '-p', docs_out.parent],
 			['cp', '-r', root_src.join('build-scripts', 'doctypes', 'docs_base'), docs_out],
 			['cd', docs_out],
-			[RbConfig.ruby, root_src.join('build-scripts', 'doctypes', 'generate-other.rb'), cur_src.join('src'), docs_out.join('other.rst')],
+			[RbConfig.ruby, root_src.join('build-scripts', 'doctypes', 'generate-other.rb'), cur_src.join('src'), docs_out.join('section_internal')],
 			[*POETRY_RUN, 'sphinx-build', '-b', 'html', docs_out, docs_out.join('docs')],
 			['zip', '-9', '-r', docs_out.parent.join('py-docs.zip'), 'docs']
 		],

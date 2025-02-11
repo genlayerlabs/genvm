@@ -2,32 +2,9 @@
 name = "genvm"
 version = "0.1.0"
 edition = "2021"
-
-[profile.dev.package.cranelift-codegen]
-opt-level = 2
-[profile.dev.package.cranelift-entity]
-opt-level = 2
-[profile.dev.package.cranelift-frontend]
-opt-level = 2
-[profile.dev.package.cranelift-codegen-shared]
-opt-level = 2
-[profile.dev.package.cranelift-bforest]
-opt-level = 2
-[profile.dev.package.cranelift-bitset]
-opt-level = 2
-[profile.dev.package.cranelift-control]
-opt-level = 2
-[profile.dev.package.cranelift-wasm]
-opt-level = 2
-[profile.dev.package.cranelift-native]
-opt-level = 2
 [profile.dev.package.wasmtime]
 opt-level = 2
-[profile.dev.package.wasmtime-cranelift]
-opt-level = 2
 [profile.dev.package.wasmparser]
-opt-level = 2
-[profile.dev.package.regalloc2]
 opt-level = 2
 
 [profile.release]
@@ -69,3 +46,6 @@ base32 = "0.5.1"
 rustix = "0.38.44"
 tokio = { version = "1.43.0", features = ["rt", "rt-multi-thread", "time", "macros", "sync"], default-features = false}
 async-trait = "0.1.85"
+dashmap = "6.1.0"
+primitive-types = { version = "0.13.1", default-features = false, features = ["impl-serde", "std"] }
+bufreaderwriter = "0.2.4"

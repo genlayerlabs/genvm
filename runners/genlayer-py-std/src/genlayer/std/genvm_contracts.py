@@ -4,16 +4,18 @@ __all__ = (
 	'deploy_contract',
 	'TransactionDataKwArgs',
 	'DeploymentTransactionDataKwArgs',
+	'Contract',
 )
 
 import typing
 import json
 import collections.abc
 
-from genlayer.py.types import Address, Lazy
+from genlayer.py.types import Address, Lazy, u256
 import genlayer.py.calldata as calldata
 import genlayer.std._wasi as wasi
 
+from genlayer.py.eth.generate import transaction_data_kw_args_serialize
 
 from ._internal import decode_sub_vm_result, lazy_from_fd_no_check
 
@@ -44,6 +46,8 @@ class GenVMCallKwArgs(typing.TypedDict):
 
 
 class _ContractAtViewMethod:
+	__slots__ = ('addr', 'name', 'data')
+
 	def __init__(self, addr: Address, name: str, data: GenVMCallKwArgs):
 		self.addr = addr
 		self.name = name
@@ -70,11 +74,14 @@ class TransactionDataKwArgs(typing.TypedDict):
 		parameters are subject to change!
 	"""
 
-	pass
+	value: typing.NotRequired[u256]
+	on: typing.NotRequired[typing.Literal['accepted', 'final']]
 
 
 class _ContractAtEmitMethod:
-	def __init__(self, addr: Address, name: str, data: TransactionDataKwArgs):
+	__slots__ = ('addr', 'name', 'data')
+
+	def __init__(self, addr: Address, name: str | None, data: TransactionDataKwArgs):
 		self.addr = addr
 		self.name = name
 		self.data = data
@@ -82,7 +89,9 @@ class _ContractAtEmitMethod:
 	def __call__(self, *args, **kwargs) -> None:
 		obj = _make_calldata_obj(self.name, args, kwargs)
 		cd = calldata.encode(obj)
-		wasi.post_message(self.addr.as_bytes, cd, json.dumps(self.data))
+		wasi.post_message(
+			self.addr.as_bytes, cd, transaction_data_kw_args_serialize(dict(self.data))
+		)
 
 
 class GenVMContractProxy[TView, TSend](typing.Protocol):
@@ -103,16 +112,23 @@ class GenVMContractProxy[TView, TSend](typing.Protocol):
 
 	def emit(self, **kwargs: typing.Unpack[TransactionDataKwArgs]) -> TSend: ...
 
+	@property
+	def balance(self) -> u256: ...
+
+	def emit_transfer(self, **data: typing.Unpack[TransactionDataKwArgs]): ...
+
 
 class ContractAt(GenVMContractProxy):
 	"""
 	Provides a way to call view methods and send transactions to GenVM contracts
 	"""
 
+	__slots__ = ('address',)
+
 	def __init__(self, addr: Address):
 		if not isinstance(addr, Address):
 			raise Exception('address expected')
-		self.addr = addr
+		self.address = addr
 
 	def view(self):
 		"""
@@ -123,7 +139,7 @@ class ContractAt(GenVMContractProxy):
 		.. note::
 			supports ``name.lazy(*args, **kwargs)`` call version
 		"""
-		return _ContractAtView(self.addr, {})
+		return _ContractAtView(self.address, {})
 
 	def emit(self, **data: typing.Unpack[TransactionDataKwArgs]):
 		"""
@@ -131,10 +147,24 @@ class ContractAt(GenVMContractProxy):
 
 		:returns: object supporting ``.name(*args, **kwargs)`` that emits a message and returns :py:obj:`None`
 		"""
-		return _ContractAtEmit(self.addr, data)
+		return _ContractAtEmit(self.address, data)
+
+	def emit_transfer(self, **data: typing.Unpack[TransactionDataKwArgs]):
+		"""
+		Method to emit a message that transfers native tokens
+		"""
+		if 'value' not in data:
+			raise TypeError('for emit_transfer value is required')
+		_ContractAtEmitMethod(self.address, None, data)()
+
+	@property
+	def balance(self) -> u256:
+		return u256(wasi.get_balance(self.address.as_bytes))
 
 
 class _ContractAtView:
+	__slots__ = ('addr', 'data')
+
 	def __init__(self, addr: Address, data):
 		self.addr = addr
 		self.data = data
@@ -144,6 +174,8 @@ class _ContractAtView:
 
 
 class _ContractAtEmit:
+	__slots__ = ('addr', 'data')
+
 	def __init__(self, addr: Address, data: TransactionDataKwArgs):
 		self.addr = addr
 		self.data = data
@@ -255,4 +287,57 @@ def deploy_contract(
 	import genlayer.std as gl
 	from genlayer.py._internal import create2_address
 
-	return create2_address(gl.message.contract_account, salt_nonce, gl.message.chain_id)
+	return create2_address(gl.message.contract_address, salt_nonce, gl.message.chain_id)
+
+
+import abc
+
+
+class Contract:
+	def __init_subclass__(cls) -> None:
+		global __known_contact__
+		if __known_contact__ is not None:
+			raise TypeError(
+				f'only one contract is allowed; first: `{__known_contact__}` second: `{cls}`'
+			)
+
+		cls.__contract__ = True
+		from genlayer.py.storage._internal.generate import storage
+
+		storage(cls)
+		__known_contact__ = cls
+
+	@property
+	def balance(self) -> u256:
+		return u256(wasi.get_self_balance())
+
+	@property
+	def address(self) -> Address:
+		"""
+		:returns: :py:class:`Address` of this contract
+		"""
+		from genlayer.std import message
+
+		return message.contract_address
+
+	@abc.abstractmethod
+	def __handle_undefined_method__(
+		self, method_name: str, args: list[typing.Any], kwargs: dict[str, typing.Any]
+	):
+		"""
+		Method that is called for no-method calls, must be either ``@gl.public.write`` or ``@gl.public.write.payable``
+		"""
+		...
+
+	@abc.abstractmethod
+	def __receive__(self):
+		"""
+		Method that is called for no-method transfers, must be ``@gl.public.write.payable``
+		"""
+		...
+
+
+Contract.__handle_undefined_method__ = None  # type: ignore
+Contract.__receive__ = None  # type: ignore
+
+__known_contact__: type[Contract] | None = None

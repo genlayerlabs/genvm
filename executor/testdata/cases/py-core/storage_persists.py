@@ -3,8 +3,7 @@
 from genlayer import *
 
 
-@gl.contract
-class Contract:
+class Contract(gl.Contract):
 	m: TreeMap[str, u32]
 
 	@gl.public.write

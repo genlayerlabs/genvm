@@ -181,6 +181,8 @@ class KeccakState:
 	The state is stored as a 5x5 table of integers.
 	"""
 
+	__slots__ = ('lanew', 'bitrate', 'b', 's', 'bitrate_bytes')
+
 	W = 5
 	H = 5
 
@@ -308,6 +310,8 @@ class KeccakState:
 
 
 class KeccakSponge:
+	__slots__ = ('state', 'padfn', 'permfn', 'buffer')
+
 	def __init__(self, bitrate, width, padfn, permfn):
 		self.state = KeccakState(bitrate, width)
 		self.padfn = padfn

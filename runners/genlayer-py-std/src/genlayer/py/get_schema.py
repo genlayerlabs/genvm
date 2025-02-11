@@ -65,16 +65,11 @@ def _repr_type(t: typing.Any, permissive: bool) -> typing.Any:
 	if ttype is getattr(typing, '_UnionGenericAlias', None) or ttype is types.UnionType:
 		return {'$or': [_repr_type(x, permissive) for x in typing.get_args(t)]}
 	if dataclasses.is_dataclass(t) and isinstance(t, type):
-		try:
+		with reflect.context_type(t):
 			return {
 				prop_name: _repr_type(prop_value, permissive)
 				for prop_name, prop_value in typing.get_type_hints(t).items()
 			}
-		except Exception as e:
-			raise TypeError(
-				'failed to generate dataclass schema',
-				{'dataclass': t, **reflect.try_get_lineno(t)},
-			) from e
 	origin = typing.get_origin(t)
 	if origin != None:
 		args = typing.get_args(t)
@@ -125,7 +120,9 @@ def _get_params(m: types.FunctionType, *, is_ctor: bool) -> dict:
 				case 'KEYWORD_ONLY':
 					kwparams[_escape_dict_prop(name)] = _repr_type(par.annotation, True)
 				case kind:
-					raise TypeError(f'unsupported parameter type {kind} {type(kind)}')
+					raise TypeError(
+						f'unsupported parameter type {kind} {type(kind)} for `{name}: {par}`'
+					)
 
 		ret = {
 			'params': params,
@@ -141,7 +138,7 @@ def _get_params(m: types.FunctionType, *, is_ctor: bool) -> dict:
 		return ret
 	except Exception as e:
 		raise Exception(
-			f"couldn't get schema for method {m}", reflect.try_get_lineno(m)
+			f"couldn't get schema for method `{m}`", reflect.try_get_lineno(m)
 		) from e
 
 
@@ -168,6 +165,10 @@ def get_schema(contract: type) -> typing.Any:
 		for name, meth in sorted(inspect.getmembers(contract))
 		if inspect.isfunction(meth) and _is_public(meth)
 	}
+
+	for k in meths:
+		if k.startswith('__'):
+			raise TypeError(f'public method names should not start with `__`, `{k}`')
 
 	return {
 		'ctor': _get_params(ctor, is_ctor=True),

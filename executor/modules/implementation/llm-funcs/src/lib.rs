@@ -41,6 +41,31 @@ fn default_equivalence_prompt_non_comparative_leader() -> String {
     include_str!("prompts/equivalence_prompt_non_comparative_leader.txt").into()
 }
 
+async fn send_with_retries(
+    builder: impl (Fn() -> reqwest::RequestBuilder) + Send,
+) -> anyhow::Result<reqwest::Response> {
+    for i in 0..3 {
+        let res = builder().send().await?;
+        if ![
+            reqwest::StatusCode::REQUEST_TIMEOUT,
+            reqwest::StatusCode::SERVICE_UNAVAILABLE,
+            reqwest::StatusCode::GATEWAY_TIMEOUT,
+        ]
+        .contains(&res.status())
+        {
+            return Ok(res);
+        }
+
+        let debug = format!("{:?}", &res);
+        let body = res.text().await?;
+        log::error!(response = CENSOR_RESPONSE.replace_all(&debug, "\"<censored>\": \"<censored>\""), body = body, retry = i; "llm request failed");
+
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+    }
+
+    Err(anyhow::anyhow!("llm retries exceeded"))
+}
+
 #[derive(Deserialize)]
 struct Config {
     host: String,
@@ -133,15 +158,16 @@ impl Impl {
         }
 
         let request = serde_json::to_vec(&request)?;
-        let res = session
-            .client
-            .post(format!("{}/v1/messages", self.config.host))
-            .header("Content-Type", "application/json")
-            .header("x-api-key", &self.api_key)
-            .header("anthropic-version", "2023-06-01")
-            .body(request)
-            .send()
-            .await?;
+        let res = send_with_retries(|| {
+            session
+                .client
+                .post(format!("{}/v1/messages", self.config.host))
+                .header("Content-Type", "application/json")
+                .header("x-api-key", &self.api_key)
+                .header("anthropic-version", "2023-06-01")
+                .body(request.clone())
+        })
+        .await?;
 
         let res = genvm_modules_impl_common::read_response(res).await?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
@@ -186,14 +212,15 @@ impl Impl {
             }
         }
         let request = serde_json::to_vec(&request)?;
-        let res = session
-            .client
-            .post(format!("{}/v1/chat/completions", self.config.host))
-            .header("Content-Type", "application/json")
-            .header("Authorization", &format!("Bearer {}", &self.api_key))
-            .body(request)
-            .send()
-            .await?;
+        let res = send_with_retries(|| {
+            session
+                .client
+                .post(format!("{}/v1/chat/completions", self.config.host))
+                .header("Content-Type", "application/json")
+                .header("Authorization", &format!("Bearer {}", &self.api_key))
+                .body(request.clone())
+        })
+        .await?;
         let res = genvm_modules_impl_common::read_response(res).await?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
         let response = val
@@ -233,16 +260,18 @@ impl Impl {
         });
 
         let request = serde_json::to_vec(&request)?;
-        let res = session
-            .client
-            .post(format!(
-                "{}/v1beta/models/{}:generateContent?key={}",
-                self.config.host, self.config.model, self.api_key
-            ))
-            .header("Content-Type", "application/json")
-            .body(request)
-            .send()
-            .await?;
+        let res = send_with_retries(|| {
+            session
+                .client
+                .post(format!(
+                    "{}/v1beta/models/{}:generateContent?key={}",
+                    self.config.host, self.config.model, self.api_key
+                ))
+                .header("Content-Type", "application/json")
+                .body(request.clone())
+        })
+        .await?;
+
         let res = read_response(res).await?;
 
         let res: serde_json::Value = serde_json::from_str(&res)?;
@@ -276,12 +305,13 @@ impl Impl {
         }
 
         let request = serde_json::to_vec(&request)?;
-        let res = session
-            .client
-            .post(format!("{}/api/generate", self.config.host))
-            .body(request)
-            .send()
-            .await?;
+        let res = send_with_retries(|| {
+            session
+                .client
+                .post(format!("{}/api/generate", self.config.host))
+                .body(request.clone())
+        })
+        .await?;
         let res = genvm_modules_impl_common::read_response(res).await?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
         let response = val
@@ -305,6 +335,7 @@ impl Impl {
             "id": 1,
         });
         let request = serde_json::to_vec(&request)?;
+        // no retries for the simulator
         let res = session
             .client
             .post(format!("{}/api", &self.config.host))
@@ -515,8 +546,8 @@ mod tests {
             "key_env_name": "ANTHROPICKEY"
         }"#;
 
-        pub const _xai: &str = r#"{
-            "host": "https://api.x.ai/v1",
+        pub const xai: &str = r#"{
+            "host": "https://api.x.ai",
             "provider": "openai-compatible",
             "model": "grok-2-1212",
             "key_env_name": "XAIKEY"
@@ -553,8 +584,20 @@ mod tests {
                 "{}",
                 "Respond with \"yes\" (without quotes) and only this word",
             )
-            .await
-            .unwrap();
+            .await;
+
+        let res = match res {
+            Ok(res) => res,
+            Err(ModuleError::Fatal(res))
+                if format!("{}", res.root_cause()).contains("llm retries exceeded") =>
+            {
+                println!("WARNING: test skipped");
+                return;
+            }
+            Err(e) => {
+                panic!("err {:?}", e);
+            }
+        };
 
         std::mem::drop(canceller); // ensure that it lives up to here
 
@@ -576,8 +619,20 @@ mod tests {
         const PROMPT: &str = "respond with json object containing single key \"result\" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes";
         let res = imp
             .exec_prompt("{\"response_format\": \"json\"}", PROMPT)
-            .await
-            .unwrap();
+            .await;
+
+        let res = match res {
+            Ok(res) => res,
+            Err(ModuleError::Fatal(res))
+                if format!("{}", res.root_cause()).contains("llm retries exceeded") =>
+            {
+                println!("WARNING: test skipped");
+                return;
+            }
+            Err(e) => {
+                panic!("err {:?}", e);
+            }
+        };
 
         let res: serde_json::Value = serde_json::from_str(&res)
             .with_context(|| format!("result is {}", &res))
@@ -611,5 +666,5 @@ mod tests {
     make_test!(anthropic);
     make_test!(google);
     make_test!(atoma);
-    //make_test!(xai);
+    make_test!(xai);
 }

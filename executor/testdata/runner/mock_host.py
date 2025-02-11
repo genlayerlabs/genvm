@@ -65,6 +65,7 @@ class MockHost(IHost):
 		storage_path_pre: Path,
 		storage_path_post: Path,
 		codes: dict[Address, typing.Any],
+		balances: dict[Address, int],
 		leader_nondet,
 	):
 		self.path = path
@@ -78,6 +79,7 @@ class MockHost(IHost):
 		self.thread = None
 		self.messages_file = None
 		self.messages_path = messages_path
+		self.balances = balances
 
 	def __enter__(self):
 		self.created = False
@@ -184,18 +186,21 @@ class MockHost(IHost):
 			self.messages_file = open(self.messages_path, 'wt')
 		self.messages_file.write(f'deploy:\n\t{data}\n\t{calldata}\n\t{code}\n')
 
-	async def eth_send(self, account: bytes, calldata: bytes, /) -> None:
+	async def eth_send(
+		self, account: bytes, calldata: bytes, data: DefaultEthTransactionData, /
+	) -> None:
 		if self.messages_file is None:
 			self.messages_file = open(self.messages_path, 'wt')
-		self.messages_file.write(f'eth_send:\n\t{calldata}\n')
+		self.messages_file.write(f'eth_send:\n\t{calldata}\n\t{data}\n')
 
-	async def eth_call(
-		self, account: bytes, calldata: bytes, data: typing.Any, /
-	) -> bytes:
+	async def eth_call(self, account: bytes, calldata: bytes, /) -> bytes:
 		assert False
 
 	async def consume_gas(self, gas: int):
 		pass
+
+	async def get_balance(self, account: bytes) -> int:
+		return self.balances.get(Address(account), 0)
 
 
 if __name__ == '__main__':

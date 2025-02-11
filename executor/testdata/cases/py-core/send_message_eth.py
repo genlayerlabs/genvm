@@ -11,7 +11,6 @@ class Ghost:
 		def test(self, x: u256, /) -> None: ...
 
 
-@gl.contract
-class Contract:
+class Contract(gl.Contract):
 	def __init__(self):
 		Ghost(Address(b'\x30' * 20)).emit().test(u256(10))

@@ -14,7 +14,7 @@ target_alias(
 			[build_generator.output_file, witx_file, output_file],
 			['cargo', 'fmt']
 		],
-		dependencies: [build_generator, witx_file],
+		dependencies: [build_generator, witx_file, root_src.join('executor', 'src', 'wasi', 'witx', 'genlayer_sdk_types.witx')],
 		output_file: output_file,
 	)
 )

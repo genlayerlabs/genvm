@@ -10,7 +10,7 @@ import numpy
 import sphinx.ext.autodoc
 
 project = 'GenLayer'
-copyright = '2024, GenLayer'
+copyright = '2025, GenLayer'
 author = 'GenLayer team'
 
 extensions = [

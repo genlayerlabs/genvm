@@ -9,6 +9,8 @@ import abc
 
 
 class _ActualStorageMan(StorageMan):
+	__slots__ = ('_slots',)
+
 	_slots: dict[u256, '_ActualStorageSlot']
 
 	def __init__(self):
@@ -23,6 +25,8 @@ class _ActualStorageMan(StorageMan):
 
 
 class _ActualStorageSlot(StorageSlot):
+	__slots__ = ()
+
 	def __init__(self, addr: u256, manager: StorageMan):
 		super().__init__(addr, manager)
 

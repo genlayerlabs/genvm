@@ -7,6 +7,8 @@ from .core import _WithStorageSlot
 class _RecordDesc[T: WithRecordStorageSlot](TypeDesc):
 	props: dict[str, tuple[TypeDesc, int]]
 
+	__slots__ = ('props', 'view_ctor', 'hsh')
+
 	def __init__(
 		self,
 		view_ctor: typing.Callable[['_RecordDesc', StorageSlot, int], T],
@@ -42,5 +44,5 @@ class _RecordDesc[T: WithRecordStorageSlot](TypeDesc):
 		return self.hsh
 
 
-class WithRecordStorageSlot(_WithStorageSlot):
+class WithRecordStorageSlot(_WithStorageSlot, typing.Protocol):
 	__type_desc__: _RecordDesc

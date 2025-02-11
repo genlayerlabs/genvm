@@ -67,7 +67,7 @@ You keep track of transactions between users and their balance in coins.
 The current balance for all users in JSON format is:
 {json.dumps(self.get_balances())}
 The transaction to compute is: {{
-sender: "{gl.message.sender_account.as_hex}",
+sender: "{gl.message.sender_address.as_hex}",
 recipient: "{Address(to_address).as_hex}",
 amount: {amount},
 }}
@@ -113,7 +113,7 @@ If the transaction is invalid, you should not update the balances.
 
 <transaction>
 {{
-sender: "{gl.message.sender_account.as_hex}",
+sender: "{gl.message.sender_address.as_hex}",
 recipient: "{Address(to_address).as_hex}",
 amount: {amount},
 }}

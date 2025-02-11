@@ -9,13 +9,13 @@ use core::mem::MaybeUninit;
 pub struct Errno(u32);
 /// Success
 pub const ERRNO_SUCCESS: Errno = Errno(0);
-pub const ERRNO_DETERMINISTIC_VIOLATION: Errno = Errno(1);
-pub const ERRNO_OVERFLOW: Errno = Errno(2);
-pub const ERRNO_INVAL: Errno = Errno(3);
-pub const ERRNO_FAULT: Errno = Errno(4);
-pub const ERRNO_ILSEQ: Errno = Errno(5);
-pub const ERRNO_IO: Errno = Errno(6);
-pub const ERRNO_FORBIDDEN: Errno = Errno(7);
+pub const ERRNO_OVERFLOW: Errno = Errno(1);
+pub const ERRNO_INVAL: Errno = Errno(2);
+pub const ERRNO_FAULT: Errno = Errno(3);
+pub const ERRNO_ILSEQ: Errno = Errno(4);
+pub const ERRNO_IO: Errno = Errno(5);
+pub const ERRNO_FORBIDDEN: Errno = Errno(6);
+pub const ERRNO_INBALANCE: Errno = Errno(7);
 impl Errno {
     pub const fn raw(&self) -> u32 {
         self.0
@@ -24,13 +24,13 @@ impl Errno {
     pub fn name(&self) -> &'static str {
         match self.0 {
             0 => "SUCCESS",
-            1 => "DETERMINISTIC_VIOLATION",
-            2 => "OVERFLOW",
-            3 => "INVAL",
-            4 => "FAULT",
-            5 => "ILSEQ",
-            6 => "IO",
-            7 => "FORBIDDEN",
+            1 => "OVERFLOW",
+            2 => "INVAL",
+            3 => "FAULT",
+            4 => "ILSEQ",
+            5 => "IO",
+            6 => "FORBIDDEN",
+            7 => "INBALANCE",
             _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }
@@ -324,8 +324,29 @@ pub unsafe fn eth_call(account: Addr, calldata: Bytes) -> Result<Fd, Errno> {
     }
 }
 
-pub unsafe fn eth_send(account: Addr, calldata: Bytes) -> Result<(), Errno> {
-    let ret = genlayer_sdk::eth_send(&account as *const _ as i32, &calldata as *const _ as i32);
+pub unsafe fn eth_send(account: Addr, calldata: Bytes, data: &str) -> Result<(), Errno> {
+    let ret = genlayer_sdk::eth_send(
+        &account as *const _ as i32,
+        &calldata as *const _ as i32,
+        data.as_ptr() as i32,
+        data.len() as i32,
+    );
+    match ret {
+        0 => Ok(()),
+        _ => Err(Errno(ret as u32)),
+    }
+}
+
+pub unsafe fn get_balance(account: Addr, res: *mut u8) -> Result<(), Errno> {
+    let ret = genlayer_sdk::get_balance(&account as *const _ as i32, res as i32);
+    match ret {
+        0 => Ok(()),
+        _ => Err(Errno(ret as u32)),
+    }
+}
+
+pub unsafe fn get_self_balance(res: *mut u8) -> Result<(), Errno> {
+    let ret = genlayer_sdk::get_self_balance(res as i32);
     match ret {
         0 => Ok(()),
         _ => Err(Errno(ret as u32)),
@@ -351,6 +372,8 @@ pub mod genlayer_sdk {
         pub fn storage_read(arg0: i32, arg1: i32, arg2: i32) -> i32;
         pub fn storage_write(arg0: i32, arg1: i32, arg2: i32) -> i32;
         pub fn eth_call(arg0: i32, arg1: i32, arg2: i32) -> i32;
-        pub fn eth_send(arg0: i32, arg1: i32) -> i32;
+        pub fn eth_send(arg0: i32, arg1: i32, arg2: i32, arg3: i32) -> i32;
+        pub fn get_balance(arg0: i32, arg1: i32) -> i32;
+        pub fn get_self_balance(arg0: i32) -> i32;
     }
 }

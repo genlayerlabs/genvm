@@ -5,8 +5,5 @@ GenLayer SDK API Documentation
    :maxdepth: 2
    :caption: Contents:
 
-   genlayer
-   genlayer.std
-   genlayer.std.advanced
-   genlayer.py.calldata
-   other
+   section_public_packages/index
+   section_internal/index

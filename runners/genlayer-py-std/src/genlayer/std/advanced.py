@@ -11,6 +11,7 @@ __all__ = (
 	'ContractError',
 	'run_nondet',
 	'validator_handle_rollbacks_and_errors_default',
+	'sandbox',
 )
 
 import typing
@@ -26,6 +27,8 @@ class AlreadySerializedResult(bytes):
 	If contract method returns instance of this class, calldata encoding won't be performed. Instead stored bytes will be passed as is
 	"""
 
+	__slots__ = ()
+
 	def __new__(cls, *args, **kwargs):
 		"""
 		Forwards all arguments to :py:class:`bytes`
@@ -38,6 +41,8 @@ class ContractReturn:
 	"""
 	Represents a normal "Return" result of a contract that is passed to validator function of :py:func:`genlayer.std.run_nondet`
 	"""
+
+	__slots__ = ('data',)
 
 	data: typing.Any
 
@@ -104,3 +109,15 @@ def validator_handle_rollbacks_and_errors_default(
 		)
 	except Exception:
 		wasi.contract_return(calldata.encode(isinstance(leaders_result, ContractError)))
+
+
+def sandbox(fn: typing.Callable[[], typing.Any]) -> Lazy[typing.Any]:
+	"""
+	Runs function in the sandbox
+	"""
+	import cloudpickle
+	from ._internal import lazy_from_fd_no_check, decode_sub_vm_result
+
+	return lazy_from_fd_no_check(
+		wasi.sandbox(cloudpickle.dumps(fn)), decode_sub_vm_result
+	)

@@ -26,6 +26,8 @@ from .desc_base_types import (
 from .desc_record import _RecordDesc, WithRecordStorageSlot
 from ..vec import DynArray, _DynArrayDesc, Array, _ArrayDesc
 
+import genlayer.py._internal.reflect as reflect
+
 
 def allow_storage[T: type](cls: T) -> T:
 	cls.__allow_storage__ = True
@@ -39,10 +41,12 @@ def storage[T: type](cls: T) -> T:
 
 
 class Lit:
-	pass
+	__slots__ = ()
 
 
 class LitPy(Lit):
+	__slots__ = ('alts',)
+
 	def __init__(self, alts: tuple):
 		self.alts = alts
 
@@ -51,6 +55,8 @@ class LitPy(Lit):
 
 
 class LitTuple(Lit):
+	__slots__ = ('args',)
+
 	def __init__(self, args: tuple[Lit]):
 		self.args = args
 
@@ -61,6 +67,8 @@ class LitTuple(Lit):
 class _Instantiation:
 	origin: type
 	args: tuple[TypeDesc | Lit, ...]
+
+	__slots__ = ('origin', 'args')
 
 	def __init__(self, origin: type, args: tuple[TypeDesc | Lit, ...]):
 		self.origin = origin
@@ -75,7 +83,7 @@ class _Instantiation:
 		return hash(('_Instantiation', self.origin, self.args))
 
 	def __repr__(self):
-		return f"{self.origin.__name__}[{', '.join(map(repr, self.args))}]"
+		return f"{reflect.repr_type(self.origin)}[{', '.join(map(repr, self.args))}]"
 
 
 _none_desc = _NoneDesc()
@@ -156,6 +164,8 @@ _known_descs: dict[type | _Instantiation, TypeDesc] = {
 
 
 class _FloatDesc(TypeDesc[float]):
+	__slots__ = ('_type',)
+
 	def __init__(self):
 		TypeDesc.__init__(self, 8, [8])
 		self._type = type
@@ -219,11 +229,10 @@ def _storage_build_inner(
 		new_cls = new_cls_special
 	elif origin is not None:
 		args: list[TypeDesc | Lit] = []
-		for c_i, c in enumerate(typing.get_args(cls)):
-			try:
+		gen_args = typing.get_args(cls)
+		for c_i, c in enumerate(gen_args):
+			with reflect.context_generic_argument(origin, gen_args, c, c_i):
 				args.append(_storage_build(c, generics_map))
-			except Exception as e:
-				raise Exception(f'during building generic argument (index {c_i}) {c!r}') from e
 		new_cls = _Instantiation(origin, tuple(args))
 	else:
 		new_cls = cls
@@ -243,10 +252,8 @@ def _storage_build(
 	cls: type | _Instantiation,
 	generics_map: dict[str, TypeDesc | Lit],
 ) -> TypeDesc | Lit:
-	try:
+	with reflect.context_type(cls):
 		return _storage_build_inner(cls, generics_map)
-	except Exception as e:
-		raise Exception(f'during building type/instantiation {cls!r}') from e
 
 
 from .numpy import try_handle_np
@@ -309,8 +316,9 @@ def _storage_build_struct(
 		try:
 			prop_desc = _storage_build(prop_value, generics_map)
 			assert isinstance(prop_desc, TypeDesc)
-		except Exception as e:
-			raise Exception(f'during generating field {prop_name}: {prop_value}') from e
+		except BaseException as e:
+			e.add_note(f'during generating field `{prop_name}: {prop_value}`')
+			raise
 		props[prop_name] = (prop_desc, cur_offset)
 
 		if isinstance(prop_value, typing.TypeVar):
@@ -350,7 +358,7 @@ def _storage_build_struct(
 			self.__type_desc__ = description
 		old_init(self, *args, **kwargs)
 
-	new_init.__storage_patched__ = True
+	new_init.__storage_patched__ = True  # type: ignore
 
 	if not hasattr(cls, '__contract__') and not getattr(
 		old_init, '__storage_patched__', False
@@ -376,6 +384,8 @@ _dt_desc: TypeDesc[_DateTime] = _known_descs[_DateTime]
 
 
 class _DateTimeDesc(TypeDesc[datetime.datetime]):
+	__slots__ = ()
+
 	def __init__(self):
 		super().__init__(_dt_desc.size, _dt_desc.copy_actions)
 

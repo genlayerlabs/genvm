@@ -58,9 +58,9 @@ fn default_datetime() -> chrono::DateTime<chrono::Utc> {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MessageData {
-    pub contract_account: crate::AccountAddress,
-    pub sender_account: crate::AccountAddress,
-    pub origin_account: crate::AccountAddress,
+    pub contract_address: crate::AccountAddress,
+    pub sender_address: crate::AccountAddress,
+    pub origin_address: crate::AccountAddress,
     pub chain_id: Arc<str>,
     pub value: Option<u64>,
     pub is_init: bool,
@@ -70,12 +70,23 @@ pub struct MessageData {
 
 trait Sock: std::io::Read + std::io::Write + Send + Sync {}
 
-impl Sock for std::os::unix::net::UnixStream {}
+impl Sock for bufreaderwriter::seq::BufReaderWriterSeq<std::os::unix::net::UnixStream> {}
 
-impl Sock for std::net::TcpStream {}
+impl Sock for bufreaderwriter::seq::BufReaderWriterSeq<std::net::TcpStream> {}
 
 pub struct Host {
     sock: Box<Mutex<dyn Sock>>,
+}
+
+#[derive(Debug)]
+pub struct AbsentLeaderResult;
+
+impl std::error::Error for AbsentLeaderResult {}
+
+impl std::fmt::Display for AbsentLeaderResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AbsentLeaderResult")
+    }
 }
 
 impl Host {
@@ -83,13 +94,17 @@ impl Host {
         const UNIX: &str = "unix://";
         let sock: Box<Mutex<dyn Sock>> = if let Some(addr_suff) = addr.strip_prefix(UNIX) {
             Box::new(Mutex::new(
-                std::os::unix::net::UnixStream::connect(std::path::Path::new(addr_suff))
-                    .with_context(|| format!("connecting to {addr}"))?,
+                bufreaderwriter::seq::BufReaderWriterSeq::new_writer(
+                    std::os::unix::net::UnixStream::connect(std::path::Path::new(addr_suff))
+                        .with_context(|| format!("connecting to {addr}"))?,
+                ),
             ))
         } else {
             Box::new(Mutex::new(
-                std::net::TcpStream::connect(addr)
-                    .with_context(|| format!("connecting to {addr}"))?,
+                bufreaderwriter::seq::BufReaderWriterSeq::new_writer(
+                    std::net::TcpStream::connect(addr)
+                        .with_context(|| format!("connecting to {addr}"))?,
+                ),
             ))
         };
         Ok(Host { sock })
@@ -138,12 +153,12 @@ fn write_result(sock: &mut dyn Sock, res: Result<&vm::RunOk, &anyhow::Error>) ->
 }
 
 impl Host {
-    pub fn append_calldata(&mut self, calldata: &mut Vec<u8>) -> Result<()> {
+    pub fn get_calldata(&mut self, calldata: &mut Vec<u8>) -> Result<()> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
         let sock: &mut dyn Sock = &mut *sock;
-        sock.write_all(&[host_fns::Methods::AppendCalldata as u8])?;
+        sock.write_all(&[host_fns::Methods::GetCalldata as u8])?;
         let len = read_u32(sock)? as usize;
         calldata.reserve(len);
         let index = calldata.len();
@@ -206,6 +221,8 @@ impl Host {
         sock.write_all(&(buf.len() as u32).to_le_bytes())?;
         sock.write_all(buf)?;
 
+        sock.flush()?;
+
         Ok(())
     }
 
@@ -239,6 +256,9 @@ impl Host {
         if has_some[0] == ResultCode::None as u8 {
             return Ok(None);
         }
+        if has_some[0] == ResultCode::NoLeaders as u8 {
+            anyhow::bail!(AbsentLeaderResult);
+        }
         let len = read_u32(sock)?;
         let mut buf = Vec::with_capacity(len as usize);
         unsafe {
@@ -256,7 +276,7 @@ impl Host {
         Ok(Some(res))
     }
 
-    pub fn post_result(&mut self, call_no: u32, res: &vm::RunOk) -> Result<()> {
+    pub fn post_nondet_result(&mut self, call_no: u32, res: &vm::RunOk) -> Result<()> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -264,6 +284,8 @@ impl Host {
         sock.write_all(&[host_fns::Methods::PostNondetResult as u8])?;
         sock.write_all(&call_no.to_le_bytes())?;
         write_result(sock, Ok(res))?;
+
+        sock.flush()?;
         Ok(())
     }
 
@@ -285,6 +307,8 @@ impl Host {
 
         sock.write_all(&(data.as_bytes().len() as u32).to_le_bytes())?;
         sock.write_all(data.as_bytes())?;
+
+        sock.flush()?;
         Ok(())
     }
 
@@ -303,6 +327,8 @@ impl Host {
 
         sock.write_all(&(data.as_bytes().len() as u32).to_le_bytes())?;
         sock.write_all(data.as_bytes())?;
+
+        sock.flush()?;
         Ok(())
     }
 
@@ -313,6 +339,8 @@ impl Host {
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::ConsumeFuel as u8])?;
         sock.write_all(&gas.to_le_bytes())?;
+
+        sock.flush()?;
         Ok(())
     }
 
@@ -331,7 +359,7 @@ impl Host {
         read_bytes(sock)
     }
 
-    pub fn eth_send(&mut self, address: AccountAddress, calldata: &[u8]) -> Result<()> {
+    pub fn eth_send(&mut self, address: AccountAddress, calldata: &[u8], data: &str) -> Result<()> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -343,6 +371,24 @@ impl Host {
         sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
         sock.write_all(calldata)?;
 
+        sock.write_all(&(data.as_bytes().len() as u32).to_le_bytes())?;
+        sock.write_all(data.as_bytes())?;
+
+        sock.flush()?;
         Ok(())
+    }
+
+    pub fn get_balance(&mut self, address: AccountAddress) -> Result<primitive_types::U256> {
+        let Ok(mut sock) = (*self.sock).lock() else {
+            anyhow::bail!("can't take lock")
+        };
+        let sock: &mut dyn Sock = &mut *sock;
+        sock.write_all(&[host_fns::Methods::GetBalance as u8])?;
+
+        sock.write_all(&address.raw())?;
+
+        let mut buf: [u8; 32] = [0; 32];
+        sock.read_exact(&mut buf)?;
+        Ok(primitive_types::U256::from_little_endian(&buf))
     }
 }

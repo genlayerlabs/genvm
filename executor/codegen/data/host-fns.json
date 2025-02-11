@@ -4,7 +4,7 @@
         "size": "u8",
         "name": "methods",
         "values": {
-            "append_calldata": 0,
+            "get_calldata": 0,
             "get_code": 1,
             "storage_read": 2,
             "storage_write": 3,
@@ -15,7 +15,8 @@
             "consume_fuel": 8,
             "deploy_contract": 9,
             "eth_call": 10,
-            "eth_send": 11
+            "eth_send": 11,
+            "get_balance": 12
         }
     }
 ]

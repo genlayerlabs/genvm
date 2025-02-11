@@ -27,22 +27,32 @@ class GenVMTimeoutException(Exception):
 	"Exception that is raised when time limit is exceeded"
 
 
+class DefaultEthTransactionData(typing.TypedDict):
+	value: str
+
+
 class DefaultTransactionData(typing.TypedDict):
-	pass
+	value: str
+	on: str
 
 
 class DeployDefaultTransactionData(DefaultTransactionData):
-	salt_nonce: typing.NotRequired[int]
+	salt_nonce: typing.NotRequired[str]
 
 
 class IHost(metaclass=abc.ABCMeta):
+	@abc.abstractmethod
 	async def loop_enter(self) -> socket.socket: ...
 
+	@abc.abstractmethod
 	async def get_calldata(self, /) -> bytes: ...
+	@abc.abstractmethod
 	async def get_code(self, addr: bytes, /) -> bytes: ...
+	@abc.abstractmethod
 	async def storage_read(
 		self, mode: StorageType, account: bytes, slot: bytes, index: int, le: int, /
 	) -> bytes: ...
+	@abc.abstractmethod
 	async def storage_write(
 		self,
 		account: bytes,
@@ -52,26 +62,39 @@ class IHost(metaclass=abc.ABCMeta):
 		/,
 	) -> None: ...
 
+	@abc.abstractmethod
 	async def consume_result(
 		self, type: ResultCode, data: collections.abc.Buffer, /
 	) -> None: ...
+	@abc.abstractmethod
 	def has_result(self) -> bool: ...
 
+	@abc.abstractmethod
 	async def get_leader_nondet_result(
 		self, call_no: int, /
 	) -> tuple[ResultCode, collections.abc.Buffer] | None: ...
+	@abc.abstractmethod
 	async def post_nondet_result(
 		self, call_no: int, type: ResultCode, data: collections.abc.Buffer, /
 	) -> None: ...
+	@abc.abstractmethod
 	async def post_message(
 		self, account: bytes, calldata: bytes, data: DefaultTransactionData, /
 	) -> None: ...
+	@abc.abstractmethod
 	async def deploy_contract(
 		self, calldata: bytes, code: bytes, data: DeployDefaultTransactionData, /
 	) -> None: ...
+	@abc.abstractmethod
 	async def consume_gas(self, gas: int, /) -> None: ...
-	async def eth_send(self, account: bytes, calldata: bytes, /) -> None: ...
+	@abc.abstractmethod
+	async def eth_send(
+		self, account: bytes, calldata: bytes, data: DefaultEthTransactionData, /
+	) -> None: ...
+	@abc.abstractmethod
 	async def eth_call(self, account: bytes, calldata: bytes, /) -> bytes: ...
+	@abc.abstractmethod
+	async def get_balance(self, account: bytes, /) -> int: ...
 
 
 async def host_loop(handler: IHost):
@@ -107,7 +130,7 @@ async def host_loop(handler: IHost):
 	while True:
 		meth_id = Methods(await recv_int(1))
 		match meth_id:
-			case Methods.APPEND_CALLDATA:
+			case Methods.GET_CALLDATA:
 				cd = await handler.get_calldata()
 				await send_int(len(cd))
 				await send_all(cd)
@@ -183,7 +206,11 @@ async def host_loop(handler: IHost):
 				calldata_len = await recv_int()
 				calldata = await read_exact(calldata_len)
 
-				await handler.eth_send(account, calldata)
+				message_data_len = await recv_int()
+				message_data_bytes = await read_exact(message_data_len)
+				message_data = json.loads(str(message_data_bytes, 'utf-8'))
+
+				await handler.eth_send(account, calldata, message_data)
 			case Methods.ETH_CALL:
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
 				calldata_len = await recv_int()
@@ -192,6 +219,10 @@ async def host_loop(handler: IHost):
 				res = await handler.eth_call(account, calldata)
 				await send_int(len(res))
 				await send_all(res)
+			case Methods.GET_BALANCE:
+				account = await read_exact(ACCOUNT_ADDR_SIZE)
+				res = await handler.get_balance(account)
+				await send_all(res.to_bytes(32, byteorder='little', signed=False))
 			case x:
 				raise Exception(f'unknown method {x}')
 

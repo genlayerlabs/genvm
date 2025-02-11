@@ -3,7 +3,8 @@
 		"executor/third-party/wasmtime": {
 			"url": "https://github.com/bytecodealliance/wasmtime.git",
 			"commit": "110e70f30e34b9df5ed4aaf401c8818c23204ca2",
-			"patches": 13
+			"patches": 13,
+			"submodules": []
 		},
 		"runners/nix/trg/py/modules/genvm-cpython-ext/sdk-rust/third-party/wasi-rs": {
 			"url": "https://github.com/bytecodealliance/wasi-rs/",

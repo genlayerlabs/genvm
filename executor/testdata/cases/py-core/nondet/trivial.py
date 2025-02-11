@@ -2,8 +2,7 @@
 from genlayer import *
 
 
-@gl.contract
-class Contract:
+class Contract(gl.Contract):
 	@gl.public.write
 	def init(self):
 		eval("print('init from eval!')")

@@ -6,6 +6,8 @@ from .core import *
 
 
 class _BoolDesc(TypeDesc):
+	__slots__ = ()
+
 	def __init__(self):
 		TypeDesc.__init__(self, 1, [1])
 
@@ -20,6 +22,8 @@ class _BoolDesc(TypeDesc):
 
 
 class _IntDesc(TypeDesc):
+	__slots__ = ('signed',)
+
 	def __init__(self, size: int, signed=True):
 		TypeDesc.__init__(self, size, [size])
 		self.signed = signed
@@ -47,6 +51,8 @@ class _IntDesc(TypeDesc):
 
 
 class _NoneDesc(TypeDesc[None]):
+	__slots__ = ()
+
 	def __init__(self):
 		TypeDesc.__init__(self, 0, [0])
 
@@ -70,6 +76,8 @@ _u32_desc = _IntDesc(4, signed=False)
 
 
 class _AddrDesc(TypeDesc):
+	__slots__ = ()
+
 	def __init__(self):
 		TypeDesc.__init__(self, Address.SIZE, [Address.SIZE])
 
@@ -84,6 +92,8 @@ class _AddrDesc(TypeDesc):
 
 
 class _CopyStrBytesAction(ComplexCopyAction):
+	__slots__ = ()
+
 	def __init__(self):
 		pass
 
@@ -101,6 +111,8 @@ class _CopyStrBytesAction(ComplexCopyAction):
 
 
 class _StrBytesDesc[T](TypeDesc):
+	__slots__ = ()
+
 	def __init__(self):
 		TypeDesc.__init__(self, _u32_desc.size, [_CopyStrBytesAction()])
 
@@ -129,6 +141,8 @@ class _StrBytesDesc[T](TypeDesc):
 
 
 class _StrDesc(_StrBytesDesc[str]):
+	__slots__ = ()
+
 	def __init__(self):
 		_StrBytesDesc.__init__(self)
 
@@ -143,6 +157,8 @@ class _StrDesc(_StrBytesDesc[str]):
 
 
 class _BytesDesc(_StrBytesDesc[bytes]):
+	__slots__ = ()
+
 	def __init__(self):
 		_StrBytesDesc.__init__(self)
 
@@ -157,6 +173,8 @@ class _BytesDesc(_StrBytesDesc[bytes]):
 
 
 class _BigIntDesc(_StrBytesDesc[int]):
+	__slots__ = ()
+
 	def __init__(self):
 		_StrBytesDesc.__init__(self)
 
