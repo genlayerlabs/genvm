@@ -14,7 +14,12 @@ runs:
   steps:
     - name: checkout submodules
       run: |
-        sudo apt-get install ninja-build
+        if command -v apt-get
+        then
+          sudo apt-get install ninja-build
+        else
+          brew install ninja tree
+        fi
         cd "$GITHUB_WORKSPACE"
         git config --global user.email "worker@ci.ci"
         git config --global user.name "CI worker"
