@@ -3,6 +3,7 @@ import typing
 import collections.abc
 import contextlib
 
+from genlayer.py.types import SizedArray
 from genlayer.py.storage import Array
 
 
@@ -21,21 +22,26 @@ def try_get_lineno(m):
 
 
 def repr_generic(origin: typing.Any, args: typing.Iterable[typing.Any]) -> str:
-	return f'{origin!r}[' + ', '.join(map(repr, args)) + ']'
+	return f'{repr_type(origin)}[' + ', '.join(map(repr_type, args)) + ']'
 
 
-def repr_type(t: type) -> str:
+def repr_type(t: typing.Any) -> str:
 	origin = typing.get_origin(t)
-	if origin is None:
-		return repr(t)
-	args = typing.get_args(t)
-	return repr_generic(origin, args)
+	if origin is not None:
+		args = typing.get_args(t)
+		return repr_generic(origin, args)
+	if isinstance(t, type):
+		if hasattr(t, '__qualname__'):
+			return t.__qualname__
+		if hasattr(t, '__name__'):
+			return t.__name__
+	return repr(t)
 
 
 def is_sized_array(
 	origin: typing.Any, args: tuple[typing.Any, ...]
 ) -> tuple[typing.Any, int] | None:
-	if origin is not Array:
+	if origin is not SizedArray and origin is not Array:
 		return None
 	if len(args) != 2:
 		raise TypeError(
@@ -115,7 +121,7 @@ def context_generic_argument(
 
 
 @contextlib.contextmanager
-def context_type(t: type) -> typing.Generator[None, None, None]:
+def context_type(t: typing.Any) -> typing.Generator[None, None, None]:
 	try:
 		yield
 	except BaseException as e:

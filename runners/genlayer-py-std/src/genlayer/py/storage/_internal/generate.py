@@ -26,6 +26,8 @@ from .desc_base_types import (
 from .desc_record import _RecordDesc, WithRecordStorageSlot
 from ..vec import DynArray, _DynArrayDesc, Array, _ArrayDesc
 
+import genlayer.py._internal.reflect as reflect
+
 
 def allow_storage[T: type](cls: T) -> T:
 	cls.__allow_storage__ = True
@@ -81,7 +83,7 @@ class _Instantiation:
 		return hash(('_Instantiation', self.origin, self.args))
 
 	def __repr__(self):
-		return f"{self.origin.__name__}[{', '.join(map(repr, self.args))}]"
+		return f"{reflect.repr_type(self.origin)}[{', '.join(map(repr, self.args))}]"
 
 
 _none_desc = _NoneDesc()
@@ -227,11 +229,10 @@ def _storage_build_inner(
 		new_cls = new_cls_special
 	elif origin is not None:
 		args: list[TypeDesc | Lit] = []
-		for c_i, c in enumerate(typing.get_args(cls)):
-			try:
+		gen_args = typing.get_args(cls)
+		for c_i, c in enumerate(gen_args):
+			with reflect.context_generic_argument(origin, gen_args, c, c_i):
 				args.append(_storage_build(c, generics_map))
-			except Exception as e:
-				raise Exception(f'during building generic argument (index {c_i}) {c!r}') from e
 		new_cls = _Instantiation(origin, tuple(args))
 	else:
 		new_cls = cls
@@ -251,10 +252,8 @@ def _storage_build(
 	cls: type | _Instantiation,
 	generics_map: dict[str, TypeDesc | Lit],
 ) -> TypeDesc | Lit:
-	try:
+	with reflect.context_type(cls):
 		return _storage_build_inner(cls, generics_map)
-	except Exception as e:
-		raise Exception(f'during building type/instantiation {cls!r}') from e
 
 
 from .numpy import try_handle_np
@@ -317,8 +316,9 @@ def _storage_build_struct(
 		try:
 			prop_desc = _storage_build(prop_value, generics_map)
 			assert isinstance(prop_desc, TypeDesc)
-		except Exception as e:
-			raise Exception(f'during generating field `{prop_name}: {prop_value}`') from e
+		except BaseException as e:
+			e.add_note(f'during generating field `{prop_name}: {prop_value}`')
+			raise
 		props[prop_name] = (prop_desc, cur_offset)
 
 		if isinstance(prop_value, typing.TypeVar):

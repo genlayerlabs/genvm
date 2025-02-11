@@ -1,11 +1,11 @@
 __all__ = ('DynArray', 'Array')
 
 import typing
-import math
 
 from ._internal.core import *
 from ._internal.core import _WithStorageSlot
 from ._internal.desc_base_types import _u32_desc
+from ..types import SizedArray
 
 
 class DynArray[T](_WithStorageSlot, collections.abc.MutableSequence[T]):
@@ -14,6 +14,8 @@ class DynArray[T](_WithStorageSlot, collections.abc.MutableSequence[T]):
 	"""
 
 	_item_desc: TypeDesc
+
+	__slots__ = ('_item_desc', '_off', '_storage_slot')
 
 	def __init__(self):
 		"""
@@ -62,13 +64,15 @@ class DynArray[T](_WithStorageSlot, collections.abc.MutableSequence[T]):
 			return ret
 
 	@typing.overload
-	def __setitem__(self, idx: int, val: T) -> None: ...
+	def __setitem__(self, idx: typing.SupportsIndex, val: T) -> None: ...
 	@typing.overload
 	def __setitem__(self, idx: slice, val: collections.abc.Sequence[T]) -> None: ...
 
-	def __setitem__(self, idx: int | slice, val: T | collections.abc.Sequence[T]) -> None:
-		if isinstance(idx, int):
-			idx = self._map_index(idx)
+	def __setitem__(
+		self, idx: typing.SupportsIndex | slice, val: T | collections.abc.Sequence[T]
+	) -> None:
+		if not isinstance(idx, slice):
+			idx = self._map_index(idx.__index__())
 			items_at = self._storage_slot.indirect(self._off)
 			self._item_desc.set(items_at, idx * self._item_desc.size, val)
 			return
@@ -168,7 +172,7 @@ class DynArray[T](_WithStorageSlot, collections.abc.MutableSequence[T]):
 		items_at = self._storage_slot.indirect(self._off)
 		return self._item_desc.get(items_at, le * self._item_desc.size)
 
-	def pop(self) -> None:
+	def pop(self) -> None:  # type: ignore
 		le = len(self)
 		if le == 0:
 			raise Exception("can't pop from empty array")
@@ -248,7 +252,7 @@ class _DynArrayDesc(TypeDesc):
 		return f'_VecDesc[{self._item_desc!r}]'
 
 
-class Array[T, S: int](_WithStorageSlot, collections.abc.Sequence):
+class Array[T, S: int](_WithStorageSlot, collections.abc.Sequence, SizedArray[T, S]):
 	"""
 	Constantly sized array that can be persisted on the blockchain
 	"""
@@ -286,11 +290,28 @@ class Array[T, S: int](_WithStorageSlot, collections.abc.Sequence):
 			raise IndexError(f'index out of range {idx} not in 0..<{le}')
 		return idx
 
-	def __getitem__(self, idx: int) -> T:
-		idx = self._map_index(idx)
-		return self._item_desc.get(
-			self._storage_slot, self._off + idx * self._item_desc.size
-		)
+	@typing.overload
+	def __getitem__(self, idx: typing.SupportsIndex) -> T: ...
+	@typing.overload
+	def __getitem__(self, idx: slice) -> 'Array': ...
+
+	def __getitem__(self, idx: typing.SupportsIndex | slice) -> T | 'Array':
+		if not isinstance(idx, slice):
+			idx = self._map_index(idx.__index__())
+			return self._item_desc.get(
+				self._storage_slot, self._off + idx * self._item_desc.size
+			)
+		else:
+			start, stop, step = idx.indices(len(self))
+			if step != 1:
+				raise KeyError('negative step is not supported')
+			le = max(stop - start, 0)
+			return Array._view_at(
+				self._item_desc,
+				le,
+				self._storage_slot,
+				self._off + start * self._item_desc.size,
+			)
 
 	def __setitem__(self, idx: int, val: T) -> None:
 		idx = self._map_index(idx)

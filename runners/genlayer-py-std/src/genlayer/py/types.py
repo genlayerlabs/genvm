@@ -5,6 +5,7 @@ Module that provides aliases for storage types and blockchain-specific types
 import base64
 import typing
 import collections.abc
+import abc
 
 from .keccak import Keccak256
 
@@ -262,3 +263,9 @@ class Address:
 				return repr(self)
 			case fmt:
 				raise TypeError(f'unsupported format {fmt!r}')
+
+
+class SizedArray[T, S: int](typing.Protocol):
+	def __len__(self) -> int: ...
+	def __getitem__(self, index: typing.SupportsIndex, /) -> T: ...
+	def __iter__(self) -> typing.Iterator[T]: ...

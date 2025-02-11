@@ -44,5 +44,5 @@ class _RecordDesc[T: WithRecordStorageSlot](TypeDesc):
 		return self.hsh
 
 
-class WithRecordStorageSlot(_WithStorageSlot):
+class WithRecordStorageSlot(_WithStorageSlot, typing.Protocol):
 	__type_desc__: _RecordDesc
