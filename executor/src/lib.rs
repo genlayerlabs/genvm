@@ -11,6 +11,7 @@ pub mod wasi;
 pub mod caching;
 
 use errors::ContractError;
+use host::AbsentLeaderResult;
 pub use host::{AccountAddress, GenericAddress, Host, MessageData};
 
 use anyhow::{Context, Result};
@@ -166,6 +167,16 @@ pub async fn run_with(
         }
     } else {
         ContractError::unwrap_res(res)
+    };
+
+    let res = match res {
+        Err(e) => match e.downcast() {
+            Ok(AbsentLeaderResult) => {
+                Ok(RunOk::ContractError("deterministic_violation".into(), None))
+            }
+            Err(e) => Err(e),
+        },
+        e => e,
     };
 
     supervisor.host.consume_result(&res)?;

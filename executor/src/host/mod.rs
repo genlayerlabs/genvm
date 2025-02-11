@@ -78,6 +78,17 @@ pub struct Host {
     sock: Box<Mutex<dyn Sock>>,
 }
 
+#[derive(Debug)]
+pub struct AbsentLeaderResult;
+
+impl std::error::Error for AbsentLeaderResult {}
+
+impl std::fmt::Display for AbsentLeaderResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AbsentLeaderResult")
+    }
+}
+
 impl Host {
     pub fn new(addr: &str) -> Result<Host> {
         const UNIX: &str = "unix://";
@@ -244,6 +255,9 @@ impl Host {
         sock.read_exact(&mut has_some)?;
         if has_some[0] == ResultCode::None as u8 {
             return Ok(None);
+        }
+        if has_some[0] == ResultCode::NoLeaders as u8 {
+            anyhow::bail!(AbsentLeaderResult);
         }
         let len = read_u32(sock)?;
         let mut buf = Vec::with_capacity(len as usize);

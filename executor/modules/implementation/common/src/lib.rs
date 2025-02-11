@@ -3,8 +3,9 @@ use std::{future::Future, pin::Pin};
 use anyhow::Result;
 use regex::Regex;
 
-static CENSOR_RESPONSE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r#""set-cookie": "[^"]*""#).unwrap());
+static CENSOR_RESPONSE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(r#""(set-cookie|cf-ray|access-control[^"]*)": "[^"]*""#).unwrap()
+});
 
 pub async fn read_response(res: reqwest::Response) -> Result<String> {
     let status = res.status();
