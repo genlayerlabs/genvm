@@ -34,3 +34,4 @@ jobs:
           ANTHROPICKEY: ${{ secrets.ANTHROPICKEY }}
           XAIKEY: ${{ secrets.XAIKEY }}
           GEMINIKEY: ${{ secrets.GEMINIKEY }}
+          ATOMAKEY: ${{ secrets.ATOMAKEY }}
