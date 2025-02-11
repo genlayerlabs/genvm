@@ -311,6 +311,15 @@ class Contract:
 	def balance(self) -> u256:
 		return u256(wasi.get_self_balance())
 
+	@property
+	def address(self) -> Address:
+		"""
+		:returns: :py:class:`Address` of this contract
+		"""
+		from genlayer.std import message
+
+		return message.contract_address
+
 	@abc.abstractmethod
 	def __handle_undefined_method__(
 		self, method_name: str, args: list[typing.Any], kwargs: dict[str, typing.Any]

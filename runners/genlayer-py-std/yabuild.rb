@@ -126,7 +126,7 @@ target_alias(
 			['mkdir', '-p', docs_out.parent],
 			['cp', '-r', root_src.join('build-scripts', 'doctypes', 'docs_base'), docs_out],
 			['cd', docs_out],
-			[RbConfig.ruby, root_src.join('build-scripts', 'doctypes', 'generate-other.rb'), cur_src.join('src'), docs_out.join('other.rst')],
+			[RbConfig.ruby, root_src.join('build-scripts', 'doctypes', 'generate-other.rb'), cur_src.join('src'), docs_out.join('section_internal')],
 			[*POETRY_RUN, 'sphinx-build', '-b', 'html', docs_out, docs_out.join('docs')],
 			['zip', '-9', '-r', docs_out.parent.join('py-docs.zip'), 'docs']
 		],

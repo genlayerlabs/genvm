@@ -24,12 +24,14 @@ __all__ = (
 	'message',
 	'message_raw',
 	'rollback_immediate',
+	'eth',
 )
 
 import typing
 import json
 import os
 
+import genlayer.py.eth as eth
 import genlayer.py.calldata as calldata
 import genlayer.std.advanced as advanced
 import genlayer.std._wasi as wasi

@@ -5,7 +5,6 @@ Module that provides aliases for storage types and blockchain-specific types
 import base64
 import typing
 import collections.abc
-import abc
 
 from .keccak import Keccak256
 

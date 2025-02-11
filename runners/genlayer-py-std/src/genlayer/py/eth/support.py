@@ -38,7 +38,19 @@ import typing
 
 
 class InplaceTuple:
-	pass
+	# editorconfig-checker-disable
+	"""
+	This class indicates that tuple should be encoded/decoded in-place.
+	Which means that even if it is dynamically sized, it is ignored.
+	It is useful for encoding/decoding arguments and returns
+
+	.. code-block:: python
+	        tuple[InplaceTuple, str, u256]
+	"""
+
+	# editorconfig-checker-enable
+
+	__slots__ = ()
 
 
 bytes1 = typing.NewType('bytes1', bytes)

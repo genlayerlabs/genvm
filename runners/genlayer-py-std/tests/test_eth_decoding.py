@@ -31,7 +31,7 @@ def test_eth_decoding_for_type(typ: type, data: list[typing.Any]):
 		encoded = meth.encode_call((d,))[4:]
 		for i in range(0, len(encoded), 32):
 			print(f'{i}\t{encoded[i:i+32].hex()}')
-		assert d == genvm_eth.decode(encoded, typ)
+		assert d == genvm_eth.decode(typ, encoded)
 
 
 @pytest.mark.parametrize(
@@ -70,4 +70,4 @@ def test_eth_decoding_inverse(params: tuple[type], data: tuple[typing.Any]):
 	assert len(params) == len(data)
 	meth = genvm_eth.MethodEncoder('test', params, type(None))
 	encoded = meth.encode_call(data)[4:]
-	assert data == genvm_eth.decode(encoded, tuple[genvm_eth.InplaceTuple, *params])
+	assert data == genvm_eth.decode(tuple[genvm_eth.InplaceTuple, *params], encoded)

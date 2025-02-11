@@ -19,7 +19,7 @@ def _generate_view(name: str, params: tuple[type], ret: type) -> typing.Any:
 		calldata = encoder.encode_call(args)
 		return lazy_from_fd(
 			wasi.eth_call(self.parent.address, calldata),
-			lambda x: decode(x, ret),
+			lambda x: decode(ret, x),
 		)
 
 	return _lazy_api(result_fn)

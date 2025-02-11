@@ -1,4 +1,4 @@
-__all__ = ('contract_generator', 'EthContractDeclaration', 'EthContractProxy')
+__all__ = ('contract_generator', 'ContractDeclaration', 'ContractProxy')
 
 import typing
 import inspect
@@ -29,16 +29,16 @@ def transaction_data_kw_args_serialize(d: dict) -> str:
 	return json.dumps(d, separators=(',', ':'))
 
 
-class EthContractProxy[TView, TWrite]:
+class ContractProxy[TView, TWrite]:
 	__slots__ = ('_view', '_send', 'address', '_balance', '_transfer')
 
 	def __init__(
 		self,
 		address: Address,
-		view_impl: typing.Callable[['EthContractProxy'], TView],
-		balance_impl: typing.Callable[['EthContractProxy'], u256],
-		send_impl: typing.Callable[['EthContractProxy', TransactionDataKwArgs], TWrite],
-		transfer_impl: typing.Callable[['EthContractProxy', TransactionDataKwArgs], None],
+		view_impl: typing.Callable[['ContractProxy'], TView],
+		balance_impl: typing.Callable[['ContractProxy'], u256],
+		send_impl: typing.Callable[['ContractProxy', TransactionDataKwArgs], TWrite],
+		transfer_impl: typing.Callable[['ContractProxy', TransactionDataKwArgs], None],
 	):
 		self.address = address
 		self._view = view_impl
@@ -60,7 +60,11 @@ class EthContractProxy[TView, TWrite]:
 		return self._balance(self)
 
 
-class EthContractDeclaration[TView, TWrite](typing.Protocol):
+class ContractDeclaration[TView, TWrite](typing.Protocol):
+	"""
+	Interface for declaring interfaces of external contracts
+	"""
+
 	View: type[TView]
 	Write: type[TWrite]
 
@@ -72,7 +76,7 @@ def _generate_methods(
 	f_type: typing.Any,
 	proxy_name,
 	factory: typing.Callable[[str, tuple, typing.Any], typing.Callable[..., typing.Any]],
-) -> typing.Callable[typing.Concatenate[EthContractProxy, _generate_spec], typing.Any]:
+) -> typing.Callable[typing.Concatenate[ContractProxy, _generate_spec], typing.Any]:
 	props: dict[str, typing.Any] = {}
 	for name, val in inspect.getmembers_static(f_type):
 		if not inspect.isfunction(val):
@@ -119,12 +123,12 @@ type _EthGenerator = typing.Callable[[str, tuple[type], type], typing.Any]
 def contract_generator(
 	generate_view: _EthGenerator,
 	generate_send: _EthGenerator,
-	balance_getter: typing.Callable[[EthContractProxy], u256],
-	transfer: typing.Callable[['EthContractProxy', TransactionDataKwArgs], None],
+	balance_getter: typing.Callable[[ContractProxy], u256],
+	transfer: typing.Callable[['ContractProxy', TransactionDataKwArgs], None],
 ):
 	def gen[TView, TWrite](
-		contr: EthContractDeclaration[TView, TWrite],
-	) -> typing.Callable[[Address], EthContractProxy[TView, TWrite]]:
+		contr: ContractDeclaration[TView, TWrite],
+	) -> typing.Callable[[Address], ContractProxy[TView, TWrite]]:
 		with reflect.context_type(contr):  # type: ignore
 			with reflect.context_notes('while generating view methods'):
 				view_meths = _generate_methods(
@@ -132,12 +136,12 @@ def contract_generator(
 				)
 			with reflect.context_notes('while generating write methods'):
 				send_meths: typing.Callable[
-					[EthContractProxy, TransactionDataKwArgs], typing.Any
+					[ContractProxy, TransactionDataKwArgs], typing.Any
 				] = _generate_methods(
 					contr.Write, f'{contr.__qualname__}.WriteProxy', factory=generate_send
 				)
 			return partial(
-				EthContractProxy,
+				ContractProxy,
 				view_impl=view_meths,
 				send_impl=send_meths,
 				balance_impl=balance_getter,

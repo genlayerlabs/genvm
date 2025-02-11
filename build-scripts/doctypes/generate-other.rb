@@ -9,29 +9,46 @@ to = Pathname.new to
 children = from.glob("**/*.py")
 children.map! { |c| c.relative_path_from(from).to_s }
 children.map! { |c| c.gsub(/(\/__init__)?\.py$/, '').gsub(/\//, '.') }
-has_already = ['genlayer', 'genlayer.std', 'genlayer.std.advanced', 'genlayer.py.calldata']
+has_already = ['genlayer', 'genlayer.std', 'genlayer.std.advanced', 'genlayer.py.calldata', 'genlayer.py.eth']
 children.filter! { |c| not has_already.include?(c) }
 children.sort!
 
-template = <<-EOF
+to.mkpath
 
-Internal packages
-=================
+children.each { |c|
+to.join("#{c}.rst").write(<<-EOF
+========#{'=' * c.size}
+Package #{c}
+========#{'=' * c.size}
 
 .. warning::
-	Users shouldn't use anything from this package directly, use re-exports
+   This is an internal module
+
+.. automodule:: #{c}
+
+EOF
+)
+}
+
+template = <<-EOF
+GenLayer SDK Internal packages
+==============================
+
+.. warning::
+   This are internal modules, they are subject to change between version. This page is provided only for reference.
+
+   For that reason users should not use anything form these packages directly, but use re-exports
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Contents:
 
 % children.each { |c|
-<%= '=' * c.size %>
-<%= c %>
-<%= '=' * c.size %>
-
-.. automodule:: <%= c %>
-
+   <%= c %>
 % }
 
 EOF
 
 TEMPLATE = ERB.new(template, trim_mode: "%")
 
-to.write(TEMPLATE.result)
+to.join('index.rst').write(TEMPLATE.result)
