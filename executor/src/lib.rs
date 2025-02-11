@@ -126,7 +126,7 @@ pub async fn run_with_impl(
                 can_write_storage: permissions.contains("w"),
                 can_send_messages: permissions.contains("s"),
                 can_call_others: permissions.contains("c"),
-                can_spawn_nondet: true,
+                can_spawn_nondet: permissions.contains("n"),
                 state_mode: crate::host::StorageType::Default,
             },
             message_data: entry_message,

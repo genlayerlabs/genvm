@@ -34,8 +34,8 @@ pub struct Args {
     sync: bool,
     #[clap(
         long,
-        default_value = "rwsc",
-        help = "r?w?s?c?, read/write/send messages/call contracts"
+        default_value = "rwscn",
+        help = "r?w?s?c?n?, read/write/send messages/call contracts/spawn nondet"
     )]
     permissions: String,
 }
@@ -46,7 +46,7 @@ pub fn handle(args: Args) -> Result<()> {
     let host = genvm::Host::new(&args.host)?;
 
     let mut perm_size = 0;
-    for perm in ["r", "w", "s", "c"] {
+    for perm in ["r", "w", "s", "c", "n"] {
         if args.permissions.contains(perm) {
             perm_size += 1;
         }
