@@ -19,13 +19,6 @@ project('executor') {
 	base_env['RUSTFLAGS'] << ' -C target-feature=+crt-static'
 
 	cargo_flags = []
-	if not config.executor_target.nil?
-		linker_path = root_src.join('build-scripts', 'zig-driver.py')
-		cargo_flags << '--config' << "target.#{config.executor_target}.linker=\"#{linker_path.to_s}\""
-		base_env['CC_aarch64_unknown_linux_gnu'] = linker_path.to_s
-		base_env['AARCH64_UNKNOWN_LINUX_GNU_OPENSSL_LIB_DIR'] = root_src.join('tools/downloaded/cross-aarch64-libs/usr/lib/openssl-1.0').to_s
-		base_env['AARCH64_UNKNOWN_LINUX_GNU_OPENSSL_INCLUDE_DIR'] = root_src.join('tools/downloaded/cross-aarch64-libs/usr/include/openssl-1.0').to_s
-	end
 
 	run_codegen = Proc.new { |inp, out, type:, tags: [], **kwargs, &blk|
 		if type == "rs"
