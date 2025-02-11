@@ -515,8 +515,8 @@ mod tests {
             "key_env_name": "ANTHROPICKEY"
         }"#;
 
-        pub const _xai: &str = r#"{
-            "host": "https://api.x.ai/v1",
+        pub const xai: &str = r#"{
+            "host": "https://api.x.ai",
             "provider": "openai-compatible",
             "model": "grok-2-1212",
             "key_env_name": "XAIKEY"
@@ -611,5 +611,5 @@ mod tests {
     make_test!(anthropic);
     make_test!(google);
     make_test!(atoma);
-    //make_test!(xai);
+    make_test!(xai);
 }
