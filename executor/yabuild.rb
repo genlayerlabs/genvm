@@ -5,9 +5,15 @@ project('executor') {
 	compiler = config.tools.clang || config.tools.gcc
 	linker = config.tools.mold || config.tools.lld
 
+	cargo_flags = []
 	if config.executor_target.nil? and not compiler.nil? and not linker.nil?
 		base_env['RUSTFLAGS'] ||= ''
 		base_env['RUSTFLAGS'] << "-Clinker=#{Shellwords.escape compiler} -Clink-arg=-fuse-ld=#{Shellwords.escape linker}"
+	end
+	if not config.executor_target.nil?
+		linker_path = $cross_cc
+		cargo_flags << '--config' << "target.#{config.executor_target}.linker=\"#{linker_path}\""
+		base_env["CC_#{config.executor_target}"] = $cross_cc
 	end
 
 	if config.executor.coverage
@@ -17,8 +23,6 @@ project('executor') {
 
 	base_env['RUSTFLAGS'] ||= ''
 	base_env['RUSTFLAGS'] << ' -C target-feature=+crt-static'
-
-	cargo_flags = []
 
 	run_codegen = Proc.new { |inp, out, type:, tags: [], **kwargs, &blk|
 		if type == "rs"
