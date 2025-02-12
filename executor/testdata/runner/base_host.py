@@ -380,8 +380,8 @@ async def run_host_and_program(
 			and deadline_future not in done
 		):
 			errors.append(Exception('no result provided'))
-	if deadline_future is not None and deadline_future in done:
-		errors.insert(0, GenVMTimeoutException())
+		else:
+			await handler.consume_result(ResultCode.CONTRACT_ERROR, b'timeout')
 
 	result = RunHostAndProgramRes(
 		b''.join(stdout).decode(),
