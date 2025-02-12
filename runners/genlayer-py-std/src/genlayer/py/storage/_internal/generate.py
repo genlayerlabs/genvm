@@ -339,14 +339,7 @@ def _storage_build_struct(
 		size += prop_desc.size
 		actions_append(copy_actions, prop_desc.copy_actions)
 
-	def view_at(desc: _RecordDesc, slot: StorageSlot, off: int, cls=cls):
-		slf: WithRecordStorageSlot = cls.__new__(cls)  # type: ignore
-		slf._storage_slot = slot
-		slf._off = off
-		slf.__type_desc__ = desc
-		return slf
-
-	description = _RecordDesc(view_at, size, copy_actions, props)
+	description = _RecordDesc(size, copy_actions, props, cls)
 
 	old_init = cls.__init__
 

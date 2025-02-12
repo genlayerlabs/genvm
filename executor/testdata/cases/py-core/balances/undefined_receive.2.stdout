@@ -1,0 +1,2 @@
+{'me': '__handle_undefined_method__', 'method_name': '__receive__', 'args': [], 'kwargs': {}, 'value': 100}
+executed with `Return("\x00")`

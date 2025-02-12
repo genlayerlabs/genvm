@@ -37,6 +37,9 @@ class VecDBElement[T: np.number, S: int, V, Dist]:
 		self._db = db
 		self.distance = distance
 
+	def __repr__(self) -> str:
+		return f'VecDB.Element(id={self.id!r}, key={self.key!r}, value={self.value!r}, distance={self.distance})'
+
 	@property
 	def key(self) -> np.ndarray[tuple[S], np.dtype[T]]:
 		"""

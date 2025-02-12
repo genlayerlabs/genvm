@@ -62,7 +62,7 @@ cum_out_dir = config.out_dir.join('share', 'genvm', 'runners', cum_name)
 cum_runner_json = {
 	Seq: [
 		{ With: { runner: "<contract>", action: { MapFile: { file: "file", to: "/contract.py" } } } },
-		{ SetArgs: ["py", "-u", "-c", "import genlayer.std._internal.runner"] },
+		{ SetArgs: ["py", "-u", "-c", "import contract; import genlayer.std._internal.runner"] },
 		{ Depends: "py-lib-cloudpickle:#{config.runners.py_libs.cloudpickle.hash}" },
 		{ Depends: py_genlayer_std_runner.meta.runner_id },
 		{ Depends: nix_target.meta.cpython_id },
@@ -90,7 +90,7 @@ cum_out_dir = config.out_dir.join('share', 'genvm', 'runners', cum_name)
 cum_runner_json = {
 	Seq: [
 		{ With: { runner: "<contract>", action: { MapFile: { file: "contract/", to: "/contract/" } } } },
-		{ SetArgs: ["py", "-u", "-c", "import genlayer.std._internal.runner"] },
+		{ SetArgs: ["py", "-u", "-c", "import contract; import genlayer.std._internal.runner"] },
 		{ Depends: "py-lib-cloudpickle:#{config.runners.py_libs.cloudpickle.hash}" },
 		{ Depends: py_genlayer_std_runner.meta.runner_id },
 		{ Depends: nix_target.meta.cpython_id },

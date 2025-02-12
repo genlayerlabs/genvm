@@ -10,7 +10,7 @@ from genlayer.py.storage import Array
 def try_get_lineno(m):
 	res = {}
 	try:
-		res['origin'] = inspect.getsourcefile(m)
+		res['file'] = inspect.getsourcefile(m)
 	except Exception:
 		pass
 	try:
@@ -102,7 +102,7 @@ def context_field(name: str, type: typing.Any) -> typing.Generator[None, None, N
 	try:
 		yield
 	except BaseException as e:
-		e.add_note(f'during generating field `{name}: {type!r}`')
+		e.add_note(f'during generating field `{name}: {repr_type(type)}`')
 		raise
 
 
@@ -115,7 +115,7 @@ def context_generic_argument(
 	except BaseException as e:
 		idx = str(index) if index > 0 else '<unknown>'
 		e.add_note(
-			f'during processing generic argument of `{repr_generic(origin, args)}`, argument `{type!r}`, index `{idx}`'
+			f'during processing generic argument of `{repr_generic(origin, args)}`, argument `{repr_type(type)}`, at index `{idx}`'
 		)
 		raise
 
@@ -125,8 +125,10 @@ def context_type(t: typing.Any) -> typing.Generator[None, None, None]:
 	try:
 		yield
 	except BaseException as e:
-		pushed = 'during processing type ' + repr_type(t)
+		res = ['during processing type `', repr_type(t), '`']
 		if len(ln := try_get_lineno(t)) != 0:
-			pushed += str(ln)
-		e.add_note(pushed)
+			res.append(' (declared at ')
+			res.append(str(ln))
+			res.append(')')
+		e.add_note(''.join(res))
 		raise

@@ -72,7 +72,7 @@ class IHost(metaclass=abc.ABCMeta):
 	@abc.abstractmethod
 	async def get_leader_nondet_result(
 		self, call_no: int, /
-	) -> tuple[ResultCode, collections.abc.Buffer] | None: ...
+	) -> tuple[ResultCode, collections.abc.Buffer] | ResultCode: ...
 	@abc.abstractmethod
 	async def post_nondet_result(
 		self, call_no: int, type: ResultCode, data: collections.abc.Buffer, /
@@ -163,14 +163,14 @@ async def host_loop(handler: IHost):
 			case Methods.GET_LEADER_NONDET_RESULT:
 				call_no = await recv_int()
 				data = await handler.get_leader_nondet_result(call_no)
-				if data is None:
-					await send_all(bytes([ResultCode.NONE]))
-					continue
-				code, as_bytes = data
-				as_bytes = memoryview(as_bytes)
-				await send_all(bytes([code]))
-				await send_int(len(as_bytes))
-				await send_all(as_bytes)
+				if isinstance(data, ResultCode):
+					await send_all(bytes([data]))
+				else:
+					code, as_bytes = data
+					await send_all(bytes([code]))
+					as_bytes = memoryview(as_bytes)
+					await send_int(len(as_bytes))
+					await send_all(as_bytes)
 			case Methods.POST_NONDET_RESULT:
 				call_no = await recv_int()
 				await handler.post_nondet_result(call_no, *await read_result())
@@ -381,7 +381,7 @@ async def run_host_and_program(
 		):
 			errors.append(Exception('no result provided'))
 		else:
-			errors.append(GenVMTimeoutException())
+			await handler.consume_result(ResultCode.CONTRACT_ERROR, b'timeout')
 
 	result = RunHostAndProgramRes(
 		b''.join(stdout).decode(),

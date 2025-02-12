@@ -1,5 +1,5 @@
-genlayer.py.calldata package
-============================
+genlayer.py.eth package
+=======================
 
 .. automodule:: genlayer.py.eth
    :members:
