@@ -1,0 +1,2 @@
+[VecDB.Element(id=0, key=array([1., 2., 3., 4., 5.], dtype=float32), value='123', distance=0.09546595811843872)]
+executed with `Return("\x00")`
