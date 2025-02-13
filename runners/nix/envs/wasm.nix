@@ -14,7 +14,7 @@ let
 
 		src = wasiSDKRaw;
 
-		buildInputs = [pkgs.libgcc];
+		buildInputs = [pkgs.libgcc pkgs.texinfo];
 
 		nativeBuildInputs = [pkgs.autoPatchelfHook];
 

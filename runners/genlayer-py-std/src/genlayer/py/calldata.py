@@ -51,7 +51,7 @@ class CalldataEncodable(metaclass=abc.ABCMeta):
 	"""
 
 	@abc.abstractmethod
-	def __to_calldata__(self) -> typing.Any:
+	def __to_calldata__(self) -> 'Encodable':
 		"""
 		Override this method to return calldata-compatible type
 
@@ -61,8 +61,22 @@ class CalldataEncodable(metaclass=abc.ABCMeta):
 		...
 
 
-def encode(
-	x: typing.Any, *, default: typing.Callable[[typing.Any], typing.Any] = lambda x: x
+type Encodable = (
+	None
+	| int
+	| str
+	| bytes
+	| collections.abc.Sequence[Encodable]
+	| collections.abc.Mapping[str, Encodable]
+	| CalldataEncodable
+)
+type EncodableWithDefault[T] = Encodable | T
+
+
+def encode[T](
+	x: EncodableWithDefault[T],
+	*,
+	default: typing.Callable[[EncodableWithDefault[T]], Encodable] | None = None,
 ) -> bytes:
 	"""
 	Encodes python object into calldata bytes
@@ -76,6 +90,13 @@ def encode(
 		#. :py:class:`CalldataEncodable`
 		#. :py:mod:`dataclasses`
 	"""
+	if default is None:
+
+		def default_default(x: EncodableWithDefault[T]) -> Encodable:
+			return x  # type: ignore
+
+		default = default_default
+
 	mem = bytearray()
 
 	def append_uleb128(i):
@@ -104,7 +125,7 @@ def encode(
 				mem.extend(bts)
 				impl(b[k])
 
-	def impl(b: typing.Any):
+	def impl(b: EncodableWithDefault[T]):
 		b = default(b)
 		if isinstance(b, CalldataEncodable):
 			b = b.__to_calldata__()
@@ -125,11 +146,13 @@ def encode(
 		elif isinstance(b, Address):
 			mem.append(SPECIAL_ADDR)
 			mem.extend(b.as_bytes)
-		elif isinstance(b, bytes):
+		elif isinstance(b, (bytes, bytearray)):
 			lb = len(b)
 			lb = (lb << 3) | TYPE_BYTES
 			append_uleb128(lb)
 			mem.extend(b)
+		elif isinstance(b, memoryview):
+			mem.extend(b.tolist())
 		elif isinstance(b, str):
 			b = b.encode('utf-8')
 			lb = len(b)
@@ -159,7 +182,7 @@ def decode(
 	mem0: collections.abc.Buffer,
 	*,
 	memview2bytes: typing.Callable[[memoryview], typing.Any] = bytes,
-) -> typing.Any:
+) -> Encodable:
 	"""
 	Decodes calldata encoded bytes into python DSL
 
@@ -235,13 +258,13 @@ def decode(
 	return res
 
 
-def to_str(d: typing.Any) -> str:
+def to_str(d: Encodable) -> str:
 	"""
 	Transforms calldata DSL into human readable json-like format, should be used for debug purposes only
 	"""
 	buf: list[str] = []
 
-	def impl(d: typing.Any) -> None:
+	def impl(d: Encodable) -> None:
 		if d is None:
 			buf.append('null')
 		elif d is True:
@@ -250,7 +273,10 @@ def to_str(d: typing.Any) -> str:
 			buf.append('false')
 		elif isinstance(d, str):
 			buf.append(json.dumps(d))
-		elif isinstance(d, bytes):
+		elif isinstance(d, (bytes, bytearray)):
+			buf.append('b#')
+			buf.append(d.hex())
+		elif isinstance(d, memoryview):
 			buf.append('b#')
 			buf.append(d.hex())
 		elif isinstance(d, int):

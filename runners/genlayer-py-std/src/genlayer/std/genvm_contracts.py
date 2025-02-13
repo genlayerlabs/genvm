@@ -75,7 +75,7 @@ class TransactionDataKwArgs(typing.TypedDict):
 	"""
 
 	value: typing.NotRequired[u256]
-	on: typing.NotRequired[typing.Literal['accepted', 'final']]
+	on: typing.NotRequired[typing.Literal['accepted', 'finalized']]
 
 
 class _ContractAtEmitMethod:
@@ -247,8 +247,20 @@ def deploy_contract(
 	*,
 	code: bytes,
 	args: collections.abc.Sequence[typing.Any] = [],
-	salt_nonce: typing.Literal[0],
 	kwargs: collections.abc.Mapping[str, typing.Any] = {},
+	salt_nonce: typing.Literal[0],
+	**rest: typing.Unpack[TransactionDataKwArgs],
+) -> None: ...
+
+
+@typing.overload
+def deploy_contract(
+	*,
+	code: bytes,
+	args: collections.abc.Sequence[typing.Any] = [],
+	kwargs: collections.abc.Mapping[str, typing.Any] = {},
+	salt_nonce: u256,
+	**rest: typing.Unpack[TransactionDataKwArgs],
 ) -> Address: ...
 
 
@@ -279,7 +291,7 @@ def deploy_contract(
 	wasi.deploy_contract(
 		calldata.encode(_make_calldata_obj(None, args, kwargs)),
 		code,
-		json.dumps(data),
+		transaction_data_kw_args_serialize(dict(data)),
 	)
 	if salt_nonce == 0:
 		return None
