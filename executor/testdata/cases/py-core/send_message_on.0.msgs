@@ -1,0 +1,3 @@
+send:
+	{'on': 'finalized'}
+	b'\x16\x04args\x15\t\x11\x06method\x1cfoo'

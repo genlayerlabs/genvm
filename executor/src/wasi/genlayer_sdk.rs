@@ -20,28 +20,67 @@ fn default_tx_value() -> primitive_types::U256 {
 }
 
 fn default_tx_on() -> InternalTxOn {
-    InternalTxOn::Final
+    InternalTxOn::Finalized
+}
+
+struct U256DeserializeVisitor;
+
+impl serde::de::Visitor<'_> for U256DeserializeVisitor {
+    type Value = primitive_types::U256;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("expected 0x string")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        if !value.starts_with("0x") {
+            return Err(E::custom("expected 0x string"));
+        }
+        let res = primitive_types::U256::from_str_radix(value, 16).map_err(E::custom)?;
+        Ok(res)
+    }
+}
+
+fn u256_deserialize<'de, D>(d: D) -> Result<primitive_types::U256, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    d.deserialize_str(U256DeserializeVisitor)
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum InternalTxOn {
-    Final,
+    Finalized,
     Accepted,
 }
 
 #[derive(Deserialize)]
 struct InternalTxData {
-    #[serde(default = "default_tx_value")]
+    #[serde(default = "default_tx_value", deserialize_with = "u256_deserialize")]
     value: primitive_types::U256,
     #[allow(dead_code)]
     #[serde(default = "default_tx_on")]
     on: InternalTxOn,
 }
 
+#[allow(dead_code)]
+#[derive(Deserialize)]
+struct InternalDeployTxData {
+    #[serde(default = "default_tx_value", deserialize_with = "u256_deserialize")]
+    value: primitive_types::U256,
+    #[serde(default = "default_tx_value", deserialize_with = "u256_deserialize")]
+    salt_nonce: primitive_types::U256,
+    #[serde(default = "default_tx_on")]
+    on: InternalTxOn,
+}
+
 #[derive(Deserialize)]
 struct ExternalTxData {
-    #[serde(default = "default_tx_value")]
+    #[serde(default = "default_tx_value", deserialize_with = "u256_deserialize")]
     value: primitive_types::U256,
 }
 
@@ -717,8 +756,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
 
         let data_str = super::common::read_string(mem, data)?;
-        let data: InternalTxData =
-            serde_json::from_str(&data_str).map_err(|_e| generated::types::Errno::Inval)?;
+        let data: InternalDeployTxData = match serde_json::from_str(&data_str) {
+            Ok(v) => v,
+            Err(err) => {
+                log::warn!(str = data_str, err:? = err; "parsing InternalDeployTxData failed");
+                return Err(generated::types::Errno::Inval.into());
+            }
+        };
         if !data.value.is_zero() {
             let my_balance = self
                 .context
