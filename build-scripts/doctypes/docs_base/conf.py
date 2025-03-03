@@ -29,6 +29,10 @@ language = 'en'
 # html_theme = 'alabaster'
 html_theme = 'pydata_sphinx_theme'
 html_static_path = ['_static']
+html_theme_options = {
+	"show_nav_level": 2,
+	"show_toc_level": 2,
+}
 
 todo_include_todos = True
 

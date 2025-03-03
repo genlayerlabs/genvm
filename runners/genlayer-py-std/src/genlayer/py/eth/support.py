@@ -45,6 +45,7 @@ class InplaceTuple:
 	It is useful for encoding/decoding arguments and returns
 
 	.. code-block:: python
+
 	        tuple[InplaceTuple, str, u256]
 	"""
 

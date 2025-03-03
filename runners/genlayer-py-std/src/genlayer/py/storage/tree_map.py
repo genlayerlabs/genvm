@@ -39,7 +39,8 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 	"""
 	Represents a mapping from keys to values that can be persisted on the blockchain
 
-	``K`` must implement :py:class:`genlayer.py.storage.tree_map.Comparable` protocol ("<" and "=" are needed)
+	:tparam K: must implement :py:class:`genlayer.py.storage.tree_map.Comparable` protocol ("<" is needed) and be storage-allowed
+	:tparam V: must be storage-allowed
 	"""
 
 	_root: u32
@@ -432,7 +433,13 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 				idx = _Node.right
 		return not_found()
 
-	def get[G](self, k: K, default: G = None) -> V | G:
+	@typing.overload
+	def get(self, k: K, /) -> V | None: ...
+
+	@typing.overload
+	def get[G](self, k: K, /, default: G) -> V | G: ...
+
+	def get(self, k: K, /, default = None):
 		"""
 		:returns: Value associated with `k` or `default` if there is no such value
 		"""

@@ -44,7 +44,7 @@ class ContractReturn:
 
 	__slots__ = ('data',)
 
-	data: typing.Any
+	data: calldata.Decoded
 
 
 @dataclass
@@ -58,7 +58,7 @@ class ContractError(Exception):
 	data: str
 
 
-def run_nondet[T](
+def run_nondet[T: calldata.Decoded](
 	leader_fn: typing.Callable[[], T],
 	validator_fn: typing.Callable[[ContractReturn | Rollback | ContractError], bool],
 ) -> Lazy[T]:
@@ -86,9 +86,9 @@ def run_nondet[T](
 
 
 def validator_handle_rollbacks_and_errors_default(
-	fn: typing.Callable[[], typing.Any],
+	fn: typing.Callable[[], calldata.Decoded],
 	leaders_result: ContractReturn | Rollback | ContractError,
-) -> tuple[typing.Any, typing.Any]:
+) -> tuple[calldata.Decoded, calldata.Decoded]:
 	"""
 	Default function to handle rollbacks and contract errors
 
@@ -111,7 +111,7 @@ def validator_handle_rollbacks_and_errors_default(
 		wasi.contract_return(calldata.encode(isinstance(leaders_result, ContractError)))
 
 
-def sandbox(fn: typing.Callable[[], typing.Any]) -> Lazy[typing.Any]:
+def sandbox[T: calldata.Decoded](fn: typing.Callable[[], T]) -> Lazy[T]:
 	"""
 	Runs function in the sandbox
 	"""

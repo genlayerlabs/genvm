@@ -1,5 +1,6 @@
 """
 Blockchain specific functionality, that won't work without GenVM
+and reexports form :py:mod:`genlayer.py` provided for convenience
 """
 
 __all__ = (

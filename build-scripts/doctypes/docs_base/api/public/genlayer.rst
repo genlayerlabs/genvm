@@ -1,4 +1,4 @@
-genlayer package
+Package genlayer
 ================
 
 .. automodule:: genlayer

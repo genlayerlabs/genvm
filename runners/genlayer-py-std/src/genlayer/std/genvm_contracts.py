@@ -281,7 +281,7 @@ def deploy_contract(
 
 	:returns: address of new contract *iff* non-zero ``salt_nonce`` was provided
 
-	.. info::
+	.. note::
 		Refer to consensus documentation for exact specification of
 
 		- ``salt_nonce`` requirements and it's effect on address

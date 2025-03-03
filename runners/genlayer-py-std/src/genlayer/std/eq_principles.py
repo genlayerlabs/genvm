@@ -11,6 +11,8 @@ import genlayer.std._wasi as wasi
 import genlayer.std.advanced as advanced
 import typing
 import json
+import genlayer.py.calldata as calldata
+
 from ..py.types import *
 from ._internal import (
 	decode_sub_vm_result,
@@ -19,15 +21,16 @@ from ._internal import (
 	lazy_from_fd_no_check,
 	_lazy_api,
 )
-from .nondet_fns import exec_prompt
 
 
 @_lazy_api
-def eq_principle_strict_eq[T](fn: typing.Callable[[], T]) -> Lazy[T]:
+def eq_principle_strict_eq[T: calldata.Decoded](fn: typing.Callable[[], T]) -> Lazy[T]:
 	"""
 	Comparative equivalence principle that checks for strict equality
 
 	:param fn: functions to perform an action
+
+	See :py:func:`genlayer.std.advanced.run_nondet` for description of data transformations
 	"""
 
 	def validator_fn(
@@ -42,14 +45,16 @@ def eq_principle_strict_eq[T](fn: typing.Callable[[], T]) -> Lazy[T]:
 
 
 @_lazy_api
-def eq_principle_prompt_comparative(
-	fn: typing.Callable[[], typing.Any], principle: str
-) -> Lazy[str]:
+def eq_principle_prompt_comparative[T: calldata.Decoded](
+	fn: typing.Callable[[], T], principle: str
+) -> Lazy[T]:
 	"""
 	Comparative equivalence principle that utilizes NLP for verifying that results are equivalent
 
 	:param fn: function that does all the job
-	:param principle: principle with which equivalence will be evaluated in the validator
+	:param principle: principle with which equivalence will be evaluated in the validator (via performing NLP)
+
+	See :py:func:`genlayer.std.advanced.run_nondet` for description of data transformations
 
 	.. note::
 		As leader results are encoded as calldata, :py:func:`format` is used for string representation. However, operating on strings by yourself is more safe in general
@@ -81,6 +86,8 @@ def eq_principle_prompt_non_comparative(
 	Both leader and validator finish their execution via NLP, that is used to perform ``task`` on ``input``.
 	Leader just executes this task, but the validator checks if task was performed with integrity.
 	This principle is useful when task is subjective
+
+	See :py:func:`~genlayer.std.advanced.run_nondet` for description of data transformations
 	"""
 
 	def leader_fn() -> str:
