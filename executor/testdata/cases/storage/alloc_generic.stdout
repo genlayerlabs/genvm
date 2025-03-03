@@ -1,0 +1,2 @@
+Test(foo='123')
+executed with `Return("\x00")`

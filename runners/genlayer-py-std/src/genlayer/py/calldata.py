@@ -16,7 +16,16 @@ Calldata natively supports following types:
 For full calldata specification see `genvm repo <https://github.com/yeagerai/genvm/blob/main/doc/calldata.md>`_
 """
 
-__all__ = ('encode', 'decode', 'to_str', 'Encodable', 'Encodable', 'EncodableWithDefault', 'Decoded', 'CalldataEncodable')
+__all__ = (
+	'encode',
+	'decode',
+	'to_str',
+	'Encodable',
+	'Encodable',
+	'EncodableWithDefault',
+	'Decoded',
+	'CalldataEncodable',
+)
 
 from .types import Address
 import typing
@@ -60,14 +69,8 @@ class CalldataEncodable(metaclass=abc.ABCMeta):
 		"""
 		...
 
-type Decoded = (
-	None
-	| int
-	| str
-	| bytes
-	| list[Decoded]
-	| dict[str, Decoded]
-)
+
+type Decoded = None | int | str | bytes | list[Decoded] | dict[str, Decoded]
 """
 Type that represents what type is coerced to after ``decode . encode``
 """

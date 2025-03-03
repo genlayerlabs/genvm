@@ -4,8 +4,10 @@ import numpy as np
 
 from genlayer import *
 
+from genlayer.py.storage._internal.generate import storage
 
-@allow_storage
+
+@storage
 class Test:
 	foo: np.float32
 

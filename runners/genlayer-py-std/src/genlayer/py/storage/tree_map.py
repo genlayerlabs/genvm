@@ -439,7 +439,7 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 	@typing.overload
 	def get[G](self, k: K, /, default: G) -> V | G: ...
 
-	def get(self, k: K, /, default = None):
+	def get(self, k: K, /, default=None):
 		"""
 		:returns: Value associated with `k` or `default` if there is no such value
 		"""

@@ -39,6 +39,7 @@ import genlayer.std._wasi as wasi
 
 # reexports
 from ..py.types import *
+from ..py.storage import storage_inmem_allocate
 from .eq_principles import *
 from .nondet_fns import *
 from .genvm_contracts import *
