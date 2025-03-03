@@ -16,6 +16,7 @@ jobs:
 
   module-test-cargo:
     needs: [initial]
+    if: needs.initial.outputs.rs-changed == 'true'
     uses: ./.github/workflows/module-test-cargo.yaml
     secrets: inherit
 
