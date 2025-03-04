@@ -26,16 +26,20 @@ __all__ = (
 	'message_raw',
 	'rollback_immediate',
 	'eth',
+	'storage_inmem_allocate',
 )
 
 import typing
 import json
 import os
+import abc
 
 import genlayer.py.eth as eth
 import genlayer.py.calldata as calldata
 import genlayer.std.advanced as advanced
 import genlayer.std._wasi as wasi
+
+import genlayer.py.get_schema as _get_schema
 
 # reexports
 from ..py.types import *
@@ -53,15 +57,36 @@ def private(f):
 	return f
 
 
-class _write:
+class _payable(metaclass=abc.ABCMeta):
 	def payable[T](self, f: T) -> T:
 		self(f)
-		setattr(f, '__payable__', True)
+		setattr(f, _get_schema.PAYABLE_ATTR, True)
 		return f
 
+	@abc.abstractmethod
+	def __call__[T](self, f: T) -> T: ...
+
+
+class _min_gas(_payable):
+	__slots__ = ('_min_gas',)
+
+	def __init__(self, min_gas: int):
+		self._min_gas = min_gas
+
 	def __call__[T](self, f: T) -> T:
-		setattr(f, '__public__', True)
-		setattr(f, '__readonly__', False)
+		setattr(f, _get_schema.PUBLIC_ATTR, True)
+		setattr(f, _get_schema.READONLY_ATTR, False)
+		setattr(f, _get_schema.MIN_GAS_ATTR, self._min_gas)
+		return f
+
+
+class _write:
+	def min_gas(self, min_gas: int, /) -> _min_gas:
+		return _min_gas(min_gas)
+
+	def __call__[T](self, f: T) -> T:
+		setattr(f, _get_schema.PUBLIC_ATTR, True)
+		setattr(f, _get_schema.READONLY_ATTR, False)
 		return f
 
 
@@ -71,8 +96,8 @@ class public:
 		"""
 		Decorator that marks a contract method as a public view
 		"""
-		setattr(f, '__public__', True)
-		setattr(f, '__readonly__', True)
+		setattr(f, _get_schema.PUBLIC_ATTR, True)
+		setattr(f, _get_schema.READONLY_ATTR, True)
 		return f
 
 	write = _write()
@@ -85,6 +110,9 @@ class public:
 		def foo(self) -> None: ...
 
 		@gl.public.write.payable
+		def bar(self) -> None: ...
+
+		@gl.public.write.min_gas(100).payable
 		def bar(self) -> None: ...
 	"""
 

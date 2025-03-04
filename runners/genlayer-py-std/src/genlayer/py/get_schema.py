@@ -10,11 +10,16 @@ import dataclasses
 
 import genlayer.py._internal.reflect as reflect
 
+PUBLIC_ATTR = '__gl_public__'
+READONLY_ATTR = '__gl_readonly__'
+MIN_GAS_ATTR = '__gl_min_gas__'
+PAYABLE_ATTR = '__gl_payable__'
+
 
 def _is_public(meth) -> bool:
 	if meth is None:
 		return False
-	return getattr(meth, '__public__', False)
+	return getattr(meth, PUBLIC_ATTR, False)
 
 
 def _is_list(t, permissive: bool) -> bool:
@@ -129,9 +134,11 @@ def _get_params(m: types.FunctionType, *, is_ctor: bool) -> dict:
 			'kwparams': kwparams,
 		}
 		if not is_ctor:
+			if min_gas := getattr(m, MIN_GAS_ATTR, None):
+				ret['min_gas'] = min_gas
 			ret.update(
 				{
-					'readonly': getattr(m, '__readonly__', False),
+					'readonly': getattr(m, READONLY_ATTR, False),
 					'ret': _repr_type(signature.return_annotation, True),
 				}
 			)

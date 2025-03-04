@@ -1,16 +1,17 @@
 from genlayer.py.get_schema import get_schema
+import genlayer.py.get_schema as _get_schema
 
 import typing
 
 
 def public(f):
-	f.__public__ = True
+	setattr(f, _get_schema.PUBLIC_ATTR, True)
 	return f
 
 
 def public_view(f):
-	f.__public__ = True
-	f.__readonly__ = True
+	setattr(f, _get_schema.PUBLIC_ATTR, True)
+	setattr(f, _get_schema.READONLY_ATTR, True)
 	return f
 
 

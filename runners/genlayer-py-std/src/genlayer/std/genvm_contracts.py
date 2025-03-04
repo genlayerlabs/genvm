@@ -313,7 +313,7 @@ class Contract:
 				f'only one contract is allowed; first: `{__known_contact__}` second: `{cls}`'
 			)
 
-		cls.__contract__ = True
+		cls.__gl_contract__ = True
 		from genlayer.py.storage._internal.generate import storage
 
 		storage(cls)

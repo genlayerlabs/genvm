@@ -418,19 +418,19 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 
 	def _get_fn[T](
 		self,
-		k: K,
+		k: object,
 		found: collections.abc.Callable[[_Node[K, V]], T],
 		not_found: collections.abc.Callable[[], T],
 	) -> T:
 		idx = self._root
 		while idx != 0:
 			_Node = self._slots[idx - 1]
-			if _Node.key == k:
-				return found(_Node)
-			if k < _Node.key:
+			if k < _Node.key:  # type: ignore
 				idx = _Node.left
-			else:
+			elif _Node.key < k:
 				idx = _Node.right
+			else:
+				return found(_Node)
 		return not_found()
 
 	@typing.overload
@@ -451,7 +451,7 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 
 		return self._get_fn(k, lambda x: x.value, not_found)
 
-	def __contains__(self, k: K) -> bool:
+	def __contains__(self, k: object) -> bool:
 		return self._get_fn(k, lambda _: True, lambda: False)
 
 	def _visit[T](

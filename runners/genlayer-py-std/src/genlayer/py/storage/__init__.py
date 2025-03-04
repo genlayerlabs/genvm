@@ -13,6 +13,8 @@ from .annotations import *
 
 import typing
 
+from ._internal.generate import ORIGINAL_INIT_ATTR
+
 
 def storage_inmem_allocate[T](t: typing.Type[T], *init_args, **init_kwargs) -> T:
 	from ._internal.generate import _storage_build, Lit
@@ -30,8 +32,8 @@ def storage_inmem_allocate[T](t: typing.Type[T], *init_args, **init_kwargs) -> T
 	else:
 		init = getattr(init, '__init__', None)
 	if init is not None:
-		if hasattr(init, '__original_init__'):
-			init = init.__original_init__
+		if hasattr(init, ORIGINAL_INIT_ATTR):
+			init = getattr(init, ORIGINAL_INIT_ATTR)
 		init(instance, *init_args, **init_kwargs)
 
 	return instance
