@@ -84,7 +84,14 @@ type Encodable = (
 	| collections.abc.Mapping[str, Encodable]
 	| CalldataEncodable
 )
+"""
+Type that can be encoded into calldata
+"""
+
 type EncodableWithDefault[T] = Encodable | T
+"""
+Type that can be encoded into calldata, provided ``default`` function ``T -> Encodable``
+"""
 
 
 def encode[T](

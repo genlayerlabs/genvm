@@ -13,6 +13,12 @@ class GetWebpageKwArgs(typing.TypedDict):
 	Mode in which to return the result
 	"""
 
+	wait_after_loaded: typing.NotRequired[str]
+	"""
+	How long to wait after dom loaded (for js to emit dynamic content)
+	Should be in format such as "1000ms" or "1s"
+	"""
+
 
 @_lazy_api
 def get_webpage(url: str, **config: typing.Unpack[GetWebpageKwArgs]) -> Lazy[str]:

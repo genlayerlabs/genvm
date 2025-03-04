@@ -49,9 +49,16 @@ enum GetWebpageConfigMode {
     html,
     text,
 }
+
+fn no_wait() -> ParsedDuration {
+    ParsedDuration(tokio::time::Duration::ZERO)
+}
+
 #[derive(Deserialize)]
 struct GetWebpageConfig {
     mode: GetWebpageConfigMode,
+    #[serde(default = "no_wait")]
+    wait_after_loaded: ParsedDuration,
 }
 
 unsafe impl Send for Impl {}
@@ -104,7 +111,8 @@ impl Impl {
         url: String,
         session: &mut Session<SessionData>,
     ) -> ModuleResult<String> {
-        let config: GetWebpageConfig = serde_json::from_str(&config)?;
+        let config: GetWebpageConfig =
+            make_error_recoverable(serde_json::from_str(&config), "invalid config")?;
         let url = url::Url::parse(&url)?;
         if url.scheme() == "file" {
             return Err(ModuleError::Recoverable("file scheme is forbidden"));
@@ -135,6 +143,14 @@ impl Impl {
         let res = req.send().await?;
         let res = res.error_for_status()?;
         std::mem::drop(res);
+
+        match config.wait_after_loaded {
+            ParsedDuration(tokio::time::Duration::ZERO) => {}
+            ParsedDuration(x) => {
+                log::trace!(duration:? = x; "sleeping to allow page to load");
+                tokio::time::sleep(x).await
+            }
+        }
 
         let script = match config.mode {
             GetWebpageConfigMode::html => {
