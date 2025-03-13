@@ -1,3 +1,4 @@
+use anyhow::Context;
 use genvm_modules_impl_common::*;
 use genvm_modules_interfaces::{CancellationToken, ModuleError, ModuleResult};
 use serde_derive::Deserialize;
@@ -86,8 +87,11 @@ impl Impl {
             .header("Content-Type", "application/json; charset=utf-8")
             .body(INIT_REQUEST)
             .send()
-            .await?;
-        let body = read_response(opened_session_res).await?;
+            .await
+            .with_context(|| "creating sessions request")?;
+        let body = read_response(opened_session_res)
+            .await
+            .with_context(|| "reading response")?;
         let val: serde_json::Value = serde_json::from_str(&body)?;
         let session_id = val
             .pointer("/value/sessionId")

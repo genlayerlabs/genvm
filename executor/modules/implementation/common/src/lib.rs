@@ -1,6 +1,6 @@
 use std::{future::Future, pin::Pin};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use regex::Regex;
 use serde::Deserialize;
 
@@ -59,18 +59,32 @@ impl<'de> Deserialize<'de> for ParsedDuration {
     }
 }
 
+fn censor_response(res: &reqwest::Response) -> String {
+    let debug = format!("{:?}", res);
+
+    let replacement = |caps: &regex::Captures| -> String {
+        format!(r#""{}": "<censored>""#, caps.get(1).unwrap().as_str())
+    };
+
+    CENSOR_RESPONSE
+        .replace_all(&debug, replacement)
+        .into_owned()
+}
+
 pub async fn read_response(res: reqwest::Response) -> Result<String> {
     let status = res.status();
     if status != 200 {
-        let debug = format!("{:?}", &res);
-        let text = res.text().await?;
+        log::error!(response = censor_response(&res), status = status.as_u16(); "request error (1)");
+        let text = res.text().await;
+        log::error!(body:? = text; "request error (2)");
         return Err(anyhow::anyhow!(
-            "can't read response\nresponse: {}\nbody: {}",
-            CENSOR_RESPONSE.replace_all(&debug, "\"<censored>\": \"<censored>\""),
-            &text
+            "request error status={} body={:?}",
+            status.as_u16(),
+            text,
         ));
     }
-    Ok(res.text().await?)
+    let text = res.text().await.with_context(|| "reading body as text")?;
+    Ok(text)
 }
 
 pub fn make_error_recoverable<T, E>(

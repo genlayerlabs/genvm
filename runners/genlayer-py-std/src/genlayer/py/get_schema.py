@@ -12,7 +12,8 @@ import genlayer.py._internal.reflect as reflect
 
 PUBLIC_ATTR = '__gl_public__'
 READONLY_ATTR = '__gl_readonly__'
-MIN_GAS_ATTR = '__gl_min_gas__'
+MIN_GAS_LEADER_ATTR = '__gl_min_gas_leader__'
+MIN_GAS_VALIDATOR_ATTR = '__gl_min_gas_validator__'
 PAYABLE_ATTR = '__gl_payable__'
 
 
@@ -134,8 +135,10 @@ def _get_params(m: types.FunctionType, *, is_ctor: bool) -> dict:
 			'kwparams': kwparams,
 		}
 		if not is_ctor:
-			if min_gas := getattr(m, MIN_GAS_ATTR, None):
-				ret['min_gas'] = min_gas
+			if min_gas := getattr(m, MIN_GAS_LEADER_ATTR, None):
+				ret['min_gas_leader'] = min_gas
+			if min_gas := getattr(m, MIN_GAS_VALIDATOR_ATTR, None):
+				ret['min_gas_validator'] = min_gas
 			ret.update(
 				{
 					'readonly': getattr(m, READONLY_ATTR, False),

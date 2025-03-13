@@ -68,21 +68,23 @@ class _payable(metaclass=abc.ABCMeta):
 
 
 class _min_gas(_payable):
-	__slots__ = ('_min_gas',)
+	__slots__ = ('_leader', '_validator')
 
-	def __init__(self, min_gas: int):
-		self._min_gas = min_gas
+	def __init__(self, leader: int, validator: int):
+		self._leader = leader
+		self._validator = validator
 
 	def __call__[T](self, f: T) -> T:
 		setattr(f, _get_schema.PUBLIC_ATTR, True)
 		setattr(f, _get_schema.READONLY_ATTR, False)
-		setattr(f, _get_schema.MIN_GAS_ATTR, self._min_gas)
+		setattr(f, _get_schema.MIN_GAS_LEADER_ATTR, self._leader)
+		setattr(f, _get_schema.MIN_GAS_VALIDATOR_ATTR, self._validator)
 		return f
 
 
-class _write:
-	def min_gas(self, min_gas: int, /) -> _min_gas:
-		return _min_gas(min_gas)
+class _write(_payable):
+	def min_gas(self, *, leader: int, validator: int) -> _min_gas:
+		return _min_gas(leader, validator)
 
 	def __call__[T](self, f: T) -> T:
 		setattr(f, _get_schema.PUBLIC_ATTR, True)
