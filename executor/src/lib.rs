@@ -174,7 +174,10 @@ pub async fn run_with(
             Ok(AbsentLeaderResult) => {
                 Ok(RunOk::ContractError("deterministic_violation".into(), None))
             }
-            Err(e) => Err(e),
+            Err(e) => {
+                log::error!(error:? = e; "internal error");
+                Err(e)
+            }
         },
         e => e,
     };

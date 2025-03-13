@@ -67,28 +67,6 @@ if len(libs) != 0:
 	new_args.append('-static')
 	new_args += map(lambda x: f'-l{x}', libs)
 
-# for i in range(len(new_args) - 1):
-# 	if new_args[i] == '-L':
-# 		lib_dirs.add(Path(new_args[i + 1]))
-
-# resolved_libs: list[str] = []
-
-# for lib in libs:
-# 	if lib in ['gcc_eh', 'dl', 'unwind', 'c', 'm', 'gcc', 'rt', 'pthread']:
-# 		continue
-# 	found = False
-# 	for base in lib_dirs:
-# 		for candidate in [lib, f'{lib}.a', f'lib{lib}.a']:
-# 			p = base.joinpath(candidate)
-# 			if p.exists():
-# 				found = True
-# 				resolved_libs.append(str(p))
-# 				break
-# 	if not found:
-# 		raise Exception(f'lib {lib} not found')
-
-# new_args += resolved_libs
-
 if '-target' not in new_args:
 	import json
 

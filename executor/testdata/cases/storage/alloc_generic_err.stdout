@@ -1,0 +1,4 @@
+generic storage classes can not be instantiated with __init__, please, use gl.storage_inmem_allocate
+due to field `foo: T`
+in class `Test`
+executed with `Return("\x00")`

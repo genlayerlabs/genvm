@@ -2,8 +2,8 @@ GenLayer SDK API Documentation
 ==============================
 
 .. toctree::
-   :maxdepth: 2
    :caption: Contents:
+   :maxdepth: 4
 
-   section_public_packages/index
-   section_internal/index
+   api/index
+   spec/index

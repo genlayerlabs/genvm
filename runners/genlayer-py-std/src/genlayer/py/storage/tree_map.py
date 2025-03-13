@@ -39,7 +39,8 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 	"""
 	Represents a mapping from keys to values that can be persisted on the blockchain
 
-	``K`` must implement :py:class:`genlayer.py.storage.tree_map.Comparable` protocol ("<" and "=" are needed)
+	:tparam K: must implement :py:class:`genlayer.py.storage.tree_map.Comparable` protocol ("<" is needed) and be storage-allowed
+	:tparam V: must be storage-allowed
 	"""
 
 	_root: u32
@@ -417,22 +418,28 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 
 	def _get_fn[T](
 		self,
-		k: K,
+		k: object,
 		found: collections.abc.Callable[[_Node[K, V]], T],
 		not_found: collections.abc.Callable[[], T],
 	) -> T:
 		idx = self._root
 		while idx != 0:
 			_Node = self._slots[idx - 1]
-			if _Node.key == k:
-				return found(_Node)
-			if k < _Node.key:
+			if k < _Node.key:  # type: ignore
 				idx = _Node.left
-			else:
+			elif _Node.key < k:
 				idx = _Node.right
+			else:
+				return found(_Node)
 		return not_found()
 
-	def get[G](self, k: K, default: G = None) -> V | G:
+	@typing.overload
+	def get(self, k: K, /) -> V | None: ...
+
+	@typing.overload
+	def get[G](self, k: K, /, default: G) -> V | G: ...
+
+	def get(self, k: K, /, default=None):
 		"""
 		:returns: Value associated with `k` or `default` if there is no such value
 		"""
@@ -444,7 +451,7 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 
 		return self._get_fn(k, lambda x: x.value, not_found)
 
-	def __contains__(self, k: K) -> bool:
+	def __contains__(self, k: object) -> bool:
 		return self._get_fn(k, lambda _: True, lambda: False)
 
 	def _visit[T](

@@ -281,7 +281,7 @@ def deploy_contract(
 
 	:returns: address of new contract *iff* non-zero ``salt_nonce`` was provided
 
-	.. info::
+	.. note::
 		Refer to consensus documentation for exact specification of
 
 		- ``salt_nonce`` requirements and it's effect on address
@@ -313,7 +313,7 @@ class Contract:
 				f'only one contract is allowed; first: `{__known_contact__}` second: `{cls}`'
 			)
 
-		cls.__contract__ = True
+		cls.__gl_contract__ = True
 		from genlayer.py.storage._internal.generate import storage
 
 		storage(cls)

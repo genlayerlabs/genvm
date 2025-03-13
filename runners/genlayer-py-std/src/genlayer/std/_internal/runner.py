@@ -12,6 +12,7 @@ mem = memoryview(entrypoint)
 import typing
 from genlayer.py.types import Rollback
 import genlayer.py.calldata
+import genlayer.py._internal.reflect as reflect
 
 
 def _give_result(res_fn: typing.Callable[[], typing.Any]):
@@ -39,11 +40,7 @@ import contract as _user_contract_module  # type: ignore
 import genlayer.std as gl
 from ...py.storage._internal.generate import _known_descs
 
-
-def _is_public(meth) -> bool:
-	if meth is None:
-		return False
-	return getattr(meth, '__public__', False)
+import genlayer.py.get_schema as _get_schema
 
 
 class MethodIsNotPayable(Exception):
@@ -58,7 +55,7 @@ def _handle_call_special(contract: type, calldata: dict[str, typing.Any]) -> str
 		return '__receive__'
 	if method_name == '#get-schema':
 		if get_schema := getattr(contract, '__get_schema__', None):
-			if _is_public(get_schema):
+			if _get_schema._is_public(get_schema):
 				raise TypeError('__get_schema__ must be private')
 			_give_result(get_schema)
 
@@ -73,13 +70,17 @@ def _handle_call_special(contract: type, calldata: dict[str, typing.Any]) -> str
 
 def _handle_call(contract: type, mem: memoryview):
 	calldata = genlayer.py.calldata.decode(mem)
+	if not isinstance(calldata, dict):
+		raise TypeError(
+			f'invalid calldata, expected dict got `{reflect.repr_type(calldata)}`'
+		)
 
 	from .. import message
 
 	is_undefined = False
 	if message.is_init:
 		meth = getattr(contract, '__init__')
-		if _is_public(meth):
+		if _get_schema._is_public(meth):
 			raise TypeError(f'constructor must be private')
 		assert meth is not object.__init__
 		meth_name = ''
@@ -93,9 +94,9 @@ def _handle_call(contract: type, mem: memoryview):
 			raise TypeError(
 				'call to undefined method with absent __handle_undefined_method__ (fallback)'
 			)
-		if not _is_public(meth):
+		if not _get_schema._is_public(meth):
 			raise TypeError(f"can't call non-public methods")
-		if message.value > 0 and not getattr(meth, '__payable__', False):
+		if message.value > 0 and not getattr(meth, _get_schema.PAYABLE_ATTR, False):
 			raise TypeError('non-payable method called with value')
 
 	from .storage import STORAGE_MAN, ROOT_STORAGE_ADDRESS
@@ -105,7 +106,9 @@ def _handle_call(contract: type, mem: memoryview):
 	if is_undefined:
 		_give_result(
 			lambda: contract_instance.__handle_undefined_method__(
-				meth_name, calldata.get('args', []), calldata.get('kwargs', {})
+				meth_name,
+				calldata.get('args', []),  # type: ignore
+				calldata.get('kwargs', {}),  # type: ignore
 			)
 		)
 	else:

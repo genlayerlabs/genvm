@@ -16,7 +16,16 @@ Calldata natively supports following types:
 For full calldata specification see `genvm repo <https://github.com/yeagerai/genvm/blob/main/doc/calldata.md>`_
 """
 
-__all__ = ('encode', 'decode', 'to_str', 'CalldataEncodable')
+__all__ = (
+	'encode',
+	'decode',
+	'to_str',
+	'Encodable',
+	'Encodable',
+	'EncodableWithDefault',
+	'Decoded',
+	'CalldataEncodable',
+)
 
 from .types import Address
 import typing
@@ -56,10 +65,15 @@ class CalldataEncodable(metaclass=abc.ABCMeta):
 		Override this method to return calldata-compatible type
 
 		.. warning::
-			returning ``self`` may lead to an infinite loop
+			returning ``self`` may lead to an infinite loop or an exception
 		"""
 		...
 
+
+type Decoded = None | int | str | bytes | list[Decoded] | dict[str, Decoded]
+"""
+Type that represents what type is coerced to after ``decode . encode``
+"""
 
 type Encodable = (
 	None
@@ -70,7 +84,14 @@ type Encodable = (
 	| collections.abc.Mapping[str, Encodable]
 	| CalldataEncodable
 )
+"""
+Type that can be encoded into calldata
+"""
+
 type EncodableWithDefault[T] = Encodable | T
+"""
+Type that can be encoded into calldata, provided ``default`` function ``T -> Encodable``
+"""
 
 
 def encode[T](
@@ -182,7 +203,7 @@ def decode(
 	mem0: collections.abc.Buffer,
 	*,
 	memview2bytes: typing.Callable[[memoryview], typing.Any] = bytes,
-) -> Encodable:
+) -> Decoded:
 	"""
 	Decodes calldata encoded bytes into python DSL
 
@@ -304,6 +325,8 @@ def to_str(d: Encodable) -> str:
 				comma = True
 				impl(v)
 			buf.append(']')
+		elif isinstance(d, CalldataEncodable):
+			impl(d.__to_calldata__())
 		else:
 			raise Exception(f"can't encode {d} to calldata")
 

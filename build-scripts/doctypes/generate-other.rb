@@ -31,8 +31,8 @@ EOF
 }
 
 template = <<-EOF
-GenLayer SDK Internal packages
-==============================
+Internal packages
+=================
 
 .. warning::
    This are internal modules, they are subject to change between version. This page is provided only for reference.
@@ -40,8 +40,7 @@ GenLayer SDK Internal packages
    For that reason users should not use anything form these packages directly, but use re-exports
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :caption: Packages:
 
 % children.each { |c|
    <%= c %>

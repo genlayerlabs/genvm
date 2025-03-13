@@ -1,2 +1,2 @@
 local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/storage.py')
+simple.run('${jsonnetDir}/alloc_generic.py')

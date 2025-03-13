@@ -28,9 +28,13 @@ from ..vec import DynArray, _DynArrayDesc, Array, _ArrayDesc
 
 import genlayer.py._internal.reflect as reflect
 
+STORAGE_PATCHED_ATTR = '__gl_storage_patched__'
+ORIGINAL_INIT_ATTR = '__gl_original_init__'
+ALLOW_STORAGE_ATTR = '__gl_allow_storage__'
+
 
 def allow_storage[T: type](cls: T) -> T:
-	cls.__allow_storage__ = True
+	setattr(cls, ALLOW_STORAGE_ATTR, True)
 	return cls
 
 
@@ -296,7 +300,7 @@ def _storage_build_struct(
 	if cls is DynArray:
 		raise Exception('invalid builder')
 
-	if not hasattr(cls, '__allow_storage__'):
+	if not hasattr(cls, ALLOW_STORAGE_ATTR):
 		raise TypeError(
 			f'class is not marked for usage within storage, please, annotate it with @allow_storage',
 			cls,
@@ -307,6 +311,7 @@ def _storage_build_struct(
 	props: dict[str, tuple[TypeDesc, int]] = {}
 
 	was_generic = False
+	generic_info = {}
 
 	for prop_name, prop_value in typing.get_type_hints(cls).items():
 		if typing.get_origin(prop_value) is typing.ClassVar:
@@ -323,8 +328,10 @@ def _storage_build_struct(
 
 		if isinstance(prop_value, typing.TypeVar):
 			was_generic = True
+			generic_info['name'] = prop_name
+			generic_info['value'] = prop_value
 
-		if not getattr(cls, '__storage_patched__', False):
+		if not getattr(cls, STORAGE_PATCHED_ATTR, False):
 
 			def getter(s: WithRecordStorageSlot, prop_name=prop_name):
 				prop_desc, off = s.__type_desc__.props[prop_name]
@@ -343,19 +350,38 @@ def _storage_build_struct(
 
 	old_init = cls.__init__
 
-	def new_init(self, *args, **kwargs):
-		if not hasattr(self, '_storage_slot'):
-			assert not was_generic
-			self._storage_slot = _FakeStorageMan().get_store_slot(ROOT_STORAGE_ADDRESS)
-			self._off = 0
-			self.__type_desc__ = description
-		old_init(self, *args, **kwargs)
-
-	new_init.__storage_patched__ = True  # type: ignore
-
-	if not hasattr(cls, '__contract__') and not getattr(
-		old_init, '__storage_patched__', False
+	if not hasattr(cls, '__gl_contract__') and not getattr(
+		old_init, STORAGE_PATCHED_ATTR, False
 	):
+		# here we may want to patch __init__ to allocate in storage
+		def new_init_generic(self, *args, **kwargs):
+			if hasattr(self, '_storage_slot'):
+				old_init(self, *args, **kwargs)
+				return
+
+			exc = TypeError(
+				'generic storage classes can not be instantiated with __init__, please, use gl.storage_inmem_allocate'
+			)
+			exc.add_note(
+				f'due to field `{generic_info['name']}: {reflect.repr_type(generic_info['value'])}`'
+			)
+			exc.add_note(f'in class `{reflect.repr_type(cls)}`')
+			raise exc
+
+		def new_init_no_generic(self, *args, **kwargs):
+			if not hasattr(self, '_storage_slot'):
+				self._storage_slot = _FakeStorageMan().get_store_slot(ROOT_STORAGE_ADDRESS)
+				self._off = 0
+				self.__type_desc__ = description
+			old_init(self, *args, **kwargs)
+
+		if was_generic:
+			new_init = new_init_generic
+		else:
+			new_init = new_init_no_generic
+
+		setattr(new_init, STORAGE_PATCHED_ATTR, True)
+		setattr(new_init, ORIGINAL_INIT_ATTR, old_init)
 		cls.__init__ = new_init
 	return description
 

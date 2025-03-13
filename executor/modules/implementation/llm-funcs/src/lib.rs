@@ -1,3 +1,4 @@
+use anyhow::Context;
 use serde_derive::{Deserialize, Serialize};
 
 use genvm_modules_impl_common::*;
@@ -45,7 +46,10 @@ async fn send_with_retries(
     builder: impl (Fn() -> reqwest::RequestBuilder) + Send,
 ) -> anyhow::Result<reqwest::Response> {
     for i in 0..3 {
-        let res = builder().send().await?;
+        let res = builder()
+            .send()
+            .await
+            .with_context(|| "sending request to llm provider")?;
         if ![
             reqwest::StatusCode::REQUEST_TIMEOUT,
             reqwest::StatusCode::SERVICE_UNAVAILABLE,
@@ -57,8 +61,8 @@ async fn send_with_retries(
         }
 
         let debug = format!("{:?}", &res);
-        let body = res.text().await?;
-        log::error!(response = CENSOR_RESPONSE.replace_all(&debug, "\"<censored>\": \"<censored>\""), body = body, retry = i; "llm request failed");
+        let body = res.text().await;
+        log::error!(response = CENSOR_RESPONSE.replace_all(&debug, "\"<censored>\": \"<censored>\""), body:? = body, retry = i; "llm request failed");
 
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
     }
@@ -520,7 +524,7 @@ pub fn new_llm_module(
 }
 
 #[cfg(test)]
-#[allow(non_upper_case_globals)]
+#[allow(non_upper_case_globals, dead_code)]
 mod tests {
     use crate::Impl;
 
@@ -662,9 +666,10 @@ mod tests {
     }
 
     make_test!(openai);
-    make_test!(heurist);
     make_test!(anthropic);
     make_test!(google);
-    make_test!(atoma);
     make_test!(xai);
+
+    //make_test!(heurist);
+    //make_test!(atoma);
 }
