@@ -119,6 +119,8 @@ def eq_principle_prompt_non_comparative(
 			'input': my_input,
 			'criteria': criteria,
 		}
-		return wasi.eq_principle_prompt(TemplateId.NON_COMPARATIVE, json.dumps(vars))
+		return wasi.eq_principle_prompt(
+			TemplateId.NON_COMPARATIVE_VALIDATOR, json.dumps(vars)
+		)
 
 	return advanced.run_nondet(leader_fn, validator_fn)

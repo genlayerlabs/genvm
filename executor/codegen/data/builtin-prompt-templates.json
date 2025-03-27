@@ -5,7 +5,7 @@
     "size": "u8",
     "values": {
         "comparative": 0,
-        "non_comparative": 1,
+        "non_comparative_validator": 1,
         "non_comparative_leader": 2
     }
   }

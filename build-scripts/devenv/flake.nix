@@ -29,11 +29,14 @@
 							curl
 
 							python312
+							python312Packages.jsonnet
 							poetry
 							pre-commit
 
 							xz
 							glibc
+
+							wabt
 						];
 
 						shellHook = ''

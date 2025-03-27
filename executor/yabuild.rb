@@ -87,8 +87,8 @@ project('executor') {
 	)
 
 	config_target = target_copy(
-		dest: config.out_dir.join('etc', 'genvm-config.json'),
-		src: [cur_src.join('default-config.json')],
+		dest: config.out_dir.join('etc', 'genvm-config.yaml'),
+		src: [cur_src.join('default-config.yaml')],
 	)
 
 	genvm_all = target_alias('all', bin, config_target, tags: ['all'])

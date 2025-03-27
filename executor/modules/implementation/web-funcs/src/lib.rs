@@ -224,9 +224,9 @@ impl genvm_modules_interfaces::Web for Proxy {
 
 #[no_mangle]
 pub fn new_web_module(
-    args: genvm_modules_interfaces::CtorArgs<'_>,
+    args: genvm_modules_interfaces::CtorArgs,
 ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Web + Send + Sync>> {
-    let config: Config = serde_json::from_str(args.config)?;
+    let config: Config = serde_yaml::from_value(args.config)?;
     let host = config.host.clone();
     Ok(Box::new(Proxy(Arc::new(Impl {
         sessions: SessionPool::new(),

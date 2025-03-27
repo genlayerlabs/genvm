@@ -3,7 +3,7 @@ use serde_derive::Serialize;
 #[repr(u8)]
 pub enum TemplateId {
     Comparative = 0,
-    NonComparative = 1,
+    NonComparativeValidator = 1,
     NonComparativeLeader = 2,
 }
 
@@ -13,7 +13,7 @@ impl TryFrom<u8> for TemplateId {
     fn try_from(value: u8) -> Result<Self, ()> {
         match value {
             0 => Ok(TemplateId::Comparative),
-            1 => Ok(TemplateId::NonComparative),
+            1 => Ok(TemplateId::NonComparativeValidator),
             2 => Ok(TemplateId::NonComparativeLeader),
             _ => Err(()),
         }

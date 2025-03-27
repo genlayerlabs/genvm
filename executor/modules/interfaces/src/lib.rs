@@ -29,8 +29,8 @@ pub trait Llm {
 }
 
 #[repr(C)]
-pub struct CtorArgs<'a> {
-    pub config: &'a str,
+pub struct CtorArgs {
+    pub config: serde_yaml::Value,
     pub cancellation: Arc<CancellationToken>,
 }
 
