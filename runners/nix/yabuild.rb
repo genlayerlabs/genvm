@@ -25,8 +25,8 @@ sdk_rust = find_target /\/sdk-rust$/
 
 command_target = target_command(
 	output_file: [
-		config.out_dir.join('share', 'genvm', 'runners', 'cpython', hashes['cpython'] + '.tar'),
-		config.out_dir.join('share', 'genvm', 'runners', 'softfloat', hashes['softfloat'] + '.tar'),
+		config.runners_dir.join('cpython', hashes['cpython'] + '.tar'),
+		config.runners_dir.join('softfloat', hashes['softfloat'] + '.tar'),
 	],
 	commands: [
 		[

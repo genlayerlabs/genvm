@@ -87,7 +87,7 @@ project('executor') {
 	)
 
 	config_target = target_copy(
-		dest: config.out_dir.join('share', 'genvm', 'default-config.json'),
+		dest: config.out_dir.join('etc', 'genvm-config.json'),
 		src: [cur_src.join('default-config.json')],
 	)
 

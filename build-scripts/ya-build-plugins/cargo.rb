@@ -9,8 +9,7 @@ class CargoBuildTarget < Target
 		@flags = flags
 		@features = features
 		@out_file = out_file
-		@target_dir = CONFIGURATOR.root_build.join('generated', 'rust-target') # dir.join('target')
-		# @target_dir = dir.join('target')
+		@target_dir = CONFIGURATOR.root_build.join('rust-target')
 		cargo_out_dir = @target_dir
 		@target = target
 		if not target.nil?
@@ -111,6 +110,9 @@ self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, n
 			o, e, s = Open3.capture3('rustc --version --verbose')
 			raise "rustc failed #{o} #{e}" if not s.success?
 			res = o.match(/host: ([a-zA-Z0-9_\-]*)/)[1]
+			if res.end_with? '-gnu'
+				res = res[..-4] + 'musl'
+			end
 			@logger.info("default rust target is set to #{res}")
 			res
 		}.call()

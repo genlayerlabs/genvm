@@ -1,7 +1,6 @@
 pub mod errors;
 mod host;
 pub mod mmap;
-pub mod plugin_loader;
 pub mod runner;
 pub mod string_templater;
 pub mod ustar;
