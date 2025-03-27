@@ -43,6 +43,7 @@ jobs:
     secrets: inherit
     with:
       runs_on: ubuntu-latest
+      target: x86_64-unknown-linux-musl
       preloads: --preload .ci/release-conf.rb
       tag: ${{ needs.gen-tag.outputs.tag }}
 

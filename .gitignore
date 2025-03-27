@@ -1,11 +1,13 @@
 # editors
 .vscode
 .idea
+.envrc
 
 # non git-controlled code and tools
 /tools/downloaded
 /third-party/*
 !/third-party/.gitkeep
+/.direnv
 
 # build related directories
 /build

@@ -26,27 +26,29 @@ For more complex examples you can look into [this](./executor/testdata/cases/py-
 
 ## Building from source
 
+Required tools:
+- git
+- ruby (3.\*)
+- ninja
+- rustup (cargo+rustc)
+
+All of them (except for the git for obvious reasons) are provided by default shell in `build-scripts/devenv/flake.nix` (for direnv add `use flake ./build-scripts/devenv`)
+
 Prelude:
 - `./tools/ya-build/ya-build config`<br />
   This command scraps and configures all targets (similar to CMake)
 - `ninja` is an alternative to `make`, it runs build commands
-- Output is located at `build/out` as a "root" (`bin`, `lib`, `share`)
-
-Required tools:
-- git
-- ruby (3.\*, otherwise it will be installed from a script)
-- [...](./build-scripts/src/ubuntu.sh) can be installed via scripts (see below)
+- Output is located at `build/out` as a "root" (`bin`, `etc`, `share`)
 
 ### Simple
 1. `cd $PROJECT_DIR`
 2. `git submodule update --init --recursive --depth 1`
-3. `./build-scripts/install/install-deps.rb --os --rust --genvm`
-4. `source env.sh`
-5. `git third-party update --all`
-7. `ya-build config` (for release build pass `--preload .ci/release-conf.rb`)
-8. `ninja -C build genvm/executor/all`
-9. Get `genvm-runners.zip` from [github](https://github.com/yeagerai/genvm)
-10. merge `build/out` and `genvm-runners.zip`
+3. `source env.sh` (not needed if you used flake)
+4. `git third-party update --all`
+5. `ya-build config` (for release build pass `--preload .ci/release-conf.rb`)
+6. `ninja -C build genvm/executor/all`
+7. Get `genvm-runners.zip` from [github](https://github.com/yeagerai/genvm)
+8. merge `build/out` and `genvm-runners.zip`
 
 ### Full
 
@@ -55,7 +57,7 @@ It will also require `docker` and `docker-buildx`
 1. `cd $PROJECT_DIR`
 2. `git submodule update --init --recursive --depth 1`
 3. `./build-scripts/install/install-deps.rb --os --rust --genvm --runners`
-4. `source env.sh`
+4. `source env.sh` (not needed if you used flake)
 5. `ya-build config` (for release build pass `--preload .ci/release-conf.rb`)
 6. `ninja -C build tags/all`
 7. full genvm (including runners) is located at `build/out`
