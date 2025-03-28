@@ -524,42 +524,72 @@ mod tests {
             "host": "https://api.openai.com",
             "provider": "openai-compatible",
             "model": "gpt-4o-mini",
-            "key_env_name": "OPENAIKEY"
+            "key_env_name": "OPENAIKEY",
+            "prompt_templates": {
+                "eq_comparative": "",
+                "eq_non_comparative_leader": "",
+                "eq_non_comparative_validator": ""
+            }
         }"#;
 
         pub const heurist: &str = r#"{
             "host": "https://llm-gateway.heurist.xyz",
             "provider": "openai-compatible",
             "model": "meta-llama/llama-3.3-70b-instruct",
-            "key_env_name": "HEURISTKEY"
+            "key_env_name": "HEURISTKEY",
+            "prompt_templates": {
+                "eq_comparative": "",
+                "eq_non_comparative_leader": "",
+                "eq_non_comparative_validator": ""
+            }
         }"#;
 
         pub const anthropic: &str = r#"{
             "host": "https://api.anthropic.com",
             "provider": "anthropic",
             "model": "claude-3-5-sonnet-20241022",
-            "key_env_name": "ANTHROPICKEY"
+            "key_env_name": "ANTHROPICKEY",
+            "prompt_templates": {
+                "eq_comparative": "",
+                "eq_non_comparative_leader": "",
+                "eq_non_comparative_validator": ""
+            }
         }"#;
 
         pub const xai: &str = r#"{
             "host": "https://api.x.ai",
             "provider": "openai-compatible",
             "model": "grok-2-1212",
-            "key_env_name": "XAIKEY"
+            "key_env_name": "XAIKEY",
+            "prompt_templates": {
+                "eq_comparative": "",
+                "eq_non_comparative_leader": "",
+                "eq_non_comparative_validator": ""
+            }
         }"#;
 
         pub const google: &str = r#"{
             "host": "https://generativelanguage.googleapis.com",
             "provider": "google",
             "model": "gemini-1.5-flash",
-            "key_env_name": "GEMINIKEY"
+            "key_env_name": "GEMINIKEY",
+            "prompt_templates": {
+                "eq_comparative": "",
+                "eq_non_comparative_leader": "",
+                "eq_non_comparative_validator": ""
+            }
         }"#;
 
         pub const atoma: &str = r#"{
             "host": "https://api.atoma.network",
             "provider": "openai-compatible",
             "model": "meta-llama/Llama-3.3-70B-Instruct",
-            "key_env_name": "ATOMAKEY"
+            "key_env_name": "ATOMAKEY",
+            "prompt_templates": {
+                "eq_comparative": "",
+                "eq_non_comparative_leader": "",
+                "eq_non_comparative_validator": ""
+            }
         }"#;
     }
 
@@ -567,6 +597,8 @@ mod tests {
         use genvm_modules_interfaces::*;
 
         let (cancellation, canceller) = make_cancellation();
+
+        let conf: serde_yaml::Value = serde_json::from_str(conf).unwrap();
 
         let imp = Impl::try_new(CtorArgs {
             config: conf,
@@ -604,6 +636,8 @@ mod tests {
         use genvm_modules_interfaces::*;
 
         let (cancellation, canceller) = make_cancellation();
+
+        let conf: serde_yaml::Value = serde_json::from_str(conf).unwrap();
 
         let imp = Impl::try_new(CtorArgs {
             config: conf,
