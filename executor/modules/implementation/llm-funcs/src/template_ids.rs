@@ -7,6 +7,17 @@ pub enum TemplateId {
     NonComparativeLeader = 2,
 }
 
+#[allow(dead_code)]
+impl TemplateId {
+    pub fn str_snake_case(self) -> &'static str {
+        match self {
+            TemplateId::Comparative => "comparative",
+            TemplateId::NonComparativeValidator => "non_comparative_validator",
+            TemplateId::NonComparativeLeader => "non_comparative_leader",
+        }
+    }
+}
+
 impl TryFrom<u8> for TemplateId {
     type Error = ();
 

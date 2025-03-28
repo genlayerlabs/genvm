@@ -17,6 +17,27 @@ pub enum Methods {
     GetBalance = 12,
 }
 
+#[allow(dead_code)]
+impl Methods {
+    pub fn str_snake_case(self) -> &'static str {
+        match self {
+            Methods::GetCalldata => "get_calldata",
+            Methods::GetCode => "get_code",
+            Methods::StorageRead => "storage_read",
+            Methods::StorageWrite => "storage_write",
+            Methods::ConsumeResult => "consume_result",
+            Methods::GetLeaderNondetResult => "get_leader_nondet_result",
+            Methods::PostNondetResult => "post_nondet_result",
+            Methods::PostMessage => "post_message",
+            Methods::ConsumeFuel => "consume_fuel",
+            Methods::DeployContract => "deploy_contract",
+            Methods::EthCall => "eth_call",
+            Methods::EthSend => "eth_send",
+            Methods::GetBalance => "get_balance",
+        }
+    }
+}
+
 impl TryFrom<u8> for Methods {
     type Error = ();
 
@@ -35,6 +56,40 @@ impl TryFrom<u8> for Methods {
             10 => Ok(Methods::EthCall),
             11 => Ok(Methods::EthSend),
             12 => Ok(Methods::GetBalance),
+            _ => Err(()),
+        }
+    }
+}
+#[derive(PartialEq, Clone, Copy, Serialize)]
+#[repr(u8)]
+pub enum Errors {
+    Ok = 0,
+    Absent = 1,
+    Forbidden = 2,
+    IAmLeader = 3,
+}
+
+#[allow(dead_code)]
+impl Errors {
+    pub fn str_snake_case(self) -> &'static str {
+        match self {
+            Errors::Ok => "ok",
+            Errors::Absent => "absent",
+            Errors::Forbidden => "forbidden",
+            Errors::IAmLeader => "i_am_leader",
+        }
+    }
+}
+
+impl TryFrom<u8> for Errors {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, ()> {
+        match value {
+            0 => Ok(Errors::Ok),
+            1 => Ok(Errors::Absent),
+            2 => Ok(Errors::Forbidden),
+            3 => Ok(Errors::IAmLeader),
             _ => Err(()),
         }
     }

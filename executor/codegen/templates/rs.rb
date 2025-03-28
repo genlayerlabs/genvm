@@ -18,6 +18,17 @@ pub enum <%= to_camel name %> {
 % }
 }
 
+#[allow(dead_code)]
+impl <%= to_camel name %> {
+    pub fn str_snake_case(self) -> &'static str {
+        match self {
+% values.each { |k, v|
+            <%= to_camel name %>::<%= to_camel k %> => "<%= k %>",
+% }
+        }
+    }
+}
+
 impl TryFrom<<%= size %>> for <%= to_camel name %> {
     type Error = ();
 

@@ -155,11 +155,11 @@ class MockHost(IHost):
 
 	async def get_leader_nondet_result(
 		self, call_no: int, /
-	) -> tuple[ResultCode, collections.abc.Buffer] | ResultCode:
+	) -> tuple[ResultCode, collections.abc.Buffer] | Errors:
 		if self.leader_nondet is None:
-			return ResultCode.NONE
+			return Errors.I_AM_LEADER
 		if call_no >= len(self.leader_nondet):
-			return ResultCode.NO_LEADERS
+			return Errors.ABSENT
 		res = self.leader_nondet[call_no]
 		if res['kind'] == 'return':
 			return (ResultCode.RETURN, _calldata.encode(res['value']))

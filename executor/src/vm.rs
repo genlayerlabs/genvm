@@ -256,10 +256,10 @@ impl VM {
             .get_typed_func::<(), ()>(&mut self.store, "")
             .or_else(|_| instance.get_typed_func::<(), ()>(&mut self.store, "_start"))
             .with_context(|| "can't find entrypoint")?;
-        log::info!(target: "vm"; "execution start");
+        log::info!(target = "vm"; "execution start");
         let time_start = std::time::Instant::now();
         let res = func.call_async(&mut self.store, ()).await;
-        log::info!(target: "vm", duration:? = time_start.elapsed(); "execution finished");
+        log::info!(target = "vm", duration:? = time_start.elapsed(); "execution finished");
         let res: RunResult = match res {
             Ok(()) => Ok(RunOk::empty_return()),
             Err(e) => {
