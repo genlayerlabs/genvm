@@ -142,6 +142,7 @@ def _get_params(m: types.FunctionType, *, is_ctor: bool) -> dict:
 			ret.update(
 				{
 					'readonly': getattr(m, READONLY_ATTR, False),
+					'payable': getattr(m, PAYABLE_ATTR, False),
 					'ret': _repr_type(signature.return_annotation, True),
 				}
 			)
