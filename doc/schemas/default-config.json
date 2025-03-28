@@ -83,10 +83,33 @@
                   "type": "string",
                   "format": "uri",
                   "description": "address of webdriver (i.e. selenium)"
+                },
+                "extra_tld": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "examples": [
+                      "genvm-test",
+                      "com"
+                    ]
+                  },
+                  "description": "extra top level domains"
+                },
+                "always_allow_hosts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "examples": [
+                      "genvm-test",
+                      "xproxy.test"
+                    ]
+                  },
+                  "description": "extra hosts to allow, regardless of port"
                 }
               },
               "required": [
-                "host"
+                "host",
+                "extra_tld"
               ]
             }
           },

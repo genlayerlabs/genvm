@@ -101,3 +101,6 @@ modules:
         representing the result of evaluating above criteria. And nothing else
   web:
     host: http://127.0.0.1:4444
+    extra_tld: []
+    always_allow_hosts:
+      - genvm-test

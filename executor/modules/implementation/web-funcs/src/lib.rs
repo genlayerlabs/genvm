@@ -3,12 +3,14 @@ use genvm_modules_impl_common::*;
 use genvm_modules_interfaces::{CancellationToken, ModuleError, ModuleResult};
 use serde_derive::Deserialize;
 
-use std::{future::Future, mem::swap, pin::Pin, sync::Arc};
+use std::{borrow::Borrow, future::Future, mem::swap, pin::Pin, sync::Arc};
 
 struct SessionData {
     id: Box<str>,
     host: Arc<str>,
 }
+
+mod domains;
 
 impl SessionDrop for SessionData {
     fn has_drop_session() -> bool {
@@ -42,6 +44,8 @@ struct Impl {
 #[derive(Deserialize)]
 struct Config {
     host: Arc<str>,
+    extra_tld: Vec<Box<str>>,
+    always_allow_hosts: Vec<Box<str>>,
 }
 
 #[derive(Deserialize)]
@@ -60,6 +64,37 @@ struct GetWebpageConfig {
     mode: GetWebpageConfigMode,
     #[serde(default = "no_wait")]
     wait_after_loaded: ParsedDuration,
+}
+
+fn binary_search_contains<T, Y>(arr: &[T], val: Y) -> bool
+where
+    T: Borrow<str>,
+    Y: Borrow<str>,
+{
+    arr.binary_search_by(|x| {
+        let x: &str = x.borrow();
+        x.cmp(val.borrow())
+    })
+    .is_ok()
+}
+
+impl Config {
+    fn check_tld(&self, host: &str) -> ModuleResult<()> {
+        let tld = match host.rfind(".") {
+            None => host,
+            Some(idx) => &host[idx + 1..],
+        };
+
+        if binary_search_contains(domains::DOMAINS, tld) {
+            return Ok(());
+        }
+
+        if binary_search_contains(&self.extra_tld, tld) {
+            return Ok(());
+        }
+
+        return Err(ModuleError::Recoverable("tld is forbidden"));
+    }
 }
 
 unsafe impl Send for Impl {}
@@ -122,10 +157,17 @@ impl Impl {
             return Err(ModuleError::Recoverable("file scheme is forbidden"));
         }
 
-        if url.host_str() != Some("genvm-test") {
-            const ALLOWED_PORTS: &[Option<u16>] = &[None, Some(80), Some(443)];
-            if !ALLOWED_PORTS.contains(&url.port()) {
-                return Err(ModuleError::Recoverable("port is forbidden"));
+        match url.host_str() {
+            None => return Err(ModuleError::Recoverable("empty host is forbidden")),
+            Some(host_str) if binary_search_contains(&self.config.always_allow_hosts, host_str) => {
+            }
+            Some(host_str) => {
+                self.config.check_tld(host_str)?;
+
+                const ALLOWED_PORTS: &[Option<u16>] = &[None, Some(80), Some(443)];
+                if !ALLOWED_PORTS.contains(&url.port()) {
+                    return Err(ModuleError::Recoverable("port is forbidden"));
+                }
             }
         }
 
@@ -226,7 +268,11 @@ impl genvm_modules_interfaces::Web for Proxy {
 pub fn new_web_module(
     args: genvm_modules_interfaces::CtorArgs,
 ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Web + Send + Sync>> {
-    let config: Config = serde_yaml::from_value(args.config)?;
+    let mut config: Config = serde_yaml::from_value(args.config)?;
+
+    config.extra_tld.sort();
+    config.always_allow_hosts.sort();
+
     let host = config.host.clone();
     Ok(Box::new(Proxy(Arc::new(Impl {
         sessions: SessionPool::new(),
