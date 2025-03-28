@@ -11,9 +11,7 @@ fn main() -> std::io::Result<()> {
 
     let target = [
         std::env::var("CARGO_CFG_TARGET_ARCH").unwrap(),
-        std::env::var("CARGO_CFG_TARGET_VENDOR").unwrap(),
         std::env::var("CARGO_CFG_TARGET_OS").unwrap(),
-        std::env::var("CARGO_CFG_TARGET_ENV").unwrap(),
     ]
     .join("-");
     println!("cargo::rustc-env=GENVM_BUILD_ID={tag}_{target}");
