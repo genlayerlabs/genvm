@@ -249,17 +249,17 @@ impl VM {
 
     pub async fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
         if let Ok(lck) = self.store.data().genlayer_ctx.lock() {
-            log::info!(target: "vm", method = "run", wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "");
+            log::info!(target: "vm", wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "run");
         }
 
         let func = instance
             .get_typed_func::<(), ()>(&mut self.store, "")
             .or_else(|_| instance.get_typed_func::<(), ()>(&mut self.store, "_start"))
             .with_context(|| "can't find entrypoint")?;
-        log::info!(target: "vm", event = "execution start"; "");
+        log::info!(target: "vm"; "execution start");
         let time_start = std::time::Instant::now();
         let res = func.call_async(&mut self.store, ()).await;
-        log::info!(target: "vm", event = "execution finished", duration:? = time_start.elapsed(); "");
+        log::info!(target: "vm", duration:? = time_start.elapsed(); "execution finished");
         let res: RunResult = match res {
             Ok(()) => Ok(RunOk::empty_return()),
             Err(e) => {
@@ -299,16 +299,16 @@ impl VM {
         };
         match &res {
             Ok(RunOk::Return(_)) => {
-                log::info!(target: "vm", event = "execution result unwrapped", result = "Return"; "")
+                log::info!(target: "vm", result = "Return"; "execution result unwrapped")
             }
             Ok(RunOk::Rollback(_)) => {
-                log::info!(target: "vm", event = "execution result unwrapped", result = "Rollback"; "")
+                log::info!(target: "vm", result = "Rollback"; "execution result unwrapped")
             }
             Ok(RunOk::ContractError(e, cause)) => {
-                log::info!(target: "vm", event = "execution result unwrapped", result = format!("ContractError({e})"), cause:? = cause; "")
+                log::info!(target: "vm", result = format!("ContractError({e})"), cause:? = cause; "execution result unwrapped")
             }
             Err(_) => {
-                log::info!(target: "vm", event = "execution result unwrapped", result = "Error"; "")
+                log::info!(target: "vm", result = "Error"; "execution result unwrapped")
             }
         };
         res
@@ -436,7 +436,7 @@ impl Supervisor {
                 let debug_path = data.debug_path();
 
                 let compile_here = || -> Result<PrecompiledModule> {
-                    log::info!(target: "cache", cache_method = "compiling", status = "start", path = debug_path, runner = data.runner_id.as_str(); "");
+                    log::info!(target: "cache", status = "start", path = debug_path, runner = data.runner_id.as_str(); "compiling");
 
                     caching::validate_wasm(&self.engines, data.contents.as_ref())?;
 
@@ -454,7 +454,7 @@ impl Supervisor {
                             Some(std::path::Path::new(&debug_path)),
                         )?
                         .compile_module()?;
-                    log::info!(target: "cache", cache_method = "compiling", status = "done", duration:? = start_time.elapsed(), path = debug_path, runner = data.runner_id.as_str(); "");
+                    log::info!(target: "cache", status = "done", duration:? = start_time.elapsed(), path = debug_path, runner = data.runner_id.as_str(); "compiling");
                     Ok(PrecompiledModule {
                         det: module_det,
                         non_det: module_non_det,
@@ -636,7 +636,7 @@ impl Supervisor {
                 match instance.get_typed_func::<(), ()>(&mut vm.store, "_initialize") {
                     Err(_) => {}
                     Ok(func) => {
-                        log::info!(target: "rt", method = "call_initialize", runner = self.runner_cache.get_unsafe(current).runner_id().as_str(), path = path; "");
+                        log::info!(target: "rt", runner = self.runner_cache.get_unsafe(current).runner_id().as_str(), path = path; "calling _initialize");
                         func.call_async(&mut vm.store, ()).await?;
                     }
                 }

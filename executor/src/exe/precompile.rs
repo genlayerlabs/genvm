@@ -26,7 +26,7 @@ fn compile_single_file_single_mode(
         .precompile_module(&wasm_data)
         .with_context(|| "precompiling")?;
 
-    log::info!(target: "precompile", event = "compiled wasm", engine = engine_type, runner:? = runner_path, runner_path:? = path_in_runner, duration:? = time_start.elapsed(); "");
+    log::info!(target: "precompile", engine = engine_type, runner:? = runner_path, runner_path:? = path_in_runner, duration:? = time_start.elapsed();  "wasm compilation done");
 
     std::fs::create_dir_all(result_path.parent().unwrap())?;
 
@@ -34,7 +34,7 @@ fn compile_single_file_single_mode(
 
     std::fs::write(result_path, precompiled)?;
 
-    log::info!(target: "precompile", event = "wrote wasm", "size" = sz, result:? = result_path, engine = engine_type, runner:? = runner_path, runner_path:? = path_in_runner, duration:? = time_start.elapsed(); "");
+    log::info!(target: "precompile", "size" = sz, result:? = result_path, engine = engine_type, runner:? = runner_path, runner_path:? = path_in_runner, duration:? = time_start.elapsed(); "wasm writing done");
 
     Ok(())
 }

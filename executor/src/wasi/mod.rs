@@ -78,7 +78,7 @@ fn add_to_linker_sync_dlsym<T: Send + 'static>(
             let func_name = Vec::from_iter(mem.as_cow(func_name_ptr)?.into_iter().cloned());
             let func_name = str::from_utf8(&func_name)?;
 
-            log::trace!(target: "rt", method = "dlsym", module = mod_name, function = func_name; "");
+            log::trace!(target: "rt", module = mod_name, function = func_name; "dlsym called");
 
             let linker_shared = linker_shared.clone();
             let Ok(ref mut linker) = linker_shared.lock() else {
