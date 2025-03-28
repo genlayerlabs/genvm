@@ -3,12 +3,12 @@ repos:
     rev: v4.6.0
     hooks:
       - id: trailing-whitespace
-        exclude: ^\.gitthirdparty
+        exclude: ^\.git-third-party
       - id: end-of-file-fixer
-        exclude: ^\.gitthirdparty
+        exclude: ^\.git-third-party
       - id: check-added-large-files
       - id: check-json
-        exclude: ^\.gitthirdparty
+        exclude: ^\.git-third-party
       - id: check-yaml
       - id: check-toml
       - id: check-merge-conflict
@@ -40,7 +40,7 @@ repos:
     rev: 3.0.3
     hooks:
       - id: editorconfig-checker
-        exclude: (runners/genlayer-py-std/src/cloudpickle|.gitthirdparty|runners/py-libs)
+        exclude: (runners/genlayer-py-std/src/cloudpickle|.git-third-party|runners/py-libs)
 
   - repo: local
     hooks:
