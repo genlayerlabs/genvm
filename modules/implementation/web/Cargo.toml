@@ -1,5 +1,5 @@
 [package]
-name = "genvm-modules-default-web"
+name = "genvm-module-web"
 version = "0.1.0"
 edition = "2021"
 
@@ -16,3 +16,5 @@ log = { version = "0.4.25", features = ["kv_unstable_serde"] }
 async-trait = "0.1.85"
 reqwest = { version = "0.12.12", features = ["cookies", "gzip", "rustls-tls", "charset", "http2"], default-features = false}
 serde_yaml = "0.9.34"
+structured-logger = "1.0.3"
+clap = { version = "4.5.16", features = ["derive"] }

@@ -1,0 +1,5 @@
+port: 3032
+
+extra_tld: []
+always_allow_hosts:
+  - genvm-test

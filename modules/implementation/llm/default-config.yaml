@@ -1,0 +1,133 @@
+port: 3031
+
+backends:
+  openai:
+    host: https://api.openai.com
+    provider: openai-compatible
+    model: gpt-4o-mini
+    key_env_name: OPENAIKEY
+
+  heurist:
+    host: https://llm-gateway.heurist.xyz
+    provider: openai-compatible
+    model: meta-llama/llama-3.3-70b-instruct
+    key_env_name: HEURISTKEY
+
+  anthropic:
+    host: https://api.anthropic.com
+    provider: anthropic
+    model: claude-3-5-sonnet-20241022
+    key_env_name: ANTHROPICKEY
+
+  xai:
+    host: https://api.x.ai
+    provider: openai-compatible
+    model: grok-2-1212
+    key_env_name: XAIKEY
+
+  google:
+    host": https://generativelanguage.googleapis.com
+    provider": google
+    model": gemini-1.5-flash
+    key_env_name": GEMINIKEY
+
+  atoma:
+    host: https://api.atoma.network
+    provider: openai-compatible
+    model: meta-llama/Llama-3.3-70B-Instruct
+    key_env_name: ATOMAKEY
+
+prompt_templates:
+  eq_comparative: |
+    You are an a judge tasked with making a binary determination about whether two outputs satisfy the given comparison criteria.
+    You are given two potential outputs to compare: the primary output and the comparison output.
+    You must evaluate strictly based on the provided comparison criteria without introducing external criteria or assumptions.
+    Your evaluation must be rigorous and thorough, as the stakes are high.
+
+    Input sections:
+    <primary_output>
+    #{leader_answer}
+    </primary_output>
+
+    <comparison_output>
+    #{validator_answer}
+    </comparison_output>
+
+    <comparison_criteria>
+    #{principle}
+    </comparison_criteria>
+
+    Evaluation rules:
+
+    1. If any section is missing or empty, return false
+    2. Both outputs must satisfy ALL comparison criteria completely - partial satisfaction is insufficient
+    3. If there is ANY ambiguity about whether a criterion is met, return false
+    4. Evaluate using ONLY the explicitly stated comparison criteria
+    5. Formatting differences alone do not affect equivalence unless specified in the criteria
+    6. Do not make assumptions about unstated criteria or requirements
+
+    Output format:
+    Respond with json object containing single key "result" and associated boolean value,
+    representing the result of evaluating above criteria. And nothing else
+  eq_non_comparative_leader: |
+    You must perform given task for the input. Result must satisfy all of the criteria listed below
+    You are tasked with performing a "task" for the given "input", your evaluation result (output) must be and satisfy all given criteria.
+    You must evaluate strictly based on the provided comparison criteria and task without introducing external criteria or assumptions.
+    Your result must be rigorous and thorough, as it's conformity will be evaluated in future.
+
+    Input sections:
+    <task>
+    #{task}
+    </task>
+
+    <criteria>
+    #{criteria}
+    </criteria>
+
+    <input>
+    #{input}
+    </input>
+
+    Evaluation rules:
+
+    1. Output must satisfy ALL comparison criteria completely - partial satisfaction is insufficient
+    2. There must be NO ambiguity about whether a criterion is met
+    3. Evaluate using ONLY the explicitly stated criteria and a task
+    4. Do not make assumptions about unstated criteria or requirements
+
+    Output format:
+    Respond only with: the result of performing the task, do not include reasoning or evaluation rules satisfaction
+  eq_non_comparative_validator: |
+    You are an a judge tasked with making a binary determination about whether task evaluation result (output) is valid for the given input and satisfies given criteria.
+    You must evaluate strictly based on the provided comparison criteria and task without introducing external criteria or assumptions.
+    Your evaluation must be rigorous and thorough, as the stakes are high.
+
+    Input sections:
+    <task>
+    #{task}
+    </task>
+
+    <input>
+    #{input}
+    </input>
+
+    <criteria>
+    #{criteria}
+    </criteria>
+
+    <output>
+    #{output}
+    </output>
+
+    Evaluation rules:
+
+    1. If any section is missing or empty, return false
+    2. Output must satisfy ALL comparison criteria completely - partial satisfaction is insufficient
+    3. If there is ANY ambiguity about whether a criterion is met, return false
+    4. Evaluate using ONLY the explicitly stated criteria and a task
+    5. Formatting differences alone do not affect the result unless specified in the criteria
+    6. Do not make assumptions about unstated criteria or requirements
+
+    Output format:
+    Respond with json object containing single key "result" and associated boolean value,
+    representing the result of evaluating above criteria. And nothing else

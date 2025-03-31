@@ -20,7 +20,7 @@ impl std::fmt::Display for PrintOption {
 
 #[derive(clap::Args, Debug)]
 pub struct Args {
-    #[arg(long, default_value_t = String::from("${genvmRoot}/etc/genvm-config.yaml"))]
+    #[arg(long, default_value_t = String::from("${genvmRoot}/etc/genvm.yaml"))]
     config: String,
     #[arg(long, default_value_t = 4)]
     threads: usize,

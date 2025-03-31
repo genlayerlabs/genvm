@@ -1,6 +1,4 @@
 project('executor') {
-	modules_dir = config.out_dir.join('lib', 'genvm-modules')
-
 	base_env = {}
 	compiler = config.tools.clang || config.tools.gcc
 	linker = config.tools.mold || config.tools.lld
@@ -64,7 +62,7 @@ project('executor') {
 		tags: ['all'],
 	)
 
-	base_env['GENVM_PROFILE_PATH'] = genvm_id_path.relative_path_from(cur_src)
+	base_env['GENVM_PROFILE_PATH'] = genvm_id_path
 
 	gen_id_first = target_command(
 		output_file: genvm_id_path,
@@ -87,10 +85,13 @@ project('executor') {
 		) {
 			inputs.push(codegen, gen_id_first)
 		}
-	)
+	) {
+		meta.cargo_flags = cargo_flags
+		meta.env = base_env
+	}
 
 	config_target = target_copy(
-		dest: config.out_dir.join('etc', 'genvm-config.yaml'),
+		dest: config.out_dir.join('etc', 'genvm.yaml'),
 		src: [cur_src.join('default-config.yaml')],
 	)
 

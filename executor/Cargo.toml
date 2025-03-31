@@ -39,9 +39,7 @@ wasmtime-cache = { path = "third-party/wasmtime/crates/cache" }
 wiggle = { path = "third-party/wasmtime/crates/wiggle", default-features = false, features = ["wasmtime_async"] }
 wasmparser = { path = "third-party/wasm-tools/crates/wasmparser" }
 
-genvm-modules-interfaces = { path = "modules/interfaces" }
-genvm-modules-default-llm = { path = "modules/implementation/llm-funcs" }
-genvm-modules-default-web = { path = "modules/implementation/web-funcs" }
+genvm-modules-interfaces = { path = "../modules/interfaces" }
 
 anyhow = { version = "1.0.22", default-features = false }
 tracing = "0.1.26"
