@@ -72,3 +72,4 @@ dashmap = "6.1.0"
 primitive-types = { version = "0.13.1", default-features = false, features = ["impl-serde", "std"] }
 bufreaderwriter = "0.2.4"
 serde_yaml = "0.9.34"
+getrandom = { version = "0.3.2", default-features = false, features = ["std"] }
