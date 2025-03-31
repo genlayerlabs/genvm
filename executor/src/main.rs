@@ -66,7 +66,7 @@ fn main() -> Result<()> {
         .with_target_writer(&args.log_disable, Box::new(NullWiriter))
         .init();
 
-    log::info!(target: "vm", method = "start", version = env!("GENVM_BUILD_ID"); "");
+    log::info!(target: "vm", version = env!("GENVM_BUILD_ID"); "start");
 
     match args.command {
         Commands::Run(args) => exe::run::handle(args),

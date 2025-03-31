@@ -21,3 +21,7 @@ class Contract(gl.Contract):
 	@gl.public.write
 	def mixed(self, a, b, *, x, y):
 		pass
+
+	@gl.public.write.payable
+	def payable(self):
+		pass

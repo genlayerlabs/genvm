@@ -2,6 +2,7 @@
 require 'erb'
 require 'pathname'
 require 'json'
+require 'ostruct'
 
 def to_camel(s)
 	s.split('_').map { |x| if x.size() == 0 then x else x[0].upcase + x[1..].downcase end }.join('')

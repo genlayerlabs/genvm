@@ -7,60 +7,118 @@
     "body": {
       "type": "object",
       "properties": {
-        "$schema": { "type": "string" },
+        "$schema": {
+          "type": "string"
+        },
         "modules": {
           "type": "object",
           "properties": {
             "llm": {
-              "allOf": [
-                { "$ref": "#/definitions/ModuleConfig" },
-                {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "enum": [
+                    "openai-compatible",
+                    "ollama",
+                    "simulator",
+                    "anthropic",
+                    "google"
+                  ]
+                },
+                "model": {
+                  "type": "string",
+                  "description": "model that provider recognizes"
+                },
+                "host": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "provider url",
+                  "examples": [
+                    "https://api.openai.com",
+                    "https://llm-gateway.heurist.xyz",
+                    "https://api.anthropic.com",
+                    "https://api.x.ai",
+                    "https://generativelanguage.googleapis.com",
+                    "https://api.atoma.network"
+                  ]
+                },
+                "key_env_name": {
+                  "type": "string",
+                  "description": "name of environment variable where api key is stored"
+                },
+                "prompt_templates": {
                   "type": "object",
                   "properties": {
-                    "config": {
-                      "type": "object",
-                      "properties": {
-                        "host": { "type": "string", "format": "uri" },
-                        "provider": { "enum": ["openai-compatible", "ollama", "simulator", "anthropic", "google"] },
-                        "model": { "type": "string" },
-                        "key_env_name": { "type": "string" }
-                      },
-                      "required": ["host", "provider", "model"]
+                    "eq_comparative": {
+                      "type": "string",
+                      "description": "must include #{leader_answer} #{validator_answer} #{principle} for templating"
+                    },
+                    "eq_non_comparative_leader": {
+                      "type": "string",
+                      "description": "must include #{task} #{criteria} #{input} for templating"
+                    },
+                    "eq_non_comparative_validator": {
+                      "type": "string",
+                      "description": "must include #{task} #{criteria} #{input} #{output} for templating"
                     }
-                  }
+                  },
+                  "required": [
+                    "eq_comparative",
+                    "eq_non_comparative_leader",
+                    "eq_non_comparative_validator"
+                  ]
                 }
+              },
+              "required": [
+                "host",
+                "provider",
+                "model",
+                "prompt_templates"
               ]
             },
             "web": {
-              "allOf": [
-                { "$ref": "#/definitions/ModuleConfig" },
-                {
-                  "type": "object",
-                  "properties": {
-                    "config": {
-                      "type": "object",
-                      "properties": {
-                        "host": { "type": "string" }
-                      },
-                      "required": ["host"]
-                    }
-                  }
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "address of webdriver (i.e. selenium)"
+                },
+                "extra_tld": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "examples": [
+                      "genvm-test",
+                      "com"
+                    ]
+                  },
+                  "description": "extra top level domains"
+                },
+                "always_allow_hosts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "examples": [
+                      "genvm-test",
+                      "xproxy.test"
+                    ]
+                  },
+                  "description": "extra hosts to allow, regardless of port"
                 }
+              },
+              "required": [
+                "host",
+                "extra_tld"
               ]
             }
           },
-          "required": ["llm", "web"]
+          "required": [
+            "llm",
+            "web"
+          ]
         }
       }
-    },
-    "ModuleConfig": {
-      "type": "object",
-      "properties": {
-        "config": {
-          "type": "object"
-        }
-      },
-      "required": ["config"]
     }
   }
 }

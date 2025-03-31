@@ -15,3 +15,4 @@ url = "2.5.2"
 log = { version = "0.4.25", features = ["kv_unstable_serde"] }
 async-trait = "0.1.85"
 reqwest = { version = "0.12.12", features = ["cookies", "gzip", "rustls-tls", "charset", "http2"], default-features = false}
+serde_yaml = "0.9.34"

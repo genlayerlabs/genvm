@@ -59,7 +59,7 @@ in rec {
 	fullDefault = wasmShell.stdenv.mkDerivation (configurator // {
 		pname = "genvm-cpython";
 
-		outputHash = "sha256-3I6J7pQFqQbDg4j1zSTs4zcLa205SDXhLoKGbX0pFnU="; #lib.fakeHash;
+		outputHash = "sha256-HyFaXe2/yj87Q1fGqVr4zqIMeyUhFH6VV/4tGtOqIhY="; #lib.fakeHash;
 		outputHashMode = "recursive";
 
 		nativeBuildInputs = configurator.nativeBuildInputs ++
@@ -110,8 +110,8 @@ in rec {
 		'';
 
 		installPhase = ''
-			mkdir -p "$out/share/genvm/runners"
-			cp --preserve=timestamps --no-preserve=mode,ownership -r genvm-export-runner/* "$out/share/genvm/runners"
+			mkdir -p "$out/share/lib/genvm/runners"
+			cp --preserve=timestamps --no-preserve=mode,ownership -r genvm-export-runner/* "$out/share/lib/genvm/runners"
 		'';
 	});
 }

@@ -152,6 +152,24 @@ fn write_result(sock: &mut dyn Sock, res: Result<&vm::RunOk, &anyhow::Error>) ->
     Ok(())
 }
 
+fn read_host_error(sock: &mut dyn Sock) -> Result<host_fns::Errors> {
+    let mut has_some = [0; 1];
+    sock.read_exact(&mut has_some)?;
+
+    host_fns::Errors::try_from(has_some[0])
+        .map_err(|_| anyhow::anyhow!("invalid error id {}", has_some[0]))
+}
+
+fn handle_host_error(sock: &mut dyn Sock) -> Result<()> {
+    let e = read_host_error(sock)?;
+
+    if e == host_fns::Errors::Ok {
+        Ok(())
+    } else {
+        Err(crate::errors::ContractError(e.str_snake_case().to_owned(), None).into())
+    }
+}
+
 impl Host {
     pub fn get_calldata(&mut self, calldata: &mut Vec<u8>) -> Result<()> {
         let Ok(mut sock) = (*self.sock).lock() else {
@@ -159,6 +177,9 @@ impl Host {
         };
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::GetCalldata as u8])?;
+
+        handle_host_error(sock)?;
+
         let len = read_u32(sock)? as usize;
         calldata.reserve(len);
         let index = calldata.len();
@@ -176,6 +197,8 @@ impl Host {
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::GetCode as u8])?;
         sock.write_all(&account.raw())?;
+
+        handle_host_error(sock)?;
 
         read_bytes(sock)
     }
@@ -198,6 +221,8 @@ impl Host {
         sock.write_all(&slot.raw())?;
         sock.write_all(&index.to_le_bytes())?;
         sock.write_all(&(buf.len() as u32).to_le_bytes())?;
+
+        handle_host_error(sock)?;
 
         sock.read_exact(buf)?;
         Ok(())
@@ -222,6 +247,8 @@ impl Host {
         sock.write_all(buf)?;
 
         sock.flush()?;
+
+        handle_host_error(sock)?;
 
         Ok(())
     }
@@ -251,14 +278,24 @@ impl Host {
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::GetLeaderNondetResult as u8])?;
         sock.write_all(&call_no.to_le_bytes())?;
+
+        match read_host_error(sock)? {
+            host_fns::Errors::Ok => {}
+            host_fns::Errors::IAmLeader => {
+                return Ok(None);
+            }
+            host_fns::Errors::Absent => {
+                anyhow::bail!(AbsentLeaderResult);
+            }
+            e => {
+                return Err(
+                    crate::errors::ContractError(e.str_snake_case().to_owned(), None).into(),
+                )
+            }
+        }
+
         let mut has_some = [0; 1];
         sock.read_exact(&mut has_some)?;
-        if has_some[0] == ResultCode::None as u8 {
-            return Ok(None);
-        }
-        if has_some[0] == ResultCode::NoLeaders as u8 {
-            anyhow::bail!(AbsentLeaderResult);
-        }
         let len = read_u32(sock)?;
         let mut buf = Vec::with_capacity(len as usize);
         unsafe {
@@ -356,6 +393,8 @@ impl Host {
         sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
         sock.write_all(calldata)?;
 
+        handle_host_error(sock)?;
+
         read_bytes(sock)
     }
 
@@ -386,6 +425,8 @@ impl Host {
         sock.write_all(&[host_fns::Methods::GetBalance as u8])?;
 
         sock.write_all(&address.raw())?;
+
+        handle_host_error(sock)?;
 
         let mut buf: [u8; 32] = [0; 32];
         sock.read_exact(&mut buf)?;

@@ -18,5 +18,16 @@
             "eth_send": 11,
             "get_balance": 12
         }
-    }
+    },
+    {
+      "type": "enum",
+      "size": "u8",
+      "name": "errors",
+      "values": {
+          "ok": 0,
+          "absent": 1,
+          "forbidden": 2,
+          "i_am_leader": 3
+      }
+  }
 ]

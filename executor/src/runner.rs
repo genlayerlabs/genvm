@@ -180,6 +180,7 @@ pub fn path() -> Result<std::path::PathBuf> {
     runners_path.pop();
     runners_path.pop();
     runners_path.push("share");
+    runners_path.push("lib");
     runners_path.push("genvm");
     runners_path.push("runners");
     Ok(runners_path)

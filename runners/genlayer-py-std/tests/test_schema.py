@@ -33,17 +33,25 @@ def test_class():
 	assert get_schema(A) == {
 		'ctor': {'params': [['x', 'int']], 'kwparams': {'y': 'string'}},
 		'methods': {
-			'an': {'params': [['x', 'any']], 'kwparams': {}, 'readonly': True, 'ret': 'any'},
+			'an': {
+				'params': [['x', 'any']],
+				'kwparams': {},
+				'readonly': True,
+				'payable': False,
+				'ret': 'any',
+			},
 			'foo': {
 				'params': [['x', 'dict']],
 				'kwparams': {'y': 'array'},
 				'readonly': False,
+				'payable': False,
 				'ret': 'any',
 			},
 			'foo_bar': {
 				'params': [['x', {'$dict': 'int'}]],
 				'kwparams': {'y': [{'$rep': [{'$rep': 'int'}]}]},
 				'readonly': True,
+				'payable': False,
 				'ret': 'any',
 			},
 		},
@@ -77,6 +85,7 @@ def test_dataclass():
 				'params': [],
 				'kwparams': {},
 				'readonly': True,
+				'payable': False,
 				'ret': {'x': 'int', 'y': 'int', 'z': 'any'},
 			}
 		},

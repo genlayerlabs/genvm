@@ -23,7 +23,7 @@ compile_dir.mkpath
 
 runner_name = 'py-genlayer-std'
 
-out_dir = config.out_dir.join('share', 'genvm', 'runners', runner_name)
+out_dir = config.runners_dir.join(runner_name)
 expected_hash = 'test'
 
 runner_json = {
@@ -58,7 +58,7 @@ nix_target = find_target /\/runners\/nix$/
 
 cum_name = 'py-genlayer'
 cum_hash = 'test'
-cum_out_dir = config.out_dir.join('share', 'genvm', 'runners', cum_name)
+cum_out_dir = config.runners_dir.join(cum_name)
 cum_runner_json = {
 	Seq: [
 		{ With: { runner: "<contract>", action: { MapFile: { file: "file", to: "/contract.py" } } } },
@@ -86,7 +86,7 @@ target_command(
 
 cum_name = 'py-genlayer-multi'
 cum_hash = 'test'
-cum_out_dir = config.out_dir.join('share', 'genvm', 'runners', cum_name)
+cum_out_dir = config.runners_dir.join(cum_name)
 cum_runner_json = {
 	Seq: [
 		{ With: { runner: "<contract>", action: { MapFile: { file: "contract/", to: "/contract/" } } } },

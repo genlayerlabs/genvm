@@ -24,6 +24,8 @@ def unfold_target(t: str) -> str:
 			return 'aarch64-macos-none'
 		case 'aarch64-apple-darwin':
 			return 'aarch64-macos-none'
+		case 'x86_64-unknown-linux-musl':
+			return 'x86_64-linux-musl'
 		case t:
 			return t
 

@@ -7,7 +7,7 @@ make_runner = Proc.new { |name, runner_name: name, extra_seq: []|
 	compile_dir = cur_build.join(name)
 	compile_dir.mkpath
 
-	out_dir = config.out_dir.join('share', 'genvm', 'runners', "py-lib-#{runner_name}")
+	out_dir = config.runners_dir.join("py-lib-#{runner_name}")
 	expected_hash = config.runners.py_libs.send(runner_name).hash
 
 	runner_json = {

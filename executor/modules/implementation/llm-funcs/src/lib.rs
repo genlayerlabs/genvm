@@ -30,18 +30,6 @@ impl Drop for Impl {
     fn drop(&mut self) {}
 }
 
-fn default_equivalence_prompt_comparative() -> String {
-    include_str!("prompts/equivalence_prompt_comparative.txt").into()
-}
-
-fn default_equivalence_prompt_non_comparative() -> String {
-    include_str!("prompts/equivalence_prompt_non_comparative.txt").into()
-}
-
-fn default_equivalence_prompt_non_comparative_leader() -> String {
-    include_str!("prompts/equivalence_prompt_non_comparative_leader.txt").into()
-}
-
 async fn send_with_retries(
     builder: impl (Fn() -> reqwest::RequestBuilder) + Send,
 ) -> anyhow::Result<reqwest::Response> {
@@ -71,18 +59,19 @@ async fn send_with_retries(
 }
 
 #[derive(Deserialize)]
+struct Prompts {
+    eq_comparative: String,
+    eq_non_comparative_leader: String,
+    eq_non_comparative_validator: String,
+}
+
+#[derive(Deserialize)]
 struct Config {
     host: String,
     provider: LLLMProvider,
     model: String,
-    #[serde(default = "String::new")]
     key_env_name: String,
-    #[serde(default = "default_equivalence_prompt_comparative")]
-    equivalence_prompt_comparative: String,
-    #[serde(default = "default_equivalence_prompt_non_comparative")]
-    equivalence_prompt_non_comparative: String,
-    #[serde(default = "default_equivalence_prompt_non_comparative_leader")]
-    equivalence_prompt_non_comparative_leader: String,
+    prompt_templates: Prompts,
 }
 
 fn sanitize_json_str(s: &str) -> &str {
@@ -107,8 +96,8 @@ struct ExecPromptConfig {
 }
 
 impl Impl {
-    fn try_new(args: CtorArgs<'_>) -> anyhow::Result<Self> {
-        let config: Config = serde_json::from_str(args.config)?;
+    fn try_new(args: CtorArgs) -> anyhow::Result<Self> {
+        let config: Config = serde_yaml::from_value(args.config)?;
         let api_key = std::env::var(&config.key_env_name).unwrap_or("".into());
         Ok(Impl {
             config,
@@ -421,8 +410,10 @@ impl Impl {
             "invalid prompt id",
         )?;
         let template = match id {
-            TemplateId::Comparative => &self.config.equivalence_prompt_comparative,
-            TemplateId::NonComparative => &self.config.equivalence_prompt_non_comparative,
+            TemplateId::Comparative => &self.config.prompt_templates.eq_comparative,
+            TemplateId::NonComparativeValidator => {
+                &self.config.prompt_templates.eq_non_comparative_validator
+            }
             TemplateId::NonComparativeLeader => {
                 return Err(ModuleError::Recoverable("invalid prompt id"))
             }
@@ -442,11 +433,11 @@ impl Impl {
             "invalid prompt id",
         )?;
         let template = match id {
-            TemplateId::Comparative | TemplateId::NonComparative => {
+            TemplateId::Comparative | TemplateId::NonComparativeValidator => {
                 return Err(ModuleError::Recoverable("illegal prompt id"))
             }
             TemplateId::NonComparativeLeader => {
-                &self.config.equivalence_prompt_non_comparative_leader
+                &self.config.prompt_templates.eq_non_comparative_leader
             }
         };
         let vars: std::collections::BTreeMap<String, String> =
@@ -518,7 +509,7 @@ impl genvm_modules_interfaces::Llm for Proxy {
 
 #[no_mangle]
 pub fn new_llm_module(
-    args: CtorArgs<'_>,
+    args: CtorArgs,
 ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Llm + Send + Sync>> {
     Ok(Box::new(Proxy(Arc::new(Impl::try_new(args)?))))
 }
@@ -533,42 +524,72 @@ mod tests {
             "host": "https://api.openai.com",
             "provider": "openai-compatible",
             "model": "gpt-4o-mini",
-            "key_env_name": "OPENAIKEY"
+            "key_env_name": "OPENAIKEY",
+            "prompt_templates": {
+                "eq_comparative": "",
+                "eq_non_comparative_leader": "",
+                "eq_non_comparative_validator": ""
+            }
         }"#;
 
         pub const heurist: &str = r#"{
             "host": "https://llm-gateway.heurist.xyz",
             "provider": "openai-compatible",
             "model": "meta-llama/llama-3.3-70b-instruct",
-            "key_env_name": "HEURISTKEY"
+            "key_env_name": "HEURISTKEY",
+            "prompt_templates": {
+                "eq_comparative": "",
+                "eq_non_comparative_leader": "",
+                "eq_non_comparative_validator": ""
+            }
         }"#;
 
         pub const anthropic: &str = r#"{
             "host": "https://api.anthropic.com",
             "provider": "anthropic",
             "model": "claude-3-5-sonnet-20241022",
-            "key_env_name": "ANTHROPICKEY"
+            "key_env_name": "ANTHROPICKEY",
+            "prompt_templates": {
+                "eq_comparative": "",
+                "eq_non_comparative_leader": "",
+                "eq_non_comparative_validator": ""
+            }
         }"#;
 
         pub const xai: &str = r#"{
             "host": "https://api.x.ai",
             "provider": "openai-compatible",
             "model": "grok-2-1212",
-            "key_env_name": "XAIKEY"
+            "key_env_name": "XAIKEY",
+            "prompt_templates": {
+                "eq_comparative": "",
+                "eq_non_comparative_leader": "",
+                "eq_non_comparative_validator": ""
+            }
         }"#;
 
         pub const google: &str = r#"{
             "host": "https://generativelanguage.googleapis.com",
             "provider": "google",
             "model": "gemini-1.5-flash",
-            "key_env_name": "GEMINIKEY"
+            "key_env_name": "GEMINIKEY",
+            "prompt_templates": {
+                "eq_comparative": "",
+                "eq_non_comparative_leader": "",
+                "eq_non_comparative_validator": ""
+            }
         }"#;
 
         pub const atoma: &str = r#"{
             "host": "https://api.atoma.network",
             "provider": "openai-compatible",
             "model": "meta-llama/Llama-3.3-70B-Instruct",
-            "key_env_name": "ATOMAKEY"
+            "key_env_name": "ATOMAKEY",
+            "prompt_templates": {
+                "eq_comparative": "",
+                "eq_non_comparative_leader": "",
+                "eq_non_comparative_validator": ""
+            }
         }"#;
     }
 
@@ -576,6 +597,8 @@ mod tests {
         use genvm_modules_interfaces::*;
 
         let (cancellation, canceller) = make_cancellation();
+
+        let conf: serde_yaml::Value = serde_json::from_str(conf).unwrap();
 
         let imp = Impl::try_new(CtorArgs {
             config: conf,
@@ -613,6 +636,8 @@ mod tests {
         use genvm_modules_interfaces::*;
 
         let (cancellation, canceller) = make_cancellation();
+
+        let conf: serde_yaml::Value = serde_json::from_str(conf).unwrap();
 
         let imp = Impl::try_new(CtorArgs {
             config: conf,

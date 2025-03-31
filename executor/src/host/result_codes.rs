@@ -6,8 +6,18 @@ pub enum ResultCode {
     Rollback = 1,
     ContractError = 2,
     Error = 3,
-    None = 4,
-    NoLeaders = 5,
+}
+
+#[allow(dead_code)]
+impl ResultCode {
+    pub fn str_snake_case(self) -> &'static str {
+        match self {
+            ResultCode::Return => "return",
+            ResultCode::Rollback => "rollback",
+            ResultCode::ContractError => "contract_error",
+            ResultCode::Error => "error",
+        }
+    }
 }
 
 impl TryFrom<u8> for ResultCode {
@@ -19,8 +29,6 @@ impl TryFrom<u8> for ResultCode {
             1 => Ok(ResultCode::Rollback),
             2 => Ok(ResultCode::ContractError),
             3 => Ok(ResultCode::Error),
-            4 => Ok(ResultCode::None),
-            5 => Ok(ResultCode::NoLeaders),
             _ => Err(()),
         }
     }
@@ -31,6 +39,17 @@ pub enum StorageType {
     Default = 0,
     LatestFinal = 1,
     LatestNonFinal = 2,
+}
+
+#[allow(dead_code)]
+impl StorageType {
+    pub fn str_snake_case(self) -> &'static str {
+        match self {
+            StorageType::Default => "default",
+            StorageType::LatestFinal => "latest_final",
+            StorageType::LatestNonFinal => "latest_non_final",
+        }
+    }
 }
 
 impl TryFrom<u8> for StorageType {

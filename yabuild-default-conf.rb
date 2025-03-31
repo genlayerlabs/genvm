@@ -7,7 +7,7 @@ extend_config({
 	createTestRunner: true,
 	out_dir: root_build.join('out'),
 	bin_dir: root_build.join('out', 'bin'),
-	runners_dir: root_build.join('out', 'share', 'genvm', 'runners'),
+	runners_dir: root_build.join('out', 'share', 'lib', 'genvm', 'runners'),
 	runners: {
 		py_libs: {
 			cloudpickle: {

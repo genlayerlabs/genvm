@@ -66,23 +66,29 @@ pub fn patch_str(vars: &impl AnyMap<String, String>, s: &str) -> Result<String> 
 }
 pub fn patch_value(
     vars: &HashMap<String, String>,
-    v: serde_json::Value,
-) -> Result<serde_json::Value> {
+    v: serde_yaml::Value,
+) -> Result<serde_yaml::Value> {
     Ok(match v {
-        serde_json::Value::String(s) => serde_json::Value::String(patch_str(vars, &s)?),
-        serde_json::Value::Array(a) => {
-            let res: Result<Vec<serde_json::Value>, _> =
+        serde_yaml::Value::String(s) => serde_yaml::Value::String(patch_str(vars, &s)?),
+        serde_yaml::Value::Sequence(a) => {
+            let res: Result<Vec<serde_yaml::Value>, _> =
                 a.into_iter().map(|a| patch_value(vars, a)).collect();
-            serde_json::Value::Array(res?)
+            serde_yaml::Value::Sequence(res?)
         }
-        serde_json::Value::Object(ob) => {
-            let res: Result<Vec<(String, serde_json::Value)>, _> = ob
+        serde_yaml::Value::Mapping(ob) => {
+            let res: Result<Vec<(serde_yaml::Value, serde_yaml::Value)>, _> = ob
                 .into_iter()
-                .map(|(k, v)| -> Result<(String, serde_json::Value)> {
-                    Ok((k, patch_value(vars, v)?))
+                .map(|(k, v)| -> Result<(serde_yaml::Value, serde_yaml::Value)> {
+                    Ok((patch_value(vars, k)?, patch_value(vars, v)?))
                 })
                 .collect();
-            serde_json::Value::Object(serde_json::Map::from_iter(res?))
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::from_iter(res?))
+        }
+        serde_yaml::Value::Tagged(t) => {
+            serde_yaml::Value::Tagged(Box::new(serde_yaml::value::TaggedValue {
+                tag: t.tag.clone(),
+                value: patch_value(vars, t.value)?,
+            }))
         }
         x => x,
     })

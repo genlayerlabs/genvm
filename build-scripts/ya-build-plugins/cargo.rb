@@ -9,8 +9,7 @@ class CargoBuildTarget < Target
 		@flags = flags
 		@features = features
 		@out_file = out_file
-		@target_dir = CONFIGURATOR.root_build.join('generated', 'rust-target') # dir.join('target')
-		# @target_dir = dir.join('target')
+		@target_dir = CONFIGURATOR.root_build.join('rust-target')
 		cargo_out_dir = @target_dir
 		@target = target
 		if not target.nil?
@@ -105,16 +104,28 @@ EOF
 # editorconfig-checker-enable
 ninja_files_parts[''] << NinjaPieceRaw.new('include genvm.ninja')
 
+RUST_HOST_TARGET = Proc.new {
+	o, e, s = Open3.capture3('rustc --version --verbose')
+	if not s.success?
+		@logger.error "could not detect rust target\n#{o}\n#{e}"
+		next "<error>"
+	end
+	res = o.match(/host: ([a-zA-Z0-9_\-]*)/)[1]
+	@logger.info("default rust target is set to #{res}")
+	res
+}.()
+
+RUST_DEFAULT_TARGET = Proc.new {
+	res = RUST_HOST_TARGET
+	if res.end_with? '-gnu'
+		res = res[..-4] + 'musl'
+	end
+	res
+}.()
+
 self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, name:, target: nil, profile: "debug", features: [], flags: [], env: {}, **kwargs, &blk|
 	if target.nil?
-		@dflt_target ||= Proc.new {
-			o, e, s = Open3.capture3('rustc --version --verbose')
-			raise "rustc failed #{o} #{e}" if not s.success?
-			res = o.match(/host: ([a-zA-Z0-9_\-]*)/)[1]
-			@logger.info("default rust target is set to #{res}")
-			res
-		}.call()
-		target = @dflt_target
+		target = RUST_DEFAULT_TARGET
 	end
 	if dir.nil?
 		dir = cur_src

@@ -14,7 +14,7 @@ wasmShell.stdenv.mkDerivation {
 	pname = "genvm-softfloat";
 	version = "0.0.1";
 
-	outputHash = "sha256-JdWCF5kwaPI1mvgoqyRpN4d9RrpP/eIpIZQPZr9nUbA=";
+	outputHash = "sha256-VYws69vJdAAhjnYymFjL8W950xhf94QkeMxYBw/AEwA="; #lib.fakeHash;
 	outputHashMode = "recursive";
 
 	src = ./.;
@@ -37,7 +37,7 @@ wasmShell.stdenv.mkDerivation {
 	'';
 
 	installPhase = ''
-		mkdir -p "$out/share/genvm/runners"
-		cp --preserve=timestamps --no-preserve=mode,ownership -r export/* "$out/share/genvm/runners"
+		mkdir -p "$out/share/lib/genvm/runners"
+		cp --preserve=timestamps --no-preserve=mode,ownership -r export/* "$out/share/lib/genvm/runners"
 	'';
 }

@@ -1,7 +1,6 @@
 pub mod errors;
 mod host;
 pub mod mmap;
-pub mod plugin_loader;
 pub mod runner;
 pub mod string_templater;
 pub mod ustar;
@@ -21,14 +20,9 @@ use ustar::SharedBytes;
 use vm::RunOk;
 
 #[derive(Deserialize)]
-struct ConfigModule {
-    config: serde_json::Value,
-}
-
-#[derive(Deserialize)]
 struct ConfigModules {
-    llm: ConfigModule,
-    web: ConfigModule,
+    llm: serde_yaml::Value,
+    web: serde_yaml::Value,
 }
 
 #[derive(Deserialize)]
@@ -62,20 +56,18 @@ fn create_modules(
 
     let config_path = string_templater::patch_str(&vars, config_path)?;
     let config_str = std::fs::read_to_string(std::path::Path::new(&config_path))?;
-    let config: serde_json::Value = serde_json::from_str(&config_str)?;
+    let config: serde_yaml::Value = serde_yaml::from_str(&config_str)?;
     let config = string_templater::patch_value(&vars, config)?;
-    let config: ConfigSchema = serde_json::from_value(config)?;
+    let config: ConfigSchema = serde_yaml::from_value(config)?;
 
-    let llm_config = serde_json::to_string(&config.modules.llm.config)?;
     let llm = genvm_modules_default_llm::new_llm_module(genvm_modules_interfaces::CtorArgs {
-        config: &llm_config,
+        config: config.modules.llm.clone(),
         cancellation: cancellation.clone(),
     })
     .with_context(|| "creating llm module")?;
 
-    let web_config = serde_json::to_string(&config.modules.web.config)?;
     let web = genvm_modules_default_web::new_web_module(genvm_modules_interfaces::CtorArgs {
-        config: &web_config,
+        config: config.modules.web.clone(),
         cancellation,
     })
     .with_context(|| "creating llm module")?;
