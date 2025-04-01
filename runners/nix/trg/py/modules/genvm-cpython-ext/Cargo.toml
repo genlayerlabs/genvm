@@ -13,7 +13,7 @@ genvm-sdk-rust = { path = "./sdk-rust", default-features = false }
 num-bigint = "0.4.6"
 
 [dependencies.pyo3]
-version = "0.22.3"
+version = "0.24.0"
 default-features = false
 features = ["macros", "abi3-py312", "extension-module", "num-bigint"]
 
