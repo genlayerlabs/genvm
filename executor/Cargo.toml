@@ -39,7 +39,8 @@ wasmtime-cache = { path = "third-party/wasmtime/crates/cache" }
 wiggle = { path = "third-party/wasmtime/crates/wiggle", default-features = false, features = ["wasmtime_async"] }
 wasmparser = { path = "third-party/wasm-tools/crates/wasmparser" }
 
-genvm-modules-interfaces = { path = "../modules/interfaces" }
+genvm-common = { path = "common" }
+genvm-modules-interfaces = { path = "modules/interfaces" }
 
 anyhow = { version = "1.0.22", default-features = false }
 tracing = "0.1.26"
@@ -71,3 +72,5 @@ primitive-types = { version = "0.13.1", default-features = false, features = ["i
 bufreaderwriter = "0.2.4"
 serde_yaml = "0.9.34"
 getrandom = { version = "0.3.2", default-features = false, features = ["std"] }
+tokio-tungstenite = "0.26.2"
+futures-util = "0.3.31"

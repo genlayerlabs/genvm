@@ -1,0 +1,193 @@
+use serde_derive::{Deserialize, Serialize};
+
+pub trait Web {
+    fn get_webpage(
+        &self,
+        config: String,
+        url: String,
+    ) -> tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>>;
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub enum Result<T> {
+    Ok(T),
+    UserError(serde_json::Value),
+    FatalError(serde_json::Value),
+}
+
+pub struct ParsedDuration(pub tokio::time::Duration);
+
+pub struct CancellationToken;
+
+struct ParsedDurationVisitor;
+
+impl serde::de::Visitor<'_> for ParsedDurationVisitor {
+    type Value = ParsedDuration;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("expected string | null")
+    }
+
+    fn visit_none<E>(self) -> std::result::Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(ParsedDuration(tokio::time::Duration::ZERO))
+    }
+
+    fn visit_str<E>(self, value: &str) -> std::result::Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        let re = regex::Regex::new(r#"^(\d+)(m?s)$"#).unwrap();
+        let caps = re
+            .captures(value)
+            .ok_or(E::custom("invalid duration format"))?;
+
+        let int_str = caps.get(1).unwrap().as_str();
+
+        let int = u64::from_str_radix(int_str, 10).map_err(E::custom)?;
+
+        match caps.get(2).unwrap().as_str() {
+            "s" => Ok(ParsedDuration(tokio::time::Duration::from_secs(int))),
+            "ms" => Ok(ParsedDuration(tokio::time::Duration::from_millis(int))),
+            _ => Err(E::custom("invalid duration suffix")),
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ParsedDuration {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(ParsedDurationVisitor)
+    }
+}
+
+impl serde::Serialize for ParsedDuration {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let as_str = format!("{}ms", self.0.as_millis());
+
+        serializer.serialize_str(&as_str)
+    }
+}
+
+pub mod llm {
+    use serde_derive::{Deserialize, Serialize};
+
+    #[derive(Clone, Deserialize, Serialize, Copy, PartialEq, Eq)]
+    #[serde(rename_all = "kebab-case")]
+    pub enum OutputMode {
+        Text,
+        Json,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct PromptIDVarsComparative {
+        leader_answer: String,
+        validator_answer: String,
+        principle: String,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct PromptIDVarsNonComparativeValidator {
+        task: String,
+        criteria: String,
+        input: String,
+        output: String,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct PromptIDVarsNonComparativeLeader {
+        task: String,
+        criteria: String,
+        input: String,
+    }
+
+    #[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
+    pub enum PromptPart {
+        Text(String),
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct PromptPayload {
+        response_format: OutputMode,
+        parts: Vec<PromptPart>,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct PromptEqComparativePayload {
+        pub vars: PromptIDVarsComparative,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct PromptEqNonComparativeValidatorPayload {
+        pub vars: PromptIDVarsNonComparativeValidator,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct PromptEqNonComparativeLeaderPayload {
+        pub vars: PromptIDVarsNonComparativeLeader,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub enum PromptTemplatePayload {
+        PromptEqComparative(PromptEqComparativePayload),
+        PromptEqNonComparativeValidator(PromptEqNonComparativeValidatorPayload),
+        PromptEqNonComparativeLeader(PromptEqNonComparativeLeaderPayload),
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub enum Message {
+        Prompt(PromptPayload),
+        PromptTemplate(PromptTemplatePayload),
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct PromptAnswer {
+        pub text: String,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    #[serde(untagged)]
+    pub enum PromptTemplateAnswer {
+        Text(String),
+        Bool(bool),
+    }
+}
+
+pub mod web {
+    use serde_derive::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize)]
+    pub enum RenderMode {
+        Text,
+        HTML,
+    }
+
+    fn no_wait() -> super::ParsedDuration {
+        super::ParsedDuration(tokio::time::Duration::ZERO)
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct RenderPayload {
+        pub mode: RenderMode,
+        pub url: String,
+        #[serde(default = "no_wait")]
+        pub wait_after_loaded: super::ParsedDuration,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub enum Message {
+        Render(RenderPayload),
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub enum RenderAnswer {
+        Text(String),
+    }
+}

@@ -32,8 +32,38 @@ struct CliArgs {
     #[arg(long, default_value = "tracing*,polling*")]
     log_disable: String,
 
-    #[arg(long, default_value_t = String::from("${genvmRoot}/etc/genvm-module-web.yaml"))]
+    #[arg(long, default_value_t = String::from("${genvmRoot}/etc/genvm-module-llm.yaml"))]
     config: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum Provider {
+    Ollama,
+    OpenaiCompatible,
+    Simulator,
+    Anthropic,
+    Google,
+}
+
+pub struct BackendConfig {
+    host: String,
+    provider: Provider,
+    model: String,
+    key_env_name: String,
+}
+
+#[derive(Deserialize)]
+struct PromptTemplates {
+    eq_comparative: String,
+    eq_non_comparative_leader: String,
+    eq_non_comparative_validator: String,
+}
+
+pub struct Config {
+    port: u16,
+    backends: BTreeMap<String, BackendConfig>,
+    prompt_templates: PromptTemplates,
 }
 
 fn main() -> Result<()> {

@@ -14,7 +14,6 @@ use wasmtime::{Engine, Linker, Module, Store};
 use crate::{
     caching,
     runner::{self, InitAction, WasmMode},
-    string_templater,
     ustar::{Archive, SharedBytes},
     wasi::{self, preview1::I32Exit},
     AccountAddress,
@@ -187,8 +186,8 @@ pub struct PrecompiledModule {
 }
 
 pub struct Modules {
-    pub web: Arc<dyn genvm_modules_interfaces::Web + Send + Sync>,
-    pub llm: Arc<dyn genvm_modules_interfaces::Llm + Send + Sync>,
+    pub web: Arc<crate::modules::Module>,
+    pub llm: Arc<crate::modules::Module>,
 }
 
 // impl Drop for Modules {
@@ -599,7 +598,11 @@ impl Supervisor {
                 Ok(None)
             }
             InitAction::AddEnv { name, val } => {
-                let new_val = string_templater::patch_str(&ctx.env, val)?;
+                let new_val = genvm_common::templater::patch_str(
+                    &ctx.env,
+                    val,
+                    &genvm_common::templater::DOLLAR_UNFOLDER_RE,
+                )?;
                 ctx.env.insert(name.clone(), new_val);
                 Ok(None)
             }

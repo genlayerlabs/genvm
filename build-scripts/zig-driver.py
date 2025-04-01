@@ -73,7 +73,9 @@ if '-target' not in new_args:
 	import json
 
 	conf = json.loads(root_dir.joinpath('build', 'config.json').read_text())
-	new_args[0:0] = ['-target', unfold_target(conf['executor_target'])]
+	trg = unfold_target(conf['executor_target'])
+	if trg is not None:
+		new_args[0:0] = ['-target', trg]
 
 import subprocess
 

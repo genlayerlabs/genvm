@@ -1,0 +1,14 @@
+[package]
+name = "genvm-common"
+version = "0.1.0"
+edition = "2021"
+
+[profile.release]
+debug = true
+
+[dependencies]
+anyhow = "1.0.97"
+regex = "1.11.1"
+serde = "1.0.219"
+serde_json = "1.0.140"
+serde_yaml = "0.9.34"

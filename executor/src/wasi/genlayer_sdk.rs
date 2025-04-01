@@ -1,7 +1,6 @@
 use core::str;
 use std::sync::Arc;
 
-use genvm_modules_interfaces::{ModuleError, ModuleResult};
 use itertools::Itertools;
 use serde::Deserialize;
 use wiggle::GuestError;
@@ -282,18 +281,6 @@ impl From<serde_json::Error> for generated::types::Error {
     }
 }
 
-fn module_result_into_result<T>(zelf: ModuleResult<T>) -> Result<T, generated::types::Error> {
-    match zelf {
-        Ok(v) => Ok(v),
-        Err(ModuleError::Recoverable(rec)) => {
-            // TODO: fixme
-            log::warn!(err:? = rec; "recoverable module error");
-            Err(generated::types::Errno::Inval.into())
-        }
-        Err(ModuleError::Fatal(e)) => Err(generated::types::Error::trap(e)),
-    }
-}
-
 impl ContextVFS<'_> {
     fn set_vm_run_result(
         &mut self,
@@ -316,6 +303,29 @@ impl ContextVFS<'_> {
             len,
         ))
     }
+}
+
+fn taskify<T>(
+    fut: impl std::future::Future<Output = anyhow::Result<std::result::Result<T, serde_json::Value>>>
+        + Send
+        + 'static,
+) -> tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>>
+where
+    T: serde::Serialize + Send,
+{
+    tokio::spawn(async move {
+        match fut.await {
+            Ok(Ok(_)) => {
+                let bundle = Vec::new();
+                Ok(Box::from(bundle))
+            }
+            Ok(Err(_)) => {
+                let bundle = Vec::new();
+                Ok(Box::from(bundle))
+            }
+            Err(e) => Err(e),
+        }
+    })
 }
 
 #[allow(unused_variables)]
@@ -378,96 +388,76 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
     async fn get_webpage(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        config: wiggle::GuestPtr<str>,
-        url: wiggle::GuestPtr<str>,
+        payload: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::Forbidden.into());
         }
-        let config_str = read_string(mem, config)?;
-        let url_str = read_string(mem, url)?;
 
-        let result_task = self
-            .context
-            .shared_data
-            .modules
-            .web
-            .get_webpage(config_str, url_str);
+        let payload = serde_json::from_str(&read_string(mem, payload)?)?;
 
-        Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_task(result_task),
-        )))
+        let web = self.context.shared_data.modules.web.clone();
+        let task = taskify(async move {
+            web.send::<genvm_modules_interfaces::web::RenderAnswer, _>(
+                genvm_modules_interfaces::web::Message::Render(payload),
+            )
+            .await
+        });
+
+        Ok(generated::types::Fd::from(
+            self.vfs
+                .place_content(FileContentsUnevaluated::from_task(task)),
+        ))
     }
 
     async fn exec_prompt(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        config: wiggle::GuestPtr<str>,
-        prompt: wiggle::GuestPtr<str>,
+        payload: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::Forbidden.into());
         }
-        let config_str = read_string(mem, config)?;
-        let prompt_str = read_string(mem, prompt)?;
 
-        let result_task = self
-            .context
-            .shared_data
-            .modules
-            .llm
-            .exec_prompt(config_str, prompt_str);
+        let payload = serde_json::from_str(&read_string(mem, payload)?)?;
 
-        Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_task(result_task),
-        )))
+        let llm = self.context.shared_data.modules.web.clone();
+        let task = taskify(async move {
+            llm.send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
+                genvm_modules_interfaces::llm::Message::Prompt(payload),
+            )
+            .await
+        });
+
+        Ok(generated::types::Fd::from(
+            self.vfs
+                .place_content(FileContentsUnevaluated::from_task(task)),
+        ))
     }
 
-    async fn exec_prompt_id(
+    async fn exec_prompt_template(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        id: u8,
-        vars: wiggle::GuestPtr<str>,
+        payload: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::Forbidden.into());
         }
-        let vars_str = read_string(mem, vars)?;
 
-        let result_task = self
-            .context
-            .shared_data
-            .modules
-            .llm
-            .exec_prompt_id(id, vars_str);
+        let payload = serde_json::from_str(&read_string(mem, payload)?)?;
 
-        Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_task(result_task),
-        )))
-    }
+        let llm = self.context.shared_data.modules.web.clone();
+        let task = taskify(async move {
+            llm.send::<genvm_modules_interfaces::llm::PromptTemplateAnswer, _>(
+                genvm_modules_interfaces::llm::Message::PromptTemplate(payload),
+            )
+            .await
+        });
 
-    async fn eq_principle_prompt(
-        &mut self,
-        mem: &mut wiggle::GuestMemory<'_>,
-        id: u8,
-        vars: wiggle::GuestPtr<str>,
-    ) -> Result<generated::types::Success, generated::types::Error> {
-        if self.context.data.conf.is_deterministic {
-            return Err(generated::types::Errno::Forbidden.into());
-        }
-        let vars_str = read_string(mem, vars)?;
-
-        let res = self
-            .context
-            .shared_data
-            .modules
-            .llm
-            .eq_principle_prompt(id, &vars_str)
-            .await;
-
-        let res = module_result_into_result(res)?;
-
-        Ok((res as i32).try_into().unwrap())
+        Ok(generated::types::Fd::from(
+            self.vfs
+                .place_content(FileContentsUnevaluated::from_task(task)),
+        ))
     }
 
     async fn run_nondet(

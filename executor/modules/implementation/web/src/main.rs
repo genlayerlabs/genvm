@@ -32,8 +32,15 @@ struct CliArgs {
     #[arg(long, default_value = "tracing*,polling*")]
     log_disable: String,
 
-    #[arg(long, default_value_t = String::from("${genvmRoot}/etc/genvm-module-llm.yaml"))]
+    #[arg(long, default_value_t = String::from("${genvmRoot}/etc/genvm-module-web.yaml"))]
     config: String,
+}
+
+pub struct Config {
+    bind: String,
+
+    extra_tld: Vec<Box<str>>,
+    always_allow_hosts: Vec<Box<str>>,
 }
 
 fn main() -> Result<()> {
@@ -43,6 +50,19 @@ fn main() -> Result<()> {
         .with_default_writer(structured_logger::json::new_writer(std::io::stdout()))
         .with_target_writer(&args.log_disable, Box::new(NullWiriter))
         .init();
+
+    let mut root_path = std::env::current_exe().with_context(|| "getting current exe")?;
+    root_path.pop();
+    root_path.pop();
+    let root_path = root_path
+        .into_os_string()
+        .into_string()
+        .map_err(|e| anyhow::anyhow!("can't convert path to string `{e:?}`"))?;
+
+    let vars: HashMap<String, String> = HashMap::from([("genvmRoot".into(), root_path)]);
+
+    let config = genvm_common::load_config(&vars, args.config).with_context(|| "loading config")?;
+    let config: ConfigSchema = serde_yaml::from_value(config)?;
 
     Ok(())
 }

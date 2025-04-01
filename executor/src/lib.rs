@@ -1,13 +1,12 @@
+pub mod caching;
 pub mod errors;
 mod host;
 pub mod mmap;
+pub mod modules;
 pub mod runner;
-pub mod string_templater;
 pub mod ustar;
 pub mod vm;
 pub mod wasi;
-
-pub mod caching;
 
 use errors::ContractError;
 use host::AbsentLeaderResult;
@@ -17,12 +16,17 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::{collections::HashMap, sync::Arc};
 use ustar::SharedBytes;
-use vm::RunOk;
+use vm::{Modules, RunOk};
+
+#[derive(Deserialize)]
+struct ConfigModule {
+    address: String,
+}
 
 #[derive(Deserialize)]
 struct ConfigModules {
-    llm: serde_yaml::Value,
-    web: serde_yaml::Value,
+    llm: ConfigModule,
+    web: ConfigModule,
 }
 
 #[derive(Deserialize)]
@@ -30,67 +34,28 @@ struct ConfigSchema {
     modules: ConfigModules,
 }
 
-//extern "Rust" {
-//    fn new_web_module(
-//        args: genvm_modules_interfaces::CtorArgs<'_>,
-//    ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Web + Send + Sync>>;
-//
-//    fn new_llm_module(
-//        args: genvm_modules_interfaces::CtorArgs<'_>,
-//    ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Llm + Send + Sync>>;
-//}
-
-fn create_modules(
+pub fn create_supervisor(
     config_path: &str,
+    host: Host,
+    is_sync: bool,
     cancellation: Arc<genvm_modules_interfaces::CancellationToken>,
-) -> Result<vm::Modules> {
+) -> Result<Arc<tokio::sync::Mutex<vm::Supervisor>>> {
     let mut root_path = std::env::current_exe().with_context(|| "getting current exe")?;
     root_path.pop();
     root_path.pop();
     let root_path = root_path
         .into_os_string()
         .into_string()
-        .map_err(|_e| anyhow::anyhow!("can't convert path to string"))?;
+        .map_err(|e| anyhow::anyhow!("can't convert path to string `{e:?}`"))?;
 
     let vars: HashMap<String, String> = HashMap::from([("genvmRoot".into(), root_path)]);
 
-    let config_path = string_templater::patch_str(&vars, config_path)?;
-    let config_str = std::fs::read_to_string(std::path::Path::new(&config_path))?;
-    let config: serde_yaml::Value = serde_yaml::from_str(&config_str)?;
-    let config = string_templater::patch_value(&vars, config)?;
+    let config = genvm_common::load_config(&vars, config_path).with_context(|| "loading config")?;
     let config: ConfigSchema = serde_yaml::from_value(config)?;
 
-    let llm = genvm_modules_default_llm::new_llm_module(genvm_modules_interfaces::CtorArgs {
-        config: config.modules.llm.clone(),
-        cancellation: cancellation.clone(),
-    })
-    .with_context(|| "creating llm module")?;
-
-    let web = genvm_modules_default_web::new_web_module(genvm_modules_interfaces::CtorArgs {
-        config: config.modules.web.clone(),
-        cancellation,
-    })
-    .with_context(|| "creating llm module")?;
-
-    Ok(vm::Modules {
-        llm: Arc::from(llm),
-        web: Arc::from(web),
-    })
-}
-
-pub fn create_supervisor(
-    config_path: &str,
-    mut host: Host,
-    is_sync: bool,
-    cancellation: Arc<genvm_modules_interfaces::CancellationToken>,
-) -> Result<Arc<tokio::sync::Mutex<vm::Supervisor>>> {
-    let modules = match create_modules(config_path, cancellation.clone()) {
-        Ok(modules) => modules,
-        Err(e) => {
-            let err = Err(e);
-            host.consume_result(&err)?;
-            return Err(err.unwrap_err());
-        }
+    let modules = Modules {
+        web: Arc::new(modules::Module::new(config.modules.web.address)),
+        llm: Arc::new(modules::Module::new(config.modules.llm.address)),
     };
     let shared_data = Arc::new(crate::vm::SharedData::new(modules, is_sync, cancellation));
 
