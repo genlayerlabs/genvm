@@ -48,7 +48,6 @@ project('executor') {
 		"codegen",
 		run_codegen.(cur_src.join('codegen', 'data', 'host-fns.json'), cur_src.join('src', 'host', 'host_fns.rs'), type: "rs"),
 		run_codegen.(cur_src.join('codegen', 'data', 'result-codes.json'), cur_src.join('src', 'host', 'result_codes.rs'), type: "rs"),
-		run_codegen.(cur_src.join('codegen', 'data', 'builtin-prompt-templates.json'), cur_src.join('modules', 'implementation', 'llm-funcs', 'src', 'template_ids.rs'), type: "rs"),
 	)
 
 	genvm_id_path = root_build.join('genvm_id.txt')

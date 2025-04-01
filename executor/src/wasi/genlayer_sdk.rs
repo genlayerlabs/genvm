@@ -112,7 +112,7 @@ pub(crate) mod generated {
             genlayer_sdk::{
                 call_contract, run_nondet, sandbox,
                 get_webpage,
-                exec_prompt, exec_prompt_id, eq_principle_prompt,
+                exec_prompt, exec_prompt_template,
                 deploy_contract, post_message,
                 eth_send, eth_call,
                 storage_read, storage_write,
@@ -131,7 +131,7 @@ pub(crate) mod generated {
             genlayer_sdk::{
                 call_contract, run_nondet, sandbox,
                 get_webpage,
-                exec_prompt, exec_prompt_id, eq_principle_prompt,
+                exec_prompt, exec_prompt_template,
                 deploy_contract, post_message,
                 eth_send, eth_call,
                 storage_read, storage_write,
@@ -305,27 +305,28 @@ impl ContextVFS<'_> {
     }
 }
 
-fn taskify<T>(
+async fn taskify<T>(
     fut: impl std::future::Future<Output = anyhow::Result<std::result::Result<T, serde_json::Value>>>
         + Send
         + 'static,
-) -> tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>>
+) -> anyhow::Result<Box<[u8]>>
 where
     T: serde::Serialize + Send,
 {
-    tokio::spawn(async move {
-        match fut.await {
-            Ok(Ok(_)) => {
-                let bundle = Vec::new();
-                Ok(Box::from(bundle))
-            }
-            Ok(Err(_)) => {
-                let bundle = Vec::new();
-                Ok(Box::from(bundle))
-            }
-            Err(e) => Err(e),
+    match fut.await? {
+        Ok(r) => {
+            let mut bundle = Vec::new();
+            bundle.push(0);
+            serde_json::to_writer(&mut bundle, &r)?;
+            Ok(Box::from(bundle))
         }
-    })
+        Err(e) => {
+            let mut bundle = Vec::new();
+            bundle.push(1);
+            serde_json::to_writer(&mut bundle, &e)?;
+            Ok(Box::from(bundle))
+        }
+    }
 }
 
 #[allow(unused_variables)]
@@ -397,12 +398,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let payload = serde_json::from_str(&read_string(mem, payload)?)?;
 
         let web = self.context.shared_data.modules.web.clone();
-        let task = taskify(async move {
+        let task = tokio::spawn(taskify(async move {
             web.send::<genvm_modules_interfaces::web::RenderAnswer, _>(
                 genvm_modules_interfaces::web::Message::Render(payload),
             )
             .await
-        });
+        }));
 
         Ok(generated::types::Fd::from(
             self.vfs
@@ -422,12 +423,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let payload = serde_json::from_str(&read_string(mem, payload)?)?;
 
         let llm = self.context.shared_data.modules.web.clone();
-        let task = taskify(async move {
+        let task = tokio::spawn(taskify(async move {
             llm.send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
                 genvm_modules_interfaces::llm::Message::Prompt(payload),
             )
             .await
-        });
+        }));
 
         Ok(generated::types::Fd::from(
             self.vfs
@@ -447,12 +448,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let payload = serde_json::from_str(&read_string(mem, payload)?)?;
 
         let llm = self.context.shared_data.modules.web.clone();
-        let task = taskify(async move {
+        let task = tokio::spawn(taskify(async move {
             llm.send::<genvm_modules_interfaces::llm::PromptTemplateAnswer, _>(
                 genvm_modules_interfaces::llm::Message::PromptTemplate(payload),
             )
             .await
-        });
+        }));
 
         Ok(generated::types::Fd::from(
             self.vfs

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::Context;
 
+pub mod cancellation;
 pub mod templater;
 
 pub fn load_config(

@@ -1,5 +1,9 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
+use std::{collections::HashMap, sync::Arc};
+
+mod config;
+mod handler;
 
 #[cfg(not(debug_assertions))]
 fn default_log_level() -> log::LevelFilter {
@@ -36,36 +40,6 @@ struct CliArgs {
     config: String,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "kebab-case")]
-enum Provider {
-    Ollama,
-    OpenaiCompatible,
-    Simulator,
-    Anthropic,
-    Google,
-}
-
-pub struct BackendConfig {
-    host: String,
-    provider: Provider,
-    model: String,
-    key_env_name: String,
-}
-
-#[derive(Deserialize)]
-struct PromptTemplates {
-    eq_comparative: String,
-    eq_non_comparative_leader: String,
-    eq_non_comparative_validator: String,
-}
-
-pub struct Config {
-    port: u16,
-    backends: BTreeMap<String, BackendConfig>,
-    prompt_templates: PromptTemplates,
-}
-
 fn main() -> Result<()> {
     let args = CliArgs::parse();
 
@@ -73,6 +47,76 @@ fn main() -> Result<()> {
         .with_default_writer(structured_logger::json::new_writer(std::io::stdout()))
         .with_target_writer(&args.log_disable, Box::new(NullWiriter))
         .init();
+
+    let mut root_path = std::env::current_exe().with_context(|| "getting current exe")?;
+    root_path.pop();
+    root_path.pop();
+    let root_path = root_path
+        .into_os_string()
+        .into_string()
+        .map_err(|e| anyhow::anyhow!("can't convert path to string `{e:?}`"))?;
+
+    let vars: HashMap<String, String> = HashMap::from([("genvmRoot".into(), root_path)]);
+
+    let config =
+        genvm_common::load_config(&vars, &args.config).with_context(|| "loading config")?;
+    let mut config: config::Config = serde_yaml::from_value(config)?;
+
+    for (k, v) in config.backends.iter_mut() {
+        if !v.enabled {
+            continue;
+        }
+
+        if !v.key.is_empty() {
+            continue;
+        }
+
+        v.key = std::env::var_os(&v.key_env_name)
+            .map(|val| val.into_string())
+            .unwrap_or(Ok("".into()))
+            .map_err(|_e| anyhow::anyhow!("can't convert OsString to String"))?;
+
+        if v.key.is_empty() {
+            log::warn!(backend = k;"could not detect key for backend");
+            v.enabled = false;
+        }
+    }
+
+    config.backends.retain(|_k, v| v.enabled);
+
+    if config.backends.is_empty() {
+        anyhow::bail!("no valid backend detected");
+    }
+
+    let (token, canceller) = genvm_common::cancellation::make();
+
+    let handle_sigterm = move || {
+        log::warn!("sigterm received");
+        canceller();
+    };
+    unsafe {
+        signal_hook::low_level::register(signal_hook::consts::SIGTERM, handle_sigterm.clone())?;
+        signal_hook::low_level::register(signal_hook::consts::SIGINT, handle_sigterm)?;
+    }
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_io()
+        .enable_time()
+        .worker_threads(config.threads)
+        .max_blocking_threads(config.blocking_threads)
+        .build()?;
+
+    let loop_fututre = genvm_modules_impl_common::run_loop(
+        config.bind_address.clone(),
+        token,
+        Arc::new(handler::HandlerProvider {
+            config: Arc::new(config),
+        }),
+    );
+
+    runtime.block_on(loop_fututre)?;
+
+    std::mem::drop(runtime);
 
     Ok(())
 }

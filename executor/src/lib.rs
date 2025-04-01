@@ -38,7 +38,7 @@ pub fn create_supervisor(
     config_path: &str,
     host: Host,
     is_sync: bool,
-    cancellation: Arc<genvm_modules_interfaces::CancellationToken>,
+    cancellation: Arc<genvm_common::cancellation::Token>,
 ) -> Result<Arc<tokio::sync::Mutex<vm::Supervisor>>> {
     let mut root_path = std::env::current_exe().with_context(|| "getting current exe")?;
     root_path.pop();

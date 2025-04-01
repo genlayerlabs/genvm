@@ -158,7 +158,7 @@ impl WasmContext {
 /// shared across all deterministic VMs
 pub struct SharedData {
     pub nondet_call_no: AtomicU32,
-    pub cancellation: Arc<genvm_modules_interfaces::CancellationToken>,
+    pub cancellation: Arc<genvm_common::cancellation::Token>,
     pub is_sync: bool,
     pub modules: Modules,
     pub balances: dashmap::DashMap<AccountAddress, primitive_types::U256>,
@@ -168,7 +168,7 @@ impl SharedData {
     pub fn new(
         modules: Modules,
         is_sync: bool,
-        cancellation: Arc<genvm_modules_interfaces::CancellationToken>,
+        cancellation: Arc<genvm_common::cancellation::Token>,
     ) -> Self {
         Self {
             nondet_call_no: 0.into(),

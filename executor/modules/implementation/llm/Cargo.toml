@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 genvm-modules-interfaces = { path = "../../interfaces" }
 genvm-modules-impl-common ={ path = "../common" }
-genvm-common = { path = "../../common" }
+genvm-common = { path = "../../../common" }
 
 anyhow = { version = "1.0.86", features = [] }
 encoding_rs_io = "0.1.7"
@@ -21,3 +21,4 @@ reqwest = { version = "0.12.12", features = ["cookies", "gzip", "rustls-tls", "c
 serde_yaml = "0.9.34"
 structured-logger = "1.0.3"
 clap = { version = "4.5.16", features = ["derive"] }
+signal-hook = "0.3.17"

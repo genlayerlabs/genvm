@@ -17,8 +17,6 @@ pub enum Result<T> {
 
 pub struct ParsedDuration(pub tokio::time::Duration);
 
-pub struct CancellationToken;
-
 struct ParsedDurationVisitor;
 
 impl serde::de::Visitor<'_> for ParsedDurationVisitor {
@@ -79,9 +77,9 @@ impl serde::Serialize for ParsedDuration {
 pub mod llm {
     use serde_derive::{Deserialize, Serialize};
 
-    #[derive(Clone, Deserialize, Serialize, Copy, PartialEq, Eq)]
+    #[derive(Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Debug)]
     #[serde(rename_all = "kebab-case")]
-    pub enum OutputMode {
+    pub enum OutputFormat {
         Text,
         Json,
     }
@@ -95,28 +93,28 @@ pub mod llm {
 
     #[derive(Serialize, Deserialize)]
     pub struct PromptIDVarsNonComparativeValidator {
-        task: String,
-        criteria: String,
-        input: String,
-        output: String,
+        pub task: String,
+        pub criteria: String,
+        pub input: String,
+        pub output: String,
     }
 
     #[derive(Serialize, Deserialize)]
     pub struct PromptIDVarsNonComparativeLeader {
-        task: String,
-        criteria: String,
-        input: String,
+        pub task: String,
+        pub criteria: String,
+        pub input: String,
     }
 
-    #[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
+    #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
     pub enum PromptPart {
         Text(String),
     }
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Serialize, Deserialize, Debug)]
     pub struct PromptPayload {
-        response_format: OutputMode,
-        parts: Vec<PromptPart>,
+        pub response_format: OutputFormat,
+        pub parts: Vec<PromptPart>,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -147,16 +145,12 @@ pub mod llm {
         PromptTemplate(PromptTemplatePayload),
     }
 
-    #[derive(Serialize, Deserialize)]
-    pub struct PromptAnswer {
-        pub text: String,
-    }
-
-    #[derive(Serialize, Deserialize)]
+    #[derive(Serialize, Deserialize, Debug)]
     #[serde(untagged)]
-    pub enum PromptTemplateAnswer {
+    pub enum PromptAnswer {
         Text(String),
         Bool(bool),
+        Object(serde_json::Map<String, serde_json::Value>),
     }
 }
 

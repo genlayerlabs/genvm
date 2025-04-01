@@ -56,13 +56,13 @@ pub fn handle(args: Args) -> Result<()> {
         anyhow::bail!("Invalid permissions {}", &args.permissions)
     }
 
-    let (token, canceller) = genvm_modules_interfaces::make_cancellation();
+    let (token, canceller) = genvm_common::cancellation::make();
 
     let supervisor = genvm::create_supervisor(&args.config, host, args.sync, token)
         .with_context(|| "creating supervisor")?;
 
     let handle_sigterm = move || {
-        log::warn!(target = "rt"; "sigterm received");
+        log::warn!("sigterm received");
         canceller();
     };
     unsafe {

@@ -1,5 +1,11 @@
-use anyhow::Result;
+use std::{collections::HashMap, sync::Arc};
+
+use anyhow::{Context, Result};
 use clap::Parser;
+
+mod config;
+mod domains;
+mod handler;
 
 #[cfg(not(debug_assertions))]
 fn default_log_level() -> log::LevelFilter {
@@ -36,13 +42,6 @@ struct CliArgs {
     config: String,
 }
 
-pub struct Config {
-    bind: String,
-
-    extra_tld: Vec<Box<str>>,
-    always_allow_hosts: Vec<Box<str>>,
-}
-
 fn main() -> Result<()> {
     let args = CliArgs::parse();
 
@@ -61,8 +60,39 @@ fn main() -> Result<()> {
 
     let vars: HashMap<String, String> = HashMap::from([("genvmRoot".into(), root_path)]);
 
-    let config = genvm_common::load_config(&vars, args.config).with_context(|| "loading config")?;
-    let config: ConfigSchema = serde_yaml::from_value(config)?;
+    let config =
+        genvm_common::load_config(&vars, &args.config).with_context(|| "loading config")?;
+    let config: config::Config = serde_yaml::from_value(config)?;
+
+    let (token, canceller) = genvm_common::cancellation::make();
+
+    let handle_sigterm = move || {
+        log::warn!("sigterm received");
+        canceller();
+    };
+    unsafe {
+        signal_hook::low_level::register(signal_hook::consts::SIGTERM, handle_sigterm.clone())?;
+        signal_hook::low_level::register(signal_hook::consts::SIGINT, handle_sigterm)?;
+    }
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_io()
+        .enable_time()
+        .worker_threads(config.threads)
+        .max_blocking_threads(config.blocking_threads)
+        .build()?;
+
+    let loop_fututre = genvm_modules_impl_common::run_loop(
+        config.bind_address.clone(),
+        token,
+        Arc::new(handler::HandlerProvider {
+            config: Arc::new(config),
+        }),
+    );
+
+    runtime.block_on(loop_fututre)?;
+
+    std::mem::drop(runtime);
 
     Ok(())
 }

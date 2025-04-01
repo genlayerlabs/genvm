@@ -1,63 +1,17 @@
-use std::{future::Future, pin::Pin};
+use futures_util::{SinkExt, StreamExt};
+use std::{future::Future, pin::Pin, sync::Arc};
 
 use anyhow::{Context, Result};
 use regex::Regex;
 use serde::Deserialize;
 
+pub mod session;
+
+pub type ModuleResult<T> = anyhow::Result<std::result::Result<T, serde_json::Value>>;
+
 pub static CENSOR_RESPONSE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     Regex::new(r#""(set-cookie|cf-ray|access-control[^"]*)": "[^"]*""#).unwrap()
 });
-
-pub static DURATION_REGEXP: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r#"^(\d)+(m?s)$"#).unwrap());
-
-pub struct ParsedDuration(pub tokio::time::Duration);
-
-struct ParsedDurationVisitor;
-
-impl serde::de::Visitor<'_> for ParsedDurationVisitor {
-    type Value = ParsedDuration;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("expected string | null")
-    }
-
-    fn visit_none<E>(self) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        Ok(ParsedDuration(tokio::time::Duration::ZERO))
-    }
-
-    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        let re = regex::Regex::new(r#"^(\d+)(m?s)$"#).unwrap();
-        let caps = re
-            .captures(value)
-            .ok_or(E::custom("invalid duration format"))?;
-
-        let int_str = caps.get(1).unwrap().as_str();
-
-        let int = u64::from_str_radix(int_str, 10).map_err(E::custom)?;
-
-        match caps.get(2).unwrap().as_str() {
-            "s" => Ok(ParsedDuration(tokio::time::Duration::from_secs(int))),
-            "ms" => Ok(ParsedDuration(tokio::time::Duration::from_millis(int))),
-            _ => Err(E::custom("invalid duration suffix")),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for ParsedDuration {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_str(ParsedDurationVisitor)
-    }
-}
 
 fn censor_response(res: &reqwest::Response) -> String {
     let debug = format!("{:?}", res);
@@ -87,80 +41,102 @@ pub async fn read_response(res: reqwest::Response) -> Result<String> {
     Ok(text)
 }
 
-pub fn make_error_recoverable<T, E>(
-    res: Result<T, E>,
-    message: &'static str,
-) -> genvm_modules_interfaces::ModuleResult<T>
+type WSStream = tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>;
+
+pub trait MessageHandler<T, R>: Sync + Send {
+    fn handle(&self, v: T) -> impl std::future::Future<Output = ModuleResult<R>> + Send;
+    fn cleanup(&self) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
+}
+
+pub trait MessageHandlerProvider<T, R>: Sync + Send {
+    fn new_handler(
+        &self,
+    ) -> impl std::future::Future<Output = anyhow::Result<impl MessageHandler<T, R>>> + Send;
+}
+
+async fn loop_one_inner<T, R>(
+    cancel: Arc<genvm_common::cancellation::Token>,
+    handler: &mut impl MessageHandler<T, R>,
+    mut stream: WSStream,
+) -> anyhow::Result<()>
 where
-    E: std::fmt::Debug,
+    T: serde::de::DeserializeOwned + 'static,
+    R: serde::Serialize + Send + 'static,
 {
-    res.map_err(|e| {
-        log::error!(original:? = e, mapped = message; "recoverable module error");
-        genvm_modules_interfaces::ModuleError::Recoverable(message)
-    })
+    loop {
+        use tokio_tungstenite::tungstenite::Message;
+
+        match stream
+            .next()
+            .await
+            .ok_or(anyhow::anyhow!("service closed connection"))??
+        {
+            Message::Ping(v) => {
+                stream.send(Message::Pong(v)).await?;
+            }
+            Message::Pong(_) => {}
+            Message::Close(_) => return Ok(()),
+            x => {
+                let text = x.into_text()?;
+                let payload = serde_json::from_str(text.as_str())?;
+                let res = handler.handle(payload).await;
+                let res = res?; // not correct
+                let answer = serde_json::to_string(&res)?;
+                stream.send(Message::Text(answer.into())).await?;
+            }
+        }
+    }
 }
 
-pub trait SessionDrop
+async fn loop_one_impl<T, R>(
+    cancel: Arc<genvm_common::cancellation::Token>,
+    handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
+    stream: tokio::net::TcpStream,
+) -> anyhow::Result<()>
 where
-    Self: Sized,
+    T: serde::de::DeserializeOwned + 'static,
+    R: serde::Serialize + Send + 'static,
 {
-    fn has_drop_session() -> bool {
-        false
+    let stream = tokio_tungstenite::accept_async(stream).await?;
+
+    let mut handler = handler_provider.new_handler().await?;
+
+    let res = loop_one_inner(cancel, &mut handler, stream).await;
+
+    if let Err(close) = handler.cleanup().await {
+        log::error!(error:? = close; "cleanup error");
     }
 
-    fn drop_session(
-        _client: reqwest::Client,
-        _data: &mut Self,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send + Sync>> {
-        Box::pin(async {})
+    res
+}
+
+async fn loop_one<T, R>(
+    cancel: Arc<genvm_common::cancellation::Token>,
+    handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
+    stream: tokio::net::TcpStream,
+) where
+    T: serde::de::DeserializeOwned + 'static,
+    R: serde::Serialize + Send + 'static,
+{
+    if let Err(e) = loop_one_impl(cancel, handler_provider, stream).await {
+        log::error!(error:? = e; "internal loop error");
     }
 }
 
-pub struct Session<T: SessionDrop> {
-    pub client: reqwest::Client,
-    pub data: T,
-}
+pub async fn run_loop<T, R>(
+    bind_address: String,
+    cancel: Arc<genvm_common::cancellation::Token>,
+    handler_provider: Arc<impl MessageHandlerProvider<T, R> + 'static>,
+) -> anyhow::Result<()>
+where
+    T: serde::de::DeserializeOwned + 'static,
+    R: serde::Serialize + Send + 'static,
+{
+    let listener = tokio::net::TcpListener::bind(&bind_address).await?;
 
-impl<T: SessionDrop> std::ops::Drop for Session<T> {
-    fn drop(&mut self) {
-        if !T::has_drop_session() {
-            return;
-        }
-        tokio::spawn(T::drop_session(self.client.clone(), &mut self.data));
-    }
-}
-
-impl<T: SessionDrop> Session<T> {
-    pub fn new(data: T) -> Self {
-        Session {
-            client: reqwest::ClientBuilder::new()
-                .cookie_store(true)
-                .gzip(true)
-                .build()
-                .unwrap(),
-            data,
-        }
-    }
-}
-
-pub struct SessionPool<T: SessionDrop> {
-    pool: crossbeam::queue::ArrayQueue<Box<Session<T>>>,
-}
-
-impl<T: SessionDrop> SessionPool<T> {
-    pub fn new() -> Self {
-        Self {
-            pool: crossbeam::queue::ArrayQueue::new(8),
-        }
+    while let Ok((stream, _)) = listener.accept().await {
+        tokio::spawn(loop_one(cancel.clone(), handler_provider.clone(), stream));
     }
 
-    pub fn get(&self) -> Option<Box<Session<T>>> {
-        self.pool.pop()
-    }
-
-    pub fn retn(&self, obj: Box<Session<T>>) {
-        let _ = self.pool.push(obj);
-    }
+    Ok(())
 }
-
-impl SessionDrop for () {}
