@@ -1171,8 +1171,9 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
             .collect();
 
         if !self.context.conf.is_deterministic {
-            let _ = getrandom::fill(&mut mem)
-                .inspect_err(|e| log::error!(error:? = e; "random failed"));
+            if let Err(e) = getrandom::fill(&mut mem) {
+                log::error!(error:err = e; "random failed");
+            }
         }
 
         memory.copy_from_slice(&mem, buf.as_array(buf_len))?;

@@ -518,11 +518,15 @@ name = "genvm-common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "log",
  "regex",
  "serde",
  "serde_json",
  "serde_yaml",
+ "structured-logger",
  "tokio",
+ "tungstenite",
+ "value-bag",
 ]
 
 [[package]]
@@ -565,6 +569,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-tungstenite",
+ "tungstenite",
 ]
 
 [[package]]
@@ -1374,6 +1379,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_buf"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a86be9d6c7d34718d2ec6f56c8d6a4671d1a7357c2a6921f47fe5a3ee6056cc"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "serde_derive"
 version = "1.0.219"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1922,6 +1936,7 @@ checksum = "35540706617d373b118d550d41f5dfe0b78a0c195dc13c6815e92e2638432306"
 dependencies = [
  "erased-serde",
  "serde",
+ "serde_buf",
  "serde_fmt",
 ]
 

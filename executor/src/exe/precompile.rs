@@ -108,7 +108,7 @@ pub fn handle(args: Args) -> Result<()> {
     let out = serde_json::json!({
         "cache_dir": cache_dir,
         "precompile_dir": precompile_dir,
-        "build_id": env!("GENVM_BUILD_ID"),
+        "version": genvm_common::VERSION,
     });
     println!("{}", serde_json::to_string(&out)?);
     if args.info {

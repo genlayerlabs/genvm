@@ -32,7 +32,7 @@
         (result $error (expected $fd (error $errno)))
     )
 
-    (@interface func (export "get_webpage")
+    (@interface func (export "web_render")
         (param $payload string)
         (result $error (expected $fd (error $errno)))
     )

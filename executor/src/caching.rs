@@ -3,15 +3,13 @@ use std::path::PathBuf;
 
 use once_cell::sync::Lazy;
 
-const GENVM_BUILD_ID: &str = env!("GENVM_BUILD_ID");
-
 /// tries to get cache directory
 fn get_cache_dir() -> Result<PathBuf> {
     let cache_dir = match directories_next::ProjectDirs::from("", "yagerai", "genvm") {
         None => {
             anyhow::bail!("can't determine platform cache directory")
         }
-        Some(dirs) => dirs.cache_dir().join(GENVM_BUILD_ID),
+        Some(dirs) => dirs.cache_dir().join(genvm_common::BUILD_ID),
     };
     std::fs::create_dir_all(&cache_dir).with_context(|| "creating cache dir")?;
 

@@ -123,7 +123,7 @@ impl Handler {
         });
         match response_format {
             llm_iface::OutputFormat::Text => {}
-            llm_iface::OutputFormat::Json => {
+            llm_iface::OutputFormat::JSON => {
                 request.as_object_mut().unwrap().insert(
                     "tools".into(),
                     serde_json::json!([{
@@ -165,7 +165,7 @@ impl Handler {
                 .map(String::from)
                 .map(Ok)
                 .map_err(Into::into),
-            llm_iface::OutputFormat::Json => val
+            llm_iface::OutputFormat::JSON => val
                 .pointer("/content/0/input/type")
                 .ok_or(anyhow::anyhow!("can't get response field {}", &res))
                 .and_then(|x| serde_json::to_string(x).map_err(Into::into))
@@ -192,7 +192,7 @@ impl Handler {
         });
         match response_format {
             llm_iface::OutputFormat::Text => {}
-            llm_iface::OutputFormat::Json => {
+            llm_iface::OutputFormat::JSON => {
                 request.as_object_mut().unwrap().insert(
                     "response_format".into(),
                     serde_json::json!({"type": "json_object"}),
@@ -238,7 +238,7 @@ impl Handler {
             "generationConfig": {
                 "responseMimeType": match response_format {
                     llm_iface::OutputFormat::Text => "text/plain",
-                    llm_iface::OutputFormat::Json => "application/json",
+                    llm_iface::OutputFormat::JSON => "application/json",
                 },
                 "temperature": 0.7,
                 "maxOutputTokens": 800,
@@ -281,7 +281,7 @@ impl Handler {
         });
         match response_format {
             llm_iface::OutputFormat::Text => {}
-            llm_iface::OutputFormat::Json => {
+            llm_iface::OutputFormat::JSON => {
                 request
                     .as_object_mut()
                     .unwrap()
@@ -342,6 +342,7 @@ impl Handler {
         response_format: llm_iface::OutputFormat,
         provider: &config::BackendConfig,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
+        log::trace!(prompt = prompt, format:? = response_format; "executing prompt");
         let res_not_sanitized = match provider.provider {
             config::Provider::Ollama => {
                 self.exec_prompt_impl_ollama(prompt, response_format, provider)
@@ -374,7 +375,7 @@ impl Handler {
             llm_iface::OutputFormat::Text => {
                 Ok(Ok(llm_iface::PromptAnswer::Text(res_not_sanitized)))
             }
-            llm_iface::OutputFormat::Json => Ok(Ok(llm_iface::PromptAnswer::Text(
+            llm_iface::OutputFormat::JSON => Ok(Ok(llm_iface::PromptAnswer::Text(
                 sanitize_json_str(&res_not_sanitized).into(),
             ))),
         }
@@ -386,7 +387,7 @@ impl Handler {
         &self,
         payload: llm_iface::PromptPayload,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        log::debug!(payload:? = payload; "exec_prompt start");
+        log::debug!(payload:serde = payload; "exec_prompt start");
         let prompt = match &payload.parts[0] {
             llm_iface::PromptPart::Text(t) => t,
         };
@@ -397,7 +398,7 @@ impl Handler {
                 self.config.backends.first_key_value().unwrap().1,
             )
             .await;
-        log::info!(payload:? = payload, result:? = res;  "exec_prompt finished");
+        log::info!(payload:serde = payload, result:? = res;  "exec_prompt finished");
         res
     }
 
@@ -408,7 +409,7 @@ impl Handler {
         let provider = self.config.backends.first_key_value().unwrap().1;
 
         match payload {
-            llm_iface::PromptTemplatePayload::PromptEqNonComparativeLeader(payload) => {
+            llm_iface::PromptTemplatePayload::EqNonComparativeLeader(payload) => {
                 let vars = serde_json::to_value(payload.vars)?
                     .as_object()
                     .unwrap()
@@ -432,17 +433,10 @@ impl Handler {
                     &genvm_common::templater::HASH_UNFOLDER_RE,
                 )?;
 
-                let res = self
-                    .exec_prompt_in_provider(&new_prompt, llm_iface::OutputFormat::Json, provider)
-                    .await?;
-                let res = match res {
-                    Ok(res) => res,
-                    Err(e) => return Ok(Err(e)),
-                };
-
-                Ok(Ok(llm_iface::PromptAnswer::Bool(answer_is_bool(res)?)))
+                self.exec_prompt_in_provider(&new_prompt, llm_iface::OutputFormat::Text, provider)
+                    .await
             }
-            llm_iface::PromptTemplatePayload::PromptEqComparative(payload) => {
+            llm_iface::PromptTemplatePayload::EqComparative(payload) => {
                 let vars = serde_json::to_value(payload.vars)?
                     .as_object()
                     .unwrap()
@@ -467,7 +461,7 @@ impl Handler {
                 )?;
 
                 let res = self
-                    .exec_prompt_in_provider(&new_prompt, llm_iface::OutputFormat::Json, provider)
+                    .exec_prompt_in_provider(&new_prompt, llm_iface::OutputFormat::JSON, provider)
                     .await?;
                 let res = match res {
                     Ok(res) => res,
@@ -476,7 +470,7 @@ impl Handler {
 
                 Ok(Ok(llm_iface::PromptAnswer::Bool(answer_is_bool(res)?)))
             }
-            llm_iface::PromptTemplatePayload::PromptEqNonComparativeValidator(payload) => {
+            llm_iface::PromptTemplatePayload::EqNonComparativeValidator(payload) => {
                 let vars = serde_json::to_value(payload.vars)?
                     .as_object()
                     .unwrap()
@@ -500,8 +494,17 @@ impl Handler {
                     &genvm_common::templater::HASH_UNFOLDER_RE,
                 )?;
 
-                self.exec_prompt_in_provider(&new_prompt, llm_iface::OutputFormat::Json, provider)
-                    .await
+                log::error!(old = self.config.prompt_templates.eq_non_comparative_validator, new = new_prompt, vars:serde = vars; "DEBUG");
+
+                let res = self
+                    .exec_prompt_in_provider(&new_prompt, llm_iface::OutputFormat::JSON, provider)
+                    .await?;
+                let res = match res {
+                    Ok(res) => res,
+                    Err(e) => return Ok(Err(e)),
+                };
+
+                Ok(Ok(llm_iface::PromptAnswer::Bool(answer_is_bool(res)?)))
             }
         }
     }
@@ -528,7 +531,7 @@ fn answer_is_bool(res: llm_iface::PromptAnswer) -> anyhow::Result<bool> {
 mod tests {
     use std::sync::Arc;
 
-    use crate::handler::Handler;
+    use crate::{config, handler::Handler};
 
     mod conf {
         pub const openai: &str = r#"{
@@ -536,11 +539,6 @@ mod tests {
             "provider": "openai-compatible",
             "model": "gpt-4o-mini",
             "key_env_name": "OPENAIKEY",
-            "prompt_templates": {
-                "eq_comparative": "",
-                "eq_non_comparative_leader": "",
-                "eq_non_comparative_validator": ""
-            }
         }"#;
 
         pub const heurist: &str = r#"{
@@ -548,11 +546,6 @@ mod tests {
             "provider": "openai-compatible",
             "model": "meta-llama/llama-3.3-70b-instruct",
             "key_env_name": "HEURISTKEY",
-            "prompt_templates": {
-                "eq_comparative": "",
-                "eq_non_comparative_leader": "",
-                "eq_non_comparative_validator": ""
-            }
         }"#;
 
         pub const anthropic: &str = r#"{
@@ -560,11 +553,6 @@ mod tests {
             "provider": "anthropic",
             "model": "claude-3-5-sonnet-20241022",
             "key_env_name": "ANTHROPICKEY",
-            "prompt_templates": {
-                "eq_comparative": "",
-                "eq_non_comparative_leader": "",
-                "eq_non_comparative_validator": ""
-            }
         }"#;
 
         pub const xai: &str = r#"{
@@ -572,11 +560,6 @@ mod tests {
             "provider": "openai-compatible",
             "model": "grok-2-1212",
             "key_env_name": "XAIKEY",
-            "prompt_templates": {
-                "eq_comparative": "",
-                "eq_non_comparative_leader": "",
-                "eq_non_comparative_validator": ""
-            }
         }"#;
 
         pub const google: &str = r#"{
@@ -584,11 +567,6 @@ mod tests {
             "provider": "google",
             "model": "gemini-1.5-flash",
             "key_env_name": "GEMINIKEY",
-            "prompt_templates": {
-                "eq_comparative": "",
-                "eq_non_comparative_leader": "",
-                "eq_non_comparative_validator": ""
-            }
         }"#;
 
         pub const atoma: &str = r#"{
@@ -596,28 +574,34 @@ mod tests {
             "provider": "openai-compatible",
             "model": "meta-llama/Llama-3.3-70B-Instruct",
             "key_env_name": "ATOMAKEY",
-            "prompt_templates": {
-                "eq_comparative": "",
-                "eq_non_comparative_leader": "",
-                "eq_non_comparative_validator": ""
-            }
         }"#;
     }
 
     async fn do_test_text(conf: &str) {
         let (cancellation, canceller) = genvm_common::cancellation::make();
 
-        let conf = serde_json::from_str(conf).unwrap();
+        let backend: config::BackendConfig = serde_json::from_str(conf).unwrap();
 
         let imp = Handler {
-            config: Arc::new(conf),
+            config: Arc::new(config::Config {
+                bind_address: Default::default(),
+                backends: [].into_iter().collect(),
+                prompt_templates: config::PromptTemplates {
+                    eq_comparative: Default::default(),
+                    eq_non_comparative_leader: Default::default(),
+                    eq_non_comparative_validator: Default::default(),
+                },
+                threads: 0,
+                blocking_threads: 0,
+            }),
             client: reqwest::Client::new(),
         };
 
         let res = imp
-            .exec_prompt(
-                "{}",
+            .exec_prompt_in_provider(
                 "Respond with \"yes\" (without quotes) and only this word",
+                genvm_modules_interfaces::llm::OutputFormat::Text,
+                &backend,
             )
             .await;
 
@@ -644,16 +628,30 @@ mod tests {
 
         let (cancellation, canceller) = genvm_common::cancellation::make();
 
-        let conf = serde_json::from_str(conf).unwrap();
+        let backend: config::BackendConfig = serde_json::from_str(conf).unwrap();
 
         let imp = Handler {
-            config: Arc::new(conf),
+            config: Arc::new(config::Config {
+                bind_address: Default::default(),
+                backends: [].into_iter().collect(),
+                prompt_templates: config::PromptTemplates {
+                    eq_comparative: Default::default(),
+                    eq_non_comparative_leader: Default::default(),
+                    eq_non_comparative_validator: Default::default(),
+                },
+                threads: 0,
+                blocking_threads: 0,
+            }),
             client: reqwest::Client::new(),
         };
 
         const PROMPT: &str = "respond with json object containing single key \"result\" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes";
         let res = imp
-            .exec_prompt("{\"response_format\": \"json\"}", PROMPT)
+            .exec_prompt_in_provider(
+                PROMPT,
+                genvm_modules_interfaces::llm::OutputFormat::JSON,
+                &backend,
+            )
             .await;
 
         let res = match res {
@@ -686,11 +684,11 @@ mod tests {
             mod $conf {
                 #[tokio::test]
                 async fn text() {
-                    crate::tests::do_test_text(crate::tests::conf::$conf).await
+                    crate::handler::tests::do_test_text(crate::handler::tests::conf::$conf).await
                 }
                 #[tokio::test]
                 async fn json() {
-                    crate::tests::do_test_json(crate::tests::conf::$conf).await
+                    crate::handler::tests::do_test_json(crate::handler::tests::conf::$conf).await
                 }
             }
         };

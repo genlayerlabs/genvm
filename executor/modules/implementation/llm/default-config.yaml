@@ -1,41 +1,46 @@
 bind_address: 127.0.0.1:3031
 
+threads: 4
+blocking_threads: 16
+log_disable: tracing*,polling*
+#log_level: trace
+
 backends:
-  openai:
+  __openai:
     host: https://api.openai.com
     provider: openai-compatible
     model: gpt-4o-mini
-    key_env_name: OPENAIKEY
+    key: ${ENV[OPENAIKEY]}
 
   heurist:
     host: https://llm-gateway.heurist.xyz
     provider: openai-compatible
     model: meta-llama/llama-3.3-70b-instruct
-    key_env_name: HEURISTKEY
+    key: ${ENV[HEURISTKEY]}
 
   anthropic:
     host: https://api.anthropic.com
     provider: anthropic
     model: claude-3-5-sonnet-20241022
-    key_env_name: ANTHROPICKEY
+    key: ${ENV[ANTHROPICKEY]}
 
   xai:
     host: https://api.x.ai
     provider: openai-compatible
     model: grok-2-1212
-    key_env_name: XAIKEY
+    key: ${ENV[XAIKEY]}
 
   google:
-    host": https://generativelanguage.googleapis.com
-    provider": google
-    model": gemini-1.5-flash
-    key_env_name": GEMINIKEY
+    host: https://generativelanguage.googleapis.com
+    provider: google
+    model: gemini-1.5-flash
+    key: ${ENV[GEMINIKEY]}
 
   atoma:
     host: https://api.atoma.network
     provider: openai-compatible
     model: meta-llama/Llama-3.3-70B-Instruct
-    key_env_name: ATOMAKEY
+    key: ${ENV[ATOMAKEY]}
 
 prompt_templates:
   eq_comparative: |

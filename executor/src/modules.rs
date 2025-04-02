@@ -1,4 +1,8 @@
-use futures_util::{SinkExt, StreamExt};
+use std::sync::Arc;
+
+use anyhow::{anyhow, Context};
+use futures_util::{stream::FusedStream, SinkExt, StreamExt};
+use genvm_common::cancellation;
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
 
 type WSStream =
@@ -10,6 +14,7 @@ struct ModuleImpl {
 }
 
 pub struct Module {
+    cancellation: Arc<genvm_common::cancellation::Token>,
     imp: tokio::sync::Mutex<ModuleImpl>,
 }
 
@@ -25,7 +30,9 @@ async fn read_handling_pings(stream: &mut WSStream) -> anyhow::Result<Utf8Bytes>
             }
             Message::Pong(_) => {}
             Message::Close(_) => anyhow::bail!("stream closed"),
+            Message::Text(text) => return Ok(text),
             x => {
+                log::info!(payload:? = x; "received unexpected");
                 let text = x.into_text()?;
                 return Ok(text);
             }
@@ -34,13 +41,26 @@ async fn read_handling_pings(stream: &mut WSStream) -> anyhow::Result<Utf8Bytes>
 }
 
 impl Module {
-    pub fn new(url: String) -> Self {
+    pub fn new(url: String, cancellation: Arc<genvm_common::cancellation::Token>) -> Self {
         Self {
             imp: tokio::sync::Mutex::new(ModuleImpl { url, stream: None }),
+            cancellation,
         }
     }
 
-    pub async fn send<R, V>(
+    pub async fn close(&self) {
+        let mut lock = self.imp.lock().await;
+        if let Some(stream) = &mut lock.stream {
+            if stream.is_terminated() {
+                return;
+            }
+            if let Err(e) = stream.close(None).await {
+                log::error!(error:err = e; "closing stream");
+            }
+        }
+    }
+
+    async fn send_impl<R, V>(
         &self,
         val: V,
     ) -> anyhow::Result<std::result::Result<R, serde_json::Value>>
@@ -62,15 +82,34 @@ impl Module {
                 stream.send(Message::Text(payload.into())).await?;
                 let response = read_handling_pings(stream).await?;
 
-                let res: genvm_modules_interfaces::Result<R> = serde_json::from_str(&response)?;
+                let res: genvm_modules_interfaces::Result<R> =
+                    serde_json::from_str(&response).with_context(|| "parsing result of module")?;
                 return match res {
                     genvm_modules_interfaces::Result::Ok(v) => Ok(Ok(v)),
                     genvm_modules_interfaces::Result::UserError(value) => Ok(Err(value)),
                     genvm_modules_interfaces::Result::FatalError(value) => {
-                        log::error!(error:? = value; "module error");
-                        Err(anyhow::anyhow!("module error"))
+                        log::error!(error = value; "module error");
+                        Err(anyhow::anyhow!("module error: {value}"))
                     }
                 };
+            }
+        }
+    }
+
+    pub async fn send<R, V>(
+        &self,
+        val: V,
+    ) -> anyhow::Result<std::result::Result<R, serde_json::Value>>
+    where
+        V: serde::Serialize,
+        R: serde::de::DeserializeOwned,
+    {
+        tokio::select! {
+            _ = self.cancellation.chan.closed() => {
+                anyhow::bail!("timeout")
+            }
+            res = self.send_impl(val) => {
+                res
             }
         }
     }

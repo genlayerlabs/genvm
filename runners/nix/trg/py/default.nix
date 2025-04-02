@@ -5,6 +5,7 @@
 , rustShell
 , tools
 , runnerHashes
+, nixHashes
 , ...
 }@args:
 let
@@ -59,7 +60,7 @@ in rec {
 	fullDefault = wasmShell.stdenv.mkDerivation (configurator // {
 		pname = "genvm-cpython";
 
-		outputHash = "sha256-HyFaXe2/yj87Q1fGqVr4zqIMeyUhFH6VV/4tGtOqIhY="; #lib.fakeHash;
+		outputHash = nixHashes.cpython;
 		outputHashMode = "recursive";
 
 		nativeBuildInputs = configurator.nativeBuildInputs ++

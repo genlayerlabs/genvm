@@ -111,7 +111,7 @@ pub(crate) mod generated {
         async: {
             genlayer_sdk::{
                 call_contract, run_nondet, sandbox,
-                get_webpage,
+                web_render,
                 exec_prompt, exec_prompt_template,
                 deploy_contract, post_message,
                 eth_send, eth_call,
@@ -130,7 +130,7 @@ pub(crate) mod generated {
         async: {
             genlayer_sdk::{
                 call_contract, run_nondet, sandbox,
-                get_webpage,
+                web_render,
                 exec_prompt, exec_prompt_template,
                 deploy_contract, post_message,
                 eth_send, eth_call,
@@ -275,9 +275,9 @@ impl From<std::num::TryFromIntError> for generated::types::Error {
 
 impl From<serde_json::Error> for generated::types::Error {
     fn from(err: serde_json::Error) -> Self {
-        match err {
-            _ => generated::types::Errno::Inval.into(),
-        }
+        log::info!(error:err = err; "deserialization failed, returning inval");
+
+        generated::types::Errno::Inval.into()
     }
 }
 
@@ -386,7 +386,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         ContractReturn(res).into()
     }
 
-    async fn get_webpage(
+    async fn web_render(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
         payload: wiggle::GuestPtr<str>,
@@ -422,7 +422,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let payload = serde_json::from_str(&read_string(mem, payload)?)?;
 
-        let llm = self.context.shared_data.modules.web.clone();
+        let llm = self.context.shared_data.modules.llm.clone();
         let task = tokio::spawn(taskify(async move {
             llm.send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
                 genvm_modules_interfaces::llm::Message::Prompt(payload),
@@ -447,12 +447,27 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let payload = serde_json::from_str(&read_string(mem, payload)?)?;
 
-        let llm = self.context.shared_data.modules.web.clone();
+        let expect_bool = match &payload {
+            genvm_modules_interfaces::llm::PromptTemplatePayload::EqNonComparativeLeader(_) => {
+                false
+            }
+            _ => true,
+        };
+
+        let llm = self.context.shared_data.modules.llm.clone();
         let task = tokio::spawn(taskify(async move {
-            llm.send::<genvm_modules_interfaces::llm::PromptTemplateAnswer, _>(
-                genvm_modules_interfaces::llm::Message::PromptTemplate(payload),
-            )
-            .await
+            let answer = llm
+                .send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
+                    genvm_modules_interfaces::llm::Message::PromptTemplate(payload),
+                )
+                .await?;
+            use genvm_modules_interfaces::llm::PromptAnswer;
+            match (expect_bool, answer) {
+                (_, Err(e)) => Ok(Err(e)),
+                (true, Ok(PromptAnswer::Bool(answer))) => Ok(Ok(PromptAnswer::Bool(answer))),
+                (false, Ok(PromptAnswer::Text(answer))) => Ok(Ok(PromptAnswer::Text(answer))),
+                (_, Ok(_)) => Err(anyhow::anyhow!("unmatched result")),
+            }
         }));
 
         Ok(generated::types::Fd::from(
@@ -700,13 +715,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
 
         let data_str = super::common::read_string(mem, data)?;
-        let data: InternalTxData = match serde_json::from_str(&data_str) {
-            Ok(v) => v,
-            Err(err) => {
-                log::warn!(str = data_str, err:? = err; "parsing InternalTxData failed");
-                return Err(generated::types::Errno::Inval.into());
-            }
-        };
+        let data: InternalTxData = serde_json::from_str(&data_str)?;
         if !data.value.is_zero() {
             let my_balance = self
                 .context
@@ -747,13 +756,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
 
         let data_str = super::common::read_string(mem, data)?;
-        let data: InternalDeployTxData = match serde_json::from_str(&data_str) {
-            Ok(v) => v,
-            Err(err) => {
-                log::warn!(str = data_str, err:? = err; "parsing InternalDeployTxData failed");
-                return Err(generated::types::Errno::Inval.into());
-            }
-        };
+        let data: InternalDeployTxData = serde_json::from_str(&data_str)?;
         if !data.value.is_zero() {
             let my_balance = self
                 .context
@@ -871,13 +874,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
 
         let data_str = super::common::read_string(mem, data)?;
-        let data: ExternalTxData = match serde_json::from_str(&data_str) {
-            Ok(v) => v,
-            Err(err) => {
-                log::warn!(str = data_str, err:? = err; "parsing ExternalTxData failed");
-                return Err(generated::types::Errno::Inval.into());
-            }
-        };
+        let data: ExternalTxData = serde_json::from_str(&data_str)?;
         if !data.value.is_zero() {
             let my_balance = self
                 .context

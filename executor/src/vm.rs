@@ -258,7 +258,7 @@ impl VM {
         log::info!(target = "vm"; "execution start");
         let time_start = std::time::Instant::now();
         let res = func.call_async(&mut self.store, ()).await;
-        log::info!(target = "vm", duration:? = time_start.elapsed(); "execution finished");
+        log::info!(duration:? = time_start.elapsed(); "vm execution finished");
         let res: RunResult = match res {
             Ok(()) => Ok(RunOk::empty_return()),
             Err(e) => {
@@ -435,7 +435,7 @@ impl Supervisor {
                 let debug_path = data.debug_path();
 
                 let compile_here = || -> Result<PrecompiledModule> {
-                    log::info!(target: "cache", status = "start", path = debug_path, runner = data.runner_id.as_str(); "compiling");
+                    log::info!(status = "start", path = debug_path, runner = data.runner_id.as_str(); "cache compiling");
 
                     caching::validate_wasm(&self.engines, data.contents.as_ref())?;
 
@@ -453,7 +453,7 @@ impl Supervisor {
                             Some(std::path::Path::new(&debug_path)),
                         )?
                         .compile_module()?;
-                    log::info!(target: "cache", status = "done", duration:? = start_time.elapsed(), path = debug_path, runner = data.runner_id.as_str(); "compiling");
+                    log::info!(status = "done", duration:? = start_time.elapsed(), path = debug_path, runner = data.runner_id.as_str(); "cache compiling");
                     Ok(PrecompiledModule {
                         det: module_det,
                         non_det: module_non_det,
@@ -495,7 +495,7 @@ impl Supervisor {
                 };
 
                 let ret = get_from_precompiled().or_else(|e| {
-                    log::trace!(target: "cache", error:? = e, runner = data.runner_id.as_str(); "could not use precompiled");
+                    log::trace!(target: "cache", error = genvm_common::log_error(&e), runner = data.runner_id.as_str(); "could not use precompiled");
                     compile_here()
                 })?;
 

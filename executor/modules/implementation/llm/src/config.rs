@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde_derive::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub enum Provider {
     Ollama,
@@ -16,19 +16,13 @@ fn enabled_true() -> bool {
     true
 }
 
-fn no_key() -> String {
-    "".to_owned()
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct BackendConfig {
     #[serde(default = "enabled_true")]
     pub enabled: bool,
     pub host: String,
     pub provider: Provider,
     pub model: String,
-    pub key_env_name: String,
-    #[serde(default = "no_key")]
     pub key: String,
 }
 
@@ -46,6 +40,6 @@ pub struct Config {
     pub backends: BTreeMap<String, BackendConfig>,
     pub prompt_templates: PromptTemplates,
 
-    pub threads: usize,
-    pub blocking_threads: usize,
+    #[serde(flatten)]
+    pub base: genvm_common::BaseConfig,
 }

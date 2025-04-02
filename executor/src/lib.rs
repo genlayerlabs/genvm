@@ -1,4 +1,5 @@
 pub mod caching;
+pub mod config;
 pub mod errors;
 mod host;
 pub mod mmap;
@@ -13,50 +14,28 @@ use host::AbsentLeaderResult;
 pub use host::{AccountAddress, GenericAddress, Host, MessageData};
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
-use std::{collections::HashMap, sync::Arc};
+
+use std::sync::Arc;
 use ustar::SharedBytes;
 use vm::{Modules, RunOk};
 
-#[derive(Deserialize)]
-struct ConfigModule {
-    address: String,
-}
-
-#[derive(Deserialize)]
-struct ConfigModules {
-    llm: ConfigModule,
-    web: ConfigModule,
-}
-
-#[derive(Deserialize)]
-struct ConfigSchema {
-    modules: ConfigModules,
-}
-
 pub fn create_supervisor(
-    config_path: &str,
+    config: &config::Config,
     host: Host,
     is_sync: bool,
     cancellation: Arc<genvm_common::cancellation::Token>,
 ) -> Result<Arc<tokio::sync::Mutex<vm::Supervisor>>> {
-    let mut root_path = std::env::current_exe().with_context(|| "getting current exe")?;
-    root_path.pop();
-    root_path.pop();
-    let root_path = root_path
-        .into_os_string()
-        .into_string()
-        .map_err(|e| anyhow::anyhow!("can't convert path to string `{e:?}`"))?;
-
-    let vars: HashMap<String, String> = HashMap::from([("genvmRoot".into(), root_path)]);
-
-    let config = genvm_common::load_config(&vars, config_path).with_context(|| "loading config")?;
-    let config: ConfigSchema = serde_yaml::from_value(config)?;
-
     let modules = Modules {
-        web: Arc::new(modules::Module::new(config.modules.web.address)),
-        llm: Arc::new(modules::Module::new(config.modules.llm.address)),
+        web: Arc::new(modules::Module::new(
+            config.modules.web.address.clone(),
+            cancellation.clone(),
+        )),
+        llm: Arc::new(modules::Module::new(
+            config.modules.llm.address.clone(),
+            cancellation.clone(),
+        )),
     };
+
     let shared_data = Arc::new(crate::vm::SharedData::new(modules, is_sync, cancellation));
 
     Ok(Arc::new(tokio::sync::Mutex::new(vm::Supervisor::new(
@@ -132,7 +111,7 @@ pub async fn run_with(
                 Ok(RunOk::ContractError("deterministic_violation".into(), None))
             }
             Err(e) => {
-                log::error!(error:? = e; "internal error");
+                log::error!(error = genvm_common::log_error(&e); "internal error");
                 Err(e)
             }
         },

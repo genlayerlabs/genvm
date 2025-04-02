@@ -27,13 +27,19 @@ impl genvm_modules_impl_common::MessageHandler<web_iface::Message, web_iface::Re
 
     fn cleanup(&self) -> impl std::future::Future<Output = anyhow::Result<()>> + Send {
         async {
-            self.client
+            if let Err(err) = self
+                .client
                 .delete(format!(
                     "{}/session/{}",
                     self.config.webdriver_host, self.session_id
                 ))
                 .send()
-                .await?;
+                .await
+            {
+                log::error!(error:err = err, id = self.session_id; "session closed");
+            } else {
+                log::debug!(id = self.session_id; "session closed");
+            }
             Ok(())
         }
     }
@@ -61,10 +67,12 @@ impl
     > + Send {
         async {
             let client = reqwest::Client::new();
-            let opened_session_res = client
+            let create_request = client
                 .post(format!("{}/session", &self.config.webdriver_host))
                 .header("Content-Type", "application/json; charset=utf-8")
-                .body(self.config.session_create_request.clone())
+                .body(self.config.session_create_request.clone());
+            log::trace!(request:? = create_request, body = self.config.session_create_request; "creating session");
+            let opened_session_res = create_request
                 .send()
                 .await
                 .with_context(|| "creating sessions request")?;
@@ -160,10 +168,10 @@ impl Handler {
         }
 
         let script = match payload.mode {
-            web_iface::RenderMode::Text => {
+            web_iface::RenderMode::HTML => {
                 r#"{ "script": "return document.body.innerHTML", "args": [] }"#
             }
-            web_iface::RenderMode::HTML => {
+            web_iface::RenderMode::Text => {
                 r#"{ "script": "return document.body.innerText.replace(/[\\s\\n]+/g, ' ')", "args": [] }"#
             }
         };

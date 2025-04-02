@@ -12,8 +12,8 @@ pub struct Config {
     pub extra_tld: Vec<Box<str>>,
     pub always_allow_hosts: Vec<Box<str>>,
 
-    pub threads: usize,
-    pub blocking_threads: usize,
+    #[serde(flatten)]
+    pub base: genvm_common::BaseConfig,
 }
 
 pub fn binary_search_contains<T, Y>(arr: &[T], val: Y) -> bool

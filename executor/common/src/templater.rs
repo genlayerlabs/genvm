@@ -5,10 +5,10 @@ use std::{
 };
 
 pub static DOLLAR_UNFOLDER_RE: LazyLock<regex::Regex> =
-    LazyLock::new(|| regex::Regex::new(r#"\$\{([a-zA-Z0-9_]*)\}"#).unwrap());
+    LazyLock::new(|| regex::Regex::new(r#"\$\{([a-zA-Z0-9_]*|ENV\[[a-zA-Z0-9_]*\])\}"#).unwrap());
 
 pub static HASH_UNFOLDER_RE: LazyLock<regex::Regex> =
-    LazyLock::new(|| regex::Regex::new(r#"\$\{([a-zA-Z0-9_]*)\}"#).unwrap());
+    LazyLock::new(|| regex::Regex::new(r#"#\{([a-zA-Z0-9_]*)\}"#).unwrap());
 
 fn replace_all<E>(
     re: &regex::Regex,
@@ -63,7 +63,7 @@ pub fn patch_str(vars: &impl AnyMap<String, String>, s: &str, re: &regex::Regex)
     replace_all(re, s, |r: &regex::Captures| {
         let r: &str = &r[1];
         vars.get_from_map(r)
-            .ok_or(anyhow::anyhow!("error"))
+            .ok_or_else(|| anyhow::anyhow!("unknown variable `{r}`"))
             .cloned()
     })
 }

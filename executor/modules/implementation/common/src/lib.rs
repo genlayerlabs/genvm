@@ -38,6 +38,7 @@ pub async fn read_response(res: reqwest::Response) -> Result<String> {
         ));
     }
     let text = res.text().await.with_context(|| "reading body as text")?;
+    log::debug!(body = text; "read response");
     Ok(text)
 }
 
@@ -54,10 +55,20 @@ pub trait MessageHandlerProvider<T, R>: Sync + Send {
     ) -> impl std::future::Future<Output = anyhow::Result<impl MessageHandler<T, R>>> + Send;
 }
 
-async fn loop_one_inner<T, R>(
-    cancel: Arc<genvm_common::cancellation::Token>,
+async fn loop_one_inner_handle<T, R>(
     handler: &mut impl MessageHandler<T, R>,
-    mut stream: WSStream,
+    text: &str,
+) -> ModuleResult<R>
+where
+    T: serde::de::DeserializeOwned + 'static,
+{
+    let payload = serde_json::from_str(text).with_context(|| "parsing payload")?;
+    handler.handle(payload).await.with_context(|| "handling")
+}
+
+async fn loop_one_inner<T, R>(
+    handler: &mut impl MessageHandler<T, R>,
+    stream: &mut WSStream,
 ) -> anyhow::Result<()>
 where
     T: serde::de::DeserializeOwned + 'static,
@@ -78,18 +89,25 @@ where
             Message::Close(_) => return Ok(()),
             x => {
                 let text = x.into_text()?;
-                let payload = serde_json::from_str(text.as_str())?;
-                let res = handler.handle(payload).await;
-                let res = res?; // not correct
+                let res = loop_one_inner_handle(handler, text.as_str()).await;
+                let res = match res {
+                    Ok(Ok(res)) => genvm_modules_interfaces::Result::Ok(res),
+                    Ok(Err(res)) => genvm_modules_interfaces::Result::UserError(res),
+                    Err(res) => {
+                        log::error!(error = genvm_common::log_error(&res); "handler error");
+                        genvm_modules_interfaces::Result::FatalError(format!("{res:#}"))
+                    }
+                };
                 let answer = serde_json::to_string(&res)?;
-                stream.send(Message::Text(answer.into())).await?;
+                let message = Message::Text(answer.into());
+
+                stream.send(message).await?;
             }
         }
     }
 }
 
 async fn loop_one_impl<T, R>(
-    cancel: Arc<genvm_common::cancellation::Token>,
     handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
     stream: tokio::net::TcpStream,
 ) -> anyhow::Result<()>
@@ -97,30 +115,37 @@ where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
 {
-    let stream = tokio_tungstenite::accept_async(stream).await?;
+    let mut stream = tokio_tungstenite::accept_async(stream).await?;
 
     let mut handler = handler_provider.new_handler().await?;
 
-    let res = loop_one_inner(cancel, &mut handler, stream).await;
+    let res = loop_one_inner(&mut handler, &mut stream).await;
 
     if let Err(close) = handler.cleanup().await {
-        log::error!(error:? = close; "cleanup error");
+        log::error!(error = genvm_common::log_error(&close); "cleanup error");
+    }
+
+    if res.is_err() {
+        if let Err(close) = stream.close(None).await {
+            log::error!(error:err = close; "stream closing error")
+        }
     }
 
     res
 }
 
 async fn loop_one<T, R>(
-    cancel: Arc<genvm_common::cancellation::Token>,
     handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
     stream: tokio::net::TcpStream,
 ) where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
 {
-    if let Err(e) = loop_one_impl(cancel, handler_provider, stream).await {
-        log::error!(error:? = e; "internal loop error");
+    log::debug!("peer accepted");
+    if let Err(e) = loop_one_impl(handler_provider, stream).await {
+        log::error!(error = genvm_common::log_error(&e); "internal loop error");
     }
+    log::debug!("peer done");
 }
 
 pub async fn run_loop<T, R>(
@@ -134,9 +159,22 @@ where
 {
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
 
-    while let Ok((stream, _)) = listener.accept().await {
-        tokio::spawn(loop_one(cancel.clone(), handler_provider.clone(), stream));
-    }
+    log::info!(address = bind_address; "loop started");
 
-    Ok(())
+    loop {
+        tokio::select! {
+            _ = cancel.chan.closed() => {
+                log::info!("loop cancelled");
+                return Ok(())
+            }
+            accepted = listener.accept() => {
+                if let Ok((stream, _)) = accepted {
+                    tokio::spawn(loop_one(handler_provider.clone(), stream));
+                } else {
+                    log::info!("accepted None");
+                    return Ok(())
+                }
+            }
+        }
+    }
 }

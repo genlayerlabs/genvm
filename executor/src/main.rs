@@ -1,7 +1,8 @@
-use std::os::fd::FromRawFd;
+use std::{collections::HashMap, os::fd::FromRawFd};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
+use genvm::config;
 
 mod exe;
 
@@ -11,42 +12,18 @@ enum Commands {
     Precompile(exe::precompile::Args),
 }
 
-#[cfg(not(debug_assertions))]
-fn default_log_level() -> log::LevelFilter {
-    log::LevelFilter::Info
-}
-
-#[cfg(debug_assertions)]
-fn default_log_level() -> log::LevelFilter {
-    log::LevelFilter::Trace
-}
-
 #[derive(clap::Parser)]
-#[command(version = concat!(env!("CARGO_PKG_VERSION"), " ", env!("PROFILE"), " ", env!("GENVM_BUILD_ID")))]
+#[command(version = genvm_common::VERSION)]
 #[clap(rename_all = "kebab_case")]
 struct CliArgs {
     #[command(subcommand)]
     command: Commands,
 
-    #[arg(long, default_value_t = default_log_level())]
-    log_level: log::LevelFilter,
-
-    #[arg(long, default_value = "wasmtime*,cranelift*,tracing*,polling*")]
-    log_disable: String,
+    #[arg(long, default_value_t = String::from("${genvmRoot}/etc/genvm.yaml"))]
+    config: String,
 
     #[arg(long, default_value = "2")]
     log_fd: std::os::fd::RawFd,
-}
-
-struct NullWiriter;
-
-impl structured_logger::Writer for NullWiriter {
-    fn write_log(
-        &self,
-        _value: &std::collections::BTreeMap<log::kv::Key, log::kv::Value>,
-    ) -> std::result::Result<(), std::io::Error> {
-        Ok(())
-    }
 }
 
 fn main() -> Result<()> {
@@ -61,15 +38,14 @@ fn main() -> Result<()> {
         }
     };
 
-    structured_logger::Builder::with_level(args.log_level.as_str())
-        .with_default_writer(structured_logger::json::new_writer(log_file))
-        .with_target_writer(&args.log_disable, Box::new(NullWiriter))
-        .init();
+    let config = genvm_common::load_config(HashMap::new(), &args.config)
+        .with_context(|| "loading config")?;
+    let config: config::Config = serde_yaml::from_value(config)?;
 
-    log::info!(target: "vm", version = env!("GENVM_BUILD_ID"); "start");
+    config.base.setup_logging(log_file)?;
 
     match args.command {
-        Commands::Run(args) => exe::run::handle(args),
+        Commands::Run(args) => exe::run::handle(args, config),
         Commands::Precompile(args) => exe::precompile::handle(args),
     }
 }

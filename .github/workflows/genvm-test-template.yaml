@@ -68,6 +68,9 @@ jobs:
           OPENAIKEY="" python3.12 -m pip install -r executor/testdata/runner/requirements.txt && \
           OPENAIKEY="" ./executor/testdata/web-container/run-test-docker.sh && \
           sleep 5 && \
+          ./build/out/bin/genvm-module-web & \
+          ./build/out/bin/genvm-module-llm & \
+          sleep 2 && \
           python3.12 -u ./executor/testdata/runner/run.py --ci
       - name: Try to get coverage
         run: |

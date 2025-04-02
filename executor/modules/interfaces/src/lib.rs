@@ -12,7 +12,7 @@ pub trait Web {
 pub enum Result<T> {
     Ok(T),
     UserError(serde_json::Value),
-    FatalError(serde_json::Value),
+    FatalError(String),
 }
 
 pub struct ParsedDuration(pub tokio::time::Duration);
@@ -78,10 +78,11 @@ pub mod llm {
     use serde_derive::{Deserialize, Serialize};
 
     #[derive(Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Debug)]
-    #[serde(rename_all = "kebab-case")]
     pub enum OutputFormat {
+        #[serde(rename = "text")]
         Text,
-        Json,
+        #[serde(rename = "json")]
+        JSON,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -108,35 +109,45 @@ pub mod llm {
 
     #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
     pub enum PromptPart {
+        #[serde(rename = "text")]
         Text(String),
+    }
+
+    fn default_text() -> OutputFormat {
+        OutputFormat::Text
     }
 
     #[derive(Serialize, Deserialize, Debug)]
     pub struct PromptPayload {
+        #[serde(default = "default_text")]
         pub response_format: OutputFormat,
         pub parts: Vec<PromptPart>,
     }
 
     #[derive(Serialize, Deserialize)]
     pub struct PromptEqComparativePayload {
+        #[serde(flatten)]
         pub vars: PromptIDVarsComparative,
     }
 
     #[derive(Serialize, Deserialize)]
     pub struct PromptEqNonComparativeValidatorPayload {
+        #[serde(flatten)]
         pub vars: PromptIDVarsNonComparativeValidator,
     }
 
     #[derive(Serialize, Deserialize)]
     pub struct PromptEqNonComparativeLeaderPayload {
+        #[serde(flatten)]
         pub vars: PromptIDVarsNonComparativeLeader,
     }
 
     #[derive(Serialize, Deserialize)]
+    #[serde(tag = "template")]
     pub enum PromptTemplatePayload {
-        PromptEqComparative(PromptEqComparativePayload),
-        PromptEqNonComparativeValidator(PromptEqNonComparativeValidatorPayload),
-        PromptEqNonComparativeLeader(PromptEqNonComparativeLeaderPayload),
+        EqComparative(PromptEqComparativePayload),
+        EqNonComparativeValidator(PromptEqNonComparativeValidatorPayload),
+        EqNonComparativeLeader(PromptEqNonComparativeLeaderPayload),
     }
 
     #[derive(Serialize, Deserialize)]
@@ -159,7 +170,9 @@ pub mod web {
 
     #[derive(Serialize, Deserialize)]
     pub enum RenderMode {
+        #[serde(rename = "text")]
         Text,
+        #[serde(rename = "html")]
         HTML,
     }
 
@@ -182,6 +195,7 @@ pub mod web {
 
     #[derive(Serialize, Deserialize)]
     pub enum RenderAnswer {
+        #[serde(rename = "text")]
         Text(String),
     }
 }

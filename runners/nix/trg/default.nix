@@ -1,5 +1,6 @@
 { pkgs
 , lib
+, nixHashes
 , ...
 }@args:
 let
@@ -9,7 +10,7 @@ in pkgs.stdenvNoCC.mkDerivation {
 	name = "genvm-nix-all-runners";
 
 	outputHashMode = "recursive";
-	outputHash = "sha256-qqi+HSt/kJFkvGAgc3JT+l3NTNvmPCgSFt4rcJSvmAw="; #lib.fakeHash;
+	outputHash = nixHashes.topmost;
 
 	nativeBuildInputs = [
 		py
