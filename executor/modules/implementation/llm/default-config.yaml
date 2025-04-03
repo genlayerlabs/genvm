@@ -6,7 +6,7 @@ log_disable: tracing*,polling*
 #log_level: trace
 
 backends:
-  __openai:
+  openai:
     host: https://api.openai.com
     provider: openai-compatible
     model: gpt-4o-mini

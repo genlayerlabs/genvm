@@ -63,8 +63,16 @@ pub fn patch_str(vars: &impl AnyMap<String, String>, s: &str, re: &regex::Regex)
     replace_all(re, s, |r: &regex::Captures| {
         let r: &str = &r[1];
         vars.get_from_map(r)
+            .map(|s| s.as_str())
+            .or_else(|| {
+                if r.starts_with("ENV[") {
+                    Some("")
+                } else {
+                    None
+                }
+            })
             .ok_or_else(|| anyhow::anyhow!("unknown variable `{r}`"))
-            .cloned()
+            .map(String::from)
     })
 }
 

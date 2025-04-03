@@ -10,32 +10,39 @@ struct Handler {
     client: reqwest::Client,
 }
 
+#[derive(Debug)]
+pub struct OverloadedError;
+
+impl std::error::Error for OverloadedError {}
+
+impl std::fmt::Display for OverloadedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "OverloadedError")
+    }
+}
+
 async fn send_with_retries(
     builder: impl (Fn() -> reqwest::RequestBuilder) + Send,
 ) -> anyhow::Result<reqwest::Response> {
-    for i in 0..3 {
-        let res = builder()
-            .send()
-            .await
-            .with_context(|| "sending request to llm provider")?;
-        if ![
-            reqwest::StatusCode::REQUEST_TIMEOUT,
-            reqwest::StatusCode::SERVICE_UNAVAILABLE,
-            reqwest::StatusCode::GATEWAY_TIMEOUT,
-        ]
-        .contains(&res.status())
-        {
-            return Ok(res);
-        }
+    let res = builder()
+        .send()
+        .await
+        .with_context(|| "sending request to llm provider")?;
 
-        let debug = format!("{:?}", &res);
-        let body = res.text().await;
-        log::error!(response = genvm_modules_impl_common::CENSOR_RESPONSE.replace_all(&debug, "\"<censored>\": \"<censored>\""), body:? = body, retry = i; "llm request failed");
-
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+    use reqwest::StatusCode;
+    match res.status() {
+        StatusCode::REQUEST_TIMEOUT
+        | StatusCode::SERVICE_UNAVAILABLE
+        | StatusCode::GATEWAY_TIMEOUT => return Err(OverloadedError.into()),
+        StatusCode::OK => return Ok(res),
+        _ => {}
     }
 
-    Err(anyhow::anyhow!("llm retries exceeded"))
+    let debug = format!("{:?}", &res);
+    let body = res.text().await;
+    log::error!(response = genvm_modules_impl_common::CENSOR_RESPONSE.replace_all(&debug, "\"<censored>\": \"<censored>\""), body:? = body; "request reading failed");
+
+    anyhow::bail!("llm request failed")
 }
 
 fn sanitize_json_str(s: &str) -> &str {
@@ -376,15 +383,33 @@ impl Handler {
     ) -> ModuleResult<llm_iface::PromptAnswer> {
         log::debug!(payload:serde = payload; "exec_prompt start");
         let llm_iface::PromptPart::Text(prompt) = &payload.parts[0];
-        let res = self
-            .exec_prompt_in_provider(
-                prompt,
-                payload.response_format,
-                self.config.backends.first_key_value().unwrap().1,
-            )
-            .await;
-        log::info!(payload:serde = payload, result:? = res;  "exec_prompt finished");
-        res
+
+        for i in 0..3 {
+            for (prov_name, config) in &self.config.backends {
+                let res = self
+                    .exec_prompt_in_provider(prompt, payload.response_format, config)
+                    .await;
+                match res {
+                    Ok(res) => {
+                        log::info!(payload:serde = payload, result:serde = res;  "exec_prompt finished");
+                        return Ok(res);
+                    }
+                    Err(e) if e.is::<OverloadedError>() => {
+                        log::info!(provider = prov_name; "provider is overloaded");
+                        continue;
+                    }
+                    Err(e) => {
+                        log::error!(provider = prov_name, payload:serde = payload, result = genvm_common::log_error(&e);  "exec_prompt failed");
+                        return Err(e);
+                    }
+                }
+            }
+
+            log::warn!(retry = i; "no providers could handle a request, waiting before retry");
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        }
+
+        anyhow::bail!("no providers could handle a request");
     }
 
     async fn exec_prompt_template(
