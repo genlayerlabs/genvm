@@ -9,15 +9,13 @@ edition = "2021"
 genvm-common = { path = "../../../common" }
 genvm-modules-interfaces = { path = "../../interfaces" }
 
-anyhow = "1.0.86"
-log = { version = "0.4.25", features = ["kv_unstable_serde"] }
+anyhow = "1.0.97"
+log = { version = "0.4.27", features = ["kv_unstable_serde"] }
 regex = "1.11.1"
-serde = "1.0.215"
-serde_derive = "1.0.215"
-tokio = { version = "1.43.0", features = ["rt", "rt-multi-thread", "net", "time", "macros", "sync"], default-features = false}
-reqwest = { version = "0.12.12", features = ["cookies", "gzip", "rustls-tls", "charset", "http2"], default-features = false}
+serde = "1.0.219"
+tokio = { version = "1.44.1", features = ["rt", "rt-multi-thread", "net", "time", "macros", "sync"], default-features = false}
+reqwest = { version = "0.12.15", features = ["cookies", "gzip", "rustls-tls", "charset", "http2"], default-features = false}
 crossbeam = "0.8.4"
 futures-util = "0.3.31"
 tokio-tungstenite = "0.26.2"
 serde_json = "1.0.140"
-tungstenite = "0.26.2"
