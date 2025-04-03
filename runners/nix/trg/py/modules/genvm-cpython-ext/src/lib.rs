@@ -25,15 +25,11 @@ fn map_error<T>(res: Result<T, genvm_sdk_rust::Errno>) -> PyResult<T> {
     res.map_err(|e| PySystemError::new_err((e.raw() as i32, e.name())))
 }
 
-fn flush_everything() {
-    //let _ = rustpython_vm::stdlib::sys::get_stdout(vm)
-    //    .and_then(|f| vm.call_method(&f, "flush", ()));
-    //let _ = rustpython_vm::stdlib::sys::get_stderr(vm)
-    //    .and_then(|f| vm.call_method(&f, "flush", ()));
-}
+fn flush_everything() {}
 
 #[pymodule]
 #[pyo3(name = "_genlayer_wasi")]
+#[allow(clippy::useless_conversion)]
 fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[pyfn(m)]
     fn rollback(s: &str) -> PyResult<()> {
@@ -110,7 +106,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfn(m)]
-    fn get_entrypoint<'a>(py: Python<'a>) -> PyResult<Bound<'a, PyBytes>> {
+    fn get_entrypoint(py: Python<'_>) -> PyResult<Bound<'_, PyBytes>> {
         let res = map_error(unsafe { genvm_sdk_rust::get_entrypoint() })?;
         let mut file = unsafe { std::fs::File::from_raw_fd(res.file as std::os::fd::RawFd) };
 
@@ -178,7 +174,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
             genvm_sdk_rust::post_message(
                 addr,
                 genvm_sdk_rust::Bytes {
-                    buf: calldata.as_ptr() as *const u8,
+                    buf: calldata.as_ptr(),
                     buf_len: calldata.len() as u32,
                 },
                 data,
@@ -192,11 +188,11 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
         let res = unsafe {
             genvm_sdk_rust::deploy_contract(
                 genvm_sdk_rust::Bytes {
-                    buf: calldata.as_ptr() as *const u8,
+                    buf: calldata.as_ptr(),
                     buf_len: calldata.len() as u32,
                 },
                 genvm_sdk_rust::Bytes {
-                    buf: code.as_ptr() as *const u8,
+                    buf: code.as_ptr(),
                     buf_len: code.len() as u32,
                 },
                 data,
@@ -212,7 +208,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
             genvm_sdk_rust::eth_call(
                 addr,
                 genvm_sdk_rust::Bytes {
-                    buf: calldata.as_ptr() as *const u8,
+                    buf: calldata.as_ptr(),
                     buf_len: calldata.len() as u32,
                 },
             )
@@ -227,7 +223,7 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
             genvm_sdk_rust::eth_send(
                 addr,
                 genvm_sdk_rust::Bytes {
-                    buf: calldata.as_ptr() as *const u8,
+                    buf: calldata.as_ptr(),
                     buf_len: calldata.len() as u32,
                 },
                 data,

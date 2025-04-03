@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use futures_util::{stream::FusedStream, SinkExt, StreamExt};
-use genvm_common::cancellation;
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
 
 type WSStream =
@@ -84,14 +83,14 @@ impl Module {
 
                 let res: genvm_modules_interfaces::Result<R> =
                     serde_json::from_str(&response).with_context(|| "parsing result of module")?;
-                return match res {
+                match res {
                     genvm_modules_interfaces::Result::Ok(v) => Ok(Ok(v)),
                     genvm_modules_interfaces::Result::UserError(value) => Ok(Err(value)),
                     genvm_modules_interfaces::Result::FatalError(value) => {
                         log::error!(error = value; "module error");
                         Err(anyhow::anyhow!("module error: {value}"))
                     }
-                };
+                }
             }
         }
     }

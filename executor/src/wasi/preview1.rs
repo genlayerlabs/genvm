@@ -55,6 +55,7 @@ impl std::fmt::Display for I32Exit {
 
 impl std::error::Error for I32Exit {}
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) mod generated {
     wiggle::from_witx!({
         witx: ["$CARGO_MANIFEST_DIR/src/wasi/witx/wasi_snapshot_preview1.witx"],
@@ -240,7 +241,7 @@ pub trait AddToLinkerFn<T> {
     fn call<'a>(&self, arg: &'a mut T) -> ContextVFS<'a>;
 }
 
-pub(super) fn add_to_linker_sync<'a, T: Send + 'static, F>(
+pub(super) fn add_to_linker_sync<T: Send + 'static, F>(
     linker: &mut wasmtime::Linker<T>,
     f: F,
 ) -> anyhow::Result<()>
@@ -693,7 +694,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     ) -> Result<generated::types::Prestat, generated::types::Error> {
         return match self.get_fd_desc(fd)? {
             FileDescriptor::Dir { path } => {
-                let path_last = if path.len() == 0 {
+                let path_last = if path.is_empty() {
                     "/"
                 } else {
                     &path[path.len() - 1]

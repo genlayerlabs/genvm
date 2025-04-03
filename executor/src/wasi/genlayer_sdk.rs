@@ -101,6 +101,7 @@ pub struct ContextVFS<'a> {
     pub(super) context: &'a mut Context,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) mod generated {
     wiggle::from_witx!({
         witx: ["$CARGO_MANIFEST_DIR/src/wasi/witx/genlayer_sdk.witx"],
@@ -205,7 +206,7 @@ pub trait AddToLinkerFn<T> {
     fn call<'a>(&self, arg: &'a mut T) -> ContextVFS<'a>;
 }
 
-pub(super) fn add_to_linker_sync<'a, T: Send + 'static, F>(
+pub(super) fn add_to_linker_sync<T: Send + 'static, F>(
     linker: &mut wasmtime::Linker<T>,
     f: F,
 ) -> anyhow::Result<()>
@@ -219,7 +220,7 @@ where
     where
         F: AddToLinkerFn<T> + Copy + Send + Sync + 'static,
     {
-        fn call<'a>(&self, arg: &'a mut T) -> impl generated::genlayer_sdk::GenlayerSdk {
+        fn call(&self, arg: &mut T) -> impl generated::genlayer_sdk::GenlayerSdk {
             self.0.call(arg)
         }
     }
@@ -447,12 +448,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let payload = serde_json::from_str(&read_string(mem, payload)?)?;
 
-        let expect_bool = match &payload {
-            genvm_modules_interfaces::llm::PromptTemplatePayload::EqNonComparativeLeader(_) => {
-                false
-            }
-            _ => true,
-        };
+        let expect_bool = !matches!(
+            &payload,
+            genvm_modules_interfaces::llm::PromptTemplatePayload::EqNonComparativeLeader(_)
+        );
 
         let llm = self.context.shared_data.modules.llm.clone();
         let task = tokio::spawn(taskify(async move {
@@ -985,7 +984,7 @@ impl Context {
         address: AccountAddress,
     ) -> Result<primitive_types::U256, generated::types::Error> {
         if let Some(res) = self.shared_data.balances.get(&address) {
-            return Ok(res.clone());
+            return Ok(*res);
         }
 
         let supervisor = self.data.supervisor.clone();
@@ -995,7 +994,7 @@ impl Context {
             .get_balance(address)
             .map_err(generated::types::Error::trap)?;
 
-        let _ = self.shared_data.balances.insert(address, res.clone());
+        let _ = self.shared_data.balances.insert(address, res);
 
         Ok(res)
     }

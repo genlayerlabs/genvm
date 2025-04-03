@@ -42,7 +42,7 @@ impl<I: Iterator<Item = u8>> Iterator for DecodeUtf8<I> {
                 Ok(b as char)
             } else {
                 let l = (!b).leading_zeros() as usize; // number of bytes in UTF-8 representation
-                if l < 2 || l > 6 {
+                if !(2..=6).contains(&l) {
                     return Err(InvalidSequence(on_err));
                 };
                 let mut x = (b as u32) & (0x7F >> l);
@@ -246,6 +246,7 @@ impl VM {
         self.config_copy.is_deterministic
     }
 
+    #[allow(clippy::manual_try_fold)]
     pub async fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
         if let Ok(lck) = self.store.data().genlayer_ctx.lock() {
             log::info!(target: "vm", wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "run");
@@ -381,6 +382,7 @@ impl WasmFileDesc {
 }
 
 impl Supervisor {
+    #[allow(clippy::unnecessary_literal_unwrap)]
     pub fn new(mut host: crate::Host, shared_data: Arc<SharedData>) -> Result<Self> {
         let engines = Engines::create(|base_conf| {
             match Lazy::force(&caching::CACHE_DIR) {

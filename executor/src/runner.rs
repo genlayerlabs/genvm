@@ -150,12 +150,12 @@ impl RunnerReaderCache {
         }
     }
 
-    pub fn get_unsafe<'a>(&mut self, key: symbol_table::GlobalSymbol) -> &mut ZipCache {
+    pub fn get_unsafe(&mut self, key: symbol_table::GlobalSymbol) -> &mut ZipCache {
         self.cache.get_mut(&key).unwrap()
     }
 }
 
-pub fn verify_runner<'a>(runner_id: &str) -> Result<(&str, &str)> {
+pub fn verify_runner(runner_id: &str) -> Result<(&str, &str)> {
     let (runner_id, runner_hash) = runner_id
         .split(":")
         .collect_tuple()

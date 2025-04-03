@@ -10,9 +10,9 @@
 
 			nixHashes = {
 				# pkgs.lib.fakeHash
-				genvm-cpython-ext = "sha256-UN1FNu32Q2pFjx1L3T745NMTbGnogcBFFlB0A3Gj0YA=";
-				cpython = "sha256-lPDd8lOrBieiIdka3jISSzFEG/Zm9m+5cdfZOupanjs=";
-				topmost = "sha256-lX/PvLPHTGtb+yH1FXVgUitWDjIbpVPWn+rcjSelwF0=";
+				genvm-cpython-ext = "sha256-aX18kHSw13co54WXeHN+6qDLN/1yAd+2ul2tvw5kWGw=";
+				cpython = "sha256-r/5G1jWemE8L3F9v2ZLcUZE5CrGqpe3z1TuTXxoDaCM=";
+				topmost = "sha256-INLAduJIiEUegLicaNg5AA5uQ/tJy6SnTQy/G8BNWm0=";
 			};
 
 			wasmShell = (import ./envs/wasm.nix args);

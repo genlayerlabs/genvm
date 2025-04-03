@@ -23,7 +23,7 @@ fn compile_single_file_single_mode(
 ) -> Result<()> {
     let time_start = std::time::Instant::now();
     let precompiled = engine
-        .precompile_module(&wasm_data)
+        .precompile_module(wasm_data)
         .with_context(|| "precompiling")?;
 
     log::info!(target: "precompile", engine = engine_type, runner:? = runner_path, runner_path:? = path_in_runner, duration:? = time_start.elapsed();  "wasm compilation done");
@@ -45,7 +45,7 @@ fn compile_single_file(
     zip_path: &std::path::Path,
 ) -> Result<()> {
     let base_path = zip_path
-        .strip_prefix(&runners_dir)
+        .strip_prefix(runners_dir)
         .with_context(|| format!("stripping {runners_dir:?} from {runners_dir:?}"))?;
 
     let base_path = if let Some(no_stem) = base_path.file_stem() {
@@ -72,7 +72,7 @@ fn compile_single_file(
             continue;
         }
 
-        let entry_name_hash = caching::path_in_zip_to_hash(&entry_name);
+        let entry_name_hash = caching::path_in_zip_to_hash(entry_name);
         let result_file = result_dir_path.join(entry_name_hash);
 
         compile_single_file_single_mode(
@@ -83,7 +83,7 @@ fn compile_single_file(
             contents.as_ref(),
             caching::DET_NON_DET_PRECOMPILED_SUFFIX.det,
             zip_path,
-            &entry_name,
+            entry_name,
         )
         .with_context(|| format!("processing det {entry_name}"))?;
 
@@ -95,7 +95,7 @@ fn compile_single_file(
             contents.as_ref(),
             caching::DET_NON_DET_PRECOMPILED_SUFFIX.non_det,
             zip_path,
-            &entry_name,
+            entry_name,
         )
         .with_context(|| format!("processing non-det {entry_name}"))?;
     }
@@ -126,7 +126,7 @@ pub fn handle(args: Args) -> Result<()> {
         if !runner_id.file_type()?.is_dir() {
             continue;
         }
-        for zip_path in std::fs::read_dir(&runner_id.path())? {
+        for zip_path in std::fs::read_dir(runner_id.path())? {
             let zip_path = zip_path?;
             if !zip_path.file_type()?.is_file() {
                 continue;

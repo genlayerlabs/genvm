@@ -54,3 +54,9 @@ repos:
         entry: bash build-scripts/cargo-fmt.sh
         language: system
         files: .*\.rs$
+
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: bash build-scripts/cargo-clippy.sh
+        language: system
+        files: .*\.rs$

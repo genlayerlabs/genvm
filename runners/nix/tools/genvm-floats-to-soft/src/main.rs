@@ -380,13 +380,13 @@ mod implementation {
                                     // f32
                                     Instruction::F32Neg => {
                                         f.instruction(&Instruction::I32ReinterpretF32);
-                                        f.instruction(&Instruction::I32Const(i32::min_value()));
+                                        f.instruction(&Instruction::I32Const(i32::MIN));
                                         f.instruction(&Instruction::I32Xor);
                                         f.instruction(&Instruction::F32ReinterpretI32)
                                     }
                                     Instruction::F32Abs => {
                                         f.instruction(&Instruction::I32ReinterpretF32);
-                                        f.instruction(&Instruction::I32Const(i32::max_value()));
+                                        f.instruction(&Instruction::I32Const(i32::MAX));
                                         f.instruction(&Instruction::I32And);
                                         f.instruction(&Instruction::F32ReinterpretI32)
                                     }
@@ -469,13 +469,13 @@ mod implementation {
                                     // f64
                                     Instruction::F64Neg => {
                                         f.instruction(&Instruction::I64ReinterpretF64);
-                                        f.instruction(&Instruction::I64Const(i64::min_value()));
+                                        f.instruction(&Instruction::I64Const(i64::MIN));
                                         f.instruction(&Instruction::I64Xor);
                                         f.instruction(&Instruction::F64ReinterpretI64)
                                     }
                                     Instruction::F64Abs => {
                                         f.instruction(&Instruction::I64ReinterpretF64);
-                                        f.instruction(&Instruction::I64Const(i64::max_value()));
+                                        f.instruction(&Instruction::I64Const(i64::MAX));
                                         f.instruction(&Instruction::I64And);
                                         f.instruction(&Instruction::F64ReinterpretI64)
                                     }
@@ -588,7 +588,8 @@ mod implementation {
                     // we can't do better than start a new code section here
                     let mut codes = CodeSection::new();
                     reencoder.parse_function_body(&mut codes, section)?;
-                    while let Some(section) = sections.next() {
+
+                    for section in sections.by_ref() {
                         let section = section?;
                         if let wasmparser::Payload::CodeSectionEntry(section) = section {
                             reencoder.parse_function_body(&mut codes, section)?;
