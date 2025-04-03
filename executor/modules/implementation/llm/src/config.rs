@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde_derive::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Provider {
     Ollama,
@@ -16,7 +16,7 @@ fn enabled_true() -> bool {
     true
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BackendConfig {
     #[serde(default = "enabled_true")]
     pub enabled: bool,
@@ -36,6 +36,8 @@ pub struct PromptTemplates {
 #[derive(Deserialize)]
 pub struct Config {
     pub bind_address: String,
+
+    pub lua_script_path: String,
 
     pub backends: BTreeMap<String, BackendConfig>,
     pub prompt_templates: PromptTemplates,

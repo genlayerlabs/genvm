@@ -4,6 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 
 mod config;
 mod handler;
+mod scripting;
 
 #[derive(clap::Parser)]
 #[command(version = genvm_common::VERSION)]
@@ -54,12 +55,14 @@ fn main() -> Result<()> {
         signal_hook::low_level::register(signal_hook::consts::SIGINT, handle_sigterm)?;
     }
 
+    let config = Arc::new(config);
+
+    let user_vm = scripting::UserVM::new(&config)?;
+
     let loop_future = genvm_modules_impl_common::run_loop(
         config.bind_address.clone(),
         token,
-        Arc::new(handler::HandlerProvider {
-            config: Arc::new(config),
-        }),
+        Arc::new(handler::HandlerProvider { config, user_vm }),
     );
 
     runtime.block_on(loop_future)?;

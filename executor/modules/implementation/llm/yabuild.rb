@@ -18,3 +18,9 @@ config_target = target_copy(
 	src: [cur_src.join('default-config.yaml')],
 	tags: ['all'],
 )
+
+script_target = target_copy(
+	dest: config.out_dir.join('scripts', 'genvm-llm-default-greyboxing.lua'),
+	src: [cur_src.join('scripting/default-greyboxing.lua')],
+	tags: ['all'],
+)

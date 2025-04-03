@@ -1,5 +1,7 @@
 bind_address: 127.0.0.1:3031
 
+lua_script_path: ${genvmRoot}/scripts/genvm-llm-default-greyboxing.lua
+
 threads: 4
 blocking_threads: 16
 log_disable: tracing*,polling*

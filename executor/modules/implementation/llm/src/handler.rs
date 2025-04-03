@@ -2,12 +2,13 @@ use anyhow::Context;
 use genvm_modules_impl_common::{MessageHandler, MessageHandlerProvider, ModuleResult};
 use std::{collections::BTreeMap, sync::Arc};
 
-use crate::config;
+use crate::{config, scripting};
 use genvm_modules_interfaces::llm as llm_iface;
 
-struct Handler {
-    config: Arc<config::Config>,
+pub struct Handler {
+    pub config: Arc<config::Config>,
     client: reqwest::Client,
+    user_vm: Arc<scripting::UserVM>,
 }
 
 #[derive(Debug)]
@@ -57,6 +58,7 @@ fn sanitize_json_str(s: &str) -> &str {
 
 pub struct HandlerProvider {
     pub config: Arc<config::Config>,
+    pub user_vm: Arc<scripting::UserVM>,
 }
 
 impl
@@ -75,23 +77,30 @@ impl
     > {
         let client = reqwest::Client::new();
 
-        Ok(Handler {
+        Ok(HandlerWrapper(Arc::new(Handler {
             config: self.config.clone(),
             client,
-        })
+            user_vm: self.user_vm.clone(),
+        })))
     }
 }
 
+struct HandlerWrapper(Arc<Handler>);
+
 impl genvm_modules_impl_common::MessageHandler<llm_iface::Message, llm_iface::PromptAnswer>
-    for Handler
+    for HandlerWrapper
 {
     async fn handle(
         &self,
         message: llm_iface::Message,
     ) -> genvm_modules_impl_common::ModuleResult<llm_iface::PromptAnswer> {
         match message {
-            llm_iface::Message::Prompt(payload) => self.exec_prompt(payload).await,
-            llm_iface::Message::PromptTemplate(payload) => self.exec_prompt_template(payload).await,
+            llm_iface::Message::Prompt(payload) => {
+                self.0.exec_prompt(self.0.clone(), payload).await
+            }
+            llm_iface::Message::PromptTemplate(payload) => {
+                self.0.exec_prompt_template(payload).await
+            }
         }
     }
 
@@ -330,7 +339,7 @@ impl Handler {
             .ok_or(anyhow::anyhow!("can't get response field {}", &res))
     }
 
-    async fn exec_prompt_in_provider(
+    pub async fn exec_prompt_in_provider(
         &self,
         prompt: &str,
         response_format: llm_iface::OutputFormat,
@@ -379,37 +388,43 @@ impl Handler {
 impl Handler {
     async fn exec_prompt(
         &self,
+        zelf: Arc<Handler>,
         payload: llm_iface::PromptPayload,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
         log::debug!(payload:serde = payload; "exec_prompt start");
+
         let llm_iface::PromptPart::Text(prompt) = &payload.parts[0];
+        let res = self.user_vm.greybox(zelf, prompt).await?;
+        log::debug!(result:serde = res; "script returned");
 
-        for i in 0..3 {
-            for (prov_name, config) in &self.config.backends {
-                let res = self
-                    .exec_prompt_in_provider(prompt, payload.response_format, config)
-                    .await;
-                match res {
-                    Ok(res) => {
-                        log::info!(payload:serde = payload, result:serde = res;  "exec_prompt finished");
-                        return Ok(res);
-                    }
-                    Err(e) if e.is::<OverloadedError>() => {
-                        log::info!(provider = prov_name; "provider is overloaded");
-                        continue;
-                    }
-                    Err(e) => {
-                        log::error!(provider = prov_name, payload:serde = payload, result = genvm_common::log_error(&e);  "exec_prompt failed");
-                        return Err(e);
-                    }
-                }
-            }
+        Ok(res)
 
-            log::warn!(retry = i; "no providers could handle a request, waiting before retry");
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        }
+        // for i in 0..3 {
+        //     for (prov_name, config) in &self.config.backends {
+        //         let res = self
+        //             .exec_prompt_in_provider(prompt, payload.response_format, config)
+        //             .await;
+        //         match res {
+        //             Ok(res) => {
+        //                 log::info!(payload:serde = payload, result:serde = res;  "exec_prompt finished");
+        //                 return Ok(res);
+        //             }
+        //             Err(e) if e.is::<OverloadedError>() => {
+        //                 log::info!(provider = prov_name; "provider is overloaded");
+        //                 continue;
+        //             }
+        //             Err(e) => {
+        //                 log::error!(provider = prov_name, payload:serde = payload, result = genvm_common::log_error(&e);  "exec_prompt failed");
+        //                 return Err(e);
+        //             }
+        //         }
+        //     }
 
-        anyhow::bail!("no providers could handle a request");
+        //     log::warn!(retry = i; "no providers could handle a request, waiting before retry");
+        //     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        // }
+
+        //anyhow::bail!("no providers could handle a request");
     }
 
     async fn exec_prompt_template(
