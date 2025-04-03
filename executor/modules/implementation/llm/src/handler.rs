@@ -1,6 +1,5 @@
 use anyhow::Context;
 use genvm_modules_impl_common::{MessageHandler, MessageHandlerProvider, ModuleResult};
-use serde_derive::{Deserialize, Serialize};
 use std::{collections::BTreeMap, sync::Arc};
 
 use crate::config;
@@ -59,48 +58,38 @@ impl
         genvm_modules_interfaces::llm::PromptAnswer,
     > for HandlerProvider
 {
-    fn new_handler(
+    async fn new_handler(
         &self,
-    ) -> impl std::future::Future<
-        Output = anyhow::Result<
-            impl MessageHandler<
-                genvm_modules_interfaces::llm::Message,
-                genvm_modules_interfaces::llm::PromptAnswer,
-            >,
+    ) -> anyhow::Result<
+        impl MessageHandler<
+            genvm_modules_interfaces::llm::Message,
+            genvm_modules_interfaces::llm::PromptAnswer,
         >,
-    > + Send {
-        async {
-            let client = reqwest::Client::new();
+    > {
+        let client = reqwest::Client::new();
 
-            return Ok(Handler {
-                config: self.config.clone(),
-                client,
-            });
-        }
+        Ok(Handler {
+            config: self.config.clone(),
+            client,
+        })
     }
 }
 
 impl genvm_modules_impl_common::MessageHandler<llm_iface::Message, llm_iface::PromptAnswer>
     for Handler
 {
-    fn handle(
+    async fn handle(
         &self,
         message: llm_iface::Message,
-    ) -> impl std::future::Future<
-        Output = genvm_modules_impl_common::ModuleResult<llm_iface::PromptAnswer>,
-    > + Send {
-        async move {
-            match message {
-                llm_iface::Message::Prompt(payload) => self.exec_prompt(payload).await,
-                llm_iface::Message::PromptTemplate(payload) => {
-                    self.exec_prompt_template(payload).await
-                }
-            }
+    ) -> genvm_modules_impl_common::ModuleResult<llm_iface::PromptAnswer> {
+        match message {
+            llm_iface::Message::Prompt(payload) => self.exec_prompt(payload).await,
+            llm_iface::Message::PromptTemplate(payload) => self.exec_prompt_template(payload).await,
         }
     }
 
-    fn cleanup(&self) -> impl std::future::Future<Output = anyhow::Result<()>> + Send {
-        async { Ok(()) }
+    async fn cleanup(&self) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
@@ -163,14 +152,12 @@ impl Handler {
                 .and_then(|x| x.as_str())
                 .ok_or(anyhow::anyhow!("can't get response field {}", &res))
                 .map(String::from)
-                .map(Ok)
-                .map_err(Into::into),
+                .map(Ok),
             llm_iface::OutputFormat::JSON => val
                 .pointer("/content/0/input/type")
                 .ok_or(anyhow::anyhow!("can't get response field {}", &res))
                 .and_then(|x| serde_json::to_string(x).map_err(Into::into))
-                .map(Ok)
-                .map_err(Into::into),
+                .map(Ok),
         }
     }
 
@@ -388,9 +375,7 @@ impl Handler {
         payload: llm_iface::PromptPayload,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
         log::debug!(payload:serde = payload; "exec_prompt start");
-        let prompt = match &payload.parts[0] {
-            llm_iface::PromptPart::Text(t) => t,
-        };
+        let llm_iface::PromptPart::Text(prompt) = &payload.parts[0];
         let res = self
             .exec_prompt_in_provider(
                 prompt,

@@ -44,7 +44,7 @@ impl serde::de::Visitor<'_> for ParsedDurationVisitor {
 
         let int_str = caps.get(1).unwrap().as_str();
 
-        let int = u64::from_str_radix(int_str, 10).map_err(E::custom)?;
+        let int = int_str.parse::<u64>().map_err(E::custom)?;
 
         match caps.get(2).unwrap().as_str() {
             "s" => Ok(ParsedDuration(tokio::time::Duration::from_secs(int))),

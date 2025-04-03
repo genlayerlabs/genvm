@@ -25,23 +25,21 @@ impl genvm_modules_impl_common::MessageHandler<web_iface::Message, web_iface::Re
         }
     }
 
-    fn cleanup(&self) -> impl std::future::Future<Output = anyhow::Result<()>> + Send {
-        async {
-            if let Err(err) = self
-                .client
-                .delete(format!(
-                    "{}/session/{}",
-                    self.config.webdriver_host, self.session_id
-                ))
-                .send()
-                .await
-            {
-                log::error!(error:err = err, id = self.session_id; "session closed");
-            } else {
-                log::debug!(id = self.session_id; "session closed");
-            }
-            Ok(())
+    async fn cleanup(&self) -> anyhow::Result<()> {
+        if let Err(err) = self
+            .client
+            .delete(format!(
+                "{}/session/{}",
+                self.config.webdriver_host, self.session_id
+            ))
+            .send()
+            .await
+        {
+            log::error!(error:err = err, id = self.session_id; "session closed");
+        } else {
+            log::debug!(id = self.session_id; "session closed");
         }
+        Ok(())
     }
 }
 
@@ -55,42 +53,38 @@ impl
         genvm_modules_interfaces::web::RenderAnswer,
     > for HandlerProvider
 {
-    fn new_handler(
+    async fn new_handler(
         &self,
-    ) -> impl std::future::Future<
-        Output = anyhow::Result<
-            impl MessageHandler<
-                genvm_modules_interfaces::web::Message,
-                genvm_modules_interfaces::web::RenderAnswer,
-            >,
+    ) -> anyhow::Result<
+        impl MessageHandler<
+            genvm_modules_interfaces::web::Message,
+            genvm_modules_interfaces::web::RenderAnswer,
         >,
-    > + Send {
-        async {
-            let client = reqwest::Client::new();
-            let create_request = client
-                .post(format!("{}/session", &self.config.webdriver_host))
-                .header("Content-Type", "application/json; charset=utf-8")
-                .body(self.config.session_create_request.clone());
-            log::trace!(request:? = create_request, body = self.config.session_create_request; "creating session");
-            let opened_session_res = create_request
-                .send()
-                .await
-                .with_context(|| "creating sessions request")?;
-            let body = read_response(opened_session_res)
-                .await
-                .with_context(|| "reading response")?;
-            let val: serde_json::Value = serde_json::from_str(&body)?;
-            let session_id = val
-                .pointer("/value/sessionId")
-                .and_then(|val| val.as_str())
-                .ok_or(anyhow::anyhow!("invalid json {}", val))?;
+    > {
+        let client = reqwest::Client::new();
+        let create_request = client
+            .post(format!("{}/session", &self.config.webdriver_host))
+            .header("Content-Type", "application/json; charset=utf-8")
+            .body(self.config.session_create_request.clone());
+        log::trace!(request:? = create_request, body = self.config.session_create_request; "creating session");
+        let opened_session_res = create_request
+            .send()
+            .await
+            .with_context(|| "creating sessions request")?;
+        let body = read_response(opened_session_res)
+            .await
+            .with_context(|| "reading response")?;
+        let val: serde_json::Value = serde_json::from_str(&body)?;
+        let session_id = val
+            .pointer("/value/sessionId")
+            .and_then(|val| val.as_str())
+            .ok_or(anyhow::anyhow!("invalid json {}", val))?;
 
-            return Ok(Handler {
-                config: self.config.clone(),
-                client,
-                session_id: session_id.to_owned(),
-            });
-        }
+        Ok(Handler {
+            config: self.config.clone(),
+            client,
+            session_id: session_id.to_owned(),
+        })
     }
 }
 

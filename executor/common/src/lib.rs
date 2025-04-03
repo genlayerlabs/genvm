@@ -1,5 +1,5 @@
 use std::{
-    backtrace::{self, Backtrace},
+    backtrace::{self},
     collections::HashMap,
 };
 
@@ -9,7 +9,7 @@ use serde::Deserialize;
 pub mod cancellation;
 pub mod templater;
 
-pub fn log_error<'a>(err: &'a anyhow::Error) -> impl log::kv::ToValue + 'a {
+pub fn log_error(err: &anyhow::Error) -> impl log::kv::ToValue + '_ {
     use log::kv::{ToValue, Value};
 
     #[derive(serde::Serialize)]
@@ -128,7 +128,7 @@ pub fn load_config(
     vars.insert("genvmRoot".to_owned(), root_path);
     for (mut name, value) in std::env::vars() {
         name.insert_str(0, "ENV[");
-        name.push_str("]");
+        name.push(']');
 
         vars.insert(name, value);
     }

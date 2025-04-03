@@ -43,6 +43,6 @@ impl Config {
             return true;
         }
 
-        return false;
+        false
     }
 }

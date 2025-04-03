@@ -2,6 +2,12 @@ pub struct Pool<T> {
     pool: crossbeam::queue::ArrayQueue<Box<T>>,
 }
 
+impl<T> Default for Pool<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> Pool<T> {
     pub fn new() -> Self {
         Self {

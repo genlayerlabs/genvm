@@ -11,7 +11,7 @@ impl Token {
     }
 }
 
-pub fn make() -> (Arc<Token>, impl Clone + Fn() -> ()) {
+pub fn make() -> (Arc<Token>, impl Clone + Fn()) {
     let (sender, receiver) = tokio::sync::mpsc::channel(1);
 
     let cancel = Arc::new(Token {

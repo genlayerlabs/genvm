@@ -1,9 +1,8 @@
 use futures_util::{SinkExt, StreamExt};
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use regex::Regex;
-use serde::Deserialize;
 
 pub mod session;
 
