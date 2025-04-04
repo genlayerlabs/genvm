@@ -24,3 +24,5 @@ script_target = target_copy(
 	src: [cur_src.join('scripting/default-greyboxing.lua')],
 	tags: ['all'],
 )
+
+find_target('genvm/modules/all').inputs.push(bin, config_target, script_target)

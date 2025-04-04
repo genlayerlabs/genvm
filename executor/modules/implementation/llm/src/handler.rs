@@ -358,9 +358,16 @@ impl HandlerInner {
         prompt: &str,
         model: &str,
         response_format: llm_iface::OutputFormat,
-        provider: &config::BackendConfig,
+        provider_id: &str,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        log::trace!(prompt = prompt, format:? = response_format; "executing prompt");
+        log::trace!(prompt = prompt, model = model, provider_id = provider_id, format:? = response_format; "executing prompt");
+
+        let provider: &config::BackendConfig = self
+            .config
+            .backends
+            .get(provider_id)
+            .ok_or(mlua::Error::DeserializeError("wrong provider".into()))?;
+
         let res_not_sanitized = match provider.provider {
             config::Provider::Ollama => {
                 self.exec_prompt_impl_ollama(prompt, model, response_format, provider)
@@ -382,11 +389,32 @@ impl HandlerInner {
                 self.exec_prompt_impl_gemini(prompt, model, response_format, provider)
                     .await
             }
-        }?;
+        };
 
         let res_not_sanitized = match res_not_sanitized {
-            Ok(res_not_sanitized) => res_not_sanitized,
-            Err(e) => return Ok(Err(e)),
+            Ok(Ok(res_not_sanitized)) => res_not_sanitized,
+            Err(e) => {
+                log::warn!(
+                    prompt = prompt,
+                    model = model,
+                    provider_id = provider_id,
+                    format:? = response_format,
+                    error = genvm_common::log_error(&e);
+                    "executing prompt fatal failure"
+                );
+                return Err(e);
+            }
+            Ok(Err(e)) => {
+                log::debug!(
+                    prompt = prompt,
+                    model = model,
+                    provider_id = provider_id,
+                    format:? = response_format,
+                    error:serde = e;
+                    "executing prompt failure"
+                );
+                return Ok(Err(e));
+            }
         };
 
         match response_format {
@@ -421,7 +449,7 @@ impl Handler {
         &self,
         payload: llm_iface::PromptTemplatePayload,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        let provider = self.inner.config.backends.first_key_value().unwrap().1;
+        let (provider_id, provider) = self.inner.config.backends.first_key_value().unwrap();
 
         match payload {
             llm_iface::PromptTemplatePayload::EqNonComparativeLeader(payload) => {
@@ -453,7 +481,7 @@ impl Handler {
                         &new_prompt,
                         &provider.script_config.models[0],
                         llm_iface::OutputFormat::Text,
-                        provider,
+                        provider_id,
                     )
                     .await
             }
@@ -487,7 +515,7 @@ impl Handler {
                         &new_prompt,
                         &provider.script_config.models[0],
                         llm_iface::OutputFormat::JSON,
-                        provider,
+                        provider_id,
                     )
                     .await?;
                 let res = match res {
@@ -533,7 +561,7 @@ impl Handler {
                         &new_prompt,
                         &provider.script_config.models[0],
                         llm_iface::OutputFormat::JSON,
-                        provider,
+                        provider_id,
                     )
                     .await?;
                 let res = match res {
@@ -659,11 +687,14 @@ mod tests {
             genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)
                 .unwrap();
         let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
+        let backend_name = "test".to_owned();
 
         let imp = HandlerInner {
             config: Arc::new(config::Config {
                 bind_address: Default::default(),
-                backends: [].into_iter().collect(),
+                backends: [(backend_name.clone(), backend.clone())]
+                    .into_iter()
+                    .collect(),
                 prompt_templates: config::PromptTemplates {
                     eq_comparative: Default::default(),
                     eq_non_comparative_leader: Default::default(),
@@ -677,10 +708,10 @@ mod tests {
 
         let res = imp
             .exec_prompt_in_provider(
-                "Respond with \"yes\" (without quotes) and only this word, lowercase",
+                "Respond with a single word \"yes\" (without quotes) and only this word, lowercase",
                 &backend.script_config.models[0],
                 genvm_modules_interfaces::llm::OutputFormat::Text,
-                &backend,
+                &backend_name,
             )
             .await;
 
@@ -724,11 +755,14 @@ mod tests {
             genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)
                 .unwrap();
         let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
+        let backend_name = "test".to_owned();
 
         let imp = HandlerInner {
             config: Arc::new(config::Config {
                 bind_address: Default::default(),
-                backends: [].into_iter().collect(),
+                backends: [(backend_name.clone(), backend.clone())]
+                    .into_iter()
+                    .collect(),
                 prompt_templates: config::PromptTemplates {
                     eq_comparative: Default::default(),
                     eq_non_comparative_leader: Default::default(),
@@ -746,7 +780,7 @@ mod tests {
                 PROMPT,
                 &backend.script_config.models[0],
                 genvm_modules_interfaces::llm::OutputFormat::JSON,
-                &backend,
+                &backend_name,
             )
             .await;
 

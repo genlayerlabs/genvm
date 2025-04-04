@@ -40,19 +40,13 @@ impl mlua::UserData for handler::Handler {
             let args: Args = vm
                 .from_value(args)
                 .with_context(|| "deserializing arguments")?;
-            let provider_config = zelf
-                .inner
-                .config
-                .backends
-                .get(&args.provider)
-                .ok_or(mlua::Error::DeserializeError("wrong provider".into()))?;
             let res = zelf
                 .inner
                 .exec_prompt_in_provider(
                     &args.text,
                     &args.model,
                     llm_iface::OutputFormat::Text,
-                    provider_config,
+                    &args.provider,
                 )
                 .await
                 .with_context(|| "running in provider");

@@ -18,3 +18,5 @@ config_target = target_copy(
 	src: [cur_src.join('default-config.yaml')],
 	tags: ['all'],
 )
+
+find_target('genvm/modules/all').inputs.push(bin, config_target)
