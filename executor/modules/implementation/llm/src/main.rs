@@ -28,7 +28,10 @@ fn main() -> Result<()> {
             continue;
         }
 
-        if v.key.is_empty() {
+        if v.script_config.models.is_empty() {
+            log::warn!(backend = k; "models are empty");
+            v.enabled = false;
+        } else if v.key.is_empty() {
             log::warn!(backend = k; "could not detect key for backend");
             v.enabled = false;
         }

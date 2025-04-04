@@ -6,7 +6,10 @@ use genvm_modules_interfaces::llm as llm_iface;
 use mlua::{IntoLua, LuaSerdeExt, UserDataRef};
 use serde::{Deserialize, Serialize};
 
-use crate::{config, handler};
+use crate::{
+    config,
+    handler::{self, OverloadedError},
+};
 
 pub struct UserVM {
     vm: mlua::Lua,
@@ -14,13 +17,8 @@ pub struct UserVM {
 }
 
 #[derive(Serialize)]
-struct BackendInfo {
-    pub models: Vec<String>,
-}
-
-#[derive(Serialize)]
-struct Common {
-    available_backends: BTreeMap<String, BackendInfo>,
+struct Greyboxing {
+    available_backends: BTreeMap<String, config::ScriptBackendConfig>,
 }
 
 impl mlua::UserData for handler::Handler {
@@ -29,6 +27,7 @@ impl mlua::UserData for handler::Handler {
         struct Args {
             provider: String,
             text: String,
+            model: String,
         }
 
         async fn exec_in_backend(
@@ -42,14 +41,30 @@ impl mlua::UserData for handler::Handler {
                 .from_value(args)
                 .with_context(|| "deserializing arguments")?;
             let provider_config = zelf
+                .inner
                 .config
                 .backends
                 .get(&args.provider)
                 .ok_or(mlua::Error::DeserializeError("wrong provider".into()))?;
             let res = zelf
-                .exec_prompt_in_provider(&args.text, llm_iface::OutputFormat::Text, provider_config)
+                .inner
+                .exec_prompt_in_provider(
+                    &args.text,
+                    &args.model,
+                    llm_iface::OutputFormat::Text,
+                    provider_config,
+                )
                 .await
-                .with_context(|| "running in provider")?;
+                .with_context(|| "running in provider");
+
+            let res = match res {
+                Ok(res) => res,
+                Err(e) if e.is::<OverloadedError>() => {
+                    return Err(mlua::Error::runtime("Overloaded"));
+                }
+                Err(e) => return Err(e.into()),
+            };
+
             vm.to_value(&res)
         }
         methods.add_async_function("exec_in_backend", exec_in_backend);
@@ -70,22 +85,22 @@ impl UserVM {
                 | StdLib::PACKAGE,
         )?;
 
-        let common = Common {
+        let greyboxing = Greyboxing {
             available_backends: config
                 .backends
                 .iter()
-                .map(|(k, v)| {
-                    (
-                        k.clone(),
-                        BackendInfo {
-                            models: Vec::from([v.model.clone()]),
-                        },
-                    )
-                })
+                .map(|(k, v)| (k.clone(), v.script_config.clone()))
                 .collect(),
         };
 
-        vm.globals().set("greyboxing", vm.to_value(&common)?)?;
+        let greyboxing = vm.to_value(&greyboxing)?;
+        let log_fn = vm.create_function(|vm: &mlua::Lua, data: mlua::Value| {
+            let as_serde: serde_json::Value = vm.from_value(data)?;
+            log::info!(log:serde = as_serde; "script log");
+            Ok(())
+        })?;
+        greyboxing.as_table().unwrap().set("log", log_fn)?;
+        vm.globals().set("greyboxing", greyboxing)?;
 
         let user_script = std::fs::read_to_string(&config.lua_script_path)
             .with_context(|| format!("reading {}", config.lua_script_path))?;

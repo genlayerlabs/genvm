@@ -11,38 +11,44 @@ backends:
   openai:
     host: https://api.openai.com
     provider: openai-compatible
-    model: gpt-4o-mini
     key: ${ENV[OPENAIKEY]}
+    models:
+      - gpt-4o-mini
 
   heurist:
     host: https://llm-gateway.heurist.xyz
     provider: openai-compatible
-    model: meta-llama/llama-3.3-70b-instruct
     key: ${ENV[HEURISTKEY]}
+    models:
+      - meta-llama/llama-3.3-70b-instruct
 
   anthropic:
     host: https://api.anthropic.com
     provider: anthropic
-    model: claude-3-5-sonnet-20241022
     key: ${ENV[ANTHROPICKEY]}
+    models:
+      - claude-3-5-sonnet-20241022
 
   xai:
     host: https://api.x.ai
     provider: openai-compatible
-    model: grok-2-1212
     key: ${ENV[XAIKEY]}
+    models:
+      - grok-2-1212
 
   google:
     host: https://generativelanguage.googleapis.com
     provider: google
-    model: gemini-1.5-flash
     key: ${ENV[GEMINIKEY]}
+    models:
+      - gemini-1.5-flash
 
   atoma:
     host: https://api.atoma.network
     provider: openai-compatible
-    model: meta-llama/Llama-3.3-70B-Instruct
     key: ${ENV[ATOMAKEY]}
+    models:
+      - meta-llama/Llama-3.3-70B-Instruct
 
 prompt_templates:
   eq_comparative: |

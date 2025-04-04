@@ -156,12 +156,20 @@ pub mod llm {
         PromptTemplate(PromptTemplatePayload),
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
     #[serde(untagged)]
     pub enum PromptAnswer {
         Text(String),
         Bool(bool),
         Object(serde_json::Map<String, serde_json::Value>),
+    }
+
+    impl PromptAnswer {
+        pub fn map_text(&mut self, f: impl FnOnce(&mut String)) {
+            if let PromptAnswer::Text(t) = self {
+                f(t)
+            }
+        }
     }
 }
 

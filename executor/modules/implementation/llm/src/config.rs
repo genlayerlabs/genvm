@@ -17,13 +17,20 @@ fn enabled_true() -> bool {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ScriptBackendConfig {
+    pub models: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BackendConfig {
     #[serde(default = "enabled_true")]
     pub enabled: bool,
     pub host: String,
     pub provider: Provider,
-    pub model: String,
     pub key: String,
+
+    #[serde(flatten)]
+    pub script_config: ScriptBackendConfig,
 }
 
 #[derive(Deserialize)]

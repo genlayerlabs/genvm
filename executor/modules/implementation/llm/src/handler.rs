@@ -5,9 +5,13 @@ use std::{collections::BTreeMap, sync::Arc};
 use crate::{config, scripting};
 use genvm_modules_interfaces::llm as llm_iface;
 
-pub struct Handler {
+pub struct HandlerInner {
     pub config: Arc<config::Config>,
     client: reqwest::Client,
+}
+
+pub struct Handler {
+    pub inner: HandlerInner,
     user_vm: Arc<scripting::UserVM>,
 }
 
@@ -78,8 +82,10 @@ impl
         let client = reqwest::Client::new();
 
         Ok(HandlerWrapper(Arc::new(Handler {
-            config: self.config.clone(),
-            client,
+            inner: HandlerInner {
+                config: self.config.clone(),
+                client,
+            },
             user_vm: self.user_vm.clone(),
         })))
     }
@@ -109,15 +115,16 @@ impl genvm_modules_impl_common::MessageHandler<llm_iface::Message, llm_iface::Pr
     }
 }
 
-impl Handler {
+impl HandlerInner {
     async fn exec_prompt_impl_anthropic(
         &self,
         prompt: &str,
+        model: &str,
         response_format: llm_iface::OutputFormat,
         provider: &config::BackendConfig,
     ) -> ModuleResult<String> {
         let mut request = serde_json::json!({
-            "model": &provider.model,
+            "model": model,
             "messages": [{
                 "role": "user",
                 "content": prompt,
@@ -180,11 +187,15 @@ impl Handler {
     async fn exec_prompt_impl_openai(
         &self,
         prompt: &str,
+        model: &str,
         response_format: llm_iface::OutputFormat,
         provider: &config::BackendConfig,
     ) -> ModuleResult<String> {
+        if true {
+            return Err(OverloadedError.into());
+        }
         let mut request = serde_json::json!({
-            "model": &provider.model,
+            "model": model,
             "messages": [{
                 "role": "user",
                 "content": prompt,
@@ -229,6 +240,7 @@ impl Handler {
     async fn exec_prompt_impl_gemini(
         &self,
         prompt: &str,
+        model: &str,
         response_format: llm_iface::OutputFormat,
         provider: &config::BackendConfig,
     ) -> ModuleResult<String> {
@@ -253,7 +265,7 @@ impl Handler {
             self.client
                 .post(format!(
                     "{}/v1beta/models/{}:generateContent?key={}",
-                    provider.host, provider.model, provider.key
+                    provider.host, model, provider.key
                 ))
                 .header("Content-Type", "application/json")
                 .body(request.clone())
@@ -274,11 +286,12 @@ impl Handler {
     async fn exec_prompt_impl_ollama(
         &self,
         prompt: &str,
+        model: &str,
         response_format: llm_iface::OutputFormat,
         provider: &config::BackendConfig,
     ) -> ModuleResult<String> {
         let mut request = serde_json::json!({
-            "model": &provider.model,
+            "model": model,
             "prompt": prompt,
             "stream": false,
         });
@@ -312,13 +325,14 @@ impl Handler {
     async fn exec_prompt_impl_simulator(
         &self,
         prompt: &str,
+        model: &str,
         response_format: llm_iface::OutputFormat,
         provider: &config::BackendConfig,
     ) -> ModuleResult<String> {
         let request = serde_json::json!({
             "jsonrpc": "2.0",
             "method": "llm_genvm_module_call",
-            "params": [&provider.model, prompt, serde_json::to_string(&response_format).unwrap()],
+            "params": [model, prompt, serde_json::to_string(&response_format).unwrap()],
             "id": 1,
         });
         let request = serde_json::to_vec(&request)?;
@@ -342,29 +356,30 @@ impl Handler {
     pub async fn exec_prompt_in_provider(
         &self,
         prompt: &str,
+        model: &str,
         response_format: llm_iface::OutputFormat,
         provider: &config::BackendConfig,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
         log::trace!(prompt = prompt, format:? = response_format; "executing prompt");
         let res_not_sanitized = match provider.provider {
             config::Provider::Ollama => {
-                self.exec_prompt_impl_ollama(prompt, response_format, provider)
+                self.exec_prompt_impl_ollama(prompt, model, response_format, provider)
                     .await
             }
             config::Provider::OpenaiCompatible => {
-                self.exec_prompt_impl_openai(prompt, response_format, provider)
+                self.exec_prompt_impl_openai(prompt, model, response_format, provider)
                     .await
             }
             config::Provider::Simulator => {
-                self.exec_prompt_impl_simulator(prompt, response_format, provider)
+                self.exec_prompt_impl_simulator(prompt, model, response_format, provider)
                     .await
             }
             config::Provider::Anthropic => {
-                self.exec_prompt_impl_anthropic(prompt, response_format, provider)
+                self.exec_prompt_impl_anthropic(prompt, model, response_format, provider)
                     .await
             }
             config::Provider::Google => {
-                self.exec_prompt_impl_gemini(prompt, response_format, provider)
+                self.exec_prompt_impl_gemini(prompt, model, response_format, provider)
                     .await
             }
         }?;
@@ -378,9 +393,11 @@ impl Handler {
             llm_iface::OutputFormat::Text => {
                 Ok(Ok(llm_iface::PromptAnswer::Text(res_not_sanitized)))
             }
-            llm_iface::OutputFormat::JSON => Ok(Ok(llm_iface::PromptAnswer::Text(
-                sanitize_json_str(&res_not_sanitized).into(),
-            ))),
+            llm_iface::OutputFormat::JSON => {
+                let sanitized = sanitize_json_str(&res_not_sanitized);
+                let obj = serde_json::from_str(sanitized)?;
+                Ok(Ok(llm_iface::PromptAnswer::Object(obj)))
+            }
         }
     }
 }
@@ -398,40 +415,13 @@ impl Handler {
         log::debug!(result:serde = res; "script returned");
 
         Ok(res)
-
-        // for i in 0..3 {
-        //     for (prov_name, config) in &self.config.backends {
-        //         let res = self
-        //             .exec_prompt_in_provider(prompt, payload.response_format, config)
-        //             .await;
-        //         match res {
-        //             Ok(res) => {
-        //                 log::info!(payload:serde = payload, result:serde = res;  "exec_prompt finished");
-        //                 return Ok(res);
-        //             }
-        //             Err(e) if e.is::<OverloadedError>() => {
-        //                 log::info!(provider = prov_name; "provider is overloaded");
-        //                 continue;
-        //             }
-        //             Err(e) => {
-        //                 log::error!(provider = prov_name, payload:serde = payload, result = genvm_common::log_error(&e);  "exec_prompt failed");
-        //                 return Err(e);
-        //             }
-        //         }
-        //     }
-
-        //     log::warn!(retry = i; "no providers could handle a request, waiting before retry");
-        //     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        // }
-
-        //anyhow::bail!("no providers could handle a request");
     }
 
     async fn exec_prompt_template(
         &self,
         payload: llm_iface::PromptTemplatePayload,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        let provider = self.config.backends.first_key_value().unwrap().1;
+        let provider = self.inner.config.backends.first_key_value().unwrap().1;
 
         match payload {
             llm_iface::PromptTemplatePayload::EqNonComparativeLeader(payload) => {
@@ -454,11 +444,17 @@ impl Handler {
 
                 let new_prompt = genvm_common::templater::patch_str(
                     &vars,
-                    &self.config.prompt_templates.eq_non_comparative_leader,
+                    &self.inner.config.prompt_templates.eq_non_comparative_leader,
                     &genvm_common::templater::HASH_UNFOLDER_RE,
                 )?;
 
-                self.exec_prompt_in_provider(&new_prompt, llm_iface::OutputFormat::Text, provider)
+                self.inner
+                    .exec_prompt_in_provider(
+                        &new_prompt,
+                        &provider.script_config.models[0],
+                        llm_iface::OutputFormat::Text,
+                        provider,
+                    )
                     .await
             }
             llm_iface::PromptTemplatePayload::EqComparative(payload) => {
@@ -481,12 +477,18 @@ impl Handler {
 
                 let new_prompt = genvm_common::templater::patch_str(
                     &vars,
-                    &self.config.prompt_templates.eq_comparative,
+                    &self.inner.config.prompt_templates.eq_comparative,
                     &genvm_common::templater::HASH_UNFOLDER_RE,
                 )?;
 
                 let res = self
-                    .exec_prompt_in_provider(&new_prompt, llm_iface::OutputFormat::JSON, provider)
+                    .inner
+                    .exec_prompt_in_provider(
+                        &new_prompt,
+                        &provider.script_config.models[0],
+                        llm_iface::OutputFormat::JSON,
+                        provider,
+                    )
                     .await?;
                 let res = match res {
                     Ok(res) => res,
@@ -515,14 +517,24 @@ impl Handler {
 
                 let new_prompt = genvm_common::templater::patch_str(
                     &vars,
-                    &self.config.prompt_templates.eq_non_comparative_validator,
+                    &self
+                        .inner
+                        .config
+                        .prompt_templates
+                        .eq_non_comparative_validator,
                     &genvm_common::templater::HASH_UNFOLDER_RE,
                 )?;
 
-                log::error!(old = self.config.prompt_templates.eq_non_comparative_validator, new = new_prompt, vars:serde = vars; "DEBUG");
+                log::error!(old = self.inner.config.prompt_templates.eq_non_comparative_validator, new = new_prompt, vars:serde = vars; "DEBUG");
 
                 let res = self
-                    .exec_prompt_in_provider(&new_prompt, llm_iface::OutputFormat::JSON, provider)
+                    .inner
+                    .exec_prompt_in_provider(
+                        &new_prompt,
+                        &provider.script_config.models[0],
+                        llm_iface::OutputFormat::JSON,
+                        provider,
+                    )
                     .await?;
                 let res = match res {
                     Ok(res) => res,
@@ -554,60 +566,101 @@ fn answer_is_bool(res: llm_iface::PromptAnswer) -> anyhow::Result<bool> {
 #[cfg(test)]
 #[allow(non_upper_case_globals, dead_code)]
 mod tests {
-    use std::sync::Arc;
+    use std::{collections::HashMap, sync::Arc};
 
-    use crate::{config, handler::Handler};
+    use std::sync::Once;
+
+    static INIT: Once = Once::new();
+
+    /// Setup function that is only run once, even if called multiple times.
+    fn setup() {
+        INIT.call_once(|| {
+            let base_conf = genvm_common::BaseConfig {
+                blocking_threads: 0,
+                log_disable: Default::default(),
+                log_level: log::LevelFilter::Trace,
+                threads: 0,
+            };
+            base_conf.setup_logging(std::io::stdout()).unwrap();
+        });
+    }
+
+    use genvm_common::templater;
+    use genvm_modules_interfaces::llm::PromptAnswer;
+
+    use crate::{
+        config,
+        handler::{HandlerInner, OverloadedError},
+    };
 
     mod conf {
         pub const openai: &str = r#"{
             "host": "https://api.openai.com",
             "provider": "openai-compatible",
-            "model": "gpt-4o-mini",
-            "key_env_name": "OPENAIKEY",
+            "models": ["gpt-4o-mini"],
+            "key": "${ENV[OPENAIKEY]}"
         }"#;
 
         pub const heurist: &str = r#"{
             "host": "https://llm-gateway.heurist.xyz",
             "provider": "openai-compatible",
-            "model": "meta-llama/llama-3.3-70b-instruct",
-            "key_env_name": "HEURISTKEY",
+            "models": ["meta-llama/llama-3.3-70b-instruct"],
+            "key": "${ENV[HEURISTKEY]}"
         }"#;
 
         pub const anthropic: &str = r#"{
             "host": "https://api.anthropic.com",
             "provider": "anthropic",
-            "model": "claude-3-5-sonnet-20241022",
-            "key_env_name": "ANTHROPICKEY",
+            "models": ["claude-3-5-sonnet-20241022"],
+            "key": "${ENV[ANTHROPICKEY]}"
         }"#;
 
         pub const xai: &str = r#"{
             "host": "https://api.x.ai",
             "provider": "openai-compatible",
-            "model": "grok-2-1212",
-            "key_env_name": "XAIKEY",
+            "models": ["grok-2-1212"],
+            "key": "${ENV[XAIKEY]}"
         }"#;
 
         pub const google: &str = r#"{
             "host": "https://generativelanguage.googleapis.com",
             "provider": "google",
-            "model": "gemini-1.5-flash",
-            "key_env_name": "GEMINIKEY",
+            "models": ["gemini-1.5-flash"],
+            "key": "${ENV[GEMINIKEY]}"
         }"#;
 
         pub const atoma: &str = r#"{
             "host": "https://api.atoma.network",
             "provider": "openai-compatible",
-            "model": "meta-llama/Llama-3.3-70B-Instruct",
-            "key_env_name": "ATOMAKEY",
+            "models": ["meta-llama/Llama-3.3-70B-Instruct"],
+            "key": "${ENV[ATOMAKEY]}"
         }"#;
     }
 
     async fn do_test_text(conf: &str) {
-        let (cancellation, canceller) = genvm_common::cancellation::make();
+        setup();
 
-        let backend: config::BackendConfig = serde_json::from_str(conf).unwrap();
+        let base_conf = genvm_common::BaseConfig {
+            blocking_threads: 0,
+            log_disable: Default::default(),
+            log_level: log::LevelFilter::Trace,
+            threads: 0,
+        };
 
-        let imp = Handler {
+        let backend: serde_json::Value = serde_json::from_str(conf).unwrap();
+        let mut vars = HashMap::new();
+        for (mut name, value) in std::env::vars() {
+            name.insert_str(0, "ENV[");
+            name.push(']');
+
+            vars.insert(name, value);
+        }
+        let backend =
+            genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)
+                .unwrap();
+        let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
+
+        let imp = HandlerInner {
             config: Arc::new(config::Config {
                 bind_address: Default::default(),
                 backends: [].into_iter().collect(),
@@ -616,15 +669,16 @@ mod tests {
                     eq_non_comparative_leader: Default::default(),
                     eq_non_comparative_validator: Default::default(),
                 },
-                threads: 0,
-                blocking_threads: 0,
+                base: base_conf,
+                lua_script_path: Default::default(),
             }),
             client: reqwest::Client::new(),
         };
 
         let res = imp
             .exec_prompt_in_provider(
-                "Respond with \"yes\" (without quotes) and only this word",
+                "Respond with \"yes\" (without quotes) and only this word, lowercase",
+                &backend.script_config.models[0],
                 genvm_modules_interfaces::llm::OutputFormat::Text,
                 &backend,
             )
@@ -632,9 +686,7 @@ mod tests {
 
         let res = match res {
             Ok(res) => res,
-            Err(ModuleError::Fatal(res))
-                if format!("{}", res.root_cause()).contains("llm retries exceeded") =>
-            {
+            Err(e) if e.is::<OverloadedError>() => {
                 println!("WARNING: test skipped");
                 return;
             }
@@ -643,19 +695,37 @@ mod tests {
             }
         };
 
-        std::mem::drop(canceller); // ensure that it lives up to here
+        let mut res = res.unwrap();
 
-        assert_eq!(res.to_lowercase().trim(), "yes")
+        res.map_text(|s| *s = s.to_lowercase().trim().to_owned());
+
+        assert_eq!(res, PromptAnswer::Text("yes".into()));
     }
 
     async fn do_test_json(conf: &str) {
-        use anyhow::Context;
+        setup();
 
-        let (cancellation, canceller) = genvm_common::cancellation::make();
+        let base_conf = genvm_common::BaseConfig {
+            blocking_threads: 0,
+            log_disable: Default::default(),
+            log_level: log::LevelFilter::Trace,
+            threads: 0,
+        };
 
-        let backend: config::BackendConfig = serde_json::from_str(conf).unwrap();
+        let backend: serde_json::Value = serde_json::from_str(conf).unwrap();
+        let mut vars = HashMap::new();
+        for (mut name, value) in std::env::vars() {
+            name.insert_str(0, "ENV[");
+            name.push(']');
 
-        let imp = Handler {
+            vars.insert(name, value);
+        }
+        let backend =
+            genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)
+                .unwrap();
+        let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
+
+        let imp = HandlerInner {
             config: Arc::new(config::Config {
                 bind_address: Default::default(),
                 backends: [].into_iter().collect(),
@@ -664,8 +734,8 @@ mod tests {
                     eq_non_comparative_leader: Default::default(),
                     eq_non_comparative_validator: Default::default(),
                 },
-                threads: 0,
-                blocking_threads: 0,
+                base: base_conf,
+                lua_script_path: Default::default(),
             }),
             client: reqwest::Client::new(),
         };
@@ -674,6 +744,7 @@ mod tests {
         let res = imp
             .exec_prompt_in_provider(
                 PROMPT,
+                &backend.script_config.models[0],
                 genvm_modules_interfaces::llm::OutputFormat::JSON,
                 &backend,
             )
@@ -681,9 +752,7 @@ mod tests {
 
         let res = match res {
             Ok(res) => res,
-            Err(ModuleError::Fatal(res))
-                if format!("{}", res.root_cause()).contains("llm retries exceeded") =>
-            {
+            Err(e) if e.is::<OverloadedError>() => {
                 println!("WARNING: test skipped");
                 return;
             }
@@ -692,13 +761,11 @@ mod tests {
             }
         };
 
-        let res: serde_json::Value = serde_json::from_str(&res)
-            .with_context(|| format!("result is {}", &res))
-            .unwrap();
+        let res = match res {
+            Ok(PromptAnswer::Object(o)) => o,
+            res => panic!("invalid! {:?}", res),
+        };
 
-        std::mem::drop(canceller); // ensure that it lives up to here
-
-        let res = res.as_object().unwrap();
         assert_eq!(res.len(), 1);
         let res = res.get("result").unwrap().as_i64().unwrap();
         assert!(res >= 0 && res <= 100)
