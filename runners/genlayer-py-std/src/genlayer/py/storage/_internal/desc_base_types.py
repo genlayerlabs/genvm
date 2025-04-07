@@ -117,10 +117,12 @@ class _StrBytesDesc[T](TypeDesc):
 		TypeDesc.__init__(self, _u32_desc.size, [_CopyStrBytesAction()])
 
 	@abc.abstractmethod
-	def decode(self, val: collections.abc.Buffer) -> T: ...
+	def decode(self, val: collections.abc.Buffer) -> T:
+		raise NotImplementedError()
 
 	@abc.abstractmethod
-	def encode(self, val: T) -> memoryview: ...
+	def encode(self, val: T) -> memoryview:
+		raise NotImplementedError()
 
 	def get(self, slot: StorageSlot, off: int) -> T:
 		le = _u32_desc.get(slot, off)

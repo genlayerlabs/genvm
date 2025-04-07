@@ -70,21 +70,26 @@ class DecoderState:
 class Codec[T](metaclass=abc.ABCMeta):
 	@property
 	@abc.abstractmethod
-	def is_dynamic(self) -> bool: ...
+	def is_dynamic(self) -> bool:
+		raise NotImplementedError()
 
 	@property
 	@abc.abstractmethod
-	def name(self) -> str: ...
+	def name(self) -> str:
+		raise NotImplementedError()
 
 	@property
 	@abc.abstractmethod
-	def size_here(self) -> int: ...
+	def size_here(self) -> int:
+		raise NotImplementedError()
 
 	@abc.abstractmethod
-	def encode(self, state: EncodeState, val: T): ...
+	def encode(self, state: EncodeState, val: T):
+		raise NotImplementedError()
 
 	@abc.abstractmethod
-	def decode(self, state: DecoderState) -> T: ...
+	def decode(self, state: DecoderState) -> T:
+		raise NotImplementedError()
 
 	def __repr__(self):
 		return self.name

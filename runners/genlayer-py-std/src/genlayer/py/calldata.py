@@ -67,7 +67,7 @@ class CalldataEncodable(metaclass=abc.ABCMeta):
 		.. warning::
 			returning ``self`` may lead to an infinite loop or an exception
 		"""
-		...
+		raise NotImplementedError()
 
 
 type Decoded = None | int | str | bytes | list[Decoded] | dict[str, Decoded]

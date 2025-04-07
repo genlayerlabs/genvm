@@ -10,6 +10,7 @@ entrypoint: bytes = wasi.get_entrypoint()
 mem = memoryview(entrypoint)
 
 import typing
+import abc
 from genlayer.py.types import Rollback
 import genlayer.py.calldata
 import genlayer.py._internal.reflect as reflect
@@ -87,10 +88,10 @@ def _handle_call(contract: type, mem: memoryview):
 	else:
 		meth_name = _handle_call_special(contract, calldata)
 		meth = getattr(contract, meth_name, None)
-		if meth is None:
+		if meth is None or getattr(meth, '__isabstractmethod__', False):
 			is_undefined = True
 			meth = getattr(contract, '__handle_undefined_method__')
-		if meth is None:
+		if meth is None or getattr(meth, '__isabstractmethod__', False):
 			raise TypeError(
 				'call to undefined method with absent __handle_undefined_method__ (fallback)'
 			)
