@@ -96,22 +96,25 @@ impl Handler {
         let url = match url::Url::parse(&payload.url) {
             Ok(url) => url,
             Err(_) => {
-                return Ok(Err(
+                return Err(ModuleResultUserError(
                     serde_json::json!({"message": "invalid url", "url": payload.url}),
-                ))
+                )
+                .into());
             }
         };
         if url.scheme() == "file" {
-            return Ok(Err(
+            return Err(ModuleResultUserError(
                 serde_json::json!({"message": "scheme forbidden", "scheme": "file"}),
-            ));
+            )
+            .into());
         }
 
         match url.host_str() {
             None => {
-                return Ok(Err(
+                return Err(ModuleResultUserError(
                     serde_json::json!({"message": "host is forbidden", "host": null}),
-                ))
+                )
+                .into())
             }
             Some(host_str)
                 if crate::config::binary_search_contains(
@@ -120,16 +123,18 @@ impl Handler {
                 ) => {}
             Some(host_str) => {
                 if !self.config.tld_is_ok(host_str) {
-                    return Ok(Err(
+                    return Err(ModuleResultUserError(
                         serde_json::json!({"message": "tld forbidden", "host": host_str}),
-                    ));
+                    )
+                    .into());
                 }
 
                 const ALLOWED_PORTS: &[Option<u16>] = &[None, Some(80), Some(443)];
                 if !ALLOWED_PORTS.contains(&url.port()) {
-                    return Ok(Err(
+                    return Err(ModuleResultUserError(
                         serde_json::json!({"message": "port forbidden", "port": url.port()}),
-                    ));
+                    )
+                    .into());
                 }
             }
         }
@@ -194,8 +199,8 @@ impl Handler {
             .and_then(|x| x.as_str())
             .ok_or(anyhow::anyhow!("invalid json {}", val))?;
 
-        Ok(Ok(genvm_modules_interfaces::web::RenderAnswer::Text(
+        Ok(genvm_modules_interfaces::web::RenderAnswer::Text(
             String::from(val.trim()),
-        )))
+        ))
     }
 }

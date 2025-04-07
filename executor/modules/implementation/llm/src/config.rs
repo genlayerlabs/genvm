@@ -2,12 +2,13 @@ use std::collections::BTreeMap;
 
 use serde_derive::{Deserialize, Serialize};
 
+use crate::providers;
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Provider {
     Ollama,
     OpenaiCompatible,
-    Simulator,
     Anthropic,
     Google,
 }
@@ -51,4 +52,30 @@ pub struct Config {
 
     #[serde(flatten)]
     pub base: genvm_common::BaseConfig,
+}
+
+impl BackendConfig {
+    pub fn to_provider(
+        &self,
+        client: reqwest::Client,
+    ) -> Box<dyn providers::Provider + Send + Sync> {
+        match self.provider {
+            Provider::Ollama => Box::new(providers::OLlama {
+                client,
+                config: self.clone(),
+            }),
+            Provider::OpenaiCompatible => Box::new(providers::OpenAICompatible {
+                client,
+                config: self.clone(),
+            }),
+            Provider::Anthropic => Box::new(providers::Anthropic {
+                client,
+                config: self.clone(),
+            }),
+            Provider::Google => Box::new(providers::Gemini {
+                client,
+                config: self.clone(),
+            }),
+        }
+    }
 }

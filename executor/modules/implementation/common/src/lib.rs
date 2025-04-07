@@ -6,7 +6,18 @@ use regex::Regex;
 
 pub mod session;
 
-pub type ModuleResult<T> = anyhow::Result<std::result::Result<T, serde_json::Value>>;
+#[derive(Debug)]
+pub struct ModuleResultUserError(pub serde_json::Value);
+
+impl std::fmt::Display for ModuleResultUserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ModuleResultUserError")
+    }
+}
+
+impl std::error::Error for ModuleResultUserError {}
+
+pub type ModuleResult<T> = anyhow::Result<T>;
 
 pub static CENSOR_RESPONSE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     Regex::new(r#""(set-cookie|cf-ray|access-control[^"]*)": "[^"]*""#).unwrap()
@@ -90,13 +101,19 @@ where
                 let text = x.into_text()?;
                 let res = loop_one_inner_handle(handler, text.as_str()).await;
                 let res = match res {
-                    Ok(Ok(res)) => genvm_modules_interfaces::Result::Ok(res),
-                    Ok(Err(res)) => genvm_modules_interfaces::Result::UserError(res),
-                    Err(res) => {
-                        log::error!(error = genvm_common::log_error(&res); "handler error");
-                        genvm_modules_interfaces::Result::FatalError(format!("{res:#}"))
-                    }
+                    Ok(res) => genvm_modules_interfaces::Result::Ok(res),
+                    Err(res) => match res.downcast::<ModuleResultUserError>() {
+                        Ok(ModuleResultUserError(res)) => {
+                            log::info!(error:serde = res; "handler user error");
+                            genvm_modules_interfaces::Result::UserError(res)
+                        }
+                        Err(res) => {
+                            log::error!(error = genvm_common::log_error(&res); "handler fatal error");
+                            genvm_modules_interfaces::Result::FatalError(format!("{res:#}"))
+                        }
+                    },
                 };
+
                 let answer = serde_json::to_string(&res)?;
                 let message = Message::Text(answer.into());
 

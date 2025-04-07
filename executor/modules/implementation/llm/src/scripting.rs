@@ -41,12 +41,11 @@ impl mlua::UserData for handler::Handler {
                 .from_value(args)
                 .with_context(|| "deserializing arguments")?;
             let res = zelf
-                .inner
                 .exec_prompt_in_provider(
                     &args.text,
                     &args.model,
-                    llm_iface::OutputFormat::Text,
                     &args.provider,
+                    llm_iface::OutputFormat::Text,
                 )
                 .await
                 .with_context(|| "running in provider");

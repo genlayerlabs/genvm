@@ -4,6 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 
 mod config;
 mod handler;
+mod providers;
 mod scripting;
 
 #[derive(clap::Parser)]
@@ -62,10 +63,22 @@ fn main() -> Result<()> {
 
     let user_vm = scripting::UserVM::new(&config)?;
 
+    let client = reqwest::Client::new();
+
+    let backends = config
+        .backends
+        .iter()
+        .map(|(k, v)| (k.clone(), v.to_provider(client.clone())))
+        .collect();
+
     let loop_future = genvm_modules_impl_common::run_loop(
         config.bind_address.clone(),
         token,
-        Arc::new(handler::HandlerProvider { config, user_vm }),
+        Arc::new(handler::HandlerProvider {
+            config,
+            user_vm,
+            providers: Arc::new(backends),
+        }),
     );
 
     runtime.block_on(loop_future)?;

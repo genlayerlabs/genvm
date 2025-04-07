@@ -19,3 +19,4 @@ serde_yaml = "0.9.34"
 clap = { version = "4.5.35", features = ["derive"] }
 signal-hook = "0.3.17"
 mlua = { version = "0.10.3", default-features = false, features = ["anyhow", "lua53", "async", "serialize", "vendored", "send", "error-send", "userdata-wrappers"] }
+async-trait = "0.1.88"

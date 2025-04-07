@@ -4,7 +4,7 @@ lua_script_path: ${genvmRoot}/scripts/genvm-llm-default-greyboxing.lua
 
 threads: 4
 blocking_threads: 16
-log_disable: tracing*,polling*
+log_disable: tracing*,polling*,tungstenite*,tokio_tungstenite*
 #log_level: trace
 
 backends:
@@ -27,7 +27,7 @@ backends:
     provider: anthropic
     key: ${ENV[ANTHROPICKEY]}
     models:
-      - claude-3-5-sonnet-20241022
+      - claude-3-7-sonnet-20250219
 
   xai:
     host: https://api.x.ai
@@ -80,8 +80,15 @@ prompt_templates:
     6. Do not make assumptions about unstated criteria or requirements
 
     Output format:
-    Respond with json object containing single key "result" and associated boolean value,
-    representing the result of evaluating above criteria. And nothing else
+    Respond with json object containing key "result" and associated boolean value,
+    representing the result of evaluating above criteria. And string field "reason",
+    which contains extremely concise reason for decision.
+
+    Examples:
+    {"result": true, "reason": "all rules satisfied"}
+    {"result": false, "reason": "rule 2 violated: ..."}
+
+    Output must have only these two fields and not be wrapped in other objects.
   eq_non_comparative_leader: |
     You must perform given task for the input. Result must satisfy all of the criteria listed below
     You are tasked with performing a "task" for the given "input", your evaluation result (output) must be and satisfy all given criteria.
@@ -109,7 +116,8 @@ prompt_templates:
     4. Do not make assumptions about unstated criteria or requirements
 
     Output format:
-    Respond only with: the result of performing the task, do not include reasoning or evaluation rules satisfaction
+    Respond only with: the result of performing the task, do not include reasoning or evaluation rules satisfaction.
+    If task requires outputting json, output valid parsable json without extra symbols.
   eq_non_comparative_validator: |
     You are an a judge tasked with making a binary determination about whether task evaluation result (output) is valid for the given input and satisfies given criteria.
     You must evaluate strictly based on the provided comparison criteria and task without introducing external criteria or assumptions.
@@ -142,5 +150,13 @@ prompt_templates:
     6. Do not make assumptions about unstated criteria or requirements
 
     Output format:
-    Respond with json object containing single key "result" and associated boolean value,
-    representing the result of evaluating above criteria. And nothing else
+    Respond with json object containing key "result" and associated boolean value,
+    representing the result of evaluating above criteria. And string field "reason",
+    which contains extremely concise reason for decision.
+
+    Examples:
+    {"result": true, "reason": "all rules satisfied"}
+    {"result": false, "reason": "rule 1 violated: section input is empty"}
+    {"result": false, "reason": "criteria not met: <explanation>"}
+
+    Output must have only these two fields and not be wrapped in other objects.
