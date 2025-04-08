@@ -32,28 +32,19 @@
         (result $error (expected $fd (error $errno)))
     )
 
-    (@interface func (export "get_webpage")
-        (param $config string)
-        (param $url string)
+    (@interface func (export "web_render")
+        (param $payload string)
         (result $error (expected $fd (error $errno)))
     )
 
     (@interface func (export "exec_prompt")
-        (param $config string)
-        (param $prompt string)
+        (param $payload string)
         (result $error (expected $fd (error $errno)))
     )
 
-    (@interface func (export "exec_prompt_id")
-        (param $id u8)
-        (param $vars string)
+    (@interface func (export "exec_prompt_template")
+        (param $payload string)
         (result $error (expected $fd (error $errno)))
-    )
-
-    (@interface func (export "eq_principle_prompt")
-        (param $id u8)
-        (param $vars string)
-        (result $error (expected $success (error $errno)))
     )
 
     (@interface func (export "call_contract")

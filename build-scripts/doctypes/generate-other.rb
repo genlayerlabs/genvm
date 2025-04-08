@@ -15,6 +15,7 @@ children.sort!
 
 to.mkpath
 
+# editorconfig-checker-disable
 children.each { |c|
 to.join("#{c}.rst").write(<<-EOF
 ========#{'=' * c.size}
@@ -47,6 +48,7 @@ Internal packages
 % }
 
 EOF
+# editorconfig-checker-enable
 
 TEMPLATE = ERB.new(template, trim_mode: "%")
 

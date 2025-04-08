@@ -13,7 +13,7 @@ class Contract(gl.Contract):
 			gl.eq_principle_prompt_non_comparative(
 				get_input,
 				task='Produce a text summary',
-				criteria='it must be at least two times less than the input (in words)',
+				criteria='It must be shorter than the original text and be a valid summary',
 			),
 			file=sys.stderr,
 		)

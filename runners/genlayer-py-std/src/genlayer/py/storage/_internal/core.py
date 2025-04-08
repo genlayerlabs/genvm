@@ -16,9 +16,7 @@ def _calculate_indirection_addr(l: u256, r: int) -> u256:
 
 
 class StorageMan(typing.Protocol):
-	@abc.abstractmethod
-	def get_store_slot(self, addr: u256) -> 'StorageSlot':
-		pass
+	def get_store_slot(self, addr: u256) -> 'StorageSlot': ...
 
 
 class StorageSlot:
@@ -35,14 +33,15 @@ class StorageSlot:
 		return self.manager.get_store_slot(addr)
 
 	@abc.abstractmethod
-	def read(self, off: int, len: int, /) -> bytes: ...
+	def read(self, off: int, len: int, /) -> bytes:
+		raise NotImplementedError()
 
 	@abc.abstractmethod
-	def write(self, off: int, what: collections.abc.Buffer, /) -> None: ...
+	def write(self, off: int, what: collections.abc.Buffer, /) -> None:
+		raise NotImplementedError()
 
 
 class ComplexCopyAction(typing.Protocol):
-	@abc.abstractmethod
 	def copy(
 		self, frm: StorageSlot, frm_off: int, to: StorageSlot, to_off: int
 	) -> int: ...
@@ -106,14 +105,14 @@ class TypeDesc[T]:
 		"""
 		Method that reads value from slot and offset pair
 		"""
-		...
+		raise NotImplementedError()
 
 	@abc.abstractmethod
 	def set(self, slot: StorageSlot, off: int, val: T) -> None:
 		"""
 		Method that writes value to slot and offset pair
 		"""
-		...
+		raise NotImplementedError()
 
 	def __repr__(self):
 		ret: list[str] = []

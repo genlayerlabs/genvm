@@ -1,7 +1,6 @@
 use core::str;
 use std::sync::Arc;
 
-use genvm_modules_interfaces::{ModuleError, ModuleResult};
 use itertools::Itertools;
 use serde::Deserialize;
 use wiggle::GuestError;
@@ -102,6 +101,7 @@ pub struct ContextVFS<'a> {
     pub(super) context: &'a mut Context,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) mod generated {
     wiggle::from_witx!({
         witx: ["$CARGO_MANIFEST_DIR/src/wasi/witx/genlayer_sdk.witx"],
@@ -112,8 +112,8 @@ pub(crate) mod generated {
         async: {
             genlayer_sdk::{
                 call_contract, run_nondet, sandbox,
-                get_webpage,
-                exec_prompt, exec_prompt_id, eq_principle_prompt,
+                web_render,
+                exec_prompt, exec_prompt_template,
                 deploy_contract, post_message,
                 eth_send, eth_call,
                 storage_read, storage_write,
@@ -131,8 +131,8 @@ pub(crate) mod generated {
         async: {
             genlayer_sdk::{
                 call_contract, run_nondet, sandbox,
-                get_webpage,
-                exec_prompt, exec_prompt_id, eq_principle_prompt,
+                web_render,
+                exec_prompt, exec_prompt_template,
                 deploy_contract, post_message,
                 eth_send, eth_call,
                 storage_read, storage_write,
@@ -206,7 +206,7 @@ pub trait AddToLinkerFn<T> {
     fn call<'a>(&self, arg: &'a mut T) -> ContextVFS<'a>;
 }
 
-pub(super) fn add_to_linker_sync<'a, T: Send + 'static, F>(
+pub(super) fn add_to_linker_sync<T: Send + 'static, F>(
     linker: &mut wasmtime::Linker<T>,
     f: F,
 ) -> anyhow::Result<()>
@@ -220,7 +220,7 @@ where
     where
         F: AddToLinkerFn<T> + Copy + Send + Sync + 'static,
     {
-        fn call<'a>(&self, arg: &'a mut T) -> impl generated::genlayer_sdk::GenlayerSdk {
+        fn call(&self, arg: &mut T) -> impl generated::genlayer_sdk::GenlayerSdk {
             self.0.call(arg)
         }
     }
@@ -276,21 +276,9 @@ impl From<std::num::TryFromIntError> for generated::types::Error {
 
 impl From<serde_json::Error> for generated::types::Error {
     fn from(err: serde_json::Error) -> Self {
-        match err {
-            _ => generated::types::Errno::Inval.into(),
-        }
-    }
-}
+        log::info!(error:err = err; "deserialization failed, returning inval");
 
-fn module_result_into_result<T>(zelf: ModuleResult<T>) -> Result<T, generated::types::Error> {
-    match zelf {
-        Ok(v) => Ok(v),
-        Err(ModuleError::Recoverable(rec)) => {
-            // TODO: fixme
-            log::warn!(err:? = rec; "recoverable module error");
-            Err(generated::types::Errno::Inval.into())
-        }
-        Err(ModuleError::Fatal(e)) => Err(generated::types::Error::trap(e)),
+        generated::types::Errno::Inval.into()
     }
 }
 
@@ -315,6 +303,30 @@ impl ContextVFS<'_> {
             )),
             len,
         ))
+    }
+}
+
+async fn taskify<T>(
+    fut: impl std::future::Future<Output = anyhow::Result<std::result::Result<T, serde_json::Value>>>
+        + Send
+        + 'static,
+) -> anyhow::Result<Box<[u8]>>
+where
+    T: serde::Serialize + Send,
+{
+    match fut.await? {
+        Ok(r) => {
+            let mut bundle = Vec::new();
+            bundle.push(0);
+            serde_json::to_writer(&mut bundle, &r)?;
+            Ok(Box::from(bundle))
+        }
+        Err(e) => {
+            let mut bundle = Vec::new();
+            bundle.push(1);
+            serde_json::to_writer(&mut bundle, &e)?;
+            Ok(Box::from(bundle))
+        }
     }
 }
 
@@ -375,99 +387,92 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         ContractReturn(res).into()
     }
 
-    async fn get_webpage(
+    async fn web_render(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        config: wiggle::GuestPtr<str>,
-        url: wiggle::GuestPtr<str>,
+        payload: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::Forbidden.into());
         }
-        let config_str = read_string(mem, config)?;
-        let url_str = read_string(mem, url)?;
 
-        let result_task = self
-            .context
-            .shared_data
-            .modules
-            .web
-            .get_webpage(config_str, url_str);
+        let payload = serde_json::from_str(&read_string(mem, payload)?)?;
 
-        Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_task(result_task),
-        )))
+        let web = self.context.shared_data.modules.web.clone();
+        let task = tokio::spawn(taskify(async move {
+            web.send::<genvm_modules_interfaces::web::RenderAnswer, _>(
+                genvm_modules_interfaces::web::Message::Render(payload),
+            )
+            .await
+        }));
+
+        Ok(generated::types::Fd::from(
+            self.vfs
+                .place_content(FileContentsUnevaluated::from_task(task)),
+        ))
     }
 
     async fn exec_prompt(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        config: wiggle::GuestPtr<str>,
-        prompt: wiggle::GuestPtr<str>,
+        payload: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::Forbidden.into());
         }
-        let config_str = read_string(mem, config)?;
-        let prompt_str = read_string(mem, prompt)?;
 
-        let result_task = self
-            .context
-            .shared_data
-            .modules
-            .llm
-            .exec_prompt(config_str, prompt_str);
+        let payload = serde_json::from_str(&read_string(mem, payload)?)?;
 
-        Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_task(result_task),
-        )))
+        let llm = self.context.shared_data.modules.llm.clone();
+        let task = tokio::spawn(taskify(async move {
+            llm.send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
+                genvm_modules_interfaces::llm::Message::Prompt(payload),
+            )
+            .await
+        }));
+
+        Ok(generated::types::Fd::from(
+            self.vfs
+                .place_content(FileContentsUnevaluated::from_task(task)),
+        ))
     }
 
-    async fn exec_prompt_id(
+    async fn exec_prompt_template(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        id: u8,
-        vars: wiggle::GuestPtr<str>,
+        payload: wiggle::GuestPtr<str>,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::Forbidden.into());
         }
-        let vars_str = read_string(mem, vars)?;
 
-        let result_task = self
-            .context
-            .shared_data
-            .modules
-            .llm
-            .exec_prompt_id(id, vars_str);
+        let payload = serde_json::from_str(&read_string(mem, payload)?)?;
 
-        Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_task(result_task),
-        )))
-    }
+        let expect_bool = !matches!(
+            &payload,
+            genvm_modules_interfaces::llm::PromptTemplatePayload::EqNonComparativeLeader(_)
+        );
 
-    async fn eq_principle_prompt(
-        &mut self,
-        mem: &mut wiggle::GuestMemory<'_>,
-        id: u8,
-        vars: wiggle::GuestPtr<str>,
-    ) -> Result<generated::types::Success, generated::types::Error> {
-        if self.context.data.conf.is_deterministic {
-            return Err(generated::types::Errno::Forbidden.into());
-        }
-        let vars_str = read_string(mem, vars)?;
+        let llm = self.context.shared_data.modules.llm.clone();
+        let task = tokio::spawn(taskify(async move {
+            let answer = llm
+                .send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
+                    genvm_modules_interfaces::llm::Message::PromptTemplate(payload),
+                )
+                .await?;
+            use genvm_modules_interfaces::llm::PromptAnswer;
+            match (expect_bool, answer) {
+                (_, Err(e)) => Ok(Err(e)),
+                (true, Ok(PromptAnswer::Bool(answer))) => Ok(Ok(PromptAnswer::Bool(answer))),
+                (false, Ok(PromptAnswer::Text(answer))) => Ok(Ok(PromptAnswer::Text(answer))),
+                (_, Ok(_)) => Err(anyhow::anyhow!("unmatched result")),
+            }
+        }));
 
-        let res = self
-            .context
-            .shared_data
-            .modules
-            .llm
-            .eq_principle_prompt(id, &vars_str)
-            .await;
-
-        let res = module_result_into_result(res)?;
-
-        Ok((res as i32).try_into().unwrap())
+        Ok(generated::types::Fd::from(
+            self.vfs
+                .place_content(FileContentsUnevaluated::from_task(task)),
+        ))
     }
 
     async fn run_nondet(
@@ -709,13 +714,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
 
         let data_str = super::common::read_string(mem, data)?;
-        let data: InternalTxData = match serde_json::from_str(&data_str) {
-            Ok(v) => v,
-            Err(err) => {
-                log::warn!(str = data_str, err:? = err; "parsing InternalTxData failed");
-                return Err(generated::types::Errno::Inval.into());
-            }
-        };
+        let data: InternalTxData = serde_json::from_str(&data_str)?;
         if !data.value.is_zero() {
             let my_balance = self
                 .context
@@ -756,13 +755,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
 
         let data_str = super::common::read_string(mem, data)?;
-        let data: InternalDeployTxData = match serde_json::from_str(&data_str) {
-            Ok(v) => v,
-            Err(err) => {
-                log::warn!(str = data_str, err:? = err; "parsing InternalDeployTxData failed");
-                return Err(generated::types::Errno::Inval.into());
-            }
-        };
+        let data: InternalDeployTxData = serde_json::from_str(&data_str)?;
         if !data.value.is_zero() {
             let my_balance = self
                 .context
@@ -880,13 +873,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
 
         let data_str = super::common::read_string(mem, data)?;
-        let data: ExternalTxData = match serde_json::from_str(&data_str) {
-            Ok(v) => v,
-            Err(err) => {
-                log::warn!(str = data_str, err:? = err; "parsing ExternalTxData failed");
-                return Err(generated::types::Errno::Inval.into());
-            }
-        };
+        let data: ExternalTxData = serde_json::from_str(&data_str)?;
         if !data.value.is_zero() {
             let my_balance = self
                 .context
@@ -997,7 +984,7 @@ impl Context {
         address: AccountAddress,
     ) -> Result<primitive_types::U256, generated::types::Error> {
         if let Some(res) = self.shared_data.balances.get(&address) {
-            return Ok(res.clone());
+            return Ok(*res);
         }
 
         let supervisor = self.data.supervisor.clone();
@@ -1007,7 +994,7 @@ impl Context {
             .get_balance(address)
             .map_err(generated::types::Error::trap)?;
 
-        let _ = self.shared_data.balances.insert(address, res.clone());
+        let _ = self.shared_data.balances.insert(address, res);
 
         Ok(res)
     }

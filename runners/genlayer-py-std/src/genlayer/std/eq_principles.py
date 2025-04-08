@@ -4,8 +4,6 @@ __all__ = (
 	'eq_principle_prompt_non_comparative',
 )
 
-from ._internal.prompt_ids import *
-
 import genlayer.std._wasi as wasi
 
 import genlayer.std.advanced as advanced
@@ -15,8 +13,6 @@ import genlayer.py.calldata as calldata
 
 from ..py.types import *
 from ._internal import (
-	decode_sub_vm_result,
-	decode_sub_vm_result_retn,
 	lazy_from_fd,
 	lazy_from_fd_no_check,
 	_lazy_api,
@@ -66,12 +62,16 @@ def eq_principle_prompt_comparative[T: calldata.Decoded](
 		my_res, leaders_res = advanced.validator_handle_rollbacks_and_errors_default(
 			fn, leaders
 		)
-		vars = {
+		payload = {
+			'template': 'EqComparative',
 			'leader_answer': format(leaders_res),
 			'validator_answer': format(my_res),
 			'principle': principle,
 		}
-		return wasi.eq_principle_prompt(TemplateId.COMPARATIVE, json.dumps(vars))
+		data = lazy_from_fd(
+			wasi.exec_prompt_template(json.dumps(payload)), lambda x: str(x, 'utf-8')
+		).get()
+		return json.loads(data)
 
 	return advanced.run_nondet(fn, validator_fn)
 
@@ -93,17 +93,14 @@ def eq_principle_prompt_non_comparative(
 	def leader_fn() -> str:
 		input_res = fn()
 		assert isinstance(input_res, str)
+		payload = {
+			'template': 'EqNonComparativeLeader',
+			'task': task,
+			'input': input_res,
+			'criteria': criteria,
+		}
 		return lazy_from_fd(
-			wasi.exec_prompt_id(
-				TemplateId.NON_COMPARATIVE_LEADER,
-				json.dumps(
-					{
-						'task': task,
-						'input': input_res,
-						'criteria': criteria,
-					}
-				),
-			),
+			wasi.exec_prompt_template(json.dumps(payload)),
 			lambda buf: str(buf, 'utf-8'),
 		).get()
 
@@ -113,14 +110,16 @@ def eq_principle_prompt_non_comparative(
 		my_input, leaders_result = advanced.validator_handle_rollbacks_and_errors_default(
 			fn, leaders
 		)
-		vars = {
+		payload = {
+			'template': 'EqNonComparativeValidator',
 			'task': task,
 			'output': leaders_result,
 			'input': my_input,
 			'criteria': criteria,
 		}
-		return wasi.eq_principle_prompt(
-			TemplateId.NON_COMPARATIVE_VALIDATOR, json.dumps(vars)
-		)
+		data = lazy_from_fd(
+			wasi.exec_prompt_template(json.dumps(payload)), lambda x: str(x, 'utf-8')
+		).get()
+		return json.loads(data)
 
 	return advanced.run_nondet(leader_fn, validator_fn)

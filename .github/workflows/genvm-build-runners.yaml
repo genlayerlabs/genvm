@@ -51,6 +51,7 @@ jobs:
       - uses: cachix/install-nix-action@v30
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          install_url: https://releases.nixos.org/nix/nix-2.24.11/install
       - uses: actions/checkout@v4
         with:
           lfs: true

@@ -14,7 +14,6 @@ use wasmtime::{Engine, Linker, Module, Store};
 use crate::{
     caching,
     runner::{self, InitAction, WasmMode},
-    string_templater,
     ustar::{Archive, SharedBytes},
     wasi::{self, preview1::I32Exit},
     AccountAddress,
@@ -43,7 +42,7 @@ impl<I: Iterator<Item = u8>> Iterator for DecodeUtf8<I> {
                 Ok(b as char)
             } else {
                 let l = (!b).leading_zeros() as usize; // number of bytes in UTF-8 representation
-                if l < 2 || l > 6 {
+                if !(2..=6).contains(&l) {
                     return Err(InvalidSequence(on_err));
                 };
                 let mut x = (b as u32) & (0x7F >> l);
@@ -159,17 +158,19 @@ impl WasmContext {
 /// shared across all deterministic VMs
 pub struct SharedData {
     pub nondet_call_no: AtomicU32,
-    pub cancellation: Arc<genvm_modules_interfaces::CancellationToken>,
+    pub cancellation: Arc<genvm_common::cancellation::Token>,
     pub is_sync: bool,
     pub modules: Modules,
     pub balances: dashmap::DashMap<AccountAddress, primitive_types::U256>,
+    pub cookie: String,
 }
 
 impl SharedData {
     pub fn new(
         modules: Modules,
         is_sync: bool,
-        cancellation: Arc<genvm_modules_interfaces::CancellationToken>,
+        cancellation: Arc<genvm_common::cancellation::Token>,
+        cookie: String,
     ) -> Self {
         Self {
             nondet_call_no: 0.into(),
@@ -177,6 +178,7 @@ impl SharedData {
             is_sync,
             modules,
             balances: dashmap::DashMap::new(),
+            cookie,
         }
     }
 }
@@ -187,8 +189,8 @@ pub struct PrecompiledModule {
 }
 
 pub struct Modules {
-    pub web: Arc<dyn genvm_modules_interfaces::Web + Send + Sync>,
-    pub llm: Arc<dyn genvm_modules_interfaces::Llm + Send + Sync>,
+    pub web: Arc<crate::modules::Module>,
+    pub llm: Arc<crate::modules::Module>,
 }
 
 // impl Drop for Modules {
@@ -247,6 +249,7 @@ impl VM {
         self.config_copy.is_deterministic
     }
 
+    #[allow(clippy::manual_try_fold)]
     pub async fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
         if let Ok(lck) = self.store.data().genlayer_ctx.lock() {
             log::info!(target: "vm", wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "run");
@@ -259,7 +262,7 @@ impl VM {
         log::info!(target = "vm"; "execution start");
         let time_start = std::time::Instant::now();
         let res = func.call_async(&mut self.store, ()).await;
-        log::info!(target = "vm", duration:? = time_start.elapsed(); "execution finished");
+        log::info!(duration:? = time_start.elapsed(); "vm execution finished");
         let res: RunResult = match res {
             Ok(()) => Ok(RunOk::empty_return()),
             Err(e) => {
@@ -382,6 +385,7 @@ impl WasmFileDesc {
 }
 
 impl Supervisor {
+    #[allow(clippy::unnecessary_literal_unwrap)]
     pub fn new(mut host: crate::Host, shared_data: Arc<SharedData>) -> Result<Self> {
         let engines = Engines::create(|base_conf| {
             match Lazy::force(&caching::CACHE_DIR) {
@@ -436,7 +440,7 @@ impl Supervisor {
                 let debug_path = data.debug_path();
 
                 let compile_here = || -> Result<PrecompiledModule> {
-                    log::info!(target: "cache", status = "start", path = debug_path, runner = data.runner_id.as_str(); "compiling");
+                    log::info!(status = "start", path = debug_path, runner = data.runner_id.as_str(); "cache compiling");
 
                     caching::validate_wasm(&self.engines, data.contents.as_ref())?;
 
@@ -454,7 +458,7 @@ impl Supervisor {
                             Some(std::path::Path::new(&debug_path)),
                         )?
                         .compile_module()?;
-                    log::info!(target: "cache", status = "done", duration:? = start_time.elapsed(), path = debug_path, runner = data.runner_id.as_str(); "compiling");
+                    log::info!(status = "done", duration:? = start_time.elapsed(), path = debug_path, runner = data.runner_id.as_str(); "cache compiling");
                     Ok(PrecompiledModule {
                         det: module_det,
                         non_det: module_non_det,
@@ -496,7 +500,7 @@ impl Supervisor {
                 };
 
                 let ret = get_from_precompiled().or_else(|e| {
-                    log::trace!(target: "cache", error:? = e, runner = data.runner_id.as_str(); "could not use precompiled");
+                    log::trace!(target: "cache", error = genvm_common::log_error(&e), runner = data.runner_id.as_str(); "could not use precompiled");
                     compile_here()
                 })?;
 
@@ -599,7 +603,11 @@ impl Supervisor {
                 Ok(None)
             }
             InitAction::AddEnv { name, val } => {
-                let new_val = string_templater::patch_str(&ctx.env, val)?;
+                let new_val = genvm_common::templater::patch_str(
+                    &ctx.env,
+                    val,
+                    &genvm_common::templater::DOLLAR_UNFOLDER_RE,
+                )?;
                 ctx.env.insert(name.clone(), new_val);
                 Ok(None)
             }

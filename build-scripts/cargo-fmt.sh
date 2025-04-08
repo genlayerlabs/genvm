@@ -8,7 +8,7 @@ cd "$SCRIPT_DIR/.."
 
 if ! cargo fmt --version
 then
-    echo "WARNING: cargo fmt didn't exit successfully"
+    echo "WARNING: cargo fmt not installed"
     exit 0
 fi
 

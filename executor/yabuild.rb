@@ -1,6 +1,4 @@
 project('executor') {
-	modules_dir = config.out_dir.join('lib', 'genvm-modules')
-
 	base_env = {}
 	compiler = config.tools.clang || config.tools.gcc
 	linker = config.tools.mold || config.tools.lld
@@ -50,7 +48,6 @@ project('executor') {
 		"codegen",
 		run_codegen.(cur_src.join('codegen', 'data', 'host-fns.json'), cur_src.join('src', 'host', 'host_fns.rs'), type: "rs"),
 		run_codegen.(cur_src.join('codegen', 'data', 'result-codes.json'), cur_src.join('src', 'host', 'result_codes.rs'), type: "rs"),
-		run_codegen.(cur_src.join('codegen', 'data', 'builtin-prompt-templates.json'), cur_src.join('modules', 'implementation', 'llm-funcs', 'src', 'template_ids.rs'), type: "rs"),
 	)
 
 	genvm_id_path = root_build.join('genvm_id.txt')
@@ -64,16 +61,7 @@ project('executor') {
 		tags: ['all'],
 	)
 
-	base_env['GENVM_PROFILE_PATH'] = genvm_id_path.relative_path_from(cur_src)
-
-	gen_id_first = target_command(
-		output_file: genvm_id_path,
-		command: [
-			RbConfig.ruby, root_src.join('build-scripts', 'generate-id.rb'), root_src, genvm_id_path.relative_path_from(root_build)
-		],
-		dependencies: [],
-		cwd: root_build,
-	)
+	base_env['GENVM_PROFILE_PATH'] = genvm_id_path
 
 	bin = target_alias(
 		'bin',
@@ -85,12 +73,15 @@ project('executor') {
 			flags: cargo_flags,
 			env: base_env,
 		) {
-			inputs.push(codegen, gen_id_first)
+			order_only_inputs.push(codegen, gen_id)
 		}
-	)
+	) {
+		meta.cargo_flags = cargo_flags
+		meta.env = base_env
+	}
 
 	config_target = target_copy(
-		dest: config.out_dir.join('etc', 'genvm-config.yaml'),
+		dest: config.out_dir.join('etc', 'genvm.yaml'),
 		src: [cur_src.join('default-config.yaml')],
 	)
 
@@ -99,3 +90,5 @@ project('executor') {
 	run_codegen.(cur_src.join('codegen', 'data', 'host-fns.json'), cur_src.join('testdata', 'runner', 'host_fns.py'), type: "py", tags: ['testdata'])
 	run_codegen.(cur_src.join('codegen', 'data', 'result-codes.json'), cur_src.join('testdata', 'runner', 'result_codes.py'), type: "py", tags: ['testdata'])
 }
+
+include_dir 'modules'

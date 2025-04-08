@@ -6,7 +6,7 @@ insert_final_newline = true
 charset = utf-8
 trim_trailing_whitespace = true
 
-[*.{py, rb, nix}]
+[*.{py,rb,nix}]
 indent_style = tab
 tab_width = 2
 

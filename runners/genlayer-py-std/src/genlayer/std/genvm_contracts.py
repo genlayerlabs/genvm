@@ -339,17 +339,14 @@ class Contract:
 		"""
 		Method that is called for no-method calls, must be either ``@gl.public.write`` or ``@gl.public.write.payable``
 		"""
-		...
+		raise NotImplementedError()
 
 	@abc.abstractmethod
 	def __receive__(self):
 		"""
 		Method that is called for no-method transfers, must be ``@gl.public.write.payable``
 		"""
-		...
+		raise NotImplementedError()
 
-
-Contract.__handle_undefined_method__ = None  # type: ignore
-Contract.__receive__ = None  # type: ignore
 
 __known_contact__: type[Contract] | None = None

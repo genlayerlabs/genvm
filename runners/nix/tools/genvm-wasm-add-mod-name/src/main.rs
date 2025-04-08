@@ -225,7 +225,7 @@ mod implementation {
                     // we can't do better than start a new code section here
                     let mut codes = CodeSection::new();
                     reencoder.parse_function_body(&mut codes, section)?;
-                    while let Some(section) = sections.next() {
+                    for section in sections.by_ref() {
                         let section = section?;
                         if let wasmparser::Payload::CodeSectionEntry(section) = section {
                             reencoder.parse_function_body(&mut codes, section)?;
@@ -293,7 +293,7 @@ fn main() -> Result<()> {
 
     let in_file = std::fs::read(in_file)?;
     let parser = wasmparser::Parser::new(0);
-    implementation::parse_core_module(&mut encoder, &mut res_module, parser, &in_file, &mod_name)?;
+    implementation::parse_core_module(&mut encoder, &mut res_module, parser, &in_file, mod_name)?;
 
     std::fs::write(out_file, res_module.finish())?;
 

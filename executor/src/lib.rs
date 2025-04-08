@@ -1,98 +1,61 @@
+pub mod caching;
+pub mod config;
 pub mod errors;
 mod host;
 pub mod mmap;
+pub mod modules;
 pub mod runner;
-pub mod string_templater;
 pub mod ustar;
 pub mod vm;
 pub mod wasi;
-
-pub mod caching;
 
 use errors::ContractError;
 use host::AbsentLeaderResult;
 pub use host::{AccountAddress, GenericAddress, Host, MessageData};
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
-use std::{collections::HashMap, sync::Arc};
+
+use std::sync::Arc;
 use ustar::SharedBytes;
-use vm::RunOk;
-
-#[derive(Deserialize)]
-struct ConfigModules {
-    llm: serde_yaml::Value,
-    web: serde_yaml::Value,
-}
-
-#[derive(Deserialize)]
-struct ConfigSchema {
-    modules: ConfigModules,
-}
-
-//extern "Rust" {
-//    fn new_web_module(
-//        args: genvm_modules_interfaces::CtorArgs<'_>,
-//    ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Web + Send + Sync>>;
-//
-//    fn new_llm_module(
-//        args: genvm_modules_interfaces::CtorArgs<'_>,
-//    ) -> anyhow::Result<Box<dyn genvm_modules_interfaces::Llm + Send + Sync>>;
-//}
-
-fn create_modules(
-    config_path: &str,
-    cancellation: Arc<genvm_modules_interfaces::CancellationToken>,
-) -> Result<vm::Modules> {
-    let mut root_path = std::env::current_exe().with_context(|| "getting current exe")?;
-    root_path.pop();
-    root_path.pop();
-    let root_path = root_path
-        .into_os_string()
-        .into_string()
-        .map_err(|_e| anyhow::anyhow!("can't convert path to string"))?;
-
-    let vars: HashMap<String, String> = HashMap::from([("genvmRoot".into(), root_path)]);
-
-    let config_path = string_templater::patch_str(&vars, config_path)?;
-    let config_str = std::fs::read_to_string(std::path::Path::new(&config_path))?;
-    let config: serde_yaml::Value = serde_yaml::from_str(&config_str)?;
-    let config = string_templater::patch_value(&vars, config)?;
-    let config: ConfigSchema = serde_yaml::from_value(config)?;
-
-    let llm = genvm_modules_default_llm::new_llm_module(genvm_modules_interfaces::CtorArgs {
-        config: config.modules.llm.clone(),
-        cancellation: cancellation.clone(),
-    })
-    .with_context(|| "creating llm module")?;
-
-    let web = genvm_modules_default_web::new_web_module(genvm_modules_interfaces::CtorArgs {
-        config: config.modules.web.clone(),
-        cancellation,
-    })
-    .with_context(|| "creating llm module")?;
-
-    Ok(vm::Modules {
-        llm: Arc::from(llm),
-        web: Arc::from(web),
-    })
-}
+use vm::{Modules, RunOk};
 
 pub fn create_supervisor(
-    config_path: &str,
-    mut host: Host,
+    config: &config::Config,
+    host: Host,
     is_sync: bool,
-    cancellation: Arc<genvm_modules_interfaces::CancellationToken>,
+    cancellation: Arc<genvm_common::cancellation::Token>,
 ) -> Result<Arc<tokio::sync::Mutex<vm::Supervisor>>> {
-    let modules = match create_modules(config_path, cancellation.clone()) {
-        Ok(modules) => modules,
-        Err(e) => {
-            let err = Err(e);
-            host.consume_result(&err)?;
-            return Err(err.unwrap_err());
-        }
+    let mut cookie = [0; 8];
+    let _ = getrandom::fill(&mut cookie);
+
+    let mut cookie_str = String::new();
+    for c in cookie {
+        cookie_str.push_str(&format!("{:x}", c));
+    }
+
+    log::info!(cookie = cookie_str; "cookie created");
+
+    let modules = Modules {
+        web: Arc::new(modules::Module::new(
+            "web".into(),
+            config.modules.web.address.clone(),
+            cancellation.clone(),
+            cookie_str.clone(),
+        )),
+        llm: Arc::new(modules::Module::new(
+            "llm".into(),
+            config.modules.llm.address.clone(),
+            cancellation.clone(),
+            cookie_str.clone(),
+        )),
     };
-    let shared_data = Arc::new(crate::vm::SharedData::new(modules, is_sync, cancellation));
+
+    let shared_data = Arc::new(crate::vm::SharedData::new(
+        modules,
+        is_sync,
+        cancellation,
+        cookie_str.clone(),
+    ));
 
     Ok(Arc::new(tokio::sync::Mutex::new(vm::Supervisor::new(
         host,
@@ -167,7 +130,7 @@ pub async fn run_with(
                 Ok(RunOk::ContractError("deterministic_violation".into(), None))
             }
             Err(e) => {
-                log::error!(error:? = e; "internal error");
+                log::error!(error = genvm_common::log_error(&e); "internal error");
                 Err(e)
             }
         },

@@ -173,7 +173,7 @@ impl Archive {
                 continue;
             }
 
-            let mut file_size = 0 as usize;
+            let mut file_size = 0_usize;
             for c in file_size_octal.iter().cloned() {
                 if !(b'0'..=b'7').contains(&c) {
                     anyhow::bail!("invalid octal ascii {}", c)

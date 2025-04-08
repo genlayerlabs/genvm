@@ -1,4 +1,4 @@
+#[allow(clippy::all)]
 mod generated;
 
-#[allow(unused_imports)]
 pub use generated::*;

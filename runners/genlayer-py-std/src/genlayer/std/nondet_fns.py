@@ -33,13 +33,14 @@ def get_webpage(url: str, **config: typing.Unpack[GetWebpageKwArgs]) -> Lazy[str
 
 	:rtype: ``str``
 	"""
+	payload = {'url': url, **config}
 	return lazy_from_fd(
-		wasi.get_webpage(json.dumps(config), url), lambda buf: str(buf, 'utf-8')
+		wasi.web_render(json.dumps(payload)), lambda buf: json.loads(bytes(buf))['text']
 	)
 
 
 class ExecPromptKwArgs(typing.TypedDict):
-	pass
+	response_format: typing.Literal['text', 'json']
 
 
 @_lazy_api
@@ -55,7 +56,8 @@ def exec_prompt(prompt: str, **config: typing.Unpack[ExecPromptKwArgs]) -> Lazy[
 
 	:rtype: ``str``
 	"""
+	payload = {'parts': [{'text': prompt}], **config}
 
 	return lazy_from_fd(
-		wasi.exec_prompt(json.dumps(config), prompt), lambda buf: str(buf, 'utf-8')
+		wasi.exec_prompt(json.dumps(payload)), lambda buf: json.loads(bytes(buf))
 	)

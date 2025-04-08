@@ -8,6 +8,13 @@
 				system = "x86_64-linux";
 			};
 
+			nixHashes = {
+				# pkgs.lib.fakeHash
+				genvm-cpython-ext = "sha256-aX18kHSw13co54WXeHN+6qDLN/1yAd+2ul2tvw5kWGw=";
+				cpython = "sha256-r/5G1jWemE8L3F9v2ZLcUZE5CrGqpe3z1TuTXxoDaCM=";
+				topmost = "sha256-INLAduJIiEUegLicaNg5AA5uQ/tJy6SnTQy/G8BNWm0=";
+			};
+
 			wasmShell = (import ./envs/wasm.nix args);
 			pyShell = (import ./envs/py.nix args);
 			rustShell = (import ./envs/rs.nix args);
@@ -17,7 +24,7 @@
 			runnerHashes = builtins.fromJSON (builtins.readFile ./hashes.json);
 
 			args = {
-				inherit pkgs wasmShell pyShell rustShell runnerHashes tools;
+				inherit pkgs wasmShell pyShell rustShell runnerHashes tools nixHashes;
 				lib = pkgs.lib;
 			};
 		in {

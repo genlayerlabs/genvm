@@ -297,11 +297,16 @@ impl Host {
         let mut has_some = [0; 1];
         sock.read_exact(&mut has_some)?;
         let len = read_u32(sock)?;
+
         let mut buf = Vec::with_capacity(len as usize);
+        let slice = buf.spare_capacity_mut();
+        let slice =
+            unsafe { core::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, slice.len()) };
+        sock.read_exact(slice)?;
         unsafe {
             buf.set_len(len as usize);
         }
-        sock.read_exact(&mut buf)?;
+
         let res = match has_some[0] {
             x if x == ResultCode::Return as u8 => vm::RunOk::Return(buf),
             x if x == ResultCode::Rollback as u8 => vm::RunOk::Rollback(String::from_utf8(buf)?),
@@ -342,7 +347,7 @@ impl Host {
         sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
         sock.write_all(calldata)?;
 
-        sock.write_all(&(data.as_bytes().len() as u32).to_le_bytes())?;
+        sock.write_all(&(data.len() as u32).to_le_bytes())?;
         sock.write_all(data.as_bytes())?;
 
         sock.flush()?;
@@ -362,7 +367,7 @@ impl Host {
         sock.write_all(&(code.len() as u32).to_le_bytes())?;
         sock.write_all(code)?;
 
-        sock.write_all(&(data.as_bytes().len() as u32).to_le_bytes())?;
+        sock.write_all(&(data.len() as u32).to_le_bytes())?;
         sock.write_all(data.as_bytes())?;
 
         sock.flush()?;
@@ -410,7 +415,7 @@ impl Host {
         sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
         sock.write_all(calldata)?;
 
-        sock.write_all(&(data.as_bytes().len() as u32).to_le_bytes())?;
+        sock.write_all(&(data.len() as u32).to_le_bytes())?;
         sock.write_all(data.as_bytes())?;
 
         sock.flush()?;

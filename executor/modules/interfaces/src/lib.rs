@@ -1,4 +1,4 @@
-use std::sync::{atomic::AtomicU32, Arc};
+use serde_derive::{Deserialize, Serialize};
 
 pub trait Web {
     fn get_webpage(
@@ -8,102 +8,207 @@ pub trait Web {
     ) -> tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>>;
 }
 
-pub trait Llm {
-    fn exec_prompt(
-        &self,
-        config: String,
-        prompt: String,
-    ) -> tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>>;
-
-    fn exec_prompt_id(
-        &self,
-        id: u8,
-        vars: String,
-    ) -> tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>>;
-
-    fn eq_principle_prompt<'a>(
-        &'a self,
-        id: u8,
-        vars: &'a str,
-    ) -> core::pin::Pin<Box<dyn ::core::future::Future<Output = ModuleResult<bool>> + Send + 'a>>;
+#[derive(Clone, Deserialize, Serialize)]
+pub enum Result<T> {
+    Ok(T),
+    UserError(serde_json::Value),
+    FatalError(String),
 }
 
-#[repr(C)]
-pub struct CtorArgs {
-    pub config: serde_yaml::Value,
-    pub cancellation: Arc<CancellationToken>,
-}
+pub struct ParsedDuration(pub tokio::time::Duration);
 
-#[derive(Debug)]
-pub enum ModuleError {
-    Recoverable(&'static str),
-    Fatal(anyhow::Error),
-}
+struct ParsedDurationVisitor;
 
-impl<T> From<T> for ModuleError
-where
-    T: Into<anyhow::Error>,
-{
-    fn from(value: T) -> Self {
-        ModuleError::Fatal(value.into())
+impl serde::de::Visitor<'_> for ParsedDurationVisitor {
+    type Value = ParsedDuration;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("expected string | null")
+    }
+
+    fn visit_none<E>(self) -> std::result::Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(ParsedDuration(tokio::time::Duration::ZERO))
+    }
+
+    fn visit_str<E>(self, value: &str) -> std::result::Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        let re = regex::Regex::new(r#"^(\d+)(m?s)$"#).unwrap();
+        let caps = re
+            .captures(value)
+            .ok_or(E::custom("invalid duration format"))?;
+
+        let int_str = caps.get(1).unwrap().as_str();
+
+        let int = int_str.parse::<u64>().map_err(E::custom)?;
+
+        match caps.get(2).unwrap().as_str() {
+            "s" => Ok(ParsedDuration(tokio::time::Duration::from_secs(int))),
+            "ms" => Ok(ParsedDuration(tokio::time::Duration::from_millis(int))),
+            _ => Err(E::custom("invalid duration suffix")),
+        }
     }
 }
 
-pub type ModuleResult<T> = std::result::Result<T, ModuleError>;
-
-pub async fn module_result_to_future(
-    res: impl std::future::Future<Output = ModuleResult<impl AsRef<[u8]> + Send + Sync>> + Send + Sync,
-) -> anyhow::Result<Box<[u8]>> {
-    let res = res.await;
-    match res {
-        Ok(original) => {
-            let original = original.as_ref();
-            let result = Box::new_uninit_slice(original.len() + 1);
-            let mut result = unsafe { result.assume_init() };
-            result[0] = 0;
-            result[1..].copy_from_slice(original);
-            Ok(result)
-        }
-        Err(ModuleError::Recoverable(rec)) => {
-            let original = rec.as_bytes();
-            let result = Box::new_uninit_slice(original.len() + 1);
-            let mut result = unsafe { result.assume_init() };
-            result[0] = 1;
-            result[1..].copy_from_slice(original);
-            Ok(result)
-        }
-        Err(ModuleError::Fatal(e)) => Err(e),
+impl<'de> serde::Deserialize<'de> for ParsedDuration {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(ParsedDurationVisitor)
     }
 }
 
-pub struct CancellationToken {
-    pub chan: tokio::sync::mpsc::Sender<()>,
-    pub should_quit: Arc<AtomicU32>,
-}
+impl serde::Serialize for ParsedDuration {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let as_str = format!("{}ms", self.0.as_millis());
 
-impl CancellationToken {
-    pub fn is_cancelled(&self) -> bool {
-        self.should_quit.load(std::sync::atomic::Ordering::SeqCst) != 0
+        serializer.serialize_str(&as_str)
     }
 }
 
-pub fn make_cancellation() -> (Arc<CancellationToken>, impl Clone + Fn() -> ()) {
-    let (sender, receiver) = tokio::sync::mpsc::channel(1);
+pub mod llm {
+    use serde_derive::{Deserialize, Serialize};
 
-    let cancel = Arc::new(CancellationToken {
-        chan: sender,
-        should_quit: Arc::new(AtomicU32::new(0)),
-    });
+    #[derive(Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Debug)]
+    pub enum OutputFormat {
+        #[serde(rename = "text")]
+        Text,
+        #[serde(rename = "json")]
+        JSON,
+    }
 
-    let cancel_copy = cancel.clone();
-    let receiver = Arc::new(std::sync::Mutex::new(receiver));
+    #[derive(Serialize, Deserialize)]
+    pub struct PromptIDVarsComparative {
+        leader_answer: String,
+        validator_answer: String,
+        principle: String,
+    }
 
-    (cancel, move || {
-        cancel_copy
-            .should_quit
-            .store(1, std::sync::atomic::Ordering::SeqCst);
-        if let Ok(mut receiver) = receiver.lock() {
-            receiver.close();
+    #[derive(Serialize, Deserialize)]
+    pub struct PromptIDVarsNonComparativeValidator {
+        pub task: String,
+        pub criteria: String,
+        pub input: String,
+        pub output: String,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct PromptIDVarsNonComparativeLeader {
+        pub task: String,
+        pub criteria: String,
+        pub input: String,
+    }
+
+    #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+    pub enum PromptPart {
+        #[serde(rename = "text")]
+        Text(String),
+    }
+
+    fn default_text() -> OutputFormat {
+        OutputFormat::Text
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct PromptPayload {
+        #[serde(default = "default_text")]
+        pub response_format: OutputFormat,
+        pub parts: Vec<PromptPart>,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct PromptEqComparativePayload {
+        #[serde(flatten)]
+        pub vars: PromptIDVarsComparative,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct PromptEqNonComparativeValidatorPayload {
+        #[serde(flatten)]
+        pub vars: PromptIDVarsNonComparativeValidator,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct PromptEqNonComparativeLeaderPayload {
+        #[serde(flatten)]
+        pub vars: PromptIDVarsNonComparativeLeader,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    #[serde(tag = "template")]
+    pub enum PromptTemplatePayload {
+        EqComparative(PromptEqComparativePayload),
+        EqNonComparativeValidator(PromptEqNonComparativeValidatorPayload),
+        EqNonComparativeLeader(PromptEqNonComparativeLeaderPayload),
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub enum Message {
+        Prompt(PromptPayload),
+        PromptTemplate(PromptTemplatePayload),
+    }
+
+    #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[serde(untagged)]
+    pub enum PromptAnswer {
+        Text(String),
+        Bool(bool),
+        Object(serde_json::Map<String, serde_json::Value>),
+    }
+
+    impl PromptAnswer {
+        pub fn map_text(&mut self, f: impl FnOnce(&mut String)) {
+            if let PromptAnswer::Text(t) = self {
+                f(t)
+            }
         }
-    })
+    }
+}
+
+pub mod web {
+    use serde_derive::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize)]
+    pub enum RenderMode {
+        #[serde(rename = "text")]
+        Text,
+        #[serde(rename = "html")]
+        HTML,
+    }
+
+    fn no_wait() -> super::ParsedDuration {
+        super::ParsedDuration(tokio::time::Duration::ZERO)
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct RenderPayload {
+        pub mode: RenderMode,
+        pub url: String,
+        #[serde(default = "no_wait")]
+        pub wait_after_loaded: super::ParsedDuration,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub enum Message {
+        Render(RenderPayload),
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub enum RenderAnswer {
+        #[serde(rename = "text")]
+        Text(String),
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GenVMHello {
+    pub cookie: String,
 }

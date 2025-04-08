@@ -64,12 +64,19 @@ jobs:
       - name: Run
         env:
           OPENAIKEY: ${{ secrets.OPENAIKEY }}
+          HEURISTKEY: ${{ secrets.HEURISTKEY }}
+          ANTHROPICKEY: ${{ secrets.ANTHROPICKEY }}
+          XAIKEY: ${{ secrets.XAIKEY }}
+          GEMINIKEY: ${{ secrets.GEMINIKEY }}
         run: |
-          OPENAIKEY="" python3.12 -m pip install -r executor/testdata/runner/requirements.txt && \
-          OPENAIKEY="" ./executor/testdata/web-container/run-test-docker.sh && \
+          python3.12 -m pip install -r executor/testdata/runner/requirements.txt && \
+          ./executor/testdata/web-container/run-test-docker.sh && \
           sleep 5 && \
+          (./build/out/bin/genvm-module-web &) && \
+          (./build/out/bin/genvm-module-llm &) && \
+          sleep 2 && \
           python3.12 -u ./executor/testdata/runner/run.py --ci
       - name: Try to get coverage
         run: |
-          rustup component add llvm-tools-preview
+          rustup component add llvm-tools-preview &&
           ./build-scripts/ci/rust-cov.sh || true

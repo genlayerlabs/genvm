@@ -4,8 +4,11 @@ use std::{
     sync::LazyLock,
 };
 
-static JSON_UNFOLDER_RE: LazyLock<regex::Regex> =
-    LazyLock::new(|| regex::Regex::new(r#"\$\{([a-zA-Z0-9_]*)\}"#).unwrap());
+pub static DOLLAR_UNFOLDER_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r#"\$\{([a-zA-Z0-9_]*|ENV\[[a-zA-Z0-9_]*\])\}"#).unwrap());
+
+pub static HASH_UNFOLDER_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r#"#\{([a-zA-Z0-9_]*)\}"#).unwrap());
 
 fn replace_all<E>(
     re: &regex::Regex,
@@ -56,30 +59,40 @@ impl<K: std::cmp::Ord, V> AnyMap<K, V> for BTreeMap<K, V> {
     }
 }
 
-pub fn patch_str(vars: &impl AnyMap<String, String>, s: &str) -> Result<String> {
-    replace_all(&JSON_UNFOLDER_RE, s, |r: &regex::Captures| {
+pub fn patch_str(vars: &impl AnyMap<String, String>, s: &str, re: &regex::Regex) -> Result<String> {
+    replace_all(re, s, |r: &regex::Captures| {
         let r: &str = &r[1];
         vars.get_from_map(r)
-            .ok_or(anyhow::anyhow!("error"))
-            .cloned()
+            .map(|s| s.as_str())
+            .or_else(|| {
+                if r.starts_with("ENV[") {
+                    Some("")
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| anyhow::anyhow!("unknown variable `{r}`"))
+            .map(String::from)
     })
 }
-pub fn patch_value(
+
+pub fn patch_yaml(
     vars: &HashMap<String, String>,
     v: serde_yaml::Value,
+    re: &regex::Regex,
 ) -> Result<serde_yaml::Value> {
     Ok(match v {
-        serde_yaml::Value::String(s) => serde_yaml::Value::String(patch_str(vars, &s)?),
+        serde_yaml::Value::String(s) => serde_yaml::Value::String(patch_str(vars, &s, re)?),
         serde_yaml::Value::Sequence(a) => {
             let res: Result<Vec<serde_yaml::Value>, _> =
-                a.into_iter().map(|a| patch_value(vars, a)).collect();
+                a.into_iter().map(|a| patch_yaml(vars, a, re)).collect();
             serde_yaml::Value::Sequence(res?)
         }
         serde_yaml::Value::Mapping(ob) => {
             let res: Result<Vec<(serde_yaml::Value, serde_yaml::Value)>, _> = ob
                 .into_iter()
                 .map(|(k, v)| -> Result<(serde_yaml::Value, serde_yaml::Value)> {
-                    Ok((patch_value(vars, k)?, patch_value(vars, v)?))
+                    Ok((patch_yaml(vars, k, re)?, patch_yaml(vars, v, re)?))
                 })
                 .collect();
             serde_yaml::Value::Mapping(serde_yaml::Mapping::from_iter(res?))
@@ -87,8 +100,33 @@ pub fn patch_value(
         serde_yaml::Value::Tagged(t) => {
             serde_yaml::Value::Tagged(Box::new(serde_yaml::value::TaggedValue {
                 tag: t.tag.clone(),
-                value: patch_value(vars, t.value)?,
+                value: patch_yaml(vars, t.value, re)?,
             }))
+        }
+        x => x,
+    })
+}
+
+pub fn patch_json(
+    vars: &HashMap<String, String>,
+    v: serde_json::Value,
+    re: &regex::Regex,
+) -> Result<serde_json::Value> {
+    Ok(match v {
+        serde_json::Value::String(s) => serde_json::Value::String(patch_str(vars, &s, re)?),
+        serde_json::Value::Array(a) => {
+            let res: Result<Vec<serde_json::Value>, _> =
+                a.into_iter().map(|a| patch_json(vars, a, re)).collect();
+            serde_json::Value::Array(res?)
+        }
+        serde_json::Value::Object(ob) => {
+            let res: Result<Vec<(String, serde_json::Value)>, _> = ob
+                .into_iter()
+                .map(|(k, v)| -> Result<(String, serde_json::Value)> {
+                    Ok((k, patch_json(vars, v, re)?))
+                })
+                .collect();
+            serde_json::Value::Object(serde_json::Map::from_iter(res?))
         }
         x => x,
     })

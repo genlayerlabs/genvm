@@ -17,7 +17,7 @@ impl Context {
     pub fn new(data: genlayer_sdk::SingleVMData, shared_data: Arc<vm::SharedData>) -> Self {
         Self {
             vfs: common::VFS::new(),
-            preview1: preview1::Context::new(data.message_data.datetime),
+            preview1: preview1::Context::new(data.message_data.datetime, data.conf),
             genlayer_sdk: genlayer_sdk::Context::new(data, shared_data),
         }
     }

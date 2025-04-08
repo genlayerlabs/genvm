@@ -33,7 +33,7 @@ def extract_tar(base_dir, path, trim_first: true)
 	end
 	base_dir.mkpath
 	if path.to_s.end_with?('.xz')
-    require 'rubygems/package'
+		require 'rubygems/package'
 		begin
 			Gem::Specification::find_by_name('ruby-xz')
 		rescue Gem::LoadError

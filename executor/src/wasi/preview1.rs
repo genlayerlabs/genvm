@@ -4,6 +4,7 @@ use tracing::instrument;
 use wiggle::{GuestError, GuestMemory, GuestPtr};
 
 use crate::ustar::SharedBytes;
+use crate::wasi::base;
 
 use super::common::*;
 use std::collections::BTreeMap;
@@ -16,6 +17,8 @@ pub struct Context {
 
     fs: Box<FilesTrie>,
     unix_timestamp: u64,
+
+    conf: base::Config,
 }
 
 pub struct ContextVFS<'a> {
@@ -52,6 +55,7 @@ impl std::fmt::Display for I32Exit {
 
 impl std::error::Error for I32Exit {}
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) mod generated {
     wiggle::from_witx!({
         witx: ["$CARGO_MANIFEST_DIR/src/wasi/witx/wasi_snapshot_preview1.witx"],
@@ -237,7 +241,7 @@ pub trait AddToLinkerFn<T> {
     fn call<'a>(&self, arg: &'a mut T) -> ContextVFS<'a>;
 }
 
-pub(super) fn add_to_linker_sync<'a, T: Send + 'static, F>(
+pub(super) fn add_to_linker_sync<T: Send + 'static, F>(
     linker: &mut wasmtime::Linker<T>,
     f: F,
 ) -> anyhow::Result<()>
@@ -263,7 +267,7 @@ where
 }
 
 impl Context {
-    pub fn new(datetime: chrono::DateTime<chrono::Utc>) -> Self {
+    pub fn new(datetime: chrono::DateTime<chrono::Utc>, conf: base::Config) -> Self {
         Self {
             args_buf: Vec::new(),
             args_offsets: Vec::new(),
@@ -274,6 +278,7 @@ impl Context {
             }),
             unix_timestamp: datetime.timestamp() as u64 * 1_000_000_000
                 + datetime.timestamp_subsec_nanos() as u64,
+            conf,
         }
     }
 }
@@ -689,7 +694,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     ) -> Result<generated::types::Prestat, generated::types::Error> {
         return match self.get_fd_desc(fd)? {
             FileDescriptor::Dir { path } => {
-                let path_last = if path.len() == 0 {
+                let path_last = if path.is_empty() {
                     "/"
                 } else {
                     &path[path.len() - 1]
@@ -1162,9 +1167,16 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         buf: GuestPtr<u8>,
         buf_len: generated::types::Size,
     ) -> Result<(), generated::types::Error> {
-        let mem: Vec<u8> = iter::repeat(0)
+        let mut mem: Vec<u8> = iter::repeat(0)
             .take(usize::try_from(buf_len).unwrap())
             .collect();
+
+        if !self.context.conf.is_deterministic {
+            if let Err(e) = getrandom::fill(&mut mem) {
+                log::error!(error:err = e; "random failed");
+            }
+        }
+
         memory.copy_from_slice(&mem, buf.as_array(buf_len))?;
         Ok(())
     }
