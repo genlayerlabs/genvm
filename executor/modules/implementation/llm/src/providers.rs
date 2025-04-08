@@ -415,8 +415,10 @@ async fn send_with_retries(
     match res.status() {
         StatusCode::REQUEST_TIMEOUT
         | StatusCode::SERVICE_UNAVAILABLE
+        | StatusCode::TOO_MANY_REQUESTS
         | StatusCode::GATEWAY_TIMEOUT => return Err(OverloadedError.into()),
         StatusCode::OK => return Ok(res),
+        x if [529].contains(&x.as_u16()) => return Err(OverloadedError.into()),
         _ => {}
     }
 

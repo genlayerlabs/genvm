@@ -380,11 +380,19 @@ mod tests {
             mod $conf {
                 #[tokio::test]
                 async fn text() {
-                    crate::handler::tests::do_test_text(crate::handler::tests::conf::$conf).await
+                    let conf = crate::handler::tests::conf::$conf;
+                    genvm_modules_impl_common::test_with_cookie(conf, async {
+                        crate::handler::tests::do_test_text(conf).await
+                    })
+                    .await;
                 }
                 #[tokio::test]
                 async fn json() {
-                    crate::handler::tests::do_test_json(crate::handler::tests::conf::$conf).await
+                    let conf = crate::handler::tests::conf::$conf;
+                    genvm_modules_impl_common::test_with_cookie(conf, async {
+                        crate::handler::tests::do_test_json(conf).await
+                    })
+                    .await;
                 }
             }
         };

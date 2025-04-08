@@ -253,5 +253,15 @@ tokio::task_local! {
 }
 
 pub fn get_cookie() -> Arc<str> {
-    COOKIE.get()
+    match COOKIE.try_with(|f| f.clone()) {
+        Ok(v) => v,
+        Err(_) => Arc::from("<absent>"),
+    }
+}
+
+pub fn test_with_cookie<F>(value: &str, f: F) -> tokio::task::futures::TaskLocalFuture<Arc<str>, F>
+where
+    F: std::future::Future,
+{
+    COOKIE.scope(Arc::from(value), f)
 }

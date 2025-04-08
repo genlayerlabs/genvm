@@ -72,13 +72,11 @@ jobs:
           python3.12 -m pip install -r executor/testdata/runner/requirements.txt && \
           ./executor/testdata/web-container/run-test-docker.sh && \
           sleep 5 && \
-          (./build/out/bin/genvm-module-web & web_pid=$!) && \
-          (./build/out/bin/genvm-module-llm & llm_pid=$!) && \
+          (./build/out/bin/genvm-module-web &) && \
+          (./build/out/bin/genvm-module-llm &) && \
           sleep 2 && \
-          python3.12 -u ./executor/testdata/runner/run.py --ci && \
-          kill -TERM $web_pid && kill -TERM $llm_pid && \
-          wait && wait
+          python3.12 -u ./executor/testdata/runner/run.py --ci
       - name: Try to get coverage
         run: |
-          rustup component add llvm-tools-preview
+          rustup component add llvm-tools-preview &&
           ./build-scripts/ci/rust-cov.sh || true
