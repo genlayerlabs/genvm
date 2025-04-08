@@ -2,123 +2,204 @@
   "$id": "https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/default-config.json",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "GenVM configuration",
-  "$ref": "#/definitions/body",
-  "definitions": {
-    "body": {
-      "type": "object",
-      "properties": {
-        "$schema": {
-          "type": "string"
-        },
-        "modules": {
-          "type": "object",
-          "properties": {
-            "llm": {
-              "type": "object",
-              "properties": {
-                "provider": {
-                  "enum": [
-                    "openai-compatible",
-                    "ollama",
-                    "simulator",
-                    "anthropic",
-                    "google"
-                  ]
-                },
-                "model": {
-                  "type": "string",
-                  "description": "model that provider recognizes"
-                },
-                "host": {
-                  "type": "string",
-                  "format": "uri",
-                  "description": "provider url",
-                  "examples": [
-                    "https://api.openai.com",
-                    "https://llm-gateway.heurist.xyz",
-                    "https://api.anthropic.com",
-                    "https://api.x.ai",
-                    "https://generativelanguage.googleapis.com",
-                    "https://api.atoma.network"
-                  ]
-                },
-                "key_env_name": {
-                  "type": "string",
-                  "description": "name of environment variable where api key is stored"
-                },
-                "prompt_templates": {
-                  "type": "object",
-                  "properties": {
-                    "eq_comparative": {
-                      "type": "string",
-                      "description": "must include #{leader_answer} #{validator_answer} #{principle} for templating"
-                    },
-                    "eq_non_comparative_leader": {
-                      "type": "string",
-                      "description": "must include #{task} #{criteria} #{input} for templating"
-                    },
-                    "eq_non_comparative_validator": {
-                      "type": "string",
-                      "description": "must include #{task} #{criteria} #{input} #{output} for templating"
-                    }
-                  },
-                  "required": [
-                    "eq_comparative",
-                    "eq_non_comparative_leader",
-                    "eq_non_comparative_validator"
-                  ]
-                }
-              },
-              "required": [
-                "host",
-                "provider",
-                "model",
-                "prompt_templates"
-              ]
+  "genvm": {
+    "allOf": [
+      {
+        "$ref": "#/definitions/base-conf"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "modules": {
+            "type": "object",
+            "properties": {
+              "web": { "$ref": "#/definitions/genvm-module-conf" },
+              "llm": { "$ref": "#/definitions/genvm-module-conf" }
             },
-            "web": {
-              "type": "object",
-              "properties": {
-                "host": {
-                  "type": "string",
-                  "format": "uri",
-                  "description": "address of webdriver (i.e. selenium)"
-                },
-                "extra_tld": {
-                  "type": "array",
-                  "items": {
+            "required": ["web", "llm"]
+          }
+        },
+        "required": ["modules"]
+      }
+    ]
+  },
+  "llm": {
+    "allOf": [
+      {
+        "$ref": "#/definitions/base-conf"
+      },
+      {
+        "$ref": "#/definitions/base-module-conf"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "lua_script_path": {
+            "type": "string",
+            "description": "path to lua script used for greyboxing"
+          },
+          "backends": {
+            "type": "object",
+            "description": "all available backends",
+            "patternProperties": {
+              "": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "set to false to ignore this backend"
+                  },
+                  "host": {
                     "type": "string",
+                    "description": "host to connect to",
+                    "format": "uri",
                     "examples": [
-                      "genvm-test",
-                      "com"
+                      "https://api.openai.com",
+                      "https://llm-gateway.heurist.xyz",
+                      "https://api.anthropic.com",
+                      "https://api.x.ai",
+                      "https://generativelanguage.googleapis.com",
+                      "https://api.atoma.network"
                     ]
                   },
-                  "description": "extra top level domains"
-                },
-                "always_allow_hosts": {
-                  "type": "array",
-                  "items": {
+                  "key": {
                     "type": "string",
-                    "examples": [
-                      "genvm-test",
-                      "xproxy.test"
-                    ]
+                    "description": "api key",
+                    "examples": ["sk-proj-...", "${ENV[APIKEY]}"]
                   },
-                  "description": "extra hosts to allow, regardless of port"
-                }
-              },
-              "required": [
-                "host",
-                "extra_tld"
-              ]
+                  "provider": {
+                    "enum": [
+                      "openai-compatible",
+                      "ollama",
+                      "simulator",
+                      "anthropic",
+                      "google"
+                    ],
+                    "description": "provider id identifier"
+                  },
+                  "models": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                },
+                "required": ["host", "key", "provider", "models"],
+                "additionalProperties": false
+              }
             }
           },
-          "required": [
-            "llm",
-            "web"
-          ]
+          "prompt_templates": {
+            "type": "object",
+            "properties": {
+              "eq_comparative": {
+                "type": "string",
+                "description": "must include #{leader_answer} #{validator_answer} #{principle} for templating"
+              },
+              "eq_non_comparative_leader": {
+                "type": "string",
+                "description": "must include #{task} #{criteria} #{input} for templating"
+              },
+              "eq_non_comparative_validator": {
+                "type": "string",
+                "description": "must include #{task} #{criteria} #{input} #{output} for templating"
+              }
+            },
+            "required": [
+              "eq_comparative",
+              "eq_non_comparative_leader",
+              "eq_non_comparative_validator"
+            ],
+            "additionalProperties": false
+          }
         }
       }
+    ]
+  },
+  "web": {
+    "allOf": [
+      {
+        "$ref": "#/definitions/base-conf"
+      },
+      {
+        "$ref": "#/definitions/base-module-conf"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "webdriver_host": {
+            "type": "string",
+            "format": "uri",
+            "description": "uri of webdriver to connect to",
+            "examples": [
+              "http://127.0.0.1:4444"
+            ]
+          },
+          "session_create_request": {
+            "type": "string",
+            "description": "raw json that will be sent to webdriver for creating a session"
+          },
+          "extra_tld": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "extra top-level domains to allow (ones that come after last `.`)"
+          },
+          "always_allow_hosts": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "hosts for which all ports are allowed"
+          }
+        }
+      }
+    ]
+  },
+  "definitions": {
+    "genvm-module-conf": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "format": "uri",
+          "description": "module address that accepts connection",
+          "examples": [
+            "ws://127.0.0.1:3031"
+          ]
+        }
+      },
+      "required": ["address"]
+    },
+    "base-module-conf": {
+      "type": "object",
+      "properties": {
+        "bind_address": {
+            "type": "string",
+            "description": "address to listen on",
+            "format": "uri",
+            "examples": [
+              "127.0.0.1:3032"
+            ]
+        }
+      },
+      "required": ["bind_address"]
+    },
+    "base-conf": {
+      "type": "object",
+      "properties": {
+          "threads": {
+            "type": "number",
+            "exclusiveMinimum": 1,
+            "description": "amount of native threads on which coroutines run"
+          },
+          "blocking_threads": {
+            "type": "number",
+            "exclusiveMinimum": 1,
+            "description": "set to same relatively large number, they will be idle for most of the time"
+          },
+          "log_disable": { "type": "string" },
+          "log_level": {
+            "enum": ["trace", "debug", "info", "warning", "error", "off"]
+          }
+      },
+      "required": ["threads", "blocking_threads", "log_disable"]
     }
   }
 }

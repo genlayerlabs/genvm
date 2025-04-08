@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../../../../doc/schemas/default-config.json#web
+# yaml-language-server: $schema=https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/default-config.json#web
 bind_address: 127.0.0.1:3032
 webdriver_host: http://127.0.0.1:4444
 

@@ -60,11 +60,22 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE" && \
             source env.sh && \
-            ninja -v -C build genvm/executor/all genvm/modules/all && \
-            tree build/out && \
-            pushd build/out && \
-            zip -r -9 ../genvm_executor.zip * && \
-            popd
+            ninja -v -C build genvm/executor/all genvm/modules/all &&
+            find build/out -name '*.yaml' -print0 | xargs -0 perl -i -pe 's/# yaml-language-server: \$schema=\.\..*//g'
+      - name: patch schema path for tag
+        if: ${{ inputs.tag != 'none' }}
+        run: |
+          find build/out -name '*.yaml' -print0 | TAG="${{inputs.tag}}" xargs -0 perl -i -pe 's/(# yaml-language-server:.*)refs\/heads\/main(.*)/$1$ENV{TAG}$2/g'
+      - name: patch schema path for commit
+        if: ${{ inputs.tag == 'none' }}
+        run: |
+          find build/out -name '*.yaml' -print0 | TAG="$(git log -1 --format='%H')" xargs -0 perl -i -pe 's/(# yaml-language-server:.*)refs\/heads\/main(.*)/$1$ENV{TAG}$2/g'
+      - name: package
+        run: |
+          tree build/out && \
+          pushd build/out && \
+          zip -r -9 ../genvm_executor.zip * && \
+          popd
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2

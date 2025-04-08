@@ -1,4 +1,5 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/default-config.json
+# yaml-language-server: $schema=../doc/schemas/default-config.json#genvm
+# yaml-language-server: $schema=https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/default-config.json#genvm
 modules:
   llm:
     address: ws://127.0.0.1:3031

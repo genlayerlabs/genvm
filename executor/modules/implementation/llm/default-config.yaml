@@ -1,3 +1,6 @@
+# yaml-language-server: $schema=../../../../doc/schemas/default-config.json#llm
+# yaml-language-server: $schema=https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/default-config.json#llm
+
 bind_address: 127.0.0.1:3031
 
 lua_script_path: ${genvmRoot}/scripts/genvm-llm-default-greyboxing.lua
