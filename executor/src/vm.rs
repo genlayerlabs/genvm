@@ -162,6 +162,7 @@ pub struct SharedData {
     pub is_sync: bool,
     pub modules: Modules,
     pub balances: dashmap::DashMap<AccountAddress, primitive_types::U256>,
+    pub cookie: String,
 }
 
 impl SharedData {
@@ -169,6 +170,7 @@ impl SharedData {
         modules: Modules,
         is_sync: bool,
         cancellation: Arc<genvm_common::cancellation::Token>,
+        cookie: String,
     ) -> Self {
         Self {
             nondet_call_no: 0.into(),
@@ -176,6 +178,7 @@ impl SharedData {
             is_sync,
             modules,
             balances: dashmap::DashMap::new(),
+            cookie,
         }
     }
 }

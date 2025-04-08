@@ -13,8 +13,10 @@ struct ModuleImpl {
 }
 
 pub struct Module {
+    name: String,
     cancellation: Arc<genvm_common::cancellation::Token>,
     imp: tokio::sync::Mutex<ModuleImpl>,
+    cookie: String,
 }
 
 async fn read_handling_pings(stream: &mut WSStream) -> anyhow::Result<Utf8Bytes> {
@@ -40,10 +42,17 @@ async fn read_handling_pings(stream: &mut WSStream) -> anyhow::Result<Utf8Bytes>
 }
 
 impl Module {
-    pub fn new(url: String, cancellation: Arc<genvm_common::cancellation::Token>) -> Self {
+    pub fn new(
+        name: String,
+        url: String,
+        cancellation: Arc<genvm_common::cancellation::Token>,
+        cookie: String,
+    ) -> Self {
         Self {
             imp: tokio::sync::Mutex::new(ModuleImpl { url, stream: None }),
             cancellation,
+            cookie,
+            name,
         }
     }
 
@@ -65,12 +74,18 @@ impl Module {
     ) -> anyhow::Result<std::result::Result<R, serde_json::Value>>
     where
         V: serde::Serialize,
-        R: serde::de::DeserializeOwned,
+        R: serde::Serialize + serde::de::DeserializeOwned,
     {
         let mut zelf = self.imp.lock().await;
 
         if zelf.stream.is_none() {
-            let (ws_stream, _) = tokio_tungstenite::connect_async(&zelf.url).await?;
+            let (mut ws_stream, _) = tokio_tungstenite::connect_async(&zelf.url).await?;
+
+            let msg = serde_json::to_string(&genvm_modules_interfaces::GenVMHello {
+                cookie: self.cookie.clone(),
+            })?;
+            ws_stream.send(Message::Text(msg.into())).await?;
+
             zelf.stream = Some(ws_stream);
         }
 
@@ -83,6 +98,9 @@ impl Module {
 
                 let res: genvm_modules_interfaces::Result<R> =
                     serde_json::from_str(&response).with_context(|| "parsing result of module")?;
+
+                log::info!(name = self.name, question:serde = val, response:serde = res; "answer from module");
+
                 match res {
                     genvm_modules_interfaces::Result::Ok(v) => Ok(Ok(v)),
                     genvm_modules_interfaces::Result::UserError(value) => Ok(Err(value)),
@@ -101,7 +119,7 @@ impl Module {
     ) -> anyhow::Result<std::result::Result<R, serde_json::Value>>
     where
         V: serde::Serialize,
-        R: serde::de::DeserializeOwned,
+        R: serde::Serialize + serde::de::DeserializeOwned,
     {
         tokio::select! {
             _ = self.cancellation.chan.closed() => {

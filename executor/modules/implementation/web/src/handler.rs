@@ -9,6 +9,7 @@ struct Handler {
     config: Arc<config::Config>,
     client: reqwest::Client,
     session_id: String,
+    hello: genvm_modules_interfaces::GenVMHello,
 }
 
 impl genvm_modules_impl_common::MessageHandler<web_iface::Message, web_iface::RenderAnswer>
@@ -35,9 +36,9 @@ impl genvm_modules_impl_common::MessageHandler<web_iface::Message, web_iface::Re
             .send()
             .await
         {
-            log::error!(error:err = err, id = self.session_id; "session closed");
+            log::error!(error:err = err, id = self.session_id, cookie = self.hello.cookie; "session closed");
         } else {
-            log::debug!(id = self.session_id; "session closed");
+            log::debug!(id = self.session_id, cookie = self.hello.cookie; "session closed");
         }
         Ok(())
     }
@@ -55,6 +56,7 @@ impl
 {
     async fn new_handler(
         &self,
+        hello: genvm_modules_interfaces::GenVMHello,
     ) -> anyhow::Result<
         impl MessageHandler<
             genvm_modules_interfaces::web::Message,
@@ -66,7 +68,7 @@ impl
             .post(format!("{}/session", &self.config.webdriver_host))
             .header("Content-Type", "application/json; charset=utf-8")
             .body(self.config.session_create_request.clone());
-        log::trace!(request:? = create_request, body = self.config.session_create_request; "creating session");
+        log::trace!(request:? = create_request, body = self.config.session_create_request, cookie = hello.cookie; "creating session");
         let opened_session_res = create_request
             .send()
             .await
@@ -84,6 +86,7 @@ impl
             config: self.config.clone(),
             client,
             session_id: session_id.to_owned(),
+            hello,
         })
     }
 }
@@ -152,7 +155,7 @@ impl Handler {
             .header("Content-Type", "application/json; charset=utf-8")
             .body(req_body.clone());
 
-        log::info!(request:? = req, body = req_body; "sending request");
+        log::info!(request:? = req, body = req_body, cookie = self.hello.cookie; "sending request");
 
         let res = req.send().await?;
         let res = res.error_for_status()?;
@@ -161,7 +164,7 @@ impl Handler {
         match payload.wait_after_loaded {
             genvm_modules_interfaces::ParsedDuration(tokio::time::Duration::ZERO) => {}
             genvm_modules_interfaces::ParsedDuration(x) => {
-                log::trace!(duration:? = x; "sleeping to allow page to load");
+                log::trace!(duration:? = x, cookie = self.hello.cookie; "sleeping to allow page to load");
                 tokio::time::sleep(x).await
             }
         }
@@ -183,7 +186,7 @@ impl Handler {
             ))
             .header("Content-Type", "application/json; charset=utf-8")
             .body(script);
-        log::debug!(request:? = req, body = script; "getting web page data");
+        log::debug!(request:? = req, body = script, cookie = self.hello.cookie; "getting web page data");
 
         let res = req.send().await?;
 

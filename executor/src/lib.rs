@@ -25,18 +25,37 @@ pub fn create_supervisor(
     is_sync: bool,
     cancellation: Arc<genvm_common::cancellation::Token>,
 ) -> Result<Arc<tokio::sync::Mutex<vm::Supervisor>>> {
+    let mut cookie = [0; 8];
+    let _ = getrandom::fill(&mut cookie);
+
+    let mut cookie_str = String::new();
+    for c in cookie {
+        cookie_str.push_str(&format!("{:x}", c));
+    }
+
+    log::info!(cookie = cookie_str; "cookie created");
+
     let modules = Modules {
         web: Arc::new(modules::Module::new(
+            "web".into(),
             config.modules.web.address.clone(),
             cancellation.clone(),
+            cookie_str.clone(),
         )),
         llm: Arc::new(modules::Module::new(
+            "llm".into(),
             config.modules.llm.address.clone(),
             cancellation.clone(),
+            cookie_str.clone(),
         )),
     };
 
-    let shared_data = Arc::new(crate::vm::SharedData::new(modules, is_sync, cancellation));
+    let shared_data = Arc::new(crate::vm::SharedData::new(
+        modules,
+        is_sync,
+        cancellation,
+        cookie_str.clone(),
+    ));
 
     Ok(Arc::new(tokio::sync::Mutex::new(vm::Supervisor::new(
         host,

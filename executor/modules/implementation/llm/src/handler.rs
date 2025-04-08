@@ -8,6 +8,7 @@ pub struct Handler {
     pub providers: Arc<BTreeMap<String, Box<dyn providers::Provider + Send + Sync>>>,
     config: Arc<config::Config>,
     user_vm: Arc<scripting::UserVM>,
+    hello: genvm_modules_interfaces::GenVMHello,
 }
 
 #[derive(Debug)]
@@ -35,6 +36,7 @@ impl
 {
     async fn new_handler(
         &self,
+        hello: genvm_modules_interfaces::GenVMHello,
     ) -> anyhow::Result<
         impl MessageHandler<
             genvm_modules_interfaces::llm::Message,
@@ -45,6 +47,7 @@ impl
             providers: self.providers.clone(),
             user_vm: self.user_vm.clone(),
             config: self.config.clone(),
+            hello,
         })))
     }
 }
@@ -87,18 +90,18 @@ impl Handler {
             .ok_or_else(|| anyhow::anyhow!("absent provider_id `{provider_id}`"))?;
 
         let res = match mode {
-            llm_iface::OutputFormat::JSON => provider
+            llm_iface::OutputFormat::Text => provider
                 .exec_prompt_text(prompt, model)
                 .await
                 .map(llm_iface::PromptAnswer::Text),
-            llm_iface::OutputFormat::Text => provider
+            llm_iface::OutputFormat::JSON => provider
                 .exec_prompt_json(prompt, model)
                 .await
                 .map(llm_iface::PromptAnswer::Object),
         };
 
         res.inspect_err(|err| {
-            log::error!(prompt = prompt, model = model, mode:? = mode, provider_id = provider_id, error = genvm_common::log_error(err); "prompt execution error");
+            log::error!(prompt = prompt, model = model, mode:? = mode, provider_id = provider_id, error = genvm_common::log_error(err), cookie = self.hello.cookie; "prompt execution error");
         })
     }
 
@@ -107,11 +110,11 @@ impl Handler {
         zelf: Arc<Handler>,
         payload: llm_iface::PromptPayload,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        log::debug!(payload:serde = payload; "exec_prompt start");
+        log::debug!(payload:serde = payload, cookie = self.hello.cookie; "exec_prompt start");
 
         let llm_iface::PromptPart::Text(prompt) = &payload.parts[0];
         let res = self.user_vm.greybox(zelf, prompt).await?;
-        log::debug!(result:serde = res; "script returned");
+        log::debug!(result:serde = res, cookie = self.hello.cookie; "script returned");
 
         Ok(res)
     }

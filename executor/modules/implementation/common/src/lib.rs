@@ -38,9 +38,9 @@ fn censor_response(res: &reqwest::Response) -> String {
 pub async fn read_response(res: reqwest::Response) -> Result<String> {
     let status = res.status();
     if status != 200 {
-        log::error!(response = censor_response(&res), status = status.as_u16(); "request error (1)");
+        log::error!(response = censor_response(&res), status = status.as_u16(), cookie = get_cookie(); "request error (1)");
         let text = res.text().await;
-        log::error!(body:? = text; "request error (2)");
+        log::error!(body:? = text, cookie = get_cookie(); "request error (2)");
         return Err(anyhow::anyhow!(
             "request error status={} body={:?}",
             status.as_u16(),
@@ -48,7 +48,7 @@ pub async fn read_response(res: reqwest::Response) -> Result<String> {
         ));
     }
     let text = res.text().await.with_context(|| "reading body as text")?;
-    log::debug!(body = text; "read response");
+    log::debug!(body = text, cookie = get_cookie(); "read response");
     Ok(text)
 }
 
@@ -62,6 +62,7 @@ pub trait MessageHandler<T, R>: Sync + Send {
 pub trait MessageHandlerProvider<T, R>: Sync + Send {
     fn new_handler(
         &self,
+        hello: genvm_modules_interfaces::GenVMHello,
     ) -> impl std::future::Future<Output = anyhow::Result<impl MessageHandler<T, R>>> + Send;
 }
 
@@ -79,6 +80,7 @@ where
 async fn loop_one_inner<T, R>(
     handler: &mut impl MessageHandler<T, R>,
     stream: &mut WSStream,
+    cookie: &str,
 ) -> anyhow::Result<()>
 where
     T: serde::de::DeserializeOwned + 'static,
@@ -90,7 +92,7 @@ where
         match stream
             .next()
             .await
-            .ok_or(anyhow::anyhow!("service closed connection"))??
+            .ok_or_else(|| anyhow::anyhow!("service closed connection"))??
         {
             Message::Ping(v) => {
                 stream.send(Message::Pong(v)).await?;
@@ -104,11 +106,11 @@ where
                     Ok(res) => genvm_modules_interfaces::Result::Ok(res),
                     Err(res) => match res.downcast::<ModuleResultUserError>() {
                         Ok(ModuleResultUserError(res)) => {
-                            log::info!(error:serde = res; "handler user error");
+                            log::info!(error:serde = res, cookie = cookie; "handler user error");
                             genvm_modules_interfaces::Result::UserError(res)
                         }
                         Err(res) => {
-                            log::error!(error = genvm_common::log_error(&res); "handler fatal error");
+                            log::error!(error = genvm_common::log_error(&res), cookie = cookie; "handler fatal error");
                             genvm_modules_interfaces::Result::FatalError(format!("{res:#}"))
                         }
                     },
@@ -123,27 +125,54 @@ where
     }
 }
 
+async fn read_hello(
+    stream: &mut WSStream,
+) -> anyhow::Result<Option<genvm_modules_interfaces::GenVMHello>> {
+    loop {
+        use tokio_tungstenite::tungstenite::Message;
+        match stream
+            .next()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("connection closed"))??
+        {
+            Message::Ping(v) => {
+                stream.send(Message::Pong(v)).await?;
+            }
+            Message::Pong(_) => {}
+            Message::Close(_) => return Ok(None),
+            x => {
+                let text = x.into_text()?;
+                let genvm_hello: genvm_modules_interfaces::GenVMHello =
+                    serde_json::from_str(text.as_str())?;
+
+                return Ok(Some(genvm_hello));
+            }
+        }
+    }
+}
+
 async fn loop_one_impl<T, R>(
     handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
-    stream: tokio::net::TcpStream,
+    stream: &mut WSStream,
+    hello: genvm_modules_interfaces::GenVMHello,
 ) -> anyhow::Result<()>
 where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
 {
-    let mut stream = tokio_tungstenite::accept_async(stream).await?;
+    let cookie = hello.cookie.clone();
 
-    let mut handler = handler_provider.new_handler().await?;
+    let mut handler = handler_provider.new_handler(hello).await?;
 
-    let res = loop_one_inner(&mut handler, &mut stream).await;
+    let res = loop_one_inner(&mut handler, stream, &cookie).await;
 
     if let Err(close) = handler.cleanup().await {
-        log::error!(error = genvm_common::log_error(&close); "cleanup error");
+        log::error!(error = genvm_common::log_error(&close), cookie = cookie; "cleanup error");
     }
 
     if res.is_err() {
         if let Err(close) = stream.close(None).await {
-            log::error!(error:err = close; "stream closing error")
+            log::error!(error:err = close, cookie = cookie; "stream closing error")
         }
     }
 
@@ -157,11 +186,35 @@ async fn loop_one<T, R>(
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
 {
-    log::debug!("peer accepted");
-    if let Err(e) = loop_one_impl(handler_provider, stream).await {
-        log::error!(error = genvm_common::log_error(&e); "internal loop error");
-    }
-    log::debug!("peer done");
+    log::trace!("sock -> ws upgrade");
+    let mut stream = match tokio_tungstenite::accept_async(stream).await {
+        Err(e) => {
+            let e = e.into();
+            log::error!(error = genvm_common::log_error(&e); "accept failed");
+            return;
+        }
+        Ok(stream) => stream,
+    };
+
+    log::trace!("reading hello");
+    let hello = match read_hello(&mut stream).await {
+        Err(e) => {
+            log::error!(error = genvm_common::log_error(&e); "read hello failed");
+            return;
+        }
+        Ok(None) => return,
+        Ok(Some(hello)) => hello,
+    };
+
+    let cookie = hello.cookie.clone();
+    let cookie: &str = &cookie;
+    COOKIE.scope(Arc::from(cookie), async {
+        log::debug!(cookie = cookie; "peer accepted");
+        if let Err(e) = loop_one_impl(handler_provider, &mut stream, hello).await {
+            log::error!(error = genvm_common::log_error(&e), cookie = cookie; "internal loop error");
+        }
+        log::debug!(cookie = cookie; "peer done");
+    }).await;
 }
 
 pub async fn run_loop<T, R>(
@@ -193,4 +246,12 @@ where
             }
         }
     }
+}
+
+tokio::task_local! {
+    static COOKIE: Arc<str>;
+}
+
+pub fn get_cookie() -> Arc<str> {
+    COOKIE.get()
 }

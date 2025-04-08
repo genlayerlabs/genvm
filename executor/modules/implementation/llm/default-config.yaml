@@ -44,6 +44,7 @@ backends:
       - gemini-1.5-flash
 
   atoma:
+    enabled: false
     host: https://api.atoma.network
     provider: openai-compatible
     key: ${ENV[ATOMAKEY]}

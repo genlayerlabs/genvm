@@ -207,3 +207,8 @@ pub mod web {
         Text(String),
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GenVMHello {
+    pub cookie: String,
+}

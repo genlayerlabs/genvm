@@ -7,4 +7,4 @@ modules:
 
 threads: 2
 blocking_threads: 4
-log_disable: wasmtime*,cranelift*,tracing*,polling*
+log_disable: wasmtime*,cranelift*,tracing*,polling*,tungstenite*,tokio_tungstenite*

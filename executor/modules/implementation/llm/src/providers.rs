@@ -422,7 +422,12 @@ async fn send_with_retries(
 
     let debug = format!("{:?}", &res);
     let body = res.text().await;
-    log::error!(response = genvm_modules_impl_common::CENSOR_RESPONSE.replace_all(&debug, "\"<censored>\": \"<censored>\""), body:? = body; "request reading failed");
+    log::error!(
+        response = genvm_modules_impl_common::CENSOR_RESPONSE.replace_all(&debug, "\"<censored>\": \"<censored>\""),
+        body:? = body,
+        cookie = genvm_modules_impl_common::get_cookie();
+        "request reading failed"
+    );
 
     anyhow::bail!("llm request failed")
 }
