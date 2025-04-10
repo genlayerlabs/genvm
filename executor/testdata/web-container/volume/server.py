@@ -5,7 +5,7 @@ import time
 class MyHTTPHandler(httpserv.SimpleHTTPRequestHandler):
 	def __init__(self, *args, **kwargs):
 		httpserv.SimpleHTTPRequestHandler.__init__(
-			self, *args, **kwargs, directory='/driver/http'
+			self, *args, **kwargs, directory='/test/http'
 		)
 
 	def do_GET(self):

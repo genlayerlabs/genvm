@@ -22,6 +22,7 @@ repos:
     rev: v0.1.0
     hooks:
       - id: dockerfilelint
+        exclude: executor/modules/implementation/web/docker/Dockerfile
 
   - repo: https://github.com/sirosen/check-jsonschema
     rev: 0.28.2
