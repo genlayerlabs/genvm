@@ -5,16 +5,18 @@ webdriver_host: http://127.0.0.1:4444
 
 threads: 4
 blocking_threads: 16
-log_disable: tracing*,polling*
+log_disable: tracing*,polling*,tungstenite*,tokio_tungstenite*
 #log_level: trace
 
 session_create_request: |
   {
     "capabilities": {
       "alwaysMatch": {
-        "browserName": "chrome",
-        "goog:chromeOptions": {
-          "args": ["--headless", "--disable-dev-shm-usage", "--no-zygote", "--no-sandbox"]
+        "browserName": "firefox",
+        "moz:firefoxOptions": {
+          "args": [
+            "--headless"
+          ]
         }
       }
     }

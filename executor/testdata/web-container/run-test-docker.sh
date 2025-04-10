@@ -3,11 +3,16 @@ set -ex
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 cd "$SCRIPT_DIR"
-IMAGE_ID="$(docker build -q -t genvm/modules-webdriver -f ./webdriver.dockerfile .)"
+
+DOCKER_BUILD_DIR=../../modules/implementation/web/docker
+
+IMAGE_ID="$(docker build -q -t genvm/modules-webdriver "$DOCKER_BUILD_DIR")"
+
 docker run \
     --add-host genvm-test:127.0.0.1 \
     -p 4444:4444 \
     --rm -d \
     --name genvm-web-test \
-    --volume ./http:/driver/http \
-    "$IMAGE_ID"
+    --volume ./volume:/test/ \
+    "$IMAGE_ID" \
+    bash /test/entry.sh
