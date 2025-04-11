@@ -9,16 +9,19 @@ fn main() -> std::io::Result<()> {
         Err(_) => "test".into(),
     };
 
-    let target = [
-        std::env::var("CARGO_CFG_TARGET_ARCH").unwrap(),
-        std::env::var("CARGO_CFG_TARGET_OS").unwrap(),
-    ]
-    .join("-");
-    println!("cargo::rustc-env=GENVM_BUILD_ID={tag}_{target}");
+    let arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+    let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
 
     println!("cargo:rerun-if-env-changed=PROFILE");
     let profile = std::env::var("PROFILE").unwrap();
     println!("cargo::rustc-env=PROFILE={profile}");
+
+    let tag = tag.replace("-", "_");
+    let arch = arch.replace("-", "_");
+    let os = os.replace("-", "_");
+    let profile = profile.replace("-", "_");
+
+    println!("cargo::rustc-env=GENVM_BUILD_ID={tag}-{arch}-{os}-{profile}");
 
     Ok(())
 }

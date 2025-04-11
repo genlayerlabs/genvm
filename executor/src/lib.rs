@@ -58,6 +58,7 @@ pub fn create_supervisor(
     ));
 
     Ok(Arc::new(tokio::sync::Mutex::new(vm::Supervisor::new(
+        config,
         host,
         shared_data,
     )?)))

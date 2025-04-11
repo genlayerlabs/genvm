@@ -866,7 +866,6 @@ dependencies = [
  "chrono",
  "clap",
  "dashmap",
- "directories-next",
  "futures-util",
  "genvm-common",
  "genvm-modules-interfaces",

@@ -46,6 +46,6 @@ fn main() -> Result<()> {
 
     match args.command {
         Commands::Run(args) => exe::run::handle(args, config),
-        Commands::Precompile(args) => exe::precompile::handle(args),
+        Commands::Precompile(args) => exe::precompile::handle(args, config),
     }
 }
