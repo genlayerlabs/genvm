@@ -483,7 +483,7 @@ impl Supervisor {
                     let mut result_zip_path = self
                         .cache_dir
                         .clone()
-                        .ok_or(anyhow::anyhow!("cache is absent"))?;
+                        .ok_or_else(|| anyhow::anyhow!("cache is absent"))?;
 
                     result_zip_path.push(caching::PRECOMPILE_DIR_NAME);
                     result_zip_path.push(id);
@@ -644,7 +644,7 @@ impl Supervisor {
                     let instance = linker.instantiate_async(&mut vm.store, &module).await?;
                     let name = module
                         .name()
-                        .ok_or(anyhow::anyhow!("can't link unnamed module {:?}", current))
+                        .ok_or_else(|| anyhow::anyhow!("can't link unnamed module {:?}", current))
                         .map_err(|e| {
                             crate::errors::ContractError("invalid_wasm".into(), Some(e))
                         })?;

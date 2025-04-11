@@ -24,7 +24,7 @@ async fn read_handling_pings(stream: &mut WSStream) -> anyhow::Result<Utf8Bytes>
         match stream
             .next()
             .await
-            .ok_or(anyhow::anyhow!("service closed connection"))??
+            .ok_or_else(|| anyhow::anyhow!("service closed connection"))??
         {
             Message::Ping(v) => {
                 stream.send(Message::Pong(v)).await?;

@@ -80,7 +80,7 @@ impl
         let session_id = val
             .pointer("/value/sessionId")
             .and_then(|val| val.as_str())
-            .ok_or(anyhow::anyhow!("invalid json {}", val))?;
+            .ok_or_else(|| anyhow::anyhow!("invalid json {}", val))?;
 
         Ok(Handler {
             config: self.config.clone(),
@@ -200,7 +200,7 @@ impl Handler {
         let val = val
             .pointer("/value")
             .and_then(|x| x.as_str())
-            .ok_or(anyhow::anyhow!("invalid json {}", val))?;
+            .ok_or_else(|| anyhow::anyhow!("invalid json {}", val))?;
 
         Ok(genvm_modules_interfaces::web::RenderAnswer::Text(
             String::from(val.trim()),

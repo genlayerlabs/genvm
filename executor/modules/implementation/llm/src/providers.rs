@@ -81,7 +81,7 @@ impl Provider for OpenAICompatible {
         let response = val
             .pointer("/choices/0/message/content")
             .and_then(|v| v.as_str())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
 
         Ok(response.to_owned())
     }
@@ -117,7 +117,7 @@ impl Provider for OpenAICompatible {
         let response = val
             .pointer("/choices/0/message/content")
             .and_then(|v| v.as_str())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
 
         let response = serde_json::from_str(response)?;
         Ok(response)
@@ -146,7 +146,7 @@ impl Provider for OLlama {
             .as_object()
             .and_then(|v| v.get("response"))
             .and_then(|v| v.as_str())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
         Ok(response.to_owned())
     }
 
@@ -171,7 +171,7 @@ impl Provider for OLlama {
             .as_object()
             .and_then(|v| v.get("response"))
             .and_then(|v| v.as_str())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
         Ok(response.to_owned())
     }
 }
@@ -211,7 +211,7 @@ impl Provider for Gemini {
         let res = res
             .pointer("/candidates/0/content/parts/0/text")
             .and_then(|x| x.as_str())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
         Ok(res.into())
     }
 
@@ -247,7 +247,7 @@ impl Provider for Gemini {
         let res = res
             .pointer("/candidates/0/content/parts/0/text")
             .and_then(|x| x.as_str())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
 
         Ok(res.to_owned())
     }
@@ -282,7 +282,7 @@ impl Provider for Anthropic {
         let val: serde_json::Value = serde_json::from_str(&res)?;
         val.pointer("/content/0/text")
             .and_then(|x| x.as_str())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))
             .map(String::from)
     }
 
@@ -335,7 +335,7 @@ impl Provider for Anthropic {
         let val = val
             .pointer("/content/0/input")
             .and_then(|x| x.as_object())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
 
         Ok(val.clone())
     }

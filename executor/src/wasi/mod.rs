@@ -87,15 +87,15 @@ fn add_to_linker_sync_dlsym<T: Send + 'static>(
 
             let fn_exported = linker
                 .get(&mut caller, mod_name, func_name)
-                .ok_or(anyhow::anyhow!("function entity not found"))?
+                .ok_or_else(|| anyhow::anyhow!("function entity not found"))?
                 .into_func()
-                .ok_or(anyhow::anyhow!("found entity is not a function"))?;
+                .ok_or_else(|| anyhow::anyhow!("found entity is not a function"))?;
 
             let table = caller
                 .get_export("__indirect_function_table")
                 .unwrap()
                 .into_table()
-                .ok_or(anyhow::anyhow!("no __indirect_function_table"))?;
+                .ok_or_else(|| anyhow::anyhow!("no __indirect_function_table"))?;
             let res = table.grow(&mut caller, 1, fn_exported.into())?;
             Ok(res.try_into()?)
         },
