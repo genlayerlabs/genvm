@@ -34,14 +34,16 @@
 							pre-commit
 
 							xz
+							zlib
 							glibc
+							libstdcxx5
 
 							wabt
 						];
 
 						shellHook = ''
 							export PATH="$(pwd)/tools/ya-build:$(pwd)/tools/git-third-party:$PATH"
-							export LD_LIBRARY_PATH="${toString pkgs.xz.out}/lib:$LD_LIBRARY_PATH"
+							export LD_LIBRARY_PATH="${toString pkgs.xz.out}/lib:${toString pkgs.zlib.out}/lib:${toString pkgs.stdenv.cc.cc.lib}/lib:$LD_LIBRARY_PATH"
 						'';
 					};
 				}

@@ -5,7 +5,7 @@ import sys
 import typing
 import enum
 
-import numpy
+import numpy  # this is done to import real VecDB
 
 import sphinx.ext.autodoc
 
@@ -69,13 +69,15 @@ ignored_special = [
 	'__weakref__',
 	'__reversed__',
 	'__protocol_attrs__',
+	'__dataclass_fields__',
+	'__match_args__',
+	'__dataclass_params__',
 ]
 
 autodoc_default_options: dict[str, str | bool] = {
 	'inherited-members': True,
 	'private-members': False,
 	'special-members': True,
-	'imported-members': True,
 	'exclude-members': ','.join(ignored_special + ['gl']),
 }
 
@@ -84,6 +86,21 @@ autodoc_class_signature = 'separated'
 autodoc_typehints = 'both'
 autodoc_typehints_description_target = 'documented_params'
 autodoc_inherit_docstrings = True
+autodoc_typehints_format = 'short'
+# autodoc_typehints_format = 'fully-qualified'
+autodoc_preserve_defaults = True
+
+
+class PsuedoAll:
+	def __contains__(self, _x):
+		return True
+
+	def append(self, _x):
+		pass
+
+	def __iter__(self):
+		return
+		yield
 
 
 def setup(app):
@@ -91,7 +108,7 @@ def setup(app):
 		idx = 0
 		for i in range(len(bases)):
 			cur = bases[i]
-			cur_name = cur if isinstance(cur, str) else cur.__name__
+			cur_name = cur if isinstance(cur, str) else cur.__qualname__
 			if cur_name.startswith('_'):
 				pass
 			else:
@@ -112,6 +129,67 @@ def setup(app):
 				options['special-members'] = []
 				options['inherited-members'] = False
 				return
+		options['special-members'] = PsuedoAll()
+		options['inherited-members'] = PsuedoAll()
+
+	def autodoc_process_signature(
+		app, what, name, obj, options, signature, return_annotation
+	):
+		return (signature, return_annotation)
 
 	app.connect('autodoc-process-bases', handle_bases)
 	app.connect('autodoc-skip-member', handle_skip_member)
+	app.connect('autodoc-process-signature', autodoc_process_signature)
+
+
+mod_names_map = {
+	'genlayer.py.eth': 'gl.eth',
+	'genlayer.py.calldata': 'gl.calldata',
+	'genlayer.std.advanced': 'gl.advanced',
+	'genlayer.std.wasi': 'gl.wasi',
+	'genlayer.std._wasi': 'gl.wasi',
+	'genlayer.std': 'gl',
+}
+
+
+def map_name(name: str) -> str:
+	for k, v in mod_names_map.items():
+		if name.startswith(k + '.') and len(k.split('.')) + 1 == len(name.split('.')):
+			print(f'REMAP! {name}')
+			return v + '.' + name[len(k) :]
+	return name
+
+
+from sphinx.domains.python._object import PyObject
+from sphinx.domains.python import PyXRefRole
+
+old_process_link = PyXRefRole.process_link
+
+
+def new_process_link(*args, **kwargs):
+	title, target = old_process_link(*args, **kwargs)
+
+	title = map_name(title)
+
+	return title, target
+
+
+PyXRefRole.process_link = new_process_link
+
+old_handle_signature = PyObject.handle_signature
+
+
+def new_handle_signature(self, sig: str, signode) -> tuple[str, str]:
+	old_modname = self.options.get('module', self.env.ref_context.get('py:module'))
+	new_modname = mod_names_map.get(old_modname, old_modname)
+	self.options['module'] = new_modname
+
+	a, b = old_handle_signature(self, sig, signode)
+
+	signode['module'] = old_modname
+	self.options['module'] = old_modname
+
+	return a, b
+
+
+PyObject.handle_signature = new_handle_signature
