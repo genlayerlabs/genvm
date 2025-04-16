@@ -40,11 +40,30 @@ def get_webpage(url: str, **config: typing.Unpack[GetWebpageKwArgs]) -> Lazy[str
 
 
 class ExecPromptKwArgs(typing.TypedDict):
-	response_format: typing.Literal['text', 'json']
+	response_format: typing.NotRequired[typing.Literal['text', 'json']]
+	"""
+	Defaults to ``text``
+	"""
+
+
+@typing.overload
+def exec_prompt(prompt: str) -> str: ...
+
+
+@typing.overload
+def exec_prompt(prompt: str, response_format: typing.Literal['text']) -> str: ...
+
+
+@typing.overload
+def exec_prompt(
+	prompt: str, response_format: typing.Literal['json']
+) -> dict[str, typing.Any]: ...
 
 
 @_lazy_api
-def exec_prompt(prompt: str, **config: typing.Unpack[ExecPromptKwArgs]) -> Lazy[str]:
+def exec_prompt(
+	prompt: str, **config: typing.Unpack[ExecPromptKwArgs]
+) -> Lazy[str | dict]:
 	"""
 	API to execute a prompt (perform NLP)
 
@@ -56,7 +75,8 @@ def exec_prompt(prompt: str, **config: typing.Unpack[ExecPromptKwArgs]) -> Lazy[
 
 	:rtype: ``str``
 	"""
-	payload = {'parts': [{'text': prompt}], **config}
+
+	payload = {'prompt': prompt, **config}
 
 	return lazy_from_fd(
 		wasi.exec_prompt(json.dumps(payload)), lambda buf: json.loads(bytes(buf))

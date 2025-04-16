@@ -59,4 +59,4 @@ USER appuser
 
 WORKDIR /wd
 
-CMD ["/src/start.sh"]
+CMD ["bash", "/src/start.sh"]

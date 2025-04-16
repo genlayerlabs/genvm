@@ -92,15 +92,15 @@
             "type": "object",
             "properties": {
               "eq_comparative": {
-                "type": "string",
+                "$ref": "#/definitions/llm-template-conf",
                 "description": "must include #{leader_answer} #{validator_answer} #{principle} for templating"
               },
               "eq_non_comparative_leader": {
-                "type": "string",
+                "$ref": "#/definitions/llm-template-conf",
                 "description": "must include #{task} #{criteria} #{input} for templating"
               },
               "eq_non_comparative_validator": {
-                "type": "string",
+                "$ref": "#/definitions/llm-template-conf",
                 "description": "must include #{task} #{criteria} #{input} #{output} for templating"
               }
             },
@@ -153,6 +153,13 @@
     ]
   },
   "definitions": {
+    "llm-template-conf": {
+      "type": "object",
+      "properties": {
+        "system": {"type": "string"},
+        "user": {"type": "string"}
+      }
+    },
     "genvm-module-conf": {
       "type": "object",
       "properties": {

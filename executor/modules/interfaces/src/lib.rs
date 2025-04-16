@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde_derive::{Deserialize, Serialize};
 
 pub trait Web {
@@ -107,12 +109,6 @@ pub mod llm {
         pub input: String,
     }
 
-    #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
-    pub enum PromptPart {
-        #[serde(rename = "text")]
-        Text(String),
-    }
-
     fn default_text() -> OutputFormat {
         OutputFormat::Text
     }
@@ -121,7 +117,7 @@ pub mod llm {
     pub struct PromptPayload {
         #[serde(default = "default_text")]
         pub response_format: OutputFormat,
-        pub parts: Vec<PromptPart>,
+        pub prompt: String,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -211,4 +207,5 @@ pub mod web {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenVMHello {
     pub cookie: String,
+    pub host_data: Arc<serde_json::Value>,
 }

@@ -11,7 +11,7 @@ mod handler;
 #[command(version = genvm_common::VERSION)]
 #[clap(rename_all = "kebab_case")]
 struct CliArgs {
-    #[arg(long, default_value_t = String::from("${genvmRoot}/etc/genvm-module-web.yaml"))]
+    #[arg(long, default_value_t = String::from("${genvmRoot}/config/genvm-module-web.yaml"))]
     config: String,
 }
 

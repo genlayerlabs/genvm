@@ -4,6 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 
 mod config;
 mod handler;
+mod prompt;
 mod providers;
 mod scripting;
 
@@ -11,8 +12,11 @@ mod scripting;
 #[command(version = genvm_common::VERSION)]
 #[clap(rename_all = "kebab_case")]
 struct CliArgs {
-    #[arg(long, default_value_t = String::from("${genvmRoot}/etc/genvm-module-llm.yaml"))]
+    #[arg(long, default_value_t = String::from("${genvmRoot}/config/genvm-module-llm.yaml"))]
     config: String,
+
+    #[arg(long, default_value_t = false)]
+    allow_empty_backends: bool,
 }
 
 fn main() -> Result<()> {
@@ -40,7 +44,7 @@ fn main() -> Result<()> {
 
     config.backends.retain(|_k, v| v.enabled);
 
-    if config.backends.is_empty() {
+    if !args.allow_empty_backends && config.backends.is_empty() {
         anyhow::bail!("no valid backend detected");
     }
 

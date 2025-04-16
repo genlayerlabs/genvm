@@ -12,29 +12,17 @@ function dump(o)
 end
 
 function just_in_backend(args, prompt, format)
-	for provider_name, provider_data in pairs(greyboxing.available_backends) do
-		local model = provider_data.models[1]
+	local handler = args.handler
 
-		local success, result = pcall(function ()
-			return args.handler:exec_in_backend({
-				provider = provider_name,
-				model = model,
-				prompt = prompt,
-				format = format,
-			})
-		end)
+	local provider_id = args.host_data.studio_llm_id
+	local model = greyboxing.available_backends[provider_id].models[1]
 
-		greyboxing.log{message = "executed with", type = type(result), res = dump(result)}
-		if success then
-			return result
-		elseif tostring(result):match("runtime error: ([a-zA-Z]*)") == "Overloaded" then
-			-- nothing/continue
-		else
-			error(result)
-		end
-	end
-
-	error("no provider could handle prompt")
+	return handler:exec_in_backend({
+		provider = provider_id,
+		model = model,
+		prompt = prompt,
+		format = format,
+	})
 end
 
 function exec_prompt(args)

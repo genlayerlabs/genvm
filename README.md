@@ -38,7 +38,7 @@ Prelude:
 - `./tools/ya-build/ya-build config`<br />
   This command scraps and configures all targets (similar to CMake)
 - `ninja` is an alternative to `make`, it runs build commands
-- Output is located at `build/out` as a "root" (`bin`, `etc`, `share`)
+- Output is located at `build/out` as a "root" (`bin`, `share`)
 
 ### Simple
 1. `cd $PROJECT_DIR`

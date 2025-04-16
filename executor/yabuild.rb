@@ -81,7 +81,7 @@ project('executor') {
 	}
 
 	config_target = target_copy(
-		dest: config.out_dir.join('etc', 'genvm.yaml'),
+		dest: config.out_dir.join('config', 'genvm.yaml'),
 		src: [cur_src.join('default-config.yaml')],
 	)
 
