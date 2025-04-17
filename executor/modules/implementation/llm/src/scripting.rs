@@ -66,17 +66,40 @@ impl mlua::UserData for handler::Handler {
 
 impl UserVM {
     pub fn new(config: &config::Config) -> anyhow::Result<Arc<UserVM>> {
-        let vm = mlua::Lua::new();
-
         use mlua::StdLib;
-        vm.load_std_libs(
-            StdLib::COROUTINE
-                | StdLib::TABLE
-                | StdLib::IO
-                | StdLib::STRING
-                | StdLib::MATH
-                | StdLib::PACKAGE,
-        )?;
+
+        let lua_lib_path = {
+            let mut lua_lib_path = std::env::current_exe()?;
+            lua_lib_path.pop();
+            lua_lib_path.pop();
+            lua_lib_path.push("share");
+            lua_lib_path.push("lib");
+            lua_lib_path.push("genvm");
+            lua_lib_path.push("greyboxing");
+
+            let mut path = lua_lib_path
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("could not detect default lib path"))?
+                .to_owned();
+            path.push_str("/?.lua");
+
+            path
+        };
+
+        std::env::set_var("LUA_PATH", &lua_lib_path);
+
+        let lua_libs = StdLib::COROUTINE
+            | StdLib::TABLE
+            | StdLib::IO
+            | StdLib::STRING
+            | StdLib::MATH
+            | StdLib::PACKAGE;
+
+        let vm = mlua::Lua::new_with(lua_libs, mlua::LuaOptions::default())?;
+
+        vm.globals().set("LUA_PATH", lua_lib_path)?;
+
+        vm.load_std_libs(lua_libs)?;
 
         let greyboxing = Greyboxing {
             available_backends: config

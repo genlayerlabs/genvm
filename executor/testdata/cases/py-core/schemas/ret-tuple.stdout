@@ -1,1 +1,1 @@
-executed with `Return("\e4\x0f{"ctor":{"params":[["foo","any"],["bar","any"]],"kwparams":{}},"methods":{"bar":{"params":[],"kwparams":{},"readonly":false,"payable":false,"ret":[{"$rep":"int"}]},"foo":{"params":[],"kwparams":{},"readonly":false,"payable":false,"ret":["int","int"]}}}")`
+executed with `Return("\e4\x0f{"ctor":{"params":[["foo","any"],["bar","any"]],"kwparams":{}},"methods":{"bar":{"params":[],"kwparams":{},"readonly":false,"ret":[{"$rep":"int"}],"payable":false},"foo":{"params":[],"kwparams":{},"readonly":false,"ret":["int","int"],"payable":false}}}")`

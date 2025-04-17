@@ -17,9 +17,14 @@ config_target = target_copy(
 	src: [cur_src.join('default-config.yaml')],
 )
 
+lua_lib_target = target_copy(
+	dest: config.out_dir.join('share', 'lib', 'genvm', 'greyboxing', 'lib-greyboxing.lua'),
+	src: [cur_src.join('scripting/lib-greyboxing.lua')],
+)
+
 script_target = target_copy(
 	dest: config.out_dir.join('scripts', 'genvm-greyboxing.lua'),
 	src: [cur_src.join('scripting/greyboxing.lua')],
 )
 
-find_target('genvm/modules/all').inputs.push(bin, config_target, script_target)
+find_target('genvm/modules/all').inputs.push(bin, config_target, script_target, lua_lib_target)
