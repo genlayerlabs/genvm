@@ -34,11 +34,11 @@ pub struct BackendConfig {
     pub script_config: ScriptBackendConfig,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct PromptTemplates {
-    pub eq_comparative: String,
-    pub eq_non_comparative_leader: String,
-    pub eq_non_comparative_validator: String,
+    pub eq_comparative: serde_json::Value,
+    pub eq_non_comparative_leader: serde_json::Value,
+    pub eq_non_comparative_validator: serde_json::Value,
 }
 
 #[derive(Deserialize)]

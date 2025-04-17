@@ -14,7 +14,7 @@ bin = target_alias(
 )
 
 config_target = target_copy(
-	dest: config.out_dir.join('etc', 'genvm-module-web.yaml'),
+	dest: config.out_dir.join('config', 'genvm-module-web.yaml'),
 	src: [cur_src.join('default-config.yaml')],
 	tags: ['all'],
 )

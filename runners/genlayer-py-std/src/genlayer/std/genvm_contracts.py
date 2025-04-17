@@ -127,7 +127,7 @@ class ContractAt(GenVMContractProxy):
 
 	def __init__(self, addr: Address):
 		if not isinstance(addr, Address):
-			raise Exception('address expected')
+			raise TypeError('address expected')
 		self.address = addr
 
 	def view(self):
@@ -306,6 +306,10 @@ import abc
 
 
 class Contract:
+	"""
+	Class that indicates main user contract
+	"""
+
 	def __init_subclass__(cls) -> None:
 		global __known_contact__
 		if __known_contact__ is not None:
@@ -321,6 +325,9 @@ class Contract:
 
 	@property
 	def balance(self) -> u256:
+		"""
+		Current balance of this contract
+		"""
 		return u256(wasi.get_self_balance())
 
 	@property

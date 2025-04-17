@@ -19,7 +19,7 @@ struct CliArgs {
     #[command(subcommand)]
     command: Commands,
 
-    #[arg(long, default_value_t = String::from("${genvmRoot}/etc/genvm.yaml"))]
+    #[arg(long, default_value_t = String::from("${genvmRoot}/config/genvm.yaml"))]
     config: String,
 
     #[arg(long, default_value = "2")]
@@ -46,6 +46,6 @@ fn main() -> Result<()> {
 
     match args.command {
         Commands::Run(args) => exe::run::handle(args, config),
-        Commands::Precompile(args) => exe::precompile::handle(args),
+        Commands::Precompile(args) => exe::precompile::handle(args, config),
     }
 }

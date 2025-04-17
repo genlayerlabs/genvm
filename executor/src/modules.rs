@@ -17,6 +17,7 @@ pub struct Module {
     cancellation: Arc<genvm_common::cancellation::Token>,
     imp: tokio::sync::Mutex<ModuleImpl>,
     cookie: String,
+    host_data: Arc<serde_json::Value>,
 }
 
 async fn read_handling_pings(stream: &mut WSStream) -> anyhow::Result<Utf8Bytes> {
@@ -24,7 +25,7 @@ async fn read_handling_pings(stream: &mut WSStream) -> anyhow::Result<Utf8Bytes>
         match stream
             .next()
             .await
-            .ok_or(anyhow::anyhow!("service closed connection"))??
+            .ok_or_else(|| anyhow::anyhow!("service closed connection"))??
         {
             Message::Ping(v) => {
                 stream.send(Message::Pong(v)).await?;
@@ -47,12 +48,14 @@ impl Module {
         url: String,
         cancellation: Arc<genvm_common::cancellation::Token>,
         cookie: String,
+        host_data: Arc<serde_json::Value>,
     ) -> Self {
         Self {
             imp: tokio::sync::Mutex::new(ModuleImpl { url, stream: None }),
             cancellation,
             cookie,
             name,
+            host_data,
         }
     }
 
@@ -79,10 +82,13 @@ impl Module {
         let mut zelf = self.imp.lock().await;
 
         if zelf.stream.is_none() {
+            log::info!(url = zelf.url, name = self.name; "initializing connection to module");
+
             let (mut ws_stream, _) = tokio_tungstenite::connect_async(&zelf.url).await?;
 
             let msg = serde_json::to_string(&genvm_modules_interfaces::GenVMHello {
                 cookie: self.cookie.clone(),
+                host_data: self.host_data.clone(),
             })?;
             ws_stream.send(Message::Text(msg.into())).await?;
 

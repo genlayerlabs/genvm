@@ -1,14 +1,14 @@
 use genvm_modules_impl_common::{MessageHandler, MessageHandlerProvider, ModuleResult};
 use std::{collections::BTreeMap, sync::Arc};
 
-use crate::{config, providers, scripting};
+use crate::{config, prompt, providers, scripting};
 use genvm_modules_interfaces::llm as llm_iface;
 
 pub struct Handler {
     pub providers: Arc<BTreeMap<String, Box<dyn providers::Provider + Send + Sync>>>,
-    config: Arc<config::Config>,
     user_vm: Arc<scripting::UserVM>,
-    hello: genvm_modules_interfaces::GenVMHello,
+
+    pub hello: genvm_modules_interfaces::GenVMHello,
 }
 
 #[derive(Debug)]
@@ -43,10 +43,11 @@ impl
             genvm_modules_interfaces::llm::PromptAnswer,
         >,
     > {
+        let _ = &self.config; // make used
+
         Ok(HandlerWrapper(Arc::new(Handler {
             providers: self.providers.clone(),
             user_vm: self.user_vm.clone(),
-            config: self.config.clone(),
             hello,
         })))
     }
@@ -66,7 +67,7 @@ impl genvm_modules_impl_common::MessageHandler<llm_iface::Message, llm_iface::Pr
                 self.0.exec_prompt(self.0.clone(), payload).await
             }
             llm_iface::Message::PromptTemplate(payload) => {
-                self.0.exec_prompt_template(payload).await
+                self.0.exec_prompt_template(self.0.clone(), payload).await
             }
         }
     }
@@ -79,29 +80,41 @@ impl genvm_modules_impl_common::MessageHandler<llm_iface::Message, llm_iface::Pr
 impl Handler {
     pub async fn exec_prompt_in_provider(
         &self,
-        prompt: &str,
+        prompt: &prompt::Internal,
         model: &str,
         provider_id: &str,
-        mode: llm_iface::OutputFormat,
+        format: prompt::ExtendedOutputFormat,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
+        log::debug!(
+            prompt:serde = prompt,
+            provider_id = provider_id,
+            model = model,
+            format:serde = format;
+            "exec_in_backend"
+        );
+
         let provider = self
             .providers
             .get(provider_id)
             .ok_or_else(|| anyhow::anyhow!("absent provider_id `{provider_id}`"))?;
 
-        let res = match mode {
-            llm_iface::OutputFormat::Text => provider
+        let res = match format {
+            prompt::ExtendedOutputFormat::Text => provider
                 .exec_prompt_text(prompt, model)
                 .await
                 .map(llm_iface::PromptAnswer::Text),
-            llm_iface::OutputFormat::JSON => provider
+            prompt::ExtendedOutputFormat::JSON => provider
                 .exec_prompt_json(prompt, model)
                 .await
                 .map(llm_iface::PromptAnswer::Object),
+            prompt::ExtendedOutputFormat::Bool => provider
+                .exec_prompt_bool_reason(prompt, model)
+                .await
+                .map(llm_iface::PromptAnswer::Bool),
         };
 
         res.inspect_err(|err| {
-            log::error!(prompt = prompt, model = model, mode:? = mode, provider_id = provider_id, error = genvm_common::log_error(err), cookie = self.hello.cookie; "prompt execution error");
+            log::error!(prompt:serde = prompt, model = model, mode:? = format, provider_id = provider_id, error = genvm_common::log_error(err), cookie = self.hello.cookie; "prompt execution error");
         })
     }
 
@@ -111,139 +124,22 @@ impl Handler {
         payload: llm_iface::PromptPayload,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
         log::debug!(payload:serde = payload, cookie = self.hello.cookie; "exec_prompt start");
-
-        let llm_iface::PromptPart::Text(prompt) = &payload.parts[0];
-        let res = self.user_vm.greybox(zelf, prompt).await?;
-        log::debug!(result:serde = res, cookie = self.hello.cookie; "script returned");
+        let res = self.user_vm.greybox(zelf, &payload).await?;
+        log::debug!(result:serde = res, cookie = self.hello.cookie; "exec_prompt returned");
 
         Ok(res)
     }
 
     async fn exec_prompt_template(
         &self,
+        zelf: Arc<Handler>,
         payload: llm_iface::PromptTemplatePayload,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        let (provider_id, provider) = self.providers.first_key_value().unwrap();
+        log::debug!(payload:serde = payload, cookie = self.hello.cookie; "exec_prompt_template start");
+        let res = self.user_vm.greybox_template(zelf, payload).await?;
+        log::debug!(result:serde = res, cookie = self.hello.cookie; "exec_prompt_template returned");
 
-        match payload {
-            llm_iface::PromptTemplatePayload::EqNonComparativeLeader(payload) => {
-                let vars = serde_json::to_value(payload.vars)?
-                    .as_object()
-                    .unwrap()
-                    .to_owned();
-                let vars: BTreeMap<String, String> = vars
-                    .into_iter()
-                    .map(|(k, v)| {
-                        (
-                            k,
-                            match v {
-                                serde_json::Value::String(s) => s,
-                                _ => unreachable!(),
-                            },
-                        )
-                    })
-                    .collect();
-
-                let new_prompt = genvm_common::templater::patch_str(
-                    &vars,
-                    &self.config.prompt_templates.eq_non_comparative_leader,
-                    &genvm_common::templater::HASH_UNFOLDER_RE,
-                )?;
-
-                let model = self
-                    .config
-                    .backends
-                    .get(provider_id)
-                    .unwrap()
-                    .script_config
-                    .models
-                    .first()
-                    .unwrap();
-
-                provider
-                    .exec_prompt_text(&new_prompt, model)
-                    .await
-                    .map(llm_iface::PromptAnswer::Text)
-            }
-            llm_iface::PromptTemplatePayload::EqComparative(payload) => {
-                let vars = serde_json::to_value(payload.vars)?
-                    .as_object()
-                    .unwrap()
-                    .to_owned();
-                let vars: BTreeMap<String, String> = vars
-                    .into_iter()
-                    .map(|(k, v)| {
-                        (
-                            k,
-                            match v {
-                                serde_json::Value::String(s) => s,
-                                _ => unreachable!(),
-                            },
-                        )
-                    })
-                    .collect();
-
-                let new_prompt = genvm_common::templater::patch_str(
-                    &vars,
-                    &self.config.prompt_templates.eq_comparative,
-                    &genvm_common::templater::HASH_UNFOLDER_RE,
-                )?;
-
-                let model = self
-                    .config
-                    .backends
-                    .get(provider_id)
-                    .unwrap()
-                    .script_config
-                    .models
-                    .first()
-                    .unwrap();
-
-                provider
-                    .exec_prompt_bool_reason(&new_prompt, model)
-                    .await
-                    .map(llm_iface::PromptAnswer::Bool)
-            }
-            llm_iface::PromptTemplatePayload::EqNonComparativeValidator(payload) => {
-                let vars = serde_json::to_value(payload.vars)?
-                    .as_object()
-                    .unwrap()
-                    .to_owned();
-                let vars: BTreeMap<String, String> = vars
-                    .into_iter()
-                    .map(|(k, v)| {
-                        (
-                            k,
-                            match v {
-                                serde_json::Value::String(s) => s,
-                                _ => unreachable!(),
-                            },
-                        )
-                    })
-                    .collect();
-
-                let new_prompt = genvm_common::templater::patch_str(
-                    &vars,
-                    &self.config.prompt_templates.eq_non_comparative_validator,
-                    &genvm_common::templater::HASH_UNFOLDER_RE,
-                )?;
-
-                let model = self
-                    .config
-                    .backends
-                    .get(provider_id)
-                    .unwrap()
-                    .script_config
-                    .models
-                    .first()
-                    .unwrap();
-
-                provider
-                    .exec_prompt_bool_reason(&new_prompt, model)
-                    .await
-                    .map(llm_iface::PromptAnswer::Bool)
-            }
-        }
+        Ok(res)
     }
 }
 
@@ -269,7 +165,7 @@ mod tests {
         });
     }
 
-    use crate::config;
+    use crate::{config, prompt};
     use genvm_common::templater;
 
     mod conf {
@@ -335,7 +231,11 @@ mod tests {
 
         let res = provider
             .exec_prompt_text(
-                "Respond with a single word \"yes\" (without quotes) and only this word, lowercase",
+                &prompt::Internal {
+                    system_message: None,
+                    temperature: 0.7,
+                    user_message: "Respond with a single word \"yes\" (without quotes) and only this word, lowercase".to_owned(),
+                },
                 &backend.script_config.models[0],
             )
             .await
@@ -363,16 +263,38 @@ mod tests {
         let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
         let provider = backend.to_provider(reqwest::Client::new());
 
-        const PROMPT: &str = "respond with json object containing single key \"result\" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes";
+        const PROMPT: &str = r#"respond with json object containing single key "result" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes. This object must not be wrapped into other objects. Example: {"result": 10}"#;
         let res = provider
-            .exec_prompt_json(PROMPT, &backend.script_config.models[0])
+            .exec_prompt_json(
+                &prompt::Internal {
+                    system_message: Some("respond with json".to_owned()),
+                    temperature: 0.7,
+                    user_message: PROMPT.to_owned(),
+                },
+                &backend.script_config.models[0],
+            )
             .await;
         eprintln!("{res:?}");
         let res = res.unwrap();
-        eprintln!("{res:?}");
-        assert_eq!(res.len(), 1);
-        let res = res.get("result").unwrap().as_i64().unwrap();
-        assert!(res >= 0 && res <= 100)
+
+        let as_val = serde_json::Value::Object(res);
+
+        // all this because of anthropic
+        for potential in [
+            as_val.pointer("/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/root/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/json/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/type/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/object/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/value/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/data/result").and_then(|x| x.as_i64()),
+        ] {
+            if let Some(v) = potential {
+                assert!(v >= 0 && v <= 100);
+                return;
+            }
+        }
+        assert!(false);
     }
 
     macro_rules! make_test {

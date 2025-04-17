@@ -114,7 +114,7 @@ class public:
 		@gl.public.write.payable
 		def bar(self) -> None: ...
 
-		@gl.public.write.min_gas(100).payable
+		@gl.public.write.min_gas(leader=100, validator=20).payable
 		def bar(self) -> None: ...
 	"""
 

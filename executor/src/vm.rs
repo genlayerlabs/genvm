@@ -7,12 +7,11 @@ use std::{
 
 use base64::Engine as _;
 use itertools::Itertools;
-use once_cell::sync::Lazy;
 use wasmparser::WasmFeatures;
 use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
-    caching,
+    caching, config,
     runner::{self, InitAction, WasmMode},
     ustar::{Archive, SharedBytes},
     wasi::{self, preview1::I32Exit},
@@ -210,6 +209,7 @@ pub struct Supervisor {
     engines: Engines,
     cached_modules: HashMap<SharedBytes, Arc<PrecompiledModule>>,
     runner_cache: runner::RunnerReaderCache,
+    cache_dir: Option<std::path::PathBuf>,
 }
 
 pub struct VM {
@@ -386,15 +386,22 @@ impl WasmFileDesc {
 
 impl Supervisor {
     #[allow(clippy::unnecessary_literal_unwrap)]
-    pub fn new(mut host: crate::Host, shared_data: Arc<SharedData>) -> Result<Self> {
+    pub fn new(
+        config: &config::Config,
+        mut host: crate::Host,
+        shared_data: Arc<SharedData>,
+    ) -> Result<Self> {
+        let my_cache_dir = caching::get_cache_dir(&config.cache_dir).ok();
+
         let engines = Engines::create(|base_conf| {
-            match Lazy::force(&caching::CACHE_DIR) {
+            match &my_cache_dir {
                 None => {
                     base_conf.disable_cache();
                 }
                 Some(cache_dir) => {
-                    let mut cache_dir = cache_dir.clone();
+                    let mut cache_dir = cache_dir.to_owned();
                     cache_dir.push("wasmtime");
+
                     let cache_conf: wasmtime_cache::CacheConfig =
                         serde_json::from_value(serde_json::Value::Object(
                             [
@@ -426,6 +433,7 @@ impl Supervisor {
             runner_cache: runner::RunnerReaderCache::new()?,
             host,
             shared_data,
+            cache_dir: my_cache_dir,
         })
     }
 
@@ -472,10 +480,12 @@ impl Supervisor {
                     let (id, hash) = runner::verify_runner(data.runner_id.as_str())?;
 
                     let path_in_arch = data.path_in_arch.as_ref();
-                    let mut result_zip_path = caching::PRECOMPILE_DIR
+                    let mut result_zip_path = self
+                        .cache_dir
                         .clone()
-                        .ok_or(anyhow::anyhow!("cache is absent"))?;
+                        .ok_or_else(|| anyhow::anyhow!("cache is absent"))?;
 
+                    result_zip_path.push(caching::PRECOMPILE_DIR_NAME);
                     result_zip_path.push(id);
                     result_zip_path.push(hash);
                     result_zip_path.push(caching::path_in_zip_to_hash(path_in_arch));
@@ -634,7 +644,7 @@ impl Supervisor {
                     let instance = linker.instantiate_async(&mut vm.store, &module).await?;
                     let name = module
                         .name()
-                        .ok_or(anyhow::anyhow!("can't link unnamed module {:?}", current))
+                        .ok_or_else(|| anyhow::anyhow!("can't link unnamed module {:?}", current))
                         .map_err(|e| {
                             crate::errors::ContractError("invalid_wasm".into(), Some(e))
                         })?;

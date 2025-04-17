@@ -10,19 +10,21 @@ bin = target_alias(
 		flags: executor_target.meta.cargo_flags,
 		env: executor_target.meta.env,
 	),
-	tags: ['all']
 )
 
 config_target = target_copy(
-	dest: config.out_dir.join('etc', 'genvm-module-llm.yaml'),
+	dest: config.out_dir.join('config', 'genvm-module-llm.yaml'),
 	src: [cur_src.join('default-config.yaml')],
-	tags: ['all'],
+)
+
+lua_lib_target = target_copy(
+	dest: config.out_dir.join('share', 'lib', 'genvm', 'greyboxing', 'lib-greyboxing.lua'),
+	src: [cur_src.join('scripting/lib-greyboxing.lua')],
 )
 
 script_target = target_copy(
-	dest: config.out_dir.join('scripts', 'genvm-llm-default-greyboxing.lua'),
-	src: [cur_src.join('scripting/default-greyboxing.lua')],
-	tags: ['all'],
+	dest: config.out_dir.join('scripts', 'genvm-greyboxing.lua'),
+	src: [cur_src.join('scripting/greyboxing.lua')],
 )
 
-find_target('genvm/modules/all').inputs.push(bin, config_target, script_target)
+find_target('genvm/modules/all').inputs.push(bin, config_target, script_target, lua_lib_target)

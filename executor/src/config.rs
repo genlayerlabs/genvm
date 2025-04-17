@@ -14,6 +14,7 @@ pub struct Modules {
 #[derive(Deserialize)]
 pub struct Config {
     pub modules: Modules,
+    pub cache_dir: String,
 
     #[serde(flatten)]
     pub base: genvm_common::BaseConfig,

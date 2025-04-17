@@ -24,6 +24,7 @@ pub fn create_supervisor(
     host: Host,
     is_sync: bool,
     cancellation: Arc<genvm_common::cancellation::Token>,
+    host_data: Arc<serde_json::Value>,
 ) -> Result<Arc<tokio::sync::Mutex<vm::Supervisor>>> {
     let mut cookie = [0; 8];
     let _ = getrandom::fill(&mut cookie);
@@ -41,12 +42,14 @@ pub fn create_supervisor(
             config.modules.web.address.clone(),
             cancellation.clone(),
             cookie_str.clone(),
+            host_data.clone(),
         )),
         llm: Arc::new(modules::Module::new(
             "llm".into(),
             config.modules.llm.address.clone(),
             cancellation.clone(),
             cookie_str.clone(),
+            host_data,
         )),
     };
 
@@ -58,6 +61,7 @@ pub fn create_supervisor(
     ));
 
     Ok(Arc::new(tokio::sync::Mutex::new(vm::Supervisor::new(
+        config,
         host,
         shared_data,
     )?)))

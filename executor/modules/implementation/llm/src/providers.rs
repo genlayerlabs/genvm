@@ -1,19 +1,27 @@
 use anyhow::Context;
 use genvm_modules_impl_common::ModuleResult;
 
-use crate::{config, handler::OverloadedError};
+use crate::{config, handler::OverloadedError, prompt};
 
 #[async_trait::async_trait]
 pub trait Provider {
-    async fn exec_prompt_text(&self, prompt: &str, model: &str) -> ModuleResult<String>;
+    async fn exec_prompt_text(
+        &self,
+        prompt: &prompt::Internal,
+        model: &str,
+    ) -> ModuleResult<String>;
 
-    async fn exec_prompt_json_as_text(&self, prompt: &str, model: &str) -> ModuleResult<String> {
+    async fn exec_prompt_json_as_text(
+        &self,
+        prompt: &prompt::Internal,
+        model: &str,
+    ) -> ModuleResult<String> {
         self.exec_prompt_text(prompt, model).await
     }
 
     async fn exec_prompt_json(
         &self,
-        prompt: &str,
+        prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<serde_json::Map<String, serde_json::Value>> {
         let res = self.exec_prompt_json_as_text(prompt, model).await?;
@@ -23,7 +31,11 @@ pub trait Provider {
         Ok(res)
     }
 
-    async fn exec_prompt_bool_reason(&self, prompt: &str, model: &str) -> ModuleResult<bool> {
+    async fn exec_prompt_bool_reason(
+        &self,
+        prompt: &prompt::Internal,
+        model: &str,
+    ) -> ModuleResult<bool> {
         let res = self.exec_prompt_json(prompt, model).await?;
         let res = res
             .get("result")
@@ -53,18 +65,55 @@ pub struct Anthropic {
     pub(crate) client: reqwest::Client,
 }
 
+impl prompt::Internal {
+    fn to_openai_messages(&self) -> Vec<serde_json::Value> {
+        let mut messages = Vec::new();
+        if let Some(sys) = &self.system_message {
+            messages.push(serde_json::json!({
+                "role": "system",
+                "content": sys,
+            }));
+        }
+        messages.push(serde_json::json!({
+            "role": "user",
+            "content": self.user_message,
+        }));
+
+        messages
+    }
+
+    fn add_gemini_messages(&self, to: &mut serde_json::Map<String, serde_json::Value>) {
+        if let Some(sys) = &self.system_message {
+            to.insert(
+                "system_instruction".to_owned(),
+                serde_json::json!({
+                    "parts": [{"text": sys}],
+                }),
+            );
+        }
+
+        to.insert(
+            "contents".to_owned(),
+            serde_json::json!({
+                "parts": [{"text": self.user_message}],
+            }),
+        );
+    }
+}
+
 #[async_trait::async_trait]
 impl Provider for OpenAICompatible {
-    async fn exec_prompt_text(&self, prompt: &str, model: &str) -> ModuleResult<String> {
+    async fn exec_prompt_text(
+        &self,
+        prompt: &prompt::Internal,
+        model: &str,
+    ) -> ModuleResult<String> {
         let request = serde_json::json!({
             "model": model,
-            "messages": [{
-                "role": "user",
-                "content": prompt,
-            }],
+            "messages": prompt.to_openai_messages(),
             "max_tokens": 1000,
             "stream": false,
-            "temperature": 0.7,
+            "temperature": prompt.temperature,
         });
 
         let request = serde_json::to_vec(&request)?;
@@ -81,25 +130,22 @@ impl Provider for OpenAICompatible {
         let response = val
             .pointer("/choices/0/message/content")
             .and_then(|v| v.as_str())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
 
         Ok(response.to_owned())
     }
 
     async fn exec_prompt_json(
         &self,
-        prompt: &str,
+        prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<serde_json::Map<String, serde_json::Value>> {
         let request = serde_json::json!({
             "model": model,
-            "messages": [{
-                "role": "user",
-                "content": prompt,
-            }],
+            "messages": prompt.to_openai_messages(),
             "max_tokens": 1000,
             "stream": false,
-            "temperature": 0.7,
+            "temperature": prompt.temperature,
             "response_format": {"type": "json_object"},
         });
 
@@ -117,7 +163,7 @@ impl Provider for OpenAICompatible {
         let response = val
             .pointer("/choices/0/message/content")
             .and_then(|v| v.as_str())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
 
         let response = serde_json::from_str(response)?;
         Ok(response)
@@ -126,12 +172,26 @@ impl Provider for OpenAICompatible {
 
 #[async_trait::async_trait]
 impl Provider for OLlama {
-    async fn exec_prompt_text(&self, prompt: &str, model: &str) -> ModuleResult<String> {
-        let request = serde_json::json!({
+    async fn exec_prompt_text(
+        &self,
+        prompt: &prompt::Internal,
+        model: &str,
+    ) -> ModuleResult<String> {
+        let mut request = serde_json::json!({
             "model": model,
-            "prompt": prompt,
+            "prompt": prompt.user_message,
             "stream": false,
+            "options": {
+                "temperature": prompt.temperature,
+            },
         });
+
+        if let Some(sys) = &prompt.system_message {
+            request
+                .as_object_mut()
+                .unwrap()
+                .insert("system".into(), sys.to_owned().into());
+        }
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
@@ -146,17 +206,31 @@ impl Provider for OLlama {
             .as_object()
             .and_then(|v| v.get("response"))
             .and_then(|v| v.as_str())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
         Ok(response.to_owned())
     }
 
-    async fn exec_prompt_json_as_text(&self, prompt: &str, model: &str) -> ModuleResult<String> {
-        let request = serde_json::json!({
+    async fn exec_prompt_json_as_text(
+        &self,
+        prompt: &prompt::Internal,
+        model: &str,
+    ) -> ModuleResult<String> {
+        let mut request = serde_json::json!({
             "model": model,
-            "prompt": prompt,
+            "prompt": prompt.user_message,
             "stream": false,
             "format": "json",
+            "options": {
+                "temperature": prompt.temperature,
+            },
         });
+
+        if let Some(sys) = &prompt.system_message {
+            request
+                .as_object_mut()
+                .unwrap()
+                .insert("system".into(), sys.to_owned().into());
+        }
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
@@ -171,26 +245,27 @@ impl Provider for OLlama {
             .as_object()
             .and_then(|v| v.get("response"))
             .and_then(|v| v.as_str())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
         Ok(response.to_owned())
     }
 }
 
 #[async_trait::async_trait]
 impl Provider for Gemini {
-    async fn exec_prompt_text(&self, prompt: &str, model: &str) -> ModuleResult<String> {
-        let request = serde_json::json!({
-            "contents": [{
-                "parts": [
-                    {"text": prompt},
-                ]
-            }],
+    async fn exec_prompt_text(
+        &self,
+        prompt: &prompt::Internal,
+        model: &str,
+    ) -> ModuleResult<String> {
+        let mut request = serde_json::json!({
             "generationConfig": {
                 "responseMimeType": "text/plain",
-                "temperature": 0.7,
+                "temperature": prompt.temperature,
                 "maxOutputTokens": 800,
             }
         });
+
+        prompt.add_gemini_messages(request.as_object_mut().unwrap());
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
@@ -211,23 +286,24 @@ impl Provider for Gemini {
         let res = res
             .pointer("/candidates/0/content/parts/0/text")
             .and_then(|x| x.as_str())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
         Ok(res.into())
     }
 
-    async fn exec_prompt_json_as_text(&self, prompt: &str, model: &str) -> ModuleResult<String> {
-        let request = serde_json::json!({
-            "contents": [{
-                "parts": [
-                    {"text": prompt},
-                ]
-            }],
+    async fn exec_prompt_json_as_text(
+        &self,
+        prompt: &prompt::Internal,
+        model: &str,
+    ) -> ModuleResult<String> {
+        let mut request = serde_json::json!({
             "generationConfig": {
                 "responseMimeType": "application/json",
-                "temperature": 0.7,
+                "temperature": prompt.temperature,
                 "maxOutputTokens": 800,
             }
         });
+
+        prompt.add_gemini_messages(request.as_object_mut().unwrap());
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
@@ -247,7 +323,7 @@ impl Provider for Gemini {
         let res = res
             .pointer("/candidates/0/content/parts/0/text")
             .and_then(|x| x.as_str())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
 
         Ok(res.to_owned())
     }
@@ -255,17 +331,25 @@ impl Provider for Gemini {
 
 #[async_trait::async_trait]
 impl Provider for Anthropic {
-    async fn exec_prompt_text(&self, prompt: &str, model: &str) -> ModuleResult<String> {
-        let request = serde_json::json!({
+    async fn exec_prompt_text(
+        &self,
+        prompt: &prompt::Internal,
+        model: &str,
+    ) -> ModuleResult<String> {
+        let mut request = serde_json::json!({
             "model": model,
-            "messages": [{
-                "role": "user",
-                "content": prompt,
-            }],
+            "messages": [{"role": "user", "content": prompt.user_message}],
             "max_tokens": 1000,
             "stream": false,
-            "temperature": 0.7,
+            "temperature": prompt.temperature,
         });
+
+        if let Some(sys) = &prompt.system_message {
+            request
+                .as_object_mut()
+                .unwrap()
+                .insert("system".into(), sys.to_owned().into());
+        }
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
@@ -282,33 +366,30 @@ impl Provider for Anthropic {
         let val: serde_json::Value = serde_json::from_str(&res)?;
         val.pointer("/content/0/text")
             .and_then(|x| x.as_str())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))
             .map(String::from)
     }
 
     async fn exec_prompt_json(
         &self,
-        prompt: &str,
+        prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<serde_json::Map<String, serde_json::Value>> {
-        let request = serde_json::json!({
+        let mut request = serde_json::json!({
             "model": model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
+            "messages": [{"role": "user", "content": prompt.user_message}],
             "max_tokens": 1000,
             "stream": false,
-            "temperature": 0.7,
+            "temperature": prompt.temperature,
             "tools": [{
                 "name": "json_out",
                 "description": "Output a valid json object",
                 "input_schema": {
                     "type": "object",
-                    "additionalProperties": {
-                        "type": ["number","string","boolean","object","array", "null"]
+                    "patternProperties": {
+                        "": {
+                            "type": ["object", "null", "array", "number", "string"],
+                        }
                     },
                 }
             }],
@@ -317,6 +398,13 @@ impl Provider for Anthropic {
                 "name": "json_out"
             }
         });
+
+        if let Some(sys) = &prompt.system_message {
+            request
+                .as_object_mut()
+                .unwrap()
+                .insert("system".into(), sys.to_owned().into());
+        }
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
@@ -335,23 +423,22 @@ impl Provider for Anthropic {
         let val = val
             .pointer("/content/0/input")
             .and_then(|x| x.as_object())
-            .ok_or(anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
 
         Ok(val.clone())
     }
 
-    async fn exec_prompt_bool_reason(&self, prompt: &str, model: &str) -> ModuleResult<bool> {
-        let request = serde_json::json!({
+    async fn exec_prompt_bool_reason(
+        &self,
+        prompt: &prompt::Internal,
+        model: &str,
+    ) -> ModuleResult<bool> {
+        let mut request = serde_json::json!({
             "model": model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
+            "messages": [{"role": "user", "content": prompt.user_message}],
             "max_tokens": 1000,
             "stream": false,
-            "temperature": 0.7,
+            "temperature": prompt.temperature,
             "tools": [{
                 "name": "json_out",
                 "description": "Output a valid json object",
@@ -369,6 +456,13 @@ impl Provider for Anthropic {
                 "name": "json_out"
             }
         });
+
+        if let Some(sys) = &prompt.system_message {
+            request
+                .as_object_mut()
+                .unwrap()
+                .insert("system".into(), sys.to_owned().into());
+        }
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
@@ -404,9 +498,13 @@ fn sanitize_json_str(s: &str) -> &str {
 }
 
 async fn send_with_retries(
-    builder: impl (Fn() -> reqwest::RequestBuilder) + Send,
+    builder: impl (FnOnce() -> reqwest::RequestBuilder) + Send,
 ) -> anyhow::Result<reqwest::Response> {
-    let res = builder()
+    let req = builder();
+
+    log::trace!(request = genvm_modules_impl_common::censor_debug(&req), cookie = genvm_modules_impl_common::get_cookie(); "sending request");
+
+    let res = req
         .send()
         .await
         .with_context(|| "sending request to llm provider")?;
@@ -425,7 +523,7 @@ async fn send_with_retries(
     let debug = format!("{:?}", &res);
     let body = res.text().await;
     log::error!(
-        response = genvm_modules_impl_common::CENSOR_RESPONSE.replace_all(&debug, "\"<censored>\": \"<censored>\""),
+        response = genvm_modules_impl_common::censor_str(&debug),
         body:? = body,
         cookie = genvm_modules_impl_common::get_cookie();
         "request reading failed"

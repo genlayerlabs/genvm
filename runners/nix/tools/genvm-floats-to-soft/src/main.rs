@@ -634,8 +634,12 @@ mod implementation {
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let in_file = args.get(1).ok_or(anyhow::anyhow!("no input provided"))?;
-    let out_file = args.get(2).ok_or(anyhow::anyhow!("no output provided"))?;
+    let in_file = args
+        .get(1)
+        .ok_or_else(|| anyhow::anyhow!("no input provided"))?;
+    let out_file = args
+        .get(2)
+        .ok_or_else(|| anyhow::anyhow!("no output provided"))?;
 
     let mut res_module = wasm_encoder::Module::new();
     let mut encoder = implementation::MyEncoder::new();

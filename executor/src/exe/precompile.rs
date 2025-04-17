@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use clap::builder::OsStr;
-use genvm::{caching, ustar::SharedBytes};
-use once_cell::sync::Lazy;
+use genvm::{caching, config, ustar::SharedBytes};
 
 #[derive(clap::Args, Debug)]
 pub struct Args {
@@ -40,6 +39,7 @@ fn compile_single_file_single_mode(
 }
 
 fn compile_single_file(
+    precompile_dir: &std::path::Path,
     engines: &genvm::vm::Engines,
     runners_dir: &std::path::Path,
     zip_path: &std::path::Path,
@@ -54,9 +54,7 @@ fn compile_single_file(
         base_path.to_owned()
     };
 
-    let mut result_dir_path = Lazy::force(&caching::PRECOMPILE_DIR)
-        .clone()
-        .ok_or(anyhow::anyhow!("cache directory is not writable"))?;
+    let mut result_dir_path = precompile_dir.to_owned();
     result_dir_path.push(base_path);
 
     let data = genvm::mmap::load_file(zip_path)?;
@@ -102,15 +100,13 @@ fn compile_single_file(
     Ok(())
 }
 
-pub fn handle(args: Args) -> Result<()> {
-    let cache_dir = Lazy::force(&caching::CACHE_DIR);
-    let precompile_dir = Lazy::force(&caching::PRECOMPILE_DIR);
-    let out = serde_json::json!({
-        "cache_dir": cache_dir,
-        "precompile_dir": precompile_dir,
-        "version": genvm_common::VERSION,
-    });
-    println!("{}", serde_json::to_string(&out)?);
+pub fn handle(args: Args, config: config::Config) -> Result<()> {
+    let cache_dir = caching::get_cache_dir(&config.cache_dir)?;
+    let mut precompile_dir = cache_dir.clone();
+    precompile_dir.push(caching::PRECOMPILE_DIR_NAME);
+
+    log::info!(cache_dir:? = cache_dir, precompile_dir:? = precompile_dir; "information");
+
     if args.info {
         return Ok(());
     }
@@ -136,7 +132,7 @@ pub fn handle(args: Args) -> Result<()> {
                 continue;
             }
 
-            compile_single_file(&engines, &runners_dir, &zip_path)
+            compile_single_file(&precompile_dir, &engines, &runners_dir, &zip_path)
                 .with_context(|| format!("processing {zip_path:?}"))?;
         }
     }

@@ -19,12 +19,13 @@ impl std::error::Error for ModuleResultUserError {}
 
 pub type ModuleResult<T> = anyhow::Result<T>;
 
-pub static CENSOR_RESPONSE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-    Regex::new(r#""(set-cookie|cf-ray|access-control[^"]*)": "[^"]*""#).unwrap()
+static CENSOR_RESPONSE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(r#""[^"]*(authorization|key|set-cookie|cf-ray|access-control)[^"]*": "[^"]*""#)
+        .unwrap()
 });
 
-fn censor_response(res: &reqwest::Response) -> String {
-    let debug = format!("{:?}", res);
+pub fn censor_str(debug: &str) -> String {
+    let debug = debug.to_lowercase();
 
     let replacement = |caps: &regex::Captures| -> String {
         format!(r#""{}": "<censored>""#, caps.get(1).unwrap().as_str())
@@ -35,10 +36,16 @@ fn censor_response(res: &reqwest::Response) -> String {
         .into_owned()
 }
 
+pub fn censor_debug(res: &impl std::fmt::Debug) -> String {
+    let debug = format!("{:?}", res);
+
+    censor_str(&debug)
+}
+
 pub async fn read_response(res: reqwest::Response) -> Result<String> {
     let status = res.status();
     if status != 200 {
-        log::error!(response = censor_response(&res), status = status.as_u16(), cookie = get_cookie(); "request error (1)");
+        log::error!(response = censor_debug(&res), status = status.as_u16(), cookie = get_cookie(); "request error (1)");
         let text = res.text().await;
         log::error!(body:? = text, cookie = get_cookie(); "request error (2)");
         return Err(anyhow::anyhow!(
@@ -48,7 +55,18 @@ pub async fn read_response(res: reqwest::Response) -> Result<String> {
         ));
     }
     let text = res.text().await.with_context(|| "reading body as text")?;
-    log::debug!(body = text, cookie = get_cookie(); "read response");
+
+    if log::log_enabled!(log::Level::Debug) {
+        match serde_json::from_str::<serde_json::Value>(&text) {
+            Ok(val) => {
+                log::debug!(body_json:serde = val, cookie = get_cookie(); "read response");
+            }
+            Err(_) => {
+                log::debug!(body_text = text, cookie = get_cookie(); "read response");
+            }
+        }
+    }
+
     Ok(text)
 }
 
@@ -205,6 +223,8 @@ async fn loop_one<T, R>(
         Ok(None) => return,
         Ok(Some(hello)) => hello,
     };
+
+    log::trace!(hello:serde = hello; "read hello");
 
     let cookie = hello.cookie.clone();
     let cookie: &str = &cookie;

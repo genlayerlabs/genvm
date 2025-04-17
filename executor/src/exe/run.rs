@@ -36,6 +36,9 @@ pub struct Args {
         help = "r?w?s?c?n?, read/write/send messages/call contracts/spawn nondet"
     )]
     permissions: String,
+
+    #[clap(long, default_value = "{}")]
+    host_data: String,
 }
 
 pub fn handle(args: Args, config: config::Config) -> Result<()> {
@@ -67,7 +70,9 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         signal_hook::low_level::register(signal_hook::consts::SIGINT, handle_sigterm)?;
     }
 
-    let supervisor = genvm::create_supervisor(&config, host, args.sync, token)
+    let host_data = serde_json::from_str(&args.host_data)?;
+
+    let supervisor = genvm::create_supervisor(&config, host, args.sync, token, host_data)
         .with_context(|| "creating supervisor")?;
 
     let res = runtime

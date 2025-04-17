@@ -106,7 +106,7 @@ impl ZipCache {
             .files
             .data
             .get(name)
-            .ok_or(anyhow::anyhow!("no file {}", name))
+            .ok_or_else(|| anyhow::anyhow!("no file {}", name))
             .with_context(|| format!("reading runner {}", self.id))?;
         Ok(contents.clone())
     }
@@ -159,7 +159,7 @@ pub fn verify_runner(runner_id: &str) -> Result<(&str, &str)> {
     let (runner_id, runner_hash) = runner_id
         .split(":")
         .collect_tuple()
-        .ok_or(anyhow::anyhow!("expected <name>:<hash>"))?;
+        .ok_or_else(|| anyhow::anyhow!("expected <name>:<hash>"))?;
 
     for c in runner_id.chars() {
         if !c.is_ascii_alphanumeric() && c != '-' && c != '_' {

@@ -73,14 +73,7 @@ impl structured_logger::Writer for NullWiriter {
     }
 }
 
-pub const BUILD_ID: &str = env!("GENVM_BUILD_ID");
-pub const VERSION: &str = concat!(
-    env!("CARGO_PKG_VERSION"),
-    " ",
-    env!("PROFILE"),
-    " ",
-    env!("GENVM_BUILD_ID")
-);
+pub const VERSION: &str = env!("GENVM_BUILD_ID");
 
 impl BaseConfig {
     pub fn setup_logging<W>(&self, writer: W) -> anyhow::Result<()>
@@ -96,7 +89,7 @@ impl BaseConfig {
             log::warn!(requested:? = log::max_level(), allowed:? = log::STATIC_MAX_LEVEL; "requested level is higher than allowed");
         }
 
-        log::info!(version = BUILD_ID; "logging initialized");
+        log::info!(version = VERSION; "logging initialized");
 
         Ok(())
     }
@@ -126,6 +119,8 @@ pub fn load_config(
         .map_err(|e| anyhow::anyhow!("can't convert path to string `{e:?}`"))?;
 
     vars.insert("genvmRoot".to_owned(), root_path);
+    vars.insert("genvmVersion".to_owned(), VERSION.to_owned());
+
     for (mut name, value) in std::env::vars() {
         name.insert_str(0, "ENV[");
         name.push(']');
