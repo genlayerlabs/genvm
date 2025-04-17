@@ -37,7 +37,6 @@ def test_class():
 				'params': [['x', 'any']],
 				'kwparams': {},
 				'readonly': True,
-				'payable': False,
 				'ret': 'any',
 			},
 			'foo': {
@@ -51,7 +50,6 @@ def test_class():
 				'params': [['x', {'$dict': 'int'}]],
 				'kwparams': {'y': [{'$rep': [{'$rep': 'int'}]}]},
 				'readonly': True,
-				'payable': False,
 				'ret': 'any',
 			},
 		},
@@ -85,7 +83,6 @@ def test_dataclass():
 				'params': [],
 				'kwparams': {},
 				'readonly': True,
-				'payable': False,
 				'ret': {'x': 'int', 'y': 'int', 'z': 'any'},
 			}
 		},
