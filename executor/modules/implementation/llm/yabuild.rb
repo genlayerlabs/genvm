@@ -18,13 +18,8 @@ config_target = target_copy(
 )
 
 script_target = target_copy(
-	dest: config.out_dir.join('scripts', 'genvm-llm-default-greyboxing.lua'),
-	src: [cur_src.join('scripting/default-greyboxing.lua')],
+	dest: config.out_dir.join('scripts', 'genvm-greyboxing.lua'),
+	src: [cur_src.join('scripting/greyboxing.lua')],
 )
 
-studio_script_target = target_copy(
-	dest: config.out_dir.join('scripts', 'genvm-llm-studio-greyboxing.lua'),
-	src: [cur_src.join('scripting/studio.lua')],
-)
-
-find_target('genvm/modules/all').inputs.push(bin, config_target, script_target, studio_script_target)
+find_target('genvm/modules/all').inputs.push(bin, config_target, script_target)
