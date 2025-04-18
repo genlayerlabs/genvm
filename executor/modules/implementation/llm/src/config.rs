@@ -4,7 +4,7 @@ use serde_derive::{Deserialize, Serialize};
 
 use crate::providers;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum Provider {
     Ollama,

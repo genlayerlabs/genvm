@@ -8,6 +8,30 @@ mod prompt;
 mod providers;
 mod scripting;
 
+#[derive(clap::Args, Debug)]
+struct RunArgs {
+    #[arg(long, default_value_t = false)]
+    allow_empty_backends: bool,
+}
+
+#[derive(clap::Args, Debug)]
+struct CheckArgs {
+    #[arg(long, help = "url")]
+    host: String,
+    #[arg(long)]
+    model: String,
+    #[arg(long)]
+    provider: config::Provider,
+    #[arg(long, help = "api key, supports `${ENV[...]}` syntax")]
+    key: String,
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum Commands {
+    Run(RunArgs),
+    Check(CheckArgs),
+}
+
 #[derive(clap::Parser)]
 #[command(version = genvm_common::VERSION)]
 #[clap(rename_all = "kebab_case")]
@@ -15,19 +39,11 @@ struct CliArgs {
     #[arg(long, default_value_t = String::from("${genvmRoot}/config/genvm-module-llm.yaml"))]
     config: String,
 
-    #[arg(long, default_value_t = false)]
-    allow_empty_backends: bool,
+    #[command(subcommand)]
+    command: Commands,
 }
 
-fn main() -> Result<()> {
-    let args = CliArgs::parse();
-
-    let config = genvm_common::load_config(HashMap::new(), &args.config)
-        .with_context(|| "loading config")?;
-    let mut config: config::Config = serde_yaml::from_value(config)?;
-
-    config.base.setup_logging(std::io::stdout())?;
-
+fn handle_run(mut config: config::Config, args: RunArgs) -> Result<()> {
     for (k, v) in config.backends.iter_mut() {
         if !v.enabled {
             continue;
@@ -90,4 +106,67 @@ fn main() -> Result<()> {
     std::mem::drop(runtime);
 
     Ok(())
+}
+
+fn handle_check(config: config::Config, args: CheckArgs) -> Result<()> {
+    let _ = config;
+
+    let runtime = tokio::runtime::Runtime::new()?;
+
+    let backend = serde_json::json!({
+        "host": args.host,
+        "provider": args.provider,
+        "models": [args.model],
+        "key": args.key
+    });
+
+    let mut vars = HashMap::new();
+    for (mut name, value) in std::env::vars() {
+        name.insert_str(0, "ENV[");
+        name.push(']');
+
+        vars.insert(name, value);
+    }
+
+    let backend = genvm_common::templater::patch_json(
+        &vars,
+        backend,
+        &genvm_common::templater::DOLLAR_UNFOLDER_RE,
+    )?;
+
+    let backend: config::BackendConfig = serde_json::from_value(backend)?;
+    let provider = backend.to_provider(reqwest::Client::new());
+
+    let res = runtime.block_on(provider
+        .exec_prompt_text(
+            &prompt::Internal {
+                system_message: None,
+                temperature: 0.7,
+                user_message: "Respond with a single word \"yes\" (without quotes) and only this word, lowercase".to_owned(),
+            },
+            &backend.script_config.models[0],
+        ))?;
+
+    let res = res.trim().to_lowercase();
+
+    if res != "yes" {
+        anyhow::bail!("provider is not functional");
+    }
+
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    let args = CliArgs::parse();
+
+    let config = genvm_common::load_config(HashMap::new(), &args.config)
+        .with_context(|| "loading config")?;
+    let config: config::Config = serde_yaml::from_value(config)?;
+
+    config.base.setup_logging(std::io::stdout())?;
+
+    match args.command {
+        Commands::Run(args) => handle_run(config, args),
+        Commands::Check(args) => handle_check(config, args),
+    }
 }
