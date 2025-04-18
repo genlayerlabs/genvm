@@ -31,9 +31,9 @@ class CargoBuildTarget < Target
 			}
 			@name = 'lib' + @name.gsub('-', '_')
 			if name == 'staticlib'
-				suff = NATIVE_STATIC_LIB_EXT
+				suff = HOST.static_lib_ext
 			else
-				suff = NATIVE_SHARED_LIB_EXT
+				suff = HOST.shared_lib_ext
 			end
 		else
 			@name = name

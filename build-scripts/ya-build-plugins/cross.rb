@@ -8,8 +8,18 @@ if not expected_path.exist?
 	require_relative './src/webget.rb'
 	download_dir.mkpath
 	download_to = download_dir.join('zig.tar.xz')
+	zig_url = case [HOST.os, HOST.arch]
+	when [:linux, :amd64]
+		"https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz"
+	when [:linux, :arm64]
+		"https://ziglang.org/download/0.13.0/zig-linux-aarch64-0.13.0.tar.xz"
+	when [:darwin, :arm64]
+		"https://ziglang.org/download/0.13.0/zig-macos-aarch64-0.13.0.tar.xz"
+	else
+		raise "unsupported host (os,arch) #{HOST}"
+	end
 	read_file(
-		uri: URI("https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz"),
+		uri: URI(zig_url),
 		path: download_to
 	)
 	extract_tar(download_dir.join('zig'), download_to)
