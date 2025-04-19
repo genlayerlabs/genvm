@@ -9,7 +9,9 @@ bin = target_alias(
 		out_file: config.bin_dir.join('genvm-module-web'),
 		flags: executor_target.meta.cargo_flags,
 		env: executor_target.meta.env,
-	),
+	) {
+		order_only_inputs.push(*executor_target.meta.order_only_inputs)
+	},
 	tags: ['all']
 )
 
