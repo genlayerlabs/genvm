@@ -27,6 +27,7 @@ backends:
       - meta-llama/llama-3.3-70b-instruct
 
   anthropic:
+    enabled: false # json mode right now is unstable
     host: https://api.anthropic.com
     provider: anthropic
     key: ${ENV[ANTHROPICKEY]}

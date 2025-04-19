@@ -63,6 +63,8 @@ project('executor') {
 
 	base_env['GENVM_PROFILE_PATH'] = genvm_id_path
 
+	order_only_deps = [codegen, gen_id].freeze
+
 	bin = target_alias(
 		'bin',
 		target_cargo_build(
@@ -73,11 +75,12 @@ project('executor') {
 			flags: cargo_flags,
 			env: base_env,
 		) {
-			order_only_inputs.push(codegen, gen_id)
+			order_only_inputs.push(*order_only_deps)
 		}
 	) {
 		meta.cargo_flags = cargo_flags
 		meta.env = base_env
+		meta.order_only_inputs = order_only_deps
 	}
 
 	config_target = target_copy(

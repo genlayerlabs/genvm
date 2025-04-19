@@ -288,6 +288,8 @@ mod tests {
             as_val.pointer("/object/result").and_then(|x| x.as_i64()),
             as_val.pointer("/value/result").and_then(|x| x.as_i64()),
             as_val.pointer("/data/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/response/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/answer/result").and_then(|x| x.as_i64()),
         ] {
             if let Some(v) = potential {
                 assert!(v >= 0 && v <= 100);

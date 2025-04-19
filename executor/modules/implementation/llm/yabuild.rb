@@ -9,7 +9,9 @@ bin = target_alias(
 		out_file: config.bin_dir.join('genvm-module-llm'),
 		flags: executor_target.meta.cargo_flags,
 		env: executor_target.meta.env,
-	),
+	) {
+		order_only_inputs.push(*executor_target.order_only_inputs)
+	},
 )
 
 config_target = target_copy(
