@@ -12,7 +12,7 @@ diff = OpenSSL::Digest.new('SHA3-224').digest(diff)
 diff = diff.bytes.pack("c*").unpack("H*").first
 diff = diff[...16]
 
-tag=`git describe --abbrev=16 --tags --dirty="-dirty_#{diff}"`
+tag=`git describe --abbrev=16 --tags --always --dirty="-dirty_#{diff}"`
 tag = tag.strip
 puts "detected tag is `#{tag}`"
 if not out.exist?

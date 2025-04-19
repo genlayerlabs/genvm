@@ -20,9 +20,7 @@ def unfold_target(t: str) -> str:
 			return 'aarch64-linux-gnu'
 		case 'aarch64-unknown-linux-musl':
 			return 'aarch64-linux-musl'
-		case 'arm64-apple-darwin':
-			return 'aarch64-macos-none'
-		case 'aarch64-apple-darwin':
+		case 'arm64-apple-darwin' | 'aarch64-apple-darwin' | 'arm64-apple-macosx':
 			return 'aarch64-macos-none'
 		case 'x86_64-unknown-linux-musl':
 			return 'x86_64-linux-musl'
@@ -37,6 +35,8 @@ lib_dirs: set[Path] = set()
 def mp(a: str) -> list[str]:
 	if a.startswith('--target='):
 		return ['-target', unfold_target(a[len('--target=') :])]
+	if unfold_target(a) != a:
+		return [unfold_target(a)]
 	if a.endswith('.rlib'):
 		p = Path(a)
 		new_p = p.with_suffix('.rlib.a')
