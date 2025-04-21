@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
 import asyncio
-import sys
+import os
 import aiohttp
 
 
 async def main():
 	async with aiohttp.ClientSession() as session:
-		async with session.get('http://localhost:4444/status') as response:
+		port = int(os.getenv('PORT', '4444'))
+		async with session.get(f'http://localhost:{port}/status') as response:
 			print(response.status)
 			body = await response.json()
 			try:
