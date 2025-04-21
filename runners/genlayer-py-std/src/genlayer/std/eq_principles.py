@@ -99,10 +99,11 @@ def eq_principle_prompt_non_comparative(
 			'input': input_res,
 			'criteria': criteria,
 		}
-		return lazy_from_fd(
+		data = lazy_from_fd(
 			wasi.exec_prompt_template(json.dumps(payload)),
 			lambda buf: str(buf, 'utf-8'),
 		).get()
+		return json.loads(data)
 
 	def validator_fn(
 		leaders: advanced.ContractReturn | Rollback | advanced.ContractError,

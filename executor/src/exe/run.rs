@@ -83,6 +83,10 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         ))
         .with_context(|| "running genvm");
 
+    if let Err(err) = &res {
+        log::error!(error = genvm_common::log_error(err); "error running genvm");
+    }
+
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,
         (Ok(RunOk::ContractError(e, cause)), PrintOption::Shrink) => {
