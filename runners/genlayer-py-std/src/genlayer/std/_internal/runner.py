@@ -54,6 +54,8 @@ def _handle_call_special(contract: type, calldata: dict[str, typing.Any]) -> str
 	method_name = calldata.get('method', '')
 	if method_name == '':
 		return '__receive__'
+	if method_name == '#error':
+		return '__on_errored_message__'
 	if method_name == '#get-schema':
 		if get_schema := getattr(contract, '__get_schema__', None):
 			if _get_schema._is_public(get_schema):
@@ -64,8 +66,10 @@ def _handle_call_special(contract: type, calldata: dict[str, typing.Any]) -> str
 		import json
 
 		_give_result(lambda: json.dumps(get_schema(contract), separators=(',', ':')))
+	if method_name.startswith('#'):
+		raise ValueError('method name can not start with hash sign')
 	if method_name.startswith('__'):
-		raise TypeError('method name can not start with two underscores')
+		raise ValueError('method name can not start with two underscores')
 	return method_name
 
 

@@ -304,6 +304,8 @@ def deploy_contract(
 
 import abc
 
+import genlayer.std.annotations as glannots
+
 
 class Contract:
 	"""
@@ -354,6 +356,14 @@ class Contract:
 		Method that is called for no-method transfers, must be ``@gl.public.write.payable``
 		"""
 		raise NotImplementedError()
+
+	@glannots.public.write.payable
+	def __on_errored_message__(self):
+		"""
+		Method that is called when emitted message with non-zero value failed. This method is not abstract to just receive value.
+		It must be ``@gl.public.write.payable``
+		"""
+		pass
 
 
 __known_contact__: type[Contract] | None = None
