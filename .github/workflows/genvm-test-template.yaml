@@ -72,8 +72,8 @@ jobs:
           python3.12 -m pip install -r executor/testdata/runner/requirements.txt && \
           ./executor/testdata/web-container/run-test-docker.sh && \
           sleep 5 && \
-          (./build/out/bin/genvm-module-web &) && \
-          (./build/out/bin/genvm-module-llm run &) && \
+          (./build/out/bin/genvm-modules web &) && \
+          (./build/out/bin/genvm-modules llm &) && \
           sleep 2 && \
           python3.12 -u ./executor/testdata/runner/run.py --ci
       - name: Try to get coverage
