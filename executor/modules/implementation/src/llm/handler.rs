@@ -1,8 +1,9 @@
-use genvm_modules_impl_common::{MessageHandler, MessageHandlerProvider, ModuleResult};
-use std::{collections::BTreeMap, sync::Arc};
+use super::{config, prompt, providers, scripting};
+use crate::common::{MessageHandler, MessageHandlerProvider, ModuleResult};
 
-use crate::{config, prompt, providers, scripting};
 use genvm_modules_interfaces::llm as llm_iface;
+
+use std::{collections::BTreeMap, sync::Arc};
 
 pub struct Handler {
     pub providers: Arc<BTreeMap<String, Box<dyn providers::Provider + Send + Sync>>>,
@@ -55,13 +56,11 @@ impl
 
 struct HandlerWrapper(Arc<Handler>);
 
-impl genvm_modules_impl_common::MessageHandler<llm_iface::Message, llm_iface::PromptAnswer>
-    for HandlerWrapper
-{
+impl crate::common::MessageHandler<llm_iface::Message, llm_iface::PromptAnswer> for HandlerWrapper {
     async fn handle(
         &self,
         message: llm_iface::Message,
-    ) -> genvm_modules_impl_common::ModuleResult<llm_iface::PromptAnswer> {
+    ) -> crate::common::ModuleResult<llm_iface::PromptAnswer> {
         match message {
             llm_iface::Message::Prompt(payload) => {
                 self.0.exec_prompt(self.0.clone(), payload).await
@@ -165,7 +164,7 @@ mod tests {
         });
     }
 
-    use crate::{config, prompt};
+    use super::super::{config, handler, prompt};
     use genvm_common::templater;
 
     mod conf {
@@ -302,19 +301,22 @@ mod tests {
     macro_rules! make_test {
         ($conf:ident) => {
             mod $conf {
+                use super::handler;
+                use crate::common;
+
                 #[tokio::test]
                 async fn text() {
-                    let conf = crate::handler::tests::conf::$conf;
-                    genvm_modules_impl_common::test_with_cookie(conf, async {
-                        crate::handler::tests::do_test_text(conf).await
+                    let conf = handler::tests::conf::$conf;
+                    common::test_with_cookie(conf, async {
+                        handler::tests::do_test_text(conf).await
                     })
                     .await;
                 }
                 #[tokio::test]
                 async fn json() {
-                    let conf = crate::handler::tests::conf::$conf;
-                    genvm_modules_impl_common::test_with_cookie(conf, async {
-                        crate::handler::tests::do_test_json(conf).await
+                    let conf = handler::tests::conf::$conf;
+                    common::test_with_cookie(conf, async {
+                        handler::tests::do_test_json(conf).await
                     })
                     .await;
                 }

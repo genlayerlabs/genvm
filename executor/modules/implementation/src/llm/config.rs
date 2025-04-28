@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde_derive::{Deserialize, Serialize};
 
-use crate::providers;
+use super::providers;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]

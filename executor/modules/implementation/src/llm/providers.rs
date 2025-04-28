@@ -1,7 +1,8 @@
+use crate::common;
 use anyhow::Context;
-use genvm_modules_impl_common::ModuleResult;
+use common::ModuleResult;
 
-use crate::{config, handler::OverloadedError, prompt};
+use super::{config, handler::OverloadedError, prompt};
 
 #[async_trait::async_trait]
 pub trait Provider {
@@ -125,7 +126,7 @@ impl Provider for OpenAICompatible {
                 .body(request.clone())
         })
         .await?;
-        let res = genvm_modules_impl_common::read_response(res).await?;
+        let res = common::read_response(res).await?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
         let response = val
             .pointer("/choices/0/message/content")
@@ -158,7 +159,7 @@ impl Provider for OpenAICompatible {
                 .body(request.clone())
         })
         .await?;
-        let res = genvm_modules_impl_common::read_response(res).await?;
+        let res = common::read_response(res).await?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
         let response = val
             .pointer("/choices/0/message/content")
@@ -200,7 +201,7 @@ impl Provider for OLlama {
                 .body(request.clone())
         })
         .await?;
-        let res = genvm_modules_impl_common::read_response(res).await?;
+        let res = common::read_response(res).await?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
         let response = val
             .as_object()
@@ -239,7 +240,7 @@ impl Provider for OLlama {
                 .body(request.clone())
         })
         .await?;
-        let res = genvm_modules_impl_common::read_response(res).await?;
+        let res = common::read_response(res).await?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
         let response = val
             .as_object()
@@ -279,7 +280,7 @@ impl Provider for Gemini {
         })
         .await?;
 
-        let res = genvm_modules_impl_common::read_response(res).await?;
+        let res = common::read_response(res).await?;
 
         let res: serde_json::Value = serde_json::from_str(&res)?;
 
@@ -317,7 +318,7 @@ impl Provider for Gemini {
         })
         .await?;
 
-        let res = genvm_modules_impl_common::read_response(res).await?;
+        let res = common::read_response(res).await?;
         let res: serde_json::Value = serde_json::from_str(&res)?;
 
         let res = res
@@ -362,7 +363,7 @@ impl Provider for Anthropic {
         })
         .await?;
 
-        let res = genvm_modules_impl_common::read_response(res).await?;
+        let res = common::read_response(res).await?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
         val.pointer("/content/0/text")
             .and_then(|x| x.as_str())
@@ -417,7 +418,7 @@ impl Provider for Anthropic {
         })
         .await?;
 
-        let res = genvm_modules_impl_common::read_response(res).await?;
+        let res = common::read_response(res).await?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
 
         let val = val
@@ -475,7 +476,7 @@ impl Provider for Anthropic {
         })
         .await?;
 
-        let res = genvm_modules_impl_common::read_response(res).await?;
+        let res = common::read_response(res).await?;
         let val: serde_json::Value = serde_json::from_str(&res)?;
 
         let val = val
@@ -502,7 +503,7 @@ async fn send_with_retries(
 ) -> anyhow::Result<reqwest::Response> {
     let req = builder();
 
-    log::trace!(request = genvm_modules_impl_common::censor_debug(&req), cookie = genvm_modules_impl_common::get_cookie(); "sending request");
+    log::trace!(request = common::censor_debug(&req), cookie = common::get_cookie(); "sending request");
 
     let res = req
         .send()
@@ -523,9 +524,9 @@ async fn send_with_retries(
     let debug = format!("{:?}", &res);
     let body = res.text().await;
     log::error!(
-        response = genvm_modules_impl_common::censor_str(&debug),
+        response = common::censor_str(&debug),
         body:? = body,
-        cookie = genvm_modules_impl_common::get_cookie();
+        cookie = common::get_cookie();
         "request reading failed"
     );
 

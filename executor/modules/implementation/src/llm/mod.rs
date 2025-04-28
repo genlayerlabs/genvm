@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use clap::Parser;
 use std::{collections::HashMap, sync::Arc};
 
 mod config;
@@ -9,13 +8,18 @@ mod providers;
 mod scripting;
 
 #[derive(clap::Args, Debug)]
-struct RunArgs {
+pub struct CliArgsRun {
+    #[arg(long, default_value_t = String::from("${genvmRoot}/config/genvm-module-llm.yaml"))]
+    config: String,
+
     #[arg(long, default_value_t = false)]
     allow_empty_backends: bool,
 }
 
 #[derive(clap::Args, Debug)]
-struct CheckArgs {
+pub struct CliArgsCheck {
+    #[arg(long, default_value_t = String::from("${genvmRoot}/config/genvm-module-llm.yaml"))]
+    config: String,
     #[arg(long, help = "url")]
     host: String,
     #[arg(long)]
@@ -26,24 +30,7 @@ struct CheckArgs {
     key: String,
 }
 
-#[derive(clap::Subcommand, Debug)]
-enum Commands {
-    Run(RunArgs),
-    Check(CheckArgs),
-}
-
-#[derive(clap::Parser)]
-#[command(version = genvm_common::VERSION)]
-#[clap(rename_all = "kebab_case")]
-struct CliArgs {
-    #[arg(long, default_value_t = String::from("${genvmRoot}/config/genvm-module-llm.yaml"))]
-    config: String,
-
-    #[command(subcommand)]
-    command: Commands,
-}
-
-fn handle_run(mut config: config::Config, args: RunArgs) -> Result<()> {
+fn handle_run(mut config: config::Config, args: CliArgsRun) -> Result<()> {
     for (k, v) in config.backends.iter_mut() {
         if !v.enabled {
             continue;
@@ -91,7 +78,7 @@ fn handle_run(mut config: config::Config, args: RunArgs) -> Result<()> {
         .map(|(k, v)| (k.clone(), v.to_provider(client.clone())))
         .collect();
 
-    let loop_future = genvm_modules_impl_common::run_loop(
+    let loop_future = crate::common::run_loop(
         config.bind_address.clone(),
         token,
         Arc::new(handler::HandlerProvider {
@@ -108,7 +95,7 @@ fn handle_run(mut config: config::Config, args: RunArgs) -> Result<()> {
     Ok(())
 }
 
-fn handle_check(config: config::Config, args: CheckArgs) -> Result<()> {
+fn handle_check(config: config::Config, args: CliArgsCheck) -> Result<()> {
     let _ = config;
 
     let runtime = tokio::runtime::Runtime::new()?;
@@ -150,23 +137,31 @@ fn handle_check(config: config::Config, args: CheckArgs) -> Result<()> {
     let res = res.trim().to_lowercase();
 
     if res != "yes" {
-        anyhow::bail!("provider is not functional");
+        anyhow::bail!(
+            "provider is not functional, answer is `{}` instead of `yes`",
+            res
+        );
     }
 
     Ok(())
 }
 
-fn main() -> Result<()> {
-    let args = CliArgs::parse();
-
+pub fn entrypoint_run(args: CliArgsRun) -> Result<()> {
     let config = genvm_common::load_config(HashMap::new(), &args.config)
         .with_context(|| "loading config")?;
     let config: config::Config = serde_yaml::from_value(config)?;
 
     config.base.setup_logging(std::io::stdout())?;
 
-    match args.command {
-        Commands::Run(args) => handle_run(config, args),
-        Commands::Check(args) => handle_check(config, args),
-    }
+    handle_run(config, args)
+}
+
+pub fn entrypoint_check(args: CliArgsCheck) -> Result<()> {
+    let config = genvm_common::load_config(HashMap::new(), &args.config)
+        .with_context(|| "loading config")?;
+    let config: config::Config = serde_yaml::from_value(config)?;
+
+    config.base.setup_logging(std::io::stdout())?;
+
+    handle_check(config, args)
 }

@@ -1,7 +1,7 @@
 use serde_derive::Deserialize;
 use std::borrow::Borrow;
 
-use crate::domains;
+use super::domains;
 
 #[derive(Deserialize)]
 pub struct Config {

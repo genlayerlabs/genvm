@@ -4,14 +4,12 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use regex::Regex;
 
-pub mod session;
-
 #[derive(Debug)]
 pub struct ModuleResultUserError(pub serde_json::Value);
 
 impl std::fmt::Display for ModuleResultUserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("ModuleResultUserError")
+        f.write_fmt(format_args!("#{:?}", self))
     }
 }
 
@@ -279,6 +277,7 @@ pub fn get_cookie() -> Arc<str> {
     }
 }
 
+#[allow(dead_code)]
 pub fn test_with_cookie<F>(value: &str, f: F) -> tokio::task::futures::TaskLocalFuture<Arc<str>, F>
 where
     F: std::future::Future,

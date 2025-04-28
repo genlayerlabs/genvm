@@ -1,16 +1,13 @@
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{Context, Result};
-use clap::Parser;
 
 mod config;
 mod domains;
 mod handler;
 
-#[derive(clap::Parser)]
-#[command(version = genvm_common::VERSION)]
-#[clap(rename_all = "kebab_case")]
-struct CliArgs {
+#[derive(clap::Args, Debug)]
+pub struct CliArgs {
     #[arg(long, default_value_t = String::from("${genvmRoot}/config/genvm-module-web.yaml"))]
     config: String,
 }
@@ -24,7 +21,7 @@ async fn check_status(webdriver_host: &str) -> anyhow::Result<()> {
         .await
         .with_context(|| "creating sessions request")?;
 
-    let body = genvm_modules_impl_common::read_response(status_res)
+    let body = crate::common::read_response(status_res)
         .await
         .with_context(|| "reading response")?;
 
@@ -37,9 +34,7 @@ async fn check_status(webdriver_host: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
-    let args = CliArgs::parse();
-
+pub fn entrypoint(args: CliArgs) -> Result<()> {
     let config = genvm_common::load_config(HashMap::new(), &args.config)
         .with_context(|| "loading config")?;
     let config: config::Config = serde_yaml::from_value(config)?;
@@ -61,7 +56,7 @@ fn main() -> Result<()> {
 
     let webdriver_host = config.webdriver_host.clone();
 
-    let loop_future = genvm_modules_impl_common::run_loop(
+    let loop_future = crate::common::run_loop(
         config.bind_address.clone(),
         token,
         Arc::new(handler::HandlerProvider {

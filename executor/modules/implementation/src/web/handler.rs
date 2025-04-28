@@ -1,7 +1,7 @@
-use crate::config;
+use super::config;
+use crate::common;
 
 use anyhow::Context;
-use genvm_modules_impl_common::*;
 use genvm_modules_interfaces::web as web_iface;
 use std::sync::Arc;
 
@@ -12,15 +12,12 @@ struct Handler {
     hello: genvm_modules_interfaces::GenVMHello,
 }
 
-impl genvm_modules_impl_common::MessageHandler<web_iface::Message, web_iface::RenderAnswer>
-    for Handler
-{
+impl common::MessageHandler<web_iface::Message, web_iface::RenderAnswer> for Handler {
     fn handle(
         &self,
         message: web_iface::Message,
-    ) -> impl std::future::Future<
-        Output = genvm_modules_impl_common::ModuleResult<web_iface::RenderAnswer>,
-    > + Send {
+    ) -> impl std::future::Future<Output = common::ModuleResult<web_iface::RenderAnswer>> + Send
+    {
         match message {
             web_iface::Message::Render(payload) => self.handle_render(payload),
         }
@@ -49,7 +46,7 @@ pub struct HandlerProvider {
 }
 
 impl
-    genvm_modules_impl_common::MessageHandlerProvider<
+    common::MessageHandlerProvider<
         genvm_modules_interfaces::web::Message,
         genvm_modules_interfaces::web::RenderAnswer,
     > for HandlerProvider
@@ -58,7 +55,7 @@ impl
         &self,
         hello: genvm_modules_interfaces::GenVMHello,
     ) -> anyhow::Result<
-        impl MessageHandler<
+        impl common::MessageHandler<
             genvm_modules_interfaces::web::Message,
             genvm_modules_interfaces::web::RenderAnswer,
         >,
@@ -73,7 +70,7 @@ impl
             .send()
             .await
             .with_context(|| "creating sessions request")?;
-        let body = read_response(opened_session_res)
+        let body = common::read_response(opened_session_res)
             .await
             .with_context(|| "reading response")?;
         let val: serde_json::Value = serde_json::from_str(&body)?;
@@ -95,18 +92,18 @@ impl Handler {
     async fn handle_render(
         &self,
         payload: web_iface::RenderPayload,
-    ) -> genvm_modules_impl_common::ModuleResult<web_iface::RenderAnswer> {
-        let url = match url::Url::parse(&payload.url) {
+    ) -> common::ModuleResult<web_iface::RenderAnswer> {
+        let url = match reqwest::Url::parse(&payload.url) {
             Ok(url) => url,
             Err(_) => {
-                return Err(ModuleResultUserError(
+                return Err(common::ModuleResultUserError(
                     serde_json::json!({"message": "invalid url", "url": payload.url}),
                 )
                 .into());
             }
         };
         if url.scheme() == "file" {
-            return Err(ModuleResultUserError(
+            return Err(common::ModuleResultUserError(
                 serde_json::json!({"message": "scheme forbidden", "scheme": "file"}),
             )
             .into());
@@ -114,19 +111,16 @@ impl Handler {
 
         match url.host_str() {
             None => {
-                return Err(ModuleResultUserError(
+                return Err(common::ModuleResultUserError(
                     serde_json::json!({"message": "host is forbidden", "host": null}),
                 )
                 .into())
             }
             Some(host_str)
-                if crate::config::binary_search_contains(
-                    &self.config.always_allow_hosts,
-                    host_str,
-                ) => {}
+                if config::binary_search_contains(&self.config.always_allow_hosts, host_str) => {}
             Some(host_str) => {
                 if !self.config.tld_is_ok(host_str) {
-                    return Err(ModuleResultUserError(
+                    return Err(common::ModuleResultUserError(
                         serde_json::json!({"message": "tld forbidden", "host": host_str}),
                     )
                     .into());
@@ -134,7 +128,7 @@ impl Handler {
 
                 const ALLOWED_PORTS: &[Option<u16>] = &[None, Some(80), Some(443)];
                 if !ALLOWED_PORTS.contains(&url.port()) {
-                    return Err(ModuleResultUserError(
+                    return Err(common::ModuleResultUserError(
                         serde_json::json!({"message": "port forbidden", "port": url.port()}),
                     )
                     .into());

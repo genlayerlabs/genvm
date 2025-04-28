@@ -1,12 +1,12 @@
 use std::{collections::BTreeMap, sync::Arc};
 
+use crate::common::ModuleResult;
 use anyhow::Context;
-use genvm_modules_impl_common::ModuleResult;
 use genvm_modules_interfaces::llm as llm_iface;
 use mlua::{IntoLua, LuaSerdeExt, UserDataRef};
 use serde::{Deserialize, Serialize};
 
-use crate::{
+use super::{
     config,
     handler::{self, OverloadedError},
     prompt,
@@ -113,7 +113,7 @@ impl UserVM {
         let greyboxing = vm.to_value(&greyboxing)?;
         let log_fn = vm.create_function(|vm: &mlua::Lua, data: mlua::Value| {
             let as_serde: serde_json::Value = vm.from_value(data)?;
-            log::info!(log:serde = as_serde, cookie = genvm_modules_impl_common::get_cookie(); "script log");
+            log::info!(log:serde = as_serde, cookie = crate::common::get_cookie(); "script log");
             Ok(())
         })?;
         greyboxing.as_table().unwrap().set("log", log_fn)?;
