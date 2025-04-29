@@ -2,6 +2,8 @@ use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{Context, Result};
 
+use crate::common;
+
 mod config;
 mod domains;
 mod handler;
@@ -10,6 +12,9 @@ mod handler;
 pub struct CliArgs {
     #[arg(long, default_value_t = String::from("${genvmRoot}/config/genvm-module-web.yaml"))]
     config: String,
+
+    #[arg(long, default_value_t = false)]
+    die_with_parent: bool,
 }
 
 async fn check_status(webdriver_host: &str) -> anyhow::Result<()> {
@@ -43,16 +48,7 @@ pub fn entrypoint(args: CliArgs) -> Result<()> {
 
     let runtime = config.base.create_rt()?;
 
-    let (token, canceller) = genvm_common::cancellation::make();
-
-    let handle_sigterm = move || {
-        log::warn!("sigterm received");
-        canceller();
-    };
-    unsafe {
-        signal_hook::low_level::register(signal_hook::consts::SIGTERM, handle_sigterm.clone())?;
-        signal_hook::low_level::register(signal_hook::consts::SIGINT, handle_sigterm)?;
-    }
+    let token = common::setup_cancels(&runtime, args.die_with_parent)?;
 
     let webdriver_host = config.webdriver_host.clone();
 

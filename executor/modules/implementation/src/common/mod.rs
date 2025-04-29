@@ -1,4 +1,5 @@
 use futures_util::{SinkExt, StreamExt};
+use genvm_common::cancellation;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -283,4 +284,49 @@ where
     F: std::future::Future,
 {
     COOKIE.scope(Arc::from(value), f)
+}
+
+pub fn setup_cancels(
+    rt: &tokio::runtime::Runtime,
+    die_with_parent: bool,
+) -> anyhow::Result<Arc<cancellation::Token>> {
+    let (token, canceller) = genvm_common::cancellation::make();
+
+    let canceller_cloned = canceller.clone();
+    let handle_sigterm = move || {
+        log::warn!("sigterm received");
+        canceller_cloned();
+    };
+    unsafe {
+        signal_hook::low_level::register(signal_hook::consts::SIGTERM, handle_sigterm.clone())?;
+        signal_hook::low_level::register(signal_hook::consts::SIGINT, handle_sigterm)?;
+    }
+
+    if die_with_parent {
+        let parent_pid = std::os::unix::process::parent_id();
+        let token = token.clone();
+
+        log::info!(parent_pid = parent_pid; "monitoring parent pid to exit when it changes");
+
+        rt.spawn(async move {
+            loop {
+                tokio::select! {
+                   _ = tokio::time::sleep(tokio::time::Duration::from_secs(5)) => {
+                        let new_parent_pid = std::os::unix::process::parent_id();
+                        if new_parent_pid == parent_pid {
+                            continue;
+                        }
+
+                        log::warn!(old = parent_pid, new_parent_pid = new_parent_pid; "parent pid changed, closing");
+                        canceller();
+                   },
+                   _ = token.chan.closed() => {
+                        break;
+                   },
+                };
+            }
+        });
+    }
+
+    Ok(token)
 }

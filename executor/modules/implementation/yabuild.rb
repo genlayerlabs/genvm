@@ -4,7 +4,7 @@ bin = target_cargo_build(
 	name: "genvm-modules",
 	target: config.executor_target,
 	profile: config.profile,
-	out_file: config.bin_dir.join('genvm-module-llm'),
+	out_file: config.bin_dir.join('genvm-modules'),
 	flags: executor_target.meta.cargo_flags,
 	env: executor_target.meta.env,
 ) {
@@ -36,4 +36,5 @@ target_alias(
 	bin,
 	web_config_target, llm_config_target,
 	script_target, lua_lib_target,
+	tags: ['all'],
 )
