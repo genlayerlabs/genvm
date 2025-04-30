@@ -159,7 +159,7 @@ impl Parser<'_> {
     }
 }
 
-pub fn parse(data: &[u8]) -> anyhow::Result<Value> {
+pub fn decode(data: &[u8]) -> anyhow::Result<Value> {
     let mut parser = Parser(data);
 
     let ret = parser.fetch_val()?;
@@ -169,4 +169,108 @@ pub fn parse(data: &[u8]) -> anyhow::Result<Value> {
     }
 
     Ok(ret)
+}
+
+fn append_uleb(to: &mut Vec<u8>, mut num: num_bigint::BigUint) {
+    if num == num_bigint::BigUint::ZERO {
+        to.push(0);
+
+        return;
+    }
+
+    loop {
+        let mut cur = (num.iter_u32_digits().next().unwrap() & ((1 << BITS_IN_TYPE) - 1)) as u8;
+
+        num >>= BITS_IN_TYPE;
+        let has_next = num != num_bigint::BigUint::ZERO;
+
+        if has_next {
+            cur |= 0x80;
+        }
+
+        to.push(cur);
+
+        if !has_next {
+            break;
+        }
+    }
+}
+
+fn encode_to(to: &mut Vec<u8>, value: &Value) {
+    match value {
+        Value::Null => to.push(SPECIAL_NULL),
+        Value::Bool(false) => to.push(SPECIAL_FALSE),
+        Value::Bool(true) => to.push(SPECIAL_TRUE),
+        Value::Address(address) => {
+            to.push(SPECIAL_ADDR);
+            to.extend_from_slice(&address.0);
+        },
+        Value::Str(data) => {
+            let mut size = num_bigint::BigUint::from(data.len());
+            size <<= BITS_IN_TYPE;
+            size += TYPE_STR; // same as |
+
+            append_uleb(to, size);
+
+            to.extend_from_slice(data.as_bytes());
+        },
+        Value::Bytes(data) => {
+            let mut size = num_bigint::BigUint::from(data.len());
+            size <<= BITS_IN_TYPE;
+            size += TYPE_BYTES; // same as |
+
+            append_uleb(to, size);
+
+            to.extend_from_slice(data);
+        },
+        Value::Number(big_int) => {
+            if big_int.sign() == num_bigint::Sign::Minus {
+                let mut mag = big_int.magnitude().clone();
+                mag -= 1u32;
+
+                mag <<= BITS_IN_TYPE;
+                mag += TYPE_NINT; // same as |
+
+                append_uleb(to, mag);
+            } else {
+                let mut mag = big_int.magnitude().clone();
+                mag <<= BITS_IN_TYPE;
+                mag += TYPE_PINT; // same as |
+
+                append_uleb(to, mag);
+            }
+        },
+        Value::Map(values) => {
+            let mut size = num_bigint::BigUint::from(values.len());
+            size <<= BITS_IN_TYPE;
+            size += TYPE_MAP; // same as |
+
+            append_uleb(to, size);
+
+            for (k, v) in values {
+                append_uleb(to, num_bigint::BigUint::from(k.len()));
+                to.extend(k.as_bytes());
+                encode_to(to, v);
+            }
+        },
+        Value::Array(values) => {
+            let mut size = num_bigint::BigUint::from(values.len());
+            size <<= BITS_IN_TYPE;
+            size += TYPE_ARR; // same as |
+
+            append_uleb(to, size);
+
+            for x in values {
+                encode_to(to, x);
+            }
+        },
+    }
+}
+
+pub fn encode(value: &Value) -> Vec<u8> {
+    let mut ret = Vec::new();
+
+    encode_to(&mut ret, value);
+
+    ret
 }

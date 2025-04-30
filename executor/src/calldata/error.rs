@@ -17,3 +17,12 @@ impl serde::de::Error for Error {
         Error(anyhow::anyhow!("{}", msg))
     }
 }
+
+impl serde::ser::Error for Error {
+    fn custom<T>(msg: T) -> Self
+    where
+        T: std::fmt::Display,
+    {
+        Error(anyhow::anyhow!("{}", msg))
+    }
+}

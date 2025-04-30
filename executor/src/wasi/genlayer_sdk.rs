@@ -2,7 +2,7 @@ use core::str;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use wiggle::GuestError;
 
 use crate::{
@@ -78,6 +78,19 @@ struct InternalDeployTxData {
 struct ExternalTxData {
     #[serde(default = "default_tx_value", deserialize_with = "u256_deserialize")]
     value: primitive_types::U256,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct TransformedMessage {
+    pub contract_address: calldata::Address,
+    pub sender_address: calldata::Address,
+    pub origin_address: calldata::Address,
+    pub chain_id: num_bigint::BigInt,
+    pub value: num_bigint::BigInt,
+    pub is_init: bool,
+    pub datetime: chrono::DateTime<chrono::Utc>,
+    #[serde(with = "serde_bytes")]
+    pub entrypoint: Vec<u8>,
 }
 
 pub struct SingleVMData {
@@ -339,7 +352,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
     ) -> Result<generated::types::Fd, generated::types::Error> {
         let request = request.read_owned(mem)?;
 
-        let request = match calldata::parse(&request) {
+        let request = match calldata::decode(&request) {
             Err(e) => {
                 log::info!(error = genvm_common::log_error(&e); "calldata parse failed");
 
@@ -351,7 +364,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let request = match calldata::from_value(request) {
             Ok(v) => v,
             Err(e) => {
-                log::info!(error = genvm_common::log_error(&e.0); "calldata deserialization failed");
+                log::info!(error:err = e; "calldata deserialization failed");
 
                 return Err(generated::types::Errno::Inval.into())
             }
