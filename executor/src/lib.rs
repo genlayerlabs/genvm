@@ -8,6 +8,7 @@ pub mod runner;
 pub mod ustar;
 pub mod vm;
 pub mod wasi;
+pub mod calldata;
 
 use errors::ContractError;
 use host::AbsentLeaderResult;

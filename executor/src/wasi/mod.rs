@@ -4,6 +4,7 @@ use crate::vm;
 
 pub mod base;
 mod common;
+mod cdrpc;
 pub mod genlayer_sdk;
 pub mod preview1;
 
