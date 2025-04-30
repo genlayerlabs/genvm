@@ -326,7 +326,6 @@ impl serde::ser::SerializeMap for SerializeMap {
         let key = key.expect("serialize_value called before serialize_key");
         self.map.insert(key, super::to_value(value)?);
         Ok(())
-
     }
 
     fn end(self) -> Result<Value> {

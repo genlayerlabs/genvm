@@ -10,6 +10,7 @@ pub enum On {
     Accepted,
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Deserialize)]
 pub enum Message {
     EthSend {

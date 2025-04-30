@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
+use std::sync::Arc;
 
 #[serde_as]
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash, Copy)]

@@ -12,7 +12,10 @@ use wasmparser::WasmFeatures;
 use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
-    caching, calldata, config, runner::{self, InitAction, WasmMode}, ustar::{Archive, SharedBytes}, wasi::{self, preview1::I32Exit}
+    caching, calldata, config,
+    runner::{self, InitAction, WasmMode},
+    ustar::{Archive, SharedBytes},
+    wasi::{self, preview1::I32Exit},
 };
 use anyhow::{Context, Result};
 use std::sync::{Arc, Mutex};

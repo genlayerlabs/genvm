@@ -12,7 +12,7 @@ pub mod wasi;
 
 use errors::ContractError;
 use host::AbsentLeaderResult;
-pub use host::{SlotID, Host, MessageData};
+pub use host::{Host, MessageData, SlotID};
 
 use anyhow::{Context, Result};
 use wasi::genlayer_sdk::{EntryKind, TransformedMessage};

@@ -88,12 +88,10 @@ fn genlayer_wasi(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[pyfn(m)]
     fn gl_call(data: &[u8]) -> PyResult<u32> {
         let res = unsafe {
-            genvm_sdk_rust::gl_call(
-                genvm_sdk_rust::Bytes {
-                    buf: data.as_ptr(),
-                    buf_len: data.len() as u32,
-                }
-            )
+            genvm_sdk_rust::gl_call(genvm_sdk_rust::Bytes {
+                buf: data.as_ptr(),
+                buf_len: data.len() as u32,
+            })
         };
 
         map_error(res)

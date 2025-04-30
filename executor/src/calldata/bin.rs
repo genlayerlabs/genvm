@@ -53,7 +53,10 @@ impl Parser<'_> {
 
     fn map_to_size(size: &num_bigint::BigUint) -> anyhow::Result<usize> {
         if size.bits() > 32 {
-            Err(anyhow::anyhow!("container size is too large {}>32", size.bits()))
+            Err(anyhow::anyhow!(
+                "container size is too large {}>32",
+                size.bits()
+            ))
         } else {
             Ok(*size.to_u32_digits().first().unwrap() as usize)
         }
@@ -72,25 +75,23 @@ impl Parser<'_> {
                 if val.bits() > 8 {
                     anyhow::bail!("invalid special value")
                 }
-                if val_least_byte == SPECIAL_NULL {
-                    Ok(Value::Null)
-                } else if val_least_byte == SPECIAL_TRUE {
-                    Ok(Value::Bool(true))
-                } else if val_least_byte == SPECIAL_FALSE {
-                    Ok(Value::Bool(true))
-                } else if val_least_byte == SPECIAL_ADDR {
-                    if self.0.len() < ADDRESS_SIZE {
-                        anyhow::bail!("invalid address")
+                match val_least_byte {
+                    SPECIAL_NULL => Ok(Value::Null),
+                    SPECIAL_TRUE => Ok(Value::Bool(true)),
+                    SPECIAL_FALSE => Ok(Value::Bool(true)),
+                    SPECIAL_ADDR => {
+                        if self.0.len() < ADDRESS_SIZE {
+                            anyhow::bail!("invalid address")
+                        }
+
+                        let addr_slice = self.fetch_slice(ADDRESS_SIZE)?;
+
+                        let mut addr = [0; ADDRESS_SIZE];
+                        addr.copy_from_slice(addr_slice);
+
+                        Ok(Value::Address(Address(addr)))
                     }
-
-                    let addr_slice = self.fetch_slice(ADDRESS_SIZE)?;
-
-                    let mut addr = [0; ADDRESS_SIZE];
-                    addr.copy_from_slice(addr_slice);
-
-                    Ok(Value::Address(Address(addr)))
-                } else {
-                    Err(anyhow::anyhow!("invalid special"))
+                    x => Err(anyhow::anyhow!("invalid special {x}")),
                 }
             }
             TYPE_BYTES => {
@@ -164,7 +165,7 @@ pub fn decode(data: &[u8]) -> anyhow::Result<Value> {
 
     let ret = parser.fetch_val()?;
 
-    if parser.0.len() != 0 {
+    if !parser.0.is_empty() {
         anyhow::bail!("input is partially unparsed")
     }
 
@@ -203,7 +204,7 @@ fn encode_to(to: &mut Vec<u8>, value: &Value) {
         Value::Address(address) => {
             to.push(SPECIAL_ADDR);
             to.extend_from_slice(&address.0);
-        },
+        }
         Value::Str(data) => {
             let mut size = num_bigint::BigUint::from(data.len());
             size <<= BITS_IN_TYPE;
@@ -212,7 +213,7 @@ fn encode_to(to: &mut Vec<u8>, value: &Value) {
             append_uleb(to, size);
 
             to.extend_from_slice(data.as_bytes());
-        },
+        }
         Value::Bytes(data) => {
             let mut size = num_bigint::BigUint::from(data.len());
             size <<= BITS_IN_TYPE;
@@ -221,7 +222,7 @@ fn encode_to(to: &mut Vec<u8>, value: &Value) {
             append_uleb(to, size);
 
             to.extend_from_slice(data);
-        },
+        }
         Value::Number(big_int) => {
             if big_int.sign() == num_bigint::Sign::Minus {
                 let mut mag = big_int.magnitude().clone();
@@ -238,7 +239,7 @@ fn encode_to(to: &mut Vec<u8>, value: &Value) {
 
                 append_uleb(to, mag);
             }
-        },
+        }
         Value::Map(values) => {
             let mut size = num_bigint::BigUint::from(values.len());
             size <<= BITS_IN_TYPE;
@@ -251,7 +252,7 @@ fn encode_to(to: &mut Vec<u8>, value: &Value) {
                 to.extend(k.as_bytes());
                 encode_to(to, v);
             }
-        },
+        }
         Value::Array(values) => {
             let mut size = num_bigint::BigUint::from(values.len());
             size <<= BITS_IN_TYPE;
@@ -262,7 +263,7 @@ fn encode_to(to: &mut Vec<u8>, value: &Value) {
             for x in values {
                 encode_to(to, x);
             }
-        },
+        }
     }
 }
 

@@ -1,14 +1,14 @@
-use core::str;
 use std::sync::Arc;
 
-use itertools::Itertools;
-use serde::{Deserialize, Serialize};
 use wiggle::GuestError;
 
+use crate::host::SlotID;
 use crate::{
-    calldata, errors::*, host, ustar::SharedBytes, vm::{self, RunOk}
+    calldata,
+    errors::*,
+    ustar::SharedBytes,
+    vm::{self, RunOk},
 };
-use crate::host::{MessageData, SlotID};
 
 use super::{base, common::*, gl_call};
 
@@ -41,28 +41,28 @@ pub struct TransformedMessage {
 }
 
 impl TransformedMessage {
-    pub fn fork_leader(&self, entry_kind: EntryKind,
+    pub fn fork_leader(
+        &self,
+        entry_kind: EntryKind,
         entry_data: Vec<u8>,
-        entry_leader_data: Option<RunOk>) -> Self
-    {
+        entry_leader_data: Option<RunOk>,
+    ) -> Self {
         TransformedMessage {
-            contract_address: self.contract_address.clone(),
-            sender_address: self.sender_address.clone(),
-            origin_address: self.origin_address.clone(),
+            contract_address: self.contract_address,
+            sender_address: self.sender_address,
+            origin_address: self.origin_address,
             stack: self.stack.clone(),
             chain_id: self.chain_id.clone(),
             value: self.value.clone(),
             is_init: false,
-            datetime: self.datetime.clone(),
-            entry_kind: entry_kind,
-            entry_data: entry_data,
-            entry_leader_data: entry_leader_data,
+            datetime: self.datetime,
+            entry_kind,
+            entry_data,
+            entry_leader_data,
         }
     }
 
-    pub fn fork(&self, entry_kind: EntryKind,
-        entry_data: Vec<u8>,) -> Self
-    {
+    pub fn fork(&self, entry_kind: EntryKind, entry_data: Vec<u8>) -> Self {
         self.fork_leader(entry_kind, entry_data, None)
     }
 }
@@ -139,10 +139,7 @@ impl SlotID {
         addr: &generated::types::FullAddr,
         mem: &mut wiggle::GuestMemory<'_>,
     ) -> Result<Self, generated::types::Error> {
-        let cow = mem.as_cow(
-            addr.ptr
-                .as_array(SlotID::len().try_into().unwrap()),
-        )?;
+        let cow = mem.as_cow(addr.ptr.as_array(SlotID::len().try_into().unwrap()))?;
         let mut ret = SlotID::zero();
         for (x, y) in ret.0.iter_mut().zip(cow.iter()) {
             *x = *y;
@@ -326,7 +323,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             Err(e) => {
                 log::info!(error = genvm_common::log_error(&e); "calldata parse failed");
 
-                return Err(generated::types::Errno::Inval.into())
+                return Err(generated::types::Errno::Inval.into());
             }
             Ok(v) => v,
         };
@@ -336,12 +333,16 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             Err(e) => {
                 log::info!(error:err = e; "calldata deserialization failed");
 
-                return Err(generated::types::Errno::Inval.into())
+                return Err(generated::types::Errno::Inval.into());
             }
         };
 
         match request {
-            gl_call::Message::EthSend { address, calldata, value } => {
+            gl_call::Message::EthSend {
+                address,
+                calldata,
+                value,
+            } => {
                 if !self.context.data.conf.is_deterministic {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
@@ -360,7 +361,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                 }
 
-
                 let data_json = serde_json::json!({
                     "value": format!("0x{:x}", value),
                 });
@@ -375,7 +375,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 self.context.messages_decremented += value;
                 Ok(file_fd_none())
-            },
+            }
             gl_call::Message::EthCall { address, calldata } => {
                 if !self.context.data.conf.is_deterministic {
                     return Err(generated::types::Errno::Forbidden.into());
@@ -393,8 +393,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 Ok(generated::types::Fd::from(self.vfs.place_content(
                     FileContentsUnevaluated::from_contents(SharedBytes::new(res), 0),
                 )))
-            },
-            gl_call::Message::CallContract { address, calldata, mut state } => {
+            }
+            gl_call::Message::CallContract {
+                address,
+                calldata,
+                mut state,
+            } => {
                 if !self.context.data.conf.is_deterministic {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
@@ -412,7 +416,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let calldata_encoded = calldata::encode(&calldata);
 
-                let mut my_data = self.context.data.message_data.fork(EntryKind::Regular, calldata_encoded);
+                let mut my_data = self
+                    .context
+                    .data
+                    .message_data
+                    .fork(EntryKind::Regular, calldata_encoded);
                 my_data.stack.push(my_data.contract_address);
 
                 let calldata_encoded = calldata::encode(&calldata);
@@ -450,8 +458,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .map_err(generated::types::Error::trap)?;
 
                 self.set_vm_run_result(res).map(|x| x.0)
-            },
-            gl_call::Message::PostMessage { address, calldata, value, on } => {
+            }
+            gl_call::Message::PostMessage {
+                address,
+                calldata,
+                value,
+                on,
+            } => {
                 if !self.context.data.conf.is_deterministic {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
@@ -488,8 +501,14 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 self.context.messages_decremented += value;
 
                 Ok(file_fd_none())
-            },
-            gl_call::Message::DeployContract { calldata, code, value, on, salt_nonce } => {
+            }
+            gl_call::Message::DeployContract {
+                calldata,
+                code,
+                value,
+                on,
+                salt_nonce,
+            } => {
                 if !self.context.data.conf.is_deterministic {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
@@ -527,7 +546,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 self.context.messages_decremented += value;
 
                 Ok(file_fd_none())
-            },
+            }
             gl_call::Message::WebRender(render_payload) => {
                 if self.context.data.conf.is_deterministic {
                     return Err(generated::types::Errno::Forbidden.into());
@@ -545,7 +564,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     self.vfs
                         .place_content(FileContentsUnevaluated::from_task(task)),
                 ))
-            },
+            }
             gl_call::Message::ExecPrompt(prompt_payload) => {
                 if self.context.data.conf.is_deterministic {
                     return Err(generated::types::Errno::Forbidden.into());
@@ -563,7 +582,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     self.vfs
                         .place_content(FileContentsUnevaluated::from_task(task)),
                 ))
-            },
+            }
             gl_call::Message::ExecPromptTemplate(prompt_template_payload) => {
                 if self.context.data.conf.is_deterministic {
                     return Err(generated::types::Errno::Forbidden.into());
@@ -578,14 +597,20 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let task = tokio::spawn(taskify(async move {
                     let answer = llm
                         .send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
-                            genvm_modules_interfaces::llm::Message::PromptTemplate(prompt_template_payload),
+                            genvm_modules_interfaces::llm::Message::PromptTemplate(
+                                prompt_template_payload,
+                            ),
                         )
                         .await?;
                     use genvm_modules_interfaces::llm::PromptAnswer;
                     match (expect_bool, answer) {
                         (_, Err(e)) => Ok(Err(e)),
-                        (true, Ok(PromptAnswer::Bool(answer))) => Ok(Ok(PromptAnswer::Bool(answer))),
-                        (false, Ok(PromptAnswer::Text(answer))) => Ok(Ok(PromptAnswer::Text(answer))),
+                        (true, Ok(PromptAnswer::Bool(answer))) => {
+                            Ok(Ok(PromptAnswer::Bool(answer)))
+                        }
+                        (false, Ok(PromptAnswer::Text(answer))) => {
+                            Ok(Ok(PromptAnswer::Text(answer)))
+                        }
                         (_, Ok(_)) => Err(anyhow::anyhow!("unmatched result")),
                     }
                 }));
@@ -594,20 +619,19 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     self.vfs
                         .place_content(FileContentsUnevaluated::from_task(task)),
                 ))
-            },
+            }
             gl_call::Message::Rollback(msg) => {
                 Err(generated::types::Error::trap(Rollback(msg).into()))
-            },
+            }
             gl_call::Message::Return(value) => {
                 let ret = calldata::encode(&value);
                 Err(generated::types::Error::trap(ContractReturn(ret).into()))
-            },
-            gl_call::Message::RunNondet { data_leader, data_validator } => {
-                self.run_nondet(data_leader, data_validator).await
             }
-            gl_call::Message::Sandbox { data } => {
-                self.sandbox(data).await
-            }
+            gl_call::Message::RunNondet {
+                data_leader,
+                data_validator,
+            } => self.run_nondet(data_leader, data_validator).await,
+            gl_call::Message::Sandbox { data } => self.sandbox(data).await,
         }
     }
 
@@ -817,19 +841,23 @@ impl ContextVFS<'_> {
             }
         };
 
-        let message_data =
-
-        match &leaders_res {
-            None => {
-                self.context.data.message_data.fork(EntryKind::Inner, data_leader)
-            }
+        let message_data = match &leaders_res {
+            None => self
+                .context
+                .data
+                .message_data
+                .fork(EntryKind::Inner, data_leader),
             Some(leaders_res) => {
                 let dup = match leaders_res {
                     RunOk::Return(items) => RunOk::Return(items.clone()),
                     RunOk::Rollback(msg) => RunOk::Rollback(msg.clone()),
                     RunOk::ContractError(msg, _) => RunOk::ContractError(msg.clone(), None),
                 };
-                self.context.data.message_data.fork_leader(EntryKind::Validator, data_validator, Some(dup))
+                self.context.data.message_data.fork_leader(
+                    EntryKind::Validator,
+                    data_validator,
+                    Some(dup),
+                )
             }
         };
 

@@ -1,10 +1,10 @@
 mod host_fns;
-mod result_codes;
 pub mod message;
+mod result_codes;
 
-pub use result_codes::{ResultCode, StorageType, EntryKind};
+pub use result_codes::{EntryKind, ResultCode, StorageType};
 
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use anyhow::{Context, Result};
 
@@ -348,7 +348,12 @@ impl Host {
         read_bytes(sock)
     }
 
-    pub fn eth_send(&mut self, address: calldata::Address, calldata: &[u8], data: &str) -> Result<()> {
+    pub fn eth_send(
+        &mut self,
+        address: calldata::Address,
+        calldata: &[u8],
+        data: &str,
+    ) -> Result<()> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };

@@ -17,17 +17,20 @@ import genlayer.py._internal.reflect as reflect
 
 import genlayer.std._internal.gl_call as gl_call
 
+
 class CalldataSchema(typing.TypedDict, total=False):
 	method: str
 	args: list[calldata.Decoded]
 	kwargs: dict[str, calldata.Decoded]
 
+
 def _give_result(res_fn: typing.Callable[[], typing.Any]) -> typing.NoReturn:
-		try:
-			res = res_fn()
-		except Rollback as r:
-			gl_call.rollback(r.msg)
-		gl_call.contract_return(res)
+	try:
+		res = res_fn()
+	except Rollback as r:
+		gl_call.rollback(r.msg)
+	gl_call.contract_return(res)
+
 
 def _handle_regular() -> typing.NoReturn:
 	from ..genvm_contracts import Contract
@@ -45,15 +48,16 @@ def _handle_regular() -> typing.NoReturn:
 
 		top_slot = STORAGE_MAN.get_store_slot(ROOT_STORAGE_ADDRESS)
 		from ...py.storage._internal.generate import _known_descs
+
 		return _known_descs[contract_type].get(top_slot, 0)
 
 	def check_abstracts(ctx: MethodResolverInfo, meth: typing.Callable) -> str | None:
 		if not _get_schema._is_public(meth):
 			return f'call to private method `{meth}`'
 		if getattr(meth, '__isabstractmethod__', False):
-			return (f'method is abstract `{meth}`')
+			return f'method is abstract `{meth}`'
 		if ctx.msg['value'] > 0 and not getattr(meth, _get_schema.PAYABLE_ATTR, False):
-			return (f'called non-payable method `{meth} with non-zero value`')
+			return f'called non-payable method `{meth} with non-zero value`'
 		return None
 
 	def resolve_method(ctx) -> typing.Callable:
@@ -62,7 +66,7 @@ def _handle_regular() -> typing.NoReturn:
 			if _get_schema._is_public(meth):
 				raise TypeError(f'__init__ must be private')
 			if meth is object.__init__:
-				raise TypeError("improper contract: define __init__")
+				raise TypeError('improper contract: define __init__')
 
 			return meth
 		# now it is not init
@@ -96,12 +100,17 @@ def _handle_regular() -> typing.NoReturn:
 						_give_result(contract.__receive__)
 				else:
 					contract = get_contract_instance(ctx.contract_type)
-					_give_result(lambda: contract.__handle_undefined_method__(ctx.cd.get('method', ''), ctx.cd.get('args', []), ctx.cd.get('kwargs', {})))
+					_give_result(
+						lambda: contract.__handle_undefined_method__(
+							ctx.cd.get('method', ''), ctx.cd.get('args', []), ctx.cd.get('kwargs', {})
+						)
+					)
 
 	# load contract, it should set __known_contact__
 	import contract as _user_contract_module  # type: ignore
 
 	from ..genvm_contracts import __known_contact__
+
 	if __known_contact__ is None:
 		raise Exception('no contract defined')
 
@@ -117,25 +126,26 @@ def _handle_regular() -> typing.NoReturn:
 
 	contract_instance = get_contract_instance(__known_contact__)
 	_give_result(
-		lambda: meth2call(
-			contract_instance, *cd.get('args', []), **cd.get('kwargs', {})
-		)
+		lambda: meth2call(contract_instance, *cd.get('args', []), **cd.get('kwargs', {}))
 	)
+
 
 match message_raw['entry_kind']:
 	case EntryKind.REGULAR:
 		_handle_regular()
 	case EntryKind.INNER:
 		import cloudpickle
+
 		runner = cloudpickle.loads(message_raw['entry_data'])
 		_give_result(runner)
 	case EntryKind.VALIDATOR:
 		import cloudpickle
 		from . import decode_sub_vm_result_retn
+
 		runner = cloudpickle.loads(message_raw['entry_data'])
 		leader_data = message_raw['entry_leader_data']
 		assert leader_data is not None
 		leaders_res = decode_sub_vm_result_retn(leader_data)
 		_give_result(lambda: runner(leaders_res))
 	case x:
-		raise ValueError(f"invalid entry kind {x}")
+		raise ValueError(f'invalid entry kind {x}')

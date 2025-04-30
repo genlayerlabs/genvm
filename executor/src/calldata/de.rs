@@ -290,7 +290,7 @@ impl<'de> serde::Deserializer<'de> for MapKeyDeserializer {
 
 fn deserialize_with_seed<'de, T>(value: Value, seed: T) -> Result<T::Value, Error>
 where
-    T: serde::de::DeserializeSeed<'de>
+    T: serde::de::DeserializeSeed<'de>,
 {
     let full_name = std::any::type_name::<T::Value>();
     if full_name == "num_bigint::bigint::BigInt" {
@@ -299,7 +299,7 @@ where
                 let ptr = std::ptr::from_ref(&num) as *const T::Value;
                 std::mem::forget(num);
                 Ok(unsafe { ptr.read() })
-            },
+            }
             _ => Err(serde::de::Error::custom("invalid type")),
         }
     } else if full_name == "genvm::calldata::types::Address" {
@@ -307,7 +307,7 @@ where
             Value::Address(addr) => {
                 let ptr = std::ptr::from_ref(&addr) as *const T::Value;
                 Ok(unsafe { ptr.read() })
-            },
+            }
             _ => Err(serde::de::Error::custom("invalid type")),
         }
     } else {
@@ -337,9 +337,7 @@ impl<'de> serde::de::MapAccess<'de> for MapDeserializer {
         T: serde::de::DeserializeSeed<'de>,
     {
         match self.value.take() {
-            Some(value) => {
-                deserialize_with_seed(value, seed)
-            },
+            Some(value) => deserialize_with_seed(value, seed),
             None => Err(serde::de::Error::custom("value is missing")),
         }
     }
@@ -528,7 +526,6 @@ impl<'de> serde::Deserializer<'de> for Value {
     where
         V: serde::de::Visitor<'de>,
     {
-        let full_name = std::any::type_name::<V::Value>();
         match self {
             Value::Address(_a) => Err(Error(anyhow::anyhow!("unexpected address"))),
             Value::Null => visitor.visit_unit(),
