@@ -3,7 +3,7 @@ use std::{str::FromStr, sync::Arc};
 use crate::{calldata, vm};
 
 pub mod base;
-mod cdrpc;
+mod gl_call;
 mod common;
 pub mod genlayer_sdk;
 pub mod preview1;
@@ -15,29 +15,14 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(data: genlayer_sdk::SingleVMData, shared_data: Arc<vm::SharedData>) -> Self {
-        let new_msg = genlayer_sdk::TransformedMessage {
-            contract_address: calldata::Address::from(data.message_data.contract_address.raw()),
-            sender_address: calldata::Address::from(data.message_data.sender_address.raw()),
-            origin_address: calldata::Address::from(data.message_data.origin_address.raw()),
-            chain_id: num_bigint::BigInt::from_str(&data.message_data.chain_id).unwrap(),
-            value: data.message_data.value.map(num_bigint::BigInt::from).unwrap_or(num_bigint::BigInt::ZERO),
-            is_init: data.message_data.is_init.clone(),
-            datetime: data.message_data.datetime.clone(),
-            entrypoint: data.entrypoint.as_ref().to_owned(),
-        };
-        let as_val = calldata::to_value(&new_msg).unwrap();
-        println!("{:?}", as_val);
-
-        let and_deserialized: genlayer_sdk::TransformedMessage = calldata::from_value(as_val).unwrap();
-        println!("{:?}", and_deserialized);
-
-
-        Self {
-            vfs: common::VFS::new(),
+    pub fn new(data: genlayer_sdk::SingleVMData, shared_data: Arc<vm::SharedData>) -> anyhow::Result<Self> {
+        let as_value = calldata::to_value(&data.message_data)?;
+        let as_bytes = calldata::encode(&as_value);
+        Ok(Self {
+            vfs: common::VFS::new(as_bytes),
             preview1: preview1::Context::new(data.message_data.datetime, data.conf),
             genlayer_sdk: genlayer_sdk::Context::new(data, shared_data),
-        }
+        })
     }
 }
 

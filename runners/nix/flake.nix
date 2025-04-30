@@ -8,11 +8,13 @@
 				system = "x86_64-linux";
 			};
 
+			lib = pkgs.lib;
+
 			nixHashes = {
 				# pkgs.lib.fakeHash
-				genvm-cpython-ext = "sha256-aX18kHSw13co54WXeHN+6qDLN/1yAd+2ul2tvw5kWGw=";
-				cpython = "sha256-r/5G1jWemE8L3F9v2ZLcUZE5CrGqpe3z1TuTXxoDaCM=";
-				topmost = "sha256-INLAduJIiEUegLicaNg5AA5uQ/tJy6SnTQy/G8BNWm0=";
+				genvm-cpython-ext = "sha256-sccECJ7o8fVCYM+7ngNZTl9enGfJWoe1gapeNNyG0H8=";
+				cpython = "sha256-Nj1qtLHu0er4PcXIVXBawBKP7pPTDfrYHY9zA1RnQwc=";
+				topmost = "sha256-bzgiTVmrdfjRnTNv63Ul6QfZd9PokLPtqhJ1vSgHb6A=";
 			};
 
 			wasmShell = (import ./envs/wasm.nix args);

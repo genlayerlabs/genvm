@@ -6,6 +6,7 @@ and reexports form :py:mod:`genlayer.py` provided for convenience
 __all__ = (
 	'Lazy',
 	'MessageType',
+	'MessageRawType',
 	'wasi',
 	'advanced',
 	'calldata',
@@ -46,6 +47,9 @@ from .nondet_fns import *
 from .genvm_contracts import *
 from .eth import *
 from .annotations import *
+from .msg import MessageRawType, message_raw as _message_raw_original
+
+import genlayer.std._internal.gl_call as gl_call
 
 
 class MessageType(typing.NamedTuple):
@@ -62,10 +66,6 @@ class MessageType(typing.NamedTuple):
 	Entire transaction initiator
 	"""
 	value: u256
-	is_init: bool
-	"""
-	``True`` *iff* it is a deployment
-	"""
 	chain_id: u256
 	"""
 	Current chain ID
@@ -73,7 +73,7 @@ class MessageType(typing.NamedTuple):
 
 
 if os.getenv('GENERATING_DOCS', 'false') == 'true':
-	message_raw: dict = ...  # type: ignore
+	message_raw: MessageRawType = ...  # type: ignore
 	"""
 	Raw message as parsed json
 	"""
@@ -83,15 +83,13 @@ if os.getenv('GENERATING_DOCS', 'false') == 'true':
 	Represents fields from a transaction message that was sent
 	"""
 else:
-	message_raw = json.loads(wasi.get_message_data())
-
+	message_raw = _message_raw_original
 	message = MessageType(
-		contract_address=Address(message_raw['contract_address']),
-		sender_address=Address(message_raw['sender_address']),
-		origin_address=Address(message_raw['origin_address']),
-		value=u256(message_raw.get('value', None) or 0),
-		is_init=message_raw.get('is_init', False),
-		chain_id=u256(int(message_raw['chain_id'])),
+		contract_address=message_raw['contract_address'],
+		sender_address=message_raw['sender_address'],
+		origin_address=message_raw['origin_address'],
+		value=u256(message_raw['value']),
+		chain_id=u256(message_raw['chain_id']),
 	)
 
 
@@ -99,4 +97,5 @@ def rollback_immediate(reason: str) -> typing.NoReturn:
 	"""
 	Performs an immediate rollback, current VM won't be able to handle it, stack unwind will not happen
 	"""
-	wasi.rollback(reason)
+
+	gl_call.rollback(reason)

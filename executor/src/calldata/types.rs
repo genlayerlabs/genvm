@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 pub const ADDRESS_SIZE: usize = 20;
 
-#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct Address(pub(super) [u8; ADDRESS_SIZE]);
 
 impl std::fmt::Debug for Address {
@@ -14,16 +14,28 @@ impl std::fmt::Debug for Address {
 }
 
 impl Address {
-    pub fn from(raw: [u8; ADDRESS_SIZE]) -> Self {
+    pub const fn from(raw: [u8; ADDRESS_SIZE]) -> Self {
         Self(raw)
     }
 
     pub fn raw(self) -> [u8; ADDRESS_SIZE] {
         self.0
     }
+
+    pub fn ref_mut(&mut self) -> &mut [u8; ADDRESS_SIZE] {
+        &mut self.0
+    }
+
+    pub const fn zero() -> Self {
+        Self([0; 20])
+    }
+
+    pub const fn len() -> usize {
+        20
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Value {
     Null,
     Address(Address),

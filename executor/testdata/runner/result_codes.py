@@ -12,3 +12,9 @@ class StorageType(IntEnum):
 	DEFAULT = 0
 	LATEST_FINAL = 1
 	LATEST_NON_FINAL = 2
+
+
+class EntryKind(IntEnum):
+	REGULAR = 0
+	INNER = 1
+	VALIDATOR = 2

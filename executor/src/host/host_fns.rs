@@ -1,5 +1,5 @@
 use serde_derive::{Serialize, Deserialize};
-#[derive(PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Methods {
     GetCalldata = 0,
@@ -60,7 +60,7 @@ impl TryFrom<u8> for Methods {
         }
     }
 }
-#[derive(PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Errors {
     Ok = 0,

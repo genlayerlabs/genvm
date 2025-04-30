@@ -287,12 +287,21 @@ def deploy_contract(
 		- ``salt_nonce`` requirements and it's effect on address
 		- order of transactions
 	"""
-	salt_nonce = data.setdefault('salt_nonce', u256(0))
-	wasi.deploy_contract(
-		calldata.encode(_make_calldata_obj(None, args, kwargs)),
-		code,
-		transaction_data_kw_args_serialize(dict(data)),
-	)
+	salt_nonce = data.get('salt_nonce', u256(0))
+
+	wasi.gl_call(calldata.encode({
+		'DeployContract': {
+			'calldata': {
+				'args': args,
+				'kwargs': kwargs,
+			},
+			'code': code,
+			'value': data.get('value', 0),
+			'on': data.get('on', 'finalized'),
+			'salt_nonce': salt_nonce,
+		}
+	}))
+
 	if salt_nonce == 0:
 		return None
 
@@ -364,6 +373,12 @@ class Contract:
 		It must be ``@gl.public.write.payable``
 		"""
 		pass
+
+	@classmethod
+	def __get_schema__(cls) -> str:
+		import genlayer.py.get_schema as _get_schema
+		res = _get_schema.get_schema(cls)
+		return json.dumps(res, separators=(',', ':'))
 
 
 __known_contact__: type[Contract] | None = None

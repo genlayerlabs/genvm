@@ -10,7 +10,7 @@ end
 
 # editorconfig-checker-disable
 ENUM_TEMPLATE_STR = <<-EOF
-#[derive(PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[repr(<%= size %>)]
 pub enum <%= to_camel name %> {
 % values.each { |k, v|

@@ -93,7 +93,6 @@ impl serde::Serializer for Serializer {
     }
 
     fn serialize_bytes(self, value: &[u8]) -> Result<Value> {
-        println!("SERiALIZE BYTES CALLED");
         Ok(Value::Bytes(value.to_owned()))
     }
 

@@ -78,9 +78,11 @@ pub(super) struct VFS {
 }
 
 impl VFS {
-    pub fn new() -> Self {
+    pub fn new(stdin: Vec<u8>) -> Self {
+        let stdin_data = SharedBytes::new(stdin);
+
         let fds = BTreeMap::from([
-            (0, FileDescriptor::Stdin),
+            (0, FileDescriptor::File(FileContentsUnevaluated::from_contents(stdin_data, 0))),
             (1, FileDescriptor::Stdout),
             (2, FileDescriptor::Stderr),
             (3, FileDescriptor::Dir { path: Vec::new() }),

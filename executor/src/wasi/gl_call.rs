@@ -13,31 +13,40 @@ pub enum On {
 #[derive(Deserialize)]
 pub enum Message {
     EthSend {
-        address: (),
-        calldata: calldata::Value,
-        value: (),
+        address: calldata::Address,
+        calldata: Vec<u8>,
+        value: primitive_types::U256,
     },
     EthCall {
-        address: (),
-        calldata: calldata::Value,
+        address: calldata::Address,
+        calldata: Vec<u8>,
     },
     CallContract {
-        address: (),
+        address: calldata::Address,
         calldata: calldata::Value,
         state: host::StorageType,
     },
     PostMessage {
-        address: (),
+        address: calldata::Address,
         calldata: calldata::Value,
-        value: (),
+        value: primitive_types::U256,
         on: On,
     },
     DeployContract {
         calldata: calldata::Value,
         code: Vec<u8>,
-        value: (),
+        value: primitive_types::U256,
         on: On,
-        salt_nonce: (),
+        salt_nonce: primitive_types::U256,
+    },
+
+    RunNondet {
+        data_leader: Vec<u8>,
+        data_validator: Vec<u8>,
+    },
+
+    Sandbox {
+        data: Vec<u8>,
     },
 
     WebRender(genvm_modules_interfaces::web::RenderPayload),

@@ -297,6 +297,7 @@ where
         match value {
             Value::Number(num) => {
                 let ptr = std::ptr::from_ref(&num) as *const T::Value;
+                std::mem::forget(num);
                 Ok(unsafe { ptr.read() })
             },
             _ => Err(serde::de::Error::custom("invalid type")),
@@ -596,8 +597,6 @@ impl<'de> serde::Deserializer<'de> for Value {
     where
         V: serde::de::Visitor<'de>,
     {
-        let full_name = std::any::type_name::<V::Value>();
-        println!("deserialize newtype {} of name {}", full_name, _name);
         visitor.visit_newtype_struct(self)
     }
 

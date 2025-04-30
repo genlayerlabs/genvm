@@ -2,77 +2,6 @@
 
 ;;; @CONTEXT_REF_TYPE@
 (module $genlayer_sdk
-
-    (@interface func (export "rollback")
-        (param $message string)
-        (@witx noreturn)
-    )
-
-    (@interface func (export "contract_return")
-        (param $result $bytes)
-        (@witx noreturn)
-    )
-
-    (@interface func (export "cdrpc")
-        (param $request $bytes)
-        (result $error (expected $fd (error $errno)))
-    )
-
-    (@interface func (export "get_message_data")
-        (result $error (expected $result_now (error $errno)))
-    )
-
-    (@interface func (export "get_entrypoint")
-        (result $error (expected $result_now (error $errno)))
-    )
-
-    (@interface func (export "run_nondet")
-        (param $data_leader $bytes)
-        (param $data_validator $bytes)
-        (result $error (expected $fd (error $errno)))
-    )
-
-    (@interface func (export "sandbox")
-        (param $data $bytes)
-        (result $error (expected $fd (error $errno)))
-    )
-
-    (@interface func (export "web_render")
-        (param $payload string)
-        (result $error (expected $fd (error $errno)))
-    )
-
-    (@interface func (export "exec_prompt")
-        (param $payload string)
-        (result $error (expected $fd (error $errno)))
-    )
-
-    (@interface func (export "exec_prompt_template")
-        (param $payload string)
-        (result $error (expected $fd (error $errno)))
-    )
-
-    (@interface func (export "call_contract")
-        (param $account $addr)
-        (param $calldata $bytes)
-        (param $data string)
-        (result $error (expected $fd (error $errno)))
-    )
-
-    (@interface func (export "post_message")
-        (param $account $addr)
-        (param $calldata $bytes)
-        (param $data string)
-        (result $error (expected (error $errno)))
-    )
-
-    (@interface func (export "deploy_contract")
-        (param $calldata $bytes)
-        (param $code $bytes)
-        (param $data string)
-        (result $error (expected (error $errno)))
-    )
-
     (@interface func (export "storage_read")
         (param $slot $full_addr)
         (param $index u32)
@@ -87,19 +16,6 @@
         (result $error (expected (error $errno)))
     )
 
-    (@interface func (export "eth_call")
-        (param $account $addr)
-        (param $calldata $bytes)
-        (result $error (expected $fd (error $errno)))
-    )
-
-    (@interface func (export "eth_send")
-        (param $account $addr)
-        (param $calldata $bytes)
-        (param $data string)
-        (result $error (expected (error $errno)))
-    )
-
     (@interface func (export "get_balance")
         (param $account $addr)
         (param $res (@witx pointer u8))
@@ -109,5 +25,10 @@
     (@interface func (export "get_self_balance")
         (param $res (@witx pointer u8))
         (result $error (expected (error $errno)))
+    )
+
+    (@interface func (export "gl_call")
+        (param $request $bytes)
+        (result $error (expected $fd (error $errno)))
     )
 )

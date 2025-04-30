@@ -1,5 +1,5 @@
 use serde_derive::{Serialize, Deserialize};
-#[derive(PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum ResultCode {
     Return = 0,
@@ -33,7 +33,7 @@ impl TryFrom<u8> for ResultCode {
         }
     }
 }
-#[derive(PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum StorageType {
     Default = 0,
@@ -60,6 +60,37 @@ impl TryFrom<u8> for StorageType {
             0 => Ok(StorageType::Default),
             1 => Ok(StorageType::LatestFinal),
             2 => Ok(StorageType::LatestNonFinal),
+            _ => Err(()),
+        }
+    }
+}
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum EntryKind {
+    Regular = 0,
+    Inner = 1,
+    Validator = 2,
+}
+
+#[allow(dead_code)]
+impl EntryKind {
+    pub fn str_snake_case(self) -> &'static str {
+        match self {
+            EntryKind::Regular => "regular",
+            EntryKind::Inner => "inner",
+            EntryKind::Validator => "validator",
+        }
+    }
+}
+
+impl TryFrom<u8> for EntryKind {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, ()> {
+        match value {
+            0 => Ok(EntryKind::Regular),
+            1 => Ok(EntryKind::Inner),
+            2 => Ok(EntryKind::Validator),
             _ => Err(()),
         }
     }

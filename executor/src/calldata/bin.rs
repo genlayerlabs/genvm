@@ -40,7 +40,7 @@ impl Parser<'_> {
     }
 
     fn fetch_slice(&mut self, le: usize) -> anyhow::Result<&[u8]> {
-        if self.0.len() < ADDRESS_SIZE {
+        if self.0.len() < le {
             anyhow::bail!("invalid size")
         }
 
@@ -53,7 +53,7 @@ impl Parser<'_> {
 
     fn map_to_size(size: &num_bigint::BigUint) -> anyhow::Result<usize> {
         if size.bits() > 32 {
-            Err(anyhow::anyhow!("invalid size"))
+            Err(anyhow::anyhow!("container size is too large {}>32", size.bits()))
         } else {
             Ok(*size.to_u32_digits().first().unwrap() as usize)
         }
@@ -62,7 +62,7 @@ impl Parser<'_> {
     fn fetch_val(&mut self) -> anyhow::Result<Value> {
         let mut val = self.fetch_uleb()?;
 
-        let val_least_byte = (val.iter_u32_digits().next().unwrap() & (u8::MAX as u32)) as u8;
+        let val_least_byte = (val.iter_u32_digits().next().unwrap_or(0) & (u8::MAX as u32)) as u8;
         let typ = val_least_byte & (((1 << BITS_IN_TYPE) - 1) as u8);
 
         val >>= BITS_IN_TYPE;
@@ -179,9 +179,8 @@ fn append_uleb(to: &mut Vec<u8>, mut num: num_bigint::BigUint) {
     }
 
     loop {
-        let mut cur = (num.iter_u32_digits().next().unwrap() & ((1 << BITS_IN_TYPE) - 1)) as u8;
-
-        num >>= BITS_IN_TYPE;
+        let mut cur = (num.iter_u32_digits().next().unwrap_or(0) & 0xff) as u8;
+        num >>= 7;
         let has_next = num != num_bigint::BigUint::ZERO;
 
         if has_next {
