@@ -6,10 +6,7 @@ use serde::Deserialize;
 use wiggle::GuestError;
 
 use crate::{
-    errors::*,
-    ustar::SharedBytes,
-    vm::{self, RunOk},
-    AccountAddress, GenericAddress, MessageData,
+    calldata, errors::*, ustar::SharedBytes, vm::{self, RunOk}, AccountAddress, GenericAddress, MessageData
 };
 
 use super::{base, common::*};
@@ -111,6 +108,7 @@ pub(crate) mod generated {
 
         async: {
             genlayer_sdk::{
+                cdrpc,
                 call_contract, run_nondet, sandbox,
                 web_render,
                 exec_prompt, exec_prompt_template,
@@ -130,6 +128,7 @@ pub(crate) mod generated {
 
         async: {
             genlayer_sdk::{
+                cdrpc,
                 call_contract, run_nondet, sandbox,
                 web_render,
                 exec_prompt, exec_prompt_template,
@@ -333,6 +332,34 @@ where
 #[allow(unused_variables)]
 #[async_trait::async_trait]
 impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
+    async fn cdrpc(
+        &mut self,
+        mem: &mut wiggle::GuestMemory<'_>,
+        request: &generated::types::Bytes,
+    ) -> Result<generated::types::Fd, generated::types::Error> {
+        let request = request.read_owned(mem)?;
+
+        let request = match calldata::parse(&request) {
+            Err(e) => {
+                log::info!(error = genvm_common::log_error(&e); "calldata parse failed");
+
+                return Err(generated::types::Errno::Inval.into())
+            }
+            Ok(v) => v,
+        };
+
+        let request = match calldata::from_value(request) {
+            Ok(v) => v,
+            Err(e) => {
+                log::info!(error = genvm_common::log_error(&e.0); "calldata deserialization failed");
+
+                return Err(generated::types::Errno::Inval.into())
+            }
+        };
+
+        todo!()
+    }
+
     fn get_message_data(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,

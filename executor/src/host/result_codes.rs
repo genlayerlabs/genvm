@@ -1,5 +1,5 @@
-use serde_derive::Serialize;
-#[derive(PartialEq, Clone, Copy, Serialize)]
+use serde_derive::{Serialize, Deserialize};
+#[derive(PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum ResultCode {
     Return = 0,
@@ -33,7 +33,7 @@ impl TryFrom<u8> for ResultCode {
         }
     }
 }
-#[derive(PartialEq, Clone, Copy, Serialize)]
+#[derive(PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum StorageType {
     Default = 0,

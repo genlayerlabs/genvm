@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::vm;
 
 pub mod base;
-mod common;
 mod cdrpc;
+mod common;
 pub mod genlayer_sdk;
 pub mod preview1;
 

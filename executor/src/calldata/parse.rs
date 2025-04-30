@@ -34,7 +34,7 @@ impl Parser<'_> {
             res += byte & 0x7f;
 
             if byte & 0x80 == 0 {
-                return Ok(res)
+                return Ok(res);
             }
         }
     }
@@ -92,7 +92,7 @@ impl Parser<'_> {
                 } else {
                     Err(anyhow::anyhow!("invalid special"))
                 }
-            },
+            }
             TYPE_BYTES => {
                 let full_size = Self::map_to_size(&val)?;
                 let slice = self.fetch_slice(full_size)?;
@@ -145,20 +145,21 @@ impl Parser<'_> {
             TYPE_NINT => {
                 val += 1u32;
 
-                Ok(Value::Number(num_bigint::BigInt::from_biguint(num_bigint::Sign::Minus, val)))
+                Ok(Value::Number(num_bigint::BigInt::from_biguint(
+                    num_bigint::Sign::Minus,
+                    val,
+                )))
             }
-            TYPE_PINT => {
-                Ok(Value::Number(num_bigint::BigInt::from_biguint(num_bigint::Sign::Plus, val)))
-            }
-            v => {
-                Err(anyhow::anyhow!("invalid type {v}"))
-            }
+            TYPE_PINT => Ok(Value::Number(num_bigint::BigInt::from_biguint(
+                num_bigint::Sign::Plus,
+                val,
+            ))),
+            v => Err(anyhow::anyhow!("invalid type {v}")),
         }
     }
 }
 
 pub fn parse(data: &[u8]) -> anyhow::Result<Value> {
-
     let mut parser = Parser(data);
 
     let ret = parser.fetch_val()?;

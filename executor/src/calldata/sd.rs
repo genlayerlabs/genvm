@@ -1,9 +1,9 @@
-use std::collections::BTreeMap;
 use serde::de::Error as _;
 use serde::de::IntoDeserializer;
+use std::collections::BTreeMap;
 
-use super::types::*;
 use super::error::*;
+use super::types::*;
 
 impl<'de> serde::de::Deserialize<'de> for Value {
     #[inline]
@@ -49,10 +49,14 @@ impl<'de> serde::de::Deserialize<'de> for Value {
 
             #[inline]
             fn visit_f64<E>(self, value: f64) -> Result<Value, E>
-                where E: serde::de::Error,
+            where
+                E: serde::de::Error,
             {
                 // TODO: we may want to check for integer value
-                Err(serde::de::Error::invalid_type(serde::de::Unexpected::Float(value), &self))
+                Err(serde::de::Error::invalid_type(
+                    serde::de::Unexpected::Float(value),
+                    &self,
+                ))
             }
 
             #[inline]
@@ -294,9 +298,7 @@ impl<'de> serde::de::MapAccess<'de> for MapDeserializer {
         match self.iter.next() {
             Some((key, value)) => {
                 self.value = Some(value);
-                let key_de = MapKeyDeserializer {
-                    key,
-                };
+                let key_de = MapKeyDeserializer { key };
                 seed.deserialize(key_de).map(Some)
             }
             None => Ok(None),
@@ -339,10 +341,7 @@ where
     }
 }
 
-fn visit_map_enum<'de, V>(
-    map: BTreeMap<String, Value>,
-    visitor: V,
-) -> Result<V::Value, Error>
+fn visit_map_enum<'de, V>(map: BTreeMap<String, Value>, visitor: V) -> Result<V::Value, Error>
 where
     V: serde::de::Visitor<'de>,
 {

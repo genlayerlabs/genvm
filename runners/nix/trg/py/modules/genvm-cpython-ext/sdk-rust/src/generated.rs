@@ -148,6 +148,15 @@ pub unsafe fn contract_return(result: Bytes) {
     genlayer_sdk::contract_return(&result as *const _ as i32);
 }
 
+pub unsafe fn cdrpc(request: Bytes) -> Result<Fd, Errno> {
+    let mut rp0 = MaybeUninit::<Fd>::uninit();
+    let ret = genlayer_sdk::cdrpc(&request as *const _ as i32, rp0.as_mut_ptr() as i32);
+    match ret {
+        0 => Ok(core::ptr::read(rp0.as_mut_ptr() as i32 as *const Fd)),
+        _ => Err(Errno(ret as u32)),
+    }
+}
+
 pub unsafe fn get_message_data() -> Result<ResultNow, Errno> {
     let mut rp0 = MaybeUninit::<ResultNow>::uninit();
     let ret = genlayer_sdk::get_message_data(rp0.as_mut_ptr() as i32);
@@ -339,6 +348,7 @@ pub mod genlayer_sdk {
     extern "C" {
         pub fn rollback(arg0: i32, arg1: i32) -> !;
         pub fn contract_return(arg0: i32) -> !;
+        pub fn cdrpc(arg0: i32, arg1: i32) -> i32;
         pub fn get_message_data(arg0: i32) -> i32;
         pub fn get_entrypoint(arg0: i32) -> i32;
         pub fn run_nondet(arg0: i32, arg1: i32, arg2: i32) -> i32;

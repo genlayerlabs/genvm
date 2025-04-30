@@ -13,6 +13,11 @@
         (@witx noreturn)
     )
 
+    (@interface func (export "cdrpc")
+        (param $request $bytes)
+        (result $error (expected $fd (error $errno)))
+    )
+
     (@interface func (export "get_message_data")
         (result $error (expected $result_now (error $errno)))
     )
