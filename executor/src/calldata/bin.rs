@@ -23,6 +23,7 @@ const SPECIAL_ADDR: u8 = (3 << BITS_IN_TYPE) | TYPE_SPECIAL;
 impl Parser<'_> {
     fn fetch_uleb(&mut self) -> anyhow::Result<num_bigint::BigUint> {
         let mut res = num_bigint::BigUint::ZERO;
+        let mut off = 0u64;
         loop {
             if self.0.is_empty() {
                 anyhow::bail!("unterminated uleb")
@@ -31,11 +32,18 @@ impl Parser<'_> {
             let byte = self.0[0];
             self.0 = &self.0[1..];
 
-            res += byte & 0x7f;
+            res += num_bigint::BigUint::from(byte & 0x7f) << off;
 
             if byte & 0x80 == 0 {
                 return Ok(res);
             }
+
+            off = match off.checked_add(7) {
+                Some(off) => off,
+                None => {
+                    anyhow::bail!("number is too big");
+                }
+            };
         }
     }
 
@@ -58,7 +66,7 @@ impl Parser<'_> {
                 size.bits()
             ))
         } else {
-            Ok(*size.to_u32_digits().first().unwrap() as usize)
+            Ok(size.to_u32_digits().first().cloned().unwrap_or(0) as usize)
         }
     }
 
@@ -72,18 +80,14 @@ impl Parser<'_> {
 
         match typ {
             TYPE_SPECIAL => {
-                if val.bits() > 8 {
-                    anyhow::bail!("invalid special value")
+                if val.bits() > 8 - BITS_IN_TYPE as u64 {
+                    anyhow::bail!("invalid special value {}", val << BITS_IN_TYPE)
                 }
                 match val_least_byte {
                     SPECIAL_NULL => Ok(Value::Null),
                     SPECIAL_TRUE => Ok(Value::Bool(true)),
                     SPECIAL_FALSE => Ok(Value::Bool(true)),
                     SPECIAL_ADDR => {
-                        if self.0.len() < ADDRESS_SIZE {
-                            anyhow::bail!("invalid address")
-                        }
-
                         let addr_slice = self.fetch_slice(ADDRESS_SIZE)?;
 
                         let mut addr = [0; ADDRESS_SIZE];
@@ -91,7 +95,10 @@ impl Parser<'_> {
 
                         Ok(Value::Address(Address(addr)))
                     }
-                    x => Err(anyhow::anyhow!("invalid special {x}")),
+                    x => Err(anyhow::anyhow!(
+                        "invalid special {x}, full={}",
+                        val << BITS_IN_TYPE
+                    )),
                 }
             }
             TYPE_BYTES => {
@@ -132,7 +139,7 @@ impl Parser<'_> {
 
                     if let Some((k, _)) = ret.last_key_value() {
                         if k >= &as_str {
-                            anyhow::bail!("invalid calldata ordering old=`{k}` new=`{as_str}`")
+                            anyhow::bail!("invalid calldata map ordering old=`{k}` new=`{as_str}`")
                         }
                     }
 

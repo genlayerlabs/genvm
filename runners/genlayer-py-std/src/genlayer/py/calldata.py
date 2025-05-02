@@ -79,6 +79,8 @@ type Encodable = (
 	None
 	| int
 	| str
+	| Address
+	| bool
 	| bytes
 	| collections.abc.Sequence[Encodable]
 	| collections.abc.Mapping[str, Encodable]

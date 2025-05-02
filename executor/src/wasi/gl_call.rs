@@ -15,11 +15,13 @@ pub enum On {
 pub enum Message {
     EthSend {
         address: calldata::Address,
+        #[serde(with = "serde_bytes")]
         calldata: Vec<u8>,
         value: primitive_types::U256,
     },
     EthCall {
         address: calldata::Address,
+        #[serde(with = "serde_bytes")]
         calldata: Vec<u8>,
     },
     CallContract {
@@ -35,6 +37,7 @@ pub enum Message {
     },
     DeployContract {
         calldata: calldata::Value,
+        #[serde(with = "serde_bytes")]
         code: Vec<u8>,
         value: primitive_types::U256,
         on: On,
@@ -42,11 +45,14 @@ pub enum Message {
     },
 
     RunNondet {
+        #[serde(with = "serde_bytes")]
         data_leader: Vec<u8>,
+        #[serde(with = "serde_bytes")]
         data_validator: Vec<u8>,
     },
 
     Sandbox {
+        #[serde(with = "serde_bytes")]
         data: Vec<u8>,
     },
 
