@@ -293,25 +293,45 @@ where
     T: serde::de::DeserializeSeed<'de>,
 {
     let full_name = std::any::type_name::<T::Value>();
-    if full_name == "num_bigint::bigint::BigInt" {
-        match value {
+    match full_name {
+        "num_bigint::bigint::BigInt" => match value {
             Value::Number(num) => {
                 let ptr = std::ptr::from_ref(&num) as *const T::Value;
                 std::mem::forget(num);
                 Ok(unsafe { ptr.read() })
             }
             _ => Err(serde::de::Error::custom("invalid type")),
-        }
-    } else if full_name == "genvm::calldata::types::Address" {
-        match value {
+        },
+        "primitive_types::U256" => match value {
+            Value::Number(num) => {
+                let (sign, mut bytes) = num.to_bytes_le();
+
+                if sign == num_bigint::Sign::Minus {
+                    return Err(Error::custom("negative for u256"));
+                }
+
+                while bytes.len() < 32 {
+                    bytes.push(0);
+                }
+
+                if bytes.len() > 32 {
+                    return Err(Error::custom("too big for u256"));
+                }
+
+                let res = primitive_types::U256::from_little_endian(&bytes);
+                let ptr = std::ptr::from_ref(&res) as *const T::Value;
+                Ok(unsafe { ptr.read() })
+            }
+            _ => Err(serde::de::Error::custom("invalid type")),
+        },
+        "genvm::calldata::types::Address" => match value {
             Value::Address(addr) => {
                 let ptr = std::ptr::from_ref(&addr) as *const T::Value;
                 Ok(unsafe { ptr.read() })
             }
             _ => Err(serde::de::Error::custom("invalid type")),
-        }
-    } else {
-        seed.deserialize(value)
+        },
+        _ => seed.deserialize(value),
     }
 }
 

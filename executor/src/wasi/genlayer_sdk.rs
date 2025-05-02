@@ -37,7 +37,8 @@ pub struct TransformedMessage {
     pub entry_kind: EntryKind,
     #[serde(with = "serde_bytes")]
     pub entry_data: Vec<u8>,
-    pub entry_leader_data: Option<RunOk>,
+    #[serde(with = "serde_bytes")]
+    pub entry_leader_data: Option<Vec<u8>>,
 }
 
 impl TransformedMessage {
@@ -47,6 +48,8 @@ impl TransformedMessage {
         entry_data: Vec<u8>,
         entry_leader_data: Option<RunOk>,
     ) -> Self {
+        let entry_leader_data = entry_leader_data.map(|x| Vec::from_iter(x.as_bytes_iter()));
+
         TransformedMessage {
             contract_address: self.contract_address,
             sender_address: self.sender_address,
@@ -288,16 +291,18 @@ where
 {
     match fut.await? {
         Ok(r) => {
-            let mut bundle = Vec::new();
-            bundle.push(0);
-            serde_json::to_writer(&mut bundle, &r)?;
-            Ok(Box::from(bundle))
+            let data = serde_json::json!({
+                "ok": r
+            });
+
+            Ok(Box::from(serde_json::to_vec(&data)?))
         }
         Err(e) => {
-            let mut bundle = Vec::new();
-            bundle.push(1);
-            serde_json::to_writer(&mut bundle, &e)?;
-            Ok(Box::from(bundle))
+            let data = serde_json::json!({
+                "error": e
+            });
+
+            Ok(Box::from(serde_json::to_vec(&data)?))
         }
     }
 }
@@ -327,6 +332,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             }
             Ok(v) => v,
         };
+
+        log::trace!(request:? = request; "gl_call");
 
         let request: gl_call::Message = match calldata::from_value(request) {
             Ok(v) => v,
@@ -817,7 +824,7 @@ impl ContextVFS<'_> {
             return Err(generated::types::Errno::Forbidden.into());
         }
 
-        // relaxed reason: here is no actual race possible, only the deterministic vm can call it, and it has no concurrency
+        // relaxed reason: only deterministic VM can run it
         let call_no = self
             .context
             .shared_data
@@ -909,6 +916,7 @@ impl ContextVFS<'_> {
                     _ => Err(ContractError(my_err, my_cause).into()),
                 },
                 _ => {
+                    log::warn!(result:? = leaders_res; "validator reported unexpected result");
                     Err(ContractError(format!("validator_disagrees call {}", call_no), None).into())
                 }
             },

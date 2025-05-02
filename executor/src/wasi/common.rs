@@ -67,6 +67,9 @@ pub enum FileDescriptor {
     Dir { path: Vec<String> },
 }
 
+#[allow(dead_code)]
+const _: FileDescriptor = FileDescriptor::Stdin;
+
 pub fn read_string(memory: &GuestMemory<'_>, ptr: GuestPtr<str>) -> Result<String, GuestError> {
     Ok(memory.as_cow_str(ptr)?.into_owned())
 }

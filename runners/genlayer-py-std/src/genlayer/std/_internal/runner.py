@@ -78,8 +78,21 @@ def _handle_regular() -> typing.NoReturn:
 				_give_result(ctx.contract_type.__get_schema__)
 			case '':
 				if err := check_abstracts(ctx, ctx.contract_type.__receive__):
-					raise ValueError(err)
-				return ctx.contract_type.__receive__
+					if err2 := check_abstracts(
+						ctx, ctx.contract_type.__handle_undefined_method__
+					):
+						exc = ValueError(err2)
+						exc.add_note(err)
+						raise exc
+					else:
+						contract = get_contract_instance(ctx.contract_type)
+						_give_result(
+							lambda: contract.__handle_undefined_method__(
+								'', ctx.cd.get('args', []), ctx.cd.get('kwargs', {})
+							)
+						)
+				else:
+					return ctx.contract_type.__receive__
 			case x:
 				if x.startswith('__'):
 					raise ValueError('calls to methods that start with __ is forbidden')
@@ -91,20 +104,13 @@ def _handle_regular() -> typing.NoReturn:
 						raise ValueError(err)
 					return meth
 				if err := check_abstracts(ctx, ctx.contract_type.__handle_undefined_method__):
-					if err2 := check_abstracts(ctx, ctx.contract_type.__receive__):
-						exc = ValueError(err2)
-						exc.add_note(err)
-						raise exc
-					else:
-						contract = get_contract_instance(ctx.contract_type)
-						_give_result(contract.__receive__)
-				else:
-					contract = get_contract_instance(ctx.contract_type)
-					_give_result(
-						lambda: contract.__handle_undefined_method__(
-							ctx.cd.get('method', ''), ctx.cd.get('args', []), ctx.cd.get('kwargs', {})
-						)
+					raise ValueError(err)
+				contract = get_contract_instance(ctx.contract_type)
+				_give_result(
+					lambda: contract.__handle_undefined_method__(
+						ctx.cd.get('method', ''), ctx.cd.get('args', []), ctx.cd.get('kwargs', {})
 					)
+				)
 
 	# load contract, it should set __known_contact__
 	import contract as _user_contract_module  # type: ignore

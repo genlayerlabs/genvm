@@ -4,10 +4,43 @@ use crate::{calldata, host};
 
 #[derive(Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Debug)]
 pub enum On {
-    #[serde(rename = "Finalized")]
+    #[serde(rename = "finalized")]
     Finalized,
-    #[serde(rename = "Accepted")]
+    #[serde(rename = "accepted")]
     Accepted,
+}
+
+fn storage_type_from_bigint<'de, D>(deserializer: D) -> Result<host::StorageType, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct Visitor;
+
+    impl serde::de::Visitor<'_> for Visitor {
+        type Value = host::StorageType;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a number")
+        }
+
+        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            let as_u8: u8 = v.try_into().map_err(|_e| E::custom("out of range"))?;
+            host::StorageType::try_from(as_u8).map_err(|_e| E::custom("out of range"))
+        }
+
+        fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            let as_u8: u8 = v.try_into().map_err(|_e| E::custom("out of range"))?;
+            host::StorageType::try_from(as_u8).map_err(|_e| E::custom("out of range"))
+        }
+    }
+
+    deserializer.deserialize_any(Visitor)
 }
 
 #[allow(clippy::enum_variant_names)]
@@ -27,6 +60,7 @@ pub enum Message {
     CallContract {
         address: calldata::Address,
         calldata: calldata::Value,
+        #[serde(deserialize_with = "storage_type_from_bigint")]
         state: host::StorageType,
     },
     PostMessage {

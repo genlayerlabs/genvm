@@ -4,7 +4,7 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 cd "$SCRIPT_DIR"
 
-DOCKER_BUILD_DIR=../../modules/implementation/web/docker
+DOCKER_BUILD_DIR=../../modules/implementation/webdriver
 
 IMAGE_ID="$(docker build -q -t genvm/modules-webdriver "$DOCKER_BUILD_DIR")"
 

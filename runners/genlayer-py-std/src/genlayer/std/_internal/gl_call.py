@@ -26,14 +26,11 @@ def gl_call_generic[T](
 ) -> Lazy[T]:
 	fd = _imp_raw(calldata.encode(data))
 	if fd == 2**32 - 1:
-		return None  # type: ignore
+		return Lazy(lambda: None)  # type: ignore
 
 	def run():
 		with os.fdopen(fd, 'rb') as f:
-			code = f.read(1)
 			rest = f.read()
-		if code != b'\x00':
-			raise Exception('recoverable error', rest.decode('utf-8'))
 		return after(rest)
 
 	return Lazy(run)

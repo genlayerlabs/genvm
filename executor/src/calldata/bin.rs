@@ -86,7 +86,7 @@ impl Parser<'_> {
                 match val_least_byte {
                     SPECIAL_NULL => Ok(Value::Null),
                     SPECIAL_TRUE => Ok(Value::Bool(true)),
-                    SPECIAL_FALSE => Ok(Value::Bool(true)),
+                    SPECIAL_FALSE => Ok(Value::Bool(false)),
                     SPECIAL_ADDR => {
                         let addr_slice = self.fetch_slice(ADDRESS_SIZE)?;
 

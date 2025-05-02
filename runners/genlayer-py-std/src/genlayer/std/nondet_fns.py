@@ -6,6 +6,12 @@ from ..py.types import *
 import genlayer.std._wasi as wasi
 import json
 
+import genlayer.std._internal.gl_call as gl_call
+
+
+class NondetException(Exception):
+	""" """
+
 
 class GetWebpageKwArgs(typing.TypedDict):
 	mode: typing.Literal['html', 'text']
@@ -18,6 +24,13 @@ class GetWebpageKwArgs(typing.TypedDict):
 	How long to wait after dom loaded (for js to emit dynamic content)
 	Should be in format such as "1000ms" or "1s"
 	"""
+
+
+def _decode_nondet(buf):
+	ret = json.loads(bytes(buf).decode('utf-8'))
+	if err := ret.get('error'):
+		raise NondetException(err)
+	return ret['ok']
 
 
 @_lazy_api
@@ -33,9 +46,16 @@ def get_webpage(url: str, **config: typing.Unpack[GetWebpageKwArgs]) -> Lazy[str
 
 	:rtype: ``str``
 	"""
-	payload = {'url': url, **config}
-	return lazy_from_fd(
-		wasi.web_render(json.dumps(payload)), lambda buf: json.loads(bytes(buf))['text']
+
+	return gl_call.gl_call_generic(
+		{
+			'WebRender': {
+				'url': url,
+				'mode': config.get('mode', 'text'),
+				'wait_after_loaded': config.get('wait_after_loaded', '0ms'),
+			}
+		},
+		lambda x: _decode_nondet(x)['text'],  # in future we may add images here as well
 	)
 
 
@@ -76,8 +96,12 @@ def exec_prompt(
 	:rtype: ``str``
 	"""
 
-	payload = {'prompt': prompt, **config}
-
-	return lazy_from_fd(
-		wasi.exec_prompt(json.dumps(payload)), lambda buf: json.loads(bytes(buf))
+	return gl_call.gl_call_generic(
+		{
+			'ExecPrompt': {
+				'prompt': prompt,
+				'response_format': config.get('response_format', 'text'),
+			}
+		},
+		_decode_nondet,
 	)

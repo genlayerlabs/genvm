@@ -175,7 +175,9 @@ def get_schema(contract: type) -> typing.Any:
 	meths = {
 		name: meth
 		for name, meth in sorted(inspect.getmembers(contract))
-		if inspect.isfunction(meth) and _is_public(meth)
+		if inspect.isfunction(meth)
+		and _is_public(meth)
+		and name != '__on_errored_message__'
 	}
 
 	for k in meths:
