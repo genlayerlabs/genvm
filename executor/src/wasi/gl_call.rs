@@ -45,6 +45,7 @@ where
 
 #[allow(clippy::enum_variant_names)]
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub enum Message {
     EthSend {
         address: calldata::Address,
