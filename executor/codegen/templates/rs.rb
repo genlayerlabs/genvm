@@ -50,7 +50,7 @@ json_path, out_path = ARGV
 
 buf = String.new
 
-buf << "use serde_derive::{Serialize, Deserialize};\n"
+buf << "use serde_derive::{Deserialize, Serialize};\n"
 
 JSON.load_file(Pathname.new(json_path)).each { |t|
 	t_os = OpenStruct.new(t)
