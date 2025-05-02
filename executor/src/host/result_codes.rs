@@ -69,7 +69,6 @@ impl TryFrom<u8> for StorageType {
 pub enum EntryKind {
     Regular = 0,
     Inner = 1,
-    Validator = 2,
 }
 
 #[allow(dead_code)]
@@ -78,7 +77,6 @@ impl EntryKind {
         match self {
             EntryKind::Regular => "regular",
             EntryKind::Inner => "inner",
-            EntryKind::Validator => "validator",
         }
     }
 }
@@ -90,7 +88,6 @@ impl TryFrom<u8> for EntryKind {
         match value {
             0 => Ok(EntryKind::Regular),
             1 => Ok(EntryKind::Inner),
-            2 => Ok(EntryKind::Validator),
             _ => Err(()),
         }
     }

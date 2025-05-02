@@ -95,7 +95,7 @@ pub async fn run_with_impl(
 
                 entry_kind: EntryKind::Regular,
                 entry_data: entrypoint,
-                entry_leader_data: None,
+                entry_stage_data: calldata::Value::Null,
             },
             supervisor: supervisor_clone,
         };

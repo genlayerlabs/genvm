@@ -1,7 +1,7 @@
 __all__ = ('get_webpage', 'exec_prompt', 'GetWebpageKwArgs', 'ExecPromptKwArgs')
 
 import typing
-from ._internal import lazy_from_fd, _lazy_api
+from ._internal import _lazy_api
 from ..py.types import *
 import genlayer.std._wasi as wasi
 import json

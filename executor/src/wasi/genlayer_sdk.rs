@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use wiggle::GuestError;
@@ -37,8 +38,12 @@ pub struct TransformedMessage {
     pub entry_kind: EntryKind,
     #[serde(with = "serde_bytes")]
     pub entry_data: Vec<u8>,
-    #[serde(with = "serde_bytes")]
-    pub entry_leader_data: Option<Vec<u8>>,
+
+    pub entry_stage_data: calldata::Value,
+}
+
+fn default_entry_stage_data() -> calldata::Value {
+    calldata::Value::Null
 }
 
 impl TransformedMessage {
@@ -48,7 +53,13 @@ impl TransformedMessage {
         entry_data: Vec<u8>,
         entry_leader_data: Option<RunOk>,
     ) -> Self {
-        let entry_leader_data = entry_leader_data.map(|x| Vec::from_iter(x.as_bytes_iter()));
+        let entry_leader_data = match entry_leader_data {
+            None => default_entry_stage_data(),
+            Some(entry_leader_data) => calldata::Value::Map(BTreeMap::from([(
+                "leaders_result".into(),
+                calldata::Value::Bytes(Vec::from_iter(entry_leader_data.as_bytes_iter())),
+            )])),
+        };
 
         TransformedMessage {
             contract_address: self.contract_address,
@@ -61,7 +72,7 @@ impl TransformedMessage {
             datetime: self.datetime,
             entry_kind,
             entry_data,
-            entry_leader_data,
+            entry_stage_data: entry_leader_data,
         }
     }
 
@@ -452,7 +463,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         chain_id: my_data.chain_id,
                         entry_kind: my_data.entry_kind,
                         entry_data: my_data.entry_data,
-                        entry_leader_data: None,
+                        entry_stage_data: default_entry_stage_data(),
                         stack: my_data.stack,
                     },
                     supervisor: supervisor.clone(),
@@ -638,7 +649,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 data_leader,
                 data_validator,
             } => self.run_nondet(data_leader, data_validator).await,
-            gl_call::Message::Sandbox { data } => self.sandbox(data).await,
+            gl_call::Message::Sandbox {
+                data,
+                allow_write_ops,
+            } => self.sandbox(data, allow_write_ops).await,
         }
     }
 
@@ -861,7 +875,7 @@ impl ContextVFS<'_> {
                     RunOk::ContractError(msg, _) => RunOk::ContractError(msg.clone(), None),
                 };
                 self.context.data.message_data.fork_leader(
-                    EntryKind::Validator,
+                    EntryKind::Inner,
                     data_validator,
                     Some(dup),
                 )
@@ -901,22 +915,8 @@ impl ContextVFS<'_> {
                 RunOk::Return(v) if v == [8] => {
                     Err(ContractError(format!("validator_disagrees call {}", call_no), None).into())
                 }
-                RunOk::ContractError(my_err, my_cause) => match leaders_res {
-                    RunOk::ContractError(leader_err, leader_cause) => {
-                        log::info!(
-                            target: "vm",
-                            event = "validator errored for leader error",
-                            validator_error = my_err,
-                            my_cause:? = my_cause,
-                            leader_cause:? = leader_cause;
-                            "AGREE"
-                        );
-                        Err(ContractError(leader_err, leader_cause).into())
-                    }
-                    _ => Err(ContractError(my_err, my_cause).into()),
-                },
                 _ => {
-                    log::warn!(result:? = leaders_res; "validator reported unexpected result");
+                    log::warn!(validator_result:? = my_res, leaders_result:? = leaders_res; "validator reported unexpected result");
                     Err(ContractError(format!("validator_disagrees call {}", call_no), None).into())
                 }
             },
@@ -928,20 +928,23 @@ impl ContextVFS<'_> {
     async fn sandbox(
         &mut self,
         data: Vec<u8>,
+        allow_write_ops: bool,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         let supervisor = self.context.data.supervisor.clone();
 
         let message_data = self.context.data.message_data.fork(EntryKind::Inner, data);
 
+        let zelf_conf = &self.context.data.conf;
+
         let vm_data = SingleVMData {
             conf: base::Config {
-                is_deterministic: self.context.data.conf.is_deterministic,
+                is_deterministic: zelf_conf.is_deterministic,
                 can_read_storage: false,
-                can_write_storage: false,
+                can_write_storage: zelf_conf.can_write_storage & allow_write_ops,
                 can_spawn_nondet: false,
                 can_call_others: false,
-                can_send_messages: false,
-                state_mode: crate::host::StorageType::Default,
+                can_send_messages: zelf_conf.can_send_messages & allow_write_ops,
+                state_mode: zelf_conf.state_mode,
             },
             message_data,
             supervisor: supervisor.clone(),

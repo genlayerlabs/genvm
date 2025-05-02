@@ -6,6 +6,32 @@ use super::types::*;
 
 type Result<T> = core::result::Result<T, Error>;
 
+impl serde::Serialize for Value {
+    #[inline]
+    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+    where
+        S: ::serde::Serializer,
+    {
+        match self {
+            Value::Null => serializer.serialize_unit(),
+            Value::Bool(b) => serializer.serialize_bool(*b),
+            Value::Bytes(b) => serializer.serialize_bytes(b),
+            Value::Str(s) => serializer.serialize_str(s),
+            Value::Array(v) => v.serialize(serializer),
+            Value::Map(m) => {
+                use serde::ser::SerializeMap;
+                let mut map = serializer.serialize_map(Some(m.len()))?;
+                for (k, v) in m {
+                    map.serialize_entry(k, v)?;
+                }
+                map.end()
+            }
+            Value::Address(_) => Err(S::Error::custom("can't serialize address")),
+            Value::Number(_) => Err(S::Error::custom("can't serialize number")),
+        }
+    }
+}
+
 pub struct Serializer;
 
 impl serde::Serializer for Serializer {

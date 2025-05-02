@@ -46,7 +46,7 @@ class MessageRawType(typing.TypedDict):
 
 	entry_kind: int
 	entry_data: bytes
-	entry_leader_data: bytes | None
+	entry_stage_data: calldata.Encodable
 
 
 if os.getenv('GENERATING_DOCS', 'false') == 'true':

@@ -15,8 +15,6 @@ import genlayer.std._internal.gl_call as gl_call
 
 from ..py.types import *
 from ._internal import (
-	lazy_from_fd,
-	lazy_from_fd_no_check,
 	_lazy_api,
 )
 

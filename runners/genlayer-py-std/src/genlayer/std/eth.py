@@ -6,7 +6,7 @@ import json
 from genlayer.py.types import u256
 from genlayer.py.eth.generate import contract_generator
 from genlayer.py.eth.calldata import MethodEncoder, decode
-from ._internal import lazy_from_fd, _lazy_api
+from ._internal import _lazy_api
 import genlayer.std._wasi as wasi
 
 import genlayer.std._internal.gl_call as gl_call

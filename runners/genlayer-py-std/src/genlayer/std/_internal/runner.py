@@ -143,15 +143,11 @@ match message_raw['entry_kind']:
 		import cloudpickle
 
 		runner = cloudpickle.loads(message_raw['entry_data'])
-		_give_result(runner)
-	case EntryKind.VALIDATOR:
-		import cloudpickle
-		from . import decode_sub_vm_result_retn
 
-		runner = cloudpickle.loads(message_raw['entry_data'])
-		leader_data = message_raw['entry_leader_data']
-		assert leader_data is not None
-		leaders_res = decode_sub_vm_result_retn(leader_data)
-		_give_result(lambda: runner(leaders_res))
+		stage_data = message_raw['entry_stage_data']
+		if stage_data is None:
+			_give_result(runner)
+		else:
+			_give_result(lambda: runner(stage_data))
 	case x:
 		raise ValueError(f'invalid entry kind {x}')

@@ -89,6 +89,8 @@ pub enum Message {
     Sandbox {
         #[serde(with = "serde_bytes")]
         data: Vec<u8>,
+
+        allow_write_ops: bool,
     },
 
     WebRender(genvm_modules_interfaces::web::RenderPayload),

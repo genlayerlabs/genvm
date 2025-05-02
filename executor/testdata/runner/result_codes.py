@@ -17,4 +17,3 @@ class StorageType(IntEnum):
 class EntryKind(IntEnum):
 	REGULAR = 0
 	INNER = 1
-	VALIDATOR = 2
