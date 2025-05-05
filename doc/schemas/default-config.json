@@ -96,11 +96,17 @@
                             "type": "boolean",
                             "default": false
                           },
+                          "use_max_completion_tokens": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "use max_completion_tokens instead of max_tokens for openai-compatible provider"
+                          },
                           "meta": {
                             "type": ["object", "null"],
                             "default": null
                           }
-                        }
+                        },
+                        "additionalProperties": false
                       }
                     }
                   }

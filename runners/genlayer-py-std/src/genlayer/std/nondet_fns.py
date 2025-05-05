@@ -64,19 +64,22 @@ class ExecPromptKwArgs(typing.TypedDict):
 	"""
 	Defaults to ``text``
 	"""
+	image: typing.NotRequired[bytes | None]
 
 
 @typing.overload
-def exec_prompt(prompt: str) -> str: ...
-
-
-@typing.overload
-def exec_prompt(prompt: str, response_format: typing.Literal['text']) -> str: ...
+def exec_prompt(prompt: str, *, image: bytes | None = None) -> str: ...
 
 
 @typing.overload
 def exec_prompt(
-	prompt: str, response_format: typing.Literal['json']
+	prompt: str, *, response_format: typing.Literal['text'], image: bytes | None = None
+) -> str: ...
+
+
+@typing.overload
+def exec_prompt(
+	prompt: str, *, response_format: typing.Literal['json'], image: bytes | None = None
 ) -> dict[str, typing.Any]: ...
 
 
@@ -101,6 +104,7 @@ def exec_prompt(
 			'ExecPrompt': {
 				'prompt': prompt,
 				'response_format': config.get('response_format', 'text'),
+				'image': config.get('image', None),
 			}
 		},
 		_decode_nondet,

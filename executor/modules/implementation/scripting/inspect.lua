@@ -252,8 +252,9 @@ function Inspector:putValue(v)
 	local tv = type(v)
 	if tv == 'string' then
 		puts(buf, smartQuote(escape(v)))
-	elseif tv == 'number' or tv == 'boolean' or tv == 'nil' or
-		tv == 'cdata' or tv == 'ctype' then
+	elseif tv == 'cdata' or tv == 'ctype' then
+		puts(buf, smartQuote("#" .. tostring(v)))
+	elseif tv == 'number' or tv == 'boolean' or tv == 'nil' then
 		puts(buf, tostring(v))
 	elseif tv == 'table' and not self.ids[v] then
 		local t = v

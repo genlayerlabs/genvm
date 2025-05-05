@@ -89,7 +89,7 @@ impl Handler {
             provider_id = provider_id,
             model = model,
             format:serde = format;
-            "exec_in_backend"
+            "exec_prompt_in_provider"
         );
 
         let provider = self
@@ -164,6 +164,8 @@ mod tests {
         });
     }
 
+    use crate::common;
+
     use super::super::{config, handler, prompt};
     use genvm_common::templater;
 
@@ -230,7 +232,7 @@ mod tests {
             genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)
                 .unwrap();
         let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
-        let provider = backend.to_provider(reqwest::Client::new());
+        let provider = backend.to_provider(common::create_client().unwrap());
 
         let res = provider
             .exec_prompt_text(
@@ -238,6 +240,9 @@ mod tests {
                     system_message: None,
                     temperature: 0.7,
                     user_message: "Respond with a single word \"yes\" (without quotes) and only this word, lowercase".to_owned(),
+                    image: None,
+                    max_tokens: 100,
+                    use_max_completion_tokens: true,
                 },
                 &backend.script_config.models.first_key_value().unwrap().0,
             )
@@ -276,7 +281,7 @@ mod tests {
             return;
         }
 
-        let provider = backend.to_provider(reqwest::Client::new());
+        let provider = backend.to_provider(common::create_client().unwrap());
 
         const PROMPT: &str = r#"respond with json object containing single key "result" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes. This object must not be wrapped into other objects. Example: {"result": 10}"#;
         let res = provider
@@ -285,6 +290,9 @@ mod tests {
                     system_message: Some("respond with json".to_owned()),
                     temperature: 0.7,
                     user_message: PROMPT.to_owned(),
+                    image: None,
+                    max_tokens: 100,
+                    use_max_completion_tokens: true,
                 },
                 &backend.script_config.models.first_key_value().unwrap().0,
             )
@@ -345,6 +353,6 @@ mod tests {
     make_test!(google);
     make_test!(xai);
 
-    //make_test!(heurist);
+    make_test!(heurist);
     //make_test!(atoma);
 }

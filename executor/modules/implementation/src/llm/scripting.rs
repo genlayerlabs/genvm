@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use crate::common::ModuleResult;
+use crate::common::{ModuleResult, ModuleResultUserError};
 use anyhow::Context;
 use genvm_modules_interfaces::llm as llm_iface;
 use mlua::{IntoLua, LuaSerdeExt, UserDataRef};
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use super::{
     config,
     handler::{self, OverloadedError},
-    prompt,
+    prompt::{self, ImageLua, ImageType},
 };
 
 pub struct UserVM {
@@ -41,6 +41,7 @@ impl mlua::UserData for handler::Handler {
             let (zelf, args) = args;
             let zelf: UserDataRef<Arc<handler::Handler>> =
                 zelf.borrow().with_context(|| "unboxing userdata")?;
+
             let args: Args = vm
                 .from_value(args)
                 .with_context(|| "deserializing arguments")?;
@@ -153,11 +154,34 @@ impl UserVM {
 
         let handler = self.vm.create_userdata(handler)?;
         let handler: mlua::Value = handler.into_lua(&self.vm)?;
-        let payload = self.vm.to_value(payload)?;
+
+        let image = match &payload.image {
+            None => self.vm.null(),
+            Some(v) => {
+                let kind = ImageType::sniff(v).ok_or(ModuleResultUserError(serde_json::json!(
+                    "can't sniff image type. only png and jpg are supported"
+                )))?;
+                let as_arc = Arc::new(ImageLua {
+                    data: v.clone(),
+                    kind,
+                });
+                let as_userdata = self.vm.create_ser_any_userdata(as_arc)?;
+                self.vm.convert(as_userdata)?
+            }
+        };
+
+        let payload = self.vm.create_table_from([
+            (
+                "response_format",
+                self.vm.to_value(&payload.response_format)?,
+            ),
+            ("prompt", self.vm.to_value(&payload.prompt)?),
+            ("image", image),
+        ])?;
 
         let arg = self.vm.create_table_from([
             ("handler", handler),
-            ("payload", payload),
+            ("payload", self.vm.convert(payload)?),
             ("host_data", host_data),
         ])?;
 

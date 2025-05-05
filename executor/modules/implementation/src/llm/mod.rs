@@ -68,7 +68,7 @@ fn handle_run(mut config: config::Config, args: CliArgsRun) -> Result<()> {
 
     let user_vm = scripting::UserVM::new(&config)?;
 
-    let client = reqwest::Client::new();
+    let client = common::create_client()?;
 
     let backends = config
         .backends
@@ -122,7 +122,7 @@ fn handle_check(config: config::Config, args: CliArgsCheck) -> Result<()> {
     )?;
 
     let backend: config::BackendConfig = serde_json::from_value(backend)?;
-    let provider = backend.to_provider(reqwest::Client::new());
+    let provider = backend.to_provider(common::create_client()?);
 
     let res = runtime.block_on(provider
         .exec_prompt_text(
@@ -130,6 +130,9 @@ fn handle_check(config: config::Config, args: CliArgsCheck) -> Result<()> {
                 system_message: None,
                 temperature: 0.7,
                 user_message: "Respond with a single word \"yes\" (without quotes) and only this word, lowercase".to_owned(),
+                image: None,
+                max_tokens: 30,
+                use_max_completion_tokens: true,
             },
             backend.script_config.models.first_key_value().unwrap().0,
         ))?;

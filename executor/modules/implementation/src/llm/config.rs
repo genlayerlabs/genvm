@@ -33,6 +33,8 @@ pub struct ModelConfig {
     pub supports_json: bool,
     #[serde(default = "default_false")]
     pub supports_image: bool,
+    #[serde(default = "default_false")]
+    pub use_max_completion_tokens: bool,
 
     #[serde(default = "default_json_null")]
     pub meta: serde_json::Value,

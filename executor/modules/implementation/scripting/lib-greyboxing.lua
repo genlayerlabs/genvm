@@ -1,7 +1,19 @@
 local M = {}
 
 M.all_backends = greyboxing.available_backends
-M.log = greyboxing.log
+
+local inspect = require('inspect')
+
+M.log = function(arg)
+	greyboxing.log(inspect(arg))
+end
+
+M.get_first_from_table = function(t)
+	for k, v in pairs(t) do
+		return { key = k, value = v }
+	end
+	return nil
+end
 
 M.exec_prompt_transform = function(args)
 	local handler = args.handler
@@ -10,6 +22,10 @@ M.exec_prompt_transform = function(args)
 		system_message = nil,
 		user_message = args.payload.prompt,
 		temperature = 0.7,
+		image = args.payload.image,
+
+		max_tokens = 1000,
+		use_max_completion_tokens = false,
 	}
 
 	local format = args.payload.response_format
@@ -30,7 +46,7 @@ function filter_backends_by(model_fn)
 	for name, conf in pairs(greyboxing.available_backends) do
 		local cur = {}
 		local has = false
-		for model_name, model_data in pairs(model_fn) do
+		for model_name, model_data in pairs(conf) do
 			if model_fn(model_data) then
 				cur[model_name] = model_data
 				has = true
@@ -50,7 +66,7 @@ M.backends_with_image_support = filter_backends_by(function(m) return m.supports
 M.backends_with_image_and_json_support = filter_backends_by(function(m) return m.supports_image and m.supports_json end)
 
 M.select_backends_for = function(args, format)
-	if format == 'json' then
+	if format == 'json' or format == 'bool' then
 		if args.image ~= nil then
 			return M.backends_with_image_and_json_support
 		else
@@ -91,6 +107,9 @@ M.exec_prompt_template_transform = function(args)
 		system_message = my_template.system,
 		user_message = as_user_text,
 		temperature = 0.7,
+		image = args.payload.image,
+		max_tokens = 1000,
+		use_max_completion_tokens = false,
 	}
 
 	return {

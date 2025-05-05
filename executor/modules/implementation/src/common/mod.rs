@@ -286,6 +286,13 @@ where
     COOKIE.scope(Arc::from(value), f)
 }
 
+pub fn create_client() -> anyhow::Result<reqwest::Client> {
+    reqwest::ClientBuilder::new()
+        .user_agent("reqwest")
+        .build()
+        .map_err(Into::into)
+}
+
 pub fn setup_cancels(
     rt: &tokio::runtime::Runtime,
     die_with_parent: bool,

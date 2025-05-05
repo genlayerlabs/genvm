@@ -917,6 +917,7 @@ dependencies = [
  "anyhow",
  "regex",
  "serde",
+ "serde_bytes",
  "serde_derive",
  "serde_json",
  "tokio",

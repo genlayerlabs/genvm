@@ -1,5 +1,6 @@
 use crate::common;
 use anyhow::Context;
+use base64::Engine;
 use common::ModuleResult;
 
 use super::{config, handler::OverloadedError, prompt};
@@ -75,10 +76,26 @@ impl prompt::Internal {
                 "content": sys,
             }));
         }
+
         messages.push(serde_json::json!({
             "role": "user",
             "content": self.user_message,
         }));
+
+        if let Some(img) = &self.image {
+            let mut encoded = "data:".to_owned();
+            encoded.push_str(img.kind.media_type());
+            encoded.push_str(";base64,");
+            base64::prelude::BASE64_STANDARD.encode_string(&img.data, &mut encoded);
+
+            messages.push(serde_json::json!({
+                "role": "user",
+                "content": [{
+                    "type": "input_image",
+                    "image_url": encoded,
+                }],
+            }));
+        }
 
         messages
     }
@@ -93,10 +110,19 @@ impl prompt::Internal {
             );
         }
 
+        let mut parts = Vec::new();
+        if let Some(img) = &self.image {
+            parts.push(serde_json::json!([{
+                "mime_type": img.kind.mime_type(),
+                "data": img.as_base64(),
+            }]));
+        }
+        parts.push(serde_json::json!([{"text": self.user_message}]));
+
         to.insert(
             "contents".to_owned(),
             serde_json::json!({
-                "parts": [{"text": self.user_message}],
+                "parts": parts,
             }),
         );
     }
@@ -109,13 +135,24 @@ impl Provider for OpenAICompatible {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
-        let request = serde_json::json!({
+        let mut request = serde_json::json!({
             "model": model,
             "messages": prompt.to_openai_messages(),
-            "max_tokens": 1000,
             "stream": false,
             "temperature": prompt.temperature,
         });
+
+        if prompt.use_max_completion_tokens {
+            request
+                .as_object_mut()
+                .unwrap()
+                .insert("max_completion_tokens".to_owned(), prompt.max_tokens.into());
+        } else {
+            request
+                .as_object_mut()
+                .unwrap()
+                .insert("max_tokens".to_owned(), prompt.max_tokens.into());
+        }
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
@@ -141,14 +178,25 @@ impl Provider for OpenAICompatible {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<serde_json::Map<String, serde_json::Value>> {
-        let request = serde_json::json!({
+        let mut request = serde_json::json!({
             "model": model,
             "messages": prompt.to_openai_messages(),
-            "max_tokens": 1000,
             "stream": false,
             "temperature": prompt.temperature,
             "response_format": {"type": "json_object"},
         });
+
+        if prompt.use_max_completion_tokens {
+            request
+                .as_object_mut()
+                .unwrap()
+                .insert("max_completion_tokens".to_owned(), prompt.max_tokens.into());
+        } else {
+            request
+                .as_object_mut()
+                .unwrap()
+                .insert("max_tokens".to_owned(), prompt.max_tokens.into());
+        }
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
@@ -171,6 +219,36 @@ impl Provider for OpenAICompatible {
     }
 }
 
+impl prompt::Internal {
+    fn to_ollama_no_format(&self, model: &str) -> serde_json::Value {
+        let mut request = serde_json::json!({
+            "model": model,
+            "prompt": self.user_message,
+            "stream": false,
+            "options": {
+                "temperature": self.temperature,
+                "num_predict": self.max_tokens,
+            },
+        });
+
+        if let Some(img) = &self.image {
+            request
+                .as_object_mut()
+                .unwrap()
+                .insert("images".into(), serde_json::json!([img.as_base64()]));
+        }
+
+        if let Some(sys) = &self.system_message {
+            request
+                .as_object_mut()
+                .unwrap()
+                .insert("system".into(), sys.to_owned().into());
+        }
+
+        request
+    }
+}
+
 #[async_trait::async_trait]
 impl Provider for OLlama {
     async fn exec_prompt_text(
@@ -178,21 +256,7 @@ impl Provider for OLlama {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
-        let mut request = serde_json::json!({
-            "model": model,
-            "prompt": prompt.user_message,
-            "stream": false,
-            "options": {
-                "temperature": prompt.temperature,
-            },
-        });
-
-        if let Some(sys) = &prompt.system_message {
-            request
-                .as_object_mut()
-                .unwrap()
-                .insert("system".into(), sys.to_owned().into());
-        }
+        let request = prompt.to_ollama_no_format(model);
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
@@ -216,15 +280,19 @@ impl Provider for OLlama {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
-        let mut request = serde_json::json!({
-            "model": model,
-            "prompt": prompt.user_message,
-            "stream": false,
-            "format": "json",
-            "options": {
-                "temperature": prompt.temperature,
-            },
-        });
+        let mut request = prompt.to_ollama_no_format(model);
+
+        request
+            .as_object_mut()
+            .unwrap()
+            .insert("format".into(), "json".into());
+
+        if let Some(img) = &prompt.image {
+            request
+                .as_object_mut()
+                .unwrap()
+                .insert("images".into(), serde_json::json!([img.as_base64()]));
+        }
 
         if let Some(sys) = &prompt.system_message {
             request
@@ -262,7 +330,7 @@ impl Provider for Gemini {
             "generationConfig": {
                 "responseMimeType": "text/plain",
                 "temperature": prompt.temperature,
-                "maxOutputTokens": 800,
+                "maxOutputTokens": prompt.max_tokens,
             }
         });
 
@@ -300,7 +368,7 @@ impl Provider for Gemini {
             "generationConfig": {
                 "responseMimeType": "application/json",
                 "temperature": prompt.temperature,
-                "maxOutputTokens": 800,
+                "maxOutputTokens": prompt.max_tokens,
             }
         });
 
@@ -330,6 +398,39 @@ impl Provider for Gemini {
     }
 }
 
+impl prompt::Internal {
+    fn to_anthropic_no_format(&self, model: &str) -> serde_json::Value {
+        let mut user_content = Vec::new();
+
+        if let Some(img) = &self.image {
+            user_content.push(serde_json::json!({"type": "image", "source": {
+                "type": "base64",
+                "media_type": img.kind.media_type(),
+                "data": img.as_base64(),
+            }}));
+        }
+
+        user_content.push(serde_json::json!({"type": "text", "text": self.user_message}));
+
+        let mut request = serde_json::json!({
+            "model": model,
+            "messages": [{"role": "user", "content": user_content}],
+            "max_tokens": self.max_tokens,
+            "stream": false,
+            "temperature": self.temperature,
+        });
+
+        if let Some(sys) = &self.system_message {
+            request
+                .as_object_mut()
+                .unwrap()
+                .insert("system".into(), sys.to_owned().into());
+        }
+
+        request
+    }
+}
+
 #[async_trait::async_trait]
 impl Provider for Anthropic {
     async fn exec_prompt_text(
@@ -337,20 +438,7 @@ impl Provider for Anthropic {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
-        let mut request = serde_json::json!({
-            "model": model,
-            "messages": [{"role": "user", "content": prompt.user_message}],
-            "max_tokens": 1000,
-            "stream": false,
-            "temperature": prompt.temperature,
-        });
-
-        if let Some(sys) = &prompt.system_message {
-            request
-                .as_object_mut()
-                .unwrap()
-                .insert("system".into(), sys.to_owned().into());
-        }
+        let request = prompt.to_anthropic_no_format(model);
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
@@ -376,29 +464,32 @@ impl Provider for Anthropic {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<serde_json::Map<String, serde_json::Value>> {
-        let mut request = serde_json::json!({
-            "model": model,
-            "messages": [{"role": "user", "content": prompt.user_message}],
-            "max_tokens": 1000,
-            "stream": false,
-            "temperature": prompt.temperature,
-            "tools": [{
-                "name": "json_out",
-                "description": "Output a valid json object",
-                "input_schema": {
-                    "type": "object",
-                    "patternProperties": {
-                        "": {
-                            "type": ["object", "null", "array", "number", "string"],
-                        }
-                    },
-                }
-            }],
-            "tool_choice": {
+        let mut request = prompt.to_anthropic_no_format(model);
+
+        request.as_object_mut().unwrap().insert(
+            "tools".to_owned(),
+            serde_json::json!(
+                [{
+                    "name": "json_out",
+                    "description": "Output a valid json object",
+                    "input_schema": {
+                        "type": "object",
+                        "patternProperties": {
+                            "": {
+                                "type": ["object", "null", "array", "number", "string"],
+                            }
+                        },
+                    }
+                }]
+            ),
+        );
+        request.as_object_mut().unwrap().insert(
+            "tool_choice".to_owned(),
+            serde_json::json!({
                 "type": "tool",
                 "name": "json_out"
-            }
-        });
+            }),
+        );
 
         if let Some(sys) = &prompt.system_message {
             request
@@ -437,7 +528,7 @@ impl Provider for Anthropic {
         let mut request = serde_json::json!({
             "model": model,
             "messages": [{"role": "user", "content": prompt.user_message}],
-            "max_tokens": 1000,
+            "max_tokens": 200,
             "stream": false,
             "temperature": prompt.temperature,
             "tools": [{

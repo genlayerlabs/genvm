@@ -2,21 +2,24 @@ local lib = require("lib-greyboxing")
 local inspect = require("inspect")
 
 function just_in_backend(args, prompt, format)
+	lib.log{ args = args, prompt = prompt, format = format }
+
 	local search_in = lib.select_backends_for(args, format)
 
-	for provider_name, provider_data in pairs(lib.all_backends) do
-		local model = provider_data.models[1]
+	for provider_name, provider_data in pairs(search_in) do
+		local model = lib.get_first_from_table(provider_data.models)
+		prompt.use_max_completion_tokens = model.value.use_max_completion_tokens
 
 		local success, result = pcall(function ()
 			return args.handler:exec_in_backend({
 				provider = provider_name,
-				model = model,
+				model = model.key,
 				prompt = prompt,
 				format = format,
 			})
 		end)
 
-		lib.log{message = "executed with", type = type(result), res = inspect(result)}
+		lib.log{message = "executed with", type = type(result), res = result}
 		if success then
 			return result
 		elseif tostring(result):match("runtime error: ([a-zA-Z]*)") == "Overloaded" then
