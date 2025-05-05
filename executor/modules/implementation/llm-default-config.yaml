@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../../../../doc/schemas/default-config.json#llm
+# yaml-language-server: $schema=../../../doc/schemas/default-config.json#llm
 # yaml-language-server: $schema=https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/default-config.json#llm
 
 bind_address: 127.0.0.1:3031
@@ -16,7 +16,9 @@ backends:
     provider: openai-compatible
     key: ${ENV[OPENAIKEY]}
     models:
-      - gpt-4o-mini
+      gpt-4o-mini:
+        supports_json: true
+        meta: {} # <- you can put anything here to read it from lua
 
   heurist:
     enabled: false
@@ -24,29 +26,32 @@ backends:
     provider: openai-compatible
     key: ${ENV[HEURISTKEY]}
     models:
-      - meta-llama/llama-3.3-70b-instruct
+      meta-llama/llama-3.3-70b-instruct: {}
 
   anthropic:
-    enabled: false # json mode right now is unstable
+    enabled: true
     host: https://api.anthropic.com
     provider: anthropic
     key: ${ENV[ANTHROPICKEY]}
     models:
-      - claude-3-7-sonnet-20250219
+      claude-3-7-sonnet-20250219:
+        supports_json: false # it is quite bad because it wraps result into random "result/value/object/..."
 
   xai:
     host: https://api.x.ai
     provider: openai-compatible
     key: ${ENV[XAIKEY]}
     models:
-      - grok-2-1212
+      grok-2-1212:
+        supports_json: true
 
   google:
     host: https://generativelanguage.googleapis.com
     provider: google
     key: ${ENV[GEMINIKEY]}
     models:
-      - gemini-1.5-flash
+      gemini-1.5-flash:
+        supports_json: true
 
   atoma:
     enabled: false
@@ -54,7 +59,8 @@ backends:
     provider: openai-compatible
     key: ${ENV[ATOMAKEY]}
     models:
-      - meta-llama/Llama-3.3-70B-Instruct
+      meta-llama/Llama-3.3-70B-Instruct:
+        supports_json: true
 
 prompt_templates:
   eq_comparative:

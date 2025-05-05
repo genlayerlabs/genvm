@@ -17,9 +17,30 @@ fn enabled_true() -> bool {
     true
 }
 
+fn default_false() -> bool {
+    false
+}
+
+fn default_json_null() -> serde_json::Value {
+    serde_json::Value::Null
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ModelConfig {
+    #[serde(default = "enabled_true")]
+    pub enabled: bool,
+    #[serde(default = "default_false")]
+    pub supports_json: bool,
+    #[serde(default = "default_false")]
+    pub supports_image: bool,
+
+    #[serde(default = "default_json_null")]
+    pub meta: serde_json::Value,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ScriptBackendConfig {
-    pub models: Vec<String>,
+    pub models: BTreeMap<String, ModelConfig>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

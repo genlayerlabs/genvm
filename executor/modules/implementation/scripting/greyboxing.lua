@@ -1,7 +1,10 @@
 local lib = require("lib-greyboxing")
+local inspect = require("inspect")
 
 function just_in_backend(args, prompt, format)
-	for provider_name, provider_data in pairs(greyboxing.available_backends) do
+	local search_in = lib.select_backends_for(args, format)
+
+	for provider_name, provider_data in pairs(lib.all_backends) do
 		local model = provider_data.models[1]
 
 		local success, result = pcall(function ()
@@ -13,7 +16,7 @@ function just_in_backend(args, prompt, format)
 			})
 		end)
 
-		greyboxing.log{message = "executed with", type = type(result), res = lib.dump(result)}
+		lib.log{message = "executed with", type = type(result), res = inspect(result)}
 		if success then
 			return result
 		elseif tostring(result):match("runtime error: ([a-zA-Z]*)") == "Overloaded" then
@@ -23,7 +26,7 @@ function just_in_backend(args, prompt, format)
 		end
 	end
 
-	error("no provider could handle prompt")
+	error("no provider could handle prompt, searched in " .. inspect(search_in))
 end
 
 function exec_prompt(args)

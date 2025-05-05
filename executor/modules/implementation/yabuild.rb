@@ -21,10 +21,12 @@ web_config_target = target_copy(
 	src: [cur_src.join('web-default-config.yaml')],
 )
 
-lua_lib_target = target_copy(
-	dest: config.out_dir.join('share', 'lib', 'genvm', 'greyboxing', 'lib-greyboxing.lua'),
-	src: [cur_src.join('scripting/lib-greyboxing.lua')],
-)
+lib_copy_targets = ['lib-greyboxing.lua', 'inspect.lua'].map { |ct|
+	target_copy(
+		dest: config.out_dir.join('share', 'lib', 'genvm', 'greyboxing', ct),
+		src: [cur_src.join('scripting', ct)],
+	)
+}
 
 script_target = target_copy(
 	dest: config.out_dir.join('scripts', 'genvm-greyboxing.lua'),
@@ -35,6 +37,6 @@ target_alias(
 	'modules',
 	bin,
 	web_config_target, llm_config_target,
-	script_target, lua_lib_target,
+	script_target, *lib_copy_targets,
 	tags: ['all'],
 )

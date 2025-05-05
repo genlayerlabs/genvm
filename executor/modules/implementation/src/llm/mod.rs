@@ -41,6 +41,8 @@ fn handle_run(mut config: config::Config, args: CliArgsRun) -> Result<()> {
             continue;
         }
 
+        v.script_config.models.retain(|_k, v| v.enabled);
+
         if v.script_config.models.is_empty() {
             log::warn!(backend = k; "models are empty");
             v.enabled = false;
@@ -99,7 +101,9 @@ fn handle_check(config: config::Config, args: CliArgsCheck) -> Result<()> {
     let backend = serde_json::json!({
         "host": args.host,
         "provider": args.provider,
-        "models": [args.model],
+        "models": {
+            args.model: {}
+        },
         "key": args.key
     });
 
@@ -127,7 +131,7 @@ fn handle_check(config: config::Config, args: CliArgsCheck) -> Result<()> {
                 temperature: 0.7,
                 user_message: "Respond with a single word \"yes\" (without quotes) and only this word, lowercase".to_owned(),
             },
-            &backend.script_config.models[0],
+            backend.script_config.models.first_key_value().unwrap().0,
         ))?;
 
     let res = res.trim().to_lowercase();

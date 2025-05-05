@@ -1,16 +1,7 @@
 local M = {}
-M.dump = function(o)
-	if type(o) == 'table' then
-		local s = '{ '
-		for k,v in pairs(o) do
-			if type(k) ~= 'number' then k = '"'..k..'"' end
-			s = s .. '['..k..'] = ' .. M.dump(v) .. ', '
-		 end
-		 return s .. '} '
-	else
-		return tostring(o)
-	end
-end
+
+M.all_backends = greyboxing.available_backends
+M.log = greyboxing.log
 
 M.exec_prompt_transform = function(args)
 	local handler = args.handler
@@ -31,6 +22,45 @@ M.exec_prompt_transform = function(args)
 		prompt = mapped_prompt,
 		format = format
 	}
+end
+
+function filter_backends_by(model_fn)
+	local ret = {}
+
+	for name, conf in pairs(greyboxing.available_backends) do
+		local cur = {}
+		local has = false
+		for model_name, model_data in pairs(model_fn) do
+			if model_fn(model_data) then
+				cur[model_name] = model_data
+				has = true
+			end
+		end
+
+		if has then
+			ret[name] = cur
+		end
+	end
+
+	return ret
+end
+
+M.backends_with_json_support = filter_backends_by(function(m) return m.supports_json end)
+M.backends_with_image_support = filter_backends_by(function(m) return m.supports_image end)
+M.backends_with_image_and_json_support = filter_backends_by(function(m) return m.supports_image and m.supports_json end)
+
+M.select_backends_for = function(args, format)
+	if format == 'json' then
+		if args.image ~= nil then
+			return M.backends_with_image_and_json_support
+		else
+			return M.backends_with_json_support
+		end
+	elseif args.image ~= nil then
+		return M.backends_with_image_support
+	end
+
+	return M.all_backends
 end
 
 M.exec_prompt_template_transform = function(args)

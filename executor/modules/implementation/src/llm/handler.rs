@@ -171,42 +171,46 @@ mod tests {
         pub const openai: &str = r#"{
             "host": "https://api.openai.com",
             "provider": "openai-compatible",
-            "models": ["gpt-4o-mini"],
+            "models": {
+                "gpt-4o-mini": { "supports_json": true }
+            },
             "key": "${ENV[OPENAIKEY]}"
         }"#;
 
         pub const heurist: &str = r#"{
             "host": "https://llm-gateway.heurist.xyz",
             "provider": "openai-compatible",
-            "models": ["meta-llama/llama-3.3-70b-instruct"],
+            "models": {
+                "meta-llama/llama-3.3-70b-instruct": { "supports_json": true }
+            },
             "key": "${ENV[HEURISTKEY]}"
         }"#;
 
         pub const anthropic: &str = r#"{
             "host": "https://api.anthropic.com",
             "provider": "anthropic",
-            "models": ["claude-3-5-sonnet-20241022"],
+            "models": { "claude-3-5-sonnet-20241022" : {} },
             "key": "${ENV[ANTHROPICKEY]}"
         }"#;
 
         pub const xai: &str = r#"{
             "host": "https://api.x.ai",
             "provider": "openai-compatible",
-            "models": ["grok-2-1212"],
+            "models": { "grok-2-1212" : { "supports_json": true } },
             "key": "${ENV[XAIKEY]}"
         }"#;
 
         pub const google: &str = r#"{
             "host": "https://generativelanguage.googleapis.com",
             "provider": "google",
-            "models": ["gemini-1.5-flash"],
+            "models": { "gemini-1.5-flash": { "supports_json": true } },
             "key": "${ENV[GEMINIKEY]}"
         }"#;
 
         pub const atoma: &str = r#"{
             "host": "https://api.atoma.network",
             "provider": "openai-compatible",
-            "models": ["meta-llama/Llama-3.3-70B-Instruct"],
+            "models": { "meta-llama/Llama-3.3-70B-Instruct": {} },
             "key": "${ENV[ATOMAKEY]}"
         }"#;
     }
@@ -235,7 +239,7 @@ mod tests {
                     temperature: 0.7,
                     user_message: "Respond with a single word \"yes\" (without quotes) and only this word, lowercase".to_owned(),
                 },
-                &backend.script_config.models[0],
+                &backend.script_config.models.first_key_value().unwrap().0,
             )
             .await
             .unwrap();
@@ -260,6 +264,18 @@ mod tests {
             genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)
                 .unwrap();
         let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
+
+        if !backend
+            .script_config
+            .models
+            .first_key_value()
+            .unwrap()
+            .1
+            .supports_json
+        {
+            return;
+        }
+
         let provider = backend.to_provider(reqwest::Client::new());
 
         const PROMPT: &str = r#"respond with json object containing single key "result" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes. This object must not be wrapped into other objects. Example: {"result": 10}"#;
@@ -270,7 +286,7 @@ mod tests {
                     temperature: 0.7,
                     user_message: PROMPT.to_owned(),
                 },
-                &backend.script_config.models[0],
+                &backend.script_config.models.first_key_value().unwrap().0,
             )
             .await;
         eprintln!("{res:?}");
