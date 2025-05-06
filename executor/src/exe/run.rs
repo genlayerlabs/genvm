@@ -20,12 +20,12 @@ impl std::fmt::Display for PrintOption {
 
 #[derive(clap::Args, Debug)]
 pub struct Args {
-    #[arg(long, default_value_t = 4)]
-    threads: usize,
     #[arg(long)]
     message: String,
     #[arg(long)]
     host: String,
+    #[arg(long)]
+    cookie: Option<String>,
     #[clap(long, default_value_t = PrintOption::None)]
     print: PrintOption,
     #[clap(long, default_value_t = false)]
@@ -72,7 +72,21 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
 
     let host_data = serde_json::from_str(&args.host_data)?;
 
-    let supervisor = genvm::create_supervisor(&config, host, args.sync, token, host_data)
+    let cookie = match &args.cookie {
+        None => {
+            let mut cookie = [0; 8];
+            let _ = getrandom::fill(&mut cookie);
+
+            let mut cookie_str = String::new();
+            for c in cookie {
+                cookie_str.push_str(&format!("{:x}", c));
+            }
+            cookie_str
+        }
+        Some(v) => v.clone(),
+    };
+
+    let supervisor = genvm::create_supervisor(&config, host, args.sync, token, host_data, cookie)
         .with_context(|| "creating supervisor")?;
 
     let res = runtime
@@ -82,6 +96,10 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
             &args.permissions,
         ))
         .with_context(|| "running genvm");
+
+    if let Err(err) = &res {
+        log::error!(error = genvm_common::log_error(err); "error running genvm");
+    }
 
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,

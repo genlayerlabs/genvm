@@ -1,0 +1,74 @@
+use std::{collections::HashMap, sync::Arc};
+
+use anyhow::{Context, Result};
+
+use crate::common;
+
+mod config;
+mod domains;
+mod handler;
+
+#[derive(clap::Args, Debug)]
+pub struct CliArgs {
+    #[arg(long, default_value_t = String::from("${genvmRoot}/config/genvm-module-web.yaml"))]
+    config: String,
+
+    #[arg(long, default_value_t = false)]
+    die_with_parent: bool,
+}
+
+async fn check_status(webdriver_host: &str) -> anyhow::Result<()> {
+    let client = reqwest::Client::new();
+    let status_res = client
+        .get(format!("{}/status", webdriver_host))
+        .header("Content-Type", "application/json; charset=utf-8")
+        .send()
+        .await
+        .with_context(|| "creating sessions request")?;
+
+    let body = crate::common::read_response(status_res)
+        .await
+        .with_context(|| "reading response")?;
+
+    let val: serde_json::Value = serde_json::from_str(&body)?;
+
+    if val.pointer("/value/ready").and_then(|v| v.as_bool()) != Some(true) {
+        anyhow::bail!("not ready {}", val)
+    }
+
+    Ok(())
+}
+
+pub fn entrypoint(args: CliArgs) -> Result<()> {
+    let config = genvm_common::load_config(HashMap::new(), &args.config)
+        .with_context(|| "loading config")?;
+    let config: config::Config = serde_yaml::from_value(config)?;
+
+    config.base.setup_logging(std::io::stdout())?;
+
+    let runtime = config.base.create_rt()?;
+
+    let token = common::setup_cancels(&runtime, args.die_with_parent)?;
+
+    let webdriver_host = config.webdriver_host.clone();
+
+    let loop_future = crate::common::run_loop(
+        config.bind_address.clone(),
+        token,
+        Arc::new(handler::HandlerProvider {
+            config: Arc::new(config),
+        }),
+    );
+
+    runtime
+        .block_on(check_status(&webdriver_host))
+        .with_context(|| "initial health check")?;
+
+    log::info!("health is OK");
+
+    runtime.block_on(loop_future)?;
+
+    std::mem::drop(runtime);
+
+    Ok(())
+}

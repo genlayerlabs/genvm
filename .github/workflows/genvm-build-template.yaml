@@ -60,7 +60,7 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE" && \
             source env.sh && \
-            ninja -v -C build genvm/executor/all genvm/modules/all &&
+            ninja -v -C build genvm/executor/all genvm/modules &&
             find build/out -name '*.yaml' -print0 | xargs -0 perl -i -pe 's/# yaml-language-server: \$schema=\.\..*//g'
       - name: patch schema path for tag
         if: ${{ inputs.tag != 'none' }}

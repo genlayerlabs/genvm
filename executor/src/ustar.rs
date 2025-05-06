@@ -155,7 +155,7 @@ impl Archive {
             let file_size_octal = trim_zeroes(&header.as_ref()[124..136]);
 
             let link_indicator = header.as_ref()[156];
-            if link_indicator != b'0' && link_indicator != b'\x00' {
+            if ![b'0', b'\x00', b'5'].contains(&link_indicator) {
                 anyhow::bail!("links are forbidden")
             }
 

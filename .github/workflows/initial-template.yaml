@@ -37,6 +37,8 @@ jobs:
           cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \
           ninja -v -C build tags/codegen
       - uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: --all-files --show-diff-on-failure
       - uses: dorny/paths-filter@v3
         id: changes
         with:

@@ -1,4 +1,5 @@
 pub mod caching;
+pub mod calldata;
 pub mod config;
 pub mod errors;
 mod host;
@@ -11,12 +12,12 @@ pub mod wasi;
 
 use errors::ContractError;
 use host::AbsentLeaderResult;
-pub use host::{AccountAddress, GenericAddress, Host, MessageData};
+pub use host::{Host, MessageData, SlotID};
 
 use anyhow::{Context, Result};
+use wasi::genlayer_sdk::{EntryKind, TransformedMessage};
 
-use std::sync::Arc;
-use ustar::SharedBytes;
+use std::{str::FromStr, sync::Arc};
 use vm::{Modules, RunOk};
 
 pub fn create_supervisor(
@@ -25,30 +26,21 @@ pub fn create_supervisor(
     is_sync: bool,
     cancellation: Arc<genvm_common::cancellation::Token>,
     host_data: Arc<serde_json::Value>,
+    cookie: String,
 ) -> Result<Arc<tokio::sync::Mutex<vm::Supervisor>>> {
-    let mut cookie = [0; 8];
-    let _ = getrandom::fill(&mut cookie);
-
-    let mut cookie_str = String::new();
-    for c in cookie {
-        cookie_str.push_str(&format!("{:x}", c));
-    }
-
-    log::info!(cookie = cookie_str; "cookie created");
-
     let modules = Modules {
         web: Arc::new(modules::Module::new(
             "web".into(),
             config.modules.web.address.clone(),
             cancellation.clone(),
-            cookie_str.clone(),
+            cookie.clone(),
             host_data.clone(),
         )),
         llm: Arc::new(modules::Module::new(
             "llm".into(),
             config.modules.llm.address.clone(),
             cancellation.clone(),
-            cookie_str.clone(),
+            cookie.clone(),
             host_data,
         )),
     };
@@ -57,7 +49,7 @@ pub fn create_supervisor(
         modules,
         is_sync,
         cancellation,
-        cookie_str.clone(),
+        cookie.clone(),
     ));
 
     Ok(Arc::new(tokio::sync::Mutex::new(vm::Supervisor::new(
@@ -74,9 +66,10 @@ pub async fn run_with_impl(
 ) -> vm::RunResult {
     let (mut vm, instance) = {
         let supervisor_clone = supervisor.clone();
-        let mut entrypoint = b"call!".to_vec();
 
         let mut supervisor = supervisor.lock().await;
+
+        let mut entrypoint = Vec::new();
         supervisor.host.get_calldata(&mut entrypoint)?;
 
         let essential_data = wasi::genlayer_sdk::SingleVMData {
@@ -89,8 +82,21 @@ pub async fn run_with_impl(
                 can_spawn_nondet: permissions.contains("n"),
                 state_mode: crate::host::StorageType::Default,
             },
-            message_data: entry_message,
-            entrypoint: SharedBytes::new(entrypoint),
+            message_data: TransformedMessage {
+                contract_address: calldata::Address::from(entry_message.contract_address.raw()),
+                sender_address: calldata::Address::from(entry_message.sender_address.raw()),
+                origin_address: calldata::Address::from(entry_message.origin_address.raw()),
+                stack: Vec::new(),
+
+                chain_id: num_bigint::BigInt::from_str(&entry_message.chain_id).unwrap(),
+                value: entry_message.value.unwrap_or(0).into(),
+                is_init: entry_message.is_init,
+                datetime: entry_message.datetime,
+
+                entry_kind: EntryKind::Regular,
+                entry_data: entrypoint,
+                entry_stage_data: calldata::Value::Null,
+            },
             supervisor: supervisor_clone,
         };
 
@@ -112,6 +118,8 @@ pub async fn run_with(
     permissions: &str,
 ) -> vm::RunResult {
     let res = run_with_impl(entry_message, supervisor.clone(), permissions).await;
+
+    log::debug!("inspecting final result");
 
     let mut supervisor = supervisor.lock().await;
 
@@ -140,6 +148,8 @@ pub async fn run_with(
         },
         e => e,
     };
+
+    log::debug!("sending final result to host");
 
     supervisor.host.consume_result(&res)?;
 

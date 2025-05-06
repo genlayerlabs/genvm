@@ -11,10 +11,10 @@ import typing
 import json
 import genlayer.py.calldata as calldata
 
+import genlayer.std._internal.gl_call as gl_call
+
 from ..py.types import *
 from ._internal import (
-	lazy_from_fd,
-	lazy_from_fd_no_check,
 	_lazy_api,
 )
 
@@ -40,6 +40,9 @@ def eq_principle_strict_eq[T: calldata.Decoded](fn: typing.Callable[[], T]) -> L
 	return advanced.run_nondet(fn, validator_fn)
 
 
+from .nondet_fns import _decode_nondet
+
+
 @_lazy_api
 def eq_principle_prompt_comparative[T: calldata.Decoded](
 	fn: typing.Callable[[], T], principle: str
@@ -62,16 +65,19 @@ def eq_principle_prompt_comparative[T: calldata.Decoded](
 		my_res, leaders_res = advanced.validator_handle_rollbacks_and_errors_default(
 			fn, leaders
 		)
-		payload = {
-			'template': 'EqComparative',
-			'leader_answer': format(leaders_res),
-			'validator_answer': format(my_res),
-			'principle': principle,
-		}
-		data = lazy_from_fd(
-			wasi.exec_prompt_template(json.dumps(payload)), lambda x: str(x, 'utf-8')
-		).get()
-		return json.loads(data)
+		ret = gl_call.gl_call_generic(
+			{
+				'ExecPromptTemplate': {
+					'template': 'EqComparative',
+					'leader_answer': format(leaders_res),
+					'validator_answer': format(my_res),
+					'principle': principle,
+				}
+			},
+			_decode_nondet,
+		)
+
+		return ret.get()
 
 	return advanced.run_nondet(fn, validator_fn)
 
@@ -93,16 +99,19 @@ def eq_principle_prompt_non_comparative(
 	def leader_fn() -> str:
 		input_res = fn()
 		assert isinstance(input_res, str)
-		payload = {
-			'template': 'EqNonComparativeLeader',
-			'task': task,
-			'input': input_res,
-			'criteria': criteria,
-		}
-		return lazy_from_fd(
-			wasi.exec_prompt_template(json.dumps(payload)),
+
+		ret = gl_call.gl_call_generic(
+			{
+				'ExecPromptTemplate': {
+					'template': 'EqNonComparativeLeader',
+					'task': task,
+					'input': input_res,
+					'criteria': criteria,
+				}
+			},
 			lambda buf: str(buf, 'utf-8'),
-		).get()
+		)
+		return ret.get()
 
 	def validator_fn(
 		leaders: advanced.ContractReturn | Rollback | advanced.ContractError,
@@ -110,16 +119,20 @@ def eq_principle_prompt_non_comparative(
 		my_input, leaders_result = advanced.validator_handle_rollbacks_and_errors_default(
 			fn, leaders
 		)
-		payload = {
-			'template': 'EqNonComparativeValidator',
-			'task': task,
-			'output': leaders_result,
-			'input': my_input,
-			'criteria': criteria,
-		}
-		data = lazy_from_fd(
-			wasi.exec_prompt_template(json.dumps(payload)), lambda x: str(x, 'utf-8')
-		).get()
-		return json.loads(data)
+
+		ret = gl_call.gl_call_generic(
+			{
+				'ExecPromptTemplate': {
+					'template': 'EqNonComparativeValidator',
+					'task': task,
+					'output': leaders_result,
+					'input': my_input,
+					'criteria': criteria,
+				}
+			},
+			_decode_nondet,
+		)
+		ret = ret.get()
+		return ret
 
 	return advanced.run_nondet(leader_fn, validator_fn)

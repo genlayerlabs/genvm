@@ -26,10 +26,6 @@ class Contract(gl.Contract):
 		return {'x': 10}
 
 	@gl.public.write
-	def retn_ser(self):
-		return gl.advanced.AlreadySerializedResult(b'123')
-
-	@gl.public.write
 	def det_viol(self):
 		import json
 

@@ -10,7 +10,7 @@ end
 
 # editorconfig-checker-disable
 ENUM_TEMPLATE_STR = <<-EOF
-#[derive(PartialEq, Clone, Copy, Serialize)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[repr(<%= size %>)]
 pub enum <%= to_camel name %> {
 % values.each { |k, v|
@@ -50,7 +50,7 @@ json_path, out_path = ARGV
 
 buf = String.new
 
-buf << "use serde_derive::Serialize;\n"
+buf << "use serde_derive::{Deserialize, Serialize};\n"
 
 JSON.load_file(Pathname.new(json_path)).each { |t|
 	t_os = OpenStruct.new(t)

@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use crate::vm;
+use crate::{calldata, vm};
 
 pub mod base;
 mod common;
 pub mod genlayer_sdk;
+mod gl_call;
 pub mod preview1;
 
 pub struct Context {
@@ -14,12 +15,17 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(data: genlayer_sdk::SingleVMData, shared_data: Arc<vm::SharedData>) -> Self {
-        Self {
-            vfs: common::VFS::new(),
+    pub fn new(
+        data: genlayer_sdk::SingleVMData,
+        shared_data: Arc<vm::SharedData>,
+    ) -> anyhow::Result<Self> {
+        let as_value = calldata::to_value(&data.message_data)?;
+        let as_bytes = calldata::encode(&as_value);
+        Ok(Self {
+            vfs: common::VFS::new(as_bytes),
             preview1: preview1::Context::new(data.message_data.datetime, data.conf),
             genlayer_sdk: genlayer_sdk::Context::new(data, shared_data),
-        }
+        })
     }
 }
 

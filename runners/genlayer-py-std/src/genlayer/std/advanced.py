@@ -6,7 +6,6 @@ This module provides some "advanced" features that can be used for optimizations
 """
 
 __all__ = (
-	'AlreadySerializedResult',
 	'ContractReturn',
 	'ContractError',
 	'run_nondet',
@@ -16,24 +15,9 @@ __all__ = (
 
 import typing
 
-import genlayer.std._wasi as wasi
 from ..py.types import Rollback, Lazy
 import genlayer.py.calldata as calldata
 from dataclasses import dataclass
-
-
-class AlreadySerializedResult(bytes):
-	"""
-	If contract method returns instance of this class, calldata encoding won't be performed. Instead stored bytes will be passed as is
-	"""
-
-	__slots__ = ()
-
-	def __new__(cls, *args, **kwargs):
-		"""
-		Forwards all arguments to :py:class:`bytes`
-		"""
-		return bytes.__new__(cls, *args, **kwargs)
 
 
 @dataclass
@@ -58,6 +42,29 @@ class ContractError(Exception):
 	data: str
 
 
+import genlayer.std._internal.gl_call as gl_call
+
+
+def sandbox[T: calldata.Decoded](
+	fn: typing.Callable[[], T], *, allow_write_ops: bool = False
+) -> Lazy[T]:
+	"""
+	Runs function in the sandbox
+	"""
+	import cloudpickle
+	from ._internal import decode_sub_vm_result
+
+	return gl_call.gl_call_generic(
+		{
+			'Sandbox': {
+				'data': cloudpickle.dumps(fn),
+				'allow_write_ops': allow_write_ops,
+			}
+		},
+		decode_sub_vm_result,
+	)
+
+
 def run_nondet[T: calldata.Decoded](
 	leader_fn: typing.Callable[[], T],
 	validator_fn: typing.Callable[[ContractReturn | Rollback | ContractError], bool],
@@ -79,10 +86,35 @@ def run_nondet[T: calldata.Decoded](
 		All sub-vm returns go through :py:mod:`genlayer.py.calldata` encoding
 	"""
 	import cloudpickle
-	from ._internal import lazy_from_fd_no_check, decode_sub_vm_result
+	from ._internal import decode_sub_vm_result, decode_sub_vm_result_retn
 
-	fd = wasi.run_nondet(cloudpickle.dumps(leader_fn), cloudpickle.dumps(validator_fn))
-	return lazy_from_fd_no_check(fd, decode_sub_vm_result)
+	def real_validator_fn(stage_data) -> bool:
+		leaders_result = decode_sub_vm_result_retn(stage_data['leaders_result'])
+
+		try:
+			answer = sandbox(lambda: validator_fn(leaders_result), allow_write_ops=True).get()
+			if isinstance(answer, bool):
+				return answer
+			import warnings
+
+			warnings.warn(
+				f'validator function returned non-bool {answer}, returning disagree'
+			)
+			return False
+		except Rollback as exc:
+			return isinstance(leaders_result, Rollback) and exc.msg == leaders_result.msg
+		except ContractError:
+			return isinstance(leaders_result, ContractError)
+
+	return gl_call.gl_call_generic(
+		{
+			'RunNondet': {
+				'data_leader': cloudpickle.dumps(leader_fn),
+				'data_validator': cloudpickle.dumps(real_validator_fn),
+			}
+		},
+		decode_sub_vm_result,
+	)
 
 
 def validator_handle_rollbacks_and_errors_default(
@@ -99,25 +131,11 @@ def validator_handle_rollbacks_and_errors_default(
 	try:
 		res = fn()
 		if not isinstance(leaders_result, ContractReturn):
-			wasi.contract_return(calldata.encode(False))
+			gl_call.contract_return(False)
 		return (res, leaders_result.data)
 	except Rollback as rb:
-		wasi.contract_return(
-			calldata.encode(
-				isinstance(leaders_result, Rollback) and rb.msg == leaders_result.msg
-			)
+		gl_call.contract_return(
+			isinstance(leaders_result, Rollback) and rb.msg == leaders_result.msg
 		)
 	except Exception:
-		wasi.contract_return(calldata.encode(isinstance(leaders_result, ContractError)))
-
-
-def sandbox[T: calldata.Decoded](fn: typing.Callable[[], T]) -> Lazy[T]:
-	"""
-	Runs function in the sandbox
-	"""
-	import cloudpickle
-	from ._internal import lazy_from_fd_no_check, decode_sub_vm_result
-
-	return lazy_from_fd_no_check(
-		wasi.sandbox(cloudpickle.dumps(fn)), decode_sub_vm_result
-	)
+		gl_call.contract_return(isinstance(leaders_result, ContractError))

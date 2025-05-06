@@ -19,5 +19,14 @@
       "latest_final": 1,
       "latest_non_final": 2
     }
+  },
+  {
+    "type": "enum",
+    "name": "entry_kind",
+    "size": "u8",
+    "values": {
+      "regular": 0,
+      "inner": 1
+    }
   }
 ]

@@ -79,8 +79,36 @@
                     "description": "provider id identifier"
                   },
                   "models": {
-                    "type": "array",
-                    "items": { "type": "string" }
+                    "type": "object",
+                    "patternProperties": {
+                      "": {
+                        "type": "object",
+                        "properties": {
+                          "enabled": {
+                            "type": "boolean",
+                            "default": true
+                          },
+                          "supports_json": {
+                            "type": "boolean",
+                            "default": false
+                          },
+                          "supports_image": {
+                            "type": "boolean",
+                            "default": false
+                          },
+                          "use_max_completion_tokens": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "use max_completion_tokens instead of max_tokens for openai-compatible provider"
+                          },
+                          "meta": {
+                            "type": ["object", "null"],
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    }
                   }
                 },
                 "required": ["host", "key", "provider", "models"],

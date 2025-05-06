@@ -17,10 +17,11 @@ import genlayer.std._wasi as wasi
 
 from genlayer.py.eth.generate import transaction_data_kw_args_serialize
 
-from ._internal import decode_sub_vm_result, lazy_from_fd_no_check
+from ._internal.gl_call import gl_call_generic
+from ._internal import decode_sub_vm_result
 
 
-def _make_calldata_obj(method, args, kwargs):
+def _make_calldata_obj(method, args, kwargs) -> calldata.Encodable:
 	ret = {}
 	if method is not None:
 		ret['method'] = method
@@ -60,8 +61,14 @@ class _ContractAtViewMethod:
 	def lazy(self, *args, **kwargs) -> Lazy[typing.Any]:
 		obj = _make_calldata_obj(self.name, args, kwargs)
 		cd = calldata.encode(obj)
-		return lazy_from_fd_no_check(
-			wasi.call_contract(self.addr.as_bytes, cd, json.dumps(self.data)),
+		return gl_call_generic(
+			{
+				'CallContract': {
+					'address': self.addr,
+					'calldata': _make_calldata_obj(self.name, args, kwargs),
+					'state': self.data.get('state', StorageType.LATEST_NON_FINAL).value,
+				}
+			},
 			decode_sub_vm_result,
 		)
 
@@ -87,10 +94,17 @@ class _ContractAtEmitMethod:
 		self.data = data
 
 	def __call__(self, *args, **kwargs) -> None:
-		obj = _make_calldata_obj(self.name, args, kwargs)
-		cd = calldata.encode(obj)
-		wasi.post_message(
-			self.addr.as_bytes, cd, transaction_data_kw_args_serialize(dict(self.data))
+		wasi.gl_call(
+			calldata.encode(
+				{
+					'PostMessage': {
+						'address': self.addr,
+						'calldata': _make_calldata_obj(self.name, args, kwargs),
+						'value': self.data.get('value', 0),
+						'on': self.data.get('on', 'finalized'),
+					}
+				}
+			)
 		)
 
 
@@ -287,12 +301,22 @@ def deploy_contract(
 		- ``salt_nonce`` requirements and it's effect on address
 		- order of transactions
 	"""
-	salt_nonce = data.setdefault('salt_nonce', u256(0))
-	wasi.deploy_contract(
-		calldata.encode(_make_calldata_obj(None, args, kwargs)),
-		code,
-		transaction_data_kw_args_serialize(dict(data)),
+	salt_nonce = data.get('salt_nonce', u256(0))
+
+	wasi.gl_call(
+		calldata.encode(
+			{
+				'DeployContract': {
+					'calldata': _make_calldata_obj(None, args, kwargs),
+					'code': code,
+					'value': data.get('value', 0),
+					'on': data.get('on', 'finalized'),
+					'salt_nonce': salt_nonce,
+				}
+			}
+		)
 	)
+
 	if salt_nonce == 0:
 		return None
 
@@ -303,6 +327,8 @@ def deploy_contract(
 
 
 import abc
+
+import genlayer.std.annotations as glannots
 
 
 class Contract:
@@ -354,6 +380,21 @@ class Contract:
 		Method that is called for no-method transfers, must be ``@gl.public.write.payable``
 		"""
 		raise NotImplementedError()
+
+	@glannots.public.write.payable
+	def __on_errored_message__(self):
+		"""
+		Method that is called when emitted message with non-zero value failed. This method is not abstract to just receive value.
+		It must be ``@gl.public.write.payable``
+		"""
+		pass
+
+	@classmethod
+	def __get_schema__(cls) -> str:
+		import genlayer.py.get_schema as _get_schema
+
+		res = _get_schema.get_schema(cls)
+		return json.dumps(res, separators=(',', ':'))
 
 
 __known_contact__: type[Contract] | None = None

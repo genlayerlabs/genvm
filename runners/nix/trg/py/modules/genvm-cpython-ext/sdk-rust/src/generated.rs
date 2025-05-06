@@ -140,134 +140,6 @@ pub struct MutBytes {
     pub buf_len: BytesLen,
 }
 pub type None = u32;
-pub unsafe fn rollback(message: &str) {
-    genlayer_sdk::rollback(message.as_ptr() as i32, message.len() as i32);
-}
-
-pub unsafe fn contract_return(result: Bytes) {
-    genlayer_sdk::contract_return(&result as *const _ as i32);
-}
-
-pub unsafe fn get_message_data() -> Result<ResultNow, Errno> {
-    let mut rp0 = MaybeUninit::<ResultNow>::uninit();
-    let ret = genlayer_sdk::get_message_data(rp0.as_mut_ptr() as i32);
-    match ret {
-        0 => Ok(core::ptr::read(rp0.as_mut_ptr() as i32 as *const ResultNow)),
-        _ => Err(Errno(ret as u32)),
-    }
-}
-
-pub unsafe fn get_entrypoint() -> Result<ResultNow, Errno> {
-    let mut rp0 = MaybeUninit::<ResultNow>::uninit();
-    let ret = genlayer_sdk::get_entrypoint(rp0.as_mut_ptr() as i32);
-    match ret {
-        0 => Ok(core::ptr::read(rp0.as_mut_ptr() as i32 as *const ResultNow)),
-        _ => Err(Errno(ret as u32)),
-    }
-}
-
-pub unsafe fn run_nondet(data_leader: Bytes, data_validator: Bytes) -> Result<Fd, Errno> {
-    let mut rp0 = MaybeUninit::<Fd>::uninit();
-    let ret = genlayer_sdk::run_nondet(
-        &data_leader as *const _ as i32,
-        &data_validator as *const _ as i32,
-        rp0.as_mut_ptr() as i32,
-    );
-    match ret {
-        0 => Ok(core::ptr::read(rp0.as_mut_ptr() as i32 as *const Fd)),
-        _ => Err(Errno(ret as u32)),
-    }
-}
-
-pub unsafe fn sandbox(data: Bytes) -> Result<Fd, Errno> {
-    let mut rp0 = MaybeUninit::<Fd>::uninit();
-    let ret = genlayer_sdk::sandbox(&data as *const _ as i32, rp0.as_mut_ptr() as i32);
-    match ret {
-        0 => Ok(core::ptr::read(rp0.as_mut_ptr() as i32 as *const Fd)),
-        _ => Err(Errno(ret as u32)),
-    }
-}
-
-pub unsafe fn web_render(payload: &str) -> Result<Fd, Errno> {
-    let mut rp0 = MaybeUninit::<Fd>::uninit();
-    let ret = genlayer_sdk::web_render(
-        payload.as_ptr() as i32,
-        payload.len() as i32,
-        rp0.as_mut_ptr() as i32,
-    );
-    match ret {
-        0 => Ok(core::ptr::read(rp0.as_mut_ptr() as i32 as *const Fd)),
-        _ => Err(Errno(ret as u32)),
-    }
-}
-
-pub unsafe fn exec_prompt(payload: &str) -> Result<Fd, Errno> {
-    let mut rp0 = MaybeUninit::<Fd>::uninit();
-    let ret = genlayer_sdk::exec_prompt(
-        payload.as_ptr() as i32,
-        payload.len() as i32,
-        rp0.as_mut_ptr() as i32,
-    );
-    match ret {
-        0 => Ok(core::ptr::read(rp0.as_mut_ptr() as i32 as *const Fd)),
-        _ => Err(Errno(ret as u32)),
-    }
-}
-
-pub unsafe fn exec_prompt_template(payload: &str) -> Result<Fd, Errno> {
-    let mut rp0 = MaybeUninit::<Fd>::uninit();
-    let ret = genlayer_sdk::exec_prompt_template(
-        payload.as_ptr() as i32,
-        payload.len() as i32,
-        rp0.as_mut_ptr() as i32,
-    );
-    match ret {
-        0 => Ok(core::ptr::read(rp0.as_mut_ptr() as i32 as *const Fd)),
-        _ => Err(Errno(ret as u32)),
-    }
-}
-
-pub unsafe fn call_contract(account: Addr, calldata: Bytes, data: &str) -> Result<Fd, Errno> {
-    let mut rp0 = MaybeUninit::<Fd>::uninit();
-    let ret = genlayer_sdk::call_contract(
-        &account as *const _ as i32,
-        &calldata as *const _ as i32,
-        data.as_ptr() as i32,
-        data.len() as i32,
-        rp0.as_mut_ptr() as i32,
-    );
-    match ret {
-        0 => Ok(core::ptr::read(rp0.as_mut_ptr() as i32 as *const Fd)),
-        _ => Err(Errno(ret as u32)),
-    }
-}
-
-pub unsafe fn post_message(account: Addr, calldata: Bytes, data: &str) -> Result<(), Errno> {
-    let ret = genlayer_sdk::post_message(
-        &account as *const _ as i32,
-        &calldata as *const _ as i32,
-        data.as_ptr() as i32,
-        data.len() as i32,
-    );
-    match ret {
-        0 => Ok(()),
-        _ => Err(Errno(ret as u32)),
-    }
-}
-
-pub unsafe fn deploy_contract(calldata: Bytes, code: Bytes, data: &str) -> Result<(), Errno> {
-    let ret = genlayer_sdk::deploy_contract(
-        &calldata as *const _ as i32,
-        &code as *const _ as i32,
-        data.as_ptr() as i32,
-        data.len() as i32,
-    );
-    match ret {
-        0 => Ok(()),
-        _ => Err(Errno(ret as u32)),
-    }
-}
-
 pub unsafe fn storage_read(slot: FullAddr, index: u32, buf: MutBytes) -> Result<(), Errno> {
     let ret = genlayer_sdk::storage_read(
         &slot as *const _ as i32,
@@ -292,32 +164,6 @@ pub unsafe fn storage_write(slot: FullAddr, index: u32, buf: Bytes) -> Result<()
     }
 }
 
-pub unsafe fn eth_call(account: Addr, calldata: Bytes) -> Result<Fd, Errno> {
-    let mut rp0 = MaybeUninit::<Fd>::uninit();
-    let ret = genlayer_sdk::eth_call(
-        &account as *const _ as i32,
-        &calldata as *const _ as i32,
-        rp0.as_mut_ptr() as i32,
-    );
-    match ret {
-        0 => Ok(core::ptr::read(rp0.as_mut_ptr() as i32 as *const Fd)),
-        _ => Err(Errno(ret as u32)),
-    }
-}
-
-pub unsafe fn eth_send(account: Addr, calldata: Bytes, data: &str) -> Result<(), Errno> {
-    let ret = genlayer_sdk::eth_send(
-        &account as *const _ as i32,
-        &calldata as *const _ as i32,
-        data.as_ptr() as i32,
-        data.len() as i32,
-    );
-    match ret {
-        0 => Ok(()),
-        _ => Err(Errno(ret as u32)),
-    }
-}
-
 pub unsafe fn get_balance(account: Addr, res: *mut u8) -> Result<(), Errno> {
     let ret = genlayer_sdk::get_balance(&account as *const _ as i32, res as i32);
     match ret {
@@ -334,26 +180,22 @@ pub unsafe fn get_self_balance(res: *mut u8) -> Result<(), Errno> {
     }
 }
 
+pub unsafe fn gl_call(request: Bytes) -> Result<Fd, Errno> {
+    let mut rp0 = MaybeUninit::<Fd>::uninit();
+    let ret = genlayer_sdk::gl_call(&request as *const _ as i32, rp0.as_mut_ptr() as i32);
+    match ret {
+        0 => Ok(core::ptr::read(rp0.as_mut_ptr() as i32 as *const Fd)),
+        _ => Err(Errno(ret as u32)),
+    }
+}
+
 pub mod genlayer_sdk {
     #[link(wasm_import_module = "genlayer_sdk")]
     extern "C" {
-        pub fn rollback(arg0: i32, arg1: i32) -> !;
-        pub fn contract_return(arg0: i32) -> !;
-        pub fn get_message_data(arg0: i32) -> i32;
-        pub fn get_entrypoint(arg0: i32) -> i32;
-        pub fn run_nondet(arg0: i32, arg1: i32, arg2: i32) -> i32;
-        pub fn sandbox(arg0: i32, arg1: i32) -> i32;
-        pub fn web_render(arg0: i32, arg1: i32, arg2: i32) -> i32;
-        pub fn exec_prompt(arg0: i32, arg1: i32, arg2: i32) -> i32;
-        pub fn exec_prompt_template(arg0: i32, arg1: i32, arg2: i32) -> i32;
-        pub fn call_contract(arg0: i32, arg1: i32, arg2: i32, arg3: i32, arg4: i32) -> i32;
-        pub fn post_message(arg0: i32, arg1: i32, arg2: i32, arg3: i32) -> i32;
-        pub fn deploy_contract(arg0: i32, arg1: i32, arg2: i32, arg3: i32) -> i32;
         pub fn storage_read(arg0: i32, arg1: i32, arg2: i32) -> i32;
         pub fn storage_write(arg0: i32, arg1: i32, arg2: i32) -> i32;
-        pub fn eth_call(arg0: i32, arg1: i32, arg2: i32) -> i32;
-        pub fn eth_send(arg0: i32, arg1: i32, arg2: i32, arg3: i32) -> i32;
         pub fn get_balance(arg0: i32, arg1: i32) -> i32;
         pub fn get_self_balance(arg0: i32) -> i32;
+        pub fn gl_call(arg0: i32, arg1: i32) -> i32;
     }
 }

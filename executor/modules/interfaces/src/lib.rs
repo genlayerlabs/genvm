@@ -118,6 +118,8 @@ pub mod llm {
         #[serde(default = "default_text")]
         pub response_format: OutputFormat,
         pub prompt: String,
+        #[serde(with = "serde_bytes")]
+        pub image: Option<Vec<u8>>,
     }
 
     #[derive(Serialize, Deserialize)]

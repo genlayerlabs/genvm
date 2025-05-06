@@ -7,15 +7,15 @@ use std::{
 
 use base64::Engine as _;
 use itertools::Itertools;
+use serde::Serialize;
 use wasmparser::WasmFeatures;
 use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
-    caching, config,
+    caching, calldata, config,
     runner::{self, InitAction, WasmMode},
     ustar::{Archive, SharedBytes},
     wasi::{self, preview1::I32Exit},
-    AccountAddress,
 };
 use anyhow::{Context, Result};
 use std::sync::{Arc, Mutex};
@@ -64,10 +64,11 @@ impl<I: Iterator<Item = u8>> Iterator for DecodeUtf8<I> {
     }
 }
 
+#[derive(Serialize)]
 pub enum RunOk {
     Return(Vec<u8>),
     Rollback(String),
-    ContractError(String, Option<anyhow::Error>),
+    ContractError(String, #[serde(skip_serializing)] Option<anyhow::Error>),
 }
 
 pub type RunResult = Result<RunOk>;
@@ -131,9 +132,9 @@ impl WasmContext {
     fn new(
         data: crate::wasi::genlayer_sdk::SingleVMData,
         shared_data: Arc<SharedData>,
-    ) -> WasmContext {
-        WasmContext {
-            genlayer_ctx: Arc::new(Mutex::new(wasi::Context::new(data, shared_data))),
+    ) -> anyhow::Result<WasmContext> {
+        Ok(WasmContext {
+            genlayer_ctx: Arc::new(Mutex::new(wasi::Context::new(data, shared_data)?)),
             limits: wasmtime::StoreLimitsBuilder::new()
                 .memories(100)
                 .memory_size(2usize << 30)
@@ -141,7 +142,7 @@ impl WasmContext {
                 .tables(1000)
                 .table_elements(1usize << 20)
                 .build(),
-        }
+        })
     }
 }
 
@@ -160,7 +161,7 @@ pub struct SharedData {
     pub cancellation: Arc<genvm_common::cancellation::Token>,
     pub is_sync: bool,
     pub modules: Modules,
-    pub balances: dashmap::DashMap<AccountAddress, primitive_types::U256>,
+    pub balances: dashmap::DashMap<calldata::Address, primitive_types::U256>,
     pub cookie: String,
 }
 
@@ -530,7 +531,7 @@ impl Supervisor {
 
         let mut store = Store::new(
             engine,
-            WasmContext::new(data, self.shared_data.clone()),
+            WasmContext::new(data, self.shared_data.clone())?,
             self.shared_data.cancellation.should_quit.clone(),
         );
 

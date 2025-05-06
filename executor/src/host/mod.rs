@@ -1,72 +1,16 @@
 mod host_fns;
+pub mod message;
 mod result_codes;
 
-pub use result_codes::ResultCode;
-pub use result_codes::StorageType;
+pub use result_codes::{EntryKind, ResultCode, StorageType};
 
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
-use serde_with::{base64::Base64, serde_as};
 
+use crate::calldata;
 use crate::vm;
-
-#[serde_as]
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash, Copy)]
-pub struct AccountAddress(#[serde_as(as = "Base64")] pub [u8; 20]);
-
-impl AccountAddress {
-    pub fn raw(&self) -> [u8; 20] {
-        let AccountAddress(r) = self;
-        *r
-    }
-
-    pub fn zero() -> Self {
-        Self([0; 20])
-    }
-
-    pub const fn len() -> usize {
-        20
-    }
-}
-
-#[serde_as]
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash, Copy)]
-pub struct GenericAddress(#[serde_as(as = "Base64")] pub [u8; 32]);
-
-impl GenericAddress {
-    pub fn raw(&self) -> [u8; 32] {
-        let GenericAddress(r) = self;
-        *r
-    }
-
-    pub fn zero() -> Self {
-        Self([0; 32])
-    }
-
-    pub const fn len() -> usize {
-        32
-    }
-}
-
-fn default_datetime() -> chrono::DateTime<chrono::Utc> {
-    chrono::DateTime::parse_from_rfc3339("2024-11-26T06:42:42.424242Z")
-        .unwrap()
-        .to_utc()
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct MessageData {
-    pub contract_address: crate::AccountAddress,
-    pub sender_address: crate::AccountAddress,
-    pub origin_address: crate::AccountAddress,
-    pub chain_id: Arc<str>,
-    pub value: Option<u64>,
-    pub is_init: bool,
-    #[serde(default = "default_datetime")]
-    pub datetime: chrono::DateTime<chrono::Utc>,
-}
+pub use message::{MessageData, SlotID};
 
 trait Sock: std::io::Read + std::io::Write + Send + Sync {}
 
@@ -190,7 +134,7 @@ impl Host {
         Ok(())
     }
 
-    pub fn get_code(&mut self, account: &AccountAddress) -> Result<Box<[u8]>> {
+    pub fn get_code(&mut self, account: &calldata::Address) -> Result<Box<[u8]>> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -206,8 +150,8 @@ impl Host {
     pub fn storage_read(
         &mut self,
         mode: StorageType,
-        account: AccountAddress,
-        slot: GenericAddress,
+        account: calldata::Address,
+        slot: SlotID,
         index: u32,
         buf: &mut [u8],
     ) -> Result<()> {
@@ -230,8 +174,8 @@ impl Host {
 
     pub fn storage_write(
         &mut self,
-        account: AccountAddress,
-        slot: GenericAddress,
+        account: calldata::Address,
+        slot: SlotID,
         index: u32,
         buf: &[u8],
     ) -> Result<()> {
@@ -264,6 +208,7 @@ impl Host {
             Err(e) => Err(e),
         };
         write_result(sock, res)?;
+        log::debug!("wrote consumed result to host");
 
         let mut int_buf = [0; 1];
         sock.read_exact(&mut int_buf)?;
@@ -333,7 +278,7 @@ impl Host {
 
     pub fn post_message(
         &mut self,
-        account: &AccountAddress,
+        account: &calldata::Address,
         calldata: &[u8],
         data: &str,
     ) -> Result<()> {
@@ -386,7 +331,7 @@ impl Host {
         Ok(())
     }
 
-    pub fn eth_call(&mut self, address: AccountAddress, calldata: &[u8]) -> Result<Box<[u8]>> {
+    pub fn eth_call(&mut self, address: calldata::Address, calldata: &[u8]) -> Result<Box<[u8]>> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -403,7 +348,12 @@ impl Host {
         read_bytes(sock)
     }
 
-    pub fn eth_send(&mut self, address: AccountAddress, calldata: &[u8], data: &str) -> Result<()> {
+    pub fn eth_send(
+        &mut self,
+        address: calldata::Address,
+        calldata: &[u8],
+        data: &str,
+    ) -> Result<()> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -422,7 +372,7 @@ impl Host {
         Ok(())
     }
 
-    pub fn get_balance(&mut self, address: AccountAddress) -> Result<primitive_types::U256> {
+    pub fn get_balance(&mut self, address: calldata::Address) -> Result<primitive_types::U256> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
