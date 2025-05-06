@@ -31,13 +31,6 @@ impl ImageType {
         }
     }
 
-    pub fn mime_type(self) -> &'static str {
-        match self {
-            Self::PNG => "mime/png",
-            Self::JPG => "mime/jpeg",
-        }
-    }
-
     pub fn media_type(self) -> &'static str {
         match self {
             Self::JPG => "image/jpeg",

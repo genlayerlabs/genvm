@@ -2,9 +2,10 @@ local lib = require("lib-greyboxing")
 local inspect = require("inspect")
 
 function just_in_backend(args, prompt, format)
-	lib.log{ args = args, prompt = prompt, format = format }
-
 	local search_in = lib.select_backends_for(args, format)
+
+	lib.log{ args = args, prompt = prompt, format = format, search_in = search_in }
+
 
 	for provider_name, provider_data in pairs(search_in) do
 		local model = lib.get_first_from_table(provider_data.models)

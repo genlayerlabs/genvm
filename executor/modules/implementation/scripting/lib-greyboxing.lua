@@ -40,15 +40,25 @@ M.exec_prompt_transform = function(args)
 	}
 end
 
+function shallow_copy(t)
+	local ret = {}
+	for k, v in pairs(t) do
+		ret[k] = v
+	end
+	return ret
+end
+
 function filter_backends_by(model_fn)
 	local ret = {}
 
 	for name, conf in pairs(greyboxing.available_backends) do
-		local cur = {}
+		local cur = shallow_copy(conf)
+		cur.models = {}
+
 		local has = false
-		for model_name, model_data in pairs(conf) do
+		for model_name, model_data in pairs(conf.models) do
 			if model_fn(model_data) then
-				cur[model_name] = model_data
+				cur.models[model_name] = model_data
 				has = true
 			end
 		end
@@ -65,18 +75,26 @@ M.backends_with_json_support = filter_backends_by(function(m) return m.supports_
 M.backends_with_image_support = filter_backends_by(function(m) return m.supports_image end)
 M.backends_with_image_and_json_support = filter_backends_by(function(m) return m.supports_image and m.supports_json end)
 
+M.log{
+	all_backends = M.all_backends,
+	backends_with_json_support = M.backends_with_json_support,
+	backends_with_image_support = M.backends_with_image_support,
+	backends_with_image_and_json_support = M.backends_with_image_and_json_support,
+}
+
 M.select_backends_for = function(args, format)
+	local has_image = args.payload.image ~= nil
 	if format == 'json' or format == 'bool' then
-		if args.image ~= nil then
+		if has_image then
 			return M.backends_with_image_and_json_support
 		else
 			return M.backends_with_json_support
 		end
-	elseif args.image ~= nil then
+	elseif has_image then
 		return M.backends_with_image_support
+	else
+		return M.all_backends
 	end
-
-	return M.all_backends
 end
 
 M.exec_prompt_template_transform = function(args)

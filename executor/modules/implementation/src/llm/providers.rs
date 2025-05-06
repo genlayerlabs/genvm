@@ -77,9 +77,11 @@ impl prompt::Internal {
             }));
         }
 
-        messages.push(serde_json::json!({
-            "role": "user",
-            "content": self.user_message,
+        let mut user_content = Vec::new();
+
+        user_content.push(serde_json::json!({
+            "type": "text",
+            "text": self.user_message,
         }));
 
         if let Some(img) = &self.image {
@@ -88,14 +90,16 @@ impl prompt::Internal {
             encoded.push_str(";base64,");
             base64::prelude::BASE64_STANDARD.encode_string(&img.data, &mut encoded);
 
-            messages.push(serde_json::json!({
-                "role": "user",
-                "content": [{
-                    "type": "input_image",
-                    "image_url": encoded,
-                }],
+            user_content.push(serde_json::json!({
+                "type": "image_url",
+                "image_url": { "url": encoded },
             }));
         }
+
+        messages.push(serde_json::json!({
+            "role": "user",
+            "content": user_content,
+        }));
 
         messages
     }
@@ -112,18 +116,20 @@ impl prompt::Internal {
 
         let mut parts = Vec::new();
         if let Some(img) = &self.image {
-            parts.push(serde_json::json!([{
-                "mime_type": img.kind.mime_type(),
-                "data": img.as_base64(),
-            }]));
+            parts.push(serde_json::json!({
+                "inline_data": {
+                    "mime_type": img.kind.media_type(),
+                    "data": img.as_base64(),
+                }
+            }));
         }
-        parts.push(serde_json::json!([{"text": self.user_message}]));
+        parts.push(serde_json::json!({"text": self.user_message}));
 
         to.insert(
             "contents".to_owned(),
-            serde_json::json!({
+            serde_json::json!([{
                 "parts": parts,
-            }),
+            }]),
         );
     }
 }
