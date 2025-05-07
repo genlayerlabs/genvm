@@ -3,13 +3,15 @@
 ## Adding new LLM provider
 **IMPORTANT**: If your provider is compatible with openai API no additional work is needed
 
-- go to [`executor/modules/implementation/llm-funcs/src/lib.rs`](../../executor/modules/implementation/llm-funcs/src/lib.rs)
-- add new value to `enum LLLMProvider`
-- add case to `exec_prompt_impl`<br>
-    **IMPORTANT**: you must implement it for both text and json modes
+- go to [`executor/modules/implementation/src/llm/providers.rs`](../../executor/modules/implementation/src/llm/providers.rs)
+- declare and implement new provider (`impl Provider`). It is recommended to implement separate json mode
+- add new value to `Provider` enum in `executor/modules/implementation/src/llm/config.rs`
+- add case to `BackendConfig::to_provider` in `executor/modules/implementation/src/llm/config.rs`
 
 ### Adding test
-- add test case to [`executor/modules/implementation/llm-funcs/src/lib.rs`](../../executor/modules/implementation/llm-funcs/src/lib.rs)
+(optional)
+
+- add test case to [`executor/modules/implementation/src/llm/handler.rs`](../../executor/modules/implementation/src/llm/handler.rs)
 - patch [workflow](../../.github/workflows/module-test-cargo.yaml) to pass secret
 - provide api key to repository owners
 
@@ -18,7 +20,7 @@
     add declaration here
 - `executor/src/wasi/genlayer_sdk.rs`<br>
     add implementation here (under `impl` trait)
-- `runners/cpython-and-ext/extension/src/lib.rs`<br>
+- `runners/nix/trg/py/modules/genvm-cpython-ext/src/lib.rs`<br>
     add python proxy<br>
     NOTE: this will change hash, rebuilding will show you the new one
 
