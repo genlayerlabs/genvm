@@ -54,6 +54,10 @@ fn handle_run(mut config: config::Config, args: CliArgsRun) -> Result<()> {
 
     config.backends.retain(|_k, v| v.enabled);
 
+    if config.backends.is_empty() {
+        log::error!("no valid backend detected")
+    }
+
     if !args.allow_empty_backends && config.backends.is_empty() {
         anyhow::bail!("no valid backend detected");
     }

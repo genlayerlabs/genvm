@@ -21,7 +21,7 @@ web_config_target = target_copy(
 	src: [cur_src.join('web-default-config.yaml')],
 )
 
-lib_copy_targets = ['lib-greyboxing.lua', 'inspect.lua'].map { |ct|
+lib_copy_targets = ['lib-greyboxing.lua', 'inspect.lua', 'value2json.lua'].map { |ct|
 	target_copy(
 		dest: config.out_dir.join('share', 'lib', 'genvm', 'greyboxing', ct),
 		src: [cur_src.join('scripting', ct)],

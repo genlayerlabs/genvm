@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 
 use crate::common::{ModuleResult, ModuleResultUserError};
 use anyhow::Context;
@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     config,
-    handler::{self, OverloadedError},
+    handler::{self, LuaError},
     prompt::{self, ImageLua, ImageType},
 };
 
@@ -22,6 +22,12 @@ pub struct UserVM {
 struct Greyboxing {
     available_backends: BTreeMap<String, config::ScriptBackendConfig>,
     templates: serde_json::Value,
+}
+
+#[derive(Serialize)]
+enum LuaReturn {
+    Ok(llm_iface::PromptAnswer),
+    Err(serde_json::Value),
 }
 
 impl mlua::UserData for handler::Handler {
@@ -52,14 +58,26 @@ impl mlua::UserData for handler::Handler {
                 .with_context(|| "running in provider");
 
             let res = match res {
-                Ok(res) => res,
-                Err(e) if e.is::<OverloadedError>() => {
-                    return Err(mlua::Error::runtime("Overloaded"));
+                Ok(res) => LuaReturn::Ok(res),
+                Err(e) => {
+                    let as_lua_err = match e.downcast::<LuaError>() {
+                        Ok(lua_err) => lua_err,
+                        Err(other_err) => LuaError {
+                            kind: handler::LuaErrorKind::Internal,
+                            context: serde_json::json!({
+                                "error_message": format!("{other_err:#}"),
+                            }),
+                        },
+                    };
+
+                    LuaReturn::Err(
+                        serde_json::to_value(&as_lua_err)
+                            .map_err(|e| mlua::Error::ExternalError(Arc::new(e)))?,
+                    )
                 }
-                Err(e) => return Err(e.into()),
             };
 
-            vm.to_value(&res)
+            vm.to_value_with(&res, DEFAULT_LUA_SER_OPTIONS)
         }
         methods.add_async_function("exec_in_backend", exec_in_backend);
     }
@@ -117,8 +135,14 @@ impl UserVM {
 
         let greyboxing = vm.to_value_with(&greyboxing, DEFAULT_LUA_SER_OPTIONS)?;
         let log_fn = vm.create_function(|vm: &mlua::Lua, data: mlua::Value| {
-            let as_serde: serde_json::Value = vm.from_value(data)?;
-            log::info!(log:serde = as_serde, cookie = crate::common::get_cookie(); "script log");
+            let mut as_serde: serde_json::Map<String, serde_json::Value> = vm.from_value(data)?;
+
+            let level = as_serde.remove("level");
+            let level = level.and_then(|x| x.as_str().map(|x| x.to_owned())).map(|x| log::Level::from_str(&x).unwrap_or(log::Level::Info)).unwrap_or(log::Level::Info);
+
+            let script_message = as_serde.remove("message").and_then(|x| x.as_str().map(|x| x.to_owned())).unwrap_or_else(|| "<none>".to_owned());
+
+            log::log!(level, log:serde = as_serde, cookie = crate::common::get_cookie(); "script_log: {script_message}");
             Ok(())
         })?;
 
