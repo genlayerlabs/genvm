@@ -124,6 +124,17 @@ impl UserVM {
 
         greyboxing.as_table().unwrap().set("log", log_fn)?;
 
+        let sleep_fn = vm.create_async_function(|vm: mlua::Lua, data: mlua::Value| async move {
+            let as_seconds: f32 = vm.from_value(data)?;
+            tokio::time::sleep(tokio::time::Duration::from_secs_f32(as_seconds)).await;
+            Ok(())
+        })?;
+
+        greyboxing
+            .as_table()
+            .unwrap()
+            .set("sleep_seconds", sleep_fn)?;
+
         vm.globals().set("greyboxing", greyboxing)?;
 
         let user_script = std::fs::read_to_string(&config.lua_script_path)

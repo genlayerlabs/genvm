@@ -1,6 +1,7 @@
 local M = {}
 
 M.all_backends = greyboxing.available_backends
+M.sleep_seconds = greyboxing.sleep_seconds
 
 local inspect = require('inspect')
 
