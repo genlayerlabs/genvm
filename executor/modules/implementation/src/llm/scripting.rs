@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use crate::common::{ModuleResult, ModuleResultUserError};
 use anyhow::Context;
 use genvm_modules_interfaces::llm as llm_iface;
-use mlua::{IntoLua, LuaSerdeExt, UserDataRef};
+use mlua::{LuaSerdeExt, UserDataRef};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -65,6 +65,10 @@ impl mlua::UserData for handler::Handler {
     }
 }
 
+const DEFAULT_LUA_SER_OPTIONS: mlua::SerializeOptions = mlua::SerializeOptions::new()
+    .serialize_none_to_null(false)
+    .serialize_unit_to_null(false);
+
 impl UserVM {
     pub fn new(config: &config::Config) -> anyhow::Result<Arc<UserVM>> {
         use mlua::StdLib;
@@ -111,13 +115,15 @@ impl UserVM {
             templates: serde_json::to_value(&config.prompt_templates)?,
         };
 
-        let greyboxing = vm.to_value(&greyboxing)?;
+        let greyboxing = vm.to_value_with(&greyboxing, DEFAULT_LUA_SER_OPTIONS)?;
         let log_fn = vm.create_function(|vm: &mlua::Lua, data: mlua::Value| {
             let as_serde: serde_json::Value = vm.from_value(data)?;
             log::info!(log:serde = as_serde, cookie = crate::common::get_cookie(); "script log");
             Ok(())
         })?;
+
         greyboxing.as_table().unwrap().set("log", log_fn)?;
+
         vm.globals().set("greyboxing", greyboxing)?;
 
         let user_script = std::fs::read_to_string(&config.lua_script_path)
@@ -150,13 +156,14 @@ impl UserVM {
         handler: Arc<handler::Handler>,
         payload: &llm_iface::PromptPayload,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        let host_data = self.vm.to_value(&handler.hello.host_data)?;
+        let host_data = self
+            .vm
+            .to_value_with(&handler.hello.host_data, DEFAULT_LUA_SER_OPTIONS)?;
 
-        let handler = self.vm.create_userdata(handler)?;
-        let handler: mlua::Value = handler.into_lua(&self.vm)?;
+        let handler = mlua::Value::UserData(self.vm.create_userdata(handler)?);
 
         let image = match &payload.image {
-            None => self.vm.null(),
+            None => mlua::Value::Nil,
             Some(v) => {
                 let kind = ImageType::sniff(v).ok_or(ModuleResultUserError(serde_json::json!(
                     "can't sniff image type. only png and jpg are supported"
@@ -165,23 +172,27 @@ impl UserVM {
                     data: v.clone(),
                     kind,
                 });
-                let as_userdata = self.vm.create_ser_any_userdata(as_arc)?;
-                self.vm.convert(as_userdata)?
+                mlua::Value::UserData(self.vm.create_ser_any_userdata(as_arc)?)
             }
         };
 
         let payload = self.vm.create_table_from([
             (
                 "response_format",
-                self.vm.to_value(&payload.response_format)?,
+                self.vm
+                    .to_value_with(&payload.response_format, DEFAULT_LUA_SER_OPTIONS)?,
             ),
-            ("prompt", self.vm.to_value(&payload.prompt)?),
+            (
+                "prompt",
+                self.vm
+                    .to_value_with(&payload.prompt, DEFAULT_LUA_SER_OPTIONS)?,
+            ),
             ("image", image),
         ])?;
 
         let arg = self.vm.create_table_from([
             ("handler", handler),
-            ("payload", self.vm.convert(payload)?),
+            ("payload", mlua::Value::Table(payload)),
             ("host_data", host_data),
         ])?;
 
@@ -200,11 +211,13 @@ impl UserVM {
         handler: Arc<handler::Handler>,
         payload: llm_iface::PromptTemplatePayload,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        let host_data = self.vm.to_value(&handler.hello.host_data)?;
+        let host_data = self
+            .vm
+            .to_value_with(&handler.hello.host_data, DEFAULT_LUA_SER_OPTIONS)?;
 
         let handler = self.vm.create_userdata(handler)?;
-        let handler: mlua::Value = handler.into_lua(&self.vm)?;
-        let payload = self.vm.to_value(&payload)?;
+        let handler: mlua::Value = mlua::Value::UserData(handler);
+        let payload = self.vm.to_value_with(&payload, DEFAULT_LUA_SER_OPTIONS)?;
 
         let arg = self.vm.create_table_from([
             ("handler", handler),
