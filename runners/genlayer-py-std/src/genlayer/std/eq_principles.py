@@ -109,7 +109,7 @@ def eq_principle_prompt_non_comparative(
 					'criteria': criteria,
 				}
 			},
-			lambda buf: str(buf, 'utf-8'),
+			_decode_nondet,
 		)
 		return ret.get()
 
