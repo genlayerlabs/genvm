@@ -149,6 +149,8 @@ pub async fn run_with(
         e => e,
     };
 
+    supervisor.log_stats();
+
     log::debug!("sending final result to host");
 
     supervisor.host.consume_result(&res)?;

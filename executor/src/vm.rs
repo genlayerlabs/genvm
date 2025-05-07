@@ -5,7 +5,6 @@ use std::{
     sync::atomic::AtomicU32,
 };
 
-use base64::Engine as _;
 use itertools::Itertools;
 use serde::Serialize;
 use wasmparser::WasmFeatures;
@@ -193,24 +192,23 @@ pub struct Modules {
     pub llm: Arc<crate::modules::Module>,
 }
 
-// impl Drop for Modules {
-//     fn drop(&mut self) {
-//         eprintln!(
-//             "{}",
-//             std::fs::read_to_string(std::path::Path::new("/proc/self/maps"))
-//                 .unwrap_or(String::new())
-//         );
-//     }
-// }
+#[derive(Serialize)]
+struct SupervisorStats {
+    precompile_hits: usize,
+    cache_hits: usize,
+    compiled_modules: usize,
+}
 
 pub struct Supervisor {
     pub host: crate::Host,
     pub shared_data: Arc<SharedData>,
 
     engines: Engines,
-    cached_modules: HashMap<SharedBytes, Arc<PrecompiledModule>>,
+    cached_modules: HashMap<symbol_table::GlobalSymbol, Arc<PrecompiledModule>>,
     runner_cache: runner::RunnerReaderCache,
     cache_dir: Option<std::path::PathBuf>,
+
+    stats: SupervisorStats,
 }
 
 pub struct VM {
@@ -373,11 +371,29 @@ pub struct WasmFileDesc {
     pub contents: SharedBytes,
     pub runner_id: symbol_table::GlobalSymbol,
     pub path_in_arch: Arc<str>,
+    pub wasm_uid: symbol_table::GlobalSymbol,
 }
 
 impl WasmFileDesc {
-    pub fn debug_path(&self) -> String {
-        [self.runner_id.as_str(), &self.path_in_arch].join("")
+    pub fn new(
+        contents: SharedBytes,
+        runner_id: symbol_table::GlobalSymbol,
+        path_in_arch: Arc<str>,
+    ) -> Self {
+        let mut wasm_uid = String::from(runner_id.as_str());
+        wasm_uid.push(':');
+        wasm_uid.push_str(&path_in_arch);
+
+        Self {
+            contents,
+            runner_id,
+            path_in_arch,
+            wasm_uid: symbol_table::GlobalSymbol::from(wasm_uid),
+        }
+    }
+
+    pub fn debug_path(&self) -> &'static str {
+        self.wasm_uid.as_str()
     }
 
     pub fn is_special(&self) -> bool {
@@ -435,14 +451,21 @@ impl Supervisor {
             host,
             shared_data,
             cache_dir: my_cache_dir,
+
+            stats: SupervisorStats {
+                cache_hits: 0,
+                precompile_hits: 0,
+                compiled_modules: 0,
+            },
         })
     }
 
     pub fn cache_module(&mut self, data: &WasmFileDesc) -> Result<Arc<PrecompiledModule>> {
-        let entry = self.cached_modules.entry(data.contents.clone());
+        let entry = self.cached_modules.entry(data.wasm_uid);
         match entry {
             std::collections::hash_map::Entry::Occupied(entry) => {
                 log::debug!(target: "cache", cache_method = "rt", path = data.debug_path(); "using cached");
+                self.stats.cache_hits += 1;
                 Ok(entry.get().clone())
             }
             std::collections::hash_map::Entry::Vacant(entry) => {
@@ -510,8 +533,9 @@ impl Supervisor {
                     Ok(PrecompiledModule { det, non_det })
                 };
 
-                let ret = get_from_precompiled().or_else(|e| {
+                let ret = get_from_precompiled().inspect(|_| { self.stats.precompile_hits += 1; }).or_else(|e| {
                     log::trace!(target: "cache", error = genvm_common::log_error(&e), runner = data.runner_id.as_str(); "could not use precompiled");
+                    self.stats.compiled_modules += 1;
                     compile_here()
                 })?;
 
@@ -632,14 +656,9 @@ impl Supervisor {
             }
             InitAction::LinkWasm(path) => {
                 let contents = self.runner_cache.get_unsafe(current).get_file(path)?;
-                let module = self.link_wasm_into(
-                    vm,
-                    &WasmFileDesc {
-                        contents,
-                        runner_id: current,
-                        path_in_arch: path.clone(),
-                    },
-                )?;
+
+                let module =
+                    self.link_wasm_into(vm, &WasmFileDesc::new(contents, current, path.clone()))?;
                 let instance = {
                     let mut linker = vm.linker.lock().await;
                     let instance = linker.instantiate_async(&mut vm.store, &module).await?;
@@ -673,14 +692,8 @@ impl Supervisor {
                     .preview1
                     .set_env(&env)?;
                 let contents = self.runner_cache.get_unsafe(current).get_file(path)?;
-                let module = self.link_wasm_into(
-                    vm,
-                    &WasmFileDesc {
-                        contents,
-                        runner_id: current,
-                        path_in_arch: path.clone(),
-                    },
-                )?;
+                let module =
+                    self.link_wasm_into(vm, &WasmFileDesc::new(contents, current, path.clone()))?;
 
                 let linker = vm.linker.lock().await;
                 Ok(Some(
@@ -777,9 +790,7 @@ impl Supervisor {
             lock.genlayer_sdk.data.message_data.contract_address
         };
 
-        let mut contract_id = String::from("<contract>:");
-        contract_id.push_str(&base64::prelude::BASE64_STANDARD.encode(contract_address.raw()));
-        let contract_id = symbol_table::GlobalSymbol::from(&contract_id);
+        let contract_id = runner::get_id_of_contract(contract_address);
 
         let provide_arch = || {
             let code = self.host.get_code(&contract_address)?;
@@ -803,5 +814,9 @@ impl Supervisor {
                 "actions returned by runner do not have a start instruction"
             )),
         }
+    }
+
+    pub fn log_stats(&self) {
+        log::info!(all_wasm_modules:? = self.cached_modules.keys(), stats:serde = self.stats; "supervisor stats");
     }
 }

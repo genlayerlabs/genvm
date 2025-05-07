@@ -179,6 +179,8 @@ impl Context {
 
     pub fn map_file(&mut self, location: &str, contents: SharedBytes) -> anyhow::Result<()> {
         let mut location_patched = String::new();
+        location_patched.reserve(location.len());
+
         let mut last_slash = true;
         for c in location.chars() {
             if c == '/' {

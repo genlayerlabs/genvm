@@ -3,12 +3,20 @@ use core::str;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use symbol_table::GlobalSymbol;
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub enum WasmMode {
     Det,
     Nondet,
+}
+
+pub fn get_id_of_contract(address: calldata::Address) -> GlobalSymbol {
+    let mut contract_id = String::from("on_chain:0x");
+    contract_id.push_str(&hex::encode(address.raw()));
+
+    GlobalSymbol::from(contract_id)
 }
 
 struct GlobalSymbolDeserializeVisitor;
@@ -63,7 +71,7 @@ pub enum InitAction {
     },
 }
 
-use crate::ustar::*;
+use crate::{calldata, ustar::*};
 
 pub struct ZipCache {
     id: symbol_table::GlobalSymbol,
