@@ -86,6 +86,8 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         Some(v) => v.clone(),
     };
 
+    log::info!(cookie = cookie; "genvm cookie");
+
     let supervisor = genvm::create_supervisor(&config, host, args.sync, token, host_data, cookie)
         .with_context(|| "creating supervisor")?;
 

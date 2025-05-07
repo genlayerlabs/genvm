@@ -1,11 +1,13 @@
 local M = {}
 
 M.all_backends = greyboxing.available_backends
+M.sleep_seconds = greyboxing.sleep_seconds
 
 local inspect = require('inspect')
+local value2json = require('value2json')
 
 M.log = function(arg)
-	greyboxing.log(inspect(arg))
+	greyboxing.log(value2json(arg))
 end
 
 M.get_first_from_table = function(t)
@@ -81,6 +83,46 @@ M.log{
 	backends_with_image_support = M.backends_with_image_support,
 	backends_with_image_and_json_support = M.backends_with_image_and_json_support,
 }
+
+if M.get_first_from_table(M.backends_with_json_support) == nil then
+	M.log{
+		level = "error",
+		message = "no backend with json support detected"
+	}
+end
+
+if M.get_first_from_table(M.backends_with_image_support) == nil then
+	M.log{
+		level = "error",
+		message = "no backend with image support detected"
+	}
+end
+
+if M.get_first_from_table(M.backends_with_image_and_json_support) == nil then
+	M.log{
+		level = "error",
+		message = "no backend with image AND json support detected"
+	}
+end
+
+M.exec_in_backend = function(handler, x)
+	local success, result = pcall(function() return handler:exec_in_backend(x) end)
+
+	if not success then
+		error({
+			kind = "LuaError",
+			ctx = {
+				original_error = result
+			}
+		})
+	end
+
+	if result.Err ~= nil then
+		error(result.Err)
+	end
+
+	return result.Ok
+end
 
 M.select_backends_for = function(args, format)
 	local has_image = args.payload.image ~= nil

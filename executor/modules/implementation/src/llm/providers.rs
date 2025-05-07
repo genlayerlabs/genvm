@@ -1,9 +1,9 @@
-use crate::common;
+use crate::{common, llm::handler::LuaErrorKind};
 use anyhow::Context;
 use base64::Engine;
 use common::ModuleResult;
 
-use super::{config, handler::OverloadedError, prompt};
+use super::{config, handler::LuaError, prompt};
 
 #[async_trait::async_trait]
 pub trait Provider {
@@ -169,9 +169,8 @@ impl Provider for OpenAICompatible {
                 .body(request.clone())
         })
         .await?;
-        let res = common::read_response(res).await?;
-        let val: serde_json::Value = serde_json::from_str(&res)?;
-        let response = val
+
+        let response = res
             .pointer("/choices/0/message/content")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
@@ -213,9 +212,8 @@ impl Provider for OpenAICompatible {
                 .body(request.clone())
         })
         .await?;
-        let res = common::read_response(res).await?;
-        let val: serde_json::Value = serde_json::from_str(&res)?;
-        let response = val
+
+        let response = res
             .pointer("/choices/0/message/content")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
@@ -271,9 +269,8 @@ impl Provider for OLlama {
                 .body(request.clone())
         })
         .await?;
-        let res = common::read_response(res).await?;
-        let val: serde_json::Value = serde_json::from_str(&res)?;
-        let response = val
+
+        let response = res
             .as_object()
             .and_then(|v| v.get("response"))
             .and_then(|v| v.as_str())
@@ -314,9 +311,8 @@ impl Provider for OLlama {
                 .body(request.clone())
         })
         .await?;
-        let res = common::read_response(res).await?;
-        let val: serde_json::Value = serde_json::from_str(&res)?;
-        let response = val
+
+        let response = res
             .as_object()
             .and_then(|v| v.get("response"))
             .and_then(|v| v.as_str())
@@ -354,10 +350,6 @@ impl Provider for Gemini {
         })
         .await?;
 
-        let res = common::read_response(res).await?;
-
-        let res: serde_json::Value = serde_json::from_str(&res)?;
-
         let res = res
             .pointer("/candidates/0/content/parts/0/text")
             .and_then(|x| x.as_str())
@@ -391,9 +383,6 @@ impl Provider for Gemini {
                 .body(request.clone())
         })
         .await?;
-
-        let res = common::read_response(res).await?;
-        let res: serde_json::Value = serde_json::from_str(&res)?;
 
         let res = res
             .pointer("/candidates/0/content/parts/0/text")
@@ -457,9 +446,7 @@ impl Provider for Anthropic {
         })
         .await?;
 
-        let res = common::read_response(res).await?;
-        let val: serde_json::Value = serde_json::from_str(&res)?;
-        val.pointer("/content/0/text")
+        res.pointer("/content/0/text")
             .and_then(|x| x.as_str())
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))
             .map(String::from)
@@ -515,10 +502,7 @@ impl Provider for Anthropic {
         })
         .await?;
 
-        let res = common::read_response(res).await?;
-        let val: serde_json::Value = serde_json::from_str(&res)?;
-
-        let val = val
+        let val = res
             .pointer("/content/0/input")
             .and_then(|x| x.as_object())
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
@@ -573,10 +557,7 @@ impl Provider for Anthropic {
         })
         .await?;
 
-        let res = common::read_response(res).await?;
-        let val: serde_json::Value = serde_json::from_str(&res)?;
-
-        let val = val
+        let val = res
             .pointer("/content/0/input/result")
             .and_then(|x| x.as_bool())
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
@@ -597,7 +578,7 @@ fn sanitize_json_str(s: &str) -> &str {
 
 async fn send_with_retries(
     builder: impl (FnOnce() -> reqwest::RequestBuilder) + Send,
-) -> anyhow::Result<reqwest::Response> {
+) -> anyhow::Result<serde_json::Value> {
     let req = builder();
 
     log::trace!(request = common::censor_debug(&req), cookie = common::get_cookie(); "sending request");
@@ -605,27 +586,59 @@ async fn send_with_retries(
     let res = req
         .send()
         .await
-        .with_context(|| "sending request to llm provider")?;
+        .with_context(|| "sending request to llm provider")
+        .map_err(|e| {
+            log::warn!(cookie = common::get_cookie(), error = genvm_common::log_error(&e); "sending request failed");
+
+            LuaError {
+                kind: crate::llm::handler::LuaErrorKind::RequestFailed,
+                context: serde_json::Value::Null,
+            }
+        })?;
+
+    let mut context = serde_json::Map::new();
+
+    let status_code = res.status();
+
+    context.insert("status_code".into(), status_code.as_u16().into());
+
+    let body = res.text().await.with_context(|| "reading_body")
+        .map_err(|e| {
+            log::warn!(cookie = common::get_cookie(), error = genvm_common::log_error(&e), status = status_code.as_u16(); "reading body failed");
+
+            LuaError {
+                kind: crate::llm::handler::LuaErrorKind::BodyReadingFailed,
+                context: context.clone().into(),
+            }
+        })?;
+
+    let body: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
+        log::warn!(cookie = common::get_cookie(), error:err = e, status = status_code.as_u16(), body = common::censor_str(&body); "parsing body failed");
+
+        context.insert("body_raw".into(), serde_json::Value::String(body));
+
+        LuaError {
+            kind: crate::llm::handler::LuaErrorKind::BodyReadingFailed,
+            context: context.clone().into(),
+        }
+    })?;
 
     use reqwest::StatusCode;
-    match res.status() {
+    let err_kind = match status_code {
+        StatusCode::OK => return Ok(body),
         StatusCode::REQUEST_TIMEOUT
         | StatusCode::SERVICE_UNAVAILABLE
         | StatusCode::TOO_MANY_REQUESTS
-        | StatusCode::GATEWAY_TIMEOUT => return Err(OverloadedError.into()),
-        StatusCode::OK => return Ok(res),
-        x if [529].contains(&x.as_u16()) => return Err(OverloadedError.into()),
-        _ => {}
+        | StatusCode::GATEWAY_TIMEOUT => LuaErrorKind::Overloaded,
+        x if [529].contains(&x.as_u16()) => LuaErrorKind::Overloaded,
+        _ => LuaErrorKind::StatusNotOk,
+    };
+
+    context.insert("body".into(), body);
+
+    Err(LuaError {
+        kind: err_kind,
+        context: context.into(),
     }
-
-    let debug = format!("{:?}", &res);
-    let body = res.text().await;
-    log::error!(
-        response = common::censor_str(&debug),
-        body:? = body,
-        cookie = common::get_cookie();
-        "request reading failed"
-    );
-
-    anyhow::bail!("llm request failed")
+    .into())
 }

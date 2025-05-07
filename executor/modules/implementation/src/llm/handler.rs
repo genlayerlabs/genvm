@@ -2,6 +2,7 @@ use super::{config, prompt, providers, scripting};
 use crate::common::{MessageHandler, MessageHandlerProvider, ModuleResult};
 
 use genvm_modules_interfaces::llm as llm_iface;
+use serde::Serialize;
 
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -12,14 +13,26 @@ pub struct Handler {
     pub hello: genvm_modules_interfaces::GenVMHello,
 }
 
-#[derive(Debug)]
-pub struct OverloadedError;
+#[derive(Debug, Serialize)]
+pub enum LuaErrorKind {
+    Internal,
+    Overloaded,
+    StatusNotOk,
+    RequestFailed,
+    BodyReadingFailed,
+}
 
-impl std::error::Error for OverloadedError {}
+#[derive(Debug, Serialize)]
+pub struct LuaError {
+    pub kind: LuaErrorKind,
+    pub context: serde_json::Value,
+}
 
-impl std::fmt::Display for OverloadedError {
+impl std::error::Error for LuaError {}
+
+impl std::fmt::Display for LuaError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "OverloadedError")
+        f.write_fmt(format_args!("{:?}", self))
     }
 }
 

@@ -1,14 +1,14 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 
 use crate::common::{ModuleResult, ModuleResultUserError};
 use anyhow::Context;
 use genvm_modules_interfaces::llm as llm_iface;
-use mlua::{IntoLua, LuaSerdeExt, UserDataRef};
+use mlua::{LuaSerdeExt, UserDataRef};
 use serde::{Deserialize, Serialize};
 
 use super::{
     config,
-    handler::{self, OverloadedError},
+    handler::{self, LuaError},
     prompt::{self, ImageLua, ImageType},
 };
 
@@ -22,6 +22,12 @@ pub struct UserVM {
 struct Greyboxing {
     available_backends: BTreeMap<String, config::ScriptBackendConfig>,
     templates: serde_json::Value,
+}
+
+#[derive(Serialize)]
+enum LuaReturn {
+    Ok(llm_iface::PromptAnswer),
+    Err(serde_json::Value),
 }
 
 impl mlua::UserData for handler::Handler {
@@ -52,18 +58,34 @@ impl mlua::UserData for handler::Handler {
                 .with_context(|| "running in provider");
 
             let res = match res {
-                Ok(res) => res,
-                Err(e) if e.is::<OverloadedError>() => {
-                    return Err(mlua::Error::runtime("Overloaded"));
+                Ok(res) => LuaReturn::Ok(res),
+                Err(e) => {
+                    let as_lua_err = match e.downcast::<LuaError>() {
+                        Ok(lua_err) => lua_err,
+                        Err(other_err) => LuaError {
+                            kind: handler::LuaErrorKind::Internal,
+                            context: serde_json::json!({
+                                "error_message": format!("{other_err:#}"),
+                            }),
+                        },
+                    };
+
+                    LuaReturn::Err(
+                        serde_json::to_value(&as_lua_err)
+                            .map_err(|e| mlua::Error::ExternalError(Arc::new(e)))?,
+                    )
                 }
-                Err(e) => return Err(e.into()),
             };
 
-            vm.to_value(&res)
+            vm.to_value_with(&res, DEFAULT_LUA_SER_OPTIONS)
         }
         methods.add_async_function("exec_in_backend", exec_in_backend);
     }
 }
+
+const DEFAULT_LUA_SER_OPTIONS: mlua::SerializeOptions = mlua::SerializeOptions::new()
+    .serialize_none_to_null(false)
+    .serialize_unit_to_null(false);
 
 impl UserVM {
     pub fn new(config: &config::Config) -> anyhow::Result<Arc<UserVM>> {
@@ -111,13 +133,32 @@ impl UserVM {
             templates: serde_json::to_value(&config.prompt_templates)?,
         };
 
-        let greyboxing = vm.to_value(&greyboxing)?;
+        let greyboxing = vm.to_value_with(&greyboxing, DEFAULT_LUA_SER_OPTIONS)?;
         let log_fn = vm.create_function(|vm: &mlua::Lua, data: mlua::Value| {
-            let as_serde: serde_json::Value = vm.from_value(data)?;
-            log::info!(log:serde = as_serde, cookie = crate::common::get_cookie(); "script log");
+            let mut as_serde: serde_json::Map<String, serde_json::Value> = vm.from_value(data)?;
+
+            let level = as_serde.remove("level");
+            let level = level.and_then(|x| x.as_str().map(|x| x.to_owned())).map(|x| log::Level::from_str(&x).unwrap_or(log::Level::Info)).unwrap_or(log::Level::Info);
+
+            let script_message = as_serde.remove("message").and_then(|x| x.as_str().map(|x| x.to_owned())).unwrap_or_else(|| "<none>".to_owned());
+
+            log::log!(level, log:serde = as_serde, cookie = crate::common::get_cookie(); "script_log: {script_message}");
             Ok(())
         })?;
+
         greyboxing.as_table().unwrap().set("log", log_fn)?;
+
+        let sleep_fn = vm.create_async_function(|vm: mlua::Lua, data: mlua::Value| async move {
+            let as_seconds: f32 = vm.from_value(data)?;
+            tokio::time::sleep(tokio::time::Duration::from_secs_f32(as_seconds)).await;
+            Ok(())
+        })?;
+
+        greyboxing
+            .as_table()
+            .unwrap()
+            .set("sleep_seconds", sleep_fn)?;
+
         vm.globals().set("greyboxing", greyboxing)?;
 
         let user_script = std::fs::read_to_string(&config.lua_script_path)
@@ -150,13 +191,14 @@ impl UserVM {
         handler: Arc<handler::Handler>,
         payload: &llm_iface::PromptPayload,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        let host_data = self.vm.to_value(&handler.hello.host_data)?;
+        let host_data = self
+            .vm
+            .to_value_with(&handler.hello.host_data, DEFAULT_LUA_SER_OPTIONS)?;
 
-        let handler = self.vm.create_userdata(handler)?;
-        let handler: mlua::Value = handler.into_lua(&self.vm)?;
+        let handler = mlua::Value::UserData(self.vm.create_userdata(handler)?);
 
         let image = match &payload.image {
-            None => self.vm.null(),
+            None => mlua::Value::Nil,
             Some(v) => {
                 let kind = ImageType::sniff(v).ok_or(ModuleResultUserError(serde_json::json!(
                     "can't sniff image type. only png and jpg are supported"
@@ -165,23 +207,27 @@ impl UserVM {
                     data: v.clone(),
                     kind,
                 });
-                let as_userdata = self.vm.create_ser_any_userdata(as_arc)?;
-                self.vm.convert(as_userdata)?
+                mlua::Value::UserData(self.vm.create_ser_any_userdata(as_arc)?)
             }
         };
 
         let payload = self.vm.create_table_from([
             (
                 "response_format",
-                self.vm.to_value(&payload.response_format)?,
+                self.vm
+                    .to_value_with(&payload.response_format, DEFAULT_LUA_SER_OPTIONS)?,
             ),
-            ("prompt", self.vm.to_value(&payload.prompt)?),
+            (
+                "prompt",
+                self.vm
+                    .to_value_with(&payload.prompt, DEFAULT_LUA_SER_OPTIONS)?,
+            ),
             ("image", image),
         ])?;
 
         let arg = self.vm.create_table_from([
             ("handler", handler),
-            ("payload", self.vm.convert(payload)?),
+            ("payload", mlua::Value::Table(payload)),
             ("host_data", host_data),
         ])?;
 
@@ -200,11 +246,13 @@ impl UserVM {
         handler: Arc<handler::Handler>,
         payload: llm_iface::PromptTemplatePayload,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        let host_data = self.vm.to_value(&handler.hello.host_data)?;
+        let host_data = self
+            .vm
+            .to_value_with(&handler.hello.host_data, DEFAULT_LUA_SER_OPTIONS)?;
 
         let handler = self.vm.create_userdata(handler)?;
-        let handler: mlua::Value = handler.into_lua(&self.vm)?;
-        let payload = self.vm.to_value(&payload)?;
+        let handler: mlua::Value = mlua::Value::UserData(handler);
+        let payload = self.vm.to_value_with(&payload, DEFAULT_LUA_SER_OPTIONS)?;
 
         let arg = self.vm.create_table_from([
             ("handler", handler),

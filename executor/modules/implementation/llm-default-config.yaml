@@ -8,7 +8,7 @@ lua_script_path: ${genvmRoot}/scripts/genvm-greyboxing.lua
 threads: 4
 blocking_threads: 16
 log_disable: tracing*,polling*,tungstenite*,tokio_tungstenite*
-#log_level: trace
+#log_level: info
 
 backends:
   openai:

@@ -12,25 +12,30 @@ function just_in_backend(args, prompt, format)
 		prompt.use_max_completion_tokens = model.value.use_max_completion_tokens
 
 		local success, result = pcall(function ()
-			return args.handler:exec_in_backend({
-				provider = provider_name,
-				model = model.key,
-				prompt = prompt,
-				format = format,
-			})
+			return lib.exec_in_backend(
+				args.handler,
+				{
+					provider = provider_name,
+					model = model.key,
+					prompt = prompt,
+					format = format,
+				}
+			)
 		end)
 
-		lib.log{message = "executed with", type = type(result), res = result}
+		lib.log{level = "debug", message = "executed with", type = type(result), res = result}
 		if success then
 			return result
-		elseif tostring(result):match("runtime error: ([a-zA-Z]*)") == "Overloaded" then
+		elseif result.kind == "Overloaded" then
 			-- nothing/continue
+			lib.log{level = "warning", message = "service is overloaded, looking for next", result = result}
 		else
+			lib.log{level = "error", message = "provider failed", result = result}
 			error(result)
 		end
 	end
 
-	error("no provider could handle prompt, searched in " .. inspect(search_in))
+	lib.log{level = "error", message = "no provider could handle prompt", search_in = search_in}
 end
 
 function exec_prompt(args)

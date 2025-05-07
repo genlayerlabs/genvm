@@ -85,7 +85,7 @@ impl BaseConfig {
             .with_target_writer(&self.log_disable, Box::new(NullWiriter))
             .init();
 
-        if log::STATIC_MAX_LEVEL > log::max_level() {
+        if log::STATIC_MAX_LEVEL < log::max_level() {
             log::warn!(requested:? = log::max_level(), allowed:? = log::STATIC_MAX_LEVEL; "requested level is higher than allowed");
         }
 
