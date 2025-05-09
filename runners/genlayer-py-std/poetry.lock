@@ -1497,13 +1497,13 @@ test = ["Cython", "array-api-strict (>=2.0)", "asv", "gmpy2", "hypothesis (>=6.3
 
 [[package]]
 name = "sentence-transformers"
-version = "3.3.1"
-description = "State-of-the-Art Text Embeddings"
+version = "4.0.1"
+description = "Embeddings, Retrieval, and Reranking"
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "sentence_transformers-3.3.1-py3-none-any.whl", hash = "sha256:abffcc79dab37b7d18d21a26d5914223dd42239cfe18cb5e111c66c54b658ae7"},
-    {file = "sentence_transformers-3.3.1.tar.gz", hash = "sha256:9635dbfb11c6b01d036b9cfcee29f7716ab64cf2407ad9f403a2e607da2ac48b"},
+    {file = "sentence_transformers-4.0.1-py3-none-any.whl", hash = "sha256:bb037b22d2766b94fa60f5c4fb9a876679b2311b509ae266259434d6de0875fd"},
+    {file = "sentence_transformers-4.0.1.tar.gz", hash = "sha256:0c0080a08dc5670b17c0c88791d15b06c0fa1a598d26714732760d1832bc7d88"},
 ]
 
 [package.dependencies]
@@ -1514,6 +1514,7 @@ scipy = "*"
 torch = ">=1.11.0"
 tqdm = "*"
 transformers = ">=4.41.0,<5.0.0"
+typing_extensions = ">=4.5.0"
 
 [package.extras]
 dev = ["accelerate (>=0.20.3)", "datasets", "peft", "pre-commit", "pytest", "pytest-cov"]
@@ -1808,4 +1809,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "34c6b7c0cf2ec1e03e94c01e6399713ae05402c514d292c92c825d6dd7b21642"
+content-hash = "817a1d4684fbb42e1f02bf272877a48f95a8c42ebc412df54317151900bd7f7f"

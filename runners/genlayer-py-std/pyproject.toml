@@ -16,7 +16,7 @@ python = "^3.12"
 pytest = "^8.3.2"
 pytest-xdist = "^3.6.1"
 pytest-cov = "^6.0.0"
-sentence-transformers = "^3.2.1"
+sentence-transformers = "^4.0.0"
 eth-abi = "^5.2.0"
 
 [build-system]
