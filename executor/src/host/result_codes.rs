@@ -67,16 +67,18 @@ impl TryFrom<u8> for StorageType {
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum EntryKind {
-    Regular = 0,
-    Inner = 1,
+    Main = 0,
+    Sandbox = 1,
+    ConsensusStage = 2,
 }
 
 #[allow(dead_code)]
 impl EntryKind {
     pub fn str_snake_case(self) -> &'static str {
         match self {
-            EntryKind::Regular => "regular",
-            EntryKind::Inner => "inner",
+            EntryKind::Main => "main",
+            EntryKind::Sandbox => "sandbox",
+            EntryKind::ConsensusStage => "consensus_stage",
         }
     }
 }
@@ -86,8 +88,9 @@ impl TryFrom<u8> for EntryKind {
 
     fn try_from(value: u8) -> Result<Self, ()> {
         match value {
-            0 => Ok(EntryKind::Regular),
-            1 => Ok(EntryKind::Inner),
+            0 => Ok(EntryKind::Main),
+            1 => Ok(EntryKind::Sandbox),
+            2 => Ok(EntryKind::ConsensusStage),
             _ => Err(()),
         }
     }

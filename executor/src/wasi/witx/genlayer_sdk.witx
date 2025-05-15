@@ -3,21 +3,23 @@
 ;;; @CONTEXT_REF_TYPE@
 (module $genlayer_sdk
     (@interface func (export "storage_read")
-        (param $slot $full_addr)
+        (param $slot (@witx pointer u8))
         (param $index u32)
-        (param $buf $mut_bytes)
+        (param $buf (@witx pointer u8))
+        (param $buf_len $bytes_len)
         (result $error (expected (error $errno)))
     )
 
     (@interface func (export "storage_write")
-        (param $slot $full_addr)
+        (param $slot (@witx pointer u8))
         (param $index u32)
-        (param $buf $bytes)
+        (param $buf (@witx const_pointer u8))
+        (param $buf_len $bytes_len)
         (result $error (expected (error $errno)))
     )
 
     (@interface func (export "get_balance")
-        (param $account $addr)
+        (param $account (@witx pointer u8))
         (param $res (@witx pointer u8))
         (result $error (expected (error $errno)))
     )
@@ -28,7 +30,8 @@
     )
 
     (@interface func (export "gl_call")
-        (param $request $bytes)
+        (param $buf (@witx const_pointer u8))
+        (param $buf_len $bytes_len)
         (result $error (expected $fd (error $errno)))
     )
 )

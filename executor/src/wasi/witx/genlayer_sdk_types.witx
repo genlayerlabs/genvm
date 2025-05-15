@@ -19,45 +19,4 @@
 
 (typename $bytes_len u32)
 
-(typename $addr
-    (record
-        (field $ptr (@witx const_pointer u8))
-    )
-)
-
-(typename $full_addr
-    (record
-        (field $ptr (@witx const_pointer u8))
-    )
-)
-
 (typename $fd (handle))
-
-(typename $result_now
-    (record
-        ;;; The address of the buffer to be written.
-        (field $file $fd)
-        ;;; The length of the buffer to be written.
-        (field $len $bytes_len)
-    )
-)
-
-(typename $bytes
-    (record
-        ;;; The address of the buffer to be written.
-        (field $buf (@witx const_pointer u8))
-        ;;; The length of the buffer to be written.
-        (field $buf_len $bytes_len)
-    )
-)
-
-(typename $mut_bytes
-    (record
-        ;;; The address of the buffer to be written.
-        (field $buf (@witx pointer u8))
-        ;;; The length of the buffer to be written.
-        (field $buf_len $bytes_len)
-    )
-)
-
-(typename $none u32)

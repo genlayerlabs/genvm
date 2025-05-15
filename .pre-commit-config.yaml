@@ -35,7 +35,7 @@ repos:
     hooks:
     - id: clang-format
       types_or: [c++, c]
-      exclude: runners/nix/trg/softfloat/berkeley-softfloat-3
+      exclude: runners/softfloat/berkeley-softfloat-3
 
   - repo: https://github.com/editorconfig-checker/editorconfig-checker.python
     rev: 3.0.3

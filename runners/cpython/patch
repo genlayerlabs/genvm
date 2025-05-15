@@ -1,0 +1,30 @@
+diff --git a/Makefile.pre.in b/Makefile.pre.in
+index 03ca4cb..e8101df 100644
+--- a/Makefile.pre.in
++++ b/Makefile.pre.in
+@@ -878,7 +878,7 @@ clinic-tests: check-clean-src $(srcdir)/Lib/test/clinic.test.c
+
+ # Build the interpreter
+ $(BUILDPYTHON):	Programs/python.o $(LINK_PYTHON_DEPS)
+-	$(LINKCC) $(PY_CORE_LDFLAGS) $(LINKFORSHARED) -o $@ Programs/python.o $(LINK_PYTHON_OBJS) $(LIBS) $(MODLIBS) $(SYSLIBS)
++	touch $@ && mkdir obj && cp $(LINK_PYTHON_OBJS) obj/
+
+ platform: $(PYTHON_FOR_BUILD_DEPS) pybuilddir.txt
+ 	$(RUNSHARED) $(PYTHON_FOR_BUILD) -c 'import sys ; from sysconfig import get_platform ; print("%s-%d.%d" % (get_platform(), *sys.version_info[:2]))' >platform
+@@ -2580,16 +2580,6 @@ libinstall:	all $(srcdir)/Modules/xxmodule.c
+ 		echo "Applying app store compliance patch"; \
+ 		patch --force --reject-file "$(abs_builddir)/app-store-compliance.rej" --strip 2 --directory "$(DESTDIR)$(LIBDEST)" --input "$(abs_srcdir)/$(APP_STORE_COMPLIANCE_PATCH)" || true ; \
+ 	fi
+-	@ # Build PYC files for the 3 optimization levels (0, 1, 2)
+-	-PYTHONPATH=$(DESTDIR)$(LIBDEST) $(RUNSHARED) \
+-		$(PYTHON_FOR_BUILD) -Wi $(DESTDIR)$(LIBDEST)/compileall.py \
+-		-o 0 -o 1 -o 2 $(COMPILEALL_OPTS) -d $(LIBDEST) -f \
+-		-x 'bad_coding|badsyntax|site-packages' \
+-		$(DESTDIR)$(LIBDEST)
+-	-PYTHONPATH=$(DESTDIR)$(LIBDEST) $(RUNSHARED) \
+-		$(PYTHON_FOR_BUILD) -Wi $(DESTDIR)$(LIBDEST)/compileall.py \
+-		-o 0 -o 1 -o 2 $(COMPILEALL_OPTS) -d $(LIBDEST)/site-packages -f \
+-		-x badsyntax $(DESTDIR)$(LIBDEST)/site-packages
+
+ # bpo-21536: Misc/python-config.sh is generated in the build directory
+ # from $(srcdir)Misc/python-config.sh.in.

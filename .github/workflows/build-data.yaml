@@ -37,13 +37,16 @@ jobs:
       - name: install dependencies
         run: |
           python3.12 -m pip install poetry && \
-            pushd build-scripts/doctypes/ && \
+            pushd doc/website/ && \
             poetry install --no-root && \
             popd
       - name: configure and build
         run: |
           cd "$GITHUB_WORKSPACE" && ./tools/ya-build/ya-build config && \
-          ninja -v -C build genvm/runners/docs
+          ninja -v -C build genvm/docs && \
+          pushd build/out && \
+          zip -r -9 ../docs.zip docs && \
+          popd
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -56,7 +59,7 @@ jobs:
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
           DIR_NAME="genvm_py_docs_${GITHUB_SHA}_${TIMESTAMP}"
           echo "dirname=$DIR_NAME" >> $GITHUB_OUTPUT
-          BASE_NAME="py-docs.zip"
+          BASE_NAME="docs.zip"
           echo "basename=$BASE_NAME" >> $GITHUB_OUTPUT
           echo "gcs_url=https://storage.googleapis.com/$GCS_BUCKET/$DIR_NAME/$BASE_NAME" >> $GITHUB_OUTPUT
       - name: Upload to GCS

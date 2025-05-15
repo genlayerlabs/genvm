@@ -208,6 +208,7 @@ def run(jsonnet_rel_path):
 				'--message',
 				json.dumps(config['message']),
 				'--print=shrink',
+				'--allow-latest',
 			]
 		)
 		if config['sync']:

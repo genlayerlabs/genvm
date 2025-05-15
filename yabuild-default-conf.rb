@@ -8,31 +8,6 @@ extend_config({
 	out_dir: root_build.join('out'),
 	bin_dir: root_build.join('out', 'bin'),
 	runners_dir: root_build.join('out', 'share', 'lib', 'genvm', 'runners'),
-	runners: {
-		py_libs: {
-			cloudpickle: {
-				hash: "B6PA2XEWJERJLTPOG525576Y3MBMUTJDK5AVS542SMCJO5MR3GUQ",
-			},
-			protobuf: {
-				hash: "N2WIUENBHXMWXCL53X6ESRT7O3MTVHZMRRLMAQZY72T44IPTFNXQ",
-			},
-			tiny_onnx_reader: {
-				hash: "DVGEU3ON7UGZSGC4CUIBGR4ZY2JMAGHKFY3UR6FO6DRZ52QLLVPQ",
-			},
-			word_piece_tokenizer: {
-				hash: "RYS4SQP7KEP7ZMQEDXSZIBOPERNPH2B3WVQ3ISLMV4EFMU34LU3A",
-			},
-			genlayermodelwrappers: {
-				hash: "test"
-			}
-		},
-		onnx_models: {
-			all_MiniLM_L6_v2: {
-				hash: "TC2HXK7ZP6Z6YHNTZZ65MHJRHRAUFKOUFWDC4NFAODV2JC72AGDA",
-			}
-		},
-		**JSON.load_file(root_src.join('runners/nix/hashes.json')),
-	},
 
 	executor: {
 		coverage: false,

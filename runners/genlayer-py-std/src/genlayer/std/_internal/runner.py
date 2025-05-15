@@ -32,7 +32,7 @@ def _give_result(res_fn: typing.Callable[[], typing.Any]) -> typing.NoReturn:
 	gl_call.contract_return(res)
 
 
-def _handle_regular() -> typing.NoReturn:
+def _handle_main() -> typing.NoReturn:
 	from ..genvm_contracts import Contract
 
 	import genlayer.py.get_schema as _get_schema
@@ -137,17 +137,20 @@ def _handle_regular() -> typing.NoReturn:
 
 
 match message_raw['entry_kind']:
-	case EntryKind.REGULAR:
-		_handle_regular()
-	case EntryKind.INNER:
+	case EntryKind.MAIN:
+		_handle_main()
+	case EntryKind.SANDBOX:
 		import cloudpickle
 
 		runner = cloudpickle.loads(message_raw['entry_data'])
 
+		_give_result(runner)
+	case EntryKind.CONSENSUS_STAGE:
+		import cloudpickle
+
+		runner = cloudpickle.loads(message_raw['entry_data'])
 		stage_data = message_raw['entry_stage_data']
-		if stage_data is None:
-			_give_result(runner)
-		else:
-			_give_result(lambda: runner(stage_data))
+
+		_give_result(lambda: runner(stage_data))
 	case x:
 		raise ValueError(f'invalid entry kind {x}')

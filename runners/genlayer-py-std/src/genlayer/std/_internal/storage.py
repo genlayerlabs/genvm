@@ -31,7 +31,9 @@ class _ActualStorageSlot(StorageSlot):
 		super().__init__(addr, manager)
 
 	def read(self, addr: int, len: int) -> bytes:
-		return wasi.storage_read(int.to_bytes(self.addr, 32, 'little'), addr, len)
+		res = bytearray(len)
+		wasi.storage_read(int.to_bytes(self.addr, 32, 'little'), addr, res)
+		return bytes(res)
 
 	@abc.abstractmethod
 	def write(self, addr: int, what: collections.abc.Buffer) -> None:
