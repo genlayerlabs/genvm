@@ -57,8 +57,6 @@ jobs:
           lfs: true
       - name: Get source
         uses: ./.github/actions/get-src
-        with:
-          third_party: runners/nix/trg/py/modules/genvm-cpython-ext/sdk-rust/third-party/wasi-rs
       - name: Restore and cache Nix store
         uses: nix-community/cache-nix-action@v5
         with:
@@ -70,15 +68,6 @@ jobs:
         run: |
           source env.sh && \
           ya-build config
-      - name: Build extension
-        run: |
-          (sudo rm -rf /usr/local/lib/android || true) &
-          source env.sh && \
-          ninja --verbose -C build tags/runner && \
-          tree build/out && \
-          pushd build/out && \
-          zip -r -9 ../runners.zip * && \
-          popd
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -86,6 +75,18 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build
+        run: |
+          (sudo rm -rf /usr/local/lib/android || true) &
+          source env.sh && \
+          ./build-scripts/ci/prefetch-runners.py && \
+          ninja --verbose -C build genvm/runners && \
+          ./build-scripts/ci/publish-runners.py && \
+          tree build/out && \
+          pushd build/out && \
+          zip -r -9 ../runners.zip * && \
+          popd
       - name: Upload to GCS
         uses: google-github-actions/upload-cloud-storage@v2
         with:
