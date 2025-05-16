@@ -111,7 +111,7 @@ pub async fn run_with_impl(
         let instance = supervisor
             .apply_contract_actions(&mut vm)
             .await
-            .with_context(|| "getting runner actions")
+            .with_context(|| "applying runner actions")
             .map_err(|cause| crate::errors::ContractError::wrap("runner_actions".into(), cause))?;
         (vm, instance)
     };

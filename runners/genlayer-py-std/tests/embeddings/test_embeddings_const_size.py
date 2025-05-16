@@ -5,12 +5,12 @@ import numpy as np
 import onnx
 import torch
 
-from genlayer.py._nn import *
+from genlayer_embeddings._nn import *
 
 from . import root_dir
 
 onnx_model_path = root_dir.joinpath(
-	*'runners/onnx-models/all-MiniLM-L6-v2/model.onnx'.split('/')
+	*'runners/models/all-MiniLM-L6-v2/model.onnx'.split('/')
 )
 onnx_model = onnx.load_model(onnx_model_path, load_external_data=False)
 

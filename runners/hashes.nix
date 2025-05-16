@@ -2,6 +2,14 @@ let
 	src = rec {
 		__prefix = "";
 
+		models = {
+			__prefix = "models-";
+
+			all-MiniLM-L6-v2 = {
+				hash = "sha256-C3vqRgr76VlY0G+HaZeGMrco+ya77R9mNE5bLWXE0Ok=";
+			};
+		};
+
 		pyLibs = {
 			__prefix = "py-lib-";
 
@@ -15,18 +23,22 @@ let
 			word_piece_tokenizer = {
 				hash = "sha256-cHaMUVyCB8GgpEILVZqrdniyg8waU2naNlAkR2oUp/A=";
 			};
-			genlayermodelwrappers = {
-				hash = "sha256-X/PGJc8fIvYC+KXCs35VVasD+AMNeQCRy/FnLQsEU/Y=";
-			};
+
 			genlayer-std = {
-				hash = "test";
+				hash = "sha256-U2J42ZeXgD4XExr0OeRExz0TkWUBZIx4y9gXyoqwFWo=";
 				depends = [
 					cpython
 				];
 			};
 
 			genlayer-embeddings = {
-				hash = "test";
+				hash = "sha256-MzlkqoMA3aQzqfvu9BYkGsUdT3MXlttQUJvXeU7xuAM=";
+
+				depends = [
+					models.all-MiniLM-L6-v2
+					pyLibs.word_piece_tokenizer
+					pyLibs.protobuf
+				];
 			};
 		};
 
@@ -44,14 +56,14 @@ let
 		wrappers = {
 			__prefix = "";
 			py-genlayer = {
-				hash = null;
+				hash = "sha256-HkkgBgbPTKmyjZ1Dfj1V+OIswoJLRbD4+JKnCzPKgY4=";
 				depends = [
 					pyLibs.cloudpickle
 					pyLibs.genlayer-std
 				];
 			};
 			py-genlayer-multi = {
-				hash = null;
+				hash = "sha256-jgmwwAnQnLeWuttPEe3Vz1PzgdylH5AN8n2s6u70FMs=";
 				depends = [
 					pyLibs.cloudpickle
 					pyLibs.genlayer-std
@@ -72,7 +84,7 @@ let
 
 	deduceHash = val:
 		if hashHasSpecial "test" val
-		then assert (genVMAllowTest || builtins.throw "test hash not allowed"); "test"
+		then (if genVMAllowTest then "test" else "error")
 		else if val.hash == null
 		then null
 		else if hashHasSpecial null val

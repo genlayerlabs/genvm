@@ -754,7 +754,9 @@ impl Supervisor {
                 let _ = self.runner_cache.get_or_create(*id, || {
                     make_new_runner_arch_from_tar(&self.shared_data, *id, &path)
                 })?;
-                Box::pin(self.apply_action_recursive(vm, ctx, action, *id)).await
+                Box::pin(self.apply_action_recursive(vm, ctx, action, *id))
+                    .await
+                    .with_context(|| format!("With {id}"))
             }
             InitAction::Depends(id) => {
                 if !ctx.visited.insert(*id) {
@@ -764,9 +766,14 @@ impl Supervisor {
                 let path = self.runner_cache.path().clone();
                 let new_arch = self.runner_cache.get_or_create(*id, || {
                     make_new_runner_arch_from_tar(&self.shared_data, *id, &path)
+                        .with_context(|| format!("loading {id}"))
                 })?;
-                let new_action = new_arch.get_actions()?;
-                Box::pin(self.apply_action_recursive(vm, ctx, &new_action, *id)).await
+                let new_action = new_arch
+                    .get_actions()
+                    .with_context(|| format!("loading {id} runner.json"))?;
+                Box::pin(self.apply_action_recursive(vm, ctx, &new_action, *id))
+                    .await
+                    .with_context(|| format!("Depends {id}"))
             }
         }
     }

@@ -50,6 +50,12 @@ repos:
         entry: ./build-scripts/hooks/shebang.py
         language: system
 
+      - id: no-commit-test
+        name: do not commit test runners
+        entry: grep -P false runners/dbg.nix
+        language: system
+        files: ^runners/dbg.nix$
+
       - id: cargo-fmt
         name: cargo fmt
         entry: bash build-scripts/cargo-fmt.sh

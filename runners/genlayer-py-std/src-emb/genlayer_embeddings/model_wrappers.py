@@ -9,8 +9,19 @@ import json
 import onnx
 import collections.abc
 import typing
+import os
 
-_ALL_MODELS = json.loads(Path(__file__).parent.joinpath('models.json').read_text())
+_models = os.getenv('GENLAYER_EMBEDDINGS_MODELS', '')
+_models_paths = _models.split(':')
+
+_ALL_MODELS = {}
+
+for i in _models_paths:
+	if len(i) == 0:
+		continue
+	p = Path(i)
+	data = json.loads(p.joinpath('model.json').read_text())
+	_ALL_MODELS[data['name']] = {'path': p.joinpath('model.onnx'), **data}
 
 
 class Model:

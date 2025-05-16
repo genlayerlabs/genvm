@@ -30,8 +30,10 @@ in
 
 		expr = {
 			Seq = [
+				{ AddEnv = { name = "GENLAYER_EMBEDDINGS_MODELS"; val = ""; }; }
 				{ Depends = runnersLib.hashes.pyLibs.word_piece_tokenizer.uid; }
 				{ Depends = runnersLib.hashes.pyLibs.protobuf.uid; }
+				{ Depends = runnersLib.hashes.models.all-MiniLM-L6-v2.uid; }
 				{ MapFile = { file = "genlayer_embeddings/"; to = "/py/libs/genlayer_embeddings/"; }; }
 				{ MapFile = { file = "onnx/"; to = "/py/libs/onnx/"; }; }
 			];

@@ -23,4 +23,5 @@ in
 	(import ./genlayer-py-std args) ++
 	(import ./softfloat args) ++
 	(import ./cpython args) ++
+	(import ./models args) ++
 	[]
