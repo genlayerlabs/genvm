@@ -21,7 +21,7 @@ let
 				hash = "sha256-X/PGJc8fIvYC+KXCs35VVasD+AMNeQCRy/FnLQsEU/Y=";
 			};
 			genlayer-std = {
-				hash = "sha256-tZUcCZ9to8S9pnS8DwGdZmNOvZMFBzxZop7t4nmF8wc=";
+				hash = "test";
 				depends = [
 					cpython
 				];
@@ -29,7 +29,7 @@ let
 		};
 
 		cpython = {
-			hash = "sha256-FpbbAgWDgf5HUzfSMDrcuAIDciU63szzeMPPV28Svi0=";
+			hash = "sha256-e6ZqT1G5w7wNNiKycS35xHCP/wn4zbW11FOtfZlSxlg=";
 			depends = [
 				softfloat
 			];
@@ -42,14 +42,14 @@ let
 		wrappers = {
 			__prefix = "";
 			py-genlayer = {
-				hash = "sha256-j+umxC6V+S2R0iyaNiHCgbeuymapa+LSyi0+iGSX6Fc=";
+				hash = null;
 				depends = [
 					pyLibs.cloudpickle
 					pyLibs.genlayer-std
 				];
 			};
 			py-genlayer-multi = {
-				hash = "sha256-K64Wxx1/vASQR/0bBvCxEqLxcyXR5fMUSFEWzIB7pbM=";
+				hash = null;
 				depends = [
 					pyLibs.cloudpickle
 					pyLibs.genlayer-std
@@ -58,12 +58,24 @@ let
 		};
 	};
 
-	hasHash = val:
-		if val.hash == null
-		then false
-		else builtins.all hasHash (if builtins.hasAttr "depends" val then val.depends else []);
+	genVMAllowTest = import ./dbg.nix;
 
-	depsAreUpToDate = val: builtins.all hasHash (if builtins.hasAttr "depends" val then val.depends else []);
+	hashHasSpecial = hsh: val:
+		if val.hash == hsh
+		then true
+		else hashHasSpecialDeps hsh val;
+
+	hashHasSpecialDeps = hsh: val:
+		builtins.any (hashHasSpecial hsh) (if builtins.hasAttr "depends" val then val.depends else []);
+
+	deduceHash = val:
+		if hashHasSpecial "test" val
+		then assert (genVMAllowTest || builtins.throw "test hash not allowed"); "test"
+		else if val.hash == null
+		then null
+		else if hashHasSpecial null val
+		then "error"
+		else val.hash;
 
 	fakeHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
@@ -80,19 +92,21 @@ let
 						(builtins.attrNames val)))
 		else
 			let
-				hash64 =
-					if val.hash != null
-					then assert depsAreUpToDate val || builtins.throw "${pref}${name} set hash to null (null dependency)"; val.hash
-					else fakeHash;
-				hash32 = builtins.convertHash { hash = hash64; toHashFormat = "nix32"; };
+				deducedHashBase = deduceHash val;
+				deducedHash = if deducedHashBase == "error" then builtins.throw "set ${pref+name} hash to null" else deducedHashBase;
+				hashSRI =
+					if deducedHash == null
+					then fakeHash
+					else deducedHash;
+				hash32 = if deducedHash == "test" then "test" else builtins.convertHash { hash = hashSRI; toHashFormat = "nix32"; };
 			in rec {
 				id = pref + name;
 
-				hash = hash64;
+				hash = hashSRI;
 
 				uid = "${id}:${hash32}";
 
-				excludeFromBuild = val.hash == null && !(depsAreUpToDate val);
+				excludeFromBuild = deducedHash == null && (hashHasSpecialDeps null val);
 			}
 	);
 in

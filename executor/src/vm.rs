@@ -226,6 +226,17 @@ struct ApplyActionCtx {
     contract_id: symbol_table::GlobalSymbol,
 }
 
+fn try_get_latest(runner_id: &str, base_path: &std::path::Path) -> Option<String> {
+    let mut path = std::path::PathBuf::from(base_path);
+    path.push("latest.json");
+
+    let latest_registry = std::fs::read_to_string(&path).ok()?;
+    let mut latest_registry: BTreeMap<String, String> =
+        serde_json::from_str(&latest_registry).ok()?;
+
+    latest_registry.remove(runner_id)
+}
+
 fn make_new_runner_arch_from_tar(
     shared_data: &SharedData,
     id: symbol_table::GlobalSymbol,
@@ -238,22 +249,14 @@ fn make_new_runner_arch_from_tar(
 
     if runner_hash == "test" || runner_hash == "latest" {
         if !shared_data.allow_latest {
-            anyhow::bail!("latest is not allowed");
+            anyhow::bail!("test runner not allowed")
         }
 
-        let mut path = std::path::PathBuf::from(base_path);
-        path.push("latest.json");
+        if let Some(borrowed) = try_get_latest(runner_id, base_path) {
+            borrowed_latest = Some(borrowed);
 
-        let latest_registry = std::fs::read_to_string(&path)?;
-        let mut latest_registry: BTreeMap<String, String> = serde_json::from_str(&latest_registry)?;
-
-        let tmp_runner_hash = latest_registry
-            .remove(runner_id)
-            .ok_or_else(|| anyhow::anyhow!("not in latest DB"))?;
-
-        borrowed_latest = Some(tmp_runner_hash);
-
-        runner_hash = borrowed_latest.as_ref().unwrap();
+            runner_hash = borrowed_latest.as_ref().unwrap();
+        }
     }
 
     let mut path = std::path::PathBuf::from(base_path);

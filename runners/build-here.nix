@@ -7,8 +7,12 @@ let
 	allRunners = import ./default.nix;
 
 	pathOfRunner = runner:
-		let hash32 = builtins.convertHash { hash = runner.hash; toHashFormat = "nix32"; }; in
-		"${runner.id}/${hash32}.tar";
+		let
+			hash32 =
+				if runner.hash == "test"
+				then "test"
+				else builtins.convertHash { hash = runner.hash; toHashFormat = "nix32"; };
+		in "${runner.id}/${hash32}.tar";
 
 	installLines =
 		builtins.concatLists
@@ -17,9 +21,6 @@ let
 				allRunners);
 in pkgs.stdenvNoCC.mkDerivation {
 	name = "genvm-test-runners";
-
-	#nativeBuildInputs = builtins.map (x: x.derivation) allRunners;
-
 	phases = ["installPhase"];
 
 	installPhase = builtins.concatStringsSep "\n" (installLines ++ [""]);

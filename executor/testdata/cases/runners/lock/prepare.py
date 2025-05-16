@@ -6,7 +6,10 @@ root_dir = test_dir
 while not root_dir.joinpath('.genvm-monorepo-root').exists():
 	root_dir = root_dir.parent
 
-config_path = root_dir.joinpath('build', 'config.json')
+config_path = root_dir.joinpath(
+	*'build/out/share/lib/genvm/runners/latest.json'.split('/')
+)
+
 if config_path.exists():
 	import json
 
@@ -14,8 +17,8 @@ if config_path.exists():
 		dat = json.load(f)
 	with open(test_dir.joinpath('runner.json'), 'rt') as f:
 		cur_contract = json.load(f)
-	cur_contract['Seq'][2]['Depends'] = f"softfloat:{dat['runners']['softfloat']}"
-	cur_contract['Seq'][4]['With']['runner'] = f"cpython:{dat['runners']['cpython']}"
+	cur_contract['Seq'][2]['Depends'] = f"softfloat:{dat['softfloat']}"
+	cur_contract['Seq'][4]['With']['runner'] = f"cpython:{dat['cpython']}"
 	with open(test_dir.joinpath('runner.json'), 'wt') as f:
 		json.dump(cur_contract, f, separators=(',', ': '), indent=2)
 		f.write('\n')

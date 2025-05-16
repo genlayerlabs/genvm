@@ -1,5 +1,6 @@
 { pkgs
 , stdenvNoCC
+, genVMAllowTest
 , ...
 }@args:
 rec {
@@ -12,13 +13,13 @@ rec {
 		add-mod-name = import ./genvm-wasm-add-mod-name args;
 	};
 
-	hashToIDHash = hash: builtins.convertHash { inherit hash; toHashFormat = "nix32"; };
+	hashToIDHash = hash: if hash == "test" then "test" else builtins.convertHash { inherit hash; toHashFormat = "nix32"; };
 	package = { id, hash, baseDerivation }: {
 		inherit id hash;
 
 		uid = "${id}:${hashToIDHash hash}";
 
-		derivation = stdenvNoCC.mkDerivation {
+		derivation = stdenvNoCC.mkDerivation ({
 			name = "genvm_runner_${id}_${hashToIDHash hash}";
 
 			srcs = [ baseDerivation ./build-scripts ];
@@ -33,8 +34,7 @@ rec {
 			'';
 
 			outputHashMode = "flat";
-			outputHash = hash;
-		};
+		} // (if hash == "test" then assert genVMAllowTest; {} else { outputHash = hash; }));
 	};
 
 	packageWithRunnerJSON = { id, hash, baseDerivation, expr }: package {

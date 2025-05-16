@@ -1,7 +1,7 @@
 # {
 #   "Seq": [
-#     { "Depends": "softfloat:42BKR7YTYWRER6G4CLEFLA55CWXYEDYBR6SPZM47IW5R2O7ACAQA" },
-#     { "Depends": "softfloat:42BKR7YTYWRER6G4CLEFLA55CWXYEDYBR6SPZM47IW5R2O7ACAQA" },
+#     { "Depends": "softfloat:17b5yad9r9jzcflawqi12r5llhgklfr6lp75r915r99l4wg8ni4n" },
+#     { "Depends": "softfloat:17b5yad9r9jzcflawqi12r5llhgklfr6lp75r915r99l4wg8ni4n" },
 #     { "Depends": "py-genlayer:test" }
 #   ]
 # }

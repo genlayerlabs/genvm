@@ -3,6 +3,8 @@ let
 	interesting = [
 		"py-genlayer"
 		"py-genlayer-multi"
+		"softfloat"
+		"cpython"
 	];
 in
 	builtins.listToAttrs

@@ -156,7 +156,7 @@ py_gl_call(PyObject* _self, PyObject* args)
 		return NULL;
 	}
 
-	return PyLong_FromLong(fd);
+	return PyLong_FromUnsignedLong(fd);
 }
 
 static PyMethodDef genlayer_module_methods[] = {

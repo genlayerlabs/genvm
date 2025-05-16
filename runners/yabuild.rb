@@ -12,7 +12,7 @@ target_alias(
 	target_command(
 		output_file: latest_uids_file,
 		commands: [
-			['bash', '-c', 'nix eval --read-only --json --file ./latest.nix > "' + "#{latest_uids_file}" + '"'],
+			['bash', '-c', 'nix eval --read-only --show-trace --json --file ./latest.nix > "' + "#{latest_uids_file}" + '"'],
 			[
 				'nix', 'build',
 				'--file', './build-here.nix',

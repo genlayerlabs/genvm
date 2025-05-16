@@ -15,7 +15,7 @@
       ]
     },
     {
-      "Depends": "softfloat:42BKR7YTYWRER6G4CLEFLA55CWXYEDYBR6SPZM47IW5R2O7ACAQA"
+      "Depends": "softfloat:17b5yad9r9jzcflawqi12r5llhgklfr6lp75r915r99l4wg8ni4n"
     },
     {
       "MapFile": {
@@ -25,19 +25,19 @@
     },
     {
       "With": {
-        "runner": "cpython:QYW2WWSQ456IKHVCD5IWV2EMEUDDGQ6EYCWOETS4EW5HOKEO4T5Q",
+        "runner": "cpython:0n66aacpvbaksjsvbkgq17zqyw64z4np3ci26q6vrhxra57nm9kv",
         "action": {
           "Seq": [
             {
               "MapFile": {
                 "to": "/py/std/encodings",
-                "file": "std/encodings/"
+                "file": "py/std/encodings/"
               }
             },
             {
               "MapFile": {
                 "to": "/py/std/linecache.py",
-                "file": "std/linecache.py"
+                "file": "py/std/linecache.py"
               }
             },
             {
@@ -47,7 +47,7 @@
               }
             },
             {
-              "StartWasm": "cpython.wasm"
+              "StartWasm": "cpython.det.wasm"
             }
           ]
         }
