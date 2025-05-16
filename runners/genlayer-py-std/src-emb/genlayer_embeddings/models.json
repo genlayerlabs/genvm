@@ -1,6 +1,6 @@
 {
   "all-MiniLM-L6-v2": {
-    "path": "/py/libs/genlayermodelwrappers/all-MiniLM-L6-v2.onnx",
+    "path": "/py/libs/genlayer_embeddings/all-MiniLM-L6-v2.onnx",
     "rename-outputs": {
       "last-hidden-state": "unpooled",
       "924": "embedding"

@@ -35,7 +35,5 @@ let
 in [
 	(makeSingle { obj = pyLibs.cloudpickle; rel = "cloudpickle"; })
 	(makeSingle { obj = pyLibs.protobuf; rel = "google/protobuf"; })
-	(makeSingle { obj = pyLibs.tiny_onnx_reader; rel = "onnx"; })
 	(makeSingle { obj = pyLibs.word_piece_tokenizer; rel = "word_piece_tokenizer"; })
-	(makeSingle { obj = pyLibs.genlayermodelwrappers; rel = "genlayermodelwrappers"; })
 ]

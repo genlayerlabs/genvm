@@ -1,11 +1,19 @@
-# { "Depends": "py-genlayer:test" }
+# {
+#   "Seq": [
+#     { "Depends": "py-lib-genlayer-embeddings:test" },
+#     { "Depends": "py-genlayer:test" }
+#   ]
+# }
+
+
 import numpy as np
 import typing
 from genlayer import *
+import genlayer_embeddings as gle
 
 
 class Contract(gl.Contract):
-	x: VecDB[np.float32, typing.Literal[5], str]
+	x: gle.VecDB[np.float32, typing.Literal[5], str]
 
 	@gl.public.write
 	def main(self):

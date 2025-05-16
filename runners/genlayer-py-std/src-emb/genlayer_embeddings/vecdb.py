@@ -2,10 +2,10 @@ from __future__ import annotations
 
 __all__ = ('VecDB', 'VecDBElement')
 
-from . import DynArray, TreeMap
-from ..types import u32
+from genlayer.py.storage import DynArray, TreeMap
+from genlayer.py.types import u32
 
-from .annotations import allow_storage
+from genlayer.py.storage.annotations import allow_storage
 
 import typing
 import numpy as np

@@ -3,6 +3,7 @@ let
 	interesting = [
 		"py-genlayer"
 		"py-genlayer-multi"
+		"genlayer-embeddings"
 		"softfloat"
 		"cpython"
 	];

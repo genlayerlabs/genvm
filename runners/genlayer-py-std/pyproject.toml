@@ -6,6 +6,7 @@ authors = ["Kira Prokopenko <kira@yeager.ai>", "Yeager AI Corp"]
 #readme = "README.md"
 packages = [
     { include = "genlayer", from = "src" },
+    { include = "genlayer", from = "src-emb" },
 ]
 
 [tool.poetry.dependencies]

@@ -11,9 +11,7 @@ let
 			protobuf = {
 				hash = "sha256-Sp879LjcoRMhX764CBqydwBfpcxoJCDP2nS6vVqhsmA=";
 			};
-			tiny_onnx_reader = {
-				hash = "sha256-UYz1TbuI+DJbcjaLIEZ7CCop/nb59GJzXSSR5xnzImE=";
-			};
+
 			word_piece_tokenizer = {
 				hash = "sha256-cHaMUVyCB8GgpEILVZqrdniyg8waU2naNlAkR2oUp/A=";
 			};
@@ -25,6 +23,10 @@ let
 				depends = [
 					cpython
 				];
+			};
+
+			genlayer-embeddings = {
+				hash = "test";
 			};
 		};
 

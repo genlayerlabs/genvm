@@ -4,7 +4,7 @@ latest_uids_file = config.runners_dir.join('latest.json')
 
 build_out = cur_build.join('nix-out')
 
-deps = cur_src.glob('**/*.{nix,py,c,rb}')
+deps = cur_src.glob('**/*.{nix,py,c,rb,json}')
 deps.sort!
 
 target_alias(

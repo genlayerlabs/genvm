@@ -25,6 +25,25 @@ in
 		};
 	})) ++
 
+	(runnersLib.toListExcluded runnersLib.hashes.pyLibs.genlayer-embeddings (runnersLib.packageWithRunnerJSON {
+		inherit (runnersLib.hashes.pyLibs.genlayer-embeddings) id hash;
+
+		expr = {
+			Seq = [
+				{ Depends = runnersLib.hashes.pyLibs.word_piece_tokenizer.uid; }
+				{ Depends = runnersLib.hashes.pyLibs.protobuf.uid; }
+				{ MapFile = { file = "genlayer_embeddings/"; to = "/py/libs/genlayer_embeddings/"; }; }
+				{ MapFile = { file = "onnx/"; to = "/py/libs/onnx/"; }; }
+			];
+		};
+
+		baseDerivation = lib.sources.cleanSourceWith {
+			src = ./src-emb;
+			filter = fName: type: lib.sources.cleanSourceFilter fName type && !(type == "directory" && fName == "__pycache__");
+			name = "genlayer-std-base-src";
+		};
+	})) ++
+
 	(runnersLib.toListExcluded runnersLib.hashes.wrappers.py-genlayer (runnersLib.packageGlue {
 		inherit (runnersLib.hashes.wrappers.py-genlayer) id hash;
 

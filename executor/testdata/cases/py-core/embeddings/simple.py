@@ -1,18 +1,18 @@
 # {
 #   "Seq": [
-#     { "Depends": "py-lib-genlayermodelwrappers:test" },
+#     { "Depends": "py-lib-genlayer-embeddings:test" },
 #     { "Depends": "py-genlayer:test" }
 #   ]
 # }
 
 from genlayer import *
-import genlayermodelwrappers
+import genlayer_embeddings as gle
 
 
 class Contract(gl.Contract):
 	@gl.public.write
 	def main(self, det: bool):
-		embeddings_generator = genlayermodelwrappers.SentenceTransformer('all-MiniLM-L6-v2')
+		embeddings_generator = gle.SentenceTransformer('all-MiniLM-L6-v2')
 
 		def nd_block():
 			real = embeddings_generator('what is genlayer?')
