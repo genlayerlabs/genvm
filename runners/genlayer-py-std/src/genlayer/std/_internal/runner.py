@@ -136,21 +136,24 @@ def _handle_main() -> typing.NoReturn:
 	)
 
 
-match message_raw['entry_kind']:
-	case EntryKind.MAIN:
-		_handle_main()
-	case EntryKind.SANDBOX:
-		import cloudpickle
+import os
 
-		runner = cloudpickle.loads(message_raw['entry_data'])
+if os.getenv('GENERATING_DOCS', 'false') != 'true':
+	match message_raw['entry_kind']:
+		case EntryKind.MAIN:
+			_handle_main()
+		case EntryKind.SANDBOX:
+			import cloudpickle
 
-		_give_result(runner)
-	case EntryKind.CONSENSUS_STAGE:
-		import cloudpickle
+			runner = cloudpickle.loads(message_raw['entry_data'])
 
-		runner = cloudpickle.loads(message_raw['entry_data'])
-		stage_data = message_raw['entry_stage_data']
+			_give_result(runner)
+		case EntryKind.CONSENSUS_STAGE:
+			import cloudpickle
 
-		_give_result(lambda: runner(stage_data))
-	case x:
-		raise ValueError(f'invalid entry kind {x}')
+			runner = cloudpickle.loads(message_raw['entry_data'])
+			stage_data = message_raw['entry_stage_data']
+
+			_give_result(lambda: runner(stage_data))
+		case x:
+			raise ValueError(f'invalid entry kind {x}')

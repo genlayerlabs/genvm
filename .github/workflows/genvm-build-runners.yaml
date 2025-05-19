@@ -80,10 +80,16 @@ jobs:
         run: |
           (sudo rm -rf /usr/local/lib/android || true) &
           source env.sh && \
-          ./build-scripts/ci/prefetch-runners.py && \
+          ninja --verbose -C build $(pwd)/build/generated/runners/latest.json && \
+          ./runners/support/registry/tools/__main__.py download --registry ./build/generated/runners/latest.json --dest ./build/out/share/lib/genvm/runners --allow-partial \
+            || exit 1
+          for i in $(find ./build/out/share/lib/genvm/runners -name '*.tar')
+          do
+            nix store add --hash-algo sha256 --mode flat --name "genvm_runner_$(basename "$(dirname "$i")")_$(basename "$i" .tar)" "$i" || exit 1
+          done
           ninja --verbose -C build genvm/runners && \
-          ./build-scripts/ci/publish-runners.py && \
           tree build/out && \
+          ./runners/support/registry/tools/__main__.py upload --registry ./build/out/share/lib/genvm/runners/latest.json --root ./build/out/share/lib/genvm/runners && \
           pushd build/out && \
           zip -r -9 ../runners.zip * && \
           popd

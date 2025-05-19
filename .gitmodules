@@ -4,3 +4,6 @@
 [submodule "tools/ya-build"]
 	path = tools/ya-build
 	url = https://github.com/kp2pml30/ya-build.git
+[submodule "runners/support/registry"]
+	path = runners/support/registry
+	url = https://github.com/yeagerai/genvm-runners-registry.git

@@ -8,7 +8,7 @@ stdenvNoCC.mkDerivation {
 	pname = "genvm-ffi";
 	version = "3.4.6";
 
-	outputHash = "sha256-9NMCEa9g3AHJ2oWnLDSfLCjJrMUCCvcVjfRs5TOhwFQ=";
+	outputHash = "sha256-tURu/+frV0GzHiyi9erUfmT4H5Q/kWk1i60zbIkV0vI=";
 	outputHashMode = "recursive";
 
 	srcs = [
@@ -67,10 +67,7 @@ stdenvNoCC.mkDerivation {
 		mkdir -p "$out/lib"
 		mkdir -p "$out/include"
 
-		make install-pkgconfigDATA
-		make install-info
-		make install-data
-
+		cp ./wasm32-unknown-wasip1/include/ffitarget.h ./wasm32-unknown-wasip1/include/ffi.h "$out/include"
 		cp libffi.a "$out/lib"
 
 		rm -rf "$out/lib/pkgconfig/" || true

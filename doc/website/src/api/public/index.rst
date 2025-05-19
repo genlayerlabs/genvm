@@ -7,3 +7,4 @@ Public API
 
    genlayer
    genlayer.std
+   genlayer_embeddings

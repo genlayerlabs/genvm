@@ -53,7 +53,7 @@ def add_file(name: str, contents: bytes, skip_pyc=True):
 
 	if name == 'runner.json':
 		new_contents = (
-			json.dumps(json.loads(contents), separators=(',', ':')) + '\n'
+			json.dumps(json.loads(contents), separators=(',', ':'), sort_keys=True) + '\n'
 		).encode('utf-8')
 		contents = new_contents
 

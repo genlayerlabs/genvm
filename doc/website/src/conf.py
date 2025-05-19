@@ -5,8 +5,6 @@ import sys
 import typing
 import enum
 
-import numpy  # this is done to import real VecDB
-
 import sphinx.ext.autodoc
 
 project = 'GenLayer'
@@ -45,6 +43,7 @@ while not root_dir.joinpath(MONO_REPO_ROOT_FILE).exists():
 	root_dir = root_dir.parent
 MONOREPO_CONF = json.loads(root_dir.joinpath(MONO_REPO_ROOT_FILE).read_text())
 sys.path.append(str(root_dir.joinpath(*MONOREPO_CONF['py-std'])))
+sys.path.append(str(root_dir.joinpath(*MONOREPO_CONF['py-emb'])))
 
 os.environ['GENERATING_DOCS'] = 'true'
 
