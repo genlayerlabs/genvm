@@ -88,6 +88,10 @@ def run_nondet[T: calldata.Decoded](
 	import cloudpickle
 	from ._internal import decode_sub_vm_result, decode_sub_vm_result_retn
 
+	def real_leader_fn(stage_data):
+		assert stage_data is None
+		return leader_fn()
+
 	def real_validator_fn(stage_data) -> bool:
 		leaders_result = decode_sub_vm_result_retn(stage_data['leaders_result'])
 
@@ -109,7 +113,7 @@ def run_nondet[T: calldata.Decoded](
 	return gl_call.gl_call_generic(
 		{
 			'RunNondet': {
-				'data_leader': cloudpickle.dumps(leader_fn),
+				'data_leader': cloudpickle.dumps(real_leader_fn),
 				'data_validator': cloudpickle.dumps(real_validator_fn),
 			}
 		},

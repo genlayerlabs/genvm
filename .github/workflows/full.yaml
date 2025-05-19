@@ -72,7 +72,7 @@ jobs:
     with:
       runs_on: ubuntu-latest
       target: x86_64-unknown-linux-musl
-      preloads: --preload .ci/release-conf.rb
+      preloads: --preload build-scripts/ci/release-conf.rb
     secrets: inherit
 
 #  build-genvm-release-macos-latest:

@@ -6,7 +6,10 @@ root_dir = test_dir
 while not root_dir.joinpath('.genvm-monorepo-root').exists():
 	root_dir = root_dir.parent
 
-config_path = root_dir.joinpath('build', 'config.json')
+config_path = root_dir.joinpath(
+	*'build/out/share/lib/genvm/runners/latest.json'.split('/')
+)
+
 if config_path.exists():
 	import json
 
@@ -18,6 +21,6 @@ if config_path.exists():
 	import re
 
 	new_text = re.sub(
-		'"softfloat:[^"]*"', f'"softfloat:{dat['runners']['softfloat']}"', original_text
+		'"softfloat:[^"]*"', f'"softfloat:{dat['softfloat']}"', original_text
 	)
 	test_dir.joinpath('dup-dependency.py').write_text(new_text)

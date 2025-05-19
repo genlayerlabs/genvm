@@ -1,6 +1,6 @@
 import numpy as np
 
-from genlayer import VecDB
+from genlayer_embeddings import VecDB
 from genlayer.py.storage._internal.generate import storage
 import typing
 
@@ -33,27 +33,6 @@ def test_store_simple_ok():
 
 	ins_val = np.array([1, 2, 3, 4, 5], dtype=np.int32)
 	db.x.insert(ins_val, '1')
-
-
-# def test_store_rnn():
-# db = DB()
-#
-# ins_val = np.array([0, 0, 0, 0, 0], dtype=np.int32)
-# db.x.insert(ins_val, '0')
-# ins_val = np.array([2, 0, 0, 0, 0], dtype=np.int32)
-# db.x.insert(ins_val, '2')
-# ins_val = np.array([-2, 0, 0, 0, 0], dtype=np.int32)
-# db.x.insert(ins_val, '-2')
-#
-# seen = set()
-# for elem in db.x.rnn(np.array([0, 0, 0, 0, 0], dtype=np.int32), np.int32(1)):
-# seen.add(elem.value)
-# assert seen == set(['0'])
-#
-# seen = set()
-# for elem in db.x.rnn(np.array([0, 0, 0, 0, 0], dtype=np.int32), np.int32(3)):
-# seen.add(elem.value)
-# assert seen == set(['0', '2', '-2'])
 
 
 def test_store_ids():

@@ -1,5 +1,0 @@
-Specification
-=============
-
-.. toctree::
-   :caption: Contents:

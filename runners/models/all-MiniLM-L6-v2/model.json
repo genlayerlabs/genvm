@@ -1,0 +1,7 @@
+{
+  "name": "all-MiniLM-L6-v2",
+  "rename-outputs": {
+    "last-hidden-state": "unpooled",
+    "924": "embedding"
+  }
+}

@@ -158,18 +158,20 @@ impl WasmContext {
 pub struct SharedData {
     pub nondet_call_no: AtomicU32,
     pub cancellation: Arc<genvm_common::cancellation::Token>,
-    pub is_sync: bool,
     pub modules: Modules,
     pub balances: dashmap::DashMap<calldata::Address, primitive_types::U256>,
+    pub is_sync: bool,
     pub cookie: String,
+    pub allow_latest: bool,
 }
 
 impl SharedData {
     pub fn new(
         modules: Modules,
-        is_sync: bool,
         cancellation: Arc<genvm_common::cancellation::Token>,
+        is_sync: bool,
         cookie: String,
+        allow_latest: bool,
     ) -> Self {
         Self {
             nondet_call_no: 0.into(),
@@ -178,6 +180,7 @@ impl SharedData {
             modules,
             balances: dashmap::DashMap::new(),
             cookie,
+            allow_latest,
         }
     }
 }
@@ -223,12 +226,38 @@ struct ApplyActionCtx {
     contract_id: symbol_table::GlobalSymbol,
 }
 
+fn try_get_latest(runner_id: &str, base_path: &std::path::Path) -> Option<String> {
+    let mut path = std::path::PathBuf::from(base_path);
+    path.push("latest.json");
+
+    let latest_registry = std::fs::read_to_string(&path).ok()?;
+    let mut latest_registry: BTreeMap<String, String> =
+        serde_json::from_str(&latest_registry).ok()?;
+
+    latest_registry.remove(runner_id)
+}
+
 fn make_new_runner_arch_from_tar(
+    shared_data: &SharedData,
     id: symbol_table::GlobalSymbol,
     base_path: &std::path::Path,
 ) -> Result<Archive> {
-    let (runner_id, runner_hash) =
+    let (runner_id, mut runner_hash) =
         runner::verify_runner(id.as_str()).with_context(|| format!("verifying {id}"))?;
+
+    let borrowed_latest: Option<String>;
+
+    if runner_hash == "test" || runner_hash == "latest" {
+        if !shared_data.allow_latest {
+            anyhow::bail!("test runner not allowed")
+        }
+
+        if let Some(borrowed) = try_get_latest(runner_id, base_path) {
+            borrowed_latest = Some(borrowed);
+
+            runner_hash = borrowed_latest.as_ref().unwrap();
+        }
+    }
 
     let mut path = std::path::PathBuf::from(base_path);
     path.push(runner_id);
@@ -258,7 +287,7 @@ impl VM {
             .get_typed_func::<(), ()>(&mut self.store, "")
             .or_else(|_| instance.get_typed_func::<(), ()>(&mut self.store, "_start"))
             .with_context(|| "can't find entrypoint")?;
-        log::info!(target = "vm"; "execution start");
+        log::info!("execution start");
         let time_start = std::time::Instant::now();
         let res = func.call_async(&mut self.store, ()).await;
         log::info!(duration:? = time_start.elapsed(); "vm execution finished");
@@ -722,10 +751,12 @@ impl Supervisor {
                         .await;
                 }
                 let path = self.runner_cache.path().clone();
-                let _ = self
-                    .runner_cache
-                    .get_or_create(*id, || make_new_runner_arch_from_tar(*id, &path))?;
-                Box::pin(self.apply_action_recursive(vm, ctx, action, *id)).await
+                let _ = self.runner_cache.get_or_create(*id, || {
+                    make_new_runner_arch_from_tar(&self.shared_data, *id, &path)
+                })?;
+                Box::pin(self.apply_action_recursive(vm, ctx, action, *id))
+                    .await
+                    .with_context(|| format!("With {id}"))
             }
             InitAction::Depends(id) => {
                 if !ctx.visited.insert(*id) {
@@ -733,11 +764,16 @@ impl Supervisor {
                 }
 
                 let path = self.runner_cache.path().clone();
-                let new_arch = self
-                    .runner_cache
-                    .get_or_create(*id, || make_new_runner_arch_from_tar(*id, &path))?;
-                let new_action = new_arch.get_actions()?;
-                Box::pin(self.apply_action_recursive(vm, ctx, &new_action, *id)).await
+                let new_arch = self.runner_cache.get_or_create(*id, || {
+                    make_new_runner_arch_from_tar(&self.shared_data, *id, &path)
+                        .with_context(|| format!("loading {id}"))
+                })?;
+                let new_action = new_arch
+                    .get_actions()
+                    .with_context(|| format!("loading {id} runner.json"))?;
+                Box::pin(self.apply_action_recursive(vm, ctx, &new_action, *id))
+                    .await
+                    .with_context(|| format!("Depends {id}"))
             }
         }
     }

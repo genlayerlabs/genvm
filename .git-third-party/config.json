@@ -6,11 +6,6 @@
 			"patches": 1,
 			"submodules": []
 		},
-		"runners/nix/trg/py/modules/genvm-cpython-ext/sdk-rust/third-party/wasi-rs": {
-			"url": "https://github.com/bytecodealliance/wasi-rs/",
-			"commit": "9ec04a7d8ebb1bbb9e3291503425cee1ec38a560",
-			"patches": 1
-		},
 		"executor/third-party/wasm-tools": {
 			"url": "https://github.com/bytecodealliance/wasm-tools.git",
 			"commit": "5a83828b7ff0e59db322de2a6466abca656de9a5",

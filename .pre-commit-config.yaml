@@ -35,13 +35,13 @@ repos:
     hooks:
     - id: clang-format
       types_or: [c++, c]
-      exclude: runners/nix/trg/softfloat/berkeley-softfloat-3
+      exclude: runners/softfloat/berkeley-softfloat-3
 
   - repo: https://github.com/editorconfig-checker/editorconfig-checker.python
     rev: 3.0.3
     hooks:
       - id: editorconfig-checker
-        exclude: (runners/genlayer-py-std/src/cloudpickle|.git-third-party|runners/py-libs)
+        exclude: (.git-third-party|runners/py-libs|runners/genlayer-py-std/src-emb/onnx)
 
   - repo: local
     hooks:
@@ -49,6 +49,12 @@ repos:
         name: check shebang
         entry: ./build-scripts/hooks/shebang.py
         language: system
+
+      - id: no-commit-test
+        name: do not commit test runners
+        entry: grep -P false runners/dbg.nix
+        language: system
+        files: ^runners/dbg.nix$
 
       - id: cargo-fmt
         name: cargo fmt

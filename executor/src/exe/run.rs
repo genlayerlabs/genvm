@@ -2,7 +2,7 @@ use std::io::Write;
 
 use anyhow::{Context, Result};
 use clap::ValueEnum;
-use genvm::{config, vm::RunOk};
+use genvm::{config, vm::RunOk, PublicArgs};
 
 #[derive(Debug, Clone, ValueEnum, PartialEq)]
 #[clap(rename_all = "kebab_case")]
@@ -20,6 +20,9 @@ impl std::fmt::Display for PrintOption {
 
 #[derive(clap::Args, Debug)]
 pub struct Args {
+    #[arg(long)]
+    allow_latest: bool,
+
     #[arg(long)]
     message: String,
     #[arg(long)]
@@ -88,8 +91,18 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
 
     log::info!(cookie = cookie; "genvm cookie");
 
-    let supervisor = genvm::create_supervisor(&config, host, args.sync, token, host_data, cookie)
-        .with_context(|| "creating supervisor")?;
+    let supervisor = genvm::create_supervisor(
+        &config,
+        host,
+        token,
+        host_data,
+        PublicArgs {
+            cookie,
+            is_sync: args.sync,
+            allow_latest: args.allow_latest,
+        },
+    )
+    .with_context(|| "creating supervisor")?;
 
     let res = runtime
         .block_on(genvm::run_with(

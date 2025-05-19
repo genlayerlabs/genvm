@@ -45,7 +45,7 @@ Prelude:
 2. `git submodule update --init --recursive --depth 1`
 3. `source env.sh` (not needed if you used flake)
 4. `git third-party update --all`
-5. `ya-build config` (for release build pass `--preload .ci/release-conf.rb`)
+5. `ya-build config` (for release build pass `--preload build-scripts/ci/release-conf.rb`)
 6. `ninja -C build genvm/executor/all`
 7. Get `genvm-runners.zip` from [github](https://github.com/yeagerai/genvm)
 8. merge `build/out` and `genvm-runners.zip`
@@ -58,7 +58,7 @@ It will also require `docker` and `docker-buildx`
 2. `git submodule update --init --recursive --depth 1`
 3. `./build-scripts/install/install-deps.rb --os --rust --genvm --runners`
 4. `source env.sh` (not needed if you used flake)
-5. `ya-build config` (for release build pass `--preload .ci/release-conf.rb`)
+5. `ya-build config` (for release build pass `--preload build-scripts/ci/release-conf.rb`)
 6. `ninja -C build tags/all`
 7. full genvm (including runners) is located at `build/out`
 

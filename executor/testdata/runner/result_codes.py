@@ -15,5 +15,6 @@ class StorageType(IntEnum):
 
 
 class EntryKind(IntEnum):
-	REGULAR = 0
-	INNER = 1
+	MAIN = 0
+	SANDBOX = 1
+	CONSENSUS_STAGE = 2

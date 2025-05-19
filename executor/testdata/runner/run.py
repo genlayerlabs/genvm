@@ -70,6 +70,12 @@ if not GENVM.exists():
 	exit(1)
 
 import typing
+import threading
+
+MAX_WORKERS = max(1, (os.cpu_count() or 1) - 2)
+print(f'concurrency is set to {MAX_WORKERS}')
+
+RUN_SEMAPHORE = threading.BoundedSemaphore(MAX_WORKERS)
 
 
 def unfold_conf(x: typing.Any, vars: dict[str, str]) -> typing.Any:
@@ -208,6 +214,7 @@ def run(jsonnet_rel_path):
 				'--message',
 				json.dumps(config['message']),
 				'--print=shrink',
+				'--allow-latest',
 			]
 		)
 		if config['sync']:
@@ -292,6 +299,14 @@ def run(jsonnet_rel_path):
 	return {'category': 'pass', **base}
 
 
+# semaphore should not be needed
+# with thread pool executor
+# but on CI some strange behavior happens
+def run_with_semaphore(*args, **kwargs):
+	with RUN_SEMAPHORE:
+		return run(*args, **kwargs)
+
+
 files = [x.relative_to(dir) for x in dir.glob('**/*.jsonnet')]
 files = [x for x in files if FILE_RE.search(str(x)) is not None]
 files.sort()
@@ -357,7 +372,7 @@ def prnt(path, res):
 				print_lines(res['genvm_log'])
 
 
-with cfutures.ThreadPoolExecutor(max_workers=(os.cpu_count() or 1)) as executor:
+with cfutures.ThreadPoolExecutor(MAX_WORKERS) as executor:
 	categories = {
 		'skip': 0,
 		'pass': 0,
@@ -407,7 +422,7 @@ with cfutures.ThreadPoolExecutor(max_workers=(os.cpu_count() or 1)) as executor:
 		)
 		for f in firsts:
 			process_result(f, lambda: run(f))
-		future2path = {executor.submit(run, path): path for path in lasts}
+		future2path = {executor.submit(run_with_semaphore, path): path for path in lasts}
 		for future in cfutures.as_completed(future2path):
 			path = future2path[future]
 			process_result(future2path[future], lambda: future.result())

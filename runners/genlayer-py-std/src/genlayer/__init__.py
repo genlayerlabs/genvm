@@ -13,7 +13,6 @@ __all__ = (
 	'Keccak256',
 	'Rollback',
 	'TreeMap',
-	'VecDB',
 	'bigint',
 	'i104',
 	'i112',

@@ -20,36 +20,43 @@ use wasi::genlayer_sdk::{EntryKind, TransformedMessage};
 use std::{str::FromStr, sync::Arc};
 use vm::{Modules, RunOk};
 
+#[derive(Debug, Clone)]
+pub struct PublicArgs {
+    pub cookie: String,
+    pub allow_latest: bool,
+    pub is_sync: bool,
+}
+
 pub fn create_supervisor(
     config: &config::Config,
     host: Host,
-    is_sync: bool,
     cancellation: Arc<genvm_common::cancellation::Token>,
     host_data: Arc<serde_json::Value>,
-    cookie: String,
+    pub_args: PublicArgs,
 ) -> Result<Arc<tokio::sync::Mutex<vm::Supervisor>>> {
     let modules = Modules {
         web: Arc::new(modules::Module::new(
             "web".into(),
             config.modules.web.address.clone(),
             cancellation.clone(),
-            cookie.clone(),
+            pub_args.cookie.clone(),
             host_data.clone(),
         )),
         llm: Arc::new(modules::Module::new(
             "llm".into(),
             config.modules.llm.address.clone(),
             cancellation.clone(),
-            cookie.clone(),
+            pub_args.cookie.clone(),
             host_data,
         )),
     };
 
     let shared_data = Arc::new(crate::vm::SharedData::new(
         modules,
-        is_sync,
         cancellation,
-        cookie.clone(),
+        pub_args.is_sync,
+        pub_args.cookie.clone(),
+        pub_args.allow_latest,
     ));
 
     Ok(Arc::new(tokio::sync::Mutex::new(vm::Supervisor::new(
@@ -93,7 +100,7 @@ pub async fn run_with_impl(
                 is_init: entry_message.is_init,
                 datetime: entry_message.datetime,
 
-                entry_kind: EntryKind::Regular,
+                entry_kind: EntryKind::Main,
                 entry_data: entrypoint,
                 entry_stage_data: calldata::Value::Null,
             },
@@ -104,7 +111,7 @@ pub async fn run_with_impl(
         let instance = supervisor
             .apply_contract_actions(&mut vm)
             .await
-            .with_context(|| "getting runner actions")
+            .with_context(|| "applying runner actions")
             .map_err(|cause| crate::errors::ContractError::wrap("runner_actions".into(), cause))?;
         (vm, instance)
     };

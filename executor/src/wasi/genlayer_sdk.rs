@@ -133,13 +133,10 @@ pub(crate) mod generated {
 
 impl calldata::Address {
     fn read_from_mem(
-        addr: &generated::types::Addr,
         mem: &mut wiggle::GuestMemory<'_>,
+        addr: wiggle::GuestPtr<u8>,
     ) -> Result<Self, generated::types::Error> {
-        let cow = mem.as_cow(
-            addr.ptr
-                .as_array(calldata::ADDRESS_SIZE.try_into().unwrap()),
-        )?;
+        let cow = mem.as_cow(addr.as_array(calldata::ADDRESS_SIZE.try_into().unwrap()))?;
         let mut ret = Self::zero();
         for (x, y) in ret.ref_mut().iter_mut().zip(cow.iter()) {
             *x = *y;
@@ -150,10 +147,10 @@ impl calldata::Address {
 
 impl SlotID {
     fn read_from_mem(
-        addr: &generated::types::FullAddr,
         mem: &mut wiggle::GuestMemory<'_>,
+        addr: wiggle::GuestPtr<u8>,
     ) -> Result<Self, generated::types::Error> {
-        let cow = mem.as_cow(addr.ptr.as_array(SlotID::len().try_into().unwrap()))?;
+        let cow = mem.as_cow(addr.as_array(SlotID::len().try_into().unwrap()))?;
         let mut ret = SlotID::zero();
         for (x, y) in ret.0.iter_mut().zip(cow.iter()) {
             *x = *y;
@@ -162,14 +159,11 @@ impl SlotID {
     }
 }
 
-impl generated::types::Bytes {
-    #[allow(dead_code)]
-    fn read_owned(
-        &self,
-        mem: &mut wiggle::GuestMemory<'_>,
-    ) -> Result<Vec<u8>, generated::types::Error> {
-        Ok(mem.as_cow(self.buf.as_array(self.buf_len))?.into_owned())
-    }
+fn read_owned_vec(
+    mem: &mut wiggle::GuestMemory<'_>,
+    ptr: wiggle::GuestPtr<[u8]>,
+) -> Result<Vec<u8>, generated::types::Error> {
+    Ok(mem.as_cow(ptr)?.into_owned())
 }
 
 impl Context {
@@ -331,9 +325,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
     async fn gl_call(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        request: &generated::types::Bytes,
+        request: wiggle::GuestPtr<u8>,
+        request_len: u32,
     ) -> Result<generated::types::Fd, generated::types::Error> {
-        let request = request.read_owned(mem)?;
+        let request = request.as_array(request_len);
+        let request = read_owned_vec(mem, request)?;
 
         let request = match calldata::decode(&request) {
             Err(e) => {
@@ -438,7 +434,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .context
                     .data
                     .message_data
-                    .fork(EntryKind::Regular, calldata_encoded);
+                    .fork(EntryKind::Main, calldata_encoded);
                 my_data.stack.push(my_data.contract_address);
 
                 let calldata_encoded = calldata::encode(&calldata);
@@ -659,10 +655,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
     async fn storage_read(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        slot: &generated::types::FullAddr,
+        slot: wiggle::GuestPtr<u8>,
         index: u32,
-        buf: &generated::types::MutBytes,
+        buf: wiggle::GuestPtr<u8>,
+        buf_len: u32,
     ) -> Result<(), generated::types::Error> {
+        let buf = buf.as_array(buf_len);
+
         if !self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::Forbidden.into());
         }
@@ -670,16 +669,14 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::Forbidden.into());
         }
 
-        if index.checked_add(buf.buf_len).is_none() {
+        if index.checked_add(buf_len).is_none() {
             return Err(generated::types::Errno::Inval.into());
         }
 
-        let dest_buf = buf.buf.as_array(buf.buf_len);
-
         let account = self.context.data.message_data.contract_address;
 
-        let slot = SlotID::read_from_mem(slot, mem)?;
-        let mem_size = buf.buf_len as usize;
+        let slot = SlotID::read_from_mem(mem, slot)?;
+        let mem_size = buf_len as usize;
         let mut vec = Vec::with_capacity(mem_size);
         unsafe { vec.set_len(mem_size) };
 
@@ -697,17 +694,20 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             )
             .map_err(generated::types::Error::trap)?;
 
-        mem.copy_from_slice(&vec, dest_buf)?;
+        mem.copy_from_slice(&vec, buf)?;
         Ok(())
     }
 
     async fn storage_write(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        slot: &generated::types::FullAddr,
+        slot: wiggle::GuestPtr<u8>,
         index: u32,
-        buf: &generated::types::Bytes,
+        buf: wiggle::GuestPtr<u8>,
+        buf_len: u32,
     ) -> Result<(), generated::types::Error> {
+        let buf = buf.as_array(buf_len);
+
         if !self.context.data.conf.is_deterministic {
             return Err(generated::types::Errno::Forbidden.into());
         }
@@ -715,14 +715,14 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::Forbidden.into());
         }
 
-        if index.checked_add(buf.buf_len).is_none() {
+        if index.checked_add(buf_len).is_none() {
             return Err(generated::types::Errno::Inval.into());
         }
 
-        let buf: Vec<u8> = buf.read_owned(mem)?;
+        let buf: Vec<u8> = read_owned_vec(mem, buf)?;
 
         let account = self.context.data.message_data.contract_address;
-        let slot = SlotID::read_from_mem(slot, mem)?;
+        let slot = SlotID::read_from_mem(mem, slot)?;
 
         let supervisor = self.context.data.supervisor.clone();
         let mut supervisor = supervisor.lock().await;
@@ -736,10 +736,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
     async fn get_balance(
         &mut self,
         mem: &mut wiggle::GuestMemory<'_>,
-        account: &generated::types::Addr,
+        account: wiggle::GuestPtr<u8>,
         result: wiggle::GuestPtr<u8>,
     ) -> Result<(), generated::types::Error> {
-        let address = calldata::Address::read_from_mem(account, mem)?;
+        let address = calldata::Address::read_from_mem(mem, account)?;
 
         self.context
             .get_balance_impl_wasi(mem, address, result, false)
@@ -863,11 +863,11 @@ impl ContextVFS<'_> {
         };
 
         let message_data = match &leaders_res {
-            None => self
-                .context
-                .data
-                .message_data
-                .fork(EntryKind::Inner, data_leader),
+            None => self.context.data.message_data.fork_leader(
+                EntryKind::ConsensusStage,
+                data_leader,
+                None,
+            ),
             Some(leaders_res) => {
                 let dup = match leaders_res {
                     RunOk::Return(items) => RunOk::Return(items.clone()),
@@ -875,7 +875,7 @@ impl ContextVFS<'_> {
                     RunOk::ContractError(msg, _) => RunOk::ContractError(msg.clone(), None),
                 };
                 self.context.data.message_data.fork_leader(
-                    EntryKind::Inner,
+                    EntryKind::ConsensusStage,
                     data_validator,
                     Some(dup),
                 )
@@ -932,7 +932,11 @@ impl ContextVFS<'_> {
     ) -> Result<generated::types::Fd, generated::types::Error> {
         let supervisor = self.context.data.supervisor.clone();
 
-        let message_data = self.context.data.message_data.fork(EntryKind::Inner, data);
+        let message_data = self
+            .context
+            .data
+            .message_data
+            .fork(EntryKind::Sandbox, data);
 
         let zelf_conf = &self.context.data.conf;
 
