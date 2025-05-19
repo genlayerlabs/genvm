@@ -10,7 +10,7 @@ let
 		name = "genvm-cpython-mod-numpy-objs";
 
 		outputHashMode = "recursive";
-		outputHash = "sha256-mPO/PIDzqGr3sLTYs+SpT1YSYtIm3PKYJBhGJmbeUys=";
+		outputHash = "sha256-aKg5gduybpv2mPiujYOWatOGjpE7tD5geoXYJDm0BDc=";
 
 		srcs = [
 			./deps

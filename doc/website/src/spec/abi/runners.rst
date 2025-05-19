@@ -48,6 +48,7 @@ SetArgs
 
 Set process arguments for the GenVM environment.
 Type: Array of strings
+
 .. code-block::
     :caption: Example
 
@@ -73,6 +74,7 @@ StartWasm
 
 Start a specific WebAssembly file in GenVM.
 Type: String (path to Wasm file)
+
 .. code-block::
     :caption: Example
 

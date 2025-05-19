@@ -6,10 +6,15 @@
 #   derivation # tar file
 # }]
 let
-	nixpkgs = import (fetchTarball { url = "https://github.com/NixOS/nixpkgs/archive/nixos-24.11.tar.gz"; sha256 = "1cvxfj03xhakyrrz8bh4499vz5d35ay92575irrbmydcxixsrf3w"; });
-	pkgs = nixpkgs {
-		system = "x86_64-linux";
-	};
+	pkgs = import
+		(builtins.fetchGit {
+			url = "https://github.com/NixOS/nixpkgs";
+			rev = "8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296";
+			shallow = true;
+		})
+		{
+			system = "x86_64-linux";
+		};
 	runnersLib = import ./support args;
 
 	args = {
