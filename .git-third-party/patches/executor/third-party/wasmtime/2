@@ -1,0 +1,1063 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: kp2pml30 <kp2pml30@gmail.com>
+Date: Thu, 17 Apr 2025 15:04:59 +0400
+Subject: [PATCH] GenVM patch
+
+---
+ Cargo.toml                                  |  18 +--
+ cranelift/codegen/src/ir/memflags.rs        |   2 +-
+ cranelift/codegen/src/ir/trapcode.rs        |   5 +
+ cranelift/wasm/src/code_translator.rs       | 119 +++++++++++++++++---
+ cranelift/wasm/src/environ/spec.rs          |   9 ++
+ crates/cache/src/config.rs                  |   9 +-
+ crates/cranelift/src/func_environ.rs        |  38 ++++++-
+ crates/cranelift/src/lib.rs                 |   3 +
+ crates/environ/src/trap_encoding.rs         |   4 +
+ crates/environ/src/tunables.rs              |   4 +
+ crates/environ/src/vmoffsets.rs             |   5 +
+ crates/wasmtime/src/config.rs               |  24 +++-
+ crates/wasmtime/src/engine/serialization.rs |   3 +
+ crates/wasmtime/src/runtime/store.rs        |  16 ++-
+ crates/wasmtime/src/runtime/vm/vmcontext.rs |   3 +
+ crates/wiggle/generate/src/wasmtime.rs      |  48 +++++++-
+ 16 files changed, 270 insertions(+), 40 deletions(-)
+
+diff --git a/Cargo.toml b/Cargo.toml
+index 0bf32b20..9bbe4c21 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -268,15 +268,15 @@ wit-bindgen = { version = "0.32.0", default-features = false }
+ wit-bindgen-rust-macro = { version = "0.32.0", default-features = false }
+ 
+ # wasm-tools family:
+-wasmparser = { version = "0.217.0", default-features = false }
+-wat = "1.217.0"
+-wast = "217.0.0"
+-wasmprinter = "0.217.0"
+-wasm-encoder = "0.217.0"
+-wasm-smith = "0.217.0"
+-wasm-mutate = "0.217.0"
+-wit-parser = "0.217.0"
+-wit-component = "0.217.0"
++wasmparser = { path = "../wasm-tools/crates/wasmparser", default-features = false }
++wat = { path = "../wasm-tools/crates/wat" }
++wast = { path = "../wasm-tools/crates/wat" }
++wasmprinter = { path = "../wasm-tools/crates/wasmprinter" }
++wasm-encoder = { path = "../wasm-tools/crates/wasm-encoder" }
++wasm-smith = { path = "../wasm-tools/crates/wasm-smith" }
++wasm-mutate = { path = "../wasm-tools/crates/wasm-mutate" }
++wit-parser = { path = "../wasm-tools/crates/wit-parser" }
++wit-component = { path = "../wasm-tools/crates/wit-component" }
+ 
+ # Non-Bytecode Alliance maintained dependencies:
+ # --------------------------
+diff --git a/cranelift/codegen/src/ir/memflags.rs b/cranelift/codegen/src/ir/memflags.rs
+index fe34dbe7..d684e6c2 100644
+--- a/cranelift/codegen/src/ir/memflags.rs
++++ b/cranelift/codegen/src/ir/memflags.rs
+@@ -393,7 +393,7 @@ impl MemFlags {
+             Some(TrapCode::ArrayOutOfBounds) => 0b1100,
+             None => 0b1111,
+ 
+-            Some(TrapCode::User(_)) => panic!("cannot set user trap code in mem flags"),
++            Some(TrapCode::User(_) | TrapCode::DeterministicMode) => panic!("cannot set user trap code in mem flags"),
+         };
+         self.bits &= !MASK_TRAP_CODE;
+         self.bits |= bits << TRAP_CODE_OFFSET;
+diff --git a/cranelift/codegen/src/ir/trapcode.rs b/cranelift/codegen/src/ir/trapcode.rs
+index 9d250826..dff00251 100644
+--- a/cranelift/codegen/src/ir/trapcode.rs
++++ b/cranelift/codegen/src/ir/trapcode.rs
+@@ -56,6 +56,10 @@ pub enum TrapCode {
+ 
+     /// A null reference was encountered which was required to be non-null.
+     NullReference,
++
++
++    /// determinisitc mode violation
++    DeterministicMode,
+ }
+ 
+ impl TrapCode {
+@@ -96,6 +100,7 @@ impl Display for TrapCode {
+             User(x) => return write!(f, "user{x}"),
+             NullReference => "null_reference",
+             ArrayOutOfBounds => "array_oob",
++            DeterministicMode => "deterministic mode violation (ir)",
+         };
+         f.write_str(identifier)
+     }
+diff --git a/cranelift/wasm/src/code_translator.rs b/cranelift/wasm/src/code_translator.rs
+index a4e81ef8..35e2b902 100644
+--- a/cranelift/wasm/src/code_translator.rs
++++ b/cranelift/wasm/src/code_translator.rs
+@@ -832,6 +832,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             );
+         }
+         Operator::F32Load { memarg } => {
++            //if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             unwrap_or_return_unreachable_state!(
+                 state,
+                 translate_load(memarg, ir::Opcode::Load, F32, builder, state, environ)?
+@@ -844,6 +845,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             );
+         }
+         Operator::F64Load { memarg } => {
++            //if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             unwrap_or_return_unreachable_state!(
+                 state,
+                 translate_load(memarg, ir::Opcode::Load, F64, builder, state, environ)?
+@@ -912,6 +914,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+         | Operator::I64Store { memarg }
+         | Operator::F32Store { memarg }
+         | Operator::F64Store { memarg } => {
++            //if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             translate_store(memarg, ir::Opcode::Store, builder, state, environ)?;
+         }
+         Operator::I32Store8 { memarg } | Operator::I64Store8 { memarg } => {
+@@ -932,9 +935,11 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+         }
+         Operator::I64Const { value } => state.push1(builder.ins().iconst(I64, *value)),
+         Operator::F32Const { value } => {
++            //if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             state.push1(builder.ins().f32const(f32_translation(*value)));
+         }
+         Operator::F64Const { value } => {
++            //if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             state.push1(builder.ins().f64const(f64_translation(*value)));
+         }
+         /******************************* Unary Operators *************************************/
+@@ -963,86 +968,107 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             state.push1(builder.ins().ireduce(I32, val));
+         }
+         Operator::F32Sqrt | Operator::F64Sqrt => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let arg = state.pop1();
+             state.push1(builder.ins().sqrt(arg));
+         }
+         Operator::F32Ceil | Operator::F64Ceil => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let arg = state.pop1();
+             state.push1(builder.ins().ceil(arg));
+         }
+         Operator::F32Floor | Operator::F64Floor => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let arg = state.pop1();
+             state.push1(builder.ins().floor(arg));
+         }
+         Operator::F32Trunc | Operator::F64Trunc => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let arg = state.pop1();
+             state.push1(builder.ins().trunc(arg));
+         }
+         Operator::F32Nearest | Operator::F64Nearest => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let arg = state.pop1();
+             state.push1(builder.ins().nearest(arg));
+         }
+         Operator::F32Abs | Operator::F64Abs => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let val = state.pop1();
+             state.push1(builder.ins().fabs(val));
+         }
+         Operator::F32Neg | Operator::F64Neg => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let arg = state.pop1();
+             state.push1(builder.ins().fneg(arg));
+         }
+         Operator::F64ConvertI64U | Operator::F64ConvertI32U => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let val = state.pop1();
+             state.push1(builder.ins().fcvt_from_uint(F64, val));
+         }
+         Operator::F64ConvertI64S | Operator::F64ConvertI32S => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let val = state.pop1();
+             state.push1(builder.ins().fcvt_from_sint(F64, val));
+         }
+         Operator::F32ConvertI64S | Operator::F32ConvertI32S => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let val = state.pop1();
+             state.push1(builder.ins().fcvt_from_sint(F32, val));
+         }
+         Operator::F32ConvertI64U | Operator::F32ConvertI32U => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let val = state.pop1();
+             state.push1(builder.ins().fcvt_from_uint(F32, val));
+         }
+         Operator::F64PromoteF32 => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let val = state.pop1();
+             state.push1(builder.ins().fpromote(F64, val));
+         }
+         Operator::F32DemoteF64 => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let val = state.pop1();
+             state.push1(builder.ins().fdemote(F32, val));
+         }
+         Operator::I64TruncF64S | Operator::I64TruncF32S => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let val = state.pop1();
+             state.push1(environ.translate_fcvt_to_sint(builder, I64, val));
+         }
+         Operator::I32TruncF64S | Operator::I32TruncF32S => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let val = state.pop1();
+             state.push1(environ.translate_fcvt_to_sint(builder, I32, val));
+         }
+         Operator::I64TruncF64U | Operator::I64TruncF32U => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let val = state.pop1();
+             state.push1(environ.translate_fcvt_to_uint(builder, I64, val));
+         }
+         Operator::I32TruncF64U | Operator::I32TruncF32U => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let val = state.pop1();
+             state.push1(environ.translate_fcvt_to_uint(builder, I32, val));
+         }
+         Operator::I64TruncSatF64S | Operator::I64TruncSatF32S => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let val = state.pop1();
+             state.push1(builder.ins().fcvt_to_sint_sat(I64, val));
+         }
+         Operator::I32TruncSatF64S | Operator::I32TruncSatF32S => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let val = state.pop1();
+             state.push1(builder.ins().fcvt_to_sint_sat(I32, val));
+         }
+         Operator::I64TruncSatF64U | Operator::I64TruncSatF32U => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let val = state.pop1();
+             state.push1(builder.ins().fcvt_to_uint_sat(I64, val));
+         }
+         Operator::I32TruncSatF64U | Operator::I32TruncSatF32U => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let val = state.pop1();
+             state.push1(builder.ins().fcvt_to_uint_sat(I32, val));
+         }
+@@ -1130,6 +1156,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             state.push1(builder.ins().rotr(arg1, arg2));
+         }
+         Operator::F32Add | Operator::F64Add => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (arg1, arg2) = state.pop2();
+             state.push1(builder.ins().fadd(arg1, arg2));
+         }
+@@ -1138,6 +1165,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             state.push1(builder.ins().isub(arg1, arg2));
+         }
+         Operator::F32Sub | Operator::F64Sub => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (arg1, arg2) = state.pop2();
+             state.push1(builder.ins().fsub(arg1, arg2));
+         }
+@@ -1146,10 +1174,12 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             state.push1(builder.ins().imul(arg1, arg2));
+         }
+         Operator::F32Mul | Operator::F64Mul => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (arg1, arg2) = state.pop2();
+             state.push1(builder.ins().fmul(arg1, arg2));
+         }
+         Operator::F32Div | Operator::F64Div => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (arg1, arg2) = state.pop2();
+             state.push1(builder.ins().fdiv(arg1, arg2));
+         }
+@@ -1170,14 +1200,17 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             state.push1(environ.translate_urem(builder, arg1, arg2));
+         }
+         Operator::F32Min | Operator::F64Min => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (arg1, arg2) = state.pop2();
+             state.push1(builder.ins().fmin(arg1, arg2));
+         }
+         Operator::F32Max | Operator::F64Max => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (arg1, arg2) = state.pop2();
+             state.push1(builder.ins().fmax(arg1, arg2));
+         }
+         Operator::F32Copysign | Operator::F64Copysign => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (arg1, arg2) = state.pop2();
+             state.push1(builder.ins().fcopysign(arg1, arg2));
+         }
+@@ -1212,16 +1245,16 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             state.push1(builder.ins().uextend(I32, val));
+         }
+         Operator::I32Eq | Operator::I64Eq => translate_icmp(IntCC::Equal, builder, state),
+-        Operator::F32Eq | Operator::F64Eq => translate_fcmp(FloatCC::Equal, builder, state),
++        Operator::F32Eq | Operator::F64Eq => translate_fcmp(environ, FloatCC::Equal, builder, state),
+         Operator::I32Ne | Operator::I64Ne => translate_icmp(IntCC::NotEqual, builder, state),
+-        Operator::F32Ne | Operator::F64Ne => translate_fcmp(FloatCC::NotEqual, builder, state),
+-        Operator::F32Gt | Operator::F64Gt => translate_fcmp(FloatCC::GreaterThan, builder, state),
++        Operator::F32Ne | Operator::F64Ne => translate_fcmp(environ, FloatCC::NotEqual, builder, state),
++        Operator::F32Gt | Operator::F64Gt => translate_fcmp(environ, FloatCC::GreaterThan, builder, state),
+         Operator::F32Ge | Operator::F64Ge => {
+-            translate_fcmp(FloatCC::GreaterThanOrEqual, builder, state)
++            translate_fcmp(environ, FloatCC::GreaterThanOrEqual, builder, state)
+         }
+-        Operator::F32Lt | Operator::F64Lt => translate_fcmp(FloatCC::LessThan, builder, state),
++        Operator::F32Lt | Operator::F64Lt => translate_fcmp(environ, FloatCC::LessThan, builder, state),
+         Operator::F32Le | Operator::F64Le => {
+-            translate_fcmp(FloatCC::LessThanOrEqual, builder, state)
++            translate_fcmp(environ, FloatCC::LessThanOrEqual, builder, state)
+         }
+         Operator::RefNull { hty } => {
+             let hty = environ.convert_heap_type(*hty);
+@@ -1623,6 +1656,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+         | Operator::I64x2Splat
+         | Operator::F32x4Splat
+         | Operator::F64x2Splat => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let splatted = builder.ins().splat(type_of(op), state.pop1());
+             state.push1(splatted)
+         }
+@@ -1700,9 +1734,13 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             // work.
+         }
+         Operator::I32x4ExtractLane { lane }
+-        | Operator::I64x2ExtractLane { lane }
++        | Operator::I64x2ExtractLane { lane } => {
++            let vector = pop1_with_bitcast(state, type_of(op), builder);
++            state.push1(builder.ins().extractlane(vector, *lane))
++        }
+         | Operator::F32x4ExtractLane { lane }
+         | Operator::F64x2ExtractLane { lane } => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let vector = pop1_with_bitcast(state, type_of(op), builder);
+             state.push1(builder.ins().extractlane(vector, *lane))
+         }
+@@ -1714,9 +1752,14 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             state.push1(builder.ins().insertlane(vector, reduced, *lane))
+         }
+         Operator::I32x4ReplaceLane { lane }
+-        | Operator::I64x2ReplaceLane { lane }
++        | Operator::I64x2ReplaceLane { lane } => {
++            let (vector, replacement) = state.pop2();
++            let vector = optionally_bitcast_vector(vector, type_of(op), builder);
++            state.push1(builder.ins().insertlane(vector, replacement, *lane))
++        }
+         | Operator::F32x4ReplaceLane { lane }
+         | Operator::F64x2ReplaceLane { lane } => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (vector, replacement) = state.pop2();
+             let vector = optionally_bitcast_vector(vector, type_of(op), builder);
+             state.push1(builder.ins().insertlane(vector, replacement, *lane))
+@@ -1893,48 +1936,55 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             translate_vector_icmp(IntCC::UnsignedLessThanOrEqual, type_of(op), builder, state)
+         }
+         Operator::F32x4Eq | Operator::F64x2Eq => {
+-            translate_vector_fcmp(FloatCC::Equal, type_of(op), builder, state)
++            translate_vector_fcmp(environ, FloatCC::Equal, type_of(op), builder, state)
+         }
+         Operator::F32x4Ne | Operator::F64x2Ne => {
+-            translate_vector_fcmp(FloatCC::NotEqual, type_of(op), builder, state)
++            translate_vector_fcmp(environ, FloatCC::NotEqual, type_of(op), builder, state)
+         }
+         Operator::F32x4Lt | Operator::F64x2Lt => {
+-            translate_vector_fcmp(FloatCC::LessThan, type_of(op), builder, state)
++            translate_vector_fcmp(environ, FloatCC::LessThan, type_of(op), builder, state)
+         }
+         Operator::F32x4Gt | Operator::F64x2Gt => {
+-            translate_vector_fcmp(FloatCC::GreaterThan, type_of(op), builder, state)
++            translate_vector_fcmp(environ, FloatCC::GreaterThan, type_of(op), builder, state)
+         }
+         Operator::F32x4Le | Operator::F64x2Le => {
+-            translate_vector_fcmp(FloatCC::LessThanOrEqual, type_of(op), builder, state)
++            translate_vector_fcmp(environ, FloatCC::LessThanOrEqual, type_of(op), builder, state)
+         }
+         Operator::F32x4Ge | Operator::F64x2Ge => {
+-            translate_vector_fcmp(FloatCC::GreaterThanOrEqual, type_of(op), builder, state)
++            translate_vector_fcmp(environ, FloatCC::GreaterThanOrEqual, type_of(op), builder, state)
+         }
+         Operator::F32x4Add | Operator::F64x2Add => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (a, b) = pop2_with_bitcast(state, type_of(op), builder);
+             state.push1(builder.ins().fadd(a, b))
+         }
+         Operator::F32x4Sub | Operator::F64x2Sub => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (a, b) = pop2_with_bitcast(state, type_of(op), builder);
+             state.push1(builder.ins().fsub(a, b))
+         }
+         Operator::F32x4Mul | Operator::F64x2Mul => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (a, b) = pop2_with_bitcast(state, type_of(op), builder);
+             state.push1(builder.ins().fmul(a, b))
+         }
+         Operator::F32x4Div | Operator::F64x2Div => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (a, b) = pop2_with_bitcast(state, type_of(op), builder);
+             state.push1(builder.ins().fdiv(a, b))
+         }
+         Operator::F32x4Max | Operator::F64x2Max => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (a, b) = pop2_with_bitcast(state, type_of(op), builder);
+             state.push1(builder.ins().fmax(a, b))
+         }
+         Operator::F32x4Min | Operator::F64x2Min => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (a, b) = pop2_with_bitcast(state, type_of(op), builder);
+             state.push1(builder.ins().fmin(a, b))
+         }
+         Operator::F32x4PMax | Operator::F64x2PMax => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             // Note the careful ordering here with respect to `fcmp` and
+             // `bitselect`. This matches the spec definition of:
+             //
+@@ -1948,6 +1998,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             state.push1(builder.ins().bitselect(cmp, b, a))
+         }
+         Operator::F32x4PMin | Operator::F64x2PMin => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             // Note the careful ordering here which is similar to `pmax` above:
+             //
+             //  fpmin(z1, z2) =
+@@ -1960,48 +2011,59 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             state.push1(builder.ins().bitselect(cmp, b, a))
+         }
+         Operator::F32x4Sqrt | Operator::F64x2Sqrt => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let a = pop1_with_bitcast(state, type_of(op), builder);
+             state.push1(builder.ins().sqrt(a))
+         }
+         Operator::F32x4Neg | Operator::F64x2Neg => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let a = pop1_with_bitcast(state, type_of(op), builder);
+             state.push1(builder.ins().fneg(a))
+         }
+         Operator::F32x4Abs | Operator::F64x2Abs => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let a = pop1_with_bitcast(state, type_of(op), builder);
+             state.push1(builder.ins().fabs(a))
+         }
+         Operator::F32x4ConvertI32x4S => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let a = pop1_with_bitcast(state, I32X4, builder);
+             state.push1(builder.ins().fcvt_from_sint(F32X4, a))
+         }
+         Operator::F32x4ConvertI32x4U => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let a = pop1_with_bitcast(state, I32X4, builder);
+             state.push1(builder.ins().fcvt_from_uint(F32X4, a))
+         }
+         Operator::F64x2ConvertLowI32x4S => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let a = pop1_with_bitcast(state, I32X4, builder);
+             let widened_a = builder.ins().swiden_low(a);
+             state.push1(builder.ins().fcvt_from_sint(F64X2, widened_a));
+         }
+         Operator::F64x2ConvertLowI32x4U => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let a = pop1_with_bitcast(state, I32X4, builder);
+             let widened_a = builder.ins().uwiden_low(a);
+             state.push1(builder.ins().fcvt_from_uint(F64X2, widened_a));
+         }
+         Operator::F64x2PromoteLowF32x4 => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let a = pop1_with_bitcast(state, F32X4, builder);
+             state.push1(builder.ins().fvpromote_low(a));
+         }
+         Operator::F32x4DemoteF64x2Zero => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let a = pop1_with_bitcast(state, F64X2, builder);
+             state.push1(builder.ins().fvdemote(a));
+         }
+         Operator::I32x4TruncSatF32x4S => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let a = pop1_with_bitcast(state, F32X4, builder);
+             state.push1(builder.ins().fcvt_to_sint_sat(I32X4, a))
+         }
+         Operator::I32x4TruncSatF64x2SZero => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let a = pop1_with_bitcast(state, F64X2, builder);
+             let converted_a = builder.ins().fcvt_to_sint_sat(I64X2, a);
+             let handle = builder.func.dfg.constants.insert(vec![0u8; 16].into());
+@@ -2022,10 +2084,12 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+         // perhaps for other backends too) should be added and the codegen for
+         // the relaxed instruction should conditionally be different.
+         Operator::I32x4RelaxedTruncF32x4U | Operator::I32x4TruncSatF32x4U => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let a = pop1_with_bitcast(state, F32X4, builder);
+             state.push1(builder.ins().fcvt_to_uint_sat(I32X4, a))
+         }
+         Operator::I32x4RelaxedTruncF64x2UZero | Operator::I32x4TruncSatF64x2UZero => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let a = pop1_with_bitcast(state, F64X2, builder);
+             let converted_a = builder.ins().fcvt_to_uint_sat(I64X2, a);
+             let handle = builder.func.dfg.constants.insert(vec![0u8; 16].into());
+@@ -2123,6 +2187,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             state.push1(builder.ins().iadd_pairwise(widen_low, widen_high));
+         }
+         Operator::F32x4Ceil | Operator::F64x2Ceil => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             // This is something of a misuse of `type_of`, because that produces the return type
+             // of `op`.  In this case we want the arg type, but we know it's the same as the
+             // return type.  Same for the 3 cases below.
+@@ -2130,14 +2195,17 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             state.push1(builder.ins().ceil(arg));
+         }
+         Operator::F32x4Floor | Operator::F64x2Floor => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let arg = pop1_with_bitcast(state, type_of(op), builder);
+             state.push1(builder.ins().floor(arg));
+         }
+         Operator::F32x4Trunc | Operator::F64x2Trunc => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let arg = pop1_with_bitcast(state, type_of(op), builder);
+             state.push1(builder.ins().trunc(arg));
+         }
+         Operator::F32x4Nearest | Operator::F64x2Nearest => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let arg = pop1_with_bitcast(state, type_of(op), builder);
+             state.push1(builder.ins().nearest(arg));
+         }
+@@ -2239,6 +2307,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+         }
+ 
+         Operator::F32x4RelaxedMax | Operator::F64x2RelaxedMax => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let ty = type_of(op);
+             let (a, b) = pop2_with_bitcast(state, ty, builder);
+             state.push1(
+@@ -2258,6 +2327,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+         }
+ 
+         Operator::F32x4RelaxedMin | Operator::F64x2RelaxedMin => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let ty = type_of(op);
+             let (a, b) = pop2_with_bitcast(state, ty, builder);
+             state.push1(
+@@ -2292,6 +2362,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+         }
+ 
+         Operator::F32x4RelaxedMadd | Operator::F64x2RelaxedMadd => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (a, b, c) = pop3_with_bitcast(state, type_of(op), builder);
+             state.push1(
+                 if environ.relaxed_simd_deterministic() || environ.has_native_fma() {
+@@ -2305,6 +2376,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             );
+         }
+         Operator::F32x4RelaxedNmadd | Operator::F64x2RelaxedNmadd => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let (a, b, c) = pop3_with_bitcast(state, type_of(op), builder);
+             let a = builder.ins().fneg(a);
+             state.push1(
+@@ -2342,6 +2414,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+         }
+ 
+         Operator::I32x4RelaxedTruncF32x4S => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let a = pop1_with_bitcast(state, F32X4, builder);
+             state.push1(
+                 if environ.relaxed_simd_deterministic() || !environ.is_x86() {
+@@ -2354,6 +2427,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             )
+         }
+         Operator::I32x4RelaxedTruncF64x2SZero => {
++            if float_op_unreachable_check(environ, builder, state) { return Ok(()) }
+             let a = pop1_with_bitcast(state, F64X2, builder);
+             let converted_a = if environ.relaxed_simd_deterministic() || !environ.is_x86() {
+                 // Deterministic semantics are to match the
+@@ -3309,18 +3383,21 @@ fn translate_vector_icmp(
+     state.push1(builder.ins().icmp(cc, bitcast_a, bitcast_b))
+ }
+ 
+-fn translate_fcmp(cc: FloatCC, builder: &mut FunctionBuilder, state: &mut FuncTranslationState) {
++fn translate_fcmp<FE: FuncEnvironment + ?Sized>(environ: &mut FE, cc: FloatCC, builder: &mut FunctionBuilder, state: &mut FuncTranslationState) {
++    if float_op_unreachable_check(environ, builder, state) { return }
+     let (arg0, arg1) = state.pop2();
+     let val = builder.ins().fcmp(cc, arg0, arg1);
+     state.push1(builder.ins().uextend(I32, val));
+ }
+ 
+-fn translate_vector_fcmp(
++fn translate_vector_fcmp<FE: FuncEnvironment + ?Sized>(
++    environ: &mut FE,
+     cc: FloatCC,
+     needed_type: Type,
+     builder: &mut FunctionBuilder,
+     state: &mut FuncTranslationState,
+ ) {
++    if float_op_unreachable_check(environ, builder, state) { return }
+     let (a, b) = state.pop2();
+     let bitcast_a = optionally_bitcast_vector(a, needed_type, builder);
+     let bitcast_b = optionally_bitcast_vector(b, needed_type, builder);
+@@ -3786,3 +3863,13 @@ fn bitcast_wasm_params<FE: FuncEnvironment + ?Sized>(
+         *arg = builder.ins().bitcast(t, flags, *arg);
+     }
+ }
++
++fn float_op_unreachable_check<FE: FuncEnvironment + ?Sized>(environ: &mut FE, builder: &mut FunctionBuilder, state: &mut FuncTranslationState) -> bool {
++    if environ.are_floats_enabled() {
++        return false;
++    }
++    environ.fuel_before_unreachable(builder);
++    builder.ins().trap(ir::TrapCode::DeterministicMode);
++    state.reachable = false;
++    return true;
++}
+diff --git a/cranelift/wasm/src/environ/spec.rs b/cranelift/wasm/src/environ/spec.rs
+index 2a46fb4d..662e66d5 100644
+--- a/cranelift/wasm/src/environ/spec.rs
++++ b/cranelift/wasm/src/environ/spec.rs
+@@ -96,6 +96,9 @@ pub trait FuncEnvironment: TargetEnvironment {
+     /// Does the given result require inclusion in stack maps?
+     fn sig_ref_result_needs_stack_map(&self, sig_ref: ir::SigRef, index: usize) -> bool;
+ 
++    /// Updates fuel right before reaching unreachable state
++    fn fuel_before_unreachable(&mut self, builder: &mut FunctionBuilder);
++
+     /// Does the given result require inclusion in stack maps?
+     fn func_ref_result_needs_stack_map(
+         &self,
+@@ -618,6 +621,9 @@ pub trait FuncEnvironment: TargetEnvironment {
+         Ok(())
+     }
+ 
++    /// check for shutdown
++    fn check_graceful_shutdown(&mut self, builder: &mut FunctionBuilder<'_>);
++
+     /// Optional callback for the `FunctionEnvironment` performing this translation to perform work
+     /// before the function body is translated.
+     fn before_translate_function(
+@@ -659,6 +665,9 @@ pub trait FuncEnvironment: TargetEnvironment {
+         false
+     }
+ 
++    /// returns if floats are enabled
++    fn are_floats_enabled(&self) -> bool;
++
+     /// Returns whether the CLIF `x86_blendv` instruction should be used for the
+     /// relaxed simd `*.relaxed_laneselect` instruction for the specified type.
+     fn use_x86_blendv_for_relaxed_laneselect(&self, ty: Type) -> bool {
+diff --git a/crates/cache/src/config.rs b/crates/cache/src/config.rs
+index 62fc6e93..ddc19ccb 100644
+--- a/crates/cache/src/config.rs
++++ b/crates/cache/src/config.rs
+@@ -345,7 +345,13 @@ impl CacheConfig {
+     /// Parses cache configuration from the file specified
+     pub fn from_file(config_file: Option<&Path>) -> Result<Self> {
+         let mut config = Self::load_and_parse_file(config_file)?;
++        Self::validate_all(&mut config)?;
++        Ok(config)
++    }
+ 
++    /// validate values and fill in defaults
++    /// all validations; not self for minimal diff
++    pub fn validate_all(config: &mut CacheConfig) -> Result<()> {
+         // validate values and fill in defaults
+         config.validate_directory_or_default()?;
+         config.validate_worker_event_queue_size_or_default();
+@@ -360,8 +366,7 @@ impl CacheConfig {
+         config.validate_file_count_limit_percent_if_deleting_or_default()?;
+         config.validate_files_total_size_limit_percent_if_deleting_or_default()?;
+         config.spawn_worker();
+-
+-        Ok(config)
++        Ok(())
+     }
+ 
+     fn spawn_worker(&mut self) {
+diff --git a/crates/cranelift/src/func_environ.rs b/crates/cranelift/src/func_environ.rs
+index f2392754..5367e31a 100644
+--- a/crates/cranelift/src/func_environ.rs
++++ b/crates/cranelift/src/func_environ.rs
+@@ -2814,6 +2814,14 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
+         if self.tunables.consume_fuel && state.reachable() {
+             self.fuel_after_op(op, builder);
+         }
++        if state.reachable() {
++            match op {
++                Operator::Loop {..} => {
++                    self.check_graceful_shutdown(builder);
++                }
++                _ => {}
++            }
++        }
+         Ok(())
+     }
+ 
+@@ -2828,6 +2836,20 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
+         Ok(())
+     }
+ 
++    fn check_graceful_shutdown(&mut self, builder: &mut FunctionBuilder<'_>) {
++        debug_assert!(!self.vmruntime_limits_ptr.is_reserved_value());
++
++        let off = i32::from(self.offsets.ptr.vmruntime_limits_should_quit_bool());
++        let ptr = builder.ins().load(self.pointer_type(), ir::MemFlags::trusted(), self.vmruntime_limits_ptr, Offset32::new(off));
++        let loaded = builder.ins().atomic_load(ir::types::I32, ir::MemFlags::trusted(), ptr);
++
++        if self.signals_based_traps() {
++            builder.ins().trapnz(loaded, ir::TrapCode::Interrupt);
++        } else {
++            self.conditionally_trap(builder, loaded, ir::TrapCode::Interrupt);
++        }
++    }
++
+     fn before_translate_function(
+         &mut self,
+         builder: &mut FunctionBuilder,
+@@ -2844,7 +2866,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
+ 
+         // If the `vmruntime_limits_ptr` variable will get used then we initialize
+         // it here.
+-        if self.tunables.consume_fuel || self.tunables.epoch_interruption {
++        if true || self.tunables.consume_fuel || self.tunables.epoch_interruption {
+             self.declare_vmruntime_limits_ptr(builder);
+         }
+         // Additionally we initialize `fuel_var` if it will get used.
+@@ -2856,6 +2878,8 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
+             self.epoch_function_entry(builder);
+         }
+ 
++        self.check_graceful_shutdown(builder);
++
+         #[cfg(feature = "wmemcheck")]
+         if self.wmemcheck {
+             let func_name = self.current_func_name(builder);
+@@ -3143,6 +3167,18 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
+             )
+         }
+     }
++
++    fn fuel_before_unreachable(&mut self, builder: &mut FunctionBuilder) {
++        if !self.tunables.consume_fuel {
++            return
++        }
++        self.fuel_increment_var(builder);
++        self.fuel_save_from_var(builder);
++    }
++
++    fn are_floats_enabled(&self) -> bool {
++        return self.tunables.floats_enabled;
++    }
+ }
+ 
+ // Helper function to convert an `IndexType` to an `ir::Type`.
+diff --git a/crates/cranelift/src/lib.rs b/crates/cranelift/src/lib.rs
+index 467a994e..1c040e4d 100644
+--- a/crates/cranelift/src/lib.rs
++++ b/crates/cranelift/src/lib.rs
+@@ -250,6 +250,9 @@ fn clif_trap_to_env_trap(trap: ir::TrapCode) -> Option<Trap> {
+         ir::TrapCode::NullReference => Trap::NullReference,
+         ir::TrapCode::ArrayOutOfBounds => Trap::ArrayOutOfBounds,
+ 
++        ir::TrapCode::DeterministicMode => Trap::DeterministicMode,
++
++
+         // These do not get converted to wasmtime traps, since they
+         // shouldn't ever be hit in theory. Instead of catching and handling
+         // these, we let the signal crash the process.
+diff --git a/crates/environ/src/trap_encoding.rs b/crates/environ/src/trap_encoding.rs
+index 9b92336a..c362abf1 100644
+--- a/crates/environ/src/trap_encoding.rs
++++ b/crates/environ/src/trap_encoding.rs
+@@ -82,6 +82,8 @@ pub enum Trap {
+     /// would have violated the reentrance rules of the component model,
+     /// triggering a trap instead.
+     CannotEnterComponent,
++
++    DeterministicMode,
+     // if adding a variant here be sure to update the `check!` macro below
+ }
+ 
+@@ -116,6 +118,7 @@ impl Trap {
+             NullReference
+             ArrayOutOfBounds
+             CannotEnterComponent
++            DeterministicMode
+         }
+ 
+         None
+@@ -144,6 +147,7 @@ impl fmt::Display for Trap {
+             NullReference => "null reference",
+             ArrayOutOfBounds => "out of bounds array access",
+             CannotEnterComponent => "cannot enter component instance",
++            DeterministicMode => "deterministic mode violation (cpu)",
+         };
+         write!(f, "wasm trap: {desc}")
+     }
+diff --git a/crates/environ/src/tunables.rs b/crates/environ/src/tunables.rs
+index ddf31712..f903a9a7 100644
+--- a/crates/environ/src/tunables.rs
++++ b/crates/environ/src/tunables.rs
+@@ -66,6 +66,9 @@ pub struct Tunables {
+     /// Whether or not the host will be using native signals (e.g. SIGILL,
+     /// SIGSEGV, etc) to implement traps.
+     pub signals_based_traps: bool,
++
++    /// Whether floats enabled
++    pub floats_enabled: bool,
+ }
+ 
+ impl Tunables {
+@@ -118,6 +121,7 @@ impl Tunables {
+             relaxed_simd_deterministic: false,
+             winch_callable: false,
+             signals_based_traps: true,
++            floats_enabled: true,
+         }
+     }
+ 
+diff --git a/crates/environ/src/vmoffsets.rs b/crates/environ/src/vmoffsets.rs
+index c6c354d2..4fd9e126 100644
+--- a/crates/environ/src/vmoffsets.rs
++++ b/crates/environ/src/vmoffsets.rs
+@@ -178,6 +178,11 @@ pub trait PtrSize {
+         self.vmruntime_limits_last_wasm_exit_pc() + self.size()
+     }
+ 
++    /// field to check boolean
++    fn vmruntime_limits_should_quit_bool(&self) -> u8 {
++        self.vmruntime_limits_last_wasm_entry_sp() + self.size()
++    }
++
+     // Offsets within `VMMemoryDefinition`
+ 
+     /// The offset of the `base` field.
+diff --git a/crates/wasmtime/src/config.rs b/crates/wasmtime/src/config.rs
+index ba36aee5..66d59220 100644
+--- a/crates/wasmtime/src/config.rs
++++ b/crates/wasmtime/src/config.rs
+@@ -160,6 +160,7 @@ struct ConfigTunables {
+     debug_adapter_modules: Option<bool>,
+     relaxed_simd_deterministic: Option<bool>,
+     signals_based_traps: Option<bool>,
++    floats_enabled: Option<bool>,
+ }
+ 
+ /// User-provided configuration for the compiler.
+@@ -706,7 +707,8 @@ impl Config {
+         self
+     }
+ 
+-    fn wasm_feature(&mut self, flag: WasmFeatures, enable: bool) -> &mut Self {
++    /// set feature
++    pub fn wasm_feature(&mut self, flag: WasmFeatures, enable: bool) -> &mut Self {
+         self.enabled_features.set(flag, enable);
+         self.disabled_features.set(flag, !enable);
+         self
+@@ -885,6 +887,17 @@ impl Config {
+         self
+     }
+ 
++    /// enables runtime checks for floating point operations
++    pub fn wasm_floats_enabled(&mut self, enable: bool) -> &mut Self {
++        self.tunables.floats_enabled = Some(enable);
++        self
++    }
++
++    /// get features
++    pub fn get_features(&self) -> &WasmFeatures {
++        return &self.enabled_features;
++    }
++
+     /// This option can be used to control the behavior of the [relaxed SIMD
+     /// proposal's][proposal] instructions.
+     ///
+@@ -1204,6 +1217,14 @@ impl Config {
+         Ok(self)
+     }
+ 
++    /// set cache as is
++    #[cfg(feature = "cache")]
++    pub fn cache_config_set(&mut self, cache_config: CacheConfig) -> Result<&mut Self> {
++        self.cache_config = cache_config;
++        CacheConfig::validate_all(&mut self.cache_config)?;
++        Ok(self)
++    }
++
+     /// Disable caching.
+     ///
+     /// Every call to [`Module::new(my_wasm)`][crate::Module::new] will
+@@ -1947,6 +1968,7 @@ impl Config {
+             debug_adapter_modules
+             relaxed_simd_deterministic
+             signals_based_traps
++            floats_enabled
+         }
+ 
+         // If we're going to compile with winch, we must use the winch calling convention.
+diff --git a/crates/wasmtime/src/engine/serialization.rs b/crates/wasmtime/src/engine/serialization.rs
+index ced555df..06073a31 100644
+--- a/crates/wasmtime/src/engine/serialization.rs
++++ b/crates/wasmtime/src/engine/serialization.rs
+@@ -371,6 +371,8 @@ impl Metadata<'_> {
+             relaxed_simd_deterministic,
+             winch_callable,
+             signals_based_traps,
++            floats_enabled,
++
+             // This doesn't affect compilation, it's just a runtime setting.
+             dynamic_memory_growth_reserve: _,
+ 
+@@ -441,6 +443,7 @@ impl Metadata<'_> {
+             other.signals_based_traps,
+             "Signals-based traps",
+         )?;
++        Self::check_bool(floats_enabled, other.floats_enabled, "floats support")?;
+ 
+         Ok(())
+     }
+diff --git a/crates/wasmtime/src/runtime/store.rs b/crates/wasmtime/src/runtime/store.rs
+index bf21c4a6..03b3e667 100644
+--- a/crates/wasmtime/src/runtime/store.rs
++++ b/crates/wasmtime/src/runtime/store.rs
+@@ -309,6 +309,8 @@ pub struct StoreOpaque {
+     // within a `Store`.
+     _marker: marker::PhantomPinned,
+ 
++    genvm_ctx: Arc<std::sync::atomic::AtomicU32>,
++
+     engine: Engine,
+     runtime_limits: VMRuntimeLimits,
+     instances: Vec<StoreInstance>,
+@@ -527,12 +529,13 @@ impl<T> Store<T> {
+     /// The store will limit the number of instances, linear memories, and
+     /// tables created to 10,000. This can be overridden with the
+     /// [`Store::limiter`] configuration method.
+-    pub fn new(engine: &Engine, data: T) -> Self {
++    pub fn new(engine: &Engine, data: T, genvm_ctx: Arc<std::sync::atomic::AtomicU32>) -> Self {
+         let pkey = engine.allocator().next_available_pkey();
+ 
+         let mut inner = Box::new(StoreInner {
+             inner: StoreOpaque {
+                 _marker: marker::PhantomPinned,
++                genvm_ctx,
+                 engine: engine.clone(),
+                 runtime_limits: Default::default(),
+                 instances: Vec::new(),
+@@ -577,6 +580,7 @@ impl<T> Store<T> {
+             epoch_deadline_behavior: None,
+             data: ManuallyDrop::new(data),
+         });
++        inner.runtime_limits.should_quit_bool = core::cell::UnsafeCell::new(inner.genvm_ctx.as_ptr() as usize);
+ 
+         // Wasmtime uses the callee argument to host functions to learn about
+         // the original pointer to the `Store` itself, allowing it to
+@@ -2704,11 +2708,11 @@ impl<T> StoreInner<T> {
+     }
+ }
+ 
+-impl<T: Default> Default for Store<T> {
+-    fn default() -> Store<T> {
+-        Store::new(&Engine::default(), T::default())
+-    }
+-}
++//impl<T: Default> Default for Store<T> {
++//    fn default() -> Store<T> {
++//        Store::new(&Engine::default(), T::default())
++//    }
++//}
+ 
+ impl<T: fmt::Debug> fmt::Debug for Store<T> {
+     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+diff --git a/crates/wasmtime/src/runtime/vm/vmcontext.rs b/crates/wasmtime/src/runtime/vm/vmcontext.rs
+index 26e72a84..6dc83c38 100644
+--- a/crates/wasmtime/src/runtime/vm/vmcontext.rs
++++ b/crates/wasmtime/src/runtime/vm/vmcontext.rs
+@@ -813,6 +813,8 @@ pub struct VMRuntimeLimits {
+     /// Used to find the end of a contiguous sequence of Wasm frames when
+     /// walking the stack.
+     pub last_wasm_entry_sp: UnsafeCell<usize>,
++
++    pub should_quit_bool: UnsafeCell<usize>,
+ }
+ 
+ // The `VMRuntimeLimits` type is a pod-type with no destructor, and we don't
+@@ -831,6 +833,7 @@ impl Default for VMRuntimeLimits {
+             last_wasm_exit_fp: UnsafeCell::new(0),
+             last_wasm_exit_pc: UnsafeCell::new(0),
+             last_wasm_entry_sp: UnsafeCell::new(0),
++            should_quit_bool: UnsafeCell::new(0),
+         }
+     }
+ }
+diff --git a/crates/wiggle/generate/src/wasmtime.rs b/crates/wiggle/generate/src/wasmtime.rs
+index cb488f99..cfa0f037 100644
+--- a/crates/wiggle/generate/src/wasmtime.rs
++++ b/crates/wiggle/generate/src/wasmtime.rs
+@@ -2,6 +2,7 @@ use crate::config::Asyncness;
+ use crate::funcs::func_bounds;
+ use crate::names;
+ use crate::CodegenSettings;
++use heck::ToUpperCamelCase;
+ use proc_macro2::{Ident, Span, TokenStream};
+ use quote::{format_ident, quote};
+ use std::collections::HashSet;
+@@ -46,6 +47,33 @@ pub fn link_module(
+         format_ident!("add_{}_to_linker", module_ident)
+     };
+ 
++    // comment to minimize delta
++    let ctx_ref_type = module.docs.contains("@CONTEXT_REF_TYPE@");
++    if ctx_ref_type {
++        let module_ident_trait = names::trait_name(&module.name);
++        let trait_name = if target_path.is_none() {
++            format_ident!("AddToLinkerFn")
++        } else {
++            format_ident!("Add{}ToLinkerFn", module.name.as_str().to_upper_camel_case())
++        };
++        return quote! {
++            pub trait #trait_name<T> {
++                fn call<'a>(&self, arg: &'a mut T) -> impl #target_path::#module_ident::#module_ident_trait + Send
++                where T: Send;
++            }
++            /// Adds all instance items to the specified `Linker`.
++            pub fn #func_name<T>(
++                linker: &mut wiggle::wasmtime_crate::Linker<T>,
++                get_cx: impl #trait_name<T> + Send + Sync + Copy + 'static,
++            ) -> wiggle::anyhow::Result<()>
++            where T: Send
++            {
++                #(#bodies)*
++                Ok(())
++            }
++        }
++    }
++
+     let u = if settings.mutable {
+         quote!(&mut U)
+     } else {
+@@ -113,21 +141,33 @@ fn generate_func(
+         quote!( #field_ident )
+     };
+ 
++    let ctx_ref_type = module.docs.contains("@CONTEXT_REF_TYPE@");
++    let get_cx = if ctx_ref_type {
++        quote! {get_cx.call}
++    } else {
++        quote! {get_cx}
++    };
++    let cx_ref = if ctx_ref_type {
++        quote! {&mut}
++    } else {
++        quote! {}
++    };
++
+     let body = quote! {
+         let export = caller.get_export("memory");
+-        let (mut mem, ctx) = match &export {
++        let (mut mem, mut ctx) = match &export {
+             Some(wiggle::wasmtime_crate::Extern::Memory(m)) => {
+                 let (mem, ctx) = m.data_and_store_mut(&mut caller);
+-                let ctx = get_cx(ctx);
++                let ctx = #get_cx(ctx);
+                 (wiggle::GuestMemory::Unshared(mem), ctx)
+             }
+             Some(wiggle::wasmtime_crate::Extern::SharedMemory(m)) => {
+-                let ctx = get_cx(caller.data_mut());
++                let ctx = #get_cx(caller.data_mut());
+                 (wiggle::GuestMemory::Shared(m.data()), ctx)
+             }
+             _ => wiggle::anyhow::bail!("missing required memory export"),
+         };
+-        Ok(<#ret_ty>::from(#abi_func(ctx, &mut mem #(, #arg_names)*) #await_ ?))
++        Ok(<#ret_ty>::from(#abi_func(#cx_ref ctx, &mut mem #(, #arg_names)*) #await_ ?))
+     };
+ 
+     match asyncness {
