@@ -1,2 +1,2 @@
-yes, it is six
+[(0, 0, 0), (255, 255, 255)]
 executed with `Return("\x00")`

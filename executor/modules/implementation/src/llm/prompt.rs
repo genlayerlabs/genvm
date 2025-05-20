@@ -41,6 +41,7 @@ impl ImageType {
 
 #[derive(Serialize, Deserialize)]
 pub struct ImageLua {
+    #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
     pub kind: ImageType,
 }

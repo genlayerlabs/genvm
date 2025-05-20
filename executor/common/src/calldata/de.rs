@@ -324,7 +324,7 @@ where
             }
             _ => Err(serde::de::Error::custom("invalid type")),
         },
-        "genvm::calldata::types::Address" => match value {
+        "genvm_common::calldata::types::Address" => match value {
             Value::Address(addr) => {
                 let ptr = std::ptr::from_ref(&addr) as *const T::Value;
                 Ok(unsafe { ptr.read() })

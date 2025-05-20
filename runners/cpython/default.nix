@@ -35,7 +35,7 @@ let
 	pythonObjs = stdenvNoCC.mkDerivation {
 		name = "genvm-cpython-objs";
 
-		outputHash = "sha256-mNrvy6nvF5lQKhV3ozuXoml8aI3fTCjBN6a+cXsAmMo="; # this should not change unless new c native module is added
+		outputHash = "sha256-hOy3ReDsp+UdMCckk9A8Tgc/rI0rjpSp5aEoWflEmFs="; # this should not change unless new c native module is added
 		outputHashMode = "recursive";
 
 		nativeBuildInputs = with pkgs; [
@@ -100,10 +100,13 @@ let
 		installPhase = ''
 			mkdir -p "$out/obj"
 			mkdir -p "$out/py/"
+			mkdir -p "$out/include"
 
 			cp /build/genvm-cpython-deps/lib/*.a "$out/obj/"
 
-			cp -r /build/out/include "$out"/include
+			cp -r --dereference /build/genvm-cpython-deps/include/. "$out/include/."
+
+			cp -r /build/out/include/. "$out/include/."
 			cp -r /build/out/lib/python3.13/. "$out/py/std"
 			cp -r ./obj/. "$out/obj/"
 

@@ -1,5 +1,4 @@
 pub mod caching;
-pub mod calldata;
 pub mod config;
 pub mod errors;
 mod host;
@@ -9,6 +8,8 @@ pub mod runner;
 pub mod ustar;
 pub mod vm;
 pub mod wasi;
+
+pub use genvm_common::calldata;
 
 use errors::ContractError;
 use host::AbsentLeaderResult;

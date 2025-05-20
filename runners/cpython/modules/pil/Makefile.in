@@ -1,0 +1,8 @@
+OBJS = $(patsubst %.c,obj/%.o,$(SRCS))
+
+all: $(OBJS)
+.PHONY: all
+
+obj/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@

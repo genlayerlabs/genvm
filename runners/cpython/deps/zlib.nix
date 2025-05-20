@@ -8,7 +8,7 @@ stdenvNoCC.mkDerivation {
 	pname = "genvm-zlib";
 	version = "1.3.1";
 
-	outputHash = "sha256-7qQEXxba8MaDA/mKTa8kdiGkf30beoBtDLeNDBeCRjA=";
+	outputHash = "sha256-4ECZt8Msre4OkTjJ+a+fiwXYBovqe7WdM5CwElQqUkQ=";
 	outputHashMode = "recursive";
 
 	src = pkgs.fetchzip {

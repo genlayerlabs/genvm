@@ -901,7 +901,10 @@ name = "genvm-common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "hex",
  "log",
+ "num-bigint",
+ "primitive-types",
  "regex",
  "serde",
  "serde_json",

@@ -22,7 +22,7 @@ where
     d.serialize_u8(*data as u8)
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(serde::Serialize)]
 pub struct TransformedMessage {
     pub contract_address: calldata::Address,
     pub sender_address: calldata::Address,
@@ -40,6 +40,29 @@ pub struct TransformedMessage {
     pub entry_data: Vec<u8>,
 
     pub entry_stage_data: calldata::Value,
+}
+
+impl std::fmt::Debug for TransformedMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let entry_stage_data_str = if matches!(self.entry_stage_data, calldata::Value::Null) {
+            "Null"
+        } else {
+            "..."
+        };
+        f.debug_struct("TransformedMessage")
+            .field("contract_address", &self.contract_address)
+            .field("sender_address", &self.sender_address)
+            .field("origin_address", &self.origin_address)
+            .field("stack", &self.stack)
+            .field("chain_id", &self.chain_id)
+            .field("value", &self.value)
+            .field("is_init", &self.is_init)
+            .field("datetime", &self.datetime)
+            .field("entry_kind", &self.entry_kind)
+            .field("entry_data", &self.entry_data.len())
+            .field("entry_stage_data", &entry_stage_data_str)
+            .finish()
+    }
 }
 
 fn default_entry_stage_data() -> calldata::Value {
@@ -131,18 +154,16 @@ pub(crate) mod generated {
     });
 }
 
-impl calldata::Address {
-    fn read_from_mem(
-        mem: &mut wiggle::GuestMemory<'_>,
-        addr: wiggle::GuestPtr<u8>,
-    ) -> Result<Self, generated::types::Error> {
-        let cow = mem.as_cow(addr.as_array(calldata::ADDRESS_SIZE.try_into().unwrap()))?;
-        let mut ret = Self::zero();
-        for (x, y) in ret.ref_mut().iter_mut().zip(cow.iter()) {
-            *x = *y;
-        }
-        Ok(ret)
+fn read_addr_from_mem(
+    mem: &mut wiggle::GuestMemory<'_>,
+    addr: wiggle::GuestPtr<u8>,
+) -> Result<calldata::Address, generated::types::Error> {
+    let cow = mem.as_cow(addr.as_array(calldata::ADDRESS_SIZE.try_into().unwrap()))?;
+    let mut ret = calldata::Address::zero();
+    for (x, y) in ret.ref_mut().iter_mut().zip(cow.iter()) {
+        *x = *y;
     }
+    Ok(ret)
 }
 
 impl SlotID {
@@ -296,18 +317,16 @@ where
 {
     match fut.await? {
         Ok(r) => {
-            let data = serde_json::json!({
-                "ok": r
-            });
+            let r = calldata::to_value(&r)?;
+            let data = calldata::Value::Map(BTreeMap::from([("ok".to_owned(), r)]));
 
-            Ok(Box::from(serde_json::to_vec(&data)?))
+            Ok(Box::from(calldata::encode(&data)))
         }
         Err(e) => {
-            let data = serde_json::json!({
-                "error": e
-            });
+            let e = calldata::to_value(&e)?;
+            let data = calldata::Value::Map(BTreeMap::from([("error".to_owned(), e)]));
 
-            Ok(Box::from(serde_json::to_vec(&data)?))
+            Ok(Box::from(calldata::encode(&data)))
         }
     }
 }
@@ -739,7 +758,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         account: wiggle::GuestPtr<u8>,
         result: wiggle::GuestPtr<u8>,
     ) -> Result<(), generated::types::Error> {
-        let address = calldata::Address::read_from_mem(mem, account)?;
+        let address = read_addr_from_mem(mem, account)?;
 
         self.context
             .get_balance_impl_wasi(mem, address, result, false)

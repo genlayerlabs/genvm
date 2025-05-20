@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use futures_util::{stream::FusedStream, SinkExt, StreamExt};
-use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
+use genvm_common::calldata;
+use tokio_tungstenite::tungstenite::{Bytes, Message};
 
 type WSStream =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
@@ -20,7 +21,7 @@ pub struct Module {
     host_data: Arc<serde_json::Value>,
 }
 
-async fn read_handling_pings(stream: &mut WSStream) -> anyhow::Result<Utf8Bytes> {
+async fn read_handling_pings(stream: &mut WSStream) -> anyhow::Result<Bytes> {
     loop {
         match stream
             .next()
@@ -32,10 +33,11 @@ async fn read_handling_pings(stream: &mut WSStream) -> anyhow::Result<Utf8Bytes>
             }
             Message::Pong(_) => {}
             Message::Close(_) => anyhow::bail!("stream closed"),
-            Message::Text(text) => return Ok(text),
+            Message::Text(text) => return Ok(text.into()),
+            Message::Binary(text) => return Ok(text),
             x => {
                 log::info!(payload:? = x; "received unexpected");
-                let text = x.into_text()?;
+                let text = x.into_data();
                 return Ok(text);
             }
         }
@@ -86,11 +88,14 @@ impl Module {
 
             let (mut ws_stream, _) = tokio_tungstenite::connect_async(&zelf.url).await?;
 
-            let msg = serde_json::to_string(&genvm_modules_interfaces::GenVMHello {
+            let msg = calldata::to_value(&genvm_modules_interfaces::GenVMHello {
                 cookie: self.cookie.clone(),
                 host_data: self.host_data.clone(),
             })?;
-            ws_stream.send(Message::Text(msg.into())).await?;
+
+            ws_stream
+                .send(Message::Binary(calldata::encode(&msg).into()))
+                .await?;
 
             zelf.stream = Some(ws_stream);
         }
@@ -98,12 +103,15 @@ impl Module {
         match &mut zelf.stream {
             None => unreachable!(),
             Some(stream) => {
-                let payload = serde_json::to_string(&val)?;
-                stream.send(Message::Text(payload.into())).await?;
+                let val = calldata::to_value(&val)?;
+                let payload = calldata::encode(&val);
+                stream.send(Message::Binary(payload.into())).await?;
                 let response = read_handling_pings(stream).await?;
 
+                let response = calldata::decode(&response)?;
+
                 let res: genvm_modules_interfaces::Result<R> =
-                    serde_json::from_str(&response).with_context(|| "parsing result of module")?;
+                    calldata::from_value(response).with_context(|| "parsing result of module")?;
 
                 log::info!(name = self.name, question:serde = val, response:serde = res; "answer from module");
 
