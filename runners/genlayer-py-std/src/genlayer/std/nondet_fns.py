@@ -106,11 +106,13 @@ class ExecPromptKwArgs(typing.TypedDict):
 	"""
 	Defaults to ``text``
 	"""
-	image: typing.NotRequired[bytes | Image | None]
+	images: typing.NotRequired[collections.abc.Sequence[bytes | Image] | None]
 
 
 @typing.overload
-def exec_prompt(prompt: str, *, image: bytes | Image | None = None) -> str: ...
+def exec_prompt(
+	prompt: str, *, images: collections.abc.Sequence[bytes | Image] | None = None
+) -> str: ...
 
 
 @typing.overload
@@ -118,7 +120,7 @@ def exec_prompt(
 	prompt: str,
 	*,
 	response_format: typing.Literal['text'],
-	image: bytes | Image | None = None,
+	images: collections.abc.Sequence[bytes | Image] | None = None,
 ) -> str: ...
 
 
@@ -147,16 +149,19 @@ def exec_prompt(
 	:rtype: ``str``
 	"""
 
-	if im := config.get('image', None):
+	images: list[bytes] = []
+	for im in config.get('images', None) or []:
 		if isinstance(im, Image):
-			im = im.raw
+			images.append(im.raw)
+		else:
+			images.append(im)
 
 	return gl_call.gl_call_generic(
 		{
 			'ExecPrompt': {
 				'prompt': prompt,
 				'response_format': config.get('response_format', 'text'),
-				'image': im,
+				'images': images,
 			}
 		},
 		_decode_nondet,

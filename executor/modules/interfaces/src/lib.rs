@@ -114,12 +114,14 @@ pub mod llm {
     }
 
     #[derive(Serialize, Deserialize, Debug)]
+    pub struct Image(#[serde(with = "serde_bytes")] pub Vec<u8>);
+
+    #[derive(Serialize, Deserialize, Debug)]
     pub struct PromptPayload {
         #[serde(default = "default_text")]
         pub response_format: OutputFormat,
         pub prompt: String,
-        #[serde(with = "serde_bytes")]
-        pub image: Option<Vec<u8>>,
+        pub images: Vec<Image>,
     }
 
     #[derive(Serialize, Deserialize)]

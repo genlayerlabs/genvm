@@ -118,6 +118,20 @@ impl<'de> serde::de::Deserialize<'de> for Value {
 
                 Ok(Value::Map(map))
             }
+
+            fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Value::Bytes(v))
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Value::Bytes(v.to_owned()))
+            }
         }
 
         deserializer.deserialize_any(ValueVisitor)

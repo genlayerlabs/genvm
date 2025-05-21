@@ -95,3 +95,12 @@ impl std::fmt::Debug for Value {
         }
     }
 }
+
+impl Value {
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Value::Str(s) => Some(s),
+            _ => None,
+        }
+    }
+}

@@ -32,7 +32,7 @@ let
 	extraObj = stdenvNoCC.mkDerivation {
 		name = "genvm-cpython-mod-pil-objs";
 		outputHashMode = "recursive";
-		outputHash = "sha256-hGTSKu3MU+UE4zFR4ROUUYMc8ATts2bEjs2Y3L1hc28=";
+		outputHash = "sha256-ki3HsZfSdrj0zGYm69VCakj35sPYmrAupOLmQtvyHak=";
 
 		srcs = [
 			pythonObjs

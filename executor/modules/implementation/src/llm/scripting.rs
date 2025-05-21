@@ -135,7 +135,7 @@ impl UserVM {
 
         let greyboxing = vm.to_value_with(&greyboxing, DEFAULT_LUA_SER_OPTIONS)?;
         let log_fn = vm.create_function(|vm: &mlua::Lua, data: mlua::Value| {
-            let mut as_serde: serde_json::Map<String, serde_json::Value> = vm.from_value(data)?;
+            let mut as_serde: BTreeMap<String, LogValue> = vm.from_value(data)?;
 
             let level = as_serde.remove("level");
             let level = level.and_then(|x| x.as_str().map(|x| x.to_owned())).map(|x| log::Level::from_str(&x).unwrap_or(log::Level::Info)).unwrap_or(log::Level::Info);
@@ -197,19 +197,24 @@ impl UserVM {
 
         let handler = mlua::Value::UserData(self.vm.create_userdata(handler)?);
 
-        let image = match &payload.image {
-            None => mlua::Value::Nil,
-            Some(v) => {
-                let kind = ImageType::sniff(v).ok_or(ModuleResultUserError(serde_json::json!(
-                    "can't sniff image type. only png and jpg are supported"
-                )))?;
+        let images: anyhow::Result<Vec<mlua::Value>> = payload
+            .images
+            .iter()
+            .map(|v| {
+                let kind = ImageType::sniff(&v.0).ok_or(ModuleResultUserError(
+                    serde_json::json!("can't sniff image type. only png and jpg are supported"),
+                ))?;
                 let as_arc = Arc::new(ImageLua {
-                    data: v.clone(),
+                    data: v.0.clone(),
                     kind,
                 });
-                mlua::Value::UserData(self.vm.create_ser_any_userdata(as_arc)?)
-            }
-        };
+                Ok(mlua::Value::UserData(
+                    self.vm.create_ser_any_userdata(as_arc)?,
+                ))
+            })
+            .collect();
+
+        let images = images?;
 
         let payload = self.vm.create_table_from([
             (
@@ -222,7 +227,10 @@ impl UserVM {
                 self.vm
                     .to_value_with(&payload.prompt, DEFAULT_LUA_SER_OPTIONS)?,
             ),
-            ("image", image),
+            (
+                "images",
+                self.vm.to_value_with(&images, DEFAULT_LUA_SER_OPTIONS)?,
+            ),
         ])?;
 
         let arg = self.vm.create_table_from([
@@ -268,5 +276,26 @@ impl UserVM {
         let res = self.vm.from_value(res)?;
 
         Ok(res)
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum LogValue {
+    Null,
+    Bool(bool),
+    Str(String),
+    Bytes(#[serde(with = "serde_bytes")] Vec<u8>),
+    Number(f64),
+    Map(BTreeMap<String, LogValue>),
+    Array(Vec<LogValue>),
+}
+
+impl LogValue {
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            LogValue::Str(s) => Some(s),
+            _ => None,
+        }
     }
 }

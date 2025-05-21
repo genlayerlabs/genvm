@@ -128,22 +128,25 @@ fn handle_check(config: config::Config, args: CliArgsCheck) -> Result<()> {
     let backend: config::BackendConfig = serde_json::from_value(backend)?;
     let provider = backend.to_provider(common::create_client()?);
 
-    let res = runtime.block_on(provider
-        .exec_prompt_text(
+    let res = runtime.block_on(
+        provider.exec_prompt_text(
             &prompt::Internal {
                 system_message: None,
                 temperature: 0.7,
-                user_message: "Respond with a single word \"yes\" (without quotes) and only this word, lowercase".to_owned(),
-                image: None,
+                user_message:
+                    "Respond with two letters \"ok\" (without quotes) and only this word, lowercase"
+                        .to_owned(),
+                images: Vec::new(),
                 max_tokens: 30,
                 use_max_completion_tokens: true,
             },
             backend.script_config.models.first_key_value().unwrap().0,
-        ))?;
+        ),
+    )?;
 
     let res = res.trim().to_lowercase();
 
-    if res != "yes" {
+    if res != "ok" {
         anyhow::bail!(
             "provider is not functional, answer is `{}` instead of `yes`",
             res

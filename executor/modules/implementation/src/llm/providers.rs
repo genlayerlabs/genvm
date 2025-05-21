@@ -84,7 +84,7 @@ impl prompt::Internal {
             "text": self.user_message,
         }));
 
-        if let Some(img) = &self.image {
+        for img in &self.images {
             let mut encoded = "data:".to_owned();
             encoded.push_str(img.kind.media_type());
             encoded.push_str(";base64,");
@@ -115,7 +115,7 @@ impl prompt::Internal {
         }
 
         let mut parts = Vec::new();
-        if let Some(img) = &self.image {
+        for img in &self.images {
             parts.push(serde_json::json!({
                 "inline_data": {
                     "mime_type": img.kind.media_type(),
@@ -235,12 +235,14 @@ impl prompt::Internal {
             },
         });
 
-        if let Some(img) = &self.image {
-            request
-                .as_object_mut()
-                .unwrap()
-                .insert("images".into(), serde_json::json!([img.as_base64()]));
+        let mut images = Vec::new();
+        for img in &self.images {
+            images.push(serde_json::Value::String(img.as_base64()));
         }
+        request
+            .as_object_mut()
+            .unwrap()
+            .insert("images".into(), serde_json::Value::Array(images));
 
         if let Some(sys) = &self.system_message {
             request
@@ -290,11 +292,16 @@ impl Provider for OLlama {
             .unwrap()
             .insert("format".into(), "json".into());
 
-        if let Some(img) = &prompt.image {
+        let mut images = Vec::new();
+        for img in &prompt.images {
+            images.push(serde_json::Value::String(img.as_base64()));
+        }
+
+        if !images.is_empty() {
             request
                 .as_object_mut()
                 .unwrap()
-                .insert("images".into(), serde_json::json!([img.as_base64()]));
+                .insert("images".into(), serde_json::Value::Array(images));
         }
 
         if let Some(sys) = &prompt.system_message {
@@ -397,7 +404,7 @@ impl prompt::Internal {
     fn to_anthropic_no_format(&self, model: &str) -> serde_json::Value {
         let mut user_content = Vec::new();
 
-        if let Some(img) = &self.image {
+        for img in &self.images {
             user_content.push(serde_json::json!({"type": "image", "source": {
                 "type": "base64",
                 "media_type": img.kind.media_type(),
