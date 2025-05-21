@@ -820,13 +820,25 @@ impl Context {
         supervisor: &Arc<tokio::sync::Mutex<crate::vm::Supervisor>>,
         essential_data: SingleVMData,
     ) -> vm::RunResult {
-        let (mut vm, instance) = {
+        let limiter = if essential_data.conf.is_deterministic {
+            self.shared_data.limiter_det.clone()
+        } else {
+            self.shared_data.limiter_non_det.clone()
+        };
+
+        let (mut vm, instance, limiter_save) = {
             let mut supervisor = supervisor.lock().await;
+
             let mut vm = supervisor.spawn(essential_data).await?;
             let instance = supervisor.apply_contract_actions(&mut vm).await?;
-            (vm, instance)
+
+            (vm, instance, limiter.save())
         };
-        vm.run(&instance).await
+        let result = vm.run(&instance).await;
+
+        limiter.restore(limiter_save);
+
+        result
     }
 }
 

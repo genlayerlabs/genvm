@@ -124,23 +124,148 @@ impl std::fmt::Debug for RunOk {
 #[derive(Clone)]
 pub struct WasmContext {
     genlayer_ctx: Arc<Mutex<wasi::Context>>,
-    limits: wasmtime::StoreLimits,
+    limits: StoreLimiter,
+}
+
+pub struct StoreLimiterSaveTok {
+    remaining_memory: u32,
+}
+
+#[derive(Clone)]
+pub struct StoreLimiter {
+    id: &'static str,
+    remaining_memory: Arc<AtomicU32>,
+}
+
+impl StoreLimiter {
+    pub fn new(id: &'static str) -> Self {
+        StoreLimiter {
+            id,
+            remaining_memory: Arc::new(AtomicU32::new(u32::MAX)),
+        }
+    }
+
+    pub fn save(&self) -> StoreLimiterSaveTok {
+        StoreLimiterSaveTok {
+            remaining_memory: self
+                .remaining_memory
+                .load(std::sync::atomic::Ordering::SeqCst),
+        }
+    }
+
+    pub fn restore(&self, tok: StoreLimiterSaveTok) {
+        self.remaining_memory
+            .store(tok.remaining_memory, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl wasmtime::ResourceLimiter for StoreLimiter {
+    fn memory_growing(
+        &mut self,
+        current: usize,
+        desired: usize,
+        maximum: Option<usize>,
+    ) -> Result<bool> {
+        let delta = desired - current;
+        if delta > u32::MAX as usize {
+            return Ok(false);
+        }
+
+        let delta = delta as u32;
+
+        let mut remaining = self
+            .remaining_memory
+            .load(std::sync::atomic::Ordering::SeqCst);
+
+        log::debug!(current = current, desired = desired, maximum:? = maximum, delta = delta, remaining_at_op_start = remaining, id = self.id; "memory grow request");
+
+        loop {
+            if delta > remaining {
+                return Ok(false);
+            }
+
+            match self.remaining_memory.compare_exchange(
+                remaining,
+                remaining - delta,
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+            ) {
+                Ok(_) => break,
+                Err(new_remaining) => remaining = new_remaining,
+            }
+        }
+
+        Ok(true)
+    }
+
+    fn table_growing(
+        &mut self,
+        current: usize,
+        desired: usize,
+        maximum: Option<usize>,
+    ) -> Result<bool> {
+        let delta = desired - current;
+
+        const TABLE_CELL_SIZE: usize = 16;
+
+        let delta = match delta.checked_mul(TABLE_CELL_SIZE) {
+            Some(delta) => delta,
+            None => return Ok(false),
+        };
+
+        if delta > u32::MAX as usize {
+            return Ok(false);
+        }
+
+        let delta = delta as u32;
+
+        let mut remaining = self
+            .remaining_memory
+            .load(std::sync::atomic::Ordering::SeqCst);
+
+        log::debug!(current = current, desired = desired, maximum:? = maximum, delta = delta, remaining_at_op_start = remaining, id = self.id; "table grow request");
+
+        loop {
+            if delta > remaining {
+                return Ok(false);
+            }
+
+            match self.remaining_memory.compare_exchange(
+                remaining,
+                remaining - delta,
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+            ) {
+                Ok(_) => break,
+                Err(new_remaining) => remaining = new_remaining,
+            }
+        }
+
+        Ok(true)
+    }
+
+    fn instances(&self) -> usize {
+        1000
+    }
+
+    fn tables(&self) -> usize {
+        100
+    }
+
+    fn memories(&self) -> usize {
+        100
+    }
 }
 
 impl WasmContext {
     fn new(
         data: crate::wasi::genlayer_sdk::SingleVMData,
         shared_data: Arc<SharedData>,
+        limiter: StoreLimiter,
     ) -> anyhow::Result<WasmContext> {
         Ok(WasmContext {
             genlayer_ctx: Arc::new(Mutex::new(wasi::Context::new(data, shared_data)?)),
-            limits: wasmtime::StoreLimitsBuilder::new()
-                .memories(100)
-                .memory_size(2usize << 30)
-                .instances(1000)
-                .tables(1000)
-                .table_elements(1usize << 20)
-                .build(),
+            limits: limiter,
         })
     }
 }
@@ -163,6 +288,9 @@ pub struct SharedData {
     pub is_sync: bool,
     pub cookie: String,
     pub allow_latest: bool,
+
+    pub limiter_det: StoreLimiter,
+    pub limiter_non_det: StoreLimiter,
 }
 
 impl SharedData {
@@ -181,6 +309,8 @@ impl SharedData {
             balances: dashmap::DashMap::new(),
             cookie,
             allow_latest,
+            limiter_det: StoreLimiter::new("det"),
+            limiter_non_det: StoreLimiter::new("non-det"),
         }
     }
 }
@@ -576,15 +706,18 @@ impl Supervisor {
     pub async fn spawn(&mut self, data: crate::wasi::genlayer_sdk::SingleVMData) -> Result<VM> {
         let config_copy = data.conf;
 
-        let engine = if data.conf.is_deterministic {
-            &self.engines.det
+        let (engine, limiter) = if data.conf.is_deterministic {
+            (&self.engines.det, self.shared_data.limiter_det.clone())
         } else {
-            &self.engines.non_det
+            (
+                &self.engines.non_det,
+                self.shared_data.limiter_non_det.clone(),
+            )
         };
 
         let mut store = Store::new(
             engine,
-            WasmContext::new(data, self.shared_data.clone())?,
+            WasmContext::new(data, self.shared_data.clone(), limiter)?,
             self.shared_data.cancellation.should_quit.clone(),
         );
 
