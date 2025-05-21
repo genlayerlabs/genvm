@@ -22,7 +22,7 @@ where
     d.serialize_u8(*data as u8)
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Debug)]
 pub struct TransformedMessage {
     pub contract_address: calldata::Address,
     pub sender_address: calldata::Address,
@@ -40,29 +40,6 @@ pub struct TransformedMessage {
     pub entry_data: Vec<u8>,
 
     pub entry_stage_data: calldata::Value,
-}
-
-impl std::fmt::Debug for TransformedMessage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let entry_stage_data_str = if matches!(self.entry_stage_data, calldata::Value::Null) {
-            "Null"
-        } else {
-            "..."
-        };
-        f.debug_struct("TransformedMessage")
-            .field("contract_address", &self.contract_address)
-            .field("sender_address", &self.sender_address)
-            .field("origin_address", &self.origin_address)
-            .field("stack", &self.stack)
-            .field("chain_id", &self.chain_id)
-            .field("value", &self.value)
-            .field("is_init", &self.is_init)
-            .field("datetime", &self.datetime)
-            .field("entry_kind", &self.entry_kind)
-            .field("entry_data", &self.entry_data.len())
-            .field("entry_stage_data", &entry_stage_data_str)
-            .finish()
-    }
 }
 
 fn default_entry_stage_data() -> calldata::Value {
@@ -826,9 +803,15 @@ impl Context {
     }
 
     pub fn log(&self) -> serde_json::Value {
+        let mut msg = serde_json::to_value(&self.data.message_data).unwrap();
+
+        let remover = msg.as_object_mut().unwrap();
+        remover.remove("entry_data");
+        remover.remove("entry_stage_data");
+
         serde_json::json!({
             "config": &self.data.conf,
-            "message": self.data.message_data
+            "message": msg
         })
     }
 

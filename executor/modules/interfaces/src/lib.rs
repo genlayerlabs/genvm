@@ -113,28 +113,13 @@ pub mod llm {
         OutputFormat::Text
     }
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Serialize, Deserialize, Debug)]
     pub struct PromptPayload {
         #[serde(default = "default_text")]
         pub response_format: OutputFormat,
         pub prompt: String,
         #[serde(with = "serde_bytes")]
         pub image: Option<Vec<u8>>,
-    }
-
-    impl std::fmt::Debug for PromptPayload {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let img_str = if self.image.is_none() {
-                "None"
-            } else {
-                "Some()"
-            };
-            f.debug_struct("PromptPayload")
-                .field("response_format", &self.response_format)
-                .field("prompt", &self.prompt)
-                .field("image", &img_str)
-                .finish()
-        }
     }
 
     #[derive(Serialize, Deserialize)]

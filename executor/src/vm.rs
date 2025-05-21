@@ -280,7 +280,7 @@ impl VM {
     #[allow(clippy::manual_try_fold)]
     pub async fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
         if let Ok(lck) = self.store.data().genlayer_ctx.lock() {
-            log::info!(target: "vm", wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "run");
+            log::info!(wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "run");
         }
 
         let func = instance
@@ -853,6 +853,6 @@ impl Supervisor {
     }
 
     pub fn log_stats(&self) {
-        log::info!(all_wasm_modules:? = self.cached_modules.keys(), stats:serde = self.stats; "supervisor stats");
+        log::info!(all_wasm_modules:serde = self.cached_modules.keys().map(|x| x.as_str()).collect_vec(), stats:serde = self.stats; "supervisor stats");
     }
 }
