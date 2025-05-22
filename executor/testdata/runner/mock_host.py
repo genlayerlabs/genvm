@@ -64,7 +64,6 @@ class MockHost(IHost):
 		messages_path: Path,
 		storage_path_pre: Path,
 		storage_path_post: Path,
-		codes: dict[Address, typing.Any],
 		balances: dict[Address, int],
 		leader_nondet,
 	):
@@ -73,7 +72,6 @@ class MockHost(IHost):
 		self.storage_path_pre = storage_path_pre
 		self.storage_path_post = storage_path_post
 		self.leader_nondet = leader_nondet
-		self.codes = codes
 		self.storage = None
 		self.sock = None
 		self.thread = None
@@ -118,16 +116,6 @@ class MockHost(IHost):
 
 	async def get_calldata(self) -> bytes:
 		return self.calldata
-
-	async def get_code(self, addr_b: bytes) -> bytes:
-		addr = Address(addr_b)
-		res = self.codes.get(addr, None)
-		if res is not None:
-			res = res.get('code', None)
-		if res is None:
-			raise Exception(f'no code for {addr}')
-		with open(res, 'rb') as f:
-			return f.read()
 
 	async def storage_read(
 		self, mode: StorageType, account: bytes, slot: bytes, index: int, le: int

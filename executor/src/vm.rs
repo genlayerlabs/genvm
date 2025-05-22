@@ -962,7 +962,9 @@ impl Supervisor {
         let contract_id = runner::get_id_of_contract(contract_address);
 
         let provide_arch = || {
-            let code = self.host.get_code(&contract_address)?;
+            let code = self
+                .host
+                .get_code(vm.config_copy.state_mode, contract_address)?;
             Self::code_to_archive(SharedBytes::new(code))
         };
 

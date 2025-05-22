@@ -11,6 +11,10 @@ M.log = function(arg)
 end
 
 M.get_first_from_table = function(t)
+	if t == nil then
+		return nil
+	end
+
 	for k, v in pairs(t) do
 		return { key = k, value = v }
 	end
@@ -167,7 +171,7 @@ M.exec_prompt_template_transform = function(args)
 		system_message = my_template.system,
 		user_message = as_user_text,
 		temperature = 0.7,
-		images = args.payload.images,
+		images = {},
 		max_tokens = 1000,
 		use_max_completion_tokens = false,
 	}

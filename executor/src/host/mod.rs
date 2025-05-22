@@ -134,17 +134,25 @@ impl Host {
         Ok(())
     }
 
-    pub fn get_code(&mut self, account: &calldata::Address) -> Result<Box<[u8]>> {
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
-        sock.write_all(&[host_fns::Methods::GetCode as u8])?;
-        sock.write_all(&account.raw())?;
+    pub fn get_code(&mut self, mode: StorageType, account: calldata::Address) -> Result<Box<[u8]>> {
+        const ZERO_SLOT: SlotID = SlotID([0; 32]);
+        const CODE_SLOT: SlotID = SlotID([
+            234, 195, 150, 126, 245, 222, 133, 175, 141, 15, 88, 159, 124, 22, 152, 199, 80, 228,
+            224, 191, 155, 52, 77, 199, 151, 248, 169, 173, 195, 70, 45, 55,
+        ]);
 
-        handle_host_error(sock)?;
+        let mut buf = [0; 4];
 
-        read_bytes(sock)
+        self.storage_read(mode, account, ZERO_SLOT, 0, &mut buf)?;
+
+        let code_size = u32::from_le_bytes(buf);
+
+        let res = Box::new_uninit_slice(code_size as usize);
+        let mut res = unsafe { res.assume_init() };
+
+        self.storage_read(mode, account, CODE_SLOT, 0, &mut res)?;
+
+        Ok(res)
     }
 
     pub fn storage_read(

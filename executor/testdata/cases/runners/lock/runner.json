@@ -15,7 +15,7 @@
       ]
     },
     {
-      "Depends": "softfloat:17b5yad9r9jzcflawqi12r5llhgklfr6lp75r915r99l4wg8ni4n"
+      "Depends": "softfloat:test"
     },
     {
       "MapFile": {
@@ -25,7 +25,7 @@
     },
     {
       "With": {
-        "runner": "cpython:0n66aacpvbaksjsvbkgq17zqyw64z4np3ci26q6vrhxra57nm9kv",
+        "runner": "cpython:test",
         "action": {
           "Seq": [
             {

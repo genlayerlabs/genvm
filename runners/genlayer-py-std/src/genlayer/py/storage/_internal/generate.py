@@ -370,7 +370,7 @@ def _storage_build_struct(
 
 		def new_init_no_generic(self, *args, **kwargs):
 			if not hasattr(self, '_storage_slot'):
-				self._storage_slot = _FakeStorageMan().get_store_slot(ROOT_STORAGE_ADDRESS)
+				self._storage_slot = _FakeStorageMan().get_store_slot(CONTRACT_SLOT_ID)
 				self._off = 0
 				self.__type_desc__ = description
 			old_init(self, *args, **kwargs)

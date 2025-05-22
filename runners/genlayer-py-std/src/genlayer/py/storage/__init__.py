@@ -17,13 +17,13 @@ from ._internal.generate import ORIGINAL_INIT_ATTR
 
 def storage_inmem_allocate[T](t: typing.Type[T], *init_args, **init_kwargs) -> T:
 	from ._internal.generate import _storage_build, Lit
-	from ._internal.core import _FakeStorageMan, ROOT_STORAGE_ADDRESS
+	from ._internal.core import _FakeStorageMan, ROOT_SLOT_ID
 
 	td = _storage_build(t, {})
 	assert not isinstance(td, Lit)
 	man = _FakeStorageMan()
 
-	instance = td.get(man.get_store_slot(ROOT_STORAGE_ADDRESS), 0)
+	instance = td.get(man.get_store_slot(ROOT_SLOT_ID), 0)
 
 	init = getattr(td, 'cls', None)
 	if init is None:

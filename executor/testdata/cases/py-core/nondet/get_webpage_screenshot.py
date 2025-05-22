@@ -10,7 +10,9 @@ class Contract(gl.Contract):
 		def run():
 			img = gl.get_webpage('http://genvm-test/hello.html', mode='screenshot')
 
-			res = gl.exec_prompt('what image says? respond only with its contents', image=img)
+			res = gl.exec_prompt(
+				'what image says? respond only with its contents', images=[img]
+			)
 
 			return ''.join(c for c in res.strip().lower() if c.isalpha())
 
