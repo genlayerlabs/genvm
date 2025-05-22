@@ -368,26 +368,11 @@ fn try_get_latest(runner_id: &str, base_path: &std::path::Path) -> Option<String
 }
 
 fn make_new_runner_arch_from_tar(
-    shared_data: &SharedData,
     id: symbol_table::GlobalSymbol,
     base_path: &std::path::Path,
 ) -> Result<Archive> {
-    let (runner_id, mut runner_hash) =
+    let (runner_id, runner_hash) =
         runner::verify_runner(id.as_str()).with_context(|| format!("verifying {id}"))?;
-
-    let borrowed_latest: Option<String>;
-
-    if runner_hash == "test" || runner_hash == "latest" {
-        if !shared_data.allow_latest {
-            anyhow::bail!("test runner not allowed")
-        }
-
-        if let Some(borrowed) = try_get_latest(runner_id, base_path) {
-            borrowed_latest = Some(borrowed);
-
-            runner_hash = borrowed_latest.as_ref().unwrap();
-        }
-    }
 
     let mut path = std::path::PathBuf::from(base_path);
     path.push(runner_id);
@@ -755,6 +740,36 @@ impl Supervisor {
         }
     }
 
+    fn unfold_test_id_if_any(
+        &mut self,
+        ctx: &ApplyActionCtx,
+        id: symbol_table::GlobalSymbol,
+        path: &std::path::Path,
+    ) -> Result<symbol_table::GlobalSymbol> {
+        if id.as_str() == "<contract>" {
+            Ok(ctx.contract_id)
+        } else {
+            let (runner_id, runner_hash) =
+                runner::verify_runner(id.as_str()).with_context(|| format!("verifying {id}"))?;
+
+            if runner_hash == "test" || runner_hash == "latest" {
+                if !self.shared_data.allow_latest {
+                    anyhow::bail!("test/latest runner not allowed")
+                }
+
+                if let Some(borrowed) = try_get_latest(runner_id, path) {
+                    let mut new_id = runner_id.to_owned();
+                    new_id.push(':');
+                    new_id.push_str(&borrowed);
+
+                    return Ok(symbol_table::GlobalSymbol::new(new_id));
+                }
+            }
+
+            Ok(id)
+        }
+    }
+
     async fn apply_action_recursive(
         &mut self,
         vm: &mut VM,
@@ -879,32 +894,36 @@ impl Supervisor {
                 Ok(None)
             }
             InitAction::With { runner: id, action } => {
-                if id.as_str() == "<contract>" {
-                    return Box::pin(self.apply_action_recursive(vm, ctx, action, ctx.contract_id))
-                        .await;
-                }
                 let path = self.runner_cache.path().clone();
-                let _ = self.runner_cache.get_or_create(*id, || {
-                    make_new_runner_arch_from_tar(&self.shared_data, *id, &path)
-                })?;
-                Box::pin(self.apply_action_recursive(vm, ctx, action, *id))
+
+                let id = self.unfold_test_id_if_any(ctx, *id, &path)?;
+
+                let _ = self
+                    .runner_cache
+                    .get_or_create(id, || make_new_runner_arch_from_tar(id, &path))?;
+
+                Box::pin(self.apply_action_recursive(vm, ctx, action, id))
                     .await
                     .with_context(|| format!("With {id}"))
             }
             InitAction::Depends(id) => {
-                if !ctx.visited.insert(*id) {
+                let path = self.runner_cache.path().clone();
+
+                let id = self.unfold_test_id_if_any(ctx, *id, &path)?;
+
+                if !ctx.visited.insert(id) {
                     return Ok(None);
                 }
 
                 let path = self.runner_cache.path().clone();
-                let new_arch = self.runner_cache.get_or_create(*id, || {
-                    make_new_runner_arch_from_tar(&self.shared_data, *id, &path)
+                let new_arch = self.runner_cache.get_or_create(id, || {
+                    make_new_runner_arch_from_tar(id, &path)
                         .with_context(|| format!("loading {id}"))
                 })?;
                 let new_action = new_arch
                     .get_actions()
                     .with_context(|| format!("loading {id} runner.json"))?;
-                Box::pin(self.apply_action_recursive(vm, ctx, &new_action, *id))
+                Box::pin(self.apply_action_recursive(vm, ctx, &new_action, id))
                     .await
                     .with_context(|| format!("Depends {id}"))
             }

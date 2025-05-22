@@ -112,6 +112,15 @@ def run(jsonnet_rel_path):
 	shutil.rmtree(seq_tmp_dir, ignore_errors=True)
 	seq_tmp_dir.mkdir(exist_ok=True, parents=True)
 
+	if 'prepare' in jsonnet_conf[0]:
+		subprocess.run(
+			[sys.executable, jsonnet_conf[0]['prepare']],
+			stdin=subprocess.DEVNULL,
+			stdout=sys.stdout,
+			stderr=sys.stderr,
+			check=True,
+		)
+
 	base_mock_storage = MockStorage()
 	import base64
 
@@ -149,14 +158,6 @@ def run(jsonnet_rel_path):
 		post_storage = my_tmp_dir.joinpath('storage.pickle')
 		my_tmp_dir.mkdir(exist_ok=True, parents=True)
 
-		if 'prepare' in single_conf_form_file:
-			subprocess.run(
-				[sys.executable, single_conf_form_file['prepare']],
-				stdin=subprocess.DEVNULL,
-				stdout=sys.stdout,
-				stderr=sys.stderr,
-				check=True,
-			)
 		for acc_val in single_conf_form_file['accounts'].values():
 			code_path = acc_val.get('code', None)
 			if code_path is None:
