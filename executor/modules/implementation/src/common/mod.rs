@@ -85,12 +85,15 @@ pub trait MessageHandlerProvider<T, R>: Sync + Send {
 
 async fn loop_one_inner_handle<T, R>(
     handler: &mut impl MessageHandler<T, R>,
-    text: &str,
+    text: &[u8],
 ) -> ModuleResult<R>
 where
     T: serde::de::DeserializeOwned + 'static,
 {
-    let payload = serde_json::from_str(text).with_context(|| "parsing payload")?;
+    let payload = genvm_common::calldata::decode(text)
+        .with_context(|| format!("parsing calldata format {:?}", text))?;
+    let payload =
+        genvm_common::calldata::from_value(payload).with_context(|| "parsing calldata value")?;
     handler.handle(payload).await.with_context(|| "handling")
 }
 
@@ -117,8 +120,8 @@ where
             Message::Pong(_) => {}
             Message::Close(_) => return Ok(()),
             x => {
-                let text = x.into_text()?;
-                let res = loop_one_inner_handle(handler, text.as_str()).await;
+                let text = x.into_data();
+                let res = loop_one_inner_handle(handler, &text).await;
                 let res = match res {
                     Ok(res) => genvm_modules_interfaces::Result::Ok(res),
                     Err(res) => match res.downcast::<ModuleResultUserError>() {
@@ -133,8 +136,8 @@ where
                     },
                 };
 
-                let answer = serde_json::to_string(&res)?;
-                let message = Message::Text(answer.into());
+                let answer = genvm_common::calldata::to_value(&res)?;
+                let message = Message::Binary(genvm_common::calldata::encode(&answer).into());
 
                 stream.send(message).await?;
             }
@@ -158,9 +161,11 @@ async fn read_hello(
             Message::Pong(_) => {}
             Message::Close(_) => return Ok(None),
             x => {
-                let text = x.into_text()?;
+                let text = x.into_data();
+
+                let genvm_hello = genvm_common::calldata::decode(&text)?;
                 let genvm_hello: genvm_modules_interfaces::GenVMHello =
-                    serde_json::from_str(text.as_str())?;
+                    genvm_common::calldata::from_value(genvm_hello)?;
 
                 return Ok(Some(genvm_hello));
             }
@@ -301,7 +306,7 @@ pub fn setup_cancels(
 
     let canceller_cloned = canceller.clone();
     let handle_sigterm = move || {
-        log::warn!("sigterm received");
+        log::info!("sigterm received");
         canceller_cloned();
     };
     unsafe {

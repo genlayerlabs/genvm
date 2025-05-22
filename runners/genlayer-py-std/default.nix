@@ -5,7 +5,14 @@
 }@args:
 let
 	middle_runner_seq = [
-		{ SetArgs = ["py" "-u" "-c" "import contract; import genlayer.std._internal.runner"]; }
+		{
+			SetArgs = [
+				"py" # interpreter exe name
+				"-u" # unbuffered
+				"-B" # don't write .pyc
+				"-c" "import contract; import genlayer.std._internal.runner"
+			];
+		}
 		{ Depends = "${runnersLib.hashes.pyLibs.cloudpickle.uid}"; }
 		{ Depends = "${runnersLib.hashes.pyLibs."genlayer-std".uid}"; }
 		{ Depends = "${runnersLib.hashes.cpython.uid}"; }

@@ -11,6 +11,10 @@ M.log = function(arg)
 end
 
 M.get_first_from_table = function(t)
+	if t == nil then
+		return nil
+	end
+
 	for k, v in pairs(t) do
 		return { key = k, value = v }
 	end
@@ -24,7 +28,7 @@ M.exec_prompt_transform = function(args)
 		system_message = nil,
 		user_message = args.payload.prompt,
 		temperature = 0.7,
-		image = args.payload.image,
+		images = args.payload.images,
 
 		max_tokens = 1000,
 		use_max_completion_tokens = false,
@@ -42,7 +46,7 @@ M.exec_prompt_transform = function(args)
 	}
 end
 
-function shallow_copy(t)
+local function shallow_copy(t)
 	local ret = {}
 	for k, v in pairs(t) do
 		ret[k] = v
@@ -125,7 +129,7 @@ M.exec_in_backend = function(handler, x)
 end
 
 M.select_backends_for = function(args, format)
-	local has_image = args.payload.image ~= nil
+	local has_image = M.get_first_from_table(args.payload.images) ~= nil
 	if format == 'json' or format == 'bool' then
 		if has_image then
 			return M.backends_with_image_and_json_support
@@ -167,7 +171,7 @@ M.exec_prompt_template_transform = function(args)
 		system_message = my_template.system,
 		user_message = as_user_text,
 		temperature = 0.7,
-		image = args.payload.image,
+		images = {},
 		max_tokens = 1000,
 		use_max_completion_tokens = false,
 	}

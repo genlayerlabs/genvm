@@ -27,11 +27,11 @@ where
                 unsafe { std::ptr::NonNull::new_unchecked(as_ptr).as_ref() }.clone(),
             ))
         }
-        "genvm::calldata::types::Value" => {
+        "genvm_common::calldata::types::Value" => {
             let as_ptr = std::ptr::from_ref(value) as *mut Value; // should be const but non-null...
             Ok(unsafe { std::ptr::NonNull::new_unchecked(as_ptr).as_ref() }.clone())
         }
-        "genvm::calldata::types::Address" => {
+        "genvm_common::calldata::types::Address" => {
             let as_ptr = std::ptr::from_ref(value) as *const Address;
             Ok(Value::Address(unsafe { as_ptr.read() }))
         }

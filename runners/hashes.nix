@@ -14,25 +14,22 @@ let
 			__prefix = "py-lib-";
 
 			cloudpickle = {
-				hash = "sha256-irqj67OPfd0Ojm0k7pgIq8nwXpvg3qfGDPYcd+Msu2k=";
+				hash = "sha256-KxOzgp6P2EXWubDDEbFeL+fDA5pHkWWM3lnqTo9VHd8=";
 			};
 			protobuf = {
-				hash = "sha256-08SY0IQYOw8m+abzpN9DiscPRSQej7Oen+aJmMrRNzw=";
+				hash = "sha256-gbbFLhPUVsefodopQthwDPhwDmlDU06rZUPVMLeJOWY=";
 			};
 
 			word_piece_tokenizer = {
-				hash = "sha256-v9dMmXX0VH1XxbKxsIjw3JkNzbStAo/5Jx1m/dWJQP8=";
+				hash = "sha256-GI/J7iTPhXqn7RfUhIfQk/p8Zwi31vGIft5bvPLcnlQ=";
 			};
 
 			genlayer-std = {
-				hash = "sha256-wz0NzeEAOLLjsZuxcMbAxSS17WbfBL5fWvhmPpmQsQ8=";
-				depends = [
-					cpython
-				];
+				hash = "sha256-vbKVENZqL7TxnPbdX1D8jSRpU2D1m1GW347lExvPIG0=";
 			};
 
 			genlayer-embeddings = {
-				hash = "sha256-D1tEwnX+qDiX5f0f+mTndTGOTjcm2opE1eUhKEBH0pU=";
+				hash = "sha256-0ffWSIkGcJu1H4VyyfrRLoIODEvHGYR/J/BnnoCIACY=";
 
 				depends = [
 					models.all-MiniLM-L6-v2
@@ -43,7 +40,7 @@ let
 		};
 
 		cpython = {
-			hash = "sha256-YfiSguQcPYeCYDxyA8jNhuZF+JkjlUSmAuw7NcHNx/Q=";
+			hash = "sha256-QEdbmqYOjTOnNRCozWWt825mPSTOK8HbUhCgRUhbxug=";
 			depends = [
 				softfloat
 			];
@@ -56,15 +53,17 @@ let
 		wrappers = {
 			__prefix = "";
 			py-genlayer = {
-				hash = "sha256-pQwm4Lii7coN77fuwuWnSg62eA9SCSc1LeebzlD9IWg=";
+				hash = "sha256-0efHaPz6R7C8+2pJj5zhhCoPPDaFSsXa8Qd0AHnVtyQ=";
 				depends = [
+					cpython
 					pyLibs.cloudpickle
 					pyLibs.genlayer-std
 				];
 			};
 			py-genlayer-multi = {
-				hash = "sha256-78WBYGZ++luYOJqu4ARsEr9KSmfYzCYbTV03fjzdJJ4=";
+				hash = "sha256-Y+4AYCLWz6FwYXq0fD42cUR7X9SYT7LWWIpE2CWbw6k=";
 				depends = [
+					cpython
 					pyLibs.cloudpickle
 					pyLibs.genlayer-std
 				];
@@ -120,7 +119,7 @@ let
 
 				uid = "${id}:${hash32}";
 
-				excludeFromBuild = deducedHash == null && (hashHasSpecialDeps null val);
+				excludeFromBuild = hashHasSpecialDeps null val;
 			}
 	);
 in

@@ -7,30 +7,33 @@ import hashlib
 from genlayer.py.types import u256
 
 
-def _calculate_indirection_addr(l: u256, r: int) -> u256:
+def _calculate_indirection_addr(l: bytes, r: int) -> bytes:
 	hasher = hashlib.sha3_256()
-	hasher.update(l.to_bytes(32, 'little'))
+	hasher.update(l)
 	hasher.update(r.to_bytes(4, 'little'))
 	res = hasher.digest()
-	return u256(int.from_bytes(res, 'little'))
+	return res
 
 
 class StorageMan(typing.Protocol):
-	def get_store_slot(self, addr: u256) -> 'StorageSlot': ...
+	def get_store_slot(self, addr: bytes) -> 'StorageSlot': ...
 
 
 class StorageSlot:
 	manager: StorageMan
 
-	__slots__ = ('manager', 'addr')
+	__slots__ = ('manager', 'addr', '_indir_cache')
 
-	def __init__(self, addr: u256, manager: StorageMan):
+	def __init__(self, addr: bytes, manager: StorageMan):
 		self.addr = addr
 		self.manager = manager
 
+		self._indir_cache = hashlib.sha3_256(addr)
+
 	def indirect(self, off: int, /) -> 'StorageSlot':
-		addr = _calculate_indirection_addr(self.addr, off)
-		return self.manager.get_store_slot(addr)
+		hasher = self._indir_cache.copy()
+		hasher.update(off.to_bytes(4, 'little'))
+		return self.manager.get_store_slot(hasher.digest())
 
 	@abc.abstractmethod
 	def read(self, off: int, len: int, /) -> bytes:
@@ -145,7 +148,7 @@ class _FakeStorageSlot(StorageSlot):
 
 	_mem: bytearray
 
-	def __init__(self, addr: u256, manager: StorageMan):
+	def __init__(self, addr: bytes, manager: StorageMan):
 		StorageSlot.__init__(self, addr, manager)
 		self._mem = bytearray()
 
@@ -161,20 +164,22 @@ class _FakeStorageSlot(StorageSlot):
 
 
 class _FakeStorageMan(StorageMan):
-	_parts: dict[u256, _FakeStorageSlot]
+	_parts: dict[bytes, _FakeStorageSlot]
 
 	__slots__ = ('_parts',)
 
 	def __init__(self):
 		self._parts = {}
 
-	def get_store_slot(self, addr: u256) -> StorageSlot:
+	def get_store_slot(self, addr: bytes) -> StorageSlot:
 		return self._parts.setdefault(addr, _FakeStorageSlot(addr, self))
 
 	def debug(self):
 		print('=== fake storage ===')
 		for k, v in self._parts.items():
-			print(f'{hex(k)}\n\t{v._mem}')
+			print(f'{k.hex()}\n\t{v._mem}')
 
 
-ROOT_STORAGE_ADDRESS = u256(0)
+ROOT_SLOT_ID = b'\x00' * 32
+CODE_SLOT_ID = _FakeStorageMan().get_store_slot(ROOT_SLOT_ID).indirect(0).addr
+CONTRACT_SLOT_ID = _FakeStorageMan().get_store_slot(ROOT_SLOT_ID).indirect(4).addr

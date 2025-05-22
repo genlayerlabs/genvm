@@ -1,4 +1,4 @@
-__all__ = ('STORAGE_MAN', 'ROOT_STORAGE_ADDRESS')
+__all__ = ('STORAGE_MAN', 'ROOT_SLOT_ID', 'CONTRACT_SLOT_ID', 'CODE_SLOT_ID')
 
 from ...py.storage._internal.core import *
 from ...py.types import u256
@@ -11,12 +11,12 @@ import abc
 class _ActualStorageMan(StorageMan):
 	__slots__ = ('_slots',)
 
-	_slots: dict[u256, '_ActualStorageSlot']
+	_slots: dict[bytes, '_ActualStorageSlot']
 
 	def __init__(self):
 		self._slots = {}
 
-	def get_store_slot(self, addr: u256) -> '_ActualStorageSlot':
+	def get_store_slot(self, addr: bytes) -> '_ActualStorageSlot':
 		ret = self._slots.get(addr, None)
 		if ret is None:
 			ret = _ActualStorageSlot(addr, self)
@@ -27,17 +27,17 @@ class _ActualStorageMan(StorageMan):
 class _ActualStorageSlot(StorageSlot):
 	__slots__ = ()
 
-	def __init__(self, addr: u256, manager: StorageMan):
+	def __init__(self, addr: bytes, manager: StorageMan):
 		super().__init__(addr, manager)
 
 	def read(self, addr: int, len: int) -> bytes:
 		res = bytearray(len)
-		wasi.storage_read(int.to_bytes(self.addr, 32, 'little'), addr, res)
+		wasi.storage_read(self.addr, addr, res)
 		return bytes(res)
 
 	@abc.abstractmethod
 	def write(self, addr: int, what: collections.abc.Buffer) -> None:
-		wasi.storage_write(int.to_bytes(self.addr, 32, 'little'), addr, what)
+		wasi.storage_write(self.addr, addr, what)
 
 
 STORAGE_MAN = _ActualStorageMan()

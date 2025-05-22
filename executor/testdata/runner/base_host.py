@@ -46,8 +46,7 @@ class IHost(metaclass=abc.ABCMeta):
 
 	@abc.abstractmethod
 	async def get_calldata(self, /) -> bytes: ...
-	@abc.abstractmethod
-	async def get_code(self, addr: bytes, /) -> bytes: ...
+
 	@abc.abstractmethod
 	async def storage_read(
 		self, mode: StorageType, account: bytes, slot: bytes, index: int, le: int, /
@@ -97,6 +96,29 @@ class IHost(metaclass=abc.ABCMeta):
 	async def get_balance(self, account: bytes, /) -> int: ...
 
 
+def save_code_callback[T](
+	address: bytes, code: bytes, cb: typing.Callable[[bytes, bytes, int, bytes], T]
+) -> tuple[T, T]:
+	root_slot = b'\x00' * 32
+	r1 = cb(
+		address, root_slot, 0, len(code).to_bytes(4, byteorder='little', signed=False)
+	)
+
+	code_slot = bytes(
+		b'\xea\xc3\x96~\xf5\xde\x85\xaf\x8d\x0fX\x9f|\x16\x98\xc7P\xe4\xe0\xbf\x9b4M\xc7\x97\xf8\xa9\xad\xc3F-7'
+	)
+
+	r2 = cb(address, code_slot, 0, code)
+
+	return (r1, r2)
+
+
+async def save_code_to_host(host: IHost, address: bytes, code: bytes):
+	r1, r2 = save_code_callback(address, code, host.storage_write)
+	await r1
+	await r2
+
+
 async def host_loop(handler: IHost):
 	async_loop = asyncio.get_event_loop()
 
@@ -135,12 +157,6 @@ async def host_loop(handler: IHost):
 				await send_all(bytes([Errors.OK]))
 				await send_int(len(cd))
 				await send_all(cd)
-			case Methods.GET_CODE:
-				addr = await read_exact(ACCOUNT_ADDR_SIZE)
-				code = await handler.get_code(addr)
-				await send_all(bytes([Errors.OK]))
-				await send_int(len(code))
-				await send_all(code)
 			case Methods.STORAGE_READ:
 				mode = await read_exact(1)
 				mode = StorageType(mode[0])

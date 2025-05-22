@@ -2,6 +2,7 @@ use super::config;
 use crate::common;
 
 use anyhow::Context;
+use base64::Engine;
 use genvm_modules_interfaces::web as web_iface;
 use std::sync::Arc;
 
@@ -89,6 +90,30 @@ impl
 }
 
 impl Handler {
+    async fn handle_screenshot(&self) -> common::ModuleResult<web_iface::RenderAnswer> {
+        let req = self.client.get(format!(
+            "{}/session/{}/screenshot",
+            self.config.webdriver_host, self.session_id
+        ));
+        log::debug!(request:? = req, cookie = self.hello.cookie; "getting web page data");
+
+        let res = req.send().await?;
+
+        let res = res.error_for_status()?;
+
+        let body = res.text().await?;
+
+        let body: serde_json::Value = serde_json::from_str(&body)?;
+        let val = body
+            .pointer("/value")
+            .and_then(|x| x.as_str())
+            .ok_or_else(|| anyhow::anyhow!("failed to get screenshot {body}"))?;
+
+        let data = base64::prelude::BASE64_STANDARD.decode(val)?;
+
+        Ok(web_iface::RenderAnswer::Image(data))
+    }
+
     async fn handle_render(
         &self,
         payload: web_iface::RenderPayload,
@@ -139,6 +164,7 @@ impl Handler {
         let req_body = serde_json::json!({
             "url": url.as_str()
         });
+
         let req_body = serde_json::to_string(&req_body)?;
         let req = self
             .client
@@ -164,6 +190,7 @@ impl Handler {
         }
 
         let script = match payload.mode {
+            web_iface::RenderMode::Screenshot => return self.handle_screenshot().await,
             web_iface::RenderMode::HTML => {
                 r#"{ "script": "return document.body.innerHTML", "args": [] }"#
             }

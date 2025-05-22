@@ -25,7 +25,7 @@ import importlib.util
 
 def add_compiled(name: str, py_src: bytes):
 	opt_level = 0
-	pyc_name = importlib.util.cache_from_source(name, optimization=opt_level)
+	pyc_name = importlib.util.cache_from_source(name, optimization='')
 	code = compile(py_src, name, 'exec', dont_inherit=True, optimize=opt_level)
 	source_hash = importlib.util.source_hash(py_src)
 

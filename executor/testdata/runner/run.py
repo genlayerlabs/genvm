@@ -29,6 +29,7 @@ sys.path.append(str(script_dir))
 from genlayer.py import calldata
 from genlayer.py.types import Address
 from mock_host import MockHost, MockStorage, run_host_and_program
+import base_host
 
 
 class MyHTTPHandler(httpserv.SimpleHTTPRequestHandler):
@@ -101,6 +102,9 @@ def run(jsonnet_rel_path):
 	jsonnet_conf = json.loads(jsonnet_conf)
 	if not isinstance(jsonnet_conf, list):
 		jsonnet_conf = [jsonnet_conf]
+
+	jsonnet_conf = unfold_conf(jsonnet_conf, {'jsonnetDir': str(jsonnet_path.parent)})
+
 	seq_tmp_dir = root_tmp_dir.joinpath(jsonnet_rel_path).with_suffix('')
 
 	import shutil
@@ -108,9 +112,36 @@ def run(jsonnet_rel_path):
 	shutil.rmtree(seq_tmp_dir, ignore_errors=True)
 	seq_tmp_dir.mkdir(exist_ok=True, parents=True)
 
+	if 'prepare' in jsonnet_conf[0]:
+		subprocess.run(
+			[sys.executable, jsonnet_conf[0]['prepare']],
+			stdin=subprocess.DEVNULL,
+			stdout=sys.stdout,
+			stderr=sys.stderr,
+			check=True,
+		)
+
+	base_mock_storage = MockStorage()
+	import base64
+
+	for addr, code in jsonnet_conf[0]['accounts'].items():
+		code = code.get('code')
+		if code is None:
+			continue
+		addr = base64.b64decode(addr)
+		if code.endswith('.wat'):
+			out_path = seq_tmp_dir.joinpath(Path(code).with_suffix('.wasm').name)
+			subprocess.run(['wat2wasm', '-o', out_path, code], check=True)
+			code = out_path
+		else:
+			code = Path(code)
+		code = Path(code).read_bytes()
+		base_host.save_code_callback(
+			addr, code, lambda a, b, c, d: base_mock_storage.write(Address(a), b, c, d)
+		)
 	empty_storage = seq_tmp_dir.joinpath('empty-storage.pickle')
 	with open(empty_storage, 'wb') as f:
-		pickle.dump(MockStorage(), f)
+		pickle.dump(base_mock_storage, f)
 
 	def step_to_run_config(i, single_conf_form_file, total_conf):
 		single_conf_form_file = pickle.loads(pickle.dumps(single_conf_form_file))
@@ -127,19 +158,6 @@ def run(jsonnet_rel_path):
 		post_storage = my_tmp_dir.joinpath('storage.pickle')
 		my_tmp_dir.mkdir(exist_ok=True, parents=True)
 
-		single_conf_form_file['vars']['jsonnetDir'] = str(jsonnet_path.parent)
-
-		single_conf_form_file = unfold_conf(
-			single_conf_form_file, single_conf_form_file['vars']
-		)
-		if 'prepare' in single_conf_form_file:
-			subprocess.run(
-				[sys.executable, single_conf_form_file['prepare']],
-				stdin=subprocess.DEVNULL,
-				stdout=sys.stdout,
-				stderr=sys.stderr,
-				check=True,
-			)
 		for acc_val in single_conf_form_file['accounts'].values():
 			code_path = acc_val.get('code', None)
 			if code_path is None:
@@ -165,7 +183,6 @@ def run(jsonnet_rel_path):
 		host = MockHost(
 			path=str(mock_sock_path),
 			calldata=calldata_bytes,
-			codes={Address(k): v for k, v in single_conf_form_file['accounts'].items()},
 			storage_path_post=post_storage,
 			storage_path_pre=pre_storage,
 			leader_nondet=single_conf_form_file.get('leader_nondet', None),
@@ -174,6 +191,7 @@ def run(jsonnet_rel_path):
 				Address(k): v for k, v in single_conf_form_file.get('balances', {}).items()
 			},
 		)
+
 		mock_host_path = my_tmp_dir.joinpath('mock-host.pickle')
 		mock_host_path.write_bytes(pickle.dumps(host))
 		return {

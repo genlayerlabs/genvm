@@ -8,7 +8,7 @@ pub struct Internal {
     pub system_message: Option<String>,
     pub user_message: String,
     pub temperature: f32,
-    pub image: Option<Arc<ImageLua>>,
+    pub images: Vec<Arc<ImageLua>>,
 
     pub max_tokens: u32,
     pub use_max_completion_tokens: bool,
@@ -41,6 +41,7 @@ impl ImageType {
 
 #[derive(Serialize, Deserialize)]
 pub struct ImageLua {
+    #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
     pub kind: ImageType,
 }

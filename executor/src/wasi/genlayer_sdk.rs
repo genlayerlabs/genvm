@@ -22,7 +22,7 @@ where
     d.serialize_u8(*data as u8)
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(serde::Serialize, Debug)]
 pub struct TransformedMessage {
     pub contract_address: calldata::Address,
     pub sender_address: calldata::Address,
@@ -131,18 +131,16 @@ pub(crate) mod generated {
     });
 }
 
-impl calldata::Address {
-    fn read_from_mem(
-        mem: &mut wiggle::GuestMemory<'_>,
-        addr: wiggle::GuestPtr<u8>,
-    ) -> Result<Self, generated::types::Error> {
-        let cow = mem.as_cow(addr.as_array(calldata::ADDRESS_SIZE.try_into().unwrap()))?;
-        let mut ret = Self::zero();
-        for (x, y) in ret.ref_mut().iter_mut().zip(cow.iter()) {
-            *x = *y;
-        }
-        Ok(ret)
+fn read_addr_from_mem(
+    mem: &mut wiggle::GuestMemory<'_>,
+    addr: wiggle::GuestPtr<u8>,
+) -> Result<calldata::Address, generated::types::Error> {
+    let cow = mem.as_cow(addr.as_array(calldata::ADDRESS_SIZE.try_into().unwrap()))?;
+    let mut ret = calldata::Address::zero();
+    for (x, y) in ret.ref_mut().iter_mut().zip(cow.iter()) {
+        *x = *y;
     }
+    Ok(ret)
 }
 
 impl SlotID {
@@ -296,18 +294,16 @@ where
 {
     match fut.await? {
         Ok(r) => {
-            let data = serde_json::json!({
-                "ok": r
-            });
+            let r = calldata::to_value(&r)?;
+            let data = calldata::Value::Map(BTreeMap::from([("ok".to_owned(), r)]));
 
-            Ok(Box::from(serde_json::to_vec(&data)?))
+            Ok(Box::from(calldata::encode(&data)))
         }
         Err(e) => {
-            let data = serde_json::json!({
-                "error": e
-            });
+            let e = calldata::to_value(&e)?;
+            let data = calldata::Value::Map(BTreeMap::from([("error".to_owned(), e)]));
 
-            Ok(Box::from(serde_json::to_vec(&data)?))
+            Ok(Box::from(calldata::encode(&data)))
         }
     }
 }
@@ -739,7 +735,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         account: wiggle::GuestPtr<u8>,
         result: wiggle::GuestPtr<u8>,
     ) -> Result<(), generated::types::Error> {
-        let address = calldata::Address::read_from_mem(mem, account)?;
+        let address = read_addr_from_mem(mem, account)?;
 
         self.context
             .get_balance_impl_wasi(mem, address, result, false)
@@ -807,9 +803,15 @@ impl Context {
     }
 
     pub fn log(&self) -> serde_json::Value {
+        let mut msg = serde_json::to_value(&self.data.message_data).unwrap();
+
+        let remover = msg.as_object_mut().unwrap();
+        remover.remove("entry_data");
+        remover.remove("entry_stage_data");
+
         serde_json::json!({
             "config": &self.data.conf,
-            "message": self.data.message_data
+            "message": msg
         })
     }
 
@@ -818,13 +820,25 @@ impl Context {
         supervisor: &Arc<tokio::sync::Mutex<crate::vm::Supervisor>>,
         essential_data: SingleVMData,
     ) -> vm::RunResult {
-        let (mut vm, instance) = {
+        let limiter = if essential_data.conf.is_deterministic {
+            self.shared_data.limiter_det.clone()
+        } else {
+            self.shared_data.limiter_non_det.clone()
+        };
+
+        let (mut vm, instance, limiter_save) = {
             let mut supervisor = supervisor.lock().await;
+
             let mut vm = supervisor.spawn(essential_data).await?;
             let instance = supervisor.apply_contract_actions(&mut vm).await?;
-            (vm, instance)
+
+            (vm, instance, limiter.save())
         };
-        vm.run(&instance).await
+        let result = vm.run(&instance).await;
+
+        limiter.restore(limiter_save);
+
+        result
     }
 }
 

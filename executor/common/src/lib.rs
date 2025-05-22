@@ -6,6 +6,7 @@ use std::{
 use anyhow::Context;
 use serde::Deserialize;
 
+pub mod calldata;
 pub mod cancellation;
 pub mod templater;
 

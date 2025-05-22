@@ -23,7 +23,7 @@ function just_in_backend(args, prompt, format)
 			)
 		end)
 
-		lib.log{level = "debug", message = "executed with", type = type(result), res = result}
+		lib.log{level = "debug", message = "executed with", type = type(result), result = result}
 		if success then
 			return result
 		elseif result.kind == "Overloaded" then

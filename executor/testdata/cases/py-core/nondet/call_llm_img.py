@@ -12,7 +12,7 @@ class Contract(gl.Contract):
 		def run():
 			return gl.exec_prompt(
 				'how many colors are in the image? Respond only with amount of colors, without any context',
-				image=im_data,
+				images=[im_data],
 			)
 
 		res = gl.eq_principle_strict_eq(run).lower()

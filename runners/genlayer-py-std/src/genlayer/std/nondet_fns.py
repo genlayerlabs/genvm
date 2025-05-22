@@ -1,10 +1,12 @@
 __all__ = ('get_webpage', 'exec_prompt', 'GetWebpageKwArgs', 'ExecPromptKwArgs')
 
 import typing
+
 from ._internal import _lazy_api
 from ..py.types import *
 import genlayer.std._wasi as wasi
-import json
+import io
+import dataclasses
 
 import genlayer.std._internal.gl_call as gl_call
 
@@ -14,7 +16,7 @@ class NondetException(Exception):
 
 
 class GetWebpageKwArgs(typing.TypedDict):
-	mode: typing.Literal['html', 'text']
+	mode: typing.Literal['html', 'text', 'screenshot']
 	"""
 	Mode in which to return the result
 	"""
@@ -26,15 +28,45 @@ class GetWebpageKwArgs(typing.TypedDict):
 	"""
 
 
+import genlayer.py.calldata as calldata
+
+
 def _decode_nondet(buf):
-	ret = json.loads(bytes(buf).decode('utf-8'))
+	ret = typing.cast(dict, calldata.decode(buf))
 	if err := ret.get('error'):
 		raise NondetException(err)
 	return ret['ok']
 
 
+if typing.TYPE_CHECKING:
+	import PIL.Image
+
+
+@dataclasses.dataclass
+class Image:
+	raw: bytes
+	pil: 'PIL.Image.Image'
+
+
+@typing.overload
+def get_webpage(
+	url: str,
+	*,
+	wait_after_loaded: str | None = None,
+	mode: typing.Literal['text', 'html'],
+) -> str: ...
+
+
+@typing.overload
+def get_webpage(
+	url: str, *, wait_after_loaded: str | None = None, mode: typing.Literal['screenshot']
+) -> Image: ...
+
+
 @_lazy_api
-def get_webpage(url: str, **config: typing.Unpack[GetWebpageKwArgs]) -> Lazy[str]:
+def get_webpage(
+	url: str, **config: typing.Unpack[GetWebpageKwArgs]
+) -> Lazy[str | Image]:
 	"""
 	API to get a webpage after rendering it
 
@@ -47,6 +79,16 @@ def get_webpage(url: str, **config: typing.Unpack[GetWebpageKwArgs]) -> Lazy[str
 	:rtype: ``str``
 	"""
 
+	def decoder(x):
+		x = _decode_nondet(x)
+		if config.get('mode', 'text') != 'screenshot':
+			return typing.cast(str, x['text'])
+		raw = typing.cast(bytes, x['image'])
+		import PIL.Image
+
+		pil = PIL.Image.open(io.BytesIO(raw))
+		return Image(raw, pil)
+
 	return gl_call.gl_call_generic(
 		{
 			'WebRender': {
@@ -55,7 +97,7 @@ def get_webpage(url: str, **config: typing.Unpack[GetWebpageKwArgs]) -> Lazy[str
 				'wait_after_loaded': config.get('wait_after_loaded', '0ms'),
 			}
 		},
-		lambda x: _decode_nondet(x)['text'],  # in future we may add images here as well
+		decoder,
 	)
 
 
@@ -64,22 +106,30 @@ class ExecPromptKwArgs(typing.TypedDict):
 	"""
 	Defaults to ``text``
 	"""
-	image: typing.NotRequired[bytes | None]
-
-
-@typing.overload
-def exec_prompt(prompt: str, *, image: bytes | None = None) -> str: ...
+	images: typing.NotRequired[collections.abc.Sequence[bytes | Image] | None]
 
 
 @typing.overload
 def exec_prompt(
-	prompt: str, *, response_format: typing.Literal['text'], image: bytes | None = None
+	prompt: str, *, images: collections.abc.Sequence[bytes | Image] | None = None
 ) -> str: ...
 
 
 @typing.overload
 def exec_prompt(
-	prompt: str, *, response_format: typing.Literal['json'], image: bytes | None = None
+	prompt: str,
+	*,
+	response_format: typing.Literal['text'],
+	images: collections.abc.Sequence[bytes | Image] | None = None,
+) -> str: ...
+
+
+@typing.overload
+def exec_prompt(
+	prompt: str,
+	*,
+	response_format: typing.Literal['json'],
+	image: bytes | Image | None = None,
 ) -> dict[str, typing.Any]: ...
 
 
@@ -99,12 +149,19 @@ def exec_prompt(
 	:rtype: ``str``
 	"""
 
+	images: list[bytes] = []
+	for im in config.get('images', None) or []:
+		if isinstance(im, Image):
+			images.append(im.raw)
+		else:
+			images.append(im)
+
 	return gl_call.gl_call_generic(
 		{
 			'ExecPrompt': {
 				'prompt': prompt,
 				'response_format': config.get('response_format', 'text'),
-				'image': config.get('image', None),
+				'images': images,
 			}
 		},
 		_decode_nondet,

@@ -44,9 +44,9 @@ def _handle_main() -> typing.NoReturn:
 		contract_type: type[Contract]
 
 	def get_contract_instance(contract_type: type[Contract]) -> Contract:
-		from .storage import STORAGE_MAN, ROOT_STORAGE_ADDRESS
+		from .storage import STORAGE_MAN, CONTRACT_SLOT_ID
 
-		top_slot = STORAGE_MAN.get_store_slot(ROOT_STORAGE_ADDRESS)
+		top_slot = STORAGE_MAN.get_store_slot(CONTRACT_SLOT_ID)
 		from ...py.storage._internal.generate import _known_descs
 
 		return _known_descs[contract_type].get(top_slot, 0)
