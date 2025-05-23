@@ -469,6 +469,37 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 self.set_vm_run_result(res).map(|x| x.0)
             }
+            gl_call::Message::EmitEvent {
+                name,
+                indexed_fields,
+                blob,
+            } => {
+                if !self.context.data.conf.is_deterministic {
+                    return Err(generated::types::Errno::Forbidden.into());
+                }
+
+                if indexed_fields.len() > 4 {
+                    return Err(generated::types::Errno::Inval.into());
+                }
+
+                if !indexed_fields.is_sorted() {
+                    return Err(generated::types::Errno::Inval.into());
+                }
+
+                for c in &indexed_fields {
+                    if !blob.contains_key(c) {
+                        return Err(generated::types::Errno::Inval.into());
+                    }
+                }
+
+                let supervisor = self.context.data.supervisor.clone();
+                let supervisor = supervisor.lock().await;
+
+                // todo
+                _ = supervisor;
+
+                return Ok(file_fd_none());
+            }
             gl_call::Message::PostMessage {
                 address,
                 calldata,

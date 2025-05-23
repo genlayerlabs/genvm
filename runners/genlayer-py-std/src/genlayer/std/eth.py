@@ -48,7 +48,7 @@ def _generate_send(name: str, params: tuple[type], ret: type) -> typing.Any:
 					'value': self._proxy_kwargs.get('value', 0),
 				}
 			},
-			lambda x: None,
+			lambda _x: None,
 		).get()
 
 	return result_fn
@@ -60,7 +60,7 @@ eth_contract = contract_generator(
 	lambda p: u256(wasi.get_balance(p.address.as_bytes)),
 	lambda p, d: gl_call.gl_call_generic(
 		{'EthSend': {'address': p.address, 'calldata': b'', 'value': d.get('value', 0)}},
-		lambda x: None,
+		lambda _x: None,
 	).get(),
 )
 """
