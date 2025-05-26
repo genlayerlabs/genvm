@@ -3,6 +3,14 @@ name = "genvm-common"
 version = "0.1.0"
 edition = "2021"
 
+[[example]]
+name = "fuzz-genvm-common-decode"
+path = "fuzz/genvm-common-decode.rs"
+
+[[example]]
+name = "fuzz-genvm-common-encode"
+path = "fuzz/genvm-common-encode.rs"
+
 [profile.release]
 debug = true
 
@@ -18,3 +26,6 @@ tokio = { version = "1.44.1", features = ["rt", "rt-multi-thread", "net", "time"
 num-bigint = { version = "0.4.6", features = ["serde"] }
 hex = "0.4.3"
 primitive-types = { version = "0.13.1", default-features = false, features = ["impl-serde", "std"] }
+
+[dev-dependencies]
+afl = { version = "0.15.18", features = ["no_cfg_fuzzing"] }

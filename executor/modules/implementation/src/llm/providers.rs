@@ -28,7 +28,7 @@ pub trait Provider {
     ) -> ModuleResult<serde_json::Map<String, serde_json::Value>> {
         let res = self.exec_prompt_json_as_text(prompt, model).await?;
         let res = sanitize_json_str(&res);
-        let res = serde_json::from_str(res)?;
+        let res = serde_json::from_str(res).with_context(|| format!("parsing {res:?}"))?;
 
         Ok(res)
     }
@@ -218,7 +218,10 @@ impl Provider for OpenAICompatible {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
 
-        let response = serde_json::from_str(response)?;
+        let response = sanitize_json_str(response);
+        let response =
+            serde_json::from_str(response).with_context(|| format!("parsing {response:?}"))?;
+
         Ok(response)
     }
 }

@@ -34,7 +34,7 @@ def test_calldata_encoding():
 		def create_atom():
 			kind = fetch_buf(1)[0] % 6
 			if kind == 0:
-				return int.from_bytes(fetch_buf(7))
+				return int.from_bytes(fetch_buf(7), signed=True)
 			if kind == 1:
 				return True
 			if kind == 2:

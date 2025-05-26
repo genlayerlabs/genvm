@@ -13,7 +13,7 @@ project('executor') {
 	end
 	if not config.executor_target.nil?
 		linker_path = $cross_cc
-		cargo_flags << '--config' << "target.#{config.executor_target}.linker=\"#{linker_path}\""
+		#cargo_flags << '--config' << "target.#{config.executor_target}.linker=\"#{linker_path}\""
 		base_env["CC_#{config.executor_target}"] = $cross_cc
 	end
 
@@ -21,9 +21,6 @@ project('executor') {
 		base_env['RUSTFLAGS'] ||= ''
 		base_env['RUSTFLAGS'] << " -Cinstrument-coverage"
 	end
-
-	base_env['RUSTFLAGS'] ||= ''
-	base_env['RUSTFLAGS'] << ' -C target-feature=+crt-static'
 
 	run_codegen = Proc.new { |inp, out, type:, tags: [], **kwargs, &blk|
 		if type == "rs"

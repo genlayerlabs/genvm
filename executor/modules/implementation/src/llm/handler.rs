@@ -201,6 +201,15 @@ mod tests {
             "key": "${ENV[HEURISTKEY]}"
         }"#;
 
+        pub const heurist_deepseek: &str = r#"{
+            "host": "https://llm-gateway.heurist.xyz",
+            "provider": "openai-compatible",
+            "models": {
+                "deepseek/deepseek-v3": { "supports_json": true }
+            },
+            "key": "${ENV[HEURISTKEY]}"
+        }"#;
+
         pub const anthropic: &str = r#"{
             "host": "https://api.anthropic.com",
             "provider": "anthropic",
@@ -367,5 +376,6 @@ mod tests {
     make_test!(xai);
 
     make_test!(heurist);
+    make_test!(heurist_deepseek);
     //make_test!(atoma);
 }
