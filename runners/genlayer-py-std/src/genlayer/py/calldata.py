@@ -25,6 +25,7 @@ __all__ = (
 	'EncodableWithDefault',
 	'Decoded',
 	'CalldataEncodable',
+	'DecodingError',
 )
 
 from .types import Address
@@ -201,6 +202,10 @@ def encode[T](
 	return bytes(mem)
 
 
+class DecodingError(ValueError):
+	pass
+
+
 def decode(
 	mem0: collections.abc.Buffer,
 	*,
@@ -213,17 +218,27 @@ def decode(
 	"""
 	mem: memoryview = memoryview(mem0)
 
+	def fetch_mem(cnt: int) -> memoryview:
+		nonlocal mem
+
+		if len(mem) < cnt:
+			raise DecodingError('unexpected end of memory')
+		ret = mem[:cnt]
+		mem = mem[cnt:]
+		return ret
+
 	def read_uleb128() -> int:
 		nonlocal mem
 		ret = 0
 		off = 0
 		while True:
-			m = mem[0]
+			m = fetch_mem(1)[0]
 			ret = ret | ((m & 0x7F) << off)
-			off += 7
-			mem = mem[1:]
 			if (m & 0x80) == 0:
+				if m == 0 and off != 0:
+					raise DecodingError('most significant octet can not be zero')
 				break
+			off += 7
 		return ret
 
 	def impl() -> typing.Any:
@@ -238,23 +253,17 @@ def decode(
 			if code == SPECIAL_TRUE:
 				return True
 			if code == SPECIAL_ADDR:
-				ret_addr = mem[: Address.SIZE]
-				mem = mem[Address.SIZE :]
-				return Address(ret_addr)
-			raise Exception(f'Unknown special {bin(code)} {hex(code)}')
+				return Address(fetch_mem(Address.SIZE))
+			raise DecodingError(f'Unknown special {bin(code)} {hex(code)}')
 		code = code >> 3
 		if typ == TYPE_PINT:
 			return code
 		elif typ == TYPE_NINT:
 			return -code - 1
 		elif typ == TYPE_BYTES:
-			ret_bytes = mem[:code]
-			mem = mem[code:]
-			return memview2bytes(ret_bytes)
+			return memview2bytes(fetch_mem(code))
 		elif typ == TYPE_STR:
-			ret_str = mem[:code]
-			mem = mem[code:]
-			return str(ret_str, encoding='utf-8')
+			return str(fetch_mem(code), encoding='utf-8')
 		elif typ == TYPE_ARR:
 			ret_arr = []
 			for _i in range(code):
@@ -265,19 +274,19 @@ def decode(
 			prev = None
 			for _i in range(code):
 				le = read_uleb128()
-				key = str(mem[:le], encoding='utf-8')
-				mem = mem[le:]
+				key = str(fetch_mem(le), encoding='utf-8')
 				if prev is not None:
-					assert prev < key
+					if prev >= key:
+						raise DecodingError(f'unordered calldata keys: `{prev}` >= `{key}`')
 				prev = key
 				assert key not in ret_dict
 				ret_dict[key] = impl()
 			return ret_dict
-		raise Exception(f'invalid type {typ}')
+		raise DecodingError(f'invalid type {typ}')
 
 	res = impl()
 	if len(mem) != 0:
-		raise Exception(f'unparsed end {bytes(mem[:5])!r}... (decoded {res})')
+		raise DecodingError(f'unparsed end {bytes(mem[:5])!r}... (decoded {res})')
 	return res
 
 
@@ -330,7 +339,7 @@ def to_str(d: Encodable) -> str:
 		elif isinstance(d, CalldataEncodable):
 			impl(d.__to_calldata__())
 		else:
-			raise Exception(f"can't encode {d} to calldata")
+			raise DecodingError(f"can't encode {d} to calldata")
 
 	impl(d)
 	return ''.join(buf)

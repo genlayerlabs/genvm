@@ -115,13 +115,7 @@ RUST_HOST_TARGET = Proc.new {
 	res
 }.()
 
-RUST_DEFAULT_TARGET = Proc.new {
-	res = RUST_HOST_TARGET
-	if res.end_with? '-gnu'
-		res = res[..-4] + 'musl'
-	end
-	res
-}.()
+RUST_DEFAULT_TARGET = RUST_HOST_TARGET
 
 self.define_singleton_method(:target_cargo_build) do |out_file: nil, dir: nil, name:, target: nil, profile: "debug", features: [], flags: [], env: {}, **kwargs, &blk|
 	if target.nil?

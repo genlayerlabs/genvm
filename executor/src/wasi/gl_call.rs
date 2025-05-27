@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{calldata, host};
@@ -99,4 +101,10 @@ pub enum Message {
 
     Rollback(String),
     Return(calldata::Value),
+
+    EmitEvent {
+        name: String,
+        indexed_fields: Vec<String>,
+        blob: BTreeMap<String, calldata::Value>,
+    },
 }

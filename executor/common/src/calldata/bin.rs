@@ -35,6 +35,9 @@ impl Parser<'_> {
             res += num_bigint::BigUint::from(byte & 0x7f) << off;
 
             if byte & 0x80 == 0 {
+                if byte == 0 && off != 0 {
+                    anyhow::bail!("most significant octet can not be zero");
+                }
                 return Ok(res);
             }
 

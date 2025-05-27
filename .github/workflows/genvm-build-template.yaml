@@ -47,6 +47,7 @@ jobs:
           toolchain: 1.84.0
           target: ${{inputs.target}}
           cache: false
+          rustflags: ""
       - name: install tools and configure
         if: ${{ inputs.tag != 'none' }}
         run: |
@@ -60,6 +61,7 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE" && \
             source env.sh && \
+            cargo --version && \
             ninja -v -C build genvm/executor/all genvm/modules &&
             find build/out -name '*.yaml' -print0 | xargs -0 perl -i -pe 's/# yaml-language-server: \$schema=\.\..*//g'
       - name: patch schema path for tag

@@ -28,6 +28,7 @@ __all__ = (
 	'rollback_immediate',
 	'eth',
 	'storage_inmem_allocate',
+	'Event',
 )
 
 import typing
@@ -38,6 +39,8 @@ import genlayer.py.eth as eth
 import genlayer.py.calldata as calldata
 import genlayer.std.advanced as advanced
 import genlayer.std._wasi as wasi
+
+from .events import Event
 
 # reexports
 from ..py.types import *

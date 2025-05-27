@@ -42,11 +42,7 @@ class MyHTTPHandler(httpserv.SimpleHTTPRequestHandler):
 dir = script_dir.parent.joinpath('cases')
 root_tmp_dir = root_dir.joinpath('build', 'genvm-testdata-out')
 
-coverage_dir = root_tmp_dir.joinpath('coverage')
 import shutil
-
-shutil.rmtree(coverage_dir, True)
-coverage_dir.mkdir(parents=True, exist_ok=True)
 
 arg_parser = argparse.ArgumentParser('genvm-test-runner')
 arg_parser.add_argument(
@@ -257,7 +253,6 @@ def run(jsonnet_rel_path):
 						mock_host,
 						cmd,
 						env=_env,
-						cwd=coverage_dir,
 						exit_timeout=2,
 						deadline=config['deadline'],
 					)
@@ -446,7 +441,6 @@ with cfutures.ThreadPoolExecutor(MAX_WORKERS) as executor:
 			process_result(future2path[future], lambda: future.result())
 	import json
 
-	print(f'coverage data is located at {coverage_dir} (if any)')
 	print(json.dumps(categories))
 
 	if args_parsed.rss_file != '':

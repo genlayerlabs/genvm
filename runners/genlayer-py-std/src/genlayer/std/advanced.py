@@ -11,6 +11,7 @@ __all__ = (
 	'run_nondet',
 	'validator_handle_rollbacks_and_errors_default',
 	'sandbox',
+	'emit_raw_event',
 )
 
 import typing
@@ -18,6 +19,7 @@ import typing
 from ..py.types import Rollback, Lazy
 import genlayer.py.calldata as calldata
 from dataclasses import dataclass
+import collections.abc
 
 
 @dataclass
@@ -143,3 +145,20 @@ def validator_handle_rollbacks_and_errors_default(
 		)
 	except Exception:
 		gl_call.contract_return(isinstance(leaders_result, ContractError))
+
+
+def emit_raw_event(
+	name: str,
+	indexed_fields_names: collections.abc.Sequence[str],
+	blob: calldata.Encodable,
+) -> None:
+	gl_call.gl_call_generic(
+		{
+			'EmitEvent': {
+				'name': name,
+				'indexed_fields': indexed_fields_names,
+				'blob': blob,
+			}
+		},
+		lambda _x: None,
+	).get()

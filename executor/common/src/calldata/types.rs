@@ -35,7 +35,7 @@ impl Address {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Value {
     Null,
     Address(Address),

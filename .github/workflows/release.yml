@@ -37,33 +37,33 @@ jobs:
     uses: ./.github/workflows/genvm-build-runners.yaml
     secrets: inherit
 
-  release-build-genvm-release-ubuntu-latest:
+  release-build-genvm-amd64-linux:
     needs: [gen-tag]
     uses: ./.github/workflows/genvm-build-template.yaml
     secrets: inherit
     with:
       runs_on: ubuntu-latest
       target: x86_64-unknown-linux-musl
-      preloads: --preload .ci/release-conf.rb
+      preloads: --preload build-scripts/ci/release-conf.rb --preload build-scripts/ci/executor-target-linux-amd64.rb
       tag: ${{ needs.gen-tag.outputs.tag }}
 
-  release-build-genvm-release-ubuntu-latest-aarch64:
+  release-build-genvm-arm64-linux:
     needs: [gen-tag]
     uses: ./.github/workflows/genvm-build-template.yaml
     secrets: inherit
     with:
       runs_on: ubuntu-latest
       target: aarch64-unknown-linux-musl
-      preloads: --preload .ci/release-conf.rb --preload .ci/executor-target-linux-aarch64.rb
+      preloads: --preload build-scripts/ci/release-conf.rb --preload build-scripts/ci/executor-target-linux-aarch64.rb
       tag: ${{ needs.gen-tag.outputs.tag }}
 
-  release-build-genvm-release-macos-latest:
+  release-build-genvm-arm64-macos:
     needs: [gen-tag]
     uses: ./.github/workflows/genvm-build-template.yaml
     secrets: inherit
     with:
       runs_on: macos-latest
-      preloads: --preload .ci/release-conf.rb
+      preloads: --preload build-scripts/ci/release-conf.rb
       tag: ${{ needs.gen-tag.outputs.tag }}
 
   release-data:
@@ -74,9 +74,9 @@ jobs:
     needs:
       - gen-tag
       - build-runners
-      - release-build-genvm-release-ubuntu-latest
-      - release-build-genvm-release-macos-latest
-      - release-build-genvm-release-ubuntu-latest-aarch64
+      - release-build-genvm-amd64-linux
+      - release-build-genvm-arm64-linux
+      - release-build-genvm-arm64-macos
       - release-data
     runs-on: ubuntu-latest
     permissions:
@@ -102,9 +102,9 @@ jobs:
             popd
       - run: |
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-runners.zip ${{ needs.build-runners.outputs.artifact_url }} && \
-          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-amd64.zip ${{ needs.release-build-genvm-release-ubuntu-latest.outputs.artifact_url }} && \
-          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-arm64.zip ${{ needs.release-build-genvm-release-ubuntu-latest-aarch64.outputs.artifact_url }} && \
-          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-macos-arm64.zip ${{ needs.release-build-genvm-release-macos-latest.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-amd64.zip ${{ needs.release-build-genvm-amd64-linux.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-arm64.zip ${{ needs.release-build-genvm-arm64-linux.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-macos-arm64.zip ${{ needs.release-build-genvm-arm64-macos.outputs.artifact_url }} && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-py-docs.zip  ${{ needs.release-data.outputs.docs_url }} && \
           true
 

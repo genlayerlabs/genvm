@@ -14,12 +14,6 @@ jobs:
     secrets: inherit
 
 ### MODULE TESTS
-
-  module-test-cargo:
-    needs: [initial]
-    uses: ./.github/workflows/module-test-cargo.yaml
-    secrets: inherit
-
   module-test-python:
     needs: [initial]
     runs-on: ubuntu-latest
@@ -55,16 +49,91 @@ jobs:
     uses: ./.github/workflows/genvm-build-runners.yaml
     secrets: inherit
 
-### GENVMS build
+### rust tests and coverage
+  genvm-debug-ubuntu-latest:
+    needs: [initial, build-runners]
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write   # Needed for posting a comment
+    steps:
+      - uses: actions/checkout@v4
+        with:
+            lfs: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          third_party: executor/third-party/wasmtime executor/third-party/wasm-tools
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: 1.84.0
+          cache: false
+          components: llvm-tools-preview
+          rustflags: ""
+      - name: Fetch runners
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/build/out" && \
+          pushd "$GITHUB_WORKSPACE/build/out" && \
+          wget -q ${{ needs.build-runners.outputs.artifact_url }} && \
+          unzip ${{ needs.build-runners.outputs.artifact_name }} && \
+          rm ${{ needs.build-runners.outputs.artifact_name }} && \
+          true
+      - name: Build
+        run: |
+          source env.sh && \
+          ya-build config --preload build-scripts/ci/coverage.rb && \
+          ninja -v -C build genvm/executor/all genvm/modules
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: mock-${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            mock-${{ runner.os }}-buildx-
+      - name: Install test tools
+        run: |
+          sudo apt-get install -y wabt && \
+          cargo install cargo-afl && \
+          python3 -m pip install -r executor/testdata/runner/requirements.txt && \
+          true
 
-  build-genvm-debug-ubuntu-latest:
-    needs: [initial]
-    uses: ./.github/workflows/genvm-build-template.yaml
-    with:
-      runs_on: ubuntu-latest
-      target: x86_64-unknown-linux-musl
-      preloads: ""
-    secrets: inherit
+      - name: Test
+        run: |
+          # echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+
+          ls /sys/devices/system/cpu/ || true
+
+          echo core | sudo tee /proc/sys/kernel/core_pattern && \
+          ./executor/testdata/web-container/run-test-docker.sh && \
+          ./build-scripts/rust-test.sh --precompile
+        env:
+          OPENAIKEY: ${{ secrets.OPENAIKEY }}
+          HEURISTKEY: ${{ secrets.HEURISTKEY }}
+          ANTHROPICKEY: ${{ secrets.ANTHROPICKEY }}
+          XAIKEY: ${{ secrets.XAIKEY }}
+          GEMINIKEY: ${{ secrets.GEMINIKEY }}
+      - name: Prepare coverage log
+        run: |
+          echo '```' > /tmp/rs-cov.log
+          cat build/genvm-testdata-out/coverage/report.txt >> /tmp/rs-cov.log
+          echo '```' >> /tmp/rs-cov.log
+
+          # The merge group ref format is: refs/heads/gh-readonly-queue/{base_branch}/pr-{pr_number}-{sha}
+          PR_NUMBER=$(echo "${{ github.ref }}" | grep -oP 'pr-\K\d+')
+          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+      - name: Post coverage
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          file-path: /tmp/rs-cov.log
+          comment-tag: rs-coverage
+          pr-number: ${{ env.PR_NUMBER }}
+
+### RELEASE BUILD
 
   build-genvm-release-ubuntu-latest:
     needs: [initial]
@@ -72,31 +141,8 @@ jobs:
     with:
       runs_on: ubuntu-latest
       target: x86_64-unknown-linux-musl
-      preloads: --preload build-scripts/ci/release-conf.rb
+      preloads: --preload build-scripts/ci/release-conf.rb --preload build-scripts/ci/executor-target-linux-amd64.rb
     secrets: inherit
-
-#  build-genvm-release-macos-latest:
-#    needs: [pre-commit]
-#    uses: ./.github/workflows/genvm-build-template.yaml
-#    with:
-#      runs_on: macos-latest
-#      preloads: --preload .ci/release-conf.rb
-#      install_also: ""
-#    secrets: inherit
-
-### GENVMS test
-
-  test-genvm-debug-ubuntu-latest:
-    needs: [build-runners, build-genvm-debug-ubuntu-latest]
-    uses: ./.github/workflows/genvm-test-template.yaml
-    with:
-      runs_on: ubuntu-latest
-      genvm_artifact_name: ${{ needs.build-genvm-debug-ubuntu-latest.outputs.artifact_name }}
-      genvm_artifact_url: ${{ needs.build-genvm-debug-ubuntu-latest.outputs.artifact_url }}
-      runners_artifact_name: ${{ needs.build-runners.outputs.artifact_name }}
-      runners_artifact_url: ${{ needs.build-runners.outputs.artifact_url }}
-    secrets: inherit
-
 
   test-genvm-release-ubuntu-latest:
     needs: [build-runners, build-genvm-release-ubuntu-latest]
@@ -128,14 +174,13 @@ jobs:
     needs:
       - initial
       - build-runners
-      - build-genvm-debug-ubuntu-latest
+
+      - genvm-debug-ubuntu-latest
+
       - build-genvm-release-ubuntu-latest
-#      - build-genvm-release-macos-latest
-      - test-genvm-debug-ubuntu-latest
       - test-genvm-release-ubuntu-latest
-#      - test-genvm-release-macos-ubuntu-latest
+
       - module-test-python
-      - module-test-cargo
     steps:
       - run: |
           echo ${{ join(needs.*.result, ' ') }} | grep -vP 'failure|cancelled'
