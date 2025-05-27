@@ -26,11 +26,11 @@ def _populate_np_descs():
 			TypeDesc.__init__(self, type.itemsize * dims, [type.itemsize * dims])
 			self._type = type
 
-		def get(self, slot: StorageSlot, off: int) -> np.ndarray:
+		def get(self, slot: Slot, off: int) -> np.ndarray:
 			dat = slot.read(off, self.size)
 			return np.frombuffer(dat, self._type).reshape(self.shape).copy()
 
-		def set(self, slot: StorageSlot, off: int, val: np.ndarray):
+		def set(self, slot: Slot, off: int, val: np.ndarray):
 			assert val.dtype == self._type
 			mv = memoryview(val).cast('B')
 			assert len(mv) == self.size, f'invalid len {len(mv)} vs expected {self.size}'
@@ -45,11 +45,11 @@ def _populate_np_descs():
 			self._type = type
 			self._typ = typ
 
-		def get(self, slot: StorageSlot, off: int):
+		def get(self, slot: Slot, off: int):
 			dat = slot.read(off, self.size)
 			return np.frombuffer(dat, self._typ).reshape((1,))[0]
 
-		def set(self, slot: StorageSlot, off: int, val):
+		def set(self, slot: Slot, off: int, val):
 			slot.write(off, self._typ.tobytes(val))
 
 	_all_np_types: list[type[np.number]] = [

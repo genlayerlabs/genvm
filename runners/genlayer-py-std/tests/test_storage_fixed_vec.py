@@ -1,18 +1,18 @@
 import typing
 
 from genlayer.py.storage import Array
-from genlayer.py.storage._internal.generate import storage, _known_descs
+from genlayer.py.storage._internal.generate import generate_storage, _known_descs
 from genlayer.py.types import u32
 
 from .common import *
 
 
-@storage
+@generate_storage
 class StorVec:
 	x: Array[u32, typing.Literal[3]]
 
 
-@storage
+@generate_storage
 class Regen:
 	y: Array[u32, typing.Literal[3]]
 

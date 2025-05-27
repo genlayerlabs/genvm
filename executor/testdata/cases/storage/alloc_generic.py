@@ -10,7 +10,7 @@ class Test[T]:
 	foo: T
 
 
-tst = gl.storage_inmem_allocate(Test[str], '123')
+tst = gl.storage.inmem_allocate(Test[str], '123')
 print(tst)
 
 exit(0)

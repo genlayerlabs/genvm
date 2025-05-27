@@ -8,7 +8,7 @@ class Contract(gl.Contract):
 		try:
 
 			def run():
-				gl.rollback_immediate("nah, I won't execute")
+				gl.advanced.rollback_immediate("nah, I won't execute")
 
 			res = gl.eq_principle_strict_eq(run).get()
 		except gl.Rollback as r:

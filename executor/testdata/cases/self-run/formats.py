@@ -1,10 +1,10 @@
 # { "Depends": "py-genlayer:test" }
 
-from genlayer.py.storage._internal.generate import storage
+from genlayer.py.storage._internal.generate import generate_storage
 from genlayer import *
 
 
-@storage
+@generate_storage
 class Test:
 	arr: DynArray[str]
 	map: TreeMap[str, None]

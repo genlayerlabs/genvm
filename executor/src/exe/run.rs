@@ -8,7 +8,6 @@ use genvm::{config, vm::RunOk, PublicArgs};
 #[clap(rename_all = "kebab_case")]
 enum PrintOption {
     Shrink,
-    All,
     None,
 }
 
@@ -100,6 +99,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
             cookie,
             is_sync: args.sync,
             allow_latest: args.allow_latest,
+            message: &message,
         },
     )
     .with_context(|| "creating supervisor")?;
@@ -119,17 +119,17 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,
         (Ok(RunOk::ContractError(e, cause)), PrintOption::Shrink) => {
-            eprintln!("shrunk contract error {:?}", cause);
+            eprintln!("genvm: contract error {:?}", cause);
             Some(format!("ContractError(\"{e}\")"))
         }
         (Err(e), PrintOption::Shrink) => {
-            eprintln!("shrunk error {:?}", e);
+            eprintln!("genvm: internal error {:?}", e);
+
             match e.downcast_ref::<wasmtime::Trap>() {
                 None => Some("Error(\"\")".into()),
                 Some(e) => Some(format!("Error(\"{e:?}\")")),
             }
         }
-        (Err(e), _) => Some(format!("Error({})", e)),
         (Ok(res), _) => Some(format!("{:?}", &res)),
     };
     match res {

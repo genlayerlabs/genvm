@@ -2,7 +2,7 @@
 
 from genlayer import *
 from dataclasses import dataclass
-from genlayer.py.storage._internal.generate import storage
+from genlayer.py.storage._internal.generate import generate_storage
 
 
 @allow_storage
@@ -11,7 +11,7 @@ class Test[T]:
 	foo: T
 
 
-@storage
+@generate_storage
 class Bar:
 	t: Test[str]
 

@@ -1,7 +1,7 @@
 import pytest
 
 from genlayer import *
-from genlayer.py.storage._internal.generate import storage
+from genlayer.py.storage._internal.generate import generate_storage
 
 
 def same_iter(li, ri):
@@ -9,7 +9,7 @@ def same_iter(li, ri):
 		assert l == r
 
 
-@storage
+@generate_storage
 class UserStorage:
 	m: TreeMap[str, str]
 

@@ -1,7 +1,7 @@
 # { "Depends": "py-genlayer:test" }
 
 from genlayer import *
-from genlayer.py.storage._internal.generate import storage
+from genlayer.py.storage._internal.generate import generate_storage
 
 
 @allow_storage
@@ -14,7 +14,7 @@ class Test:
 		return self.foo
 
 
-@storage
+@generate_storage
 class Composite:
 	a: Test
 	b: Test

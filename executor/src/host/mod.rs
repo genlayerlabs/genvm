@@ -2,6 +2,9 @@ mod host_fns;
 pub mod message;
 mod result_codes;
 
+use genvm_common::calldata::Address;
+use genvm_common::calldata::ADDRESS_SIZE;
+use message::root_offsets;
 pub use result_codes::{EntryKind, ResultCode, StorageType};
 
 use std::sync::Mutex;
@@ -9,6 +12,8 @@ use std::sync::Mutex;
 use anyhow::{Context, Result};
 
 use crate::calldata;
+use crate::errors::ContractError;
+use crate::memlimiter;
 use crate::vm;
 pub use message::{MessageData, SlotID};
 
@@ -114,6 +119,14 @@ fn handle_host_error(sock: &mut dyn Sock) -> Result<()> {
     }
 }
 
+pub struct LockedSlotsSet(Box<[SlotID]>);
+
+impl LockedSlotsSet {
+    pub fn contains(&self, slot: SlotID) -> bool {
+        self.0.binary_search(&slot).is_ok()
+    }
+}
+
 impl Host {
     pub fn get_calldata(&mut self, calldata: &mut Vec<u8>) -> Result<()> {
         let Ok(mut sock) = (*self.sock).lock() else {
@@ -134,23 +147,106 @@ impl Host {
         Ok(())
     }
 
-    pub fn get_code(&mut self, mode: StorageType, account: calldata::Address) -> Result<Box<[u8]>> {
-        const ZERO_SLOT: SlotID = SlotID([0; 32]);
-        const CODE_SLOT: SlotID = SlotID([
-            234, 195, 150, 126, 245, 222, 133, 175, 141, 15, 88, 159, 124, 22, 152, 199, 80, 228,
-            224, 191, 155, 52, 77, 199, 151, 248, 169, 173, 195, 70, 45, 55,
-        ]);
+    fn get_locked_slots(
+        &mut self,
+        contract_address: calldata::Address,
+        limiter: &memlimiter::Limiter,
+    ) -> Result<LockedSlotsSet> {
+        let locked_slot = SlotID::ZERO.indirection(root_offsets::LOCKED_SLOTS);
 
-        let mut buf = [0; 4];
+        let mut len_buf = [0; 4];
+        self.storage_read(
+            StorageType::Default,
+            contract_address,
+            locked_slot,
+            0,
+            &mut len_buf,
+        )?;
+        let len = u32::from_le_bytes(len_buf);
 
-        self.storage_read(mode, account, ZERO_SLOT, 0, &mut buf)?;
+        if !limiter.consume_mul(len, SlotID::SIZE, true) {
+            return Err(ContractError::oom(None).into());
+        }
 
-        let code_size = u32::from_le_bytes(buf);
+        let res = Box::new_uninit_slice(len as usize);
+        let mut res = unsafe { res.assume_init() };
+
+        let read_to = unsafe {
+            std::slice::from_raw_parts_mut(
+                res.as_mut_ptr() as *mut u8,
+                (len * SlotID::SIZE) as usize,
+            )
+        };
+        self.storage_read(
+            StorageType::Default,
+            contract_address,
+            locked_slot,
+            4,
+            read_to,
+        )?;
+
+        res.sort();
+
+        Ok(LockedSlotsSet(res))
+    }
+
+    pub fn get_locked_slots_for_sender(
+        &mut self,
+        contract_address: calldata::Address,
+        sender: calldata::Address,
+        limiter: &memlimiter::Limiter,
+    ) -> Result<LockedSlotsSet> {
+        let upgraders_slot = SlotID::ZERO.indirection(root_offsets::UPGRADERS);
+
+        let mut len_buf = [0; 4];
+        self.storage_read(
+            StorageType::Default,
+            contract_address,
+            upgraders_slot,
+            0,
+            &mut len_buf,
+        )?;
+        let len = u32::from_le_bytes(len_buf);
+
+        for i in 0..len {
+            let mut read_sender = [0; ADDRESS_SIZE];
+
+            self.storage_read(
+                StorageType::Default,
+                contract_address,
+                upgraders_slot,
+                4 + i * Address::SIZE,
+                &mut read_sender,
+            )?;
+
+            if read_sender == sender.raw() {
+                return Ok(LockedSlotsSet(Box::from([])));
+            }
+        }
+
+        self.get_locked_slots(contract_address, limiter)
+    }
+
+    pub fn get_code(
+        &mut self,
+        mode: StorageType,
+        account: calldata::Address,
+        limiter: &memlimiter::Limiter,
+    ) -> Result<Box<[u8]>> {
+        let code_slot = SlotID::ZERO.indirection(root_offsets::CODE);
+
+        let mut len_buf = [0; 4];
+        self.storage_read(mode, account, code_slot, 0, &mut len_buf)?;
+        let code_size = u32::from_le_bytes(len_buf);
+
+        if !limiter.consume(code_size, true) {
+            return Err(ContractError::oom(None).into());
+        }
 
         let res = Box::new_uninit_slice(code_size as usize);
         let mut res = unsafe { res.assume_init() };
 
-        self.storage_read(mode, account, CODE_SLOT, 0, &mut res)?;
+        self.storage_read(mode, account, code_slot, 4, &mut res)?;
 
         Ok(res)
     }

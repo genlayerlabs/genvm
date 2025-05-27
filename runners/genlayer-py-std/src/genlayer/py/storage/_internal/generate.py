@@ -2,7 +2,7 @@
 Module that uses reflections that generates python-friendly views to GenVM storage format (mapping from slot addresses to linear memories)
 """
 
-__all__ = ('storage',)
+__all__ = ('generate_storage',)
 
 from genlayer.py.types import *
 
@@ -11,19 +11,17 @@ import sys
 import struct
 
 from .core import *
-from .core import _FakeStorageMan
 
 from .desc_base_types import (
-	_AddrDesc,
-	_IntDesc,
-	_StrDesc,
-	_BytesDesc,
-	_u32_desc,
-	_BoolDesc,
-	_NoneDesc,
+	AddrDesc,
+	IntDesc,
+	StrDesc,
+	BytesDesc,
+	BoolDesc,
+	NoneDesc,
 	_BigIntDesc,
 )
-from .desc_record import _RecordDesc, WithRecordStorageSlot
+from .desc_record import _RecordDesc, RecordExtraFields
 from ..vec import DynArray, _DynArrayDesc, Array, _ArrayDesc
 
 import genlayer.py._internal.reflect as reflect
@@ -38,7 +36,7 @@ def allow_storage[T: type](cls: T) -> T:
 	return cls
 
 
-def storage[T: type](cls: T) -> T:
+def generate_storage[T: type](cls: T) -> T:
 	cls = allow_storage(cls)
 	_storage_build(cls, {})
 	return cls
@@ -90,79 +88,79 @@ class _Instantiation:
 		return f"{reflect.repr_type(self.origin)}[{', '.join(map(repr, self.args))}]"
 
 
-_none_desc = _NoneDesc()
+_none_desc = NoneDesc()
 
 _known_descs: dict[type | _Instantiation, TypeDesc] = {
-	Address: _AddrDesc(),
-	str: _StrDesc(),
-	bytes: _BytesDesc(),
-	bool: _BoolDesc(),
+	Address: AddrDesc(),
+	str: StrDesc(),
+	bytes: BytesDesc(),
+	bool: BoolDesc(),
 	type(None): _none_desc,
 	None: _none_desc,  # type: ignore
-	u8: _IntDesc(1, signed=False),
-	u16: _IntDesc(2, signed=False),
-	u24: _IntDesc(3, signed=False),
-	u32: _IntDesc(4, signed=False),
-	u40: _IntDesc(5, signed=False),
-	u48: _IntDesc(6, signed=False),
-	u56: _IntDesc(7, signed=False),
-	u64: _IntDesc(8, signed=False),
-	u72: _IntDesc(9, signed=False),
-	u80: _IntDesc(10, signed=False),
-	u88: _IntDesc(11, signed=False),
-	u96: _IntDesc(12, signed=False),
-	u104: _IntDesc(13, signed=False),
-	u112: _IntDesc(14, signed=False),
-	u120: _IntDesc(15, signed=False),
-	u128: _IntDesc(16, signed=False),
-	u136: _IntDesc(17, signed=False),
-	u144: _IntDesc(18, signed=False),
-	u152: _IntDesc(19, signed=False),
-	u160: _IntDesc(20, signed=False),
-	u168: _IntDesc(21, signed=False),
-	u176: _IntDesc(22, signed=False),
-	u184: _IntDesc(23, signed=False),
-	u192: _IntDesc(24, signed=False),
-	u200: _IntDesc(25, signed=False),
-	u208: _IntDesc(26, signed=False),
-	u216: _IntDesc(27, signed=False),
-	u224: _IntDesc(28, signed=False),
-	u232: _IntDesc(29, signed=False),
-	u240: _IntDesc(30, signed=False),
-	u248: _IntDesc(31, signed=False),
-	u256: _IntDesc(32, signed=False),
-	i8: _IntDesc(1),
-	i16: _IntDesc(2),
-	i24: _IntDesc(3),
-	i32: _IntDesc(4),
-	i40: _IntDesc(5),
-	i48: _IntDesc(6),
-	i56: _IntDesc(7),
-	i64: _IntDesc(8),
-	i72: _IntDesc(9),
-	i80: _IntDesc(10),
-	i88: _IntDesc(11),
-	i96: _IntDesc(12),
-	i104: _IntDesc(13),
-	i112: _IntDesc(14),
-	i120: _IntDesc(15),
-	i128: _IntDesc(16),
-	i136: _IntDesc(17),
-	i144: _IntDesc(18),
-	i152: _IntDesc(19),
-	i160: _IntDesc(20),
-	i168: _IntDesc(21),
-	i176: _IntDesc(22),
-	i184: _IntDesc(23),
-	i192: _IntDesc(24),
-	i200: _IntDesc(25),
-	i208: _IntDesc(26),
-	i216: _IntDesc(27),
-	i224: _IntDesc(28),
-	i232: _IntDesc(29),
-	i240: _IntDesc(30),
-	i248: _IntDesc(31),
-	i256: _IntDesc(32),
+	u8: IntDesc(1, signed=False),
+	u16: IntDesc(2, signed=False),
+	u24: IntDesc(3, signed=False),
+	u32: IntDesc(4, signed=False),
+	u40: IntDesc(5, signed=False),
+	u48: IntDesc(6, signed=False),
+	u56: IntDesc(7, signed=False),
+	u64: IntDesc(8, signed=False),
+	u72: IntDesc(9, signed=False),
+	u80: IntDesc(10, signed=False),
+	u88: IntDesc(11, signed=False),
+	u96: IntDesc(12, signed=False),
+	u104: IntDesc(13, signed=False),
+	u112: IntDesc(14, signed=False),
+	u120: IntDesc(15, signed=False),
+	u128: IntDesc(16, signed=False),
+	u136: IntDesc(17, signed=False),
+	u144: IntDesc(18, signed=False),
+	u152: IntDesc(19, signed=False),
+	u160: IntDesc(20, signed=False),
+	u168: IntDesc(21, signed=False),
+	u176: IntDesc(22, signed=False),
+	u184: IntDesc(23, signed=False),
+	u192: IntDesc(24, signed=False),
+	u200: IntDesc(25, signed=False),
+	u208: IntDesc(26, signed=False),
+	u216: IntDesc(27, signed=False),
+	u224: IntDesc(28, signed=False),
+	u232: IntDesc(29, signed=False),
+	u240: IntDesc(30, signed=False),
+	u248: IntDesc(31, signed=False),
+	u256: IntDesc(32, signed=False),
+	i8: IntDesc(1),
+	i16: IntDesc(2),
+	i24: IntDesc(3),
+	i32: IntDesc(4),
+	i40: IntDesc(5),
+	i48: IntDesc(6),
+	i56: IntDesc(7),
+	i64: IntDesc(8),
+	i72: IntDesc(9),
+	i80: IntDesc(10),
+	i88: IntDesc(11),
+	i96: IntDesc(12),
+	i104: IntDesc(13),
+	i112: IntDesc(14),
+	i120: IntDesc(15),
+	i128: IntDesc(16),
+	i136: IntDesc(17),
+	i144: IntDesc(18),
+	i152: IntDesc(19),
+	i160: IntDesc(20),
+	i168: IntDesc(21),
+	i176: IntDesc(22),
+	i184: IntDesc(23),
+	i192: IntDesc(24),
+	i200: IntDesc(25),
+	i208: IntDesc(26),
+	i216: IntDesc(27),
+	i224: IntDesc(28),
+	i232: IntDesc(29),
+	i240: IntDesc(30),
+	i248: IntDesc(31),
+	i256: IntDesc(32),
 	bigint: _BigIntDesc(),
 }
 
@@ -174,11 +172,11 @@ class _FloatDesc(TypeDesc[float]):
 		TypeDesc.__init__(self, 8, [8])
 		self._type = type
 
-	def get(self, slot: StorageSlot, off: int) -> float:
+	def get(self, slot: Slot, off: int) -> float:
 		dat = slot.read(off, self.size)
 		return struct.unpack('d', dat)[0]
 
-	def set(self, slot: StorageSlot, off: int, val: float):
+	def set(self, slot: Slot, off: int, val: float):
 		slot.write(off, struct.pack('d', val))
 
 
@@ -283,6 +281,14 @@ def _storage_build_generic(
 		arg0 = cls.args[0]
 		assert not isinstance(arg0, Lit)
 		return _DynArrayDesc(arg0)
+	elif cls.origin is Indirection:
+		arg0 = cls.args[0]
+		assert not isinstance(arg0, Lit)
+		return IndirectionTypeDesc(arg0)
+	elif cls.origin is VLA:
+		arg0 = cls.args[0]
+		assert not isinstance(arg0, Lit)
+		return VLATypeDesc(arg0)
 	elif cls.origin is Array:
 		arg0 = cls.args[0]
 		assert not isinstance(arg0, Lit)
@@ -333,11 +339,11 @@ def _storage_build_struct(
 
 		if not getattr(cls, STORAGE_PATCHED_ATTR, False):
 
-			def getter(s: WithRecordStorageSlot, prop_name=prop_name):
+			def getter(s: RecordExtraFields, prop_name=prop_name):
 				prop_desc, off = s.__type_desc__.props[prop_name]
 				return prop_desc.get(s._storage_slot, s._off + off)
 
-			def setter(s: WithRecordStorageSlot, v, prop_name=prop_name):
+			def setter(s: RecordExtraFields, v, prop_name=prop_name):
 				prop_desc, off = s.__type_desc__.props[prop_name]
 				prop_desc.set(s._storage_slot, s._off + off, v)
 
@@ -360,7 +366,7 @@ def _storage_build_struct(
 				return
 
 			exc = TypeError(
-				'generic storage classes can not be instantiated with __init__, please, use gl.storage_inmem_allocate'
+				'generic storage classes can not be instantiated with __init__, please, use gl.storage.inmem_allocate'
 			)
 			exc.add_note(
 				f'due to field `{generic_info['name']}: {reflect.repr_type(generic_info['value'])}`'
@@ -370,7 +376,7 @@ def _storage_build_struct(
 
 		def new_init_no_generic(self, *args, **kwargs):
 			if not hasattr(self, '_storage_slot'):
-				self._storage_slot = _FakeStorageMan().get_store_slot(CONTRACT_SLOT_ID)
+				self._storage_slot = InmemManager().get_store_slot(ROOT_SLOT_ID)
 				self._off = 0
 				self.__type_desc__ = description
 			old_init(self, *args, **kwargs)
@@ -386,7 +392,7 @@ def _storage_build_struct(
 	return description
 
 
-@storage
+@generate_storage
 class _DateTime:
 	seconds: u64
 	micros: u32
@@ -408,7 +414,7 @@ class _DateTimeDesc(TypeDesc[datetime.datetime]):
 	def __init__(self):
 		super().__init__(_dt_desc.size, _dt_desc.copy_actions)
 
-	def get(self, slot: StorageSlot, off: int) -> datetime.datetime:
+	def get(self, slot: Slot, off: int) -> datetime.datetime:
 		dt = _dt_desc.get(slot, off)
 
 		def make_date(dt_tuple: time.struct_time, tzinfo):
@@ -436,7 +442,7 @@ class _DateTimeDesc(TypeDesc[datetime.datetime]):
 			dt_tuple = time.localtime(dt.seconds)
 			return make_date(dt_tuple, tzinfo=tz)
 
-	def set(self, slot: StorageSlot, off: int, val: datetime.datetime) -> None:
+	def set(self, slot: Slot, off: int, val: datetime.datetime) -> None:
 		dt = _dt_desc.get(slot, off)
 		tz = val.tzinfo
 		dt.seconds = u64(int(val.timestamp()))

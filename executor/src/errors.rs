@@ -10,6 +10,10 @@ impl std::fmt::Display for ContractError {
 }
 
 impl ContractError {
+    pub fn oom(cause: Option<anyhow::Error>) -> Self {
+        ContractError("OOM".to_owned(), cause)
+    }
+
     pub fn wrap(message: String, cause: anyhow::Error) -> Self {
         match cause.downcast::<ContractError>() {
             Err(cause) => Self(message, Some(cause)),

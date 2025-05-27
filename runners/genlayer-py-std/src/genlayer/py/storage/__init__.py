@@ -3,25 +3,39 @@ __all__ = (
 	'Array',
 	'TreeMap',
 	'allow_storage',
-	'storage_inmem_allocate',
+	'inmem_allocate',
+	'Root',
+	'ROOT_SLOT_ID',
+	'Slot',
+	'Manager',
+	'Indirection',
+	'VLA',
 )
 
 from .vec import DynArray, Array
 from .tree_map import TreeMap
 from .annotations import *
+from .root import Root
+
+from ._internal.core import Indirection, VLA
+
+from ._internal.core import ROOT_SLOT_ID, Slot, Manager, InmemManager
 
 import typing
 
-from ._internal.generate import ORIGINAL_INIT_ATTR
+from ._internal.generate import (
+	ORIGINAL_INIT_ATTR,
+	generate_storage,
+	_known_descs,
+	_storage_build,
+	Lit,
+)
 
 
-def storage_inmem_allocate[T](t: typing.Type[T], *init_args, **init_kwargs) -> T:
-	from ._internal.generate import _storage_build, Lit
-	from ._internal.core import _FakeStorageMan, ROOT_SLOT_ID
-
+def inmem_allocate[T](t: typing.Type[T], *init_args, **init_kwargs) -> T:
 	td = _storage_build(t, {})
 	assert not isinstance(td, Lit)
-	man = _FakeStorageMan()
+	man = InmemManager()
 
 	instance = td.get(man.get_store_slot(ROOT_SLOT_ID), 0)
 

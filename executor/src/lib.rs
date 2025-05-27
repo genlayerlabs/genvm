@@ -2,6 +2,7 @@ pub mod caching;
 pub mod config;
 pub mod errors;
 mod host;
+pub mod memlimiter;
 pub mod mmap;
 pub mod modules;
 pub mod runner;
@@ -22,15 +23,16 @@ use std::{str::FromStr, sync::Arc};
 use vm::{Modules, RunOk};
 
 #[derive(Debug, Clone)]
-pub struct PublicArgs {
+pub struct PublicArgs<'a> {
     pub cookie: String,
     pub allow_latest: bool,
     pub is_sync: bool,
+    pub message: &'a MessageData,
 }
 
 pub fn create_supervisor(
     config: &config::Config,
-    host: Host,
+    mut host: Host,
     cancellation: Arc<genvm_common::cancellation::Token>,
     host_data: Arc<serde_json::Value>,
     pub_args: PublicArgs,
@@ -52,12 +54,22 @@ pub fn create_supervisor(
         )),
     };
 
+    let limiter_det = memlimiter::Limiter::new("det");
+
+    let locked_slots = host.get_locked_slots_for_sender(
+        calldata::Address::from(pub_args.message.contract_address.raw()),
+        calldata::Address::from(pub_args.message.sender_address.raw()),
+        &limiter_det,
+    )?;
+
     let shared_data = Arc::new(crate::vm::SharedData::new(
         modules,
         cancellation,
         pub_args.is_sync,
         pub_args.cookie.clone(),
         pub_args.allow_latest,
+        limiter_det,
+        locked_slots,
     ));
 
     Ok(Arc::new(tokio::sync::Mutex::new(vm::Supervisor::new(

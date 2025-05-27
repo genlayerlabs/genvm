@@ -1,39 +1,38 @@
 from genlayer.py.types import Address
 import abc
-import collections.abc
 
 from .core import *
 
 
-class _BoolDesc(TypeDesc):
+class BoolDesc(TypeDesc):
 	__slots__ = ()
 
 	def __init__(self):
 		TypeDesc.__init__(self, 1, [1])
 
-	def get(self, slot: StorageSlot, off: int) -> bool:
+	def get(self, slot: Slot, off: int) -> bool:
 		return slot.read(off, 1)[0] != 0
 
-	def set(self, slot: StorageSlot, off: int, val: bool):
+	def set(self, slot: Slot, off: int, val: bool):
 		slot.write(off, bytes([1 if val else 0]))
 
 	def __repr__(self):
 		return '_BoolDesc'
 
 
-class _IntDesc(TypeDesc):
+class IntDesc(TypeDesc):
 	__slots__ = ('signed',)
 
 	def __init__(self, size: int, signed=True):
 		TypeDesc.__init__(self, size, [size])
 		self.signed = signed
 
-	def get(self, slot: StorageSlot, off: int) -> int:
+	def get(self, slot: Slot, off: int) -> int:
 		return int.from_bytes(
 			slot.read(off, self.size), byteorder='little', signed=self.signed
 		)
 
-	def set(self, slot: StorageSlot, off: int, val: int):
+	def set(self, slot: Slot, off: int, val: int):
 		slot.write(
 			off, memoryview(val.to_bytes(self.size, byteorder='little', signed=self.signed))
 		)
@@ -42,7 +41,7 @@ class _IntDesc(TypeDesc):
 		return f"_IntDesc[{self.size}, {"" if self.signed else "un"}signed]"
 
 	def __eq__(self, r):
-		if not isinstance(r, _IntDesc):
+		if not isinstance(r, IntDesc):
 			return False
 		return self.size == r.size and self.signed == r.signed
 
@@ -50,41 +49,42 @@ class _IntDesc(TypeDesc):
 		return hash(('_IntDesc', self.size, self.signed))
 
 
-class _NoneDesc(TypeDesc[None]):
+class NoneDesc(TypeDesc[None]):
 	__slots__ = ()
 
 	def __init__(self):
 		TypeDesc.__init__(self, 0, [0])
 
-	def get(self, slot: StorageSlot, off: int) -> None:
+	def get(self, slot: Slot, off: int) -> None:
 		return
 
-	def set(self, slot: StorageSlot, off: int, val: None):
+	def set(self, slot: Slot, off: int, val: None):
 		pass
 
 	def __repr__(self):
 		return f'_NoneDesc'
 
 	def __eq__(self, r):
-		return isinstance(r, _NoneDesc)
+		return isinstance(r, NoneDesc)
 
 	def __hash__(self):
 		return hash('_NoneDesc')
 
 
-_u32_desc = _IntDesc(4, signed=False)
+_u8_desc = IntDesc(1, signed=False)
+_u32_desc = IntDesc(4, signed=False)
 
 
-class _AddrDesc(TypeDesc):
+class AddrDesc(TypeDesc):
 	__slots__ = ()
 
 	def __init__(self):
 		TypeDesc.__init__(self, Address.SIZE, [Address.SIZE])
 
-	def get(self, slot: StorageSlot, off: int) -> Address:
+	def get(self, slot: Slot, off: int) -> Address:
 		return Address(slot.read(off, self.size))
 
-	def set(self, slot: StorageSlot, off: int, val: Address):
+	def set(self, slot: Slot, off: int, val: Address):
 		slot.write(off, memoryview(val.as_bytes))
 
 	def __repr__(self):
@@ -97,7 +97,7 @@ class _CopyStrBytesAction(ComplexCopyAction):
 	def __init__(self):
 		pass
 
-	def copy(self, frm: StorageSlot, frm_off: int, to: StorageSlot, to_off: int) -> int:
+	def copy(self, frm: Slot, frm_off: int, to: Slot, to_off: int) -> int:
 		frm_stor = frm.indirect(frm_off)
 		to_stor = to.indirect(to_off)
 		le = _u32_desc.get(frm, frm_off)
@@ -124,12 +124,12 @@ class _StrBytesDesc[T](TypeDesc):
 	def encode(self, val: T) -> memoryview:
 		raise NotImplementedError()
 
-	def get(self, slot: StorageSlot, off: int) -> T:
+	def get(self, slot: Slot, off: int) -> T:
 		le = _u32_desc.get(slot, off)
 		contents_at = slot.indirect(off)
 		return self.decode(contents_at.read(0, le))
 
-	def set(self, slot: StorageSlot, off: int, val: T):
+	def set(self, slot: Slot, off: int, val: T):
 		contents_at = slot.indirect(off)
 		enc = self.encode(val)
 		_u32_desc.set(slot, off, len(enc))
@@ -142,7 +142,7 @@ class _StrBytesDesc[T](TypeDesc):
 		return hash(type(self).__name__)
 
 
-class _StrDesc(_StrBytesDesc[str]):
+class StrDesc(_StrBytesDesc[str]):
 	__slots__ = ()
 
 	def __init__(self):
@@ -158,7 +158,7 @@ class _StrDesc(_StrBytesDesc[str]):
 		return '_StrDesc'
 
 
-class _BytesDesc(_StrBytesDesc[bytes]):
+class BytesDesc(_StrBytesDesc[bytes]):
 	__slots__ = ()
 
 	def __init__(self):
@@ -193,15 +193,3 @@ class _BigIntDesc(_StrBytesDesc[int]):
 
 	def __repr__(self):
 		return '_BigIntDesc'
-
-
-# here is a problem: we can't return actual tuple..
-# class _TupleDesc(TypeDesc[tuple]):
-# 	def __init__(self, subs: tuple[TypeDesc]):
-# 		self._subs = subs
-# 		copy_actions: list[CopyAction] = []
-# 		size = 0
-# 		for x in subs:
-# 			actions_append(copy_actions, x.copy_actions)
-# 			size += x.size
-# 		TypeDesc.__init__(self, size, copy_actions)

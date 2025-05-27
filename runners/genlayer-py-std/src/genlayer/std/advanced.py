@@ -162,3 +162,11 @@ def emit_raw_event(
 		},
 		lambda _x: None,
 	).get()
+
+
+def rollback_immediate(reason: str) -> typing.NoReturn:
+	"""
+	Performs an immediate rollback, current VM won't be able to handle it, stack unwind will not happen
+	"""
+
+	gl_call.rollback(reason)

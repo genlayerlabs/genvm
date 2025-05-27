@@ -1,6 +1,6 @@
 from genlayer.py.storage import DynArray, Array, TreeMap
 from genlayer.py.types import u32, bigint
-from genlayer.py.storage._internal.generate import storage
+from genlayer.py.storage._internal.generate import generate_storage
 from dataclasses import dataclass
 import typing
 
@@ -9,7 +9,7 @@ import genlayer.py.calldata as calldata
 from .common import *
 
 
-@storage
+@generate_storage
 class Store:
 	da: DynArray[str]
 	sa: Array[str, typing.Literal[3]]

@@ -6,4 +6,4 @@ class Contract(gl.Contract):
 	@gl.public.write
 	def foo(self, a, b):
 		print('contract to.foo')
-		gl.rollback_immediate(f"nah, I won't execute {a + b}")
+		gl.advanced.rollback_immediate(f"nah, I won't execute {a + b}")

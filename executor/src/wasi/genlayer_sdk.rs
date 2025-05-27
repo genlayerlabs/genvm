@@ -746,10 +746,14 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::Inval.into());
         }
 
-        let buf: Vec<u8> = read_owned_vec(mem, buf)?;
-
         let account = self.context.data.message_data.contract_address;
         let slot = SlotID::read_from_mem(mem, slot)?;
+
+        if self.context.shared_data.locked_slots.contains(slot) {
+            return Err(generated::types::Errno::Forbidden.into());
+        }
+
+        let buf: Vec<u8> = read_owned_vec(mem, buf)?;
 
         let supervisor = self.context.data.supervisor.clone();
         let mut supervisor = supervisor.lock().await;

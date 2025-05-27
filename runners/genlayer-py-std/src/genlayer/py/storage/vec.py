@@ -3,12 +3,14 @@ __all__ = ('DynArray', 'Array')
 import typing
 
 from ._internal.core import *
-from ._internal.core import _WithStorageSlot
+from ._internal.core import _WithStorageSlotAndTD
+
 from ._internal.desc_base_types import _u32_desc
+
 from ..types import SizedArray
 
 
-class DynArray[T](_WithStorageSlot, collections.abc.MutableSequence[T]):
+class DynArray[T](_WithStorageSlotAndTD, collections.abc.MutableSequence[T]):
 	"""
 	Represents exponentially growing array (:py:class:`list` in python terms) that can be persisted on the blockchain
 	"""
@@ -24,14 +26,6 @@ class DynArray[T](_WithStorageSlot, collections.abc.MutableSequence[T]):
 		:raises TypeError: always
 		"""
 		raise TypeError("this class can't be instantiated by user")
-
-	@staticmethod
-	def _view_at(item_desc: TypeDesc, slot: StorageSlot, off: int) -> 'DynArray':
-		slf = DynArray.__new__(DynArray)
-		slf._item_desc = item_desc
-		slf._storage_slot = slot
-		slf._off = off
-		return slf
 
 	def __len__(self) -> int:
 		return _u32_desc.get(self._storage_slot, self._off)
@@ -191,13 +185,16 @@ class DynArray[T](_WithStorageSlot, collections.abc.MutableSequence[T]):
 		return ''.join(ret)
 
 
-class _VecCopyAction(ComplexCopyAction):
+class _DynArrayDesc(SpecialTypeDesc, ComplexCopyAction):
+	_item_desc: TypeDesc
+
 	__slots__ = ('_item_desc',)
 
 	def __init__(self, item_desc: TypeDesc):
-		self._item_desc = item_desc
+		SpecialTypeDesc.__init__(self, item_desc, lambda: DynArray.__new__(DynArray))
+		TypeDesc.__init__(self, _u32_desc.size, [self])
 
-	def copy(self, frm: StorageSlot, frm_off: int, to: StorageSlot, to_off: int) -> int:
+	def copy(self, frm: Slot, frm_off: int, to: Slot, to_off: int) -> int:
 		le = _u32_desc.get(frm, frm_off)
 		_u32_desc.set(to, to_off, le)
 
@@ -212,33 +209,18 @@ class _VecCopyAction(ComplexCopyAction):
 				cum_off += actions_apply_copy(cop, to_indirect, cum_off, frm_indirect, cum_off)
 		return _u32_desc.size
 
-	def __repr__(self):
-		return '_VecCopyAction'
-
-
-class _DynArrayDesc(TypeDesc):
-	_item_desc: TypeDesc
-
-	__slots__ = ('_item_desc', '_cop')
-
-	def __init__(self, it_desc: TypeDesc):
-		self._item_desc = it_desc
-		self._cop = _VecCopyAction(it_desc)
-		TypeDesc.__init__(self, _u32_desc.size, [self._cop])
-
-	def get(self, slot: StorageSlot, off: int) -> DynArray:
-		return DynArray._view_at(self._item_desc, slot, off)
-
-	def set(self, slot: StorageSlot, off: int, val: DynArray | list) -> None:
-		if isinstance(val, list):
-			_u32_desc.set(slot, off, len(val))
-			indirect_slot = slot.indirect(off)
-			for i in range(len(val)):
-				self._item_desc.set(indirect_slot, i * self._item_desc.size, val[i])
+	def set(self, slot: Slot, off: int, val: DynArray | collections.abc.Sequence) -> None:
+		if isinstance(val, DynArray):
+			if val._item_desc is not self:
+				raise TypeError('incompatible vector type')
+			self.copy(val._storage_slot, val._off, slot, off)
 			return
-		if val._item_desc is not self:
-			raise Exception('incompatible vector type')
-		self._cop.copy(val._storage_slot, val._off, slot, off)
+
+		_u32_desc.set(slot, off, len(val))
+		indirect_slot = slot.indirect(off)
+		for i in range(len(val)):
+			self._item_desc.set(indirect_slot, i * self._item_desc.size, val[i])
+		return
 
 	def __eq__(self, r):
 		if not isinstance(r, _DynArrayDesc):
@@ -252,7 +234,9 @@ class _DynArrayDesc(TypeDesc):
 		return f'_VecDesc[{self._item_desc!r}]'
 
 
-class Array[T, S: int](_WithStorageSlot, collections.abc.Sequence, SizedArray[T, S]):
+class Array[T, S: int](
+	_WithStorageSlotAndTD, collections.abc.Sequence, SizedArray[T, S]
+):
 	"""
 	Constantly sized array that can be persisted on the blockchain
 	"""
@@ -268,13 +252,13 @@ class Array[T, S: int](_WithStorageSlot, collections.abc.Sequence, SizedArray[T,
 
 		:raises TypeError: always
 		"""
-		raise TypeError("this class can't be instantiated by user")
+		raise TypeError('this class can not be instantiated by user')
 
 	def __len__(self) -> int:
 		return self._len
 
 	@staticmethod
-	def _view_at(item_desc: TypeDesc, le: int, slot: StorageSlot, off: int) -> 'Array':
+	def _view_at(item_desc: TypeDesc, le: int, slot: Slot, off: int) -> 'Array':
 		slf = Array.__new__(Array)
 		slf._item_desc = item_desc
 		slf._len = le
@@ -322,25 +306,22 @@ class Array[T, S: int](_WithStorageSlot, collections.abc.Sequence, SizedArray[T,
 			yield self[i]
 
 
-class _ArrayDesc(TypeDesc):
+class _ArrayDesc(SpecialTypeDesc):
 	_item_desc: TypeDesc
 	_len: int
 
 	__slots__ = ('_item_desc', '_len')
 
-	def __init__(self, it_desc: TypeDesc, le: int):
-		self._item_desc = it_desc
-		self._len = le
+	def __init__(self, item_desc: TypeDesc, le: int):
+		SpecialTypeDesc.__init__(self, item_desc, lambda: Array.__new__(Array))
+
 		cop: list[CopyAction] = []
 		for _i in range(le):
-			actions_append(cop, it_desc.copy_actions)
+			actions_append(cop, item_desc.copy_actions)
 
-		TypeDesc.__init__(self, self._item_desc.size * le, cop)
+		TypeDesc.__init__(self, le * item_desc.size, cop)
 
-	def get(self, slot: StorageSlot, off: int) -> Array:
-		return Array._view_at(self._item_desc, self._len, slot, off)
-
-	def set(self, slot: StorageSlot, off: int, val: Array | list) -> None:
+	def set(self, slot: Slot, off: int, val: Array | list) -> None:
 		assert len(val) == self._len
 		if isinstance(val, list):
 			for i in range(self._len):

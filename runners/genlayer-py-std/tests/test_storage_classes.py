@@ -1,6 +1,6 @@
 from genlayer.py.storage import *
 from genlayer.py.types import *
-from genlayer.py.storage._internal.generate import storage, _known_descs
+from genlayer.py.storage._internal.generate import generate_storage, _known_descs
 
 
 class A:
@@ -22,7 +22,7 @@ class C(B, A):
 
 
 def test_fields():
-	X = storage(C)
+	X = generate_storage(C)
 
 	x = X()
 	x.x = u32(0x01020304)
@@ -36,5 +36,5 @@ def test_fields():
 
 
 def test_sizes():
-	X = storage(C)
+	X = generate_storage(C)
 	assert _known_descs[X].size == 12
