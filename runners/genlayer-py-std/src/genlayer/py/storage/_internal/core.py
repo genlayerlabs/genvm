@@ -160,14 +160,10 @@ class SpecialTypeDesc(TypeDesc):
 		return ret
 
 	def __eq__(self, r):
-		return (
-			type(self) == type(r)
-			and self.item_desc == r.item_desc
-			and self.view_ctor is r.view_ctor
-		)
+		return type(self) == type(r) and self.item_desc == r.item_desc
 
 	def __hash__(self) -> int:
-		return hash((type(self).__qualname__, self.item_desc, self.view_ctor))
+		return hash((type(self).__qualname__, self.item_desc))
 
 
 class Indirection[T](_WithStorageSlotAndTD):

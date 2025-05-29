@@ -186,9 +186,7 @@ class DynArray[T](_WithStorageSlotAndTD, collections.abc.MutableSequence[T]):
 
 
 class _DynArrayDesc(SpecialTypeDesc, ComplexCopyAction):
-	_item_desc: TypeDesc
-
-	__slots__ = ('_item_desc',)
+	__slots__ = ('item_desc', 'view_ctor')
 
 	def __init__(self, item_desc: TypeDesc):
 		SpecialTypeDesc.__init__(self, item_desc, lambda: DynArray.__new__(DynArray))
@@ -198,7 +196,7 @@ class _DynArrayDesc(SpecialTypeDesc, ComplexCopyAction):
 		le = _u32_desc.get(frm, frm_off)
 		_u32_desc.set(to, to_off, le)
 
-		cop = self._item_desc.copy_actions
+		cop = self.item_desc.copy_actions
 		to_indirect = to.indirect(to_off)
 		frm_indirect = frm.indirect(frm_off)
 		if len(cop) == 1 and isinstance(cop[0], int):
@@ -211,7 +209,7 @@ class _DynArrayDesc(SpecialTypeDesc, ComplexCopyAction):
 
 	def set(self, slot: Slot, off: int, val: DynArray | collections.abc.Sequence) -> None:
 		if isinstance(val, DynArray):
-			if val._item_desc is not self:
+			if val._item_desc is not self.item_desc:
 				raise TypeError('incompatible vector type')
 			self.copy(val._storage_slot, val._off, slot, off)
 			return
@@ -219,19 +217,8 @@ class _DynArrayDesc(SpecialTypeDesc, ComplexCopyAction):
 		_u32_desc.set(slot, off, len(val))
 		indirect_slot = slot.indirect(off)
 		for i in range(len(val)):
-			self._item_desc.set(indirect_slot, i * self._item_desc.size, val[i])
+			self.item_desc.set(indirect_slot, i * self.item_desc.size, val[i])
 		return
-
-	def __eq__(self, r):
-		if not isinstance(r, _DynArrayDesc):
-			return False
-		return self._item_desc == r._item_desc
-
-	def __hash__(self):
-		return hash(('_VecDesc', hash(self._item_desc)))
-
-	def __repr__(self):
-		return f'_VecDesc[{self._item_desc!r}]'
 
 
 class Array[T, S: int](
@@ -307,13 +294,19 @@ class Array[T, S: int](
 
 
 class _ArrayDesc(SpecialTypeDesc):
-	_item_desc: TypeDesc
 	_len: int
 
-	__slots__ = ('_item_desc', '_len')
+	__slots__ = ('item_desc', 'view_ctor', '_len')
 
 	def __init__(self, item_desc: TypeDesc, le: int):
-		SpecialTypeDesc.__init__(self, item_desc, lambda: Array.__new__(Array))
+		self._len = le
+
+		def new_array():
+			ret = Array.__new__(Array)
+			ret._len = le
+			return ret
+
+		SpecialTypeDesc.__init__(self, item_desc, new_array)
 
 		cop: list[CopyAction] = []
 		for _i in range(le):
@@ -325,17 +318,6 @@ class _ArrayDesc(SpecialTypeDesc):
 		assert len(val) == self._len
 		if isinstance(val, list):
 			for i in range(self._len):
-				self._item_desc.set(slot, off + i * self._item_desc.size, val[i])
+				self.item_desc.set(slot, off + i * self.item_desc.size, val[i])
 		else:
 			actions_apply_copy(self.copy_actions, slot, off, val._storage_slot, val._off)
-
-	def __eq__(self, r):
-		if not isinstance(r, Array):
-			return False
-		return self._item_desc == r._item_desc and self._len == r._len
-
-	def __hash__(self):
-		return hash(('_FixedVecDesc', hash(self._item_desc), self._len))
-
-	def __repr__(self):
-		return f'_FixedVecDesc[{self._item_desc!r}, {self._len}]'

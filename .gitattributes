@@ -5,3 +5,4 @@
 runners/py-libs/pure-py/** linguist-vendored
 runners/models/** linguist-vendored
 runners/softfloat/berkeley-softfloat-3/** linguist-vendored
+runners/genlayer-py-std/fuzz/inputs/** linguist-vendored

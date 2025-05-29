@@ -73,3 +73,15 @@ def test_del(key: str):
 	del r[key]
 
 	same_iter(sorted(l.m.items()), sorted(r.items()))
+
+
+def test_repr():
+	v = {
+		'b': 'русские буквы',
+		'a': 'c',
+	}
+
+	l = UserStorage()
+	l.m.update(v)
+
+	assert repr(l.m) == "{'a':'c','b':'русские буквы'}"

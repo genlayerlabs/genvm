@@ -37,6 +37,7 @@
 							zlib
 							glibc
 							libstdcxx5
+							aflplusplus
 
 							wabt
 						];

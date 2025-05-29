@@ -22,7 +22,7 @@ jobs:
         with:
           lfs: true
       - run: |
-          sudo apt-get install -y python3-poetry
+          sudo apt-get install -y python3-poetry afl++
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -39,6 +39,8 @@ jobs:
       - name: pytest
         run: |
           pushd runners/genlayer-py-std && \
+          echo core | sudo tee /proc/sys/kernel/core_pattern && \
+          ./fuzz/run.sh && \
           poetry run pytest -n auto && \
           popd
 
