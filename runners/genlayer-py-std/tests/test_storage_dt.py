@@ -1,11 +1,11 @@
 import pytest
 
-from genlayer.py.storage._internal.generate import storage
+from genlayer.py.storage._internal.generate import generate_storage
 
 import datetime
 
 
-@storage
+@generate_storage
 class Store:
 	dt: datetime.datetime
 
@@ -34,7 +34,7 @@ def test_dt(expr: datetime.datetime):
 from genlayer.py.storage import TreeMap
 
 
-@storage
+@generate_storage
 class Pr:
 	x: TreeMap[str, str]
 

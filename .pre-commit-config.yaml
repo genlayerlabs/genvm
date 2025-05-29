@@ -3,9 +3,9 @@ repos:
     rev: v4.6.0
     hooks:
       - id: trailing-whitespace
-        exclude: ^\.git-third-party
+        exclude: ^\.git-third-party|runners/genlayer-py-std/fuzz/inputs
       - id: end-of-file-fixer
-        exclude: ^\.git-third-party
+        exclude: ^\.git-third-party|runners/genlayer-py-std/fuzz/inputs
       - id: check-added-large-files
       - id: check-json
         exclude: ^\.git-third-party
@@ -41,7 +41,7 @@ repos:
     rev: 3.0.3
     hooks:
       - id: editorconfig-checker
-        exclude: (.git-third-party|runners/py-libs|runners/genlayer-py-std/src-emb/onnx)
+        exclude: (.git-third-party|runners/py-libs|runners/genlayer-py-std/src-emb/onnx|runners/genlayer-py-std/fuzz/inputs)
 
   - repo: local
     hooks:

@@ -1,5 +1,5 @@
 from genlayer.py.storage import DynArray, allow_storage
-from genlayer.py.storage._internal.generate import storage
+from genlayer.py.storage._internal.generate import generate_storage
 
 
 @allow_storage
@@ -10,7 +10,7 @@ class A:
 		self.x = x
 
 
-@storage
+@generate_storage
 class B:
 	x: A
 	y: A
@@ -33,7 +33,7 @@ class C:
 		self.v = x  # type: ignore
 
 
-@storage
+@generate_storage
 class D:
 	x: C
 	y: C

@@ -11,7 +11,7 @@ PRECOMPILE=false
 
 show_help() {
     cat << EOF
-Usage: $0 [OPTIONS]0
+Usage: $0 [OPTIONS]
 
 OPTIONS:
     --help              Show this help message

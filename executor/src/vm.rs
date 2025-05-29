@@ -12,6 +12,8 @@ use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
     caching, calldata, config,
+    host::LockedSlotsSet,
+    memlimiter,
     runner::{self, InitAction, WasmMode},
     ustar::{Archive, SharedBytes},
     wasi::{self, preview1::I32Exit},
@@ -124,47 +126,15 @@ impl std::fmt::Debug for RunOk {
 #[derive(Clone)]
 pub struct WasmContext {
     genlayer_ctx: Arc<Mutex<wasi::Context>>,
-    limits: StoreLimiter,
+    limits: memlimiter::Limiter,
 }
 
-pub struct StoreLimiterSaveTok {
-    remaining_memory: u32,
-}
-
-#[derive(Clone)]
-pub struct StoreLimiter {
-    id: &'static str,
-    remaining_memory: Arc<AtomicU32>,
-}
-
-impl StoreLimiter {
-    pub fn new(id: &'static str) -> Self {
-        StoreLimiter {
-            id,
-            remaining_memory: Arc::new(AtomicU32::new(u32::MAX)),
-        }
-    }
-
-    pub fn save(&self) -> StoreLimiterSaveTok {
-        StoreLimiterSaveTok {
-            remaining_memory: self
-                .remaining_memory
-                .load(std::sync::atomic::Ordering::SeqCst),
-        }
-    }
-
-    pub fn restore(&self, tok: StoreLimiterSaveTok) {
-        self.remaining_memory
-            .store(tok.remaining_memory, std::sync::atomic::Ordering::SeqCst);
-    }
-}
-
-impl wasmtime::ResourceLimiter for StoreLimiter {
+impl wasmtime::ResourceLimiter for memlimiter::Limiter {
     fn memory_growing(
         &mut self,
         current: usize,
         desired: usize,
-        maximum: Option<usize>,
+        _maximum: Option<usize>,
     ) -> Result<bool> {
         let delta = desired - current;
         if delta > u32::MAX as usize {
@@ -172,76 +142,25 @@ impl wasmtime::ResourceLimiter for StoreLimiter {
         }
 
         let delta = delta as u32;
-
-        let mut remaining = self
-            .remaining_memory
-            .load(std::sync::atomic::Ordering::SeqCst);
-
-        log::debug!(current = current, desired = desired, maximum:? = maximum, delta = delta, remaining_at_op_start = remaining, id = self.id; "memory grow request");
-
-        loop {
-            if delta > remaining {
-                return Ok(false);
-            }
-
-            match self.remaining_memory.compare_exchange(
-                remaining,
-                remaining - delta,
-                std::sync::atomic::Ordering::SeqCst,
-                std::sync::atomic::Ordering::SeqCst,
-            ) {
-                Ok(_) => break,
-                Err(new_remaining) => remaining = new_remaining,
-            }
-        }
-
-        Ok(true)
+        Ok(self.consume(delta, false))
     }
 
     fn table_growing(
         &mut self,
         current: usize,
         desired: usize,
-        maximum: Option<usize>,
+        _maximum: Option<usize>,
     ) -> Result<bool> {
         let delta = desired - current;
 
-        const TABLE_CELL_SIZE: usize = 16;
-
-        let delta = match delta.checked_mul(TABLE_CELL_SIZE) {
-            Some(delta) => delta,
-            None => return Ok(false),
-        };
+        const TABLE_CELL_SIZE: u32 = 16;
 
         if delta > u32::MAX as usize {
             return Ok(false);
         }
 
         let delta = delta as u32;
-
-        let mut remaining = self
-            .remaining_memory
-            .load(std::sync::atomic::Ordering::SeqCst);
-
-        log::debug!(current = current, desired = desired, maximum:? = maximum, delta = delta, remaining_at_op_start = remaining, id = self.id; "table grow request");
-
-        loop {
-            if delta > remaining {
-                return Ok(false);
-            }
-
-            match self.remaining_memory.compare_exchange(
-                remaining,
-                remaining - delta,
-                std::sync::atomic::Ordering::SeqCst,
-                std::sync::atomic::Ordering::SeqCst,
-            ) {
-                Ok(_) => break,
-                Err(new_remaining) => remaining = new_remaining,
-            }
-        }
-
-        Ok(true)
+        Ok(self.consume_mul(delta, TABLE_CELL_SIZE, false))
     }
 
     fn instances(&self) -> usize {
@@ -261,7 +180,7 @@ impl WasmContext {
     fn new(
         data: crate::wasi::genlayer_sdk::SingleVMData,
         shared_data: Arc<SharedData>,
-        limiter: StoreLimiter,
+        limiter: memlimiter::Limiter,
     ) -> anyhow::Result<WasmContext> {
         Ok(WasmContext {
             genlayer_ctx: Arc::new(Mutex::new(wasi::Context::new(data, shared_data)?)),
@@ -289,8 +208,9 @@ pub struct SharedData {
     pub cookie: String,
     pub allow_latest: bool,
 
-    pub limiter_det: StoreLimiter,
-    pub limiter_non_det: StoreLimiter,
+    pub limiter_det: memlimiter::Limiter,
+    pub limiter_non_det: memlimiter::Limiter,
+    pub locked_slots: LockedSlotsSet,
 }
 
 impl SharedData {
@@ -300,6 +220,8 @@ impl SharedData {
         is_sync: bool,
         cookie: String,
         allow_latest: bool,
+        limiter_det: memlimiter::Limiter,
+        locked_slots: LockedSlotsSet,
     ) -> Self {
         Self {
             nondet_call_no: 0.into(),
@@ -309,8 +231,9 @@ impl SharedData {
             balances: dashmap::DashMap::new(),
             cookie,
             allow_latest,
-            limiter_det: StoreLimiter::new("det"),
-            limiter_non_det: StoreLimiter::new("non-det"),
+            limiter_det,
+            limiter_non_det: memlimiter::Limiter::new("non-det"),
+            locked_slots,
         }
     }
 }
@@ -370,6 +293,7 @@ fn try_get_latest(runner_id: &str, base_path: &std::path::Path) -> Option<String
 fn make_new_runner_arch_from_tar(
     id: symbol_table::GlobalSymbol,
     base_path: &std::path::Path,
+    limiter: &memlimiter::Limiter,
 ) -> Result<Archive> {
     let (runner_id, runner_hash) =
         runner::verify_runner(id.as_str()).with_context(|| format!("verifying {id}"))?;
@@ -381,7 +305,7 @@ fn make_new_runner_arch_from_tar(
     fname.push_str(".tar");
     path.push(fname);
 
-    let contents = crate::mmap::load_file(&path)?;
+    let contents = crate::mmap::load_file(&path, Some(limiter))?;
 
     crate::ustar::Archive::from_ustar(SharedBytes::new(contents))
         .with_context(|| format!("path {:?}", path))
@@ -898,9 +822,9 @@ impl Supervisor {
 
                 let id = self.unfold_test_id_if_any(ctx, *id, &path)?;
 
-                let _ = self
-                    .runner_cache
-                    .get_or_create(id, || make_new_runner_arch_from_tar(id, &path))?;
+                let _ = self.runner_cache.get_or_create(id, || {
+                    make_new_runner_arch_from_tar(id, &path, &self.shared_data.limiter_det)
+                })?;
 
                 Box::pin(self.apply_action_recursive(vm, ctx, action, id))
                     .await
@@ -917,7 +841,7 @@ impl Supervisor {
 
                 let path = self.runner_cache.path().clone();
                 let new_arch = self.runner_cache.get_or_create(id, || {
-                    make_new_runner_arch_from_tar(id, &path)
+                    make_new_runner_arch_from_tar(id, &path, &self.shared_data.limiter_det)
                         .with_context(|| format!("loading {id}"))
                 })?;
                 let new_action = new_arch
@@ -981,9 +905,11 @@ impl Supervisor {
         let contract_id = runner::get_id_of_contract(contract_address);
 
         let provide_arch = || {
-            let code = self
-                .host
-                .get_code(vm.config_copy.state_mode, contract_address)?;
+            let code = self.host.get_code(
+                vm.config_copy.state_mode,
+                contract_address,
+                &self.shared_data.limiter_det,
+            )?;
             Self::code_to_archive(SharedBytes::new(code))
         };
 

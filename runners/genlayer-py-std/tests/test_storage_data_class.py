@@ -1,5 +1,5 @@
 from genlayer.py.storage import allow_storage
-from genlayer.py.storage._internal.generate import storage
+from genlayer.py.storage._internal.generate import generate_storage
 from dataclasses import dataclass
 
 
@@ -12,7 +12,7 @@ class A:
 		self.x = x
 
 
-@storage
+@generate_storage
 @dataclass
 class B:
 	x: A

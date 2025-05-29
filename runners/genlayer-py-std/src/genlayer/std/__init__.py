@@ -25,14 +25,12 @@ __all__ = (
 	'get_webpage',
 	'message',
 	'message_raw',
-	'rollback_immediate',
 	'eth',
-	'storage_inmem_allocate',
+	'storage',
 	'Event',
 )
 
 import typing
-import json
 import os
 
 import genlayer.py.eth as eth
@@ -44,15 +42,18 @@ from .events import Event
 
 # reexports
 from ..py.types import *
-from ..py.storage import storage_inmem_allocate
+import genlayer.py.storage as storage
+
+from ._internal.storage import STORAGE_MAN
+
+storage.Root.MANAGER = STORAGE_MAN
+
 from .eq_principles import *
 from .nondet_fns import *
 from .genvm_contracts import *
 from .eth import *
 from .annotations import *
 from .msg import MessageRawType, message_raw as _message_raw_original
-
-import genlayer.std._internal.gl_call as gl_call
 
 
 class MessageType(typing.NamedTuple):
@@ -94,11 +95,3 @@ else:
 		value=u256(message_raw['value']),
 		chain_id=u256(message_raw['chain_id']),
 	)
-
-
-def rollback_immediate(reason: str) -> typing.NoReturn:
-	"""
-	Performs an immediate rollback, current VM won't be able to handle it, stack unwind will not happen
-	"""
-
-	gl_call.rollback(reason)

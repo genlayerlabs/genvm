@@ -99,16 +99,17 @@ class IHost(metaclass=abc.ABCMeta):
 def save_code_callback[T](
 	address: bytes, code: bytes, cb: typing.Callable[[bytes, bytes, int, bytes], T]
 ) -> tuple[T, T]:
-	root_slot = b'\x00' * 32
+	import hashlib
+
+	code_digest = hashlib.sha3_256(b'\x00' * 32)
+	CODE_OFFSET = 1
+	code_digest.update(CODE_OFFSET.to_bytes(4, byteorder='little'))
+	code_slot = code_digest.digest()
 	r1 = cb(
-		address, root_slot, 0, len(code).to_bytes(4, byteorder='little', signed=False)
+		address, code_slot, 0, len(code).to_bytes(4, byteorder='little', signed=False)
 	)
 
-	code_slot = bytes(
-		b'\xea\xc3\x96~\xf5\xde\x85\xaf\x8d\x0fX\x9f|\x16\x98\xc7P\xe4\xe0\xbf\x9b4M\xc7\x97\xf8\xa9\xad\xc3F-7'
-	)
-
-	r2 = cb(address, code_slot, 0, code)
+	r2 = cb(address, code_slot, 4, code)
 
 	return (r1, r2)
 

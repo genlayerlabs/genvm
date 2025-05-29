@@ -344,9 +344,9 @@ class Contract:
 			)
 
 		cls.__gl_contract__ = True
-		from genlayer.py.storage._internal.generate import storage
+		from genlayer.py.storage._internal.generate import generate_storage
 
-		storage(cls)
+		generate_storage(cls)
 		__known_contact__ = cls
 
 	@property

@@ -47,14 +47,6 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 	_slots: DynArray[_Node[K, V]]
 	_free_slots: DynArray[u32]
 
-	def __init__(self):
-		"""
-		This class can't be created with ``TreeMap()``
-
-		:raises TypeError: always
-		"""
-		raise TypeError("this class can't be instantiated by user")
-
 	def clear(self):
 		self._root = u32(0)
 		self._slots.clear()
@@ -477,7 +469,7 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 			if comma:
 				ret.append(',')
 			comma = True
-			ret.append(json.dumps(k))
+			ret.append(repr(k))
 			ret.append(':')
 			ret.append(repr(v))
 		ret.append('}')

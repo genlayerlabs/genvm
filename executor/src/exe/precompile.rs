@@ -57,7 +57,7 @@ fn compile_single_file(
     let mut result_dir_path = precompile_dir.to_owned();
     result_dir_path.push(base_path);
 
-    let data = genvm::mmap::load_file(zip_path)?;
+    let data = genvm::mmap::load_file(zip_path, None)?;
 
     let arch = genvm::ustar::Archive::from_ustar(SharedBytes::new(data))?;
 

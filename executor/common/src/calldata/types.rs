@@ -14,6 +14,8 @@ impl std::fmt::Debug for Address {
 }
 
 impl Address {
+    pub const SIZE: u32 = 20;
+
     pub const fn from(raw: [u8; ADDRESS_SIZE]) -> Self {
         Self(raw)
     }

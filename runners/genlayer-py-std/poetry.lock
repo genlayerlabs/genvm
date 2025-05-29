@@ -1094,28 +1094,6 @@ dev = ["pre-commit", "tox"]
 testing = ["coverage", "pytest", "pytest-benchmark"]
 
 [[package]]
-name = "psutil"
-version = "5.6.3"
-description = "Cross-platform lib for process and system monitoring in Python."
-optional = false
-python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
-files = [
-    {file = "psutil-5.6.3-cp27-none-win32.whl", hash = "sha256:d5350cb66690915d60f8b233180f1e49938756fb2d501c93c44f8fb5b970cc63"},
-    {file = "psutil-5.6.3-cp27-none-win_amd64.whl", hash = "sha256:b6e08f965a305cd84c2d07409bc16fbef4417d67b70c53b299116c5b895e3f45"},
-    {file = "psutil-5.6.3-cp35-cp35m-win32.whl", hash = "sha256:cf49178021075d47c61c03c0229ac0c60d5e2830f8cab19e2d88e579b18cdb76"},
-    {file = "psutil-5.6.3-cp35-cp35m-win_amd64.whl", hash = "sha256:bc96d437dfbb8865fc8828cf363450001cb04056bbdcdd6fc152c436c8a74c61"},
-    {file = "psutil-5.6.3-cp36-cp36m-win32.whl", hash = "sha256:eba238cf1989dfff7d483c029acb0ac4fcbfc15de295d682901f0e2497e6781a"},
-    {file = "psutil-5.6.3-cp36-cp36m-win_amd64.whl", hash = "sha256:954f782608bfef9ae9f78e660e065bd8ffcfaea780f9f2c8a133bb7cb9e826d7"},
-    {file = "psutil-5.6.3-cp37-cp37m-win32.whl", hash = "sha256:503e4b20fa9d3342bcf58191bbc20a4a5ef79ca7df8972e6197cc14c5513e73d"},
-    {file = "psutil-5.6.3-cp37-cp37m-win_amd64.whl", hash = "sha256:028a1ec3c6197eadd11e7b46e8cc2f0720dc18ac6d7aabdb8e8c0d6c9704f000"},
-    {file = "psutil-5.6.3-cp38-cp38-win_amd64.whl", hash = "sha256:12542c3642909f4cd1928a2fba59e16fa27e47cbeea60928ebb62a8cbd1ce123"},
-    {file = "psutil-5.6.3.tar.gz", hash = "sha256:863a85c1c0a5103a12c05a35e59d336e1d665747e531256e061213e2e90f63f3"},
-]
-
-[package.extras]
-enum = ["enum34"]
-
-[[package]]
 name = "pydantic"
 version = "2.11.5"
 description = "Data validation using Python type hints"
@@ -1306,23 +1284,14 @@ setproctitle = ["setproctitle"]
 testing = ["filelock"]
 
 [[package]]
-name = "pythonfuzz"
-version = "1.0.11"
-description = "Coverage-guided fuzz testing for Python"
+name = "python-afl"
+version = "0.7.3"
+description = "American Fuzzy Lop fork server and instrumentation for pure-Python code"
 optional = false
-python-versions = ">=3.5.3"
+python-versions = "*"
 files = [
-    {file = "pythonfuzz-1.0.11-py3-none-any.whl", hash = "sha256:427a43d3c17ddfead1270c6326214bf1d2a287d66d902d21d8454d96f50c6f68"},
-    {file = "pythonfuzz-1.0.11.tar.gz", hash = "sha256:e703ed096ea91272a2e006d39df26f0b41e72d4ef265b98e847fe6b3d170da4f"},
+    {file = "python-afl-0.7.3.tar.gz", hash = "sha256:b373196d747266230bbe842edaaad659625363857c8e765505d765d0613f9544"},
 ]
-
-[package.dependencies]
-psutil = "5.6.3"
-
-[package.source]
-type = "legacy"
-url = "https://gitlab.com/api/v4/projects/19904939/packages/pypi/simple"
-reference = "gitlab"
 
 [[package]]
 name = "pyyaml"
@@ -2003,4 +1972,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "89135d1417e3eaa9461c3f7ba9dc9782d27ab1223f636dcd35fe1f3db182f2fe"
+content-hash = "0e771c60ae9dc9ea3cdf05140a7ca62b8bc8dd8c40addcd501c6d4dcbcf1905c"

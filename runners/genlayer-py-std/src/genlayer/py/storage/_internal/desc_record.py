@@ -6,7 +6,11 @@ from .core import _WithStorageSlot
 import genlayer.py._internal.reflect as reflect
 
 
-class _RecordDesc[T: WithRecordStorageSlot](TypeDesc):
+class RecordExtraFields(_WithStorageSlot, typing.Protocol):
+	__type_desc__: '_RecordDesc'
+
+
+class _RecordDesc[T: RecordExtraFields](TypeDesc):
 	props: dict[str, tuple[TypeDesc, int]]
 
 	__slots__ = ('props', 'hsh', 'cls')
@@ -26,14 +30,14 @@ class _RecordDesc[T: WithRecordStorageSlot](TypeDesc):
 		it.sort(key=lambda x: x[0])
 		self.hsh = hash((('_RecordDesc', self.size), *it))
 
-	def get(self, slot: StorageSlot, off: int) -> T:
+	def get(self, slot: Slot, off: int) -> T:
 		slf = self.cls.__new__(self.cls)
 		slf._storage_slot = slot
 		slf._off = off
 		slf.__type_desc__ = self
 		return slf
 
-	def set(self, slot: StorageSlot, off: int, val: T) -> None:
+	def set(self, slot: Slot, off: int, val: T) -> None:
 		assert hasattr(
 			val, '__type_desc__'
 		), f'Is right the same storage type? `{reflect.repr_type(self.cls)}` <- `{reflect.repr_type(type(val))}`'
@@ -53,7 +57,3 @@ class _RecordDesc[T: WithRecordStorageSlot](TypeDesc):
 
 	def __hash__(self):
 		return self.hsh
-
-
-class WithRecordStorageSlot(_WithStorageSlot, typing.Protocol):
-	__type_desc__: _RecordDesc

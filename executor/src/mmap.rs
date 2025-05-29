@@ -2,6 +2,8 @@ use std::ptr::NonNull;
 
 use anyhow::Context;
 
+use crate::{errors::ContractError, memlimiter};
+
 #[derive(Debug)]
 struct Mmap(NonNull<[u8]>);
 
@@ -34,6 +36,7 @@ impl Drop for Mmap {
 
 pub fn load_file(
     path: &std::path::Path,
+    limiter: Option<&memlimiter::Limiter>,
 ) -> anyhow::Result<impl AsRef<[u8]> + Send + Sync + 'static> {
     let file = std::fs::File::open(path).with_context(|| format!("opening {:?}", path))?;
 
@@ -41,8 +44,15 @@ pub fn load_file(
         .metadata()
         .context("failed to get file metadata")?
         .len();
-    let file_len =
-        usize::try_from(file_len).map_err(|_| anyhow::anyhow!("file too large to map"))?;
+    let file_len = u32::try_from(file_len).map_err(|_| anyhow::anyhow!("file too large to map"))?;
+
+    if let Some(limiter) = limiter {
+        if !limiter.consume(file_len, true) {
+            return Err(ContractError::oom(None).into());
+        }
+    }
+
+    let file_len = file_len as usize;
 
     let ptr = unsafe {
         rustix::mm::mmap(

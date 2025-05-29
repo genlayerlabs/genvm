@@ -1,4 +1,4 @@
-__all__ = ('STORAGE_MAN', 'ROOT_SLOT_ID', 'CONTRACT_SLOT_ID', 'CODE_SLOT_ID')
+__all__ = ('STORAGE_MAN', 'ROOT_SLOT_ID')
 
 from ...py.storage._internal.core import *
 from ...py.types import u256
@@ -8,7 +8,7 @@ import collections.abc
 import abc
 
 
-class _ActualStorageMan(StorageMan):
+class _ActualStorageMan(Manager):
 	__slots__ = ('_slots',)
 
 	_slots: dict[bytes, '_ActualStorageSlot']
@@ -24,20 +24,20 @@ class _ActualStorageMan(StorageMan):
 		return ret
 
 
-class _ActualStorageSlot(StorageSlot):
+class _ActualStorageSlot(Slot):
 	__slots__ = ()
 
-	def __init__(self, addr: bytes, manager: StorageMan):
+	def __init__(self, addr: bytes, manager: Manager):
 		super().__init__(addr, manager)
 
 	def read(self, addr: int, len: int) -> bytes:
 		res = bytearray(len)
-		wasi.storage_read(self.addr, addr, res)
+		wasi.storage_read(self.id, addr, res)
 		return bytes(res)
 
 	@abc.abstractmethod
 	def write(self, addr: int, what: collections.abc.Buffer) -> None:
-		wasi.storage_write(self.addr, addr, what)
+		wasi.storage_write(self.id, addr, what)
 
 
 STORAGE_MAN = _ActualStorageMan()

@@ -37,19 +37,15 @@ def _handle_main() -> typing.NoReturn:
 
 	import genlayer.py.get_schema as _get_schema
 
+	import genlayer as gl_std
+
+	root_slot = gl_std.gl.storage.Root.get()
+
 	@dataclasses.dataclass
 	class MethodResolverInfo:
 		cd: CalldataSchema
 		msg: MessageRawType
 		contract_type: type[Contract]
-
-	def get_contract_instance(contract_type: type[Contract]) -> Contract:
-		from .storage import STORAGE_MAN, CONTRACT_SLOT_ID
-
-		top_slot = STORAGE_MAN.get_store_slot(CONTRACT_SLOT_ID)
-		from ...py.storage._internal.generate import _known_descs
-
-		return _known_descs[contract_type].get(top_slot, 0)
 
 	def check_abstracts(ctx: MethodResolverInfo, meth: typing.Callable) -> str | None:
 		if not _get_schema._is_public(meth):
@@ -85,7 +81,7 @@ def _handle_main() -> typing.NoReturn:
 						exc.add_note(err)
 						raise exc
 					else:
-						contract = get_contract_instance(ctx.contract_type)
+						contract = root_slot.get_contract_instance(ctx.contract_type)
 						_give_result(
 							lambda: contract.__handle_undefined_method__(
 								'', ctx.cd.get('args', []), ctx.cd.get('kwargs', {})
@@ -105,7 +101,7 @@ def _handle_main() -> typing.NoReturn:
 					return meth
 				if err := check_abstracts(ctx, ctx.contract_type.__handle_undefined_method__):
 					raise ValueError(err)
-				contract = get_contract_instance(ctx.contract_type)
+				contract = root_slot.get_contract_instance(ctx.contract_type)
 				_give_result(
 					lambda: contract.__handle_undefined_method__(
 						ctx.cd.get('method', ''), ctx.cd.get('args', []), ctx.cd.get('kwargs', {})
@@ -126,11 +122,14 @@ def _handle_main() -> typing.NoReturn:
 			f'invalid calldata, expected dict got `{reflect.repr_type(cd_raw)}`'
 		)
 
+	if message_raw.get('is_init'):
+		root_slot.lock_default()
+
 	cd = typing.cast(CalldataSchema, cd_raw)
 	ctx = MethodResolverInfo(cd, message_raw, __known_contact__)
 	meth2call = resolve_method(ctx)
 
-	contract_instance = get_contract_instance(__known_contact__)
+	contract_instance = root_slot.get_contract_instance(__known_contact__)
 	_give_result(
 		lambda: meth2call(contract_instance, *cd.get('args', []), **cd.get('kwargs', {}))
 	)

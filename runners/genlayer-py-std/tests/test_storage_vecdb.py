@@ -1,13 +1,13 @@
 import numpy as np
 
 from genlayer_embeddings import VecDB
-from genlayer.py.storage._internal.generate import storage
+from genlayer.py.storage._internal.generate import generate_storage
 import typing
 
 import pytest
 
 
-@storage
+@generate_storage
 class DB:
 	x: VecDB[np.int32, typing.Literal[5], str]
 

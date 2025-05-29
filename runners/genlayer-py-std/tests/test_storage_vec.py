@@ -1,12 +1,12 @@
 import pytest
 
 from genlayer.py.storage import DynArray
-from genlayer.py.storage._internal.generate import storage
+from genlayer.py.storage._internal.generate import generate_storage
 
 from .common import *
 
 
-@storage
+@generate_storage
 class StorVec:
 	x: DynArray[str]
 

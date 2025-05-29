@@ -12,7 +12,7 @@ class Contract(gl.Contract):
 
 	@gl.public.write
 	def rback(self):
-		gl.rollback_immediate("nah, I won't execute")
+		gl.advanced.rollback_immediate("nah, I won't execute")
 
 	def priv(self):
 		eval("print('init from priv!')")
