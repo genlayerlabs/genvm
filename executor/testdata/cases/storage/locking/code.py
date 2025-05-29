@@ -42,4 +42,4 @@ class Contract(gl.Contract):
 			print(e)
 		else:
 			code.extend(new_code)
-		print(len(code))
+		print(len(code) == len(new_code))

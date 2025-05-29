@@ -32,13 +32,6 @@ from mock_host import MockHost, MockStorage, run_host_and_program
 import base_host
 
 
-class MyHTTPHandler(httpserv.SimpleHTTPRequestHandler):
-	def __init__(self, *args, **kwargs):
-		httpserv.SimpleHTTPRequestHandler.__init__(
-			self, *args, **kwargs, directory=http_dir
-		)
-
-
 dir = script_dir.parent.joinpath('cases')
 root_tmp_dir = root_dir.joinpath('build', 'genvm-testdata-out')
 
@@ -56,7 +49,6 @@ arg_parser.add_argument('--filter', metavar='REGEX', default='.*')
 arg_parser.add_argument('--show-steps', default=False, action='store_true')
 arg_parser.add_argument('--ci', default=False, action='store_true')
 arg_parser.add_argument('--rss-file', metavar='PATH', default='')
-arg_parser.add_argument('--nop-dlclose', default=False, action='store_true')
 arg_parser.add_argument('--no-sequential', default=False, action='store_true')
 args_parsed = arg_parser.parse_args()
 GENVM = Path(args_parsed.gen_vm)
@@ -86,12 +78,17 @@ def unfold_conf(x: typing.Any, vars: dict[str, str]) -> typing.Any:
 
 
 def run(jsonnet_rel_path):
+	debug_path_base = str(jsonnet_rel_path)
 	jsonnet_path = dir.joinpath(jsonnet_rel_path)
 	skipped = jsonnet_path.with_suffix('.skip')
 	if skipped.exists():
-		return {
-			'category': 'skip',
-		}
+		report_single(
+			debug_path_base,
+			{
+				'category': 'skip',
+			},
+		)
+		return
 	jsonnet_conf = _jsonnet.evaluate_file(
 		str(jsonnet_path), jpathdir=[str(script_dir.parent)]
 	)
@@ -144,9 +141,12 @@ def run(jsonnet_rel_path):
 		if total_conf == 1:
 			my_tmp_dir = seq_tmp_dir
 			suff = ''
+			my_debug_path = debug_path_base
 		else:
 			my_tmp_dir = seq_tmp_dir.joinpath(str(i))
 			suff = f'.{i}'
+
+			my_debug_path = debug_path_base + f' ({i})'
 		if i == 0:
 			pre_storage = empty_storage
 		else:
@@ -201,6 +201,7 @@ def run(jsonnet_rel_path):
 			'messages_path': messages_path,
 			'expected_messages_path': jsonnet_path.with_suffix(f'{suff}.msgs'),
 			'deadline': single_conf_form_file.get('deadline', None),
+			'test_name': my_debug_path,
 		}
 
 	run_configs = [
@@ -210,15 +211,8 @@ def run(jsonnet_rel_path):
 	base = {}
 	for config in run_configs:
 		tmp_dir = config['tmp_dir']
+		test_name = config['test_name']
 		cmd = []
-		# it is impossible to sigterm timed command (in an easy way)
-		# cmd = [
-		# '/usr/bin/time',
-		# '-q',
-		# '-f',
-		# '<RSS>%M-%X</RSS>',
-		# '--',
-		# ]
 		cmd.extend(
 			[
 				GENVM,
@@ -243,9 +237,6 @@ def run(jsonnet_rel_path):
 		]
 		with config['host'] as mock_host:
 			_env = dict(os.environ)
-			if args_parsed.nop_dlclose:
-				_env['LD_PRELOAD'] = str(GENVM.parent.parent.parent.joinpath('fake-dlclose.so'))
-				# _env["LD_DEBUG"] = "libs"
 
 			try:
 				res = asyncio.run(
@@ -258,14 +249,17 @@ def run(jsonnet_rel_path):
 					)
 				)
 			except Exception as e:
-				print(e.args)
-				return {
-					'category': 'fail',
-					'steps': steps,
-					'exception': 'internal error',
-					'exc': e,
-					**e.args[-1],
-				}
+				report_single(
+					test_name,
+					{
+						'category': 'fail',
+						'steps': steps,
+						'exception': 'internal error',
+						'exc': e,
+						**e.args[-1],
+					},
+				)
+				return
 
 		base = {
 			'steps': steps,
@@ -283,33 +277,44 @@ def run(jsonnet_rel_path):
 		exp_stdout_path = config['expected_output']
 		if exp_stdout_path.exists():
 			if exp_stdout_path.read_text() != res.stdout:
-				return {
-					'category': 'fail',
-					'reason': f'stdout mismatch, see\n\tdiff {str(exp_stdout_path)} {str(got_stdout_path)}',
-					**base,
-				}
+				report_single(
+					test_name,
+					{
+						'category': 'fail',
+						'reason': f'stdout mismatch, see\n\tdiff {str(exp_stdout_path)} {str(got_stdout_path)}',
+						**base,
+					},
+				)
+				return
 		else:
 			exp_stdout_path.write_text(res.stdout)
 
 		messages_path: Path = config['messages_path']
 		expected_messages_path: Path = config['expected_messages_path']
 		if messages_path.exists() != expected_messages_path.exists():
-			return {
-				'category': 'fail',
-				'reason': f'messages do not exists\n\tdiff {messages_path} {expected_messages_path}',
-				**base,
-			}
+			report_single(
+				test_name,
+				{
+					'category': 'fail',
+					'reason': f'messages do not exists\n\tdiff {messages_path} {expected_messages_path}',
+					**base,
+				},
+			)
+			return
 		if messages_path.exists():
 			got = messages_path.read_text()
 			exp = expected_messages_path.read_text()
 			if got != exp:
-				return {
-					'category': 'fail',
-					'reason': f'messages differ\n\tdiff {messages_path} {expected_messages_path}',
-					**base,
-				}
-
-	return {'category': 'pass', **base}
+				report_single(
+					test_name,
+					{
+						'category': 'fail',
+						'reason': f'messages differ\n\tdiff {messages_path} {expected_messages_path}',
+						**base,
+					},
+				)
+				return
+		report_single(test_name, {'category': 'pass', **base})
 
 
 # semaphore should not be needed
@@ -385,39 +390,45 @@ def prnt(path, res):
 				print_lines(res['genvm_log'])
 
 
+categories = {
+	'skip': 0,
+	'pass': 0,
+	'fail': [],
+}
+rss = []
+sign_by_category = {
+	'skip': '⚠ ',
+	'pass': f'{COLORS.OKGREEN}✓{COLORS.ENDC}',
+	'fail': f'{COLORS.FAIL}✗{COLORS.ENDC}',
+}
+
+
+def report_single(path, res):
+	if res['category'] == 'fail':
+		categories['fail'].append(str(path))
+	else:
+		categories[res['category']] += 1
+	if (
+		'stderr' in res
+		and (m := re.search(r'<RSS>(\d+)-(\d+)</RSS>', res['stderr'])) is not None
+	):
+		rss.append((int(m.group(1)) - int(m.group(2))) * 1024)
+		print(rss[-1], m)
+	prnt(path, res)
+
+
 with cfutures.ThreadPoolExecutor(MAX_WORKERS) as executor:
-	categories = {
-		'skip': 0,
-		'pass': 0,
-		'fail': [],
-	}
-	rss = []
-	sign_by_category = {
-		'skip': '⚠ ',
-		'pass': f'{COLORS.OKGREEN}✓{COLORS.ENDC}',
-		'fail': f'{COLORS.FAIL}✗{COLORS.ENDC}',
-	}
 
 	def process_result(path, res_getter):
 		try:
-			res = res_getter()
+			res_getter()
 		except Exception as e:
 			res = {
 				'category': 'fail',
 				'reason': str(e),
 				'exc': e,
 			}
-		if res['category'] == 'fail':
-			categories['fail'].append(str(path))
-		else:
-			categories[res['category']] += 1
-		if (
-			'stderr' in res
-			and (m := re.search(r'<RSS>(\d+)-(\d+)</RSS>', res['stderr'])) is not None
-		):
-			rss.append((int(m.group(1)) - int(m.group(2))) * 1024)
-			print(rss[-1], m)
-		prnt(path, res)
+			report_single(path, res)
 
 	if len(files) > 0:
 		# NOTE this is needed to cache wasm compilation result

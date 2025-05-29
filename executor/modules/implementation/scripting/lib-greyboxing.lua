@@ -90,14 +90,14 @@ M.log{
 
 if M.get_first_from_table(M.backends_with_json_support) == nil then
 	M.log{
-		level = "error",
+		level = "warning",
 		message = "no backend with json support detected"
 	}
 end
 
 if M.get_first_from_table(M.backends_with_image_support) == nil then
 	M.log{
-		level = "error",
+		level = "warning",
 		message = "no backend with image support detected"
 	}
 end
