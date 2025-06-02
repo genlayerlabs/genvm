@@ -39,6 +39,12 @@ def mp(a: str) -> list[str]:
 		return ['-target', unfold_target(a[len('--target=') :])]
 	if unfold_target(a) != a:
 		return [unfold_target(a)]
+
+	if (
+		a.endswith('.o') and 'self-contained' in a.split('/') and 'crt' in a.split('/')[-1]
+	):
+		return []
+
 	if a.endswith('.rlib'):
 		p = Path(a)
 		new_p = p.with_suffix('.rlib.a')

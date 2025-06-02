@@ -7,18 +7,20 @@ project('executor') {
 
 	base_env["CC_#{RUST_DEFAULT_TARGET}"] = $cross_cc
 
+	base_env['RUSTFLAGS'] ||= ''
+	base_env['RUSTFLAGS'] << ' -C target-feature=+crt-static'
+
 	if config.executor_target.nil? and not compiler.nil? and not linker.nil?
-		base_env['RUSTFLAGS'] ||= ''
 		base_env['RUSTFLAGS'] << "-Clinker=#{Shellwords.escape compiler} -Clink-arg=-fuse-ld=#{Shellwords.escape linker}"
 	end
 	if not config.executor_target.nil?
 		linker_path = $cross_cc
-		#cargo_flags << '--config' << "target.#{config.executor_target}.linker=\"#{linker_path}\""
+		#base_env['RUSTFLAGS'] << "-Clinker=#{Shellwords.escape linker_path} "
+		cargo_flags << '--config' << "target.#{config.executor_target}.linker=\"#{linker_path}\""
 		base_env["CC_#{config.executor_target}"] = $cross_cc
 	end
 
 	if config.executor.coverage
-		base_env['RUSTFLAGS'] ||= ''
 		base_env['RUSTFLAGS'] << " -Cinstrument-coverage"
 	end
 
