@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use serde_derive::{Deserialize, Serialize};
 
@@ -10,10 +10,48 @@ pub trait Web {
     ) -> tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>>;
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum GenericValue {
+    Null,
+    Bool(bool),
+    Str(String),
+    Bytes(#[serde(with = "serde_bytes")] Vec<u8>),
+    Number(f64),
+    Map(BTreeMap<String, GenericValue>),
+    Array(Vec<GenericValue>),
+}
+
+impl From<serde_json::Value> for GenericValue {
+    fn from(value: serde_json::Value) -> Self {
+        match value {
+            serde_json::Value::Null => GenericValue::Null,
+            serde_json::Value::Bool(x) => GenericValue::Bool(x),
+            serde_json::Value::Number(number) => GenericValue::Number(number.as_f64().unwrap()),
+            serde_json::Value::String(s) => GenericValue::Str(s),
+            serde_json::Value::Array(values) => {
+                GenericValue::Array(values.into_iter().map(Into::into).collect())
+            }
+            serde_json::Value::Object(map) => GenericValue::Map(BTreeMap::from_iter(
+                map.into_iter().map(|(k, v)| (k, v.into())),
+            )),
+        }
+    }
+}
+
+impl GenericValue {
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            GenericValue::Str(s) => Some(s),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub enum Result<T> {
     Ok(T),
-    UserError(serde_json::Value),
+    UserError(GenericValue),
     FatalError(String),
 }
 

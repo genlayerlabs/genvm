@@ -2,9 +2,13 @@ use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{Context, Result};
 
-use crate::common;
+use crate::{
+    common,
+    scripting::{self, RSContext},
+};
 
 mod config;
+mod ctx;
 mod domains;
 mod handler;
 
@@ -42,7 +46,7 @@ async fn check_status(webdriver_host: &str) -> anyhow::Result<()> {
 pub fn entrypoint(args: CliArgs) -> Result<()> {
     let config = genvm_common::load_config(HashMap::new(), &args.config)
         .with_context(|| "loading config")?;
-    let config: config::Config = serde_yaml::from_value(config)?;
+    let config: Arc<config::Config> = Arc::new(serde_yaml::from_value(config)?);
 
     config.base.setup_logging(std::io::stdout())?;
 
@@ -52,12 +56,41 @@ pub fn entrypoint(args: CliArgs) -> Result<()> {
 
     let webdriver_host = config.webdriver_host.clone();
 
+    let moved_config = config.clone();
+
+    let vm_pool = runtime.block_on(scripting::pool::new(config.vm_count, move || {
+        let moved_config = moved_config.clone();
+        async {
+            let mut user_vm =
+                crate::scripting::UserVM::create("", move |vm: mlua::Lua| async move {
+                    // set llm-related globals
+                    vm.globals()
+                        .set("__web", ctx::create_global(&vm, &moved_config)?)?;
+
+                    // load script
+                    scripting::load_script(&vm, &moved_config.lua_script_path).await?;
+
+                    // get functions populated by script
+                    let render: mlua::Function = vm.globals().get("render")?;
+
+                    Ok(ctx::VMData { render })
+                })
+                .await?;
+
+            user_vm.add_ctx_creator(Box::new(|ctx: &RSContext<ctx::CtxPart>, vm, table| {
+                table.set("__ctx_web", vm.create_userdata(ctx.data.clone())?)?;
+
+                Ok(())
+            }));
+
+            Ok(user_vm)
+        }
+    }))?;
+
     let loop_future = crate::common::run_loop(
         config.bind_address.clone(),
         token,
-        Arc::new(handler::HandlerProvider {
-            config: Arc::new(config),
-        }),
+        Arc::new(handler::HandlerProvider { vm_pool, config }),
     );
 
     runtime

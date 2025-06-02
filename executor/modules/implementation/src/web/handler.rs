@@ -1,42 +1,68 @@
-use super::config;
-use crate::common;
+use super::{config, ctx};
+use crate::{common, scripting};
 
-use anyhow::Context;
-use base64::Engine;
 use genvm_modules_interfaces::web as web_iface;
+use mlua::LuaSerdeExt;
 use std::sync::Arc;
 
-struct Handler {
-    config: Arc<config::Config>,
-    client: reqwest::Client,
-    session_id: String,
-    hello: genvm_modules_interfaces::GenVMHello,
+type UserVM = scripting::UserVM<ctx::VMData, ctx::CtxPart>;
+
+pub struct Inner {
+    user_vm: Arc<UserVM>,
+
+    ctx: scripting::RSContext<ctx::CtxPart>,
+    ctx_val: mlua::Value,
 }
 
+struct Handler(Arc<Inner>);
+
 impl common::MessageHandler<web_iface::Message, web_iface::RenderAnswer> for Handler {
-    fn handle(
+    async fn handle(
         &self,
         message: web_iface::Message,
-    ) -> impl std::future::Future<Output = common::ModuleResult<web_iface::RenderAnswer>> + Send
-    {
+    ) -> common::ModuleResult<web_iface::RenderAnswer> {
         match message {
-            web_iface::Message::Render(payload) => self.handle_render(payload),
+            web_iface::Message::Render(payload) => {
+                let payload = self.0.user_vm.vm.to_value(&payload)?;
+
+                let res: mlua::Value = self
+                    .0
+                    .user_vm
+                    .call_fn(
+                        &self.0.user_vm.data.render,
+                        (self.0.ctx_val.clone(), payload),
+                    )
+                    .await?;
+
+                let res = self.0.user_vm.vm.from_value(res)?;
+
+                Ok(res)
+            }
         }
     }
 
     async fn cleanup(&self) -> anyhow::Result<()> {
+        let lock = self.0.ctx.data.session.lock().await;
+
+        let session = match lock.as_ref() {
+            None => return Ok(()),
+            Some(session) => session,
+        };
+
         if let Err(err) = self
+            .0
+            .ctx
             .client
             .delete(format!(
                 "{}/session/{}",
-                self.config.webdriver_host, self.session_id
+                self.0.ctx.data.config.webdriver_host, session
             ))
             .send()
             .await
         {
-            log::error!(error:err = err, id = self.session_id, cookie = self.hello.cookie; "session closed");
+            log::error!(error:err = err, id = session, cookie = self.0.ctx.data.hello.cookie; "session closed");
         } else {
-            log::debug!(id = self.session_id, cookie = self.hello.cookie; "session closed");
+            log::debug!(id = session, cookie = self.0.ctx.data.hello.cookie; "session closed");
         }
         Ok(())
     }
@@ -44,6 +70,7 @@ impl common::MessageHandler<web_iface::Message, web_iface::RenderAnswer> for Han
 
 pub struct HandlerProvider {
     pub config: Arc<config::Config>,
+    pub vm_pool: scripting::pool::Pool<ctx::VMData, ctx::CtxPart>,
 }
 
 impl
@@ -62,169 +89,25 @@ impl
         >,
     > {
         let client = reqwest::Client::new();
-        let create_request = client
-            .post(format!("{}/session", &self.config.webdriver_host))
-            .header("Content-Type", "application/json; charset=utf-8")
-            .body(self.config.session_create_request.clone());
-        log::trace!(request:? = create_request, body = self.config.session_create_request, cookie = hello.cookie; "creating session");
-        let opened_session_res = create_request
-            .send()
-            .await
-            .with_context(|| "creating sessions request")?;
-        let body = common::read_response(opened_session_res)
-            .await
-            .with_context(|| "reading response")?;
-        let val: serde_json::Value = serde_json::from_str(&body)?;
-        let session_id = val
-            .pointer("/value/sessionId")
-            .and_then(|val| val.as_str())
-            .ok_or_else(|| anyhow::anyhow!("invalid json {}", val))?;
 
-        Ok(Handler {
-            config: self.config.clone(),
-            client,
-            session_id: session_id.to_owned(),
-            hello,
-        })
-    }
-}
-
-impl Handler {
-    async fn handle_screenshot(&self) -> common::ModuleResult<web_iface::RenderAnswer> {
-        let req = self.client.get(format!(
-            "{}/session/{}/screenshot",
-            self.config.webdriver_host, self.session_id
-        ));
-        log::debug!(request:? = req, cookie = self.hello.cookie; "getting web page data");
-
-        let res = req.send().await?;
-
-        let res = res.error_for_status()?;
-
-        let body = res.text().await?;
-
-        let body: serde_json::Value = serde_json::from_str(&body)?;
-        let val = body
-            .pointer("/value")
-            .and_then(|x| x.as_str())
-            .ok_or_else(|| anyhow::anyhow!("failed to get screenshot {body}"))?;
-
-        let data = base64::prelude::BASE64_STANDARD.decode(val)?;
-
-        Ok(web_iface::RenderAnswer::Image(data))
-    }
-
-    async fn handle_render(
-        &self,
-        payload: web_iface::RenderPayload,
-    ) -> common::ModuleResult<web_iface::RenderAnswer> {
-        let url = match reqwest::Url::parse(&payload.url) {
-            Ok(url) => url,
-            Err(_) => {
-                return Err(common::ModuleResultUserError(
-                    serde_json::json!({"message": "invalid url", "url": payload.url}),
-                )
-                .into());
-            }
-        };
-        if url.scheme() == "file" {
-            return Err(common::ModuleResultUserError(
-                serde_json::json!({"message": "scheme forbidden", "scheme": "file"}),
-            )
-            .into());
-        }
-
-        match url.host_str() {
-            None => {
-                return Err(common::ModuleResultUserError(
-                    serde_json::json!({"message": "host is forbidden", "host": null}),
-                )
-                .into())
-            }
-            Some(host_str)
-                if config::binary_search_contains(&self.config.always_allow_hosts, host_str) => {}
-            Some(host_str) => {
-                if !self.config.tld_is_ok(host_str) {
-                    return Err(common::ModuleResultUserError(
-                        serde_json::json!({"message": "tld forbidden", "host": host_str}),
-                    )
-                    .into());
-                }
-
-                const ALLOWED_PORTS: &[Option<u16>] = &[None, Some(80), Some(443)];
-                if !ALLOWED_PORTS.contains(&url.port()) {
-                    return Err(common::ModuleResultUserError(
-                        serde_json::json!({"message": "port forbidden", "port": url.port()}),
-                    )
-                    .into());
-                }
-            }
-        }
-
-        let req_body = serde_json::json!({
-            "url": url.as_str()
-        });
-
-        let req_body = serde_json::to_string(&req_body)?;
-        let req = self
-            .client
-            .post(format!(
-                "{}/session/{}/url",
-                self.config.webdriver_host, self.session_id
-            ))
-            .header("Content-Type", "application/json; charset=utf-8")
-            .body(req_body.clone());
-
-        log::info!(request:? = req, body = req_body, cookie = self.hello.cookie; "sending request");
-
-        let res = req.send().await?;
-        let res = res.error_for_status()?;
-        std::mem::drop(res);
-
-        match payload.wait_after_loaded {
-            genvm_modules_interfaces::ParsedDuration(tokio::time::Duration::ZERO) => {}
-            genvm_modules_interfaces::ParsedDuration(x) => {
-                log::trace!(duration:? = x, cookie = self.hello.cookie; "sleeping to allow page to load");
-                tokio::time::sleep(x).await
-            }
-        }
-
-        let script = match payload.mode {
-            web_iface::RenderMode::Screenshot => return self.handle_screenshot().await,
-            web_iface::RenderMode::HTML => {
-                r#"{ "script": "return document.body.innerHTML", "args": [] }"#
-            }
-            web_iface::RenderMode::Text => {
-                r#"{ "script": "return document.body.innerText.replace(/[\\s\\n]+/g, ' ')", "args": [] }"#
-            }
+        let ctx = scripting::RSContext {
+            client: client.clone(),
+            data: Arc::new(ctx::CtxPart {
+                client: client,
+                hello,
+                session: tokio::sync::Mutex::new(None),
+                config: self.config.clone(),
+            }),
         };
 
-        let req = self
-            .client
-            .post(format!(
-                "{}/session/{}/execute/sync",
-                self.config.webdriver_host, self.session_id
-            ))
-            .header("Content-Type", "application/json; charset=utf-8")
-            .body(script);
-        log::debug!(request:? = req, body = script, cookie = self.hello.cookie; "getting web page data");
+        let user_vm = self.vm_pool.get();
 
-        let res = req.send().await?;
+        let ctx_val = user_vm.create_ctx(&ctx)?;
 
-        let res = res.error_for_status()?;
-
-        let body = res.text().await?;
-
-        let res_buf = body;
-
-        let val: serde_json::Value = serde_json::from_str(&res_buf)?;
-        let val = val
-            .pointer("/value")
-            .and_then(|x| x.as_str())
-            .ok_or_else(|| anyhow::anyhow!("invalid json {}", val))?;
-
-        Ok(genvm_modules_interfaces::web::RenderAnswer::Text(
-            String::from(val.trim()),
-        ))
+        Ok(Handler(Arc::new(Inner {
+            user_vm,
+            ctx,
+            ctx_val,
+        })))
     }
 }

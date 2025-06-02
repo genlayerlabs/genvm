@@ -1,32 +1,36 @@
-use crate::{common, llm::handler::LuaErrorKind};
+use std::collections::BTreeMap;
+
+use crate::common::{self, ErrorKind, MapUserError, ModuleError, ModuleResult};
 use anyhow::Context;
 use base64::Engine;
-use common::ModuleResult;
 
-use super::{config, handler::LuaError, prompt};
+use super::{config, prompt};
 
 #[async_trait::async_trait]
 pub trait Provider {
     async fn exec_prompt_text(
         &self,
+        client: &reqwest::Client,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String>;
 
     async fn exec_prompt_json_as_text(
         &self,
+        client: &reqwest::Client,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
-        self.exec_prompt_text(prompt, model).await
+        self.exec_prompt_text(client, prompt, model).await
     }
 
     async fn exec_prompt_json(
         &self,
+        client: &reqwest::Client,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<serde_json::Map<String, serde_json::Value>> {
-        let res = self.exec_prompt_json_as_text(prompt, model).await?;
+        let res = self.exec_prompt_json_as_text(client, prompt, model).await?;
         let res = sanitize_json_str(&res);
         let res = serde_json::from_str(res).with_context(|| format!("parsing {res:?}"))?;
 
@@ -35,10 +39,11 @@ pub trait Provider {
 
     async fn exec_prompt_bool_reason(
         &self,
+        client: &reqwest::Client,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<bool> {
-        let res = self.exec_prompt_json(prompt, model).await?;
+        let res = self.exec_prompt_json(client, prompt, model).await?;
         let res = res
             .get("result")
             .and_then(|x| x.as_bool())
@@ -49,22 +54,18 @@ pub trait Provider {
 
 pub struct OpenAICompatible {
     pub(crate) config: config::BackendConfig,
-    pub(crate) client: reqwest::Client,
 }
 
 pub struct Gemini {
     pub(crate) config: config::BackendConfig,
-    pub(crate) client: reqwest::Client,
 }
 
 pub struct OLlama {
     pub(crate) config: config::BackendConfig,
-    pub(crate) client: reqwest::Client,
 }
 
 pub struct Anthropic {
     pub(crate) config: config::BackendConfig,
-    pub(crate) client: reqwest::Client,
 }
 
 impl prompt::Internal {
@@ -138,6 +139,7 @@ impl prompt::Internal {
 impl Provider for OpenAICompatible {
     async fn exec_prompt_text(
         &self,
+        client: &reqwest::Client,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
@@ -162,7 +164,7 @@ impl Provider for OpenAICompatible {
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
-            self.client
+            client
                 .post(format!("{}/v1/chat/completions", self.config.host))
                 .header("Content-Type", "application/json")
                 .header("Authorization", &format!("Bearer {}", &self.config.key))
@@ -180,6 +182,7 @@ impl Provider for OpenAICompatible {
 
     async fn exec_prompt_json(
         &self,
+        client: &reqwest::Client,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<serde_json::Map<String, serde_json::Value>> {
@@ -205,7 +208,7 @@ impl Provider for OpenAICompatible {
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
-            self.client
+            client
                 .post(format!("{}/v1/chat/completions", self.config.host))
                 .header("Content-Type", "application/json")
                 .header("Authorization", &format!("Bearer {}", &self.config.key))
@@ -262,6 +265,7 @@ impl prompt::Internal {
 impl Provider for OLlama {
     async fn exec_prompt_text(
         &self,
+        client: &reqwest::Client,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
@@ -269,7 +273,7 @@ impl Provider for OLlama {
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
-            self.client
+            client
                 .post(format!("{}/api/generate", self.config.host))
                 .body(request.clone())
         })
@@ -285,6 +289,7 @@ impl Provider for OLlama {
 
     async fn exec_prompt_json_as_text(
         &self,
+        client: &reqwest::Client,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
@@ -316,7 +321,7 @@ impl Provider for OLlama {
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
-            self.client
+            client
                 .post(format!("{}/api/generate", self.config.host))
                 .body(request.clone())
         })
@@ -335,6 +340,7 @@ impl Provider for OLlama {
 impl Provider for Gemini {
     async fn exec_prompt_text(
         &self,
+        client: &reqwest::Client,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
@@ -350,7 +356,7 @@ impl Provider for Gemini {
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
-            self.client
+            client
                 .post(format!(
                     "{}/v1beta/models/{}:generateContent?key={}",
                     self.config.host, model, self.config.key
@@ -369,6 +375,7 @@ impl Provider for Gemini {
 
     async fn exec_prompt_json_as_text(
         &self,
+        client: &reqwest::Client,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
@@ -384,7 +391,7 @@ impl Provider for Gemini {
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
-            self.client
+            client
                 .post(format!(
                     "{}/v1beta/models/{}:generateContent?key={}",
                     self.config.host, model, self.config.key
@@ -440,6 +447,7 @@ impl prompt::Internal {
 impl Provider for Anthropic {
     async fn exec_prompt_text(
         &self,
+        client: &reqwest::Client,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
@@ -447,7 +455,7 @@ impl Provider for Anthropic {
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
-            self.client
+            client
                 .post(format!("{}/v1/messages", self.config.host))
                 .header("Content-Type", "application/json")
                 .header("x-api-key", &self.config.key)
@@ -464,6 +472,7 @@ impl Provider for Anthropic {
 
     async fn exec_prompt_json(
         &self,
+        client: &reqwest::Client,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<serde_json::Map<String, serde_json::Value>> {
@@ -503,7 +512,7 @@ impl Provider for Anthropic {
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
-            self.client
+            client
                 .post(format!("{}/v1/messages", self.config.host))
                 .header("Content-Type", "application/json")
                 .header("x-api-key", &self.config.key)
@@ -522,6 +531,7 @@ impl Provider for Anthropic {
 
     async fn exec_prompt_bool_reason(
         &self,
+        client: &reqwest::Client,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<bool> {
@@ -558,7 +568,7 @@ impl Provider for Anthropic {
 
         let request = serde_json::to_vec(&request)?;
         let res = send_with_retries(|| {
-            self.client
+            client
                 .post(format!("{}/v1/messages", self.config.host))
                 .header("Content-Type", "application/json")
                 .header("x-api-key", &self.config.key)
@@ -597,41 +607,28 @@ async fn send_with_retries(
         .send()
         .await
         .with_context(|| "sending request to llm provider")
-        .map_err(|e| {
-            log::warn!(cookie = common::get_cookie(), error = genvm_common::log_error(&e); "sending request failed");
+        .inspect_err(|e| {
+            log::warn!(cookie = common::get_cookie(), error = genvm_common::log_error(e); "sending request failed");
+        })
+        .map_user_error(ErrorKind::SENDING_REQUEST, true)?;
 
-            LuaError {
-                kind: crate::llm::handler::LuaErrorKind::RequestFailed,
-                context: serde_json::Value::Null,
-            }
-        })?;
-
-    let mut context = serde_json::Map::new();
+    let mut context = BTreeMap::new();
 
     let status_code = res.status();
 
-    context.insert("status_code".into(), status_code.as_u16().into());
+    context.insert(
+        "status_code".into(),
+        genvm_modules_interfaces::GenericValue::Number(status_code.as_u16() as f64),
+    );
 
     let body = res.text().await.with_context(|| "reading_body")
-        .map_err(|e| {
-            log::warn!(cookie = common::get_cookie(), error = genvm_common::log_error(&e), status = status_code.as_u16(); "reading body failed");
+        .inspect_err(|e| {
+            log::warn!(cookie = common::get_cookie(), error = genvm_common::log_error(e), status = status_code.as_u16(); "reading body failed");
+        }).map_user_error(ErrorKind::READING_BODY, true)?;
 
-            LuaError {
-                kind: crate::llm::handler::LuaErrorKind::BodyReadingFailed,
-                context: context.clone().into(),
-            }
-        })?;
-
-    let body: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-        log::warn!(cookie = common::get_cookie(), error:err = e, status = status_code.as_u16(), body = common::censor_str(&body); "parsing body failed");
-
-        context.insert("body_raw".into(), serde_json::Value::String(body));
-
-        LuaError {
-            kind: crate::llm::handler::LuaErrorKind::BodyReadingFailed,
-            context: context.clone().into(),
-        }
-    })?;
+    let body: serde_json::Value = serde_json::from_str(&body).inspect_err(|e| {
+        log::warn!(cookie = common::get_cookie(), error:? = e, status = status_code.as_u16(), body = common::censor_str(&body); "parsing body failed");
+    }).map_user_error(ErrorKind::DESERIALIZING, true)?;
 
     use reqwest::StatusCode;
     let err_kind = match status_code {
@@ -639,16 +636,224 @@ async fn send_with_retries(
         StatusCode::REQUEST_TIMEOUT
         | StatusCode::SERVICE_UNAVAILABLE
         | StatusCode::TOO_MANY_REQUESTS
-        | StatusCode::GATEWAY_TIMEOUT => LuaErrorKind::Overloaded,
-        x if [529].contains(&x.as_u16()) => LuaErrorKind::Overloaded,
-        _ => LuaErrorKind::StatusNotOk,
+        | StatusCode::GATEWAY_TIMEOUT => ErrorKind::OVERLOADED,
+        x if [529].contains(&x.as_u16()) => ErrorKind::OVERLOADED,
+        _ => ErrorKind::STATUS_NOT_OK,
     };
 
-    context.insert("body".into(), body);
+    context.insert("body".into(), body.into());
 
-    Err(LuaError {
-        kind: err_kind,
-        context: context.into(),
+    Err(ModuleError {
+        fatal: true,
+        causes: vec![err_kind.into()],
+        ctx: context,
     }
     .into())
+}
+
+#[cfg(test)]
+#[allow(non_upper_case_globals, dead_code)]
+mod tests {
+    use std::collections::HashMap;
+
+    use crate::common;
+
+    use super::super::{config, prompt};
+    use genvm_common::templater;
+
+    mod conf {
+        pub const openai: &str = r#"{
+            "host": "https://api.openai.com",
+            "provider": "openai-compatible",
+            "models": {
+                "gpt-4o-mini": { "supports_json": true }
+            },
+            "key": "${ENV[OPENAIKEY]}"
+        }"#;
+
+        pub const heurist: &str = r#"{
+            "host": "https://llm-gateway.heurist.xyz",
+            "provider": "openai-compatible",
+            "models": {
+                "meta-llama/llama-3.3-70b-instruct": { "supports_json": true }
+            },
+            "key": "${ENV[HEURISTKEY]}"
+        }"#;
+
+        pub const heurist_deepseek: &str = r#"{
+            "host": "https://llm-gateway.heurist.xyz",
+            "provider": "openai-compatible",
+            "models": {
+                "deepseek/deepseek-v3": { "supports_json": true }
+            },
+            "key": "${ENV[HEURISTKEY]}"
+        }"#;
+
+        pub const anthropic: &str = r#"{
+            "host": "https://api.anthropic.com",
+            "provider": "anthropic",
+            "models": { "claude-3-5-sonnet-20241022" : {} },
+            "key": "${ENV[ANTHROPICKEY]}"
+        }"#;
+
+        pub const xai: &str = r#"{
+            "host": "https://api.x.ai",
+            "provider": "openai-compatible",
+            "models": { "grok-2-1212" : { "supports_json": true } },
+            "key": "${ENV[XAIKEY]}"
+        }"#;
+
+        pub const google: &str = r#"{
+            "host": "https://generativelanguage.googleapis.com",
+            "provider": "google",
+            "models": { "gemini-1.5-flash": { "supports_json": true } },
+            "key": "${ENV[GEMINIKEY]}"
+        }"#;
+
+        pub const atoma: &str = r#"{
+            "host": "https://api.atoma.network",
+            "provider": "openai-compatible",
+            "models": { "meta-llama/Llama-3.3-70B-Instruct": {} },
+            "key": "${ENV[ATOMAKEY]}"
+        }"#;
+    }
+
+    async fn do_test_text(conf: &str) {
+        common::tests::setup();
+
+        let backend: serde_json::Value = serde_json::from_str(conf).unwrap();
+        let mut vars = HashMap::new();
+        for (mut name, value) in std::env::vars() {
+            name.insert_str(0, "ENV[");
+            name.push(']');
+
+            vars.insert(name, value);
+        }
+        let backend =
+            genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)
+                .unwrap();
+        let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
+        let provider = backend.to_provider();
+
+        let client = common::create_client().unwrap();
+
+        let res = provider
+            .exec_prompt_text(
+                &client,
+                &prompt::Internal {
+                    system_message: None,
+                    temperature: 0.7,
+                    user_message: "Respond with a single word \"yes\" (without quotes) and only this word, lowercase".to_owned(),
+                    images: Vec::new(),
+                    max_tokens: 100,
+                    use_max_completion_tokens: true,
+                },
+                &backend.script_config.models.first_key_value().unwrap().0,
+            )
+            .await
+            .unwrap();
+
+        let res = res.trim().to_lowercase();
+
+        assert_eq!(res, "yes");
+    }
+
+    async fn do_test_json(conf: &str) {
+        common::tests::setup();
+
+        let backend: serde_json::Value = serde_json::from_str(conf).unwrap();
+        let mut vars = HashMap::new();
+        for (mut name, value) in std::env::vars() {
+            name.insert_str(0, "ENV[");
+            name.push(']');
+
+            vars.insert(name, value);
+        }
+        let backend =
+            genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)
+                .unwrap();
+        let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
+
+        if !backend
+            .script_config
+            .models
+            .first_key_value()
+            .unwrap()
+            .1
+            .supports_json
+        {
+            return;
+        }
+
+        let provider = backend.to_provider();
+
+        let client = common::create_client().unwrap();
+
+        const PROMPT: &str = r#"respond with json object containing single key "result" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes. This object must not be wrapped into other objects. Example: {"result": 10}"#;
+        let res = provider
+            .exec_prompt_json(
+                &client,
+                &prompt::Internal {
+                    system_message: Some("respond with json".to_owned()),
+                    temperature: 0.7,
+                    user_message: PROMPT.to_owned(),
+                    images: Vec::new(),
+                    max_tokens: 100,
+                    use_max_completion_tokens: true,
+                },
+                &backend.script_config.models.first_key_value().unwrap().0,
+            )
+            .await;
+        eprintln!("{res:?}");
+        let res = res.unwrap();
+
+        let as_val = serde_json::Value::Object(res);
+
+        // all this because of anthropic
+        for potential in [
+            as_val.pointer("/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/root/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/json/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/type/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/object/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/value/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/data/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/response/result").and_then(|x| x.as_i64()),
+            as_val.pointer("/answer/result").and_then(|x| x.as_i64()),
+        ] {
+            if let Some(v) = potential {
+                assert!(v >= 0 && v <= 100);
+                return;
+            }
+        }
+        assert!(false);
+    }
+
+    macro_rules! make_test {
+        ($conf:ident) => {
+            mod $conf {
+                use crate::common;
+
+                #[tokio::test]
+                async fn text() {
+                    let conf = super::conf::$conf;
+                    common::test_with_cookie(conf, async { super::do_test_text(conf).await }).await;
+                }
+                #[tokio::test]
+                async fn json() {
+                    let conf = super::conf::$conf;
+                    common::test_with_cookie(conf, async { super::do_test_json(conf).await }).await;
+                }
+            }
+        };
+    }
+
+    make_test!(openai);
+    make_test!(anthropic);
+    make_test!(google);
+    make_test!(xai);
+
+    make_test!(heurist);
+    make_test!(heurist_deepseek);
+    //make_test!(atoma);
 }

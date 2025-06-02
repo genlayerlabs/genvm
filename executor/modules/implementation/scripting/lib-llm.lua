@@ -1,29 +1,43 @@
 local M = {}
 
-M.all_backends = greyboxing.available_backends
-M.sleep_seconds = greyboxing.sleep_seconds
+local lib = require('lib-genvm')
 
-local inspect = require('inspect')
-local value2json = require('value2json')
+---@class Prompt
+---@field system_message string | nil
+---@field user_message string
+---@field temperature number
+---@field images userdata[]
+---@field max_tokens integer
+---@field use_max_completion_tokens boolean
 
-M.log = function(arg)
-	greyboxing.log(value2json(arg))
-end
+---@alias Format "text" | "json" | "bool"
 
-M.get_first_from_table = function(t)
-	if t == nil then
-		return nil
-	end
+---@alias ModelConfig { enabled: boolean, supports_json: boolean, supports_image: boolean, use_max_completion_tokens: boolean, meta: any }
+---@alias ProvidersDB { [string]: { models: { [string]: ModelConfig } } }
 
-	for k, v in pairs(t) do
-		return { key = k, value = v }
-	end
-	return nil
-end
 
+---@alias LLMExecPromptPayload { response_format: "text" | "json", prompt: string, images: userdata[] }
+---@alias LLMExecPromptTemplatePayload { template: "EqComparative" | "EqNonComparativeValidator" | "EqNonComparativeLeader", vars: table<string, string> }
+
+---@class LLM
+---@field exec_prompt_in_provider fun(ctx, data: { prompt: Prompt, format: Format, model: string }): any
+---@field providers ProvidersDB
+---@field templates { eq_comparative: any, eq_non_comparative_leader: any, eq_non_comparative_validator: any }
+
+---@type LLM
+local rs = __llm; ---@diagnostic disable-line
+
+M.rs = rs
+
+
+M.exec_prompt_in_provider = rs.exec_prompt_in_provider
+M.providers = rs.providers
+M.templates = rs.templates
+
+---@alias MappedPrompt { prompt: Prompt, format: "json" | "text" | "bool" }
+
+---@return MappedPrompt
 M.exec_prompt_transform = function(args)
-	local handler = args.handler
-
 	local mapped_prompt = {
 		system_message = nil,
 		user_message = args.payload.prompt,
@@ -54,10 +68,10 @@ local function shallow_copy(t)
 	return ret
 end
 
-function filter_backends_by(model_fn)
+local function filter_backends_by(model_fn)
 	local ret = {}
 
-	for name, conf in pairs(greyboxing.available_backends) do
+	for name, conf in pairs(rs.providers) do
 		local cur = shallow_copy(conf)
 		cur.models = {}
 
@@ -77,55 +91,39 @@ function filter_backends_by(model_fn)
 	return ret
 end
 
+---@type ProvidersDB
 M.backends_with_json_support = filter_backends_by(function(m) return m.supports_json end)
+---@type ProvidersDB
 M.backends_with_image_support = filter_backends_by(function(m) return m.supports_image end)
+---@type ProvidersDB
 M.backends_with_image_and_json_support = filter_backends_by(function(m) return m.supports_image and m.supports_json end)
 
-M.log{
+lib.log{
 	all_backends = M.all_backends,
 	backends_with_json_support = M.backends_with_json_support,
 	backends_with_image_support = M.backends_with_image_support,
 	backends_with_image_and_json_support = M.backends_with_image_and_json_support,
 }
 
-if M.get_first_from_table(M.backends_with_json_support) == nil then
-	M.log{
+if lib.get_first_from_table(M.backends_with_json_support) == nil then
+	lib.log{
 		level = "warning",
 		message = "no backend with json support detected"
 	}
 end
 
-if M.get_first_from_table(M.backends_with_image_support) == nil then
-	M.log{
+if lib.get_first_from_table(M.backends_with_image_support) == nil then
+	lib.log{
 		level = "warning",
 		message = "no backend with image support detected"
 	}
 end
 
-if M.get_first_from_table(M.backends_with_image_and_json_support) == nil then
-	M.log{
+if lib.get_first_from_table(M.backends_with_image_and_json_support) == nil then
+	lib.log{
 		level = "error",
 		message = "no backend with image AND json support detected"
 	}
-end
-
-M.exec_in_backend = function(handler, x)
-	local success, result = pcall(function() return handler:exec_in_backend(x) end)
-
-	if not success then
-		error({
-			kind = "LuaError",
-			ctx = {
-				original_error = result
-			}
-		})
-	end
-
-	if result.Err ~= nil then
-		error(result.Err)
-	end
-
-	return result.Ok
 end
 
 M.select_backends_for = function(args, format)
@@ -143,6 +141,7 @@ M.select_backends_for = function(args, format)
 	end
 end
 
+---@return MappedPrompt
 M.exec_prompt_template_transform = function(args)
 	local handler = args.handler
 
@@ -158,7 +157,7 @@ M.exec_prompt_template_transform = function(args)
 	my_data = my_data[args.payload.template]
 	args.payload.template = nil
 
-	local my_template = greyboxing.templates[my_data.template_id]
+	local my_template = M.rs.templates[my_data.template_id]
 
 	local as_user_text = my_template.user
 	for key, val in pairs(args.payload) do

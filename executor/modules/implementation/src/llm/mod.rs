@@ -1,13 +1,17 @@
 use anyhow::{Context, Result};
 use std::{collections::HashMap, sync::Arc};
 
-use crate::common;
+use crate::{
+    common,
+    scripting::{self, RSContext},
+};
 
 mod config;
 mod handler;
 mod prompt;
 mod providers;
-mod scripting;
+
+type UserVM = scripting::UserVM<ctx::VMData, ctx::CtxPart>;
 
 #[derive(clap::Args, Debug)]
 pub struct CliArgsRun {
@@ -34,6 +38,8 @@ pub struct CliArgsCheck {
     #[arg(long, help = "api key, supports `${ENV[...]}` syntax")]
     key: String,
 }
+
+mod ctx;
 
 fn handle_run(mut config: config::Config, args: CliArgsRun) -> Result<()> {
     for (k, v) in config.backends.iter_mut() {
@@ -70,22 +76,53 @@ fn handle_run(mut config: config::Config, args: CliArgsRun) -> Result<()> {
 
     let config = Arc::new(config);
 
-    let user_vm = scripting::UserVM::new(&config)?;
-
-    let client = common::create_client()?;
-
     let backends = config
         .backends
         .iter()
-        .map(|(k, v)| (k.clone(), v.to_provider(client.clone())))
+        .map(|(k, v)| (k.clone(), v.to_provider()))
         .collect();
+
+    let moved_config = config.clone();
+
+    let vm_pool = runtime.block_on(scripting::pool::new(config.vm_count, move || {
+        let moved_config = moved_config.clone();
+        async {
+            let mut user_vm =
+                crate::scripting::UserVM::create("", move |vm: mlua::Lua| async move {
+                    // set llm-related globals
+                    vm.globals()
+                        .set("__llm", ctx::create_global(&vm, &moved_config)?)?;
+
+                    // load script
+                    scripting::load_script(&vm, &moved_config.lua_script_path).await?;
+
+                    // get functions populated by script
+                    let exec_prompt: mlua::Function = vm.globals().get("exec_prompt")?;
+                    let exec_prompt_template: mlua::Function =
+                        vm.globals().get("exec_prompt_template")?;
+
+                    Ok(ctx::VMData {
+                        exec_prompt,
+                        exec_prompt_template,
+                    })
+                })
+                .await?;
+
+            user_vm.add_ctx_creator(Box::new(|ctx: &RSContext<ctx::CtxPart>, vm, table| {
+                table.set("__ctx_web", vm.create_userdata(ctx.data.clone())?)?;
+
+                Ok(())
+            }));
+
+            Ok(user_vm)
+        }
+    }))?;
 
     let loop_future = crate::common::run_loop(
         config.bind_address.clone(),
         token,
-        Arc::new(handler::HandlerProvider {
-            config,
-            user_vm,
+        Arc::new(handler::Provider {
+            vm_pool,
             providers: Arc::new(backends),
         }),
     );
@@ -126,10 +163,13 @@ fn handle_check(config: config::Config, args: CliArgsCheck) -> Result<()> {
     )?;
 
     let backend: config::BackendConfig = serde_json::from_value(backend)?;
-    let provider = backend.to_provider(common::create_client()?);
+    let provider = backend.to_provider();
+
+    let client = common::create_client()?;
 
     let res = runtime.block_on(
         provider.exec_prompt_text(
+            &client,
             &prompt::Internal {
                 system_message: None,
                 temperature: 0.7,

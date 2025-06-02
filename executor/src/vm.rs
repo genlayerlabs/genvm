@@ -933,6 +933,6 @@ impl Supervisor {
     }
 
     pub fn log_stats(&self) {
-        log::info!(all_wasm_modules:serde = self.cached_modules.keys().map(|x| x.as_str()).collect_vec(), stats:serde = self.stats; "supervisor stats");
+        log::debug!(all_wasm_modules:serde = self.cached_modules.keys().map(|x| x.as_str()).collect_vec(), stats:serde = self.stats; "supervisor stats");
     }
 }

@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use genvm_modules_interfaces::GenericValue;
 use wiggle::GuestError;
 
 use crate::host::SlotID;
@@ -285,7 +286,7 @@ impl ContextVFS<'_> {
 }
 
 async fn taskify<T>(
-    fut: impl std::future::Future<Output = anyhow::Result<std::result::Result<T, serde_json::Value>>>
+    fut: impl std::future::Future<Output = anyhow::Result<std::result::Result<T, GenericValue>>>
         + Send
         + 'static,
 ) -> anyhow::Result<Box<[u8]>>

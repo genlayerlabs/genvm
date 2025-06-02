@@ -1,4 +1,6 @@
 pub(crate) mod common;
+pub(crate) mod scripting;
+
 mod llm;
 mod web;
 
