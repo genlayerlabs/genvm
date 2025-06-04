@@ -2,7 +2,12 @@ pub mod pool;
 
 mod ctx;
 
-use std::{future::Future, sync::Arc};
+use std::{collections::BTreeMap, future::Future, sync::Arc};
+
+use genvm_modules_interfaces::GenericValue;
+use serde::{Deserialize, Serialize};
+
+use crate::common::{self, MapUserError, ModuleError};
 
 pub struct RSContext<C> {
     pub client: reqwest::Client,
@@ -17,6 +22,19 @@ pub struct UserVM<T, C> {
     pub data: T,
 
     ctx_creators: Vec<Box<CtxCreator<C>>>,
+}
+
+pub fn anyhow_to_lua_error(e: anyhow::Error) -> mlua::Error {
+    match e.downcast::<mlua::Error>() {
+        Ok(e) => e,
+        Err(e) => match e.downcast::<ModuleError>() {
+            Ok(e) => mlua::Error::external(e),
+            Err(e) => {
+                // we may need to *relocate* to allow other type checks
+                mlua::Error::external(e.into_boxed_dyn_error())
+            }
+        },
+    }
 }
 
 impl<T, C> UserVM<T, C> {
@@ -50,7 +68,7 @@ impl<T, C> UserVM<T, C> {
             lua_lib_path.push("share");
             lua_lib_path.push("lib");
             lua_lib_path.push("genvm");
-            lua_lib_path.push("greyboxing");
+            lua_lib_path.push("lua");
 
             let mut path = lua_lib_path
                 .to_str()
@@ -86,9 +104,9 @@ impl<T, C> UserVM<T, C> {
         let mut ctx_creators: Vec<Box<CtxCreator<C>>> = Vec::new();
 
         ctx_creators.push(Box::new(|rs_ctx, vm, ctx| {
-            let my_ctx = vm.create_userdata(ctx::dflt::CtxPart {
+            let my_ctx = vm.create_userdata(Arc::new(ctx::dflt::CtxPart {
                 client: rs_ctx.client.clone(),
-            })?;
+            }))?;
 
             ctx.set("__ctx_dflt", my_ctx)?;
 
@@ -133,8 +151,197 @@ where
 {
     let script_contents = std::fs::read_to_string(&path)?;
     let chunk = vm.load(script_contents);
-    let chunk = chunk.set_name(path.into());
+
+    let mut name = String::from("@");
+    name.push_str(&path.into());
+
+    let chunk = chunk.set_name(name);
     chunk.exec_async().await?;
 
     Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HeaderData(#[serde(with = "serde_bytes")] pub Vec<u8>);
+
+impl From<HeaderData> for GenericValue {
+    fn from(val: HeaderData) -> Self {
+        GenericValue::Bytes(val.0)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Response {
+    pub status: u16,
+
+    pub headers: BTreeMap<String, HeaderData>,
+
+    #[serde(with = "serde_bytes")]
+    pub body: Vec<u8>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResponseJSON {
+    pub status: u16,
+
+    pub headers: BTreeMap<String, HeaderData>,
+
+    pub body: serde_json::Value,
+}
+
+pub async fn send_request_get_lua_compatible_response_bytes(
+    url: &str,
+    request: reqwest::RequestBuilder,
+    error_on_status: bool,
+) -> anyhow::Result<Response> {
+    let response = request
+        .send()
+        .await
+        .map_user_error(common::ErrorKind::SENDING_REQUEST, true)?;
+
+    let status = response.status().as_u16();
+    let mut new_headers = BTreeMap::<String, HeaderData>::new();
+    for (k, v) in response.headers() {
+        new_headers.insert(k.as_str().to_owned(), HeaderData(v.as_bytes().to_owned()));
+    }
+
+    let body = response.bytes().await;
+
+    let body = match body {
+        Ok(body) => body,
+        Err(e) => {
+            return Err(ModuleError {
+                causes: vec![common::ErrorKind::READING_BODY.into()],
+                fatal: true,
+                ctx: BTreeMap::from([
+                    ("url".to_owned(), GenericValue::Str(url.to_owned())),
+                    ("status".to_string(), GenericValue::Number(status.into())),
+                    ("rust_error".to_owned(), GenericValue::Str(e.to_string())),
+                    (
+                        "headers".to_owned(),
+                        GenericValue::Map(BTreeMap::from_iter(
+                            new_headers
+                                .into_iter()
+                                .map(|(k, v)| (k, GenericValue::Bytes(v.0))),
+                        )),
+                    ),
+                ]),
+            }
+            .into());
+        }
+    };
+
+    log::trace!(body:? = body, len = body.len(); "read body");
+
+    if error_on_status && status != 200 {
+        return Err(ModuleError {
+            causes: vec![common::ErrorKind::STATUS_NOT_OK.into()],
+            fatal: true,
+            ctx: BTreeMap::from([
+                ("url".to_owned(), GenericValue::Str(url.to_owned())),
+                ("status".to_string(), GenericValue::Number(status.into())),
+                (
+                    "headers".to_owned(),
+                    GenericValue::Map(BTreeMap::from_iter(
+                        new_headers
+                            .into_iter()
+                            .map(|(k, v)| (k, GenericValue::Bytes(v.0))),
+                    )),
+                ),
+                ("body".to_owned(), GenericValue::Bytes(body.into())),
+            ]),
+        }
+        .into());
+    }
+
+    Ok(Response {
+        status,
+        headers: new_headers,
+        body: body.into(),
+    })
+}
+
+pub async fn send_request_get_lua_compatible_response_json(
+    url: &str,
+    request: reqwest::RequestBuilder,
+    error_on_status: bool,
+) -> anyhow::Result<ResponseJSON> {
+    let response = request
+        .send()
+        .await
+        .map_user_error(common::ErrorKind::SENDING_REQUEST, true)?;
+
+    let status = response.status().as_u16();
+    let mut new_headers = BTreeMap::<String, HeaderData>::new();
+    for (k, v) in response.headers() {
+        new_headers.insert(k.as_str().to_owned(), HeaderData(v.as_bytes().to_owned()));
+    }
+
+    let body = response.json().await;
+
+    let body: serde_json::Value = match body {
+        Ok(body) => body,
+        Err(e) => {
+            return Err(ModuleError {
+                causes: vec![common::ErrorKind::READING_BODY.into()],
+                fatal: true,
+                ctx: BTreeMap::from([
+                    ("url".to_owned(), GenericValue::Str(url.to_owned())),
+                    ("status".to_string(), GenericValue::Number(status.into())),
+                    ("rust_error".to_owned(), GenericValue::Str(e.to_string())),
+                    (
+                        "headers".to_owned(),
+                        GenericValue::Map(BTreeMap::from_iter(
+                            new_headers
+                                .into_iter()
+                                .map(|(k, v)| (k, GenericValue::Bytes(v.0))),
+                        )),
+                    ),
+                ]),
+            }
+            .into());
+        }
+    };
+
+    log::trace!(body:? = body; "read body");
+
+    if error_on_status && status != 200 {
+        return Err(ModuleError {
+            causes: vec![common::ErrorKind::STATUS_NOT_OK.into()],
+            fatal: true,
+            ctx: BTreeMap::from([
+                ("url".to_owned(), GenericValue::Str(url.to_owned())),
+                ("status".to_string(), GenericValue::Number(status.into())),
+                (
+                    "headers".to_owned(),
+                    GenericValue::Map(BTreeMap::from_iter(
+                        new_headers
+                            .into_iter()
+                            .map(|(k, v)| (k, GenericValue::Bytes(v.0))),
+                    )),
+                ),
+                ("body".to_owned(), body.into()),
+            ]),
+        }
+        .into());
+    }
+
+    Ok(ResponseJSON {
+        status,
+        headers: new_headers,
+        body,
+    })
+}
+
+pub fn try_unwrap_any_err(err: anyhow::Error) -> Result<ModuleError, anyhow::Error> {
+    match err.downcast::<ModuleError>() {
+        Ok(e) => Ok(e),
+        Err(err) => {
+            if let Some(e) = err.downcast_ref::<mlua::Error>() {
+                ctx::try_unwrap_err(e).ok_or(err)
+            } else {
+                Err(err)
+            }
+        }
+    }
 }

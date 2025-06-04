@@ -1,6 +1,4 @@
-use std::collections::BTreeMap;
-
-use crate::common::{self, ErrorKind, MapUserError, ModuleError, ModuleResult};
+use crate::{common::ModuleResult, scripting};
 use anyhow::Context;
 use base64::Engine;
 
@@ -69,7 +67,7 @@ pub struct Anthropic {
 }
 
 impl prompt::Internal {
-    fn to_openai_messages(&self) -> Vec<serde_json::Value> {
+    fn to_openai_messages(&self) -> ModuleResult<Vec<serde_json::Value>> {
         let mut messages = Vec::new();
         if let Some(sys) = &self.system_message {
             messages.push(serde_json::json!({
@@ -87,9 +85,10 @@ impl prompt::Internal {
 
         for img in &self.images {
             let mut encoded = "data:".to_owned();
-            encoded.push_str(img.kind.media_type());
+            let kind = img.kind_or_error()?;
+            encoded.push_str(kind.media_type());
             encoded.push_str(";base64,");
-            base64::prelude::BASE64_STANDARD.encode_string(&img.data, &mut encoded);
+            base64::prelude::BASE64_STANDARD.encode_string(&img.0, &mut encoded);
 
             user_content.push(serde_json::json!({
                 "type": "image_url",
@@ -102,10 +101,13 @@ impl prompt::Internal {
             "content": user_content,
         }));
 
-        messages
+        Ok(messages)
     }
 
-    fn add_gemini_messages(&self, to: &mut serde_json::Map<String, serde_json::Value>) {
+    fn add_gemini_messages(
+        &self,
+        to: &mut serde_json::Map<String, serde_json::Value>,
+    ) -> ModuleResult<()> {
         if let Some(sys) = &self.system_message {
             to.insert(
                 "system_instruction".to_owned(),
@@ -117,9 +119,10 @@ impl prompt::Internal {
 
         let mut parts = Vec::new();
         for img in &self.images {
+            let kind = img.kind_or_error()?;
             parts.push(serde_json::json!({
                 "inline_data": {
-                    "mime_type": img.kind.media_type(),
+                    "mime_type": kind.media_type(),
                     "data": img.as_base64(),
                 }
             }));
@@ -132,6 +135,8 @@ impl prompt::Internal {
                 "parts": parts,
             }]),
         );
+
+        Ok(())
     }
 }
 
@@ -145,7 +150,7 @@ impl Provider for OpenAICompatible {
     ) -> ModuleResult<String> {
         let mut request = serde_json::json!({
             "model": model,
-            "messages": prompt.to_openai_messages(),
+            "messages": prompt.to_openai_messages()?,
             "stream": false,
             "temperature": prompt.temperature,
         });
@@ -163,19 +168,20 @@ impl Provider for OpenAICompatible {
         }
 
         let request = serde_json::to_vec(&request)?;
-        let res = send_with_retries(|| {
-            client
-                .post(format!("{}/v1/chat/completions", self.config.host))
-                .header("Content-Type", "application/json")
-                .header("Authorization", &format!("Bearer {}", &self.config.key))
-                .body(request.clone())
-        })
-        .await?;
+        let url = format!("{}/v1/chat/completions", self.config.host);
+        let request = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("Authorization", &format!("Bearer {}", &self.config.key))
+            .body(request.clone());
+        let res =
+            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
 
         let response = res
+            .body
             .pointer("/choices/0/message/content")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
 
         Ok(response.to_owned())
     }
@@ -188,7 +194,7 @@ impl Provider for OpenAICompatible {
     ) -> ModuleResult<serde_json::Map<String, serde_json::Value>> {
         let mut request = serde_json::json!({
             "model": model,
-            "messages": prompt.to_openai_messages(),
+            "messages": prompt.to_openai_messages()?,
             "stream": false,
             "temperature": prompt.temperature,
             "response_format": {"type": "json_object"},
@@ -207,19 +213,20 @@ impl Provider for OpenAICompatible {
         }
 
         let request = serde_json::to_vec(&request)?;
-        let res = send_with_retries(|| {
-            client
-                .post(format!("{}/v1/chat/completions", self.config.host))
-                .header("Content-Type", "application/json")
-                .header("Authorization", &format!("Bearer {}", &self.config.key))
-                .body(request.clone())
-        })
-        .await?;
+        let url = format!("{}/v1/chat/completions", self.config.host);
+        let request = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("Authorization", &format!("Bearer {}", &self.config.key))
+            .body(request.clone());
+        let res =
+            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
 
         let response = res
+            .body
             .pointer("/choices/0/message/content")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
 
         let response = sanitize_json_str(response);
         let response =
@@ -272,18 +279,17 @@ impl Provider for OLlama {
         let request = prompt.to_ollama_no_format(model);
 
         let request = serde_json::to_vec(&request)?;
-        let res = send_with_retries(|| {
-            client
-                .post(format!("{}/api/generate", self.config.host))
-                .body(request.clone())
-        })
-        .await?;
+        let url = format!("{}/api/generate", self.config.host);
+        let request = client.post(&url).body(request.clone());
+        let res =
+            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
 
         let response = res
+            .body
             .as_object()
             .and_then(|v| v.get("response"))
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
         Ok(response.to_owned())
     }
 
@@ -320,18 +326,17 @@ impl Provider for OLlama {
         }
 
         let request = serde_json::to_vec(&request)?;
-        let res = send_with_retries(|| {
-            client
-                .post(format!("{}/api/generate", self.config.host))
-                .body(request.clone())
-        })
-        .await?;
+        let url = format!("{}/api/generate", self.config.host);
+        let request = client.post(&url).body(request.clone());
+        let res =
+            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
 
         let response = res
+            .body
             .as_object()
             .and_then(|v| v.get("response"))
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
         Ok(response.to_owned())
     }
 }
@@ -352,24 +357,25 @@ impl Provider for Gemini {
             }
         });
 
-        prompt.add_gemini_messages(request.as_object_mut().unwrap());
+        prompt.add_gemini_messages(request.as_object_mut().unwrap())?;
 
         let request = serde_json::to_vec(&request)?;
-        let res = send_with_retries(|| {
-            client
-                .post(format!(
-                    "{}/v1beta/models/{}:generateContent?key={}",
-                    self.config.host, model, self.config.key
-                ))
-                .header("Content-Type", "application/json")
-                .body(request.clone())
-        })
-        .await?;
+        let url = format!(
+            "{}/v1beta/models/{}:generateContent?key={}",
+            self.config.host, model, self.config.key
+        );
+        let request = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .body(request.clone());
+        let res =
+            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
 
         let res = res
+            .body
             .pointer("/candidates/0/content/parts/0/text")
             .and_then(|x| x.as_str())
-            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
         Ok(res.into())
     }
 
@@ -387,37 +393,39 @@ impl Provider for Gemini {
             }
         });
 
-        prompt.add_gemini_messages(request.as_object_mut().unwrap());
+        prompt.add_gemini_messages(request.as_object_mut().unwrap())?;
 
         let request = serde_json::to_vec(&request)?;
-        let res = send_with_retries(|| {
-            client
-                .post(format!(
-                    "{}/v1beta/models/{}:generateContent?key={}",
-                    self.config.host, model, self.config.key
-                ))
-                .header("Content-Type", "application/json")
-                .body(request.clone())
-        })
-        .await?;
+        let url = format!(
+            "{}/v1beta/models/{}:generateContent?key={}",
+            self.config.host, model, self.config.key
+        );
+        let request = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .body(request.clone());
+        let res =
+            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
 
         let res = res
+            .body
             .pointer("/candidates/0/content/parts/0/text")
             .and_then(|x| x.as_str())
-            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
 
         Ok(res.to_owned())
     }
 }
 
 impl prompt::Internal {
-    fn to_anthropic_no_format(&self, model: &str) -> serde_json::Value {
+    fn to_anthropic_no_format(&self, model: &str) -> ModuleResult<serde_json::Value> {
         let mut user_content = Vec::new();
 
         for img in &self.images {
+            let kind = img.kind_or_error()?;
             user_content.push(serde_json::json!({"type": "image", "source": {
                 "type": "base64",
-                "media_type": img.kind.media_type(),
+                "media_type": kind.media_type(),
                 "data": img.as_base64(),
             }}));
         }
@@ -439,7 +447,7 @@ impl prompt::Internal {
                 .insert("system".into(), sys.to_owned().into());
         }
 
-        request
+        Ok(request)
     }
 }
 
@@ -451,22 +459,23 @@ impl Provider for Anthropic {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
-        let request = prompt.to_anthropic_no_format(model);
+        let request = prompt.to_anthropic_no_format(model)?;
 
         let request = serde_json::to_vec(&request)?;
-        let res = send_with_retries(|| {
-            client
-                .post(format!("{}/v1/messages", self.config.host))
-                .header("Content-Type", "application/json")
-                .header("x-api-key", &self.config.key)
-                .header("anthropic-version", "2023-06-01")
-                .body(request.clone())
-        })
-        .await?;
+        let url = format!("{}/v1/messages", self.config.host);
+        let request = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("x-api-key", &self.config.key)
+            .header("anthropic-version", "2023-06-01")
+            .body(request.clone());
+        let res =
+            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
 
-        res.pointer("/content/0/text")
+        res.body
+            .pointer("/content/0/text")
             .and_then(|x| x.as_str())
-            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))
             .map(String::from)
     }
 
@@ -476,7 +485,7 @@ impl Provider for Anthropic {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<serde_json::Map<String, serde_json::Value>> {
-        let mut request = prompt.to_anthropic_no_format(model);
+        let mut request = prompt.to_anthropic_no_format(model)?;
 
         request.as_object_mut().unwrap().insert(
             "tools".to_owned(),
@@ -511,20 +520,21 @@ impl Provider for Anthropic {
         }
 
         let request = serde_json::to_vec(&request)?;
-        let res = send_with_retries(|| {
-            client
-                .post(format!("{}/v1/messages", self.config.host))
-                .header("Content-Type", "application/json")
-                .header("x-api-key", &self.config.key)
-                .header("anthropic-version", "2023-06-01")
-                .body(request.clone())
-        })
-        .await?;
+        let url = format!("{}/v1/messages", self.config.host);
+        let request = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("x-api-key", &self.config.key)
+            .header("anthropic-version", "2023-06-01")
+            .body(request.clone());
+        let res =
+            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
 
         let val = res
+            .body
             .pointer("/content/0/input")
             .and_then(|x| x.as_object())
-            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
 
         Ok(val.clone())
     }
@@ -567,20 +577,21 @@ impl Provider for Anthropic {
         }
 
         let request = serde_json::to_vec(&request)?;
-        let res = send_with_retries(|| {
-            client
-                .post(format!("{}/v1/messages", self.config.host))
-                .header("Content-Type", "application/json")
-                .header("x-api-key", &self.config.key)
-                .header("anthropic-version", "2023-06-01")
-                .body(request.clone())
-        })
-        .await?;
+        let url = format!("{}/v1/messages", self.config.host);
+        let request = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("x-api-key", &self.config.key)
+            .header("anthropic-version", "2023-06-01")
+            .body(request.clone());
+        let res =
+            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
 
         let val = res
+            .body
             .pointer("/content/0/input/result")
             .and_then(|x| x.as_bool())
-            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res))?;
+            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
 
         Ok(val)
     }
@@ -594,61 +605,6 @@ fn sanitize_json_str(s: &str) -> &str {
         .unwrap_or(s);
     let s = s.strip_suffix("```").unwrap_or(s);
     s.trim()
-}
-
-async fn send_with_retries(
-    builder: impl (FnOnce() -> reqwest::RequestBuilder) + Send,
-) -> anyhow::Result<serde_json::Value> {
-    let req = builder();
-
-    log::trace!(request = common::censor_debug(&req), cookie = common::get_cookie(); "sending request");
-
-    let res = req
-        .send()
-        .await
-        .with_context(|| "sending request to llm provider")
-        .inspect_err(|e| {
-            log::warn!(cookie = common::get_cookie(), error = genvm_common::log_error(e); "sending request failed");
-        })
-        .map_user_error(ErrorKind::SENDING_REQUEST, true)?;
-
-    let mut context = BTreeMap::new();
-
-    let status_code = res.status();
-
-    context.insert(
-        "status_code".into(),
-        genvm_modules_interfaces::GenericValue::Number(status_code.as_u16() as f64),
-    );
-
-    let body = res.text().await.with_context(|| "reading_body")
-        .inspect_err(|e| {
-            log::warn!(cookie = common::get_cookie(), error = genvm_common::log_error(e), status = status_code.as_u16(); "reading body failed");
-        }).map_user_error(ErrorKind::READING_BODY, true)?;
-
-    let body: serde_json::Value = serde_json::from_str(&body).inspect_err(|e| {
-        log::warn!(cookie = common::get_cookie(), error:? = e, status = status_code.as_u16(), body = common::censor_str(&body); "parsing body failed");
-    }).map_user_error(ErrorKind::DESERIALIZING, true)?;
-
-    use reqwest::StatusCode;
-    let err_kind = match status_code {
-        StatusCode::OK => return Ok(body),
-        StatusCode::REQUEST_TIMEOUT
-        | StatusCode::SERVICE_UNAVAILABLE
-        | StatusCode::TOO_MANY_REQUESTS
-        | StatusCode::GATEWAY_TIMEOUT => ErrorKind::OVERLOADED,
-        x if [529].contains(&x.as_u16()) => ErrorKind::OVERLOADED,
-        _ => ErrorKind::STATUS_NOT_OK,
-    };
-
-    context.insert("body".into(), body.into());
-
-    Err(ModuleError {
-        fatal: true,
-        causes: vec![err_kind.into()],
-        ctx: context,
-    }
-    .into())
 }
 
 #[cfg(test)]
@@ -748,7 +704,7 @@ mod tests {
                     max_tokens: 100,
                     use_max_completion_tokens: true,
                 },
-                &backend.script_config.models.first_key_value().unwrap().0,
+                backend.script_config.models.first_key_value().unwrap().0,
             )
             .await
             .unwrap();
@@ -801,7 +757,7 @@ mod tests {
                     max_tokens: 100,
                     use_max_completion_tokens: true,
                 },
-                &backend.script_config.models.first_key_value().unwrap().0,
+                backend.script_config.models.first_key_value().unwrap().0,
             )
             .await;
         eprintln!("{res:?}");
@@ -822,11 +778,11 @@ mod tests {
             as_val.pointer("/answer/result").and_then(|x| x.as_i64()),
         ] {
             if let Some(v) = potential {
-                assert!(v >= 0 && v <= 100);
+                assert!((0..=100).contains(&v));
                 return;
             }
         }
-        assert!(false);
+        unreachable!("no result found in {as_val:?}");
     }
 
     macro_rules! make_test {

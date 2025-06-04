@@ -1567,7 +1567,7 @@ mod tests {
     #[test]
     fn is_sorted() {
         for (l, r) in DOMAINS.iter().zip(DOMAINS.iter().skip(1)) {
-            if !(l < r) {
+            if l >= r {
                 panic!("wrong ordering {} {}", l, r)
             }
         }

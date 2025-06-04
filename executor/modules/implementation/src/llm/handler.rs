@@ -1,5 +1,5 @@
 use super::{ctx, prompt, providers, scripting, UserVM};
-use crate::common::{MessageHandler, MessageHandlerProvider, ModuleError, ModuleResult};
+use crate::common::{self, MessageHandler, MessageHandlerProvider, ModuleError, ModuleResult};
 
 use genvm_modules_interfaces::llm::{self as llm_iface};
 use mlua::LuaSerdeExt;
@@ -33,7 +33,7 @@ impl
             genvm_modules_interfaces::llm::PromptAnswer,
         >,
     > {
-        let client = reqwest::Client::new();
+        let client = common::create_client()?;
 
         let ctx = scripting::RSContext {
             client: client.clone(),
@@ -66,7 +66,7 @@ impl crate::common::MessageHandler<llm_iface::Message, llm_iface::PromptAnswer> 
         match message {
             llm_iface::Message::Prompt(payload) => {
                 for img in &payload.images {
-                    if let None = prompt::ImageType::sniff(&img.0) {
+                    if prompt::ImageType::sniff(&img.0).is_none() {
                         return Err(ModuleError {
                             causes: vec!["INVALID_IMAGE".into()],
                             fatal: false,

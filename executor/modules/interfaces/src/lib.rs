@@ -22,6 +22,48 @@ pub enum GenericValue {
     Array(Vec<GenericValue>),
 }
 
+impl From<String> for GenericValue {
+    fn from(value: String) -> Self {
+        GenericValue::Str(value)
+    }
+}
+
+impl From<i32> for GenericValue {
+    fn from(value: i32) -> Self {
+        GenericValue::Number(value as f64)
+    }
+}
+
+impl From<u16> for GenericValue {
+    fn from(value: u16) -> Self {
+        GenericValue::Number(value as f64)
+    }
+}
+
+impl From<f64> for GenericValue {
+    fn from(value: f64) -> Self {
+        GenericValue::Number(value)
+    }
+}
+
+impl From<u32> for GenericValue {
+    fn from(value: u32) -> Self {
+        GenericValue::Number(value as f64)
+    }
+}
+
+impl From<bool> for GenericValue {
+    fn from(value: bool) -> Self {
+        GenericValue::Bool(value)
+    }
+}
+
+impl From<Vec<u8>> for GenericValue {
+    fn from(value: Vec<u8>) -> Self {
+        GenericValue::Bytes(value)
+    }
+}
+
 impl From<serde_json::Value> for GenericValue {
     fn from(value: serde_json::Value) -> Self {
         match value {

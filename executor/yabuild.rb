@@ -13,6 +13,7 @@ project('executor') {
 	if config.executor_target.nil? and not compiler.nil? and not linker.nil?
 		base_env['RUSTFLAGS'] << "-Clinker=#{Shellwords.escape compiler} -Clink-arg=-fuse-ld=#{Shellwords.escape linker}"
 	end
+
 	if not config.executor_target.nil?
 		linker_path = $cross_cc
 		#base_env['RUSTFLAGS'] << "-Clinker=#{Shellwords.escape linker_path} "

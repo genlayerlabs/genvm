@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 
 use crate::{
     common::{self, ErrorKind, MapUserError, ModuleError},
-    scripting::DEFAULT_LUA_SER_OPTIONS,
+    scripting::{self, HeaderData, DEFAULT_LUA_SER_OPTIONS},
 };
 use anyhow::Context;
 use base64::Engine;
@@ -32,7 +32,6 @@ fn default_false() -> bool {
 pub struct Request {
     pub method: RequestKind,
     pub url: String,
-
     pub headers: BTreeMap<String, HeaderData>,
 
     #[serde(with = "serde_bytes", default = "default_none")]
@@ -40,20 +39,9 @@ pub struct Request {
     #[serde(default = "default_false")]
     pub sign: bool,
     #[serde(default = "default_false")]
+    pub json: bool,
+    #[serde(default = "default_false")]
     pub error_on_status: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct HeaderData(#[serde(with = "serde_bytes")] Vec<u8>);
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Response {
-    pub status: u16,
-
-    pub headers: BTreeMap<String, HeaderData>,
-
-    #[serde(with = "serde_bytes")]
-    pub body: Vec<u8>,
 }
 
 pub struct CtxPart {
@@ -63,7 +51,7 @@ pub struct CtxPart {
 impl mlua::UserData for CtxPart {}
 
 impl CtxPart {
-    async fn request(&self, req: Request) -> anyhow::Result<Response> {
+    async fn request(&self, vm: &mlua::Lua, req: Request) -> anyhow::Result<mlua::Value> {
         log::trace!(request:? = req; "received request");
 
         let url = match reqwest::Url::parse(&req.url) {
@@ -72,7 +60,7 @@ impl CtxPart {
                 return Err(common::ModuleError {
                     causes: vec![ErrorKind::DESERIALIZING.into()],
                     ctx: BTreeMap::from([("url".into(), GenericValue::Str(req.url))]),
-                    fatal: false,
+                    fatal: true,
                 }
                 .into());
             }
@@ -93,12 +81,12 @@ impl CtxPart {
             let name: reqwest::header::HeaderName = k
                 .as_bytes()
                 .try_into()
-                .map_user_error(ErrorKind::DESERIALIZING.to_string(), false)?;
+                .map_user_error(ErrorKind::DESERIALIZING.to_string(), true)?;
             let data: &[u8] = &v.0;
             headers.insert(
                 name,
                 data.try_into()
-                    .map_user_error("invalid header value", false)?,
+                    .map_user_error("invalid header value", true)?,
             );
         }
 
@@ -110,48 +98,23 @@ impl CtxPart {
             request
         };
 
-        let response = request
-            .send()
-            .await
-            .map_user_error(ErrorKind::SENDING_REQUEST, false)?;
-
-        let status = response.status().as_u16();
-        let mut new_headers = BTreeMap::<String, HeaderData>::new();
-        for (k, v) in response.headers() {
-            new_headers.insert(k.as_str().to_owned(), HeaderData(v.as_bytes().to_owned()));
+        if req.json {
+            let res = scripting::send_request_get_lua_compatible_response_json(
+                &req.url,
+                request,
+                req.error_on_status,
+            )
+            .await?;
+            Ok(vm.to_value_with(&res, DEFAULT_LUA_SER_OPTIONS)?)
+        } else {
+            let res = scripting::send_request_get_lua_compatible_response_bytes(
+                &req.url,
+                request,
+                req.error_on_status,
+            )
+            .await?;
+            Ok(vm.to_value_with(&res, DEFAULT_LUA_SER_OPTIONS)?)
         }
-        let body = response
-            .bytes()
-            .await
-            .map_user_error(ErrorKind::READING_BODY, false)?;
-
-        log::trace!(body:? = body, len = body.len(); "read body");
-
-        if req.error_on_status && status != 200 {
-            return Err(ModuleError {
-                causes: vec![ErrorKind::STATUS_NOT_OK.into()],
-                fatal: false,
-                ctx: BTreeMap::from([
-                    ("status".to_owned(), GenericValue::Number(status.into())),
-                    (
-                        "headers".to_owned(),
-                        GenericValue::Map(BTreeMap::from_iter(
-                            new_headers
-                                .into_iter()
-                                .map(|(k, v)| (k, GenericValue::Bytes(v.0))),
-                        )),
-                    ),
-                    ("body".to_owned(), GenericValue::Bytes(body.into())),
-                ]),
-            }
-            .into());
-        }
-
-        Ok(Response {
-            status: status,
-            headers: new_headers,
-            body: body.into(),
-        })
     }
 }
 
@@ -202,7 +165,8 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
         "json_parse",
         vm.create_function(|vm: &mlua::Lua, data: mlua::String| {
             let data: serde_json::Value = serde_json::from_slice(&data.as_bytes())
-                .map_user_error(ErrorKind::DESERIALIZING, false)?;
+                .map_user_error(ErrorKind::DESERIALIZING, true)
+                .map_err(scripting::anyhow_to_lua_error)?;
 
             vm.to_value_with(&data, DEFAULT_LUA_SER_OPTIONS)
         })?,
@@ -224,7 +188,8 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
         vm.create_function(|vm: &mlua::Lua, data: mlua::String| {
             let decoded = base64::prelude::BASE64_STANDARD
                 .decode(data.as_bytes())
-                .map_user_error(ErrorKind::DESERIALIZING, false)?;
+                .map_user_error(ErrorKind::DESERIALIZING, true)
+                .map_err(scripting::anyhow_to_lua_error)?;
 
             Ok(vm.create_string(decoded))
         })?,
@@ -270,23 +235,18 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
     dflt.set(
         "as_user_error",
         vm.create_function(|vm: &mlua::Lua, args: mlua::Value| {
+            log::trace!(name = args.type_name(); "casting to user error (1)");
+
             let err = match args.as_error() {
                 None => return Ok(mlua::Value::Nil),
                 Some(err) => err,
             };
 
-            match err {
-                mlua::Error::ExternalError(e) => {
-                    if let Some(e) = e.downcast_ref::<ModuleError>() {
-                        return vm.to_value(e);
-                    }
-                }
-                mlua::Error::CallbackError { cause: e, .. } => {
-                    if let Some(e) = e.downcast_ref::<ModuleError>() {
-                        return vm.to_value(e);
-                    }
-                }
-                _ => {}
+            log::trace!(error:? = err; "casting to user error (2)");
+
+            if let Some(err) = super::try_unwrap_err(err) {
+                log::trace!(error:? = err; "casting to user error (3)");
+                return vm.to_value(&err);
             }
 
             Ok(mlua::Value::Nil)
@@ -299,15 +259,21 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
             |vm: mlua::Lua, args: (mlua::Table, mlua::Value)| async move {
                 let (zelf, req) = args;
 
-                let zelf: mlua::AnyUserData = zelf.get("__ctx_rs")?;
-                let zelf: mlua::UserDataRef<Arc<CtxPart>> =
-                    zelf.borrow().with_context(|| "unboxing userdata")?;
+                let zelf: mlua::AnyUserData = zelf.get("__ctx_dflt")?;
+                let zelf: mlua::UserDataRef<Arc<CtxPart>> = zelf
+                    .borrow()
+                    .with_context(|| "unboxing userdata")
+                    .map_err(scripting::anyhow_to_lua_error)?;
 
                 let request: Request = vm
                     .from_value(req)
-                    .with_context(|| "deserializing request")?;
+                    .with_context(|| "deserializing request")
+                    .map_err(scripting::anyhow_to_lua_error)?;
 
-                let response = zelf.request(request).await?;
+                let response = zelf
+                    .request(&vm, request)
+                    .await
+                    .map_err(scripting::anyhow_to_lua_error)?;
 
                 let result = vm.to_value_with(&response, DEFAULT_LUA_SER_OPTIONS)?;
 
@@ -323,7 +289,10 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
 mod tests {
     use base64::Engine;
 
-    use crate::{common, scripting};
+    use crate::{
+        common,
+        scripting::{self, Response},
+    };
 
     use super::*;
 

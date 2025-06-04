@@ -1,6 +1,6 @@
 local M = {}
 
----@alias WebRenderPayload { url: string, mode: "Text" | "HTML" | "Screenshot", wait_after_loaded: number }
+---@alias WebRenderPayload { url: string, mode: "text" | "html" | "screenshot", wait_after_loaded: number }
 
 local lib = require('lib-genvm')
 
@@ -11,6 +11,11 @@ local lib = require('lib-genvm')
 
 ---@type WEB
 M.rs = __web; ---@diagnostic disable-line
+
+M.allowed_schemas = {
+	["http"] = true,
+	["https"] = true,
+}
 
 M.check_url = function(url)
 	local split_url = lib.rs.split_url(url)
@@ -26,7 +31,18 @@ M.check_url = function(url)
 	end
 	---@cast split_url -nil
 
-	if split_url.host == "" then
+	if not M.allowed_schemas[split_url.schema] then
+		lib.rs.user_error({
+			causes = {"SCHEMA_FORBIDDEN"},
+			fatal = false,
+			ctx = {
+				schema = split_url.schema,
+				url = url,
+			}
+		})
+	end
+
+	if M.rs.config.always_allow_hosts[split_url.host] then
 		return
 	end
 

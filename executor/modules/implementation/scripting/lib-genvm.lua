@@ -7,7 +7,9 @@ local value2json = require('value2json')
 ---@class RS
 ---@field log_json fun(val: any): nil
 ---@field sleep_seconds fun(duration: number): nil
----@field request fun(ctx, req: { body: nil | string, url: string, headers: table<string, string>, method: string, error_on_status: boolean | nil }): { body: string, status: integer, headers: table<string, string> }
+---@field request
+---| fun(ctx, req: { body: nil | string, url: string, headers: table<string, string>, method: string, error_on_status: boolean | nil, json: false | nil }): { body: string, status: integer, headers: table<string, string> }
+---| fun(ctx, req: { body: nil | string, url: string, headers: table<string, string>, method: string, error_on_status: boolean | nil, json: true }): { body: any, status: integer, headers: table<string, string> }
 ---@field split_url fun(url: string): nil | { schema: string, port: number | nil, host: string }
 ---@field user_error fun(val: ModuleError): nil
 ---@field base64_decode fun(val: string): string

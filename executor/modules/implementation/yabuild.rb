@@ -21,22 +21,24 @@ web_config_target = target_copy(
 	src: [cur_src.join('web-default-config.yaml')],
 )
 
-lib_copy_targets = ['lib-greyboxing.lua', 'inspect.lua', 'value2json.lua'].map { |ct|
+lib_copy_targets = ['lib-genvm.lua', 'lib-web.lua', 'lib-llm.lua', 'inspect.lua', 'value2json.lua'].map { |ct|
 	target_copy(
-		dest: config.out_dir.join('share', 'lib', 'genvm', 'greyboxing', ct),
+		dest: config.out_dir.join('share', 'lib', 'genvm', 'lua', ct),
 		src: [cur_src.join('scripting', ct)],
 	)
 }
 
-script_target = target_copy(
-	dest: config.out_dir.join('scripts', 'genvm-greyboxing.lua'),
-	src: [cur_src.join('scripting/greyboxing.lua')],
-)
+script_copy_targets = ['web-default.lua', 'llm-default.lua'].map { |ct|
+	target_copy(
+		dest: config.out_dir.join('scripts', ct),
+		src: [cur_src.join('scripting', ct)],
+	)
+}
 
 target_alias(
 	'modules',
 	bin,
 	web_config_target, llm_config_target,
-	script_target, *lib_copy_targets,
+	*script_copy_targets, *lib_copy_targets,
 	tags: ['all'],
 )

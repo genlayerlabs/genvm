@@ -7,6 +7,8 @@ use std::{collections::BTreeMap, sync::Arc};
 use anyhow::{Context, Result};
 use regex::Regex;
 
+use crate::scripting;
+
 #[allow(non_camel_case_types, dead_code)]
 pub enum ErrorKind {
     STATUS_NOT_OK,
@@ -17,17 +19,18 @@ pub enum ErrorKind {
     Other(String),
 }
 
-impl Into<String> for ErrorKind {
-    fn into(self) -> String {
-        if let ErrorKind::Other(k) = self {
-            return k;
+impl From<ErrorKind> for String {
+    fn from(x: ErrorKind) -> String {
+        if let ErrorKind::Other(k) = x {
+            k
+        } else {
+            x.to_string()
         }
-
-        return self.to_string();
     }
 }
 
 impl ErrorKind {
+    #[allow(clippy::inherent_to_string)]
     pub fn to_string(&self) -> String {
         match self {
             ErrorKind::STATUS_NOT_OK => "STATUS_NOT_OK".to_owned(),
@@ -40,11 +43,23 @@ impl ErrorKind {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModuleError {
     pub causes: Vec<String>,
     pub fatal: bool,
     pub ctx: BTreeMap<String, genvm_modules_interfaces::GenericValue>,
+}
+
+impl ModuleError {
+    pub fn try_unwrap_dyn(
+        err: &(dyn std::error::Error + Send + Sync + 'static),
+    ) -> Option<ModuleError> {
+        if let Some(e) = err.downcast_ref::<ModuleError>() {
+            return Some(e.clone());
+        }
+
+        None
+    }
 }
 
 pub trait MapUserError {
@@ -99,7 +114,7 @@ where
 
 impl std::fmt::Display for ModuleError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("#{:?}", self))
+        f.write_fmt(format_args!("{:?}", self))
     }
 }
 
@@ -213,30 +228,26 @@ where
                 let res = loop_one_inner_handle(handler, &text).await;
                 let res = match res {
                     Ok(res) => genvm_modules_interfaces::Result::Ok(res),
-                    Err(res) => match res.downcast::<ModuleError>() {
-                        Ok(res) => {
-                            log::info!(error:serde = res, cookie = cookie; "handler user error");
-                            if res.fatal {
-                                genvm_modules_interfaces::Result::FatalError(format!("{res:#}"))
+                    Err(err) => match scripting::try_unwrap_any_err(err) {
+                        Ok(err) => {
+                            if err.fatal {
+                                genvm_modules_interfaces::Result::FatalError(format!("{err:#}"))
                             } else {
                                 let res = GenericValue::Map(BTreeMap::from([
                                     (
                                         "causes".to_owned(),
                                         GenericValue::Array(
-                                            res.causes
-                                                .into_iter()
-                                                .map(|x| GenericValue::Str(x))
-                                                .collect(),
+                                            err.causes.into_iter().map(Into::into).collect(),
                                         ),
                                     ),
-                                    ("ctx".to_owned(), GenericValue::Map(res.ctx)),
+                                    ("ctx".to_owned(), GenericValue::Map(err.ctx)),
                                 ]));
                                 genvm_modules_interfaces::Result::UserError(res)
                             }
                         }
-                        Err(res) => {
-                            log::error!(error = genvm_common::log_error(&res), cookie = cookie; "handler fatal error");
-                            genvm_modules_interfaces::Result::FatalError(format!("{res:#}"))
+                        Err(err) => {
+                            log::error!(error = genvm_common::log_error(&err), cookie = cookie; "handler fatal error");
+                            genvm_modules_interfaces::Result::FatalError(format!("{err:#}"))
                         }
                     },
                 };

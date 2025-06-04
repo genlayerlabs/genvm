@@ -23,14 +23,22 @@ impl common::MessageHandler<web_iface::Message, web_iface::RenderAnswer> for Han
     ) -> common::ModuleResult<web_iface::RenderAnswer> {
         match message {
             web_iface::Message::Render(payload) => {
-                let payload = self.0.user_vm.vm.to_value(&payload)?;
+                let vm = &self.0.user_vm.vm;
+
+                let payload_lua = vm.create_table()?;
+                payload_lua.set("mode", vm.to_value(&payload.mode)?)?;
+                payload_lua.set("url", payload.url)?;
+                payload_lua.set(
+                    "wait_after_loaded",
+                    payload.wait_after_loaded.0.as_secs_f64(),
+                )?;
 
                 let res: mlua::Value = self
                     .0
                     .user_vm
                     .call_fn(
                         &self.0.user_vm.data.render,
-                        (self.0.ctx_val.clone(), payload),
+                        (self.0.ctx_val.clone(), payload_lua),
                     )
                     .await?;
 
@@ -93,7 +101,7 @@ impl
         let ctx = scripting::RSContext {
             client: client.clone(),
             data: Arc::new(ctx::CtxPart {
-                client: client,
+                client,
                 hello,
                 session: tokio::sync::Mutex::new(None),
                 config: self.config.clone(),

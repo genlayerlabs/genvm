@@ -5,7 +5,7 @@ use mlua::LuaSerdeExt;
 
 use crate::{
     common::{self, MapUserError, ModuleResult},
-    scripting::DEFAULT_LUA_SER_OPTIONS,
+    scripting::{self, DEFAULT_LUA_SER_OPTIONS},
 };
 
 use super::{
@@ -79,7 +79,8 @@ pub fn create_global(vm: &mlua::Lua, config: &Config) -> anyhow::Result<mlua::Va
             let res = web
                 .get_webdriver_session()
                 .await
-                .map_user_error("CREATING_SESSION", true)?;
+                .map_user_error("CREATING_SESSION", true)
+                .map_err(scripting::anyhow_to_lua_error)?;
             Ok(res)
         })?,
     )?;

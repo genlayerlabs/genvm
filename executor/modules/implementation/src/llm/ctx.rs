@@ -89,12 +89,14 @@ async fn exec_prompt_in_provider(
 
     let args: Args = vm
         .from_value(args)
-        .with_context(|| "deserializing arguments")?;
+        .with_context(|| "deserializing arguments")
+        .map_err(scripting::anyhow_to_lua_error)?;
 
     let res = zelf
         .exec_prompt_in_provider(&args.prompt, &args.model, &args.provider, args.format)
         .await
-        .with_context(|| "running in provider")?;
+        .with_context(|| "running in provider")
+        .map_err(scripting::anyhow_to_lua_error)?;
 
     vm.to_value_with(&res, scripting::DEFAULT_LUA_SER_OPTIONS)
 }
