@@ -1,7 +1,7 @@
 use super::{config, ctx};
 use crate::{common, scripting};
 
-use genvm_modules_interfaces::web as web_iface;
+use genvm_modules_interfaces::web::{self as web_iface, RenderAnswer};
 use mlua::LuaSerdeExt;
 use std::sync::Arc;
 
@@ -22,6 +22,24 @@ impl common::MessageHandler<web_iface::Message, web_iface::RenderAnswer> for Han
         message: web_iface::Message,
     ) -> common::ModuleResult<web_iface::RenderAnswer> {
         match message {
+            web_iface::Message::Request(payload) => {
+                let vm = &self.0.user_vm.vm;
+
+                let payload_lua = vm.to_value(&payload)?;
+
+                let res: mlua::Value = self
+                    .0
+                    .user_vm
+                    .call_fn(
+                        &self.0.user_vm.data.request,
+                        (self.0.ctx_val.clone(), payload_lua),
+                    )
+                    .await?;
+
+                let res = self.0.user_vm.vm.from_value(res)?;
+
+                Ok(RenderAnswer::Response(res))
+            }
             web_iface::Message::Render(payload) => {
                 let vm = &self.0.user_vm.vm;
 

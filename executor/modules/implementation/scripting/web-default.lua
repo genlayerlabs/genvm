@@ -15,7 +15,7 @@ local function render_screenshot(ctx)
 	}
 end
 
-local function render_impl(ctx, payload)
+function Render(ctx, payload)
 	---@cast payload WebRenderPayload
 	web.check_url(payload.url)
 
@@ -78,11 +78,22 @@ local function render_impl(ctx, payload)
 	}
 end
 
-function render(ctx, payload)
-	---@cast payload WebRenderPayload
-	return render_impl(ctx, payload)
-end
+function Request(ctx, payload)
+	---@cast payload WebRequestPayload
 
-function request(ctx, payload)
-	error("todo")
+	web.check_url(payload.url)
+
+	local success, result = pcall(lib.rs.request, ctx, {
+		method = payload.method,
+		url = payload.url,
+		headers = payload.headers,
+		body = payload.body,
+		sign = payload.sign,
+	})
+
+	if success then
+		return result
+	end
+
+	lib.reraise_with_fatality(result, false)
 end

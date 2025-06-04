@@ -71,9 +71,10 @@ pub fn entrypoint(args: CliArgs) -> Result<()> {
                     scripting::load_script(&vm, &moved_config.lua_script_path).await?;
 
                     // get functions populated by script
-                    let render: mlua::Function = vm.globals().get("render")?;
+                    let render: mlua::Function = vm.globals().get("Render")?;
+                    let request: mlua::Function = vm.globals().get("Request")?;
 
-                    Ok(ctx::VMData { render })
+                    Ok(ctx::VMData { render, request })
                 })
                 .await?;
 

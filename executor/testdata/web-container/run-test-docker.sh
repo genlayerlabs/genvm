@@ -11,6 +11,7 @@ IMAGE_ID="$(docker build -q -t genvm/modules-webdriver "$DOCKER_BUILD_DIR")"
 docker run \
     --add-host genvm-test:127.0.0.1 \
     -p 4444:4444 \
+    -p 80:4445 \
     --rm -d \
     --name genvm-web-test \
     --volume ./volume:/test/ \

@@ -254,6 +254,8 @@ pub mod llm {
 }
 
 pub mod web {
+    use std::collections::BTreeMap;
+
     use serde_derive::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize)]
@@ -278,13 +280,64 @@ pub mod web {
         pub wait_after_loaded: super::ParsedDuration,
     }
 
+    #[derive(Debug, Serialize, Deserialize)]
+    pub enum RequestMethod {
+        GET,
+        POST,
+        HEAD,
+        DELETE,
+        OPTIONS,
+        PATCH,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct Response {
+        pub status: u16,
+        pub headers: BTreeMap<String, HeaderData>,
+
+        #[serde(with = "serde_bytes")]
+        pub body: Vec<u8>,
+    }
+
+    fn default_none<T>() -> Option<T> {
+        None
+    }
+
+    fn default_false() -> bool {
+        false
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct HeaderData(#[serde(with = "serde_bytes")] pub Vec<u8>);
+
+    impl From<HeaderData> for super::GenericValue {
+        fn from(val: HeaderData) -> Self {
+            val.0.into()
+        }
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct RequestPayload {
+        pub method: RequestMethod,
+        pub url: String,
+        pub headers: BTreeMap<String, HeaderData>,
+
+        #[serde(with = "serde_bytes", default = "default_none")]
+        pub body: Option<Vec<u8>>,
+        #[serde(default = "default_false")]
+        pub sign: bool,
+    }
+
     #[derive(Serialize, Deserialize)]
     pub enum Message {
         Render(RenderPayload),
+        Request(RequestPayload),
     }
 
     #[derive(Serialize, Deserialize)]
     pub enum RenderAnswer {
+        #[serde(rename = "response")]
+        Response(Response),
         #[serde(rename = "text")]
         Text(String),
         #[serde(rename = "image", with = "serde_bytes")]

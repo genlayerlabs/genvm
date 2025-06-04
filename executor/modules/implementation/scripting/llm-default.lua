@@ -58,7 +58,7 @@ local function just_in_backend(ctx, mapped_prompt)
 	lib.log{level = "error", message = "no provider could handle prompt", search_in = search_in}
 end
 
-function exec_prompt(ctx, args)
+function ExecPrompt(ctx, args)
 	---@cast args LLMExecPromptPayload
 
 	local mapped = llm.exec_prompt_transform(args)
@@ -66,7 +66,7 @@ function exec_prompt(ctx, args)
 	return just_in_backend(ctx, mapped)
 end
 
-function exec_prompt_template(ctx, args)
+function ExecPromptTemplate(ctx, args)
 	---@cast args LLMExecPromptTemplatePayload
 
 	local mapped = llm.exec_prompt_template_transform(args)

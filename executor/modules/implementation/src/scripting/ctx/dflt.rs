@@ -2,13 +2,15 @@ use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 
 use crate::{
     common::{self, ErrorKind, MapUserError, ModuleError},
-    scripting::{self, HeaderData, DEFAULT_LUA_SER_OPTIONS},
+    scripting::{self, DEFAULT_LUA_SER_OPTIONS},
 };
 use anyhow::Context;
 use base64::Engine;
 use genvm_modules_interfaces::GenericValue;
 use mlua::LuaSerdeExt;
 use serde::{Deserialize, Serialize};
+
+use genvm_modules_interfaces::web as web_iface;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum RequestKind {
@@ -30,9 +32,9 @@ fn default_false() -> bool {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Request {
-    pub method: RequestKind,
+    pub method: web_iface::RequestMethod,
     pub url: String,
-    pub headers: BTreeMap<String, HeaderData>,
+    pub headers: BTreeMap<String, web_iface::HeaderData>,
 
     #[serde(with = "serde_bytes", default = "default_none")]
     pub body: Option<Vec<u8>>,
@@ -67,12 +69,12 @@ impl CtxPart {
         };
 
         let method = match req.method {
-            RequestKind::GET => reqwest::Method::GET,
-            RequestKind::POST => reqwest::Method::POST,
-            RequestKind::DELETE => reqwest::Method::DELETE,
-            RequestKind::HEAD => reqwest::Method::HEAD,
-            RequestKind::OPTIONS => reqwest::Method::OPTIONS,
-            RequestKind::PATCH => reqwest::Method::PATCH,
+            web_iface::RequestMethod::GET => reqwest::Method::GET,
+            web_iface::RequestMethod::POST => reqwest::Method::POST,
+            web_iface::RequestMethod::DELETE => reqwest::Method::DELETE,
+            web_iface::RequestMethod::HEAD => reqwest::Method::HEAD,
+            web_iface::RequestMethod::OPTIONS => reqwest::Method::OPTIONS,
+            web_iface::RequestMethod::PATCH => reqwest::Method::PATCH,
         };
 
         let mut headers: reqwest::header::HeaderMap<reqwest::header::HeaderValue> =

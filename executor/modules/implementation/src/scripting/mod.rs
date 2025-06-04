@@ -4,7 +4,7 @@ mod ctx;
 
 use std::{collections::BTreeMap, future::Future, sync::Arc};
 
-use genvm_modules_interfaces::GenericValue;
+use genvm_modules_interfaces::{web::HeaderData, GenericValue};
 use serde::{Deserialize, Serialize};
 
 use crate::common::{self, MapUserError, ModuleError};
@@ -159,15 +159,6 @@ where
     chunk.exec_async().await?;
 
     Ok(())
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct HeaderData(#[serde(with = "serde_bytes")] pub Vec<u8>);
-
-impl From<HeaderData> for GenericValue {
-    fn from(val: HeaderData) -> Self {
-        GenericValue::Bytes(val.0)
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

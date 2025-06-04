@@ -96,6 +96,7 @@ pub enum Message {
     },
 
     WebRender(genvm_modules_interfaces::web::RenderPayload),
+    WebRequest(genvm_modules_interfaces::web::RequestPayload),
     ExecPrompt(genvm_modules_interfaces::llm::PromptPayload),
     ExecPromptTemplate(genvm_modules_interfaces::llm::PromptTemplatePayload),
 

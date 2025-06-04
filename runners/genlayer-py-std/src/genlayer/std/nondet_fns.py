@@ -1,4 +1,11 @@
-__all__ = ('get_webpage', 'exec_prompt', 'GetWebpageKwArgs', 'ExecPromptKwArgs')
+__all__ = (
+	'get_webpage',
+	'exec_prompt',
+	'GetWebpageKwArgs',
+	'ExecPromptKwArgs',
+	'request',
+	'Response',
+)
 
 import typing
 
@@ -61,6 +68,43 @@ def get_webpage(
 def get_webpage(
 	url: str, *, wait_after_loaded: str | None = None, mode: typing.Literal['screenshot']
 ) -> Image: ...
+
+
+@dataclasses.dataclass
+class Response:
+	status: int
+	headers: dict[str, bytes]
+	body: bytes | None
+
+
+def str_or_bytes_to_bytes(
+	data: str | bytes | None,
+) -> bytes | None:
+	if data is None:
+		return None
+	if isinstance(data, str):
+		return data.encode('utf-8')
+	return data
+
+
+@_lazy_api
+def request(
+	url: str,
+	method: typing.Literal['GET', 'POST', 'DELETE', 'HEAD', 'OPTIONS', 'PATCH'],
+	body: str | bytes | None = None,
+	headers: dict[str, str | bytes] = {},
+) -> Lazy[Response]:
+	return gl_call.gl_call_generic(
+		{
+			'WebRequest': {
+				'url': url,
+				'method': method,
+				'body': str_or_bytes_to_bytes(body),
+				'headers': {k: str_or_bytes_to_bytes(v) for k, v in headers.items()},
+			}
+		},
+		lambda x: Response(**(_decode_nondet(x)['response'])),
+	)
 
 
 @_lazy_api

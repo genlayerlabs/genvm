@@ -607,6 +607,24 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         .place_content(FileContentsUnevaluated::from_task(task)),
                 ))
             }
+            gl_call::Message::WebRequest(request_payload) => {
+                if self.context.data.conf.is_deterministic {
+                    return Err(generated::types::Errno::Forbidden.into());
+                }
+
+                let web = self.context.shared_data.modules.web.clone();
+                let task = tokio::spawn(taskify(async move {
+                    web.send::<genvm_modules_interfaces::web::RenderAnswer, _>(
+                        genvm_modules_interfaces::web::Message::Request(request_payload),
+                    )
+                    .await
+                }));
+
+                Ok(generated::types::Fd::from(
+                    self.vfs
+                        .place_content(FileContentsUnevaluated::from_task(task)),
+                ))
+            }
             gl_call::Message::ExecPrompt(prompt_payload) => {
                 if self.context.data.conf.is_deterministic {
                     return Err(generated::types::Errno::Forbidden.into());

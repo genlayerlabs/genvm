@@ -28,6 +28,8 @@ __all__ = (
 	'eth',
 	'storage',
 	'Event',
+	'request',
+	'Response',
 )
 
 import typing

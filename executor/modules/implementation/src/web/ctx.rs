@@ -15,6 +15,7 @@ use super::{
 
 pub struct VMData {
     pub render: mlua::Function,
+    pub request: mlua::Function,
 }
 
 pub struct CtxPart {
