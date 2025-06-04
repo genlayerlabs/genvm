@@ -47,7 +47,7 @@ pub fn load_file(
     let file_len = u32::try_from(file_len).map_err(|_| anyhow::anyhow!("file too large to map"))?;
 
     if let Some(limiter) = limiter {
-        if !limiter.consume(file_len, true) {
+        if !limiter.consume(file_len) {
             return Err(ContractError::oom(None).into());
         }
     }

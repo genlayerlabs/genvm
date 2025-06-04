@@ -71,7 +71,7 @@ pub enum InitAction {
     },
 }
 
-use crate::{calldata, ustar::*};
+use crate::{calldata, errors::ContractError, memlimiter, ustar::*};
 
 pub struct ZipCache {
     id: symbol_table::GlobalSymbol,
@@ -146,9 +146,13 @@ impl RunnerReaderCache {
         &mut self,
         name: symbol_table::GlobalSymbol,
         arch_provider: impl FnOnce() -> Result<Archive>,
+        limiter: &memlimiter::Limiter,
     ) -> Result<&mut ZipCache> {
         match self.cache.entry(name) {
             std::collections::hash_map::Entry::Occupied(occupied_entry) => {
+                if !limiter.consume(occupied_entry.get().files.total_size) {
+                    return Err(ContractError::oom(None).into());
+                }
                 Ok(occupied_entry.into_mut())
             }
             std::collections::hash_map::Entry::Vacant(vacant_entry) => {

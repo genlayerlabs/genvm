@@ -164,7 +164,7 @@ impl Host {
         )?;
         let len = u32::from_le_bytes(len_buf);
 
-        if !limiter.consume_mul(len, SlotID::SIZE, true) {
+        if !limiter.consume_mul(len, SlotID::SIZE) {
             return Err(ContractError::oom(None).into());
         }
 
@@ -239,7 +239,7 @@ impl Host {
         self.storage_read(mode, account, code_slot, 0, &mut len_buf)?;
         let code_size = u32::from_le_bytes(len_buf);
 
-        if !limiter.consume(code_size, true) {
+        if !limiter.consume(code_size) {
             return Err(ContractError::oom(None).into());
         }
 
