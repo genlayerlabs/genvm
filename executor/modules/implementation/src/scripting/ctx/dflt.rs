@@ -326,7 +326,15 @@ mod tests {
         chunk.exec().unwrap();
 
         let f: mlua::Function = uvm.vm.globals().get("Test").unwrap();
-        let res: mlua::Value = f.call_async((status.to_string(),)).await.unwrap();
+
+        let rs_ctx = scripting::RSContext {
+            client: common::create_client().unwrap(),
+            data: Arc::new(()),
+        };
+
+        let ctx_lua = uvm.create_ctx(&rs_ctx).unwrap();
+
+        let res: mlua::Value = f.call_async((ctx_lua, status.to_string())).await.unwrap();
 
         let res: Response = uvm.vm.from_value(res).unwrap();
 
@@ -364,7 +372,14 @@ mod tests {
         const EXPECT_B64: &str = "xdcUhPjPm/S3b0eQRzCASw==";
         let expected = base64::prelude::BASE64_STANDARD.decode(EXPECT_B64).unwrap();
 
-        let res: mlua::Value = f.call_async(()).await.unwrap();
+        let rs_ctx = scripting::RSContext {
+            client: common::create_client().unwrap(),
+            data: Arc::new(()),
+        };
+
+        let ctx_lua = uvm.create_ctx(&rs_ctx).unwrap();
+
+        let res: mlua::Value = f.call_async((ctx_lua,)).await.unwrap();
 
         let res: Response = uvm.vm.from_value(res).unwrap();
 
