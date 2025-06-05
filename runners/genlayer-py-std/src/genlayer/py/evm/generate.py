@@ -21,16 +21,10 @@ class TransactionDataKwArgs(typing.TypedDict):
 	value: typing.NotRequired[u256]
 
 
-def transaction_data_kw_args_serialize(d: dict) -> str:
-	if 'value' in d:
-		d['value'] = hex(d['value'])
-	if 'salt_nonce' in d:
-		d['salt_nonce'] = hex(d['salt_nonce'])
-	return json.dumps(d, separators=(',', ':'))
-
-
 class ContractProxy[TView, TWrite]:
 	__slots__ = ('_view', '_send', 'address', '_balance', '_transfer')
+
+	address: Address
 
 	def __init__(
 		self,

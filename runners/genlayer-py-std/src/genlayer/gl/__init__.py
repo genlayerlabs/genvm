@@ -5,40 +5,32 @@ and reexports form :py:mod:`genlayer.py` provided for convenience
 
 __all__ = (
 	'Lazy',
+	'Event',
 	'MessageType',
 	'MessageRawType',
-	'wasi',
-	'advanced',
-	'calldata',
-	'private',
-	'public',
-	'Contract',
-	'contract_interface',
-	'ContractAt',
-	'deploy_contract',
-	'eth_contract',
-	'eq_principle_prompt_comparative',
-	'eq_principle_prompt_non_comparative',
-	'eq_principle_strict_eq',
-	'eq_principles',
-	'exec_prompt',
-	'get_webpage',
 	'message',
 	'message_raw',
-	'eth',
+	'private',
+	'public',
+	# auto-loaded modules
+	'wasi',
+	'calldata',
 	'storage',
-	'Event',
-	'request',
-	'Response',
+	# lazy loaded modules
+	'evm',
+	'nondet',
+	'eq_principle',
+	'contract_interface',
+	'deploy_contract',
+	'Contract',
+	'get_contract_at',
 )
 
 import typing
 import os
 
-import genlayer.py.eth as eth
 import genlayer.py.calldata as calldata
-import genlayer.std.advanced as advanced
-import genlayer.std._wasi as wasi
+import _genlayer_wasi as wasi
 
 from .events import Event
 
@@ -50,10 +42,38 @@ from ._internal.storage import STORAGE_MAN
 
 storage.Root.MANAGER = STORAGE_MAN
 
-from .eq_principles import *
-from .nondet_fns import *
+
+def _post_load_evm(mod):
+	from ._internal.eth import evm_contract_interface as ci
+
+	mod.contract_interface = ci
+
+
+if typing.TYPE_CHECKING or os.getenv('GENERATING_DOCS', 'false') == 'true':
+	import genlayer.gl.nondet as nondet
+	import genlayer.gl.advanced as advanced
+	import genlayer.gl.eq_principle as eq_principle
+	import genlayer.py.evm as evm
+else:
+	_modules = {
+		'nondet': ('genlayer.gl.nondet', None),
+		'eq_principle': ('genlayer.gl.eq_principle', None),
+		'evm': ('genlayer.py.evm', _post_load_evm),
+		'advanced': ('genlayer.gl.advanced', None),
+	}
+
+	def __getattr__(name: str):
+		module, post_load = _modules.get(name, (None, None))
+		if module is None:
+			raise AttributeError(f"module 'genlayer.gl' has no attribute '{name}'")
+		mod = __import__(module, fromlist=[name])
+		if post_load is not None:
+			post_load(mod)
+		globals()[name] = mod
+		return mod
+
+
 from .genvm_contracts import *
-from .eth import *
 from .annotations import *
 from .msg import MessageRawType, message_raw as _message_raw_original
 

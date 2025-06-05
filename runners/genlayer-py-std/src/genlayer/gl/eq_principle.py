@@ -1,17 +1,14 @@
 __all__ = (
-	'eq_principle_strict_eq',
-	'eq_principle_prompt_comparative',
-	'eq_principle_prompt_non_comparative',
+	'strict_eq',
+	'prompt_comparative',
+	'prompt_non_comparative',
 )
 
-import genlayer.std._wasi as wasi
-
-import genlayer.std.advanced as advanced
+import genlayer.gl.advanced as advanced
 import typing
-import json
 import genlayer.py.calldata as calldata
 
-import genlayer.std._internal.gl_call as gl_call
+import genlayer.gl._internal.gl_call as gl_call
 
 from ..py.types import *
 from ._internal import (
@@ -20,13 +17,13 @@ from ._internal import (
 
 
 @_lazy_api
-def eq_principle_strict_eq[T: calldata.Decoded](fn: typing.Callable[[], T]) -> Lazy[T]:
+def strict_eq[T: calldata.Decoded](fn: typing.Callable[[], T]) -> Lazy[T]:
 	"""
 	Comparative equivalence principle that checks for strict equality
 
 	:param fn: functions to perform an action
 
-	See :py:func:`genlayer.std.advanced.run_nondet` for description of data transformations
+	See :py:func:`genlayer.gl.vm.run_nondet` for description of data transformations
 	"""
 
 	def validator_fn(
@@ -40,11 +37,11 @@ def eq_principle_strict_eq[T: calldata.Decoded](fn: typing.Callable[[], T]) -> L
 	return advanced.run_nondet(fn, validator_fn)
 
 
-from .nondet_fns import _decode_nondet
+from .nondet import _decode_nondet
 
 
 @_lazy_api
-def eq_principle_prompt_comparative[T: calldata.Decoded](
+def prompt_comparative[T: calldata.Decoded](
 	fn: typing.Callable[[], T], principle: str
 ) -> Lazy[T]:
 	"""
@@ -53,7 +50,7 @@ def eq_principle_prompt_comparative[T: calldata.Decoded](
 	:param fn: function that does all the job
 	:param principle: principle with which equivalence will be evaluated in the validator (via performing NLP)
 
-	See :py:func:`genlayer.std.advanced.run_nondet` for description of data transformations
+	See :py:func:`genlayer.gl.vm.run_nondet` for description of data transformations
 
 	.. note::
 		As leader results are encoded as calldata, :py:func:`format` is used for string representation. However, operating on strings by yourself is more safe in general
@@ -83,7 +80,7 @@ def eq_principle_prompt_comparative[T: calldata.Decoded](
 
 
 @_lazy_api
-def eq_principle_prompt_non_comparative(
+def prompt_non_comparative(
 	fn: typing.Callable[[], str], *, task: str, criteria: str
 ) -> Lazy[str]:
 	"""
@@ -93,7 +90,7 @@ def eq_principle_prompt_non_comparative(
 	Leader just executes this task, but the validator checks if task was performed with integrity.
 	This principle is useful when task is subjective
 
-	See :py:func:`~genlayer.std.advanced.run_nondet` for description of data transformations
+	See :py:func:`~genlayer.gl.vm.run_nondet` for description of data transformations
 	"""
 
 	def leader_fn() -> str:

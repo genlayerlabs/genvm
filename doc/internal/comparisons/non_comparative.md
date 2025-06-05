@@ -90,7 +90,7 @@ your output must be only JSON without any formatting prefix or suffix.
 This result should be perfectly parsable by a JSON parser without errors.
 """
 
-        final_result = gl.eq_principle_prompt_non_comparative(
+        final_result = gl.eq_principle.prompt_non_comparative(
             lambda: input,
             task,
         )
@@ -137,7 +137,7 @@ This result should be perfectly parsable by a JSON parser without errors."""
             result = gl.exec_prompt(task_prompt)
             return result
 
-        final_result = gl.eq_principle_prompt_noncomparative(
+        final_result = gl.eq_principle.prompt_noncomparative(
             compute_updated_balances,
             leader_task = task_prompt,
             evaluation_criteria = """

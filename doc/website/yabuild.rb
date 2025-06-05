@@ -15,7 +15,7 @@ target_alias(
 			['mkdir', '-p', docs_build.parent],
 			['cp', '-r', cur_src.join('src'), docs_build],
 			['cd', docs_build],
-			[RbConfig.ruby, cur_src.join('generate-other.rb'), LIB_SRC, docs_build.join('api', 'internal')],
+#			[RbConfig.ruby, cur_src.join('generate-other.rb'), LIB_SRC, docs_build.join('api', 'internal')],
 			[*POETRY_RUN, 'sphinx-build', '-b', 'html', docs_build, docs_out],
 		],
 		cwd: cur_src,

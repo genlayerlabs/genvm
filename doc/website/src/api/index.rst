@@ -1,8 +1,10 @@
-SDK API Documentation
-=====================
+Public API
+==========
 
 .. toctree::
-   :caption: Parts:
+   :caption: Packages:
+   :maxdepth: 3
 
-   public/index
-   internal/index
+   genlayer
+   genlayer.gl
+   genlayer_embeddings

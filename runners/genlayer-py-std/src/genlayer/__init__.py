@@ -1,7 +1,7 @@
 """
 Common import for all contracts
 
-It exposes most of the types to the top scope and encapsulates other utility under :py:obj:`gl` namespace which is a proxy to :py:mod:`genlayer.std`
+It exposes most of the types to the top scope and encapsulates other utility under :py:obj:`gl` namespace which is a proxy to :py:mod:`genlayer.gl`
 """
 
 __all__ = (
@@ -80,26 +80,30 @@ __all__ = (
 	'u96',
 )
 
+import os
+
 from .py.types import *
 from .py.storage import *
 
-if not typing.TYPE_CHECKING:
+_gen_docs = os.getenv('GENERATING_DOCS', 'false') == 'true'
+
+if not typing.TYPE_CHECKING and not _gen_docs:
 
 	class GL:
 		"""
-		proxy to :py:mod:`genlayer.std` used for lazy loading
+		proxy to :py:mod:`genlayer.gl` used for lazy loading
 		"""
 
 		def __getattr__(self, attr):
-			import genlayer.std as _imp
+			globals().pop('gl', None)
+			import genlayer.gl as _imp
 
 			# below is needed to trick cloudpickle
-			global gl
-			gl = _imp
+			globals()['gl'] = _imp
 
 			return getattr(_imp, attr)
 
 	gl = GL()
 	del GL
 else:
-	import genlayer.std as gl
+	import genlayer.gl as gl

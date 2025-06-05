@@ -15,7 +15,7 @@ import dataclasses
 from genlayer.py.types import Rollback
 import genlayer.py._internal.reflect as reflect
 
-import genlayer.std._internal.gl_call as gl_call
+import genlayer.gl._internal.gl_call as gl_call
 
 
 class CalldataSchema(typing.TypedDict, total=False):

@@ -10,7 +10,7 @@ Package genlayer
     .. autodata:: gl
         :no-value:
 
-        Proxy to :py:mod:`genlayer.std`
+        Proxy to :py:mod:`genlayer.gl` module.
 
 ===============
 Integer aliases

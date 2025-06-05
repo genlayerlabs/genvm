@@ -3,6 +3,7 @@ This module is responsible for interactions with ghost/external contracts
 """
 
 __all__ = (
+	'contract_interface',
 	'signature_of',
 	'type_name_of',
 	'selector_of',
@@ -49,3 +50,11 @@ __all__ = (
 from .calldata import *
 from .support import *
 from .generate import contract_generator, ContractProxy, ContractDeclaration
+
+import typing
+from ..types import Address
+
+
+def contract_interface[TView, TWrite](
+	contr: ContractDeclaration[TView, TWrite],
+) -> typing.Callable[[Address], ContractProxy[TView, TWrite]]: ...

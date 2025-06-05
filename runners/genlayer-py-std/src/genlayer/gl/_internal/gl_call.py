@@ -4,7 +4,7 @@ import os
 import genlayer.py.calldata as calldata
 import collections.abc
 from genlayer.py.types import Lazy
-from genlayer.std._wasi import gl_call as _imp_raw
+from _genlayer_wasi import gl_call as _imp_raw
 
 
 def _imp(data: calldata.Encodable) -> int:

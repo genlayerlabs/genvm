@@ -17,4 +17,4 @@ class Contract(gl.Contract):
 				print(f'err {e.args}')
 			print(json.loads.__name__)
 
-		gl.eq_principle_strict_eq(run_ndet)
+		gl.eq_principle.strict_eq(run_ndet)

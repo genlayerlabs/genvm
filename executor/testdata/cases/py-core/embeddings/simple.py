@@ -21,4 +21,4 @@ class Contract(gl.Contract):
 		if det:
 			nd_block()
 		else:
-			gl.eq_principle_strict_eq(nd_block)
+			gl.eq_principle.strict_eq(nd_block)

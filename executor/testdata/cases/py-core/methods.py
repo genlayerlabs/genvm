@@ -29,7 +29,7 @@ class Contract(gl.Contract):
 	def det_viol(self):
 		import json
 
-		gl.get_webpage(
+		gl.nondet.web.render(
 			'http://genvm-test/hello.html',
 			mode='text',
 		)

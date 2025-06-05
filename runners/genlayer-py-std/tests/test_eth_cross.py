@@ -1,5 +1,5 @@
 import eth_abi.abi as eth
-import genlayer.py.eth as genvm_eth
+import genlayer.py.evm as genvm_eth
 from genlayer.py.types import *
 
 import pytest

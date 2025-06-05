@@ -2,7 +2,7 @@
 from genlayer import *
 
 
-@gl.eth_contract
+@gl.evm.contract_interface
 class Ghost:
 	class View:
 		pass

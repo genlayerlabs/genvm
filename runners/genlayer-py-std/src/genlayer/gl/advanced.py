@@ -25,7 +25,7 @@ import collections.abc
 @dataclass
 class ContractReturn:
 	"""
-	Represents a normal "Return" result of a contract that is passed to validator function of :py:func:`genlayer.std.run_nondet`
+	Represents a normal "Return" result of a contract that is passed to validator function of :py:func:`genlayer.gl.vm.run_nondet`
 	"""
 
 	__slots__ = ('data',)
@@ -36,7 +36,7 @@ class ContractReturn:
 @dataclass
 class ContractError(Exception):
 	"""
-	Represents "Contract error" result of a contract that is passed to validator function of :py:func:`genlayer.std.run_nondet`
+	Represents "Contract error" result of a contract that is passed to validator function of :py:func:`genlayer.gl.vm.run_nondet`
 
 	Validating leader output and sandbox invocation are only places where contract can "handle" contract error
 	"""
@@ -44,7 +44,7 @@ class ContractError(Exception):
 	data: str
 
 
-import genlayer.std._internal.gl_call as gl_call
+import genlayer.gl._internal.gl_call as gl_call
 
 
 def sandbox[T: calldata.Decoded](

@@ -2,7 +2,7 @@
 from genlayer import *
 
 
-@gl.eth_contract
+@gl.evm.contract_interface
 class EthContract:
 	class View:
 		pass
@@ -23,7 +23,7 @@ class Contract(gl.Contract):
 		print('main At(self)', EthContract(gl.message.contract_address).balance)
 
 		print('=== call .view() ===')
-		gl.ContractAt(gl.message.contract_address).view().nested()
+		gl.get_contract_at(gl.message.contract_address).view().nested()
 
 	@gl.public.view
 	def nested(self):

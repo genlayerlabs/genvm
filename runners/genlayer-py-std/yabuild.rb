@@ -11,4 +11,4 @@ run_codegen = Proc.new { |inp, out, tags: [], **kwargs, &blk|
 	)
 }
 
-run_codegen.(root_src.join('executor', 'codegen', 'data', 'result-codes.json'), cur_src.join('src', 'genlayer', 'std', '_internal', 'result_codes.py'))
+run_codegen.(root_src.join('executor', 'codegen', 'data', 'result-codes.json'), cur_src.join('src', 'genlayer', 'gl', '_internal', 'result_codes.py'))

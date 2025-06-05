@@ -3,7 +3,7 @@ __all__ = ('STORAGE_MAN', 'ROOT_SLOT_ID')
 from ...py.storage._internal.core import *
 from ...py.types import u256
 
-import genlayer.std._wasi as wasi
+import _genlayer_wasi as wasi
 import collections.abc
 import abc
 

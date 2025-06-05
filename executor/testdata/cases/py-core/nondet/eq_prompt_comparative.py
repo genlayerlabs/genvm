@@ -7,11 +7,11 @@ class Contract(gl.Contract):
 	def main(self):
 		def run():
 			return (
-				gl.exec_prompt(
+				gl.nondet.exec_prompt(
 					"respond with a single word 'yes' (without quotes) and nothing else"
 				)
 				.strip()
 				.lower()
 			)
 
-		print(gl.eq_principle_prompt_comparative(run, 'result must be exactly the same'))
+		print(gl.eq_principle.prompt_comparative(run, 'result must be exactly the same'))

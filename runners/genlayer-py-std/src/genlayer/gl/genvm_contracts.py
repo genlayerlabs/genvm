@@ -1,10 +1,10 @@
 __all__ = (
-	'ContractAt',
 	'contract_interface',
 	'deploy_contract',
-	'TransactionDataKwArgs',
-	'DeploymentTransactionDataKwArgs',
 	'Contract',
+	'get_contract_at',
+	'BaseContract',
+	'ContractProxy',
 )
 
 import typing
@@ -13,12 +13,20 @@ import collections.abc
 
 from genlayer.py.types import Address, Lazy, u256
 import genlayer.py.calldata as calldata
-import genlayer.std._wasi as wasi
 
-from genlayer.py.eth.generate import transaction_data_kw_args_serialize
+import _genlayer_wasi as wasi
 
 from ._internal.gl_call import gl_call_generic
 from ._internal import decode_sub_vm_result
+
+type ON = typing.Literal['accepted', 'finalized']
+
+
+class BaseContract(typing.Protocol):
+	@property
+	def balance(self) -> u256: ...
+	@property
+	def address(self) -> Address: ...
 
 
 def _make_calldata_obj(method, args, kwargs) -> calldata.Encodable:
@@ -35,116 +43,83 @@ def _make_calldata_obj(method, args, kwargs) -> calldata.Encodable:
 from ._internal.result_codes import StorageType
 
 
-class GenVMCallKwArgs(typing.TypedDict):
-	"""
-	Built-in parameters of performing a GenVM call view method
-
-	.. warning::
-		parameters are subject to change!
-	"""
-
-	state: typing.NotRequired[StorageType]
-
-
 class _ContractAtViewMethod:
-	__slots__ = ('addr', 'name', 'data')
+	__slots__ = ('_addr', '_name', '_state')
 
-	def __init__(self, addr: Address, name: str, data: GenVMCallKwArgs):
-		self.addr = addr
-		self.name = name
-		data.setdefault('state', StorageType.DEFAULT)
-		self.data = data
+	def __init__(self, name: str, addr: Address, state: StorageType):
+		self._addr = addr
+		self._name = name
+		self._state = state
 
 	def __call__(self, *args, **kwargs) -> typing.Any:
 		return self.lazy(*args, **kwargs).get()
 
 	def lazy(self, *args, **kwargs) -> Lazy[typing.Any]:
-		obj = _make_calldata_obj(self.name, args, kwargs)
+		obj = _make_calldata_obj(self._name, args, kwargs)
 		cd = calldata.encode(obj)
 		return gl_call_generic(
 			{
 				'CallContract': {
-					'address': self.addr,
-					'calldata': _make_calldata_obj(self.name, args, kwargs),
-					'state': self.data.get('state', StorageType.LATEST_NON_FINAL).value,
+					'address': self._addr,
+					'calldata': _make_calldata_obj(self._name, args, kwargs),
+					'state': self._state.value,
 				}
 			},
 			decode_sub_vm_result,
 		)
 
 
-class TransactionDataKwArgs(typing.TypedDict):
-	"""
-	Built-in parameters of all transaction messages that a contract can emit
-
-	.. warning::
-		parameters are subject to change!
-	"""
-
-	value: typing.NotRequired[u256]
-	on: typing.NotRequired[typing.Literal['accepted', 'finalized']]
-
-
 class _ContractAtEmitMethod:
-	__slots__ = ('addr', 'name', 'data')
+	__slots__ = ('_addr', '_name', '_value', '_on')
 
-	def __init__(self, addr: Address, name: str | None, data: TransactionDataKwArgs):
-		self.addr = addr
-		self.name = name
-		self.data = data
+	def __init__(self, name: str | None, addr: Address, value: u256, on: str):
+		self._addr = addr
+		self._name = name
+		self._value = value
+		self._on = on
 
 	def __call__(self, *args, **kwargs) -> None:
 		wasi.gl_call(
 			calldata.encode(
 				{
 					'PostMessage': {
-						'address': self.addr,
-						'calldata': _make_calldata_obj(self.name, args, kwargs),
-						'value': self.data.get('value', 0),
-						'on': self.data.get('on', 'finalized'),
+						'address': self._addr,
+						'calldata': _make_calldata_obj(self._name, args, kwargs),
+						'value': self._value,
+						'on': self._on,
 					}
 				}
 			)
 		)
 
 
-class GenVMContractProxy[TView, TSend](typing.Protocol):
-	__slots__ = ('_view', '_send', 'address')
-
-	address: Address
-	"""
-	Address to which this proxy points
-	"""
-
-	def __init__(
-		self,
-		address: Address,
-	):
-		self.address = address
-
-	def view(self) -> TView: ...
-
-	def emit(self, **kwargs: typing.Unpack[TransactionDataKwArgs]) -> TSend: ...
-
-	@property
-	def balance(self) -> u256: ...
-
-	def emit_transfer(self, **data: typing.Unpack[TransactionDataKwArgs]): ...
+class ContractProxy[TView, TSend](BaseContract, typing.Protocol):
+	def view(self, *, state: StorageType = StorageType.LATEST_NON_FINAL) -> TView: ...
+	def emit(self, *, value: u256 = u256(0), on: ON = 'finalized') -> TSend: ...
+	def emit_transfer(self, *, value: u256, on: ON = 'finalized') -> None: ...
 
 
-class ContractAt(GenVMContractProxy):
+class ErasedMethods(typing.Protocol):
+	def __getattr__(self, name: str) -> typing.Callable: ...
+
+
+class _ContractAt(ContractProxy[ErasedMethods, ErasedMethods]):
 	"""
 	Provides a way to call view methods and send transactions to GenVM contracts
 	"""
 
-	__slots__ = ('address',)
+	__slots__ = ('_address',)
 
 	def __init__(self, addr: Address):
 		if not isinstance(addr, Address):
 			raise TypeError('address expected')
-		self.address = addr
+		self._address = addr
 
-	def view(self):
+	@property
+	def address(self) -> Address:
+		return self._address
+
+	def view(self, *, state: StorageType = StorageType.LATEST_NON_FINAL) -> ErasedMethods:
 		"""
 		Namespace with all view methods
 
@@ -153,49 +128,49 @@ class ContractAt(GenVMContractProxy):
 		.. note::
 			supports ``name.lazy(*args, **kwargs)`` call version
 		"""
-		return _ContractAtView(self.address, {})
+		return _ContractAtGetter(_ContractAtViewMethod, self._address, state)
 
-	def emit(self, **data: typing.Unpack[TransactionDataKwArgs]):
+	def emit(self, *, value: u256 = u256(0), on: ON = 'finalized') -> ErasedMethods:
 		"""
 		Namespace with write message
 
 		:returns: object supporting ``.name(*args, **kwargs)`` that emits a message and returns :py:obj:`None`
 		"""
-		return _ContractAtEmit(self.address, data)
+		return _ContractAtGetter(_ContractAtEmitMethod, self._address, value, on)
 
-	def emit_transfer(self, **data: typing.Unpack[TransactionDataKwArgs]):
+	def emit_transfer(self, *, value: u256, on: ON = 'finalized') -> None:
 		"""
 		Method to emit a message that transfers native tokens
 		"""
-		if 'value' not in data:
-			raise TypeError('for emit_transfer value is required')
-		_ContractAtEmitMethod(self.address, None, data)()
+		_ContractAtEmitMethod(None, self._address, value, on)()
 
 	@property
 	def balance(self) -> u256:
-		return u256(wasi.get_balance(self.address.as_bytes))
+		return u256(wasi.get_balance(self._address.as_bytes))
 
 
-class _ContractAtView:
-	__slots__ = ('addr', 'data')
-
-	def __init__(self, addr: Address, data):
-		self.addr = addr
-		self.data = data
-
-	def __getattr__(self, name):
-		return _ContractAtViewMethod(self.addr, name, self.data)
+def get_contract_at(address: Address) -> ContractProxy:
+	return _ContractAt(address)
 
 
-class _ContractAtEmit:
-	__slots__ = ('addr', 'data')
+_ContractAtGetter_P = typing.ParamSpec('_ContractAtGetter_P')
 
-	def __init__(self, addr: Address, data: TransactionDataKwArgs):
-		self.addr = addr
-		self.data = data
 
-	def __getattr__(self, name):
-		return _ContractAtEmitMethod(self.addr, name, self.data)
+class _ContractAtGetter[T]:
+	__slots__ = ('_ctor', '_args', '_kwargs')
+
+	def __init__(
+		self,
+		ctor: typing.Callable[typing.Concatenate[str, _ContractAtGetter_P], T],
+		*args: _ContractAtGetter_P.args,
+		**kwargs: _ContractAtGetter_P.kwargs,
+	):
+		self._ctor = ctor
+		self._args = args
+		self._kwargs = kwargs
+
+	def __getattr__(self, name: str) -> T:
+		return self._ctor(name, *self._args, **self._kwargs)
 
 
 class GenVMContractDeclaration[TView, TWrite](typing.Protocol):
@@ -214,7 +189,7 @@ class GenVMContractDeclaration[TView, TWrite](typing.Protocol):
 
 def contract_interface[TView, TWrite](
 	_contr: GenVMContractDeclaration[TView, TWrite],
-) -> typing.Callable[[Address], GenVMContractProxy[TView, TWrite]]:
+) -> typing.Callable[[Address], ContractProxy[TView, TWrite]]:
 	# editorconfig-checker-disable
 	"""
 	This decorator produces an "interface" for other GenVM contracts. It has no semantical value, but can be used for auto completion and type checks
@@ -230,30 +205,10 @@ def contract_interface[TView, TWrite](
 	            def write_meth(self, i: int) -> None: ...
 	"""
 	# editorconfig-checker-enable
-	return ContractAt
+	return get_contract_at
 
 
 from genlayer.py.types import u8, u256
-
-
-class DeploymentTransactionDataKwArgs(TransactionDataKwArgs):
-	"""
-	Class for representing parameters of ``deploy_contract``
-	"""
-
-	salt_nonce: typing.NotRequired[u256 | typing.Literal[0]]
-	"""
-	*iff* it is provided and does not equal to :math:`0` then ``Address`` of deployed contract will be known ahead of time. It will depend on this field
-	"""
-
-
-@typing.overload
-def deploy_contract(
-	*,
-	code: bytes,
-	args: collections.abc.Sequence[typing.Any] = [],
-	kwargs: collections.abc.Mapping[str, typing.Any] = {},
-) -> None: ...
 
 
 @typing.overload
@@ -263,7 +218,8 @@ def deploy_contract(
 	args: collections.abc.Sequence[typing.Any] = [],
 	kwargs: collections.abc.Mapping[str, typing.Any] = {},
 	salt_nonce: typing.Literal[0],
-	**rest: typing.Unpack[TransactionDataKwArgs],
+	value: u256 = u256(0),
+	on: ON = 'finalized',
 ) -> None: ...
 
 
@@ -274,7 +230,8 @@ def deploy_contract(
 	args: collections.abc.Sequence[typing.Any] = [],
 	kwargs: collections.abc.Mapping[str, typing.Any] = {},
 	salt_nonce: u256,
-	**rest: typing.Unpack[TransactionDataKwArgs],
+	value: u256 = u256(0),
+	on: ON = 'finalized',
 ) -> Address: ...
 
 
@@ -283,7 +240,9 @@ def deploy_contract(
 	code: bytes,
 	args: collections.abc.Sequence[typing.Any] = [],
 	kwargs: collections.abc.Mapping[str, typing.Any] = {},
-	**data: typing.Unpack[DeploymentTransactionDataKwArgs],
+	salt_nonce: u256 | typing.Literal[0] = u256(0),
+	value: u256 = u256(0),
+	on: ON = 'finalized',
 ) -> Address | None:
 	"""
 	Function for deploying new genvm contracts
@@ -301,7 +260,6 @@ def deploy_contract(
 		- ``salt_nonce`` requirements and it's effect on address
 		- order of transactions
 	"""
-	salt_nonce = data.get('salt_nonce', u256(0))
 
 	wasi.gl_call(
 		calldata.encode(
@@ -309,8 +267,8 @@ def deploy_contract(
 				'DeployContract': {
 					'calldata': _make_calldata_obj(None, args, kwargs),
 					'code': code,
-					'value': data.get('value', 0),
-					'on': data.get('on', 'finalized'),
+					'value': value,
+					'on': on,
 					'salt_nonce': salt_nonce,
 				}
 			}
@@ -320,7 +278,7 @@ def deploy_contract(
 	if salt_nonce == 0:
 		return None
 
-	import genlayer.std as gl
+	import genlayer.gl as gl
 	from genlayer.py._internal import create2_address
 
 	return create2_address(gl.message.contract_address, salt_nonce, gl.message.chain_id)
@@ -328,10 +286,10 @@ def deploy_contract(
 
 import abc
 
-import genlayer.std.annotations as glannots
+import genlayer.gl.annotations as glannots
 
 
-class Contract:
+class Contract(BaseContract):
 	"""
 	Class that indicates main user contract
 	"""
@@ -361,11 +319,10 @@ class Contract:
 		"""
 		:returns: :py:class:`Address` of this contract
 		"""
-		from genlayer.std import message
+		from genlayer.gl import message
 
 		return message.contract_address
 
-	@abc.abstractmethod
 	def __handle_undefined_method__(
 		self, method_name: str, args: list[typing.Any], kwargs: dict[str, typing.Any]
 	):
@@ -374,7 +331,6 @@ class Contract:
 		"""
 		raise NotImplementedError()
 
-	@abc.abstractmethod
 	def __receive__(self):
 		"""
 		Method that is called for no-method transfers, must be ``@gl.public.write.payable``
@@ -396,5 +352,8 @@ class Contract:
 		res = _get_schema.get_schema(cls)
 		return json.dumps(res, separators=(',', ':'))
 
+
+Contract.__handle_undefined_method__.__isabstractmethod__ = True  # type: ignore
+Contract.__receive__.__isabstractmethod__ = True  # type: ignore
 
 __known_contact__: type[Contract] | None = None

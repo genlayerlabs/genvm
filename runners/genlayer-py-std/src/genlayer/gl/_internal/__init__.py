@@ -1,5 +1,5 @@
 import typing
-import genlayer.std._wasi as wasi
+import _genlayer_wasi as wasi
 import genlayer.py.calldata as calldata
 from ...py.types import Rollback, Lazy
 import collections.abc
@@ -56,7 +56,7 @@ def _lazy_api[T, **R](fn: typing.Callable[R, Lazy[T]]) -> LazyApi[T, R]:
 
 		eager.__signature__ = inspect.signature(fn)
 		eager.__doc__ = (
-			textwrap.dedent(fn.__doc__)
+			textwrap.dedent(fn.__doc__ or '')
 			+ '\n\n.. note::\n\tsupports ``.lazy()`` version, which will return :py:class:`~genlayer.py.types.Lazy`'
 		)
 	eager.__name__ = fn.__name__

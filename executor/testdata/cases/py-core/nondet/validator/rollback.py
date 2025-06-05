@@ -8,4 +8,4 @@ class Contract(gl.Contract):
 		def run():
 			raise gl.Rollback('rollback')
 
-		print(gl.eq_principle_strict_eq(run))
+		print(gl.eq_principle.strict_eq(run))

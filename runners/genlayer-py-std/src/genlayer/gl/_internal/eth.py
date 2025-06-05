@@ -1,17 +1,15 @@
-__all__ = ('eth_contract',)
+__all__ = ('contract_interface',)
 
 import typing
 import json
 
 from genlayer.py.types import u256
-from genlayer.py.eth.generate import contract_generator
-from genlayer.py.eth.calldata import MethodEncoder, decode
-from ._internal import _lazy_api
-import genlayer.std._wasi as wasi
+from genlayer.py.evm.generate import contract_generator
+from genlayer.py.evm.calldata import MethodEncoder, decode
+from . import _lazy_api
+import _genlayer_wasi as wasi
 
-import genlayer.std._internal.gl_call as gl_call
-
-from genlayer.py.eth.generate import transaction_data_kw_args_serialize
+import genlayer.gl._internal.gl_call as gl_call
 
 
 def _generate_view(name: str, params: tuple[type], ret: type) -> typing.Any:
@@ -54,7 +52,7 @@ def _generate_send(name: str, params: tuple[type], ret: type) -> typing.Any:
 	return result_fn
 
 
-eth_contract = contract_generator(
+evm_contract_interface = contract_generator(
 	_generate_view,
 	_generate_send,
 	lambda p: u256(wasi.get_balance(p.address.as_bytes)),

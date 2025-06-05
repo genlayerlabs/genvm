@@ -6,7 +6,7 @@ class Contract(gl.Contract):
 	@gl.public.write
 	def main(self):
 		def run():
-			res = gl.exec_prompt(
+			res = gl.nondet.exec_prompt(
 				'respond with json object containing single key "result" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes',
 				response_format='json',
 			)
@@ -15,4 +15,4 @@ class Contract(gl.Contract):
 			res['result'] = 42
 			return res
 
-		print(gl.eq_principle_strict_eq(run))
+		print(gl.eq_principle.strict_eq(run))

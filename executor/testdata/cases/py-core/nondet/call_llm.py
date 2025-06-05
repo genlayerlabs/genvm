@@ -6,8 +6,8 @@ class Contract(gl.Contract):
 	@gl.public.write
 	def main(self):
 		def run():
-			return gl.exec_prompt(
+			return gl.nondet.exec_prompt(
 				"respond with a single word 'yes' (without quotes) and nothing else"
 			).strip()
 
-		print(gl.eq_principle_strict_eq(run))
+		print(gl.eq_principle.strict_eq(run))

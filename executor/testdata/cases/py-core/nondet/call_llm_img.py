@@ -10,12 +10,12 @@ class Contract(gl.Contract):
 	@gl.public.view
 	def main(self):
 		def run():
-			return gl.exec_prompt(
+			return gl.nondet.exec_prompt(
 				'how many colors are in the image? Respond only with amount of colors, without any context',
 				images=[im_data],
 			)
 
-		res = gl.eq_principle_strict_eq(run).lower()
+		res = gl.eq_principle.strict_eq(run).lower()
 		print(res, file=sys.stderr)
 		if '6' in res or 'six' in res:
 			print('yes, it is six')

@@ -4,7 +4,7 @@ from genlayer.py._internal.event import Event
 
 
 def _emit(self: Event) -> None:
-	from genlayer.std.advanced import emit_raw_event
+	from genlayer.gl.advanced import emit_raw_event
 
 	emit_raw_event(self.name, self.indexed, self._blob)
 
