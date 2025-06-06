@@ -16,10 +16,13 @@ __all__ = (
 	'wasi',
 	'calldata',
 	'storage',
+	'advanced',
 	# lazy loaded modules
+	'vm',
 	'evm',
 	'nondet',
 	'eq_principle',
+	# other
 	'contract_interface',
 	'deploy_contract',
 	'Contract',
@@ -54,12 +57,14 @@ if typing.TYPE_CHECKING or os.getenv('GENERATING_DOCS', 'false') == 'true':
 	import genlayer.gl.advanced as advanced
 	import genlayer.gl.eq_principle as eq_principle
 	import genlayer.py.evm as evm
+	import genlayer.gl.vm as vm
 else:
 	_modules = {
 		'nondet': ('genlayer.gl.nondet', None),
 		'eq_principle': ('genlayer.gl.eq_principle', None),
 		'evm': ('genlayer.py.evm', _post_load_evm),
 		'advanced': ('genlayer.gl.advanced', None),
+		'vm': ('genlayer.gl.vm', None),
 	}
 
 	def __getattr__(name: str):
@@ -101,7 +106,7 @@ class MessageType(typing.NamedTuple):
 if os.getenv('GENERATING_DOCS', 'false') == 'true':
 	message_raw: MessageRawType = ...  # type: ignore
 	"""
-	Raw message as parsed json
+	Raw message, parsed
 	"""
 
 	message: MessageType = ...  # type: ignore

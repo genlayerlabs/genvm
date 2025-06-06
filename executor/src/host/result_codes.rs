@@ -3,9 +3,9 @@ use serde_derive::{Deserialize, Serialize};
 #[repr(u8)]
 pub enum ResultCode {
     Return = 0,
-    Rollback = 1,
-    ContractError = 2,
-    Error = 3,
+    UserError = 1,
+    VmError = 2,
+    InternalError = 3,
 }
 
 #[allow(dead_code)]
@@ -13,9 +13,9 @@ impl ResultCode {
     pub fn str_snake_case(self) -> &'static str {
         match self {
             ResultCode::Return => "return",
-            ResultCode::Rollback => "rollback",
-            ResultCode::ContractError => "contract_error",
-            ResultCode::Error => "error",
+            ResultCode::UserError => "user_error",
+            ResultCode::VmError => "vm_error",
+            ResultCode::InternalError => "internal_error",
         }
     }
 }
@@ -26,9 +26,9 @@ impl TryFrom<u8> for ResultCode {
     fn try_from(value: u8) -> Result<Self, ()> {
         match value {
             0 => Ok(ResultCode::Return),
-            1 => Ok(ResultCode::Rollback),
-            2 => Ok(ResultCode::ContractError),
-            3 => Ok(ResultCode::Error),
+            1 => Ok(ResultCode::UserError),
+            2 => Ok(ResultCode::VmError),
+            3 => Ok(ResultCode::InternalError),
             _ => Err(()),
         }
     }

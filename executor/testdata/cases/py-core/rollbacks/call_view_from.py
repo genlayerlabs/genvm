@@ -8,8 +8,8 @@ class Contract(gl.Contract):
 		print('contract from.main')
 		try:
 			res = gl.get_contract_at(addr).view().foo(1, 2).get()
-		except gl.Rollback as r:
-			print('handled', r.msg)
+		except gl.vm.UserError as r:
+			print('handled', r.message)
 		else:
 			print(res)
 			exit(1)

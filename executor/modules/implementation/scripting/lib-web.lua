@@ -18,6 +18,15 @@ M.allowed_schemas = {
 	["https"] = true,
 }
 
+local function table_has_val(tab, val)
+	for _, v in ipairs(tab) do
+		if v == val then
+			return true
+		end
+	end
+	return false
+end
+
 M.check_url = function(url)
 	local split_url = lib.rs.split_url(url)
 
@@ -43,7 +52,12 @@ M.check_url = function(url)
 		})
 	end
 
-	if M.rs.config.always_allow_hosts[split_url.host] then
+	lib.log {
+		always_allow_hosts = M.rs.config.always_allow_hosts,
+		host = split_url.host,
+	}
+
+	if table_has_val(M.rs.config.always_allow_hosts, split_url.host) then
 		return
 	end
 
@@ -58,13 +72,19 @@ M.check_url = function(url)
 		})
 	end
 
-	local from = split_url.host:find("\\.[a-z]$")
+	local from = split_url.host:find("[.]([^.]*)$")
 	if from == nil then
-		from = 1
+		from = 0 -- not 1 for +1
 	end
-	local tld = string.sub(split_url.host, from - 1)
+	local tld = string.sub(split_url.host, from + 1)
 
-	if M.rs.allowed_tld[tld] then
+	lib.log{
+		detected_tld = tld,
+		host = split_url.host,
+		from = from,
+	}
+
+	if not M.rs.allowed_tld[tld] then
 		lib.rs.user_error({
 			causes = {"TLD_FORBIDDEN"},
 			fatal = false,

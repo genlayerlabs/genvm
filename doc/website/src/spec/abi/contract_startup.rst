@@ -1,3 +1,5 @@
+.. _startup-process-reference:
+
 Contract Startup Process
 ========================
 

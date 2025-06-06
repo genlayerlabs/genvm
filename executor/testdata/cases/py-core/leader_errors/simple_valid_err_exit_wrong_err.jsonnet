@@ -2,13 +2,13 @@ local simple = import 'templates/simple.jsonnet';
 simple.run('${jsonnetDir}/simple.py') {
     "calldata": |||
         {
-            "method": "foo",
+            "method": "ex",
             "args": []
         }
     |||,
     leader_nondet: [
         {
-            "kind": "contract_error",
+            "kind": "rollback",
             "value": "exit_code 1"
         }
     ],

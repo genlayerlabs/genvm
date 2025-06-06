@@ -10,12 +10,11 @@ from .result_codes import EntryKind
 import genlayer.py.calldata as calldata
 
 import typing
-import abc
 import dataclasses
-from genlayer.py.types import Rollback
 import genlayer.py._internal.reflect as reflect
 
 import genlayer.gl._internal.gl_call as gl_call
+import genlayer.gl.vm as _vm
 
 
 class CalldataSchema(typing.TypedDict, total=False):
@@ -27,8 +26,8 @@ class CalldataSchema(typing.TypedDict, total=False):
 def _give_result(res_fn: typing.Callable[[], typing.Any]) -> typing.NoReturn:
 	try:
 		res = res_fn()
-	except Rollback as r:
-		gl_call.rollback(r.msg)
+	except _vm.UserError as r:
+		gl_call.rollback(r.message)
 	gl_call.contract_return(res)
 
 

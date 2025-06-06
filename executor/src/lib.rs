@@ -145,12 +145,12 @@ pub async fn run_with(
 
     let res = if supervisor.shared_data.cancellation.is_cancelled() {
         match res {
-            Ok(RunOk::ContractError(msg, cause)) => Ok(RunOk::ContractError(
+            Ok(RunOk::VMError(msg, cause)) => Ok(RunOk::VMError(
                 "timeout".into(),
                 cause.map(|v| v.context(msg)),
             )),
             Ok(r) => Ok(r),
-            Err(e) => Ok(RunOk::ContractError("timeout".into(), Some(e))),
+            Err(e) => Ok(RunOk::VMError("timeout".into(), Some(e))),
         }
     } else {
         ContractError::unwrap_res(res)
@@ -158,9 +158,7 @@ pub async fn run_with(
 
     let res = match res {
         Err(e) => match e.downcast() {
-            Ok(AbsentLeaderResult) => {
-                Ok(RunOk::ContractError("deterministic_violation".into(), None))
-            }
+            Ok(AbsentLeaderResult) => Ok(RunOk::VMError("deterministic_violation".into(), None)),
             Err(e) => {
                 log::error!(error = genvm_common::log_error(&e); "internal error");
                 Err(e)

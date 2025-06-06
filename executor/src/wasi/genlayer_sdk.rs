@@ -267,7 +267,7 @@ impl ContextVFS<'_> {
         data: vm::RunOk,
     ) -> Result<(generated::types::Fd, usize), generated::types::Error> {
         let data = match data {
-            RunOk::ContractError(e, cause) => {
+            RunOk::VMError(e, cause) => {
                 return Err(generated::types::Error::trap(
                     ContractError(e, cause).into(),
                 ))
@@ -681,7 +681,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 ))
             }
             gl_call::Message::Rollback(msg) => {
-                Err(generated::types::Error::trap(Rollback(msg).into()))
+                Err(generated::types::Error::trap(UserError(msg).into()))
             }
             gl_call::Message::Return(value) => {
                 let ret = calldata::encode(&value);
@@ -939,8 +939,8 @@ impl ContextVFS<'_> {
             Some(leaders_res) => {
                 let dup = match leaders_res {
                     RunOk::Return(items) => RunOk::Return(items.clone()),
-                    RunOk::Rollback(msg) => RunOk::Rollback(msg.clone()),
-                    RunOk::ContractError(msg, _) => RunOk::ContractError(msg.clone(), None),
+                    RunOk::UserError(msg) => RunOk::UserError(msg.clone()),
+                    RunOk::VMError(msg, _) => RunOk::VMError(msg.clone(), None),
                 };
                 self.context.data.message_data.fork_leader(
                     EntryKind::ConsensusStage,

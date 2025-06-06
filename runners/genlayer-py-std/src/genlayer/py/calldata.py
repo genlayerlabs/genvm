@@ -196,7 +196,7 @@ def encode[T](
 			with reflect.context_type(type(b)):
 				impl_dict(dataclasses.asdict(b))
 		else:
-			raise TypeError(f'not calldata encodable', reflect.repr_type(type(b)))
+			raise TypeError(f'not calldata encodable {b!r}: {reflect.repr_type(type(b))}')
 
 	impl(x)
 	return bytes(mem)

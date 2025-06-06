@@ -27,6 +27,6 @@ class Contract(gl.Contract):
 	@gl.public.write
 	def ex2(self):
 		def do_fn():
-			non_existent_fn()
+			non_existent_fn()  # noqa
 
 		gl.eq_principle.strict_eq(do_fn)

@@ -11,7 +11,6 @@ __all__ = (
 	'Array',
 	'DynArray',
 	'Keccak256',
-	'Rollback',
 	'TreeMap',
 	'bigint',
 	'i104',

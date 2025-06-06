@@ -3,9 +3,9 @@ from enum import IntEnum
 
 class ResultCode(IntEnum):
 	RETURN = 0
-	ROLLBACK = 1
-	CONTRACT_ERROR = 2
-	ERROR = 3
+	USER_ERROR = 1
+	VM_ERROR = 2
+	INTERNAL_ERROR = 3
 
 
 class StorageType(IntEnum):

@@ -8,11 +8,11 @@ class Contract(gl.Contract):
 		try:
 
 			def run():
-				gl.advanced.rollback_immediate("nah, I won't execute")
+				gl.advanced.user_error_immediate("nah, I won't execute")
 
 			res = gl.eq_principle.strict_eq(run).get()
-		except gl.Rollback as r:
-			print('handled', r.msg)
+		except gl.vm.UserError as r:
+			print('handled', r.message)
 		else:
 			print(res)
 			exit(1)

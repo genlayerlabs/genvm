@@ -45,6 +45,14 @@ class MessageRawType(typing.TypedDict):
 	"""
 
 	entry_kind: int
+	"""
+	One of:
+		- ``0`` for ``MAIN``
+		- ``1`` for ``SANDBOX``
+		- ``2`` for ``CONSENSUS_STAGE``
+
+	See :ref:`startup-process-reference` for more details.
+	"""
 	entry_data: bytes
 	entry_stage_data: calldata.Encodable
 

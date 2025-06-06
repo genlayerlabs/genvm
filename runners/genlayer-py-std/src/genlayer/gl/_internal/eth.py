@@ -1,4 +1,4 @@
-__all__ = ('contract_interface',)
+__all__ = ('evm_contract_interface',)
 
 import typing
 import json

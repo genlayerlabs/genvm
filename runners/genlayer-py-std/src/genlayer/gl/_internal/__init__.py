@@ -1,31 +1,6 @@
 import typing
-import _genlayer_wasi as wasi
-import genlayer.py.calldata as calldata
-from ...py.types import Rollback, Lazy
-import collections.abc
+from ...py.types import Lazy
 import os
-from ..advanced import ContractReturn, ContractError
-from .result_codes import ResultCode
-
-
-def decode_sub_vm_result_retn(
-	data: collections.abc.Buffer,
-) -> ContractReturn | Rollback | ContractError:
-	mem = memoryview(data)
-	if mem[0] == ResultCode.ROLLBACK:
-		return Rollback(str(mem[1:], encoding='utf8'))
-	if mem[0] == ResultCode.RETURN:
-		return ContractReturn(calldata.decode(mem[1:]))
-	if mem[0] == ResultCode.CONTRACT_ERROR:
-		return ContractError(str(mem[1:], encoding='utf8'))
-	assert False, f'unknown type {mem[0]}'
-
-
-def decode_sub_vm_result(data: collections.abc.Buffer) -> typing.Any:
-	dat = decode_sub_vm_result_retn(data)
-	if isinstance(dat, (Rollback, ContractError)):
-		raise dat
-	return dat.data
 
 
 class LazyApi[T, **R](typing.Protocol):

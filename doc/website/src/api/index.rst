@@ -6,5 +6,4 @@ Public API
    :maxdepth: 3
 
    genlayer
-   genlayer.gl
    genlayer_embeddings

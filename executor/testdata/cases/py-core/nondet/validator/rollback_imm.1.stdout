@@ -1,1 +1,1 @@
-executed with `ContractError("validator_disagrees call 0")`
+executed with `VMError("validator_disagrees call 0")`

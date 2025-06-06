@@ -1,1 +1,1 @@
-executed with `Rollback("nah, I won't execute")`
+executed with `UserError("nah, I won't execute")`

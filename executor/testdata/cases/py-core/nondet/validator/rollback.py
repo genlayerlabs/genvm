@@ -6,6 +6,6 @@ class Contract(gl.Contract):
 	@gl.public.write
 	def main(self):
 		def run():
-			raise gl.Rollback('rollback')
+			raise gl.vm.UserError('rollback')
 
 		print(gl.eq_principle.strict_eq(run))

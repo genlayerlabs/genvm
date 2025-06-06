@@ -21,21 +21,6 @@ import genlayer.gl._internal.gl_call as gl_call
 from . import _decode_nondet, Image
 
 
-@typing.overload
-def render(
-	url: str,
-	*,
-	wait_after_loaded: str | None = None,
-	mode: typing.Literal['text', 'html'],
-) -> str: ...
-
-
-@typing.overload
-def render(
-	url: str, *, wait_after_loaded: str | None = None, mode: typing.Literal['screenshot']
-) -> Image: ...
-
-
 @dataclasses.dataclass
 class Response:
 	status: int
@@ -121,6 +106,21 @@ def request(
 		},
 		lambda x: Response(**(_decode_nondet(x)['response'])),
 	)
+
+
+@typing.overload
+def render(
+	url: str,
+	*,
+	wait_after_loaded: str | None = None,
+	mode: typing.Literal['text', 'html'],
+) -> str: ...
+
+
+@typing.overload
+def render(
+	url: str, *, wait_after_loaded: str | None = None, mode: typing.Literal['screenshot']
+) -> Image: ...
 
 
 @_lazy_api

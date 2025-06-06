@@ -12,16 +12,6 @@ use serde::{Deserialize, Serialize};
 
 use genvm_modules_interfaces::web as web_iface;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum RequestKind {
-    GET,
-    POST,
-    HEAD,
-    DELETE,
-    OPTIONS,
-    PATCH,
-}
-
 fn default_none<T>() -> Option<T> {
     None
 }
@@ -58,10 +48,13 @@ impl CtxPart {
 
         let url = match reqwest::Url::parse(&req.url) {
             Ok(url) => url,
-            Err(_) => {
+            Err(err) => {
                 return Err(common::ModuleError {
                     causes: vec![ErrorKind::DESERIALIZING.into()],
-                    ctx: BTreeMap::from([("url".into(), GenericValue::Str(req.url))]),
+                    ctx: BTreeMap::from([
+                        ("url".into(), GenericValue::Str(req.url)),
+                        ("rust_error".into(), GenericValue::Str(format!("{err:#}"))),
+                    ]),
                     fatal: true,
                 }
                 .into());
@@ -289,8 +282,6 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
 
 #[cfg(test)]
 mod tests {
-    use base64::Engine;
-
     use crate::{
         common,
         scripting::{self, Response},
@@ -316,7 +307,6 @@ mod tests {
         let uvm = create_test_vm().await;
 
         let mut cwd = std::env::current_dir().unwrap();
-        println!("{cwd:?}");
         cwd.push("tests");
         cwd.push("lua");
         cwd.push("get_status.lua");
@@ -358,7 +348,6 @@ mod tests {
         let uvm = create_test_vm().await;
 
         let mut cwd = std::env::current_dir().unwrap();
-        println!("{cwd:?}");
         cwd.push("tests");
         cwd.push("lua");
         cwd.push("bytes.lua");
@@ -369,8 +358,7 @@ mod tests {
 
         let f: mlua::Function = uvm.vm.globals().get("Test").unwrap();
 
-        const EXPECT_B64: &str = "xdcUhPjPm/S3b0eQRzCASw==";
-        let expected = base64::prelude::BASE64_STANDARD.decode(EXPECT_B64).unwrap();
+        let expected = b"\xde\xad\xbe\xef";
 
         let rs_ctx = scripting::RSContext {
             client: common::create_client().unwrap(),

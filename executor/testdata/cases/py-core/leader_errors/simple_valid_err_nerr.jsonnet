@@ -9,7 +9,7 @@ simple.run('${jsonnetDir}/simple.py') {
     leader_nondet: [
         {
             "kind": "contract_error",
-            "value": "err"
+            "value": "exit_code 1"
         }
     ],
 }

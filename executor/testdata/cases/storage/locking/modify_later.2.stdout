@@ -1,2 +1,2 @@
 Patched!
-executed with `ContractError("exit_code 30")`
+executed with `VMError("exit_code 30")`

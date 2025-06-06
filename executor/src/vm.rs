@@ -69,8 +69,8 @@ impl<I: Iterator<Item = u8>> Iterator for DecodeUtf8<I> {
 #[derive(Serialize)]
 pub enum RunOk {
     Return(Vec<u8>),
-    Rollback(String),
-    ContractError(String, #[serde(skip_serializing)] Option<anyhow::Error>),
+    UserError(String),
+    VMError(String, #[serde(skip_serializing)] Option<anyhow::Error>),
 }
 
 pub type RunResult = Result<RunOk>;
@@ -86,10 +86,10 @@ impl RunOk {
             RunOk::Return(buf) => [ResultCode::Return as u8]
                 .into_iter()
                 .chain(buf.iter().cloned()),
-            RunOk::Rollback(buf) => [ResultCode::Rollback as u8]
+            RunOk::UserError(buf) => [ResultCode::UserError as u8]
                 .into_iter()
                 .chain(buf.as_bytes().iter().cloned()),
-            RunOk::ContractError(buf, _) => [ResultCode::ContractError as u8]
+            RunOk::VMError(buf, _) => [ResultCode::VmError as u8]
                 .into_iter()
                 .chain(buf.as_bytes().iter().cloned()),
         }
@@ -118,8 +118,8 @@ impl std::fmt::Debug for RunOk {
                     .join("");
                 f.write_fmt(format_args!("Return(\"{}\")", str))
             }
-            Self::Rollback(r) => f.debug_tuple("Rollback").field(r).finish(),
-            Self::ContractError(r, _) => f.debug_tuple("ContractError").field(r).finish(),
+            Self::UserError(r) => f.debug_tuple("UserError").field(r).finish(),
+            Self::VMError(r, _) => f.debug_tuple("VMError").field(r).finish(),
         }
     }
 }
@@ -347,23 +347,20 @@ impl VM {
                 let res: Result<RunOk> = [
                     |e: anyhow::Error| match e.downcast::<crate::wasi::preview1::I32Exit>() {
                         Ok(I32Exit(0)) => Ok(RunOk::empty_return()),
-                        Ok(I32Exit(v)) => {
-                            Ok(RunOk::ContractError(format!("exit_code {}", v), None))
-                        }
+                        Ok(I32Exit(v)) => Ok(RunOk::VMError(format!("exit_code {}", v), None)),
                         Err(e) => Err(e),
                     },
                     |e: anyhow::Error| {
-                        e.downcast::<wasmtime::Trap>().map(|v| {
-                            RunOk::ContractError(format!("wasm_trap {v:?}"), Some(v.into()))
-                        })
+                        e.downcast::<wasmtime::Trap>()
+                            .map(|v| RunOk::VMError(format!("wasm_trap {v:?}"), Some(v.into())))
                     },
                     |e: anyhow::Error| {
                         e.downcast::<crate::errors::ContractError>()
-                            .map(|crate::errors::ContractError(m, c)| RunOk::ContractError(m, c))
+                            .map(|crate::errors::ContractError(m, c)| RunOk::VMError(m, c))
                     },
                     |e: anyhow::Error| {
-                        e.downcast::<crate::errors::Rollback>()
-                            .map(|crate::errors::Rollback(v)| RunOk::Rollback(v))
+                        e.downcast::<crate::errors::UserError>()
+                            .map(|crate::errors::UserError(v)| RunOk::UserError(v))
                     },
                     |e: anyhow::Error| {
                         e.downcast::<crate::wasi::genlayer_sdk::ContractReturn>()
@@ -382,10 +379,10 @@ impl VM {
             Ok(RunOk::Return(_)) => {
                 log::info!(target: "vm", result = "Return"; "execution result unwrapped")
             }
-            Ok(RunOk::Rollback(_)) => {
+            Ok(RunOk::UserError(_)) => {
                 log::info!(target: "vm", result = "Rollback"; "execution result unwrapped")
             }
-            Ok(RunOk::ContractError(e, cause)) => {
+            Ok(RunOk::VMError(e, cause)) => {
                 log::info!(target: "vm", result = format!("ContractError({e})"), cause:? = cause; "execution result unwrapped")
             }
             Err(_) => {

@@ -26,5 +26,4 @@ session_create_request: |
   }
 
 extra_tld: []
-always_allow_hosts:
-  - genvm-test
+always_allow_hosts: []
