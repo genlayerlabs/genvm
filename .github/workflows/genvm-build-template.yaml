@@ -30,6 +30,7 @@ env:
   GCS_BUCKET: "gh-af"
 jobs:
   build:
+    timeout-minutes: 30
     runs-on: ${{ inputs.runs_on }}
     outputs:
       artifact_name: ${{ steps.upload.outputs.basename }}

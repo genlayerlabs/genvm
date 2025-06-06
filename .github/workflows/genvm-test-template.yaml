@@ -26,6 +26,7 @@ defaults:
     shell: bash -x {0}
 jobs:
   mock-tests:
+    timeout-minutes: 30
     runs-on: ${{ inputs.runs_on }}
     steps:
       - uses: actions/checkout@v4

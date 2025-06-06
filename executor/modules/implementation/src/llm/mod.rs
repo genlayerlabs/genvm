@@ -328,6 +328,37 @@ mod tests {
         });
 
         let user_vm = create_vm(&config, &extra_path).await.unwrap();
+
+        // this ensures order
+        user_vm
+            .vm
+            .load(
+                r#"
+                    local llm = require("lib-llm")
+                    setmetatable(llm.providers, {
+                        __pairs = function(t)
+                            local keys = {}
+                            for k in next,t,nil do
+                                table.insert(keys, k)
+                            end
+
+                            table.sort(keys)
+
+                            local i = 0
+                            return function()
+                                i = i + 1
+                                local key = keys[i]
+                                if key ~= nil then
+                                    return key, t[key]
+                                end
+                            end, t, nil
+                        end
+                    })
+                "#,
+            )
+            .exec()
+            .unwrap();
+
         let client = reqwest::Client::new();
         let rs_ctx = scripting::RSContext {
             client: client.clone(),
@@ -367,8 +398,8 @@ mod tests {
             _ => panic!("unexpected response format"),
         }
 
-        server_task.await.unwrap();
-
         assert!(made_request.load(std::sync::atomic::Ordering::SeqCst));
+
+        server_task.await.unwrap();
     }
 }
