@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use futures_util::{stream::FusedStream, SinkExt, StreamExt};
 use genvm_common::calldata;
+use genvm_modules_interfaces::GenericValue;
 use tokio_tungstenite::tungstenite::{Bytes, Message};
 
 type WSStream =
@@ -73,10 +74,7 @@ impl Module {
         }
     }
 
-    async fn send_impl<R, V>(
-        &self,
-        val: V,
-    ) -> anyhow::Result<std::result::Result<R, serde_json::Value>>
+    async fn send_impl<R, V>(&self, val: V) -> anyhow::Result<std::result::Result<R, GenericValue>>
     where
         V: serde::Serialize,
         R: serde::Serialize + serde::de::DeserializeOwned,
@@ -127,10 +125,7 @@ impl Module {
         }
     }
 
-    pub async fn send<R, V>(
-        &self,
-        val: V,
-    ) -> anyhow::Result<std::result::Result<R, serde_json::Value>>
+    pub async fn send<R, V>(&self, val: V) -> anyhow::Result<std::result::Result<R, GenericValue>>
     where
         V: serde::Serialize,
         R: serde::Serialize + serde::de::DeserializeOwned,

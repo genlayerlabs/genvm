@@ -152,9 +152,9 @@ class MockHost(IHost):
 		if res['kind'] == 'return':
 			return (ResultCode.RETURN, _calldata.encode(res['value']))
 		if res['kind'] == 'rollback':
-			return (ResultCode.ROLLBACK, res['value'].encode('utf-8'))
+			return (ResultCode.USER_ERROR, res['value'].encode('utf-8'))
 		if res['kind'] == 'contract_error':
-			return (ResultCode.CONTRACT_ERROR, res['value'].encode('utf-8'))
+			return (ResultCode.VM_ERROR, res['value'].encode('utf-8'))
 		assert False
 
 	async def post_nondet_result(

@@ -91,6 +91,7 @@ impl SharedBytes {
 
 pub struct Archive {
     pub data: BTreeMap<String, SharedBytes>,
+    pub total_size: u32,
 }
 
 fn map_try_insert<K, V>(map: &mut BTreeMap<K, V>, key: K, value: V) -> anyhow::Result<&mut V>
@@ -189,11 +190,15 @@ impl Archive {
             map_try_insert(&mut res, name, file_contents)?;
         }
 
-        Ok(Self { data: res })
+        Ok(Self {
+            data: res,
+            total_size: original_data.len() as u32,
+        })
     }
 
     pub fn from_zip<R: std::io::Read + std::io::Seek>(
         zip: &mut zip::ZipArchive<R>,
+        total_size: u32,
     ) -> anyhow::Result<Self> {
         let mut res = BTreeMap::new();
 
@@ -210,15 +215,21 @@ impl Archive {
             )?;
         }
 
-        Ok(Self { data: res })
+        Ok(Self {
+            data: res,
+            total_size,
+        })
     }
 
     pub fn from_file_and_runner(file: SharedBytes, runner_comment: SharedBytes) -> Self {
+        let total_size = file.len() as u32;
+
         Self {
             data: BTreeMap::from_iter([
                 ("runner.json".into(), runner_comment),
                 ("file".into(), file),
             ]),
+            total_size,
         }
     }
 }

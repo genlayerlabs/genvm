@@ -82,16 +82,16 @@ fn write_result(sock: &mut dyn Sock, res: Result<&vm::RunOk, &anyhow::Error>) ->
             sock.write_all(&[ResultCode::Return as u8])?;
             r
         }
-        Ok(vm::RunOk::Rollback(r)) => {
-            sock.write_all(&[ResultCode::Rollback as u8])?;
+        Ok(vm::RunOk::UserError(r)) => {
+            sock.write_all(&[ResultCode::UserError as u8])?;
             r.as_bytes()
         }
-        Ok(vm::RunOk::ContractError(r, _)) => {
-            sock.write_all(&[ResultCode::ContractError as u8])?;
+        Ok(vm::RunOk::VMError(r, _)) => {
+            sock.write_all(&[ResultCode::VmError as u8])?;
             r.as_bytes()
         }
         Err(e) => {
-            sock.write_all(&[ResultCode::Error as u8])?;
+            sock.write_all(&[ResultCode::InternalError as u8])?;
             str = format!("{:#}", e);
             str.as_bytes()
         }
@@ -164,7 +164,7 @@ impl Host {
         )?;
         let len = u32::from_le_bytes(len_buf);
 
-        if !limiter.consume_mul(len, SlotID::SIZE, true) {
+        if !limiter.consume_mul(len, SlotID::SIZE) {
             return Err(ContractError::oom(None).into());
         }
 
@@ -239,7 +239,7 @@ impl Host {
         self.storage_read(mode, account, code_slot, 0, &mut len_buf)?;
         let code_size = u32::from_le_bytes(len_buf);
 
-        if !limiter.consume(code_size, true) {
+        if !limiter.consume(code_size) {
             return Err(ContractError::oom(None).into());
         }
 
@@ -358,9 +358,9 @@ impl Host {
 
         let res = match has_some[0] {
             x if x == ResultCode::Return as u8 => vm::RunOk::Return(buf),
-            x if x == ResultCode::Rollback as u8 => vm::RunOk::Rollback(String::from_utf8(buf)?),
-            x if x == ResultCode::ContractError as u8 => {
-                vm::RunOk::ContractError(String::from_utf8(buf)?, None)
+            x if x == ResultCode::UserError as u8 => vm::RunOk::UserError(String::from_utf8(buf)?),
+            x if x == ResultCode::VmError as u8 => {
+                vm::RunOk::VMError(String::from_utf8(buf)?, None)
             }
             x => anyhow::bail!("host returned incorrect result id {}", x),
         };

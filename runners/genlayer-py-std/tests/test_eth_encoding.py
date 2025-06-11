@@ -1,4 +1,4 @@
-import genlayer.py.eth as genvm_eth
+import genlayer.py.evm as genvm_eth
 
 from genlayer.py.types import *
 from genlayer.py.storage import *

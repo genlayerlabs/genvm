@@ -12,6 +12,7 @@ use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
     caching, calldata, config,
+    errors::ContractError,
     host::LockedSlotsSet,
     memlimiter,
     runner::{self, InitAction, WasmMode},
@@ -68,8 +69,8 @@ impl<I: Iterator<Item = u8>> Iterator for DecodeUtf8<I> {
 #[derive(Serialize)]
 pub enum RunOk {
     Return(Vec<u8>),
-    Rollback(String),
-    ContractError(String, #[serde(skip_serializing)] Option<anyhow::Error>),
+    UserError(String),
+    VMError(String, #[serde(skip_serializing)] Option<anyhow::Error>),
 }
 
 pub type RunResult = Result<RunOk>;
@@ -85,10 +86,10 @@ impl RunOk {
             RunOk::Return(buf) => [ResultCode::Return as u8]
                 .into_iter()
                 .chain(buf.iter().cloned()),
-            RunOk::Rollback(buf) => [ResultCode::Rollback as u8]
+            RunOk::UserError(buf) => [ResultCode::UserError as u8]
                 .into_iter()
                 .chain(buf.as_bytes().iter().cloned()),
-            RunOk::ContractError(buf, _) => [ResultCode::ContractError as u8]
+            RunOk::VMError(buf, _) => [ResultCode::VmError as u8]
                 .into_iter()
                 .chain(buf.as_bytes().iter().cloned()),
         }
@@ -117,8 +118,8 @@ impl std::fmt::Debug for RunOk {
                     .join("");
                 f.write_fmt(format_args!("Return(\"{}\")", str))
             }
-            Self::Rollback(r) => f.debug_tuple("Rollback").field(r).finish(),
-            Self::ContractError(r, _) => f.debug_tuple("ContractError").field(r).finish(),
+            Self::UserError(r) => f.debug_tuple("UserError").field(r).finish(),
+            Self::VMError(r, _) => f.debug_tuple("VMError").field(r).finish(),
         }
     }
 }
@@ -142,7 +143,13 @@ impl wasmtime::ResourceLimiter for memlimiter::Limiter {
         }
 
         let delta = delta as u32;
-        Ok(self.consume(delta, false))
+        let success = self.consume(delta);
+
+        if current == 0 && !success {
+            Err(ContractError::oom(None).into())
+        } else {
+            Ok(success)
+        }
     }
 
     fn table_growing(
@@ -153,14 +160,18 @@ impl wasmtime::ResourceLimiter for memlimiter::Limiter {
     ) -> Result<bool> {
         let delta = desired - current;
 
-        const TABLE_CELL_SIZE: u32 = 16;
-
         if delta > u32::MAX as usize {
             return Ok(false);
         }
 
         let delta = delta as u32;
-        Ok(self.consume_mul(delta, TABLE_CELL_SIZE, false))
+        let success = self.consume_mul(delta, memlimiter::consts::TABLE_ENTRY_SIZE);
+
+        if current == 0 && !success {
+            Err(ContractError::oom(None).into())
+        } else {
+            Ok(success)
+        }
     }
 
     fn instances(&self) -> usize {
@@ -336,23 +347,20 @@ impl VM {
                 let res: Result<RunOk> = [
                     |e: anyhow::Error| match e.downcast::<crate::wasi::preview1::I32Exit>() {
                         Ok(I32Exit(0)) => Ok(RunOk::empty_return()),
-                        Ok(I32Exit(v)) => {
-                            Ok(RunOk::ContractError(format!("exit_code {}", v), None))
-                        }
+                        Ok(I32Exit(v)) => Ok(RunOk::VMError(format!("exit_code {}", v), None)),
                         Err(e) => Err(e),
                     },
                     |e: anyhow::Error| {
-                        e.downcast::<wasmtime::Trap>().map(|v| {
-                            RunOk::ContractError(format!("wasm_trap {v:?}"), Some(v.into()))
-                        })
+                        e.downcast::<wasmtime::Trap>()
+                            .map(|v| RunOk::VMError(format!("wasm_trap {v:?}"), Some(v.into())))
                     },
                     |e: anyhow::Error| {
                         e.downcast::<crate::errors::ContractError>()
-                            .map(|crate::errors::ContractError(m, c)| RunOk::ContractError(m, c))
+                            .map(|crate::errors::ContractError(m, c)| RunOk::VMError(m, c))
                     },
                     |e: anyhow::Error| {
-                        e.downcast::<crate::errors::Rollback>()
-                            .map(|crate::errors::Rollback(v)| RunOk::Rollback(v))
+                        e.downcast::<crate::errors::UserError>()
+                            .map(|crate::errors::UserError(v)| RunOk::UserError(v))
                     },
                     |e: anyhow::Error| {
                         e.downcast::<crate::wasi::genlayer_sdk::ContractReturn>()
@@ -371,10 +379,10 @@ impl VM {
             Ok(RunOk::Return(_)) => {
                 log::info!(target: "vm", result = "Return"; "execution result unwrapped")
             }
-            Ok(RunOk::Rollback(_)) => {
+            Ok(RunOk::UserError(_)) => {
                 log::info!(target: "vm", result = "Rollback"; "execution result unwrapped")
             }
-            Ok(RunOk::ContractError(e, cause)) => {
+            Ok(RunOk::VMError(e, cause)) => {
                 log::info!(target: "vm", result = format!("ContractError({e})"), cause:? = cause; "execution result unwrapped")
             }
             Err(_) => {
@@ -703,6 +711,12 @@ impl Supervisor {
     ) -> Result<Option<wasmtime::Instance>> {
         match action {
             InitAction::MapFile { to, file } => {
+                let limiter = if vm.is_det() {
+                    &self.shared_data.limiter_det
+                } else {
+                    &self.shared_data.limiter_non_det
+                };
+
                 if file.ends_with("/") {
                     let arch = self.runner_cache.get_unsafe(current);
 
@@ -723,6 +737,12 @@ impl Supervisor {
                         }
                         name_in_fs.push_str(&name[file.len()..]);
 
+                        if !limiter.consume(
+                            memlimiter::consts::FILE_MAPPING_SIZE + name_in_fs.len() as u32,
+                        ) {
+                            return Err(ContractError::oom(None).into());
+                        }
+
                         vm.store
                             .data_mut()
                             .genlayer_ctx_mut()
@@ -730,6 +750,10 @@ impl Supervisor {
                             .map_file(&name_in_fs, file_contents.clone())?;
                     }
                 } else {
+                    if !limiter.consume(memlimiter::consts::FILE_MAPPING_SIZE + to.len() as u32) {
+                        return Err(ContractError::oom(None).into());
+                    }
+
                     vm.store
                         .data_mut()
                         .genlayer_ctx_mut()
@@ -822,9 +846,17 @@ impl Supervisor {
 
                 let id = self.unfold_test_id_if_any(ctx, *id, &path)?;
 
-                let _ = self.runner_cache.get_or_create(id, || {
-                    make_new_runner_arch_from_tar(id, &path, &self.shared_data.limiter_det)
-                })?;
+                let limiter = if vm.is_det() {
+                    &self.shared_data.limiter_det
+                } else {
+                    &self.shared_data.limiter_non_det
+                };
+
+                let _ = self.runner_cache.get_or_create(
+                    id,
+                    || make_new_runner_arch_from_tar(id, &path, limiter),
+                    limiter,
+                )?;
 
                 Box::pin(self.apply_action_recursive(vm, ctx, action, id))
                     .await
@@ -839,11 +871,21 @@ impl Supervisor {
                     return Ok(None);
                 }
 
+                let limiter = if vm.is_det() {
+                    &self.shared_data.limiter_det
+                } else {
+                    &self.shared_data.limiter_non_det
+                };
+
                 let path = self.runner_cache.path().clone();
-                let new_arch = self.runner_cache.get_or_create(id, || {
-                    make_new_runner_arch_from_tar(id, &path, &self.shared_data.limiter_det)
-                        .with_context(|| format!("loading {id}"))
-                })?;
+                let new_arch = self.runner_cache.get_or_create(
+                    id,
+                    || {
+                        make_new_runner_arch_from_tar(id, &path, limiter)
+                            .with_context(|| format!("loading {id}"))
+                    },
+                    limiter,
+                )?;
                 let new_action = new_arch
                     .get_actions()
                     .with_context(|| format!("loading {id} runner.json"))?;
@@ -856,7 +898,7 @@ impl Supervisor {
 
     fn code_to_archive(code: SharedBytes) -> Result<Archive> {
         if let Ok(mut as_zip) = zip::ZipArchive::new(std::io::Cursor::new(code.clone())) {
-            return Archive::from_zip(&mut as_zip);
+            return Archive::from_zip(&mut as_zip, code.len() as u32);
         }
 
         if wasmparser::Parser::is_core_wasm(code.as_ref()) {
@@ -904,16 +946,22 @@ impl Supervisor {
 
         let contract_id = runner::get_id_of_contract(contract_address);
 
+        let limiter = if vm.is_det() {
+            &self.shared_data.limiter_det
+        } else {
+            &self.shared_data.limiter_non_det
+        };
+
         let provide_arch = || {
-            let code = self.host.get_code(
-                vm.config_copy.state_mode,
-                contract_address,
-                &self.shared_data.limiter_det,
-            )?;
+            let code = self
+                .host
+                .get_code(vm.config_copy.state_mode, contract_address, limiter)?;
             Self::code_to_archive(SharedBytes::new(code))
         };
 
-        let cur_arch = self.runner_cache.get_or_create(contract_id, provide_arch)?;
+        let cur_arch = self
+            .runner_cache
+            .get_or_create(contract_id, provide_arch, limiter)?;
         let actions = cur_arch.get_actions()?;
 
         let mut ctx = ApplyActionCtx {
@@ -933,6 +981,12 @@ impl Supervisor {
     }
 
     pub fn log_stats(&self) {
-        log::info!(all_wasm_modules:serde = self.cached_modules.keys().map(|x| x.as_str()).collect_vec(), stats:serde = self.stats; "supervisor stats");
+        log::debug!(
+            all_wasm_modules:serde = self.cached_modules.keys().map(|x| x.as_str()).collect_vec(),
+            stats:serde = self.stats,
+            det_max_memory = u32::MAX - self.shared_data.limiter_det.get_least_remaining_memory(),
+            non_det_max_memory = u32::MAX - self.shared_data.limiter_non_det.get_least_remaining_memory();
+            "supervisor stats"
+        );
     }
 }

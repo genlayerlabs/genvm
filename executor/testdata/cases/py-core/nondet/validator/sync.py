@@ -9,4 +9,4 @@ class Contract(gl.Contract):
 			print('SHOULD NOT BE PRINTED')
 			return 10
 
-		print(gl.eq_principle_strict_eq(run))
+		print(gl.eq_principle.strict_eq(run))

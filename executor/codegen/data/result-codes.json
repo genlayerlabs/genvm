@@ -5,9 +5,9 @@
     "size": "u8",
     "values": {
       "return": 0,
-      "rollback": 1,
-      "contract_error": 2,
-      "error": 3
+      "user_error": 1,
+      "vm_error": 2,
+      "internal_error": 3
     }
   },
   {

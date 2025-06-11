@@ -5,4 +5,4 @@
 4194304
 33554432
 268435456
-executed with `ContractError("exit_code 1")`
+executed with `VMError("exit_code 1")`

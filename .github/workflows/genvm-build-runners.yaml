@@ -45,6 +45,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [gen_url]
     if: ${{ needs.gen_url.outputs.already_exists == 'false' }}
     steps:

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use serde_derive::{Deserialize, Serialize};
 
@@ -10,10 +10,90 @@ pub trait Web {
     ) -> tokio::task::JoinHandle<anyhow::Result<Box<[u8]>>>;
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum GenericValue {
+    Null,
+    Bool(bool),
+    Str(String),
+    Bytes(#[serde(with = "serde_bytes")] Vec<u8>),
+    Number(f64),
+    Map(BTreeMap<String, GenericValue>),
+    Array(Vec<GenericValue>),
+}
+
+impl From<String> for GenericValue {
+    fn from(value: String) -> Self {
+        GenericValue::Str(value)
+    }
+}
+
+impl From<i32> for GenericValue {
+    fn from(value: i32) -> Self {
+        GenericValue::Number(value as f64)
+    }
+}
+
+impl From<u16> for GenericValue {
+    fn from(value: u16) -> Self {
+        GenericValue::Number(value as f64)
+    }
+}
+
+impl From<f64> for GenericValue {
+    fn from(value: f64) -> Self {
+        GenericValue::Number(value)
+    }
+}
+
+impl From<u32> for GenericValue {
+    fn from(value: u32) -> Self {
+        GenericValue::Number(value as f64)
+    }
+}
+
+impl From<bool> for GenericValue {
+    fn from(value: bool) -> Self {
+        GenericValue::Bool(value)
+    }
+}
+
+impl From<Vec<u8>> for GenericValue {
+    fn from(value: Vec<u8>) -> Self {
+        GenericValue::Bytes(value)
+    }
+}
+
+impl From<serde_json::Value> for GenericValue {
+    fn from(value: serde_json::Value) -> Self {
+        match value {
+            serde_json::Value::Null => GenericValue::Null,
+            serde_json::Value::Bool(x) => GenericValue::Bool(x),
+            serde_json::Value::Number(number) => GenericValue::Number(number.as_f64().unwrap()),
+            serde_json::Value::String(s) => GenericValue::Str(s),
+            serde_json::Value::Array(values) => {
+                GenericValue::Array(values.into_iter().map(Into::into).collect())
+            }
+            serde_json::Value::Object(map) => GenericValue::Map(BTreeMap::from_iter(
+                map.into_iter().map(|(k, v)| (k, v.into())),
+            )),
+        }
+    }
+}
+
+impl GenericValue {
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            GenericValue::Str(s) => Some(s),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub enum Result<T> {
     Ok(T),
-    UserError(serde_json::Value),
+    UserError(GenericValue),
     FatalError(String),
 }
 
@@ -174,6 +254,8 @@ pub mod llm {
 }
 
 pub mod web {
+    use std::collections::BTreeMap;
+
     use serde_derive::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize)]
@@ -198,13 +280,64 @@ pub mod web {
         pub wait_after_loaded: super::ParsedDuration,
     }
 
+    #[derive(Debug, Serialize, Deserialize)]
+    pub enum RequestMethod {
+        GET,
+        POST,
+        HEAD,
+        DELETE,
+        OPTIONS,
+        PATCH,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct Response {
+        pub status: u16,
+        pub headers: BTreeMap<String, HeaderData>,
+
+        #[serde(with = "serde_bytes")]
+        pub body: Vec<u8>,
+    }
+
+    fn default_none<T>() -> Option<T> {
+        None
+    }
+
+    fn default_false() -> bool {
+        false
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct HeaderData(#[serde(with = "serde_bytes")] pub Vec<u8>);
+
+    impl From<HeaderData> for super::GenericValue {
+        fn from(val: HeaderData) -> Self {
+            val.0.into()
+        }
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct RequestPayload {
+        pub method: RequestMethod,
+        pub url: String,
+        pub headers: BTreeMap<String, HeaderData>,
+
+        #[serde(with = "serde_bytes", default = "default_none")]
+        pub body: Option<Vec<u8>>,
+        #[serde(default = "default_false")]
+        pub sign: bool,
+    }
+
     #[derive(Serialize, Deserialize)]
     pub enum Message {
         Render(RenderPayload),
+        Request(RequestPayload),
     }
 
     #[derive(Serialize, Deserialize)]
     pub enum RenderAnswer {
+        #[serde(rename = "response")]
+        Response(Response),
         #[serde(rename = "text")]
         Text(String),
         #[serde(rename = "image", with = "serde_bytes")]

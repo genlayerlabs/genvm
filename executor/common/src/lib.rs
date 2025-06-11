@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::Context;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub mod calldata;
 pub mod cancellation;
@@ -53,7 +53,7 @@ fn default_log_level() -> log::LevelFilter {
     log::LevelFilter::Trace
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct BaseConfig {
     pub threads: usize,
     pub blocking_threads: usize,

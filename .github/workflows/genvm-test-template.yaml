@@ -26,6 +26,7 @@ defaults:
     shell: bash -x {0}
 jobs:
   mock-tests:
+    timeout-minutes: 30
     runs-on: ${{ inputs.runs_on }}
     steps:
       - uses: actions/checkout@v4
@@ -72,6 +73,7 @@ jobs:
           python3.12 -m pip install -r executor/testdata/runner/requirements.txt && \
           ./executor/testdata/web-container/run-test-docker.sh && \
           sleep 5 && \
+          perl -pe 's/(always_allow_hosts:) \[\]/$1 ["localhost", "genvm-test"]/' -i ./build/out/config/genvm-module-web.yaml && \
           (./build/out/bin/genvm-modules web &) && \
           (./build/out/bin/genvm-modules llm &) && \
           sleep 2 && \

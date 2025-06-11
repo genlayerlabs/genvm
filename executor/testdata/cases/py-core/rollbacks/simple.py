@@ -5,4 +5,4 @@ from genlayer import *
 class Contract(gl.Contract):
 	@gl.public.write
 	def main(self):
-		gl.advanced.rollback_immediate("nah, I won't execute")
+		gl.advanced.user_error_immediate("nah, I won't execute")

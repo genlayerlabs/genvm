@@ -3,7 +3,8 @@
 
 bind_address: 127.0.0.1:3031
 
-lua_script_path: ${genvmRoot}/scripts/genvm-greyboxing.lua
+lua_script_path: ${genvmRoot}/scripts/llm-default.lua
+vm_count: 6
 
 threads: 4
 blocking_threads: 16

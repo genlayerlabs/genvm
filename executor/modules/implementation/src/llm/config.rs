@@ -72,31 +72,25 @@ pub struct Config {
 
     pub backends: BTreeMap<String, BackendConfig>,
     pub prompt_templates: PromptTemplates,
+    pub vm_count: usize,
 
     #[serde(flatten)]
     pub base: genvm_common::BaseConfig,
 }
 
 impl BackendConfig {
-    pub fn to_provider(
-        &self,
-        client: reqwest::Client,
-    ) -> Box<dyn providers::Provider + Send + Sync> {
+    pub fn to_provider(&self) -> Box<dyn providers::Provider + Send + Sync> {
         match self.provider {
             Provider::Ollama => Box::new(providers::OLlama {
-                client,
                 config: self.clone(),
             }),
             Provider::OpenaiCompatible => Box::new(providers::OpenAICompatible {
-                client,
                 config: self.clone(),
             }),
             Provider::Anthropic => Box::new(providers::Anthropic {
-                client,
                 config: self.clone(),
             }),
             Provider::Google => Box::new(providers::Gemini {
-                client,
                 config: self.clone(),
             }),
         }

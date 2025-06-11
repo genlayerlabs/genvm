@@ -118,9 +118,9 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
 
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,
-        (Ok(RunOk::ContractError(e, cause)), PrintOption::Shrink) => {
+        (Ok(RunOk::VMError(e, cause)), PrintOption::Shrink) => {
             eprintln!("genvm: contract error {:?}", cause);
-            Some(format!("ContractError(\"{e}\")"))
+            Some(format!("VMError(\"{e}\")"))
         }
         (Err(e), PrintOption::Shrink) => {
             eprintln!("genvm: internal error {:?}", e);

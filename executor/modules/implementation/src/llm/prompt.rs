@@ -3,6 +3,8 @@ use std::sync::Arc;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 
+use crate::common::{ModuleError, ModuleResult};
+
 #[derive(Serialize, Deserialize)]
 pub struct Internal {
     pub system_message: Option<String>,
@@ -40,15 +42,22 @@ impl ImageType {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct ImageLua {
-    #[serde(with = "serde_bytes")]
-    pub data: Vec<u8>,
-    pub kind: ImageType,
-}
+pub struct ImageLua(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
 impl ImageLua {
     pub fn as_base64(&self) -> String {
-        base64::prelude::BASE64_STANDARD.encode(&self.data)
+        base64::prelude::BASE64_STANDARD.encode(&self.0)
+    }
+
+    pub fn kind_or_error(&self) -> ModuleResult<ImageType> {
+        ImageType::sniff(&self.0).ok_or_else(|| {
+            ModuleError {
+                causes: vec!["INVALID_IMAGE".into()],
+                fatal: true,
+                ctx: std::collections::BTreeMap::new(),
+            }
+            .into()
+        })
     }
 }
 
@@ -61,5 +70,3 @@ pub enum ExtendedOutputFormat {
     #[serde(rename = "bool")]
     Bool,
 }
-
-impl mlua::UserData for ImageLua {}

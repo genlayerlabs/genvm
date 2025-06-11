@@ -84,16 +84,6 @@ Just an alias for :py:class:`int`, it is introduced to prevent accidental use of
 """
 
 
-class Rollback(Exception):
-	"""
-	Exception that will be treated as a "Rollback"
-	"""
-
-	def __init__(self, msg: str):
-		self.msg = msg
-		super()
-
-
 class Lazy[T]:
 	"""
 	Base class to support lazy evaluation

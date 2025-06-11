@@ -1,20 +1,124 @@
 use futures_util::{SinkExt, StreamExt};
 use genvm_common::cancellation;
-use std::sync::Arc;
+use genvm_modules_interfaces::GenericValue;
+use serde::{Deserialize, Serialize};
+use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context, Result};
 use regex::Regex;
 
-#[derive(Debug)]
-pub struct ModuleResultUserError(pub serde_json::Value);
+use crate::scripting;
 
-impl std::fmt::Display for ModuleResultUserError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("#{:?}", self))
+#[allow(non_camel_case_types, dead_code)]
+pub enum ErrorKind {
+    STATUS_NOT_OK,
+    READING_BODY,
+    SENDING_REQUEST,
+    DESERIALIZING,
+    OVERLOADED,
+    Other(String),
+}
+
+impl From<ErrorKind> for String {
+    fn from(x: ErrorKind) -> String {
+        if let ErrorKind::Other(k) = x {
+            k
+        } else {
+            x.to_string()
+        }
     }
 }
 
-impl std::error::Error for ModuleResultUserError {}
+impl ErrorKind {
+    #[allow(clippy::inherent_to_string)]
+    pub fn to_string(&self) -> String {
+        match self {
+            ErrorKind::STATUS_NOT_OK => "STATUS_NOT_OK".to_owned(),
+            ErrorKind::READING_BODY => "READING_BODY".to_owned(),
+            ErrorKind::SENDING_REQUEST => "SENDING_REQUEST".to_owned(),
+            ErrorKind::DESERIALIZING => "DESERIALIZING".to_owned(),
+            ErrorKind::OVERLOADED => "OVERLOADED".to_owned(),
+            ErrorKind::Other(str) => str.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModuleError {
+    pub causes: Vec<String>,
+    pub fatal: bool,
+    pub ctx: BTreeMap<String, genvm_modules_interfaces::GenericValue>,
+}
+
+impl ModuleError {
+    pub fn try_unwrap_dyn(
+        err: &(dyn std::error::Error + Send + Sync + 'static),
+    ) -> Option<ModuleError> {
+        if let Some(e) = err.downcast_ref::<ModuleError>() {
+            return Some(e.clone());
+        }
+
+        None
+    }
+}
+
+pub trait MapUserError {
+    type Output;
+
+    fn map_user_error(
+        self,
+        message: impl Into<String>,
+        fatal: bool,
+    ) -> Result<Self::Output, anyhow::Error>;
+}
+
+impl<T, E> MapUserError for Result<T, E>
+where
+    E: Into<anyhow::Error>,
+{
+    type Output = T;
+
+    fn map_user_error(
+        self,
+        message: impl Into<String>,
+        fatal: bool,
+    ) -> Result<Self::Output, anyhow::Error> {
+        match self {
+            Ok(s) => Ok(s),
+            Err(e) => {
+                let e = e.into();
+                match e.downcast::<ModuleError>() {
+                    Ok(mut e) => {
+                        e.causes.insert(0, message.into());
+                        Err(ModuleError {
+                            causes: e.causes,
+                            fatal: fatal || e.fatal,
+                            ctx: e.ctx,
+                        }
+                        .into())
+                    }
+                    Err(e) => Err(ModuleError {
+                        causes: vec![message.into()],
+                        fatal,
+                        ctx: BTreeMap::from([(
+                            "rust_error".to_owned(),
+                            genvm_modules_interfaces::GenericValue::Str(format!("{e:#}")),
+                        )]),
+                    }
+                    .into()),
+                }
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for ModuleError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{:?}", self))
+    }
+}
+
+impl std::error::Error for ModuleError {}
 
 pub type ModuleResult<T> = anyhow::Result<T>;
 
@@ -124,14 +228,26 @@ where
                 let res = loop_one_inner_handle(handler, &text).await;
                 let res = match res {
                     Ok(res) => genvm_modules_interfaces::Result::Ok(res),
-                    Err(res) => match res.downcast::<ModuleResultUserError>() {
-                        Ok(ModuleResultUserError(res)) => {
-                            log::info!(error:serde = res, cookie = cookie; "handler user error");
-                            genvm_modules_interfaces::Result::UserError(res)
+                    Err(err) => match scripting::try_unwrap_any_err(err) {
+                        Ok(err) => {
+                            if err.fatal {
+                                genvm_modules_interfaces::Result::FatalError(format!("{err:#}"))
+                            } else {
+                                let res = GenericValue::Map(BTreeMap::from([
+                                    (
+                                        "causes".to_owned(),
+                                        GenericValue::Array(
+                                            err.causes.into_iter().map(Into::into).collect(),
+                                        ),
+                                    ),
+                                    ("ctx".to_owned(), GenericValue::Map(err.ctx)),
+                                ]));
+                                genvm_modules_interfaces::Result::UserError(res)
+                            }
                         }
-                        Err(res) => {
-                            log::error!(error = genvm_common::log_error(&res), cookie = cookie; "handler fatal error");
-                            genvm_modules_interfaces::Result::FatalError(format!("{res:#}"))
+                        Err(err) => {
+                            log::error!(error = genvm_common::log_error(&err), cookie = cookie; "handler fatal error");
+                            genvm_modules_interfaces::Result::FatalError(format!("{err:#}"))
                         }
                     },
                 };
@@ -341,4 +457,23 @@ pub fn setup_cancels(
     }
 
     Ok(token)
+}
+
+#[cfg(test)]
+pub mod tests {
+    use std::sync::Once;
+
+    static INIT: Once = Once::new();
+
+    pub fn setup() {
+        INIT.call_once(|| {
+            let base_conf = genvm_common::BaseConfig {
+                blocking_threads: 0,
+                log_disable: Default::default(),
+                log_level: log::LevelFilter::Trace,
+                threads: 0,
+            };
+            base_conf.setup_logging(std::io::stdout()).unwrap();
+        });
+    }
 }

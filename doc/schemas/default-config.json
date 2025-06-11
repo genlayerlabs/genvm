@@ -34,10 +34,6 @@
       {
         "type": "object",
         "properties": {
-          "lua_script_path": {
-            "type": "string",
-            "description": "path to lua script used for greyboxing"
-          },
           "backends": {
             "type": "object",
             "description": "all available backends",
@@ -212,9 +208,18 @@
             "examples": [
               "127.0.0.1:3032"
             ]
+        },
+        "lua_script_path": {
+            "type": "string",
+            "description": "path to script"
+        },
+        "vm_count": {
+            "type": "integer",
+            "description": "amount of lua vm to create",
+            "minimum": 1
         }
       },
-      "required": ["bind_address"]
+      "required": ["bind_address", "lua_script_path", "vm_count"]
     },
     "base-conf": {
       "type": "object",

@@ -8,13 +8,8 @@ class Contract(gl.Contract):
 	@gl.public.write
 	def main(self, ev: str):
 		def run_ndet():
-			try:
-				glb = globals()
-				print(f'{gl.advanced.sandbox(lambda: eval(ev, glb)).get()}')
-			except Rollback as rb:
-				print(f'rollback {rb.msg}')
-			except Exception as e:
-				print(f'err {e.args}')
+			glb = globals()
+			print(f'{gl.vm.spawn_sandbox(lambda: eval(ev, glb))}')
 			print(json.loads.__name__)
 
-		gl.eq_principle_strict_eq(run_ndet)
+		gl.eq_principle.strict_eq(run_ndet)

@@ -10,7 +10,7 @@ let
 				"py" # interpreter exe name
 				"-u" # unbuffered
 				"-B" # don't write .pyc
-				"-c" "import contract; import genlayer.std._internal.runner"
+				"-c" "import contract; import genlayer.gl._internal.runner"
 			];
 		}
 		{ Depends = "${runnersLib.hashes.pyLibs.cloudpickle.uid}"; }

@@ -18,7 +18,6 @@ extensions = [
 	'sphinx.ext.intersphinx',
 ]
 
-
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
@@ -89,6 +88,8 @@ autodoc_typehints_format = 'short'
 # autodoc_typehints_format = 'fully-qualified'
 autodoc_preserve_defaults = True
 
+autodoc_signature_line_length = 1
+
 
 class PsuedoAll:
 	def __contains__(self, _x):
@@ -142,12 +143,10 @@ def setup(app):
 
 
 mod_names_map = {
-	'genlayer.py.eth': 'gl.eth',
-	'genlayer.py.calldata': 'gl.calldata',
-	'genlayer.std.advanced': 'gl.advanced',
-	'genlayer.std.wasi': 'gl.wasi',
-	'genlayer.std._wasi': 'gl.wasi',
-	'genlayer.std': 'gl',
+	'genlayer.py.evm': 'genlayer.gl.evm',
+	'genlayer.py.calldata': 'genlayer.gl.calldata',
+	'genlayer.py.storage': 'genlayer.gl.storage',
+	'genlayer.std.advanced': 'genlayer.gl.advanced',
 }
 
 

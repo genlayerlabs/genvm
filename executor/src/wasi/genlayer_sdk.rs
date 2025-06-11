@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use genvm_modules_interfaces::GenericValue;
 use wiggle::GuestError;
 
 use crate::host::SlotID;
@@ -266,7 +267,7 @@ impl ContextVFS<'_> {
         data: vm::RunOk,
     ) -> Result<(generated::types::Fd, usize), generated::types::Error> {
         let data = match data {
-            RunOk::ContractError(e, cause) => {
+            RunOk::VMError(e, cause) => {
                 return Err(generated::types::Error::trap(
                     ContractError(e, cause).into(),
                 ))
@@ -285,7 +286,7 @@ impl ContextVFS<'_> {
 }
 
 async fn taskify<T>(
-    fut: impl std::future::Future<Output = anyhow::Result<std::result::Result<T, serde_json::Value>>>
+    fut: impl std::future::Future<Output = anyhow::Result<std::result::Result<T, GenericValue>>>
         + Send
         + 'static,
 ) -> anyhow::Result<Box<[u8]>>
@@ -606,6 +607,24 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         .place_content(FileContentsUnevaluated::from_task(task)),
                 ))
             }
+            gl_call::Message::WebRequest(request_payload) => {
+                if self.context.data.conf.is_deterministic {
+                    return Err(generated::types::Errno::Forbidden.into());
+                }
+
+                let web = self.context.shared_data.modules.web.clone();
+                let task = tokio::spawn(taskify(async move {
+                    web.send::<genvm_modules_interfaces::web::RenderAnswer, _>(
+                        genvm_modules_interfaces::web::Message::Request(request_payload),
+                    )
+                    .await
+                }));
+
+                Ok(generated::types::Fd::from(
+                    self.vfs
+                        .place_content(FileContentsUnevaluated::from_task(task)),
+                ))
+            }
             gl_call::Message::ExecPrompt(prompt_payload) => {
                 if self.context.data.conf.is_deterministic {
                     return Err(generated::types::Errno::Forbidden.into());
@@ -662,7 +681,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 ))
             }
             gl_call::Message::Rollback(msg) => {
-                Err(generated::types::Error::trap(Rollback(msg).into()))
+                Err(generated::types::Error::trap(UserError(msg).into()))
             }
             gl_call::Message::Return(value) => {
                 let ret = calldata::encode(&value);
@@ -920,8 +939,8 @@ impl ContextVFS<'_> {
             Some(leaders_res) => {
                 let dup = match leaders_res {
                     RunOk::Return(items) => RunOk::Return(items.clone()),
-                    RunOk::Rollback(msg) => RunOk::Rollback(msg.clone()),
-                    RunOk::ContractError(msg, _) => RunOk::ContractError(msg.clone(), None),
+                    RunOk::UserError(msg) => RunOk::UserError(msg.clone()),
+                    RunOk::VMError(msg, _) => RunOk::VMError(msg.clone(), None),
                 };
                 self.context.data.message_data.fork_leader(
                     EntryKind::ConsensusStage,

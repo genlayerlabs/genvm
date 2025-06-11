@@ -200,7 +200,7 @@ def run(jsonnet_rel_path):
 			'mock_host_path': mock_host_path,
 			'messages_path': messages_path,
 			'expected_messages_path': jsonnet_path.with_suffix(f'{suff}.msgs'),
-			'deadline': single_conf_form_file.get('deadline', None),
+			'deadline': single_conf_form_file.get('deadline', 10 * 60),  # 10 minutes
 			'test_name': my_debug_path,
 		}
 

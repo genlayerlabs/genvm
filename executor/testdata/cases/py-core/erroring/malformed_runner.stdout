@@ -1,1 +1,1 @@
-executed with `ContractError("runner_actions")`
+executed with `VMError("runner_actions")`

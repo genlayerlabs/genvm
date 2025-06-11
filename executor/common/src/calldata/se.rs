@@ -99,13 +99,25 @@ impl serde::Serializer for Serializer {
     }
 
     #[inline]
-    fn serialize_f32(self, _float: f32) -> Result<Value> {
-        Err(Error::custom("floats are not supported"))
+    fn serialize_f32(self, float: f32) -> Result<Value> {
+        self.serialize_f64(float as f64)
     }
 
     #[inline]
-    fn serialize_f64(self, _float: f64) -> Result<Value> {
-        Err(Error::custom("floats are not supported"))
+    fn serialize_f64(self, float: f64) -> Result<Value> {
+        let safe_lower = -((1i64 << 53) - 1);
+        let safe_upper = (1i64 << 53) - 1;
+
+        if float >= safe_lower as f64 && float <= safe_upper as f64 {
+            let as_int = float as i64;
+            if as_int as f64 == float {
+                Ok(Value::Number(as_int.into()))
+            } else {
+                Err(Error::custom("float has fractional part"))
+            }
+        } else {
+            Err(Error::custom("float out of range for serialization"))
+        }
     }
 
     #[inline]

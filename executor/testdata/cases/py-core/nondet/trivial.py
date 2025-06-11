@@ -11,4 +11,4 @@ class Contract(gl.Contract):
 			print('wow, nondet')
 			return 'web page?'
 
-		return gl.eq_principle_strict_eq(run)
+		return gl.eq_principle.strict_eq(run)

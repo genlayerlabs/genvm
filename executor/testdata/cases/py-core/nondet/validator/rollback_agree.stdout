@@ -1,1 +1,1 @@
-executed with `Rollback("rollback")`
+executed with `UserError("rollback")`

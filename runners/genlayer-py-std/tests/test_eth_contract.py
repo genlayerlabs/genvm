@@ -3,8 +3,8 @@ from functools import partial
 
 from genlayer.py.types import Address, u256
 
-from genlayer.py.eth.calldata import MethodEncoder
-import genlayer.py.eth as genvm_eth
+from genlayer.py.evm.calldata import MethodEncoder
+import genlayer.py.evm as genvm_eth
 
 
 def generate_test(

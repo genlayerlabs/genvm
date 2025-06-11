@@ -5,7 +5,7 @@ impl std::error::Error for ContractError {}
 
 impl std::fmt::Display for ContractError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ContractError({})", self.0)
+        write!(f, "VMError({})", self.0)
     }
 }
 
@@ -25,7 +25,7 @@ impl ContractError {
         match res {
             Ok(x) => Ok(x),
             Err(e) => match e.downcast::<ContractError>() {
-                Ok(ce) => Ok(crate::vm::RunOk::ContractError(ce.0, ce.1)),
+                Ok(ce) => Ok(crate::vm::RunOk::VMError(ce.0, ce.1)),
                 Err(e) => Err(e),
             },
         }
@@ -33,12 +33,12 @@ impl ContractError {
 }
 
 #[derive(Debug)]
-pub struct Rollback(pub String);
+pub struct UserError(pub String);
 
-impl std::error::Error for Rollback {}
+impl std::error::Error for UserError {}
 
-impl std::fmt::Display for Rollback {
+impl std::fmt::Display for UserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Rollback({:?})", self.0)
+        write!(f, "UserError({:?})", self.0)
     }
 }
