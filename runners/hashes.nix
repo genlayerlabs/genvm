@@ -25,7 +25,7 @@ let
 			};
 
 			genlayer-std = {
-				hash = "sha256-UQ24vP+DUJVsZMI6giPV0XQiYBihQ4XD6M/L4bXkhF4=";
+				hash = "test";
 			};
 
 			genlayer-embeddings = {

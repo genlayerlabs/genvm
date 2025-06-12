@@ -1,0 +1,4 @@
+inmem: ok Gen(name=b'Ada', birthday=datetime.datetime(2024, 11, 26, 6, 42, 42, 424242))
+storage: not ok 6: forbidden
+copied out: ok Gen(name=b'Ada', birthday=datetime.datetime(2024, 11, 26, 6, 42, 42, 424242))
+executed with `Return("\x00")`
