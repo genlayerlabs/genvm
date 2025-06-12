@@ -26,8 +26,26 @@ impl serde::Serialize for Value {
                 }
                 map.end()
             }
-            Value::Address(_) => Err(S::Error::custom("can't serialize address")),
-            Value::Number(_) => Err(S::Error::custom("can't serialize number")),
+            // both below should be an error, but because of erased serde in logging (thanks rust!) it is like this for now
+            Value::Address(addr) => {
+                let mut str = String::from("$Address(");
+                str.push_str(&hex::encode(addr.raw()));
+                str.push(')');
+
+                serializer.serialize_str(&str)
+            }
+            Value::Number(num) => {
+                if let Ok(num) = num.try_into() {
+                    let num: i64 = num;
+                    serializer.serialize_i64(num)
+                } else {
+                    let mut str = String::from("$Num(");
+                    str.push_str(&num.to_string());
+                    str.push(')');
+
+                    serializer.serialize_str(&str)
+                }
+            }
         }
     }
 }

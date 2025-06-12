@@ -113,7 +113,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         .with_context(|| "running genvm");
 
     if let Err(err) = &res {
-        log::error!(error = genvm_common::log_error(err); "error running genvm");
+        log::error!(error:serde = genvm_common::LogError(err); "error running genvm");
     }
 
     let res: Option<String> = match (res, args.print) {

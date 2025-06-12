@@ -246,7 +246,7 @@ where
                             }
                         }
                         Err(err) => {
-                            log::error!(error = genvm_common::log_error(&err), cookie = cookie; "handler fatal error");
+                            log::error!(error:serde = genvm_common::LogError(&err), cookie = cookie; "handler fatal error");
                             genvm_modules_interfaces::Result::FatalError(format!("{err:#}"))
                         }
                     },
@@ -305,7 +305,7 @@ where
     let res = loop_one_inner(&mut handler, stream, &cookie).await;
 
     if let Err(close) = handler.cleanup().await {
-        log::error!(error = genvm_common::log_error(&close), cookie = cookie; "cleanup error");
+        log::error!(error:serde = genvm_common::LogError(&close), cookie = cookie; "cleanup error");
     }
 
     if res.is_err() {
@@ -328,7 +328,7 @@ async fn loop_one<T, R>(
     let mut stream = match tokio_tungstenite::accept_async(stream).await {
         Err(e) => {
             let e = e.into();
-            log::error!(error = genvm_common::log_error(&e); "accept failed");
+            log::error!(error:serde = genvm_common::LogError(&e); "accept failed");
             return;
         }
         Ok(stream) => stream,
@@ -337,7 +337,7 @@ async fn loop_one<T, R>(
     log::trace!("reading hello");
     let hello = match read_hello(&mut stream).await {
         Err(e) => {
-            log::error!(error = genvm_common::log_error(&e); "read hello failed");
+            log::error!(error:serde = genvm_common::LogError(&e); "read hello failed");
             return;
         }
         Ok(None) => return,
@@ -351,7 +351,7 @@ async fn loop_one<T, R>(
     COOKIE.scope(Arc::from(cookie), async {
         log::debug!(cookie = cookie; "peer accepted");
         if let Err(e) = loop_one_impl(handler_provider, &mut stream, hello).await {
-            log::error!(error = genvm_common::log_error(&e), cookie = cookie; "internal loop error");
+            log::error!(error:serde = genvm_common::LogError(&e), cookie = cookie; "internal loop error");
         }
         log::debug!(cookie = cookie; "peer done");
     }).await;

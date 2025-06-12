@@ -64,7 +64,7 @@ impl CtxPart {
                 model = model,
                 mode:? = format,
                 provider_id = provider_id,
-                error = genvm_common::log_error(err),
+                error:serde = genvm_common::LogError(err),
                 cookie = self.hello.cookie;
                 "prompt execution error"
             );

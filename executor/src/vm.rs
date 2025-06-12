@@ -610,7 +610,7 @@ impl Supervisor {
                 };
 
                 let ret = get_from_precompiled().inspect(|_| { self.stats.precompile_hits += 1; }).or_else(|e| {
-                    log::trace!(target: "cache", error = genvm_common::log_error(&e), runner = data.runner_id.as_str(); "could not use precompiled");
+                    log::trace!(target: "cache", error:serde = genvm_common::LogError(&e), runner = data.runner_id.as_str(); "could not use precompiled");
                     self.stats.compiled_modules += 1;
                     compile_here()
                 })?;

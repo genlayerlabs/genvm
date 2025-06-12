@@ -909,7 +909,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "structured-logger",
  "tokio",
 ]
 
@@ -1388,16 +1387,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "parking_lot"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1bf18183cf54e8d6059647fc3063646a1801cf30896933ec2311622cc4b9a27"
-dependencies = [
- "lock_api",
- "parking_lot_core",
 ]
 
 [[package]]
@@ -1973,19 +1962,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
-name = "structured-logger"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16524b1ef57fd2e253216ab20ec44f0dc32b29155a4b3e6bef0a857d8c9f5f08"
-dependencies = [
- "log",
- "parking_lot",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2193,7 +2169,6 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
- "parking_lot",
  "pin-project-lite",
  "socket2",
  "tokio-macros",

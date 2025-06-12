@@ -160,7 +160,7 @@ pub async fn run_with(
         Err(e) => match e.downcast() {
             Ok(AbsentLeaderResult) => Ok(RunOk::VMError("deterministic_violation".into(), None)),
             Err(e) => {
-                log::error!(error = genvm_common::log_error(&e); "internal error");
+                log::error!(error:serde = genvm_common::LogError(&e); "internal error");
                 Err(e)
             }
         },

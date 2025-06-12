@@ -59,7 +59,14 @@ impl std::fmt::Debug for Value {
             Self::Str(str) => f.write_fmt(format_args!("{str:?}")),
             Self::Bytes(bytes) => {
                 f.write_str("b#")?;
-                f.write_str(&hex::encode(bytes))
+                if bytes.len() > 64 {
+                    f.write_str(&hex::encode(&bytes[..32]))?;
+                    f.write_str("...")?;
+                    f.write_str(&hex::encode(&bytes[bytes.len() - 32..]))?;
+                } else {
+                    f.write_str(&hex::encode(bytes))?;
+                }
+                Ok(())
             }
             Self::Number(num) => f.write_fmt(format_args!("{num:}")),
             Self::Map(map) => {

@@ -330,14 +330,14 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let request = match calldata::decode(&request) {
             Err(e) => {
-                log::info!(error = genvm_common::log_error(&e); "calldata parse failed");
+                log::info!(error:serde = genvm_common::LogError(&e); "calldata parse failed");
 
                 return Err(generated::types::Errno::Inval.into());
             }
             Ok(v) => v,
         };
 
-        log::trace!(request:? = request; "gl_call");
+        log::trace!(request:serde = request; "gl_call");
 
         let request: gl_call::Message = match calldata::from_value(request) {
             Ok(v) => v,
@@ -856,17 +856,14 @@ impl Context {
         Ok(res)
     }
 
-    pub fn log(&self) -> serde_json::Value {
-        let mut msg = serde_json::to_value(&self.data.message_data).unwrap();
+    pub fn log(&self) -> calldata::Value {
+        let msg = calldata::to_value(&self.data.message_data).unwrap();
+        let conf = calldata::to_value(&self.data.conf).unwrap();
 
-        let remover = msg.as_object_mut().unwrap();
-        remover.remove("entry_data");
-        remover.remove("entry_stage_data");
-
-        serde_json::json!({
-            "config": &self.data.conf,
-            "message": msg
-        })
+        calldata::Value::Map(BTreeMap::from([
+            ("config".to_owned(), conf),
+            ("message".to_owned(), msg),
+        ]))
     }
 
     async fn spawn_and_run(
