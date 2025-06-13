@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use genvm_common::*;
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
@@ -79,10 +80,10 @@ fn handle_run(mut config: config::Config, args: CliArgsRun) -> Result<()> {
         v.script_config.models.retain(|_k, v| v.enabled);
 
         if v.script_config.models.is_empty() {
-            log::warn!(backend = k; "models are empty");
+            log_warn!(backend = k; "models are empty");
             v.enabled = false;
         } else if v.key.is_empty() {
-            log::warn!(backend = k; "could not detect key for backend");
+            log_warn!(backend = k; "could not detect key for backend");
             v.enabled = false;
         }
     }
@@ -90,14 +91,14 @@ fn handle_run(mut config: config::Config, args: CliArgsRun) -> Result<()> {
     config.backends.retain(|_k, v| v.enabled);
 
     if config.backends.is_empty() {
-        log::error!("no valid backend detected")
+        log_error!("no valid backend detected")
     }
 
     if !args.allow_empty_backends && config.backends.is_empty() {
         anyhow::bail!("no valid backend detected");
     }
 
-    log::info!(backends:serde = config.backends.keys().collect::<Vec<_>>(); "backends left after filter");
+    log_info!(backends:serde = config.backends.keys().collect::<Vec<_>>(); "backends left after filter");
 
     let runtime = config.base.create_rt()?;
 
@@ -222,6 +223,7 @@ pub fn entrypoint_check(args: CliArgsCheck) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use genvm_common::logger;
     use genvm_modules_interfaces::llm::{self as llm_iface};
     use mlua::LuaSerdeExt;
     use std::collections::BTreeMap;
@@ -309,7 +311,7 @@ mod tests {
         let config = Arc::new(config::Config {
             bind_address: "".to_owned(),
             base: genvm_common::BaseConfig {
-                log_level: log::LevelFilter::Debug,
+                log_level: logger::Level::Debug,
                 threads: 1,
                 blocking_threads: 3,
                 log_disable: "".to_owned(),

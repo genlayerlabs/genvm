@@ -1,5 +1,7 @@
 use std::io::Write;
 
+use genvm_common::*;
+
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use genvm::{config, vm::RunOk, PublicArgs};
@@ -64,7 +66,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
     let (token, canceller) = genvm_common::cancellation::make();
 
     let handle_sigterm = move || {
-        log::warn!("sigterm received");
+        log_warn!("sigterm received");
         canceller();
     };
     unsafe {
@@ -88,7 +90,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         Some(v) => v.clone(),
     };
 
-    log::info!(cookie = cookie; "genvm cookie");
+    log_info!(cookie = cookie; "genvm cookie");
 
     let supervisor = genvm::create_supervisor(
         &config,
@@ -113,7 +115,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         .with_context(|| "running genvm");
 
     if let Err(err) = &res {
-        log::error!(error:serde = genvm_common::LogError(err); "error running genvm");
+        log_error!(error:ah = err; "error running genvm");
     }
 
     let res: Option<String> = match (res, args.print) {

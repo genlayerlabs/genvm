@@ -1,22 +1,283 @@
 mod error;
-mod log_anyhow;
-
-pub use log_anyhow::LogError;
 
 use error::Error;
 use serde::Serialize;
 
-use std::io::Write;
+use std::{io::Write, str::FromStr};
+
+use crate::calldata;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub enum Level {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl std::fmt::Display for Level {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Trace => f.write_str("trace"),
+            Self::Debug => f.write_str("debug"),
+            Self::Info => f.write_str("info"),
+            Self::Warn => f.write_str("warn"),
+            Self::Error => f.write_str("error"),
+        }
+    }
+}
+
+impl FromStr for Level {
+    type Err = ();
+
+    fn from_str(s: &str) -> std::result::Result<Self, ()> {
+        match s.to_lowercase().as_str() {
+            "trace" => Ok(Self::Trace),
+            "debug" => Ok(Self::Debug),
+            "info" => Ok(Self::Info),
+            "warn" => Ok(Self::Warn),
+            "error" => Ok(Self::Error),
+            _ => Err(()),
+        }
+    }
+}
+
+impl Level {
+    pub const fn filter_enables(self, level: Level) -> bool {
+        level as u32 >= self as u32
+    }
+}
+
+impl<'d> serde::Deserialize<'d> for Level {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'d>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Self::from_str(&s).map_err(|_| serde::de::Error::custom(format!("Unknown log level: {s}")))
+    }
+}
 
 pub struct Logger {
-    filter: log::LevelFilter,
+    filter: Level,
     default_writer: Box<std::sync::Mutex<dyn std::io::Write + Send + Sync>>,
     disabled_buffer: String,
     disabled: Vec<(usize, usize)>,
 }
 
+impl Logger {
+    pub fn enabled(&self, callsite: Callsite) -> bool {
+        if !self.filter.filter_enables(callsite.level) {
+            return false;
+        }
+
+        match self.disabled.binary_search_by(|(off, to)| {
+            let cur = &self.disabled_buffer[*off..*to];
+
+            cur.cmp(callsite.target)
+        }) {
+            Ok(_) => return false, // exact match is skipped
+            Err(mut place) if place > 0 => {
+                place -= 1;
+
+                let cur_idx = self.disabled[place];
+                let cur = &self.disabled_buffer[cur_idx.0..cur_idx.1];
+
+                if cur.ends_with("::") && callsite.target.starts_with(cur) {
+                    return false;
+                }
+            }
+            _ => {}
+        };
+
+        true
+    }
+}
+
+pub static __LOGGER: std::sync::OnceLock<Logger> = std::sync::OnceLock::new();
+
+#[derive(Clone, Copy)]
+pub struct Callsite {
+    pub level: Level,
+    pub target: &'static str,
+}
+
+pub enum Capture<'a> {
+    Str(&'a str),
+    Error(&'a (dyn std::error::Error + 'a)),
+    Display(&'a (dyn std::fmt::Display + 'a)),
+    Debug(&'a (dyn std::fmt::Debug + 'a)),
+    Anyhow(&'a anyhow::Error),
+    #[allow(clippy::type_complexity)]
+    Serde(&'a (dyn Fn(&mut std::io::Cursor<&mut Vec<u8>>) -> Result<(), error::Error> + 'a)),
+}
+
+impl<'a> From<&'a (dyn std::error::Error + 'static)> for Capture<'a> {
+    fn from(value: &'a (dyn std::error::Error + 'static)) -> Self {
+        Capture::Error(value)
+    }
+}
+
+impl<'a> From<&'a str> for Capture<'a> {
+    fn from(value: &'a str) -> Self {
+        Capture::Str(value)
+    }
+}
+
+impl<'a> From<&'a anyhow::Error> for Capture<'a> {
+    fn from(value: &'a anyhow::Error) -> Self {
+        Capture::Anyhow(value)
+    }
+}
+
+pub struct Record<'a> {
+    pub callsite: Callsite,
+    pub args: std::fmt::Arguments<'a>,
+    pub kv: &'a [(&'static str, Capture<'a>)],
+    pub file: &'static str,
+    pub line: u32,
+}
+
+#[cfg(debug_assertions)]
+pub const STATIC_MIN_LEVEL: Level = Level::Trace;
+
+#[cfg(not(debug_assertions))]
+pub const STATIC_MIN_LEVEL: Level = Level::Debug;
+
+pub const fn statically_enabled(callsite: Callsite) -> bool {
+    STATIC_MIN_LEVEL.filter_enables(callsite.level)
+}
+
+#[macro_export]
+macro_rules! __make_capture {
+    (= $value:expr) => {
+        $crate::logger::Capture::Display(&$value)
+    };
+
+    (err = $value:expr) => {
+        $crate::logger::Capture::Error(&$value)
+    };
+
+    (ah = $value:expr) => {
+        $crate::logger::Capture::Anyhow(&$value)
+    };
+
+    (? = $value:expr) => {
+        $crate::logger::Capture::Debug(&$value)
+    };
+
+    (serde = $value:expr) => {
+        $crate::logger::Capture::Serde(&|v| {
+            serde::Serialize::serialize(&$value, $crate::logger::Visitor(v))
+        })
+    };
+}
+
+#[macro_export]
+macro_rules! __do_log {
+    ($callsite:tt, $log:tt, $($key:tt $(:$capture:tt)? $(= $value:expr)?),+; $($arg:tt)+) => ({
+        let res = $log.__try_log($crate::logger::Record {
+            callsite: $callsite,
+            args: format_args!($($arg)+),
+            kv: &[$((stringify!($key), $crate::__make_capture!($($capture)* = $($value)*))),+] as &[_],
+            file: file!(),
+            line: line!(),
+        });
+        #[cfg(debug_assertions)]
+        if let Err(e) = res {
+            eprintln!("Error logging: {e:#}");
+        }
+    });
+
+    ($callsite:tt, $log:tt, $($arg:tt)+) => ({
+        let res = $log.__try_log($crate::logger::Record {
+            callsite: $callsite,
+            args: format_args!($($arg)+),
+            kv: &[],
+            file: file!(),
+            line: line!(),
+        });
+        #[cfg(debug_assertions)]
+        if let Err(e) = res {
+            eprintln!("Error logging: {e:#}");
+        }
+    });
+}
+
+#[macro_export]
+macro_rules! log_static {
+    ($level:expr, $($arg:tt)+) => {{
+        const CALLSITE: $crate::logger::Callsite = $crate::logger::Callsite {
+            level: $level,
+            target: module_path!(),
+        };
+        if const { $crate::logger::statically_enabled(CALLSITE) } {
+            if let Some(cur_logger) = $crate::logger::__LOGGER.get() {
+                if cur_logger.enabled(CALLSITE) {
+                    $crate::__do_log!(CALLSITE, cur_logger, $($arg)+)
+                }
+            }
+        }
+    }}
+}
+
+#[macro_export]
+macro_rules! log_with_level {
+    ($level:expr, $($arg:tt)+) => {{
+        let callsite: $crate::logger::Callsite = $crate::logger::Callsite {
+            level: $level,
+            target: module_path!(),
+        };
+        if let Some(cur_logger) = $crate::logger::__LOGGER.get() {
+            if cur_logger.enabled(callsite) {
+                $crate::__do_log!(callsite, cur_logger, $($arg)+)
+            }
+        }
+    }}
+}
+
+#[macro_export]
+macro_rules! log_enabled {
+    ($level:expr) => {{
+        if let Some(cur_logger) = $crate::logger::__LOGGER.get() {
+            cur_logger.enabled($crate::logger::Callsite {
+                level: $level,
+                target: module_path!(),
+            })
+        } else {
+            false
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! log_error {
+    ($($arg:tt)+) => ($crate::log_static!($crate::logger::Level::Error, $($arg)+))
+}
+
+#[macro_export]
+macro_rules! log_warn {
+    ($($arg:tt)+) => ($crate::log_static!($crate::logger::Level::Warn, $($arg)+))
+}
+
+#[macro_export]
+macro_rules! log_info {
+    ($($arg:tt)+) => ($crate::log_static!($crate::logger::Level::Info, $($arg)+))
+}
+
+#[macro_export]
+macro_rules! log_debug {
+    ($($arg:tt)+) => ($crate::log_static!($crate::logger::Level::Debug, $($arg)+))
+}
+
+#[macro_export]
+macro_rules! log_trace {
+    ($($arg:tt)+) => ($crate::log_static!($crate::logger::Level::Trace, $($arg)+))
+}
+
 thread_local! {
-    static LOG_BUFFER: std::cell::RefCell<Vec<u8>> = std::cell::RefCell::new(Vec::new());
+    static LOG_BUFFER: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 fn write_str_part_escaping(
@@ -78,7 +339,7 @@ fn write_bytes_inner(buf: &mut std::io::Cursor<&mut Vec<u8>>, s: &[u8]) -> std::
         if let Some(prefix) = get_utf8_char_prefix(&s[i..]) {
             let ch = prefix.chars().next().unwrap();
             if ch.is_control() {
-                buf.write_fmt(format_args!("\\x{:02x}", s[i]))?;
+                buf.write_fmt(format_args!("\\u{:04x}", s[i]))?;
 
                 i += 1;
             } else {
@@ -87,7 +348,7 @@ fn write_bytes_inner(buf: &mut std::io::Cursor<&mut Vec<u8>>, s: &[u8]) -> std::
 
             i += prefix.len();
         } else {
-            buf.write_fmt(format_args!("\\x{:02x}", s[i]))?;
+            buf.write_fmt(format_args!("\\u{:04x}", s[i]))?;
 
             i += 1;
         }
@@ -108,6 +369,17 @@ fn write_bytes(buf: &mut std::io::Cursor<&mut Vec<u8>>, s: &[u8]) -> std::io::Re
     }
 
     buf.write_all(b")\"")?;
+
+    Ok(())
+}
+
+fn write_quoted_str_escaping(
+    buf: &mut std::io::Cursor<&mut Vec<u8>>,
+    s: &str,
+) -> std::io::Result<()> {
+    buf.write_all(b"\"")?;
+    write_str_escaping(buf, s)?;
+    buf.write_all(b"\"")?;
 
     Ok(())
 }
@@ -141,30 +413,82 @@ fn write_k_v_str_fast(
     Ok(())
 }
 
-struct Visitor<'a, 'w>(&'a mut std::io::Cursor<&'w mut Vec<u8>>);
+pub struct Visitor<'a, 'w>(pub &'a mut std::io::Cursor<&'w mut Vec<u8>>);
 
-struct SerializeVec<'a, 'w> {
+pub struct SerializeVec<'a, 'w> {
     cur: &'a mut std::io::Cursor<&'w mut Vec<u8>>,
     put_comma: bool,
     close_curly: bool,
 }
 
-struct SerializeMap<'a, 'w> {
+pub struct SerializeMap<'a, 'w> {
     cur: &'a mut std::io::Cursor<&'w mut Vec<u8>>,
     put_comma: bool,
     close_curly: bool,
 }
 
-impl<'a, 'w> Visitor<'a, 'w> {
+impl Visitor<'_, '_> {
     fn serialize_with_special<T>(&mut self, value: &T) -> Result<(), error::Error>
     where
         T: ?Sized + Serialize,
     {
-        value.serialize(Visitor(self.0))
+        let full_name = std::any::type_name_of_val(value);
+
+        match full_name {
+            "genvm_common::calldata::types::Value" => {
+                let casted = unsafe {
+                    (std::ptr::from_ref(value) as *const calldata::Value)
+                        .as_ref()
+                        .unwrap()
+                };
+                match casted {
+                    calldata::Value::Number(num) => {
+                        self.serialize_with_special(num)?;
+                    }
+                    calldata::Value::Address(addr) => {
+                        self.serialize_with_special(addr)?;
+                    }
+                    _ => value.serialize(Visitor(self.0))?,
+                }
+                Ok(())
+            }
+            "genvm_common::calldata::types::Address" => {
+                let casted = unsafe {
+                    (std::ptr::from_ref(value) as *const calldata::Address)
+                        .as_ref()
+                        .unwrap()
+                };
+                self.0
+                    .write_fmt(format_args!("\"$Address({})\"", hex::encode(casted.raw())))?;
+
+                Ok(())
+            }
+            "primitive_types::U256" => {
+                let casted = unsafe {
+                    (std::ptr::from_ref(value) as *const primitive_types::U256)
+                        .as_ref()
+                        .unwrap()
+                };
+                self.0.write_fmt(format_args!("{}", casted))?;
+
+                Ok(())
+            }
+            "num_bigint::bigint::BigInt" => {
+                let casted = unsafe {
+                    (std::ptr::from_ref(value) as *const num_bigint::BigInt)
+                        .as_ref()
+                        .unwrap()
+                };
+                self.0.write_fmt(format_args!("{}", casted))?;
+
+                Ok(())
+            }
+            _ => value.serialize(Visitor(self.0)),
+        }
     }
 }
 
-impl<'a, 'w> serde::ser::SerializeSeq for SerializeVec<'a, 'w> {
+impl serde::ser::SerializeSeq for SerializeVec<'_, '_> {
     type Ok = ();
 
     type Error = error::Error;
@@ -198,7 +522,7 @@ impl<'a, 'w> serde::ser::SerializeSeq for SerializeVec<'a, 'w> {
     }
 }
 
-impl<'a, 'w> serde::ser::SerializeTupleStruct for SerializeVec<'a, 'w> {
+impl serde::ser::SerializeTupleStruct for SerializeVec<'_, '_> {
     type Ok = ();
     type Error = error::Error;
 
@@ -214,7 +538,7 @@ impl<'a, 'w> serde::ser::SerializeTupleStruct for SerializeVec<'a, 'w> {
     }
 }
 
-impl<'a, 'w> serde::ser::SerializeTupleVariant for SerializeVec<'a, 'w> {
+impl serde::ser::SerializeTupleVariant for SerializeVec<'_, '_> {
     type Ok = ();
     type Error = error::Error;
 
@@ -230,7 +554,7 @@ impl<'a, 'w> serde::ser::SerializeTupleVariant for SerializeVec<'a, 'w> {
     }
 }
 
-impl<'a, 'w> serde::ser::SerializeMap for SerializeMap<'a, 'w> {
+impl serde::ser::SerializeMap for SerializeMap<'_, '_> {
     type Ok = ();
     type Error = error::Error;
 
@@ -249,9 +573,7 @@ impl<'a, 'w> serde::ser::SerializeMap for SerializeMap<'a, 'w> {
         if key.starts_with("\"") && key.ends_with("\"") {
             self.cur.write_all(key.as_bytes())?;
         } else {
-            self.cur.write_all(b"\"")?;
-            write_str_part_escaping(self.cur, &key[1..key.len() - 1])?;
-            self.cur.write_all(b"\"")?;
+            write_quoted_str_escaping(self.cur, key.as_str())?;
         }
 
         self.cur.write_all(b":")?;
@@ -278,7 +600,7 @@ impl<'a, 'w> serde::ser::SerializeMap for SerializeMap<'a, 'w> {
     }
 }
 
-impl<'a, 'w> serde::ser::SerializeTuple for SerializeVec<'a, 'w> {
+impl serde::ser::SerializeTuple for SerializeVec<'_, '_> {
     type Ok = ();
 
     type Error = error::Error;
@@ -295,7 +617,7 @@ impl<'a, 'w> serde::ser::SerializeTuple for SerializeVec<'a, 'w> {
     }
 }
 
-impl<'a, 'w> serde::ser::SerializeStruct for SerializeMap<'a, 'w> {
+impl serde::ser::SerializeStruct for SerializeMap<'_, '_> {
     type Ok = ();
 
     type Error = error::Error;
@@ -307,11 +629,11 @@ impl<'a, 'w> serde::ser::SerializeStruct for SerializeMap<'a, 'w> {
         if self.put_comma {
             self.cur.write_all(b",")?;
         } else {
+            self.cur.write_all(b"{")?;
             self.put_comma = true;
         }
-        self.cur.write_all(b"\"")?;
-        write_str_part_escaping(self.cur, key)?;
-        self.cur.write_all(b"\":")?;
+        write_quoted_str_escaping(self.cur, key)?;
+        self.cur.write_all(b":")?;
         Visitor(self.cur).serialize_with_special(value)?;
 
         Ok(())
@@ -326,7 +648,7 @@ impl<'a, 'w> serde::ser::SerializeStruct for SerializeMap<'a, 'w> {
     }
 }
 
-impl<'a, 'w> serde::ser::SerializeStructVariant for SerializeMap<'a, 'w> {
+impl serde::ser::SerializeStructVariant for SerializeMap<'_, '_> {
     type Ok = ();
     type Error = Error;
 
@@ -426,16 +748,14 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
         self.serialize_str(v.encode_utf8(&mut buf))
     }
 
-    fn serialize_str(mut self, v: &str) -> Result<Self::Ok, Self::Error> {
-        self.0.write_all(b"\"")?;
-        write_str_escaping(&mut self.0, v)?;
-        self.0.write_all(b"\"")?;
+    fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
+        write_quoted_str_escaping(self.0, v)?;
 
         Ok(())
     }
 
-    fn serialize_bytes(mut self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        write_bytes(&mut self.0, v)?;
+    fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
+        write_bytes(self.0, v)?;
 
         Ok(())
     }
@@ -457,10 +777,8 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
         Ok(())
     }
 
-    fn serialize_unit_struct(mut self, name: &'static str) -> Result<Self::Ok, Self::Error> {
-        self.0.write_all(b"\"")?;
-        write_str_escaping(&mut self.0, name)?;
-        self.0.write_all(b"\"")?;
+    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
+        write_quoted_str_escaping(self.0, name)?;
 
         Ok(())
     }
@@ -475,7 +793,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
     }
 
     fn serialize_newtype_struct<T>(
-        mut self,
+        self,
         name: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
@@ -483,7 +801,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
         T: ?Sized + serde::Serialize,
     {
         self.0.write_all(b"{\"")?;
-        write_str_part_escaping(&mut self.0, name)?;
+        write_str_part_escaping(self.0, name)?;
         self.0.write_all(b"\":")?;
         Visitor(self.0).serialize_with_special(value)?;
         self.0.write_all(b"}")?;
@@ -598,148 +916,105 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
     }
 }
 
-impl<'a, 'kv, 'w> log::kv::VisitValue<'kv> for Visitor<'a, 'w> {
-    fn visit_any(&mut self, value: log::kv::Value) -> Result<(), log::kv::Error> {
-        Visitor(&mut self.0)
-            .serialize_with_special(&value)
-            .map_err(log::kv::Error::boxed)
-    }
-
-    fn visit_null(&mut self) -> Result<(), log::kv::Error> {
-        self.0.write_all(b"null")?;
-        Ok(())
-    }
-
-    fn visit_bool(&mut self, v: bool) -> Result<(), log::kv::Error> {
-        if v {
-            self.0.write_all(b"true")?;
-        } else {
-            self.0.write_all(b"false")?;
+impl<'a> Visitor<'a, '_> {
+    fn dump_error(&mut self, err: &(dyn std::error::Error + 'a)) -> Result<(), error::Error> {
+        self.0.write_all(b"{")?;
+        write_k_v_str_fast(self.0, "message", &format!("{err:#}"))?;
+        if let Some(source) = err.source() {
+            self.0.write_all(b",\"source\":")?;
+            self.dump_error(source)?;
         }
+        self.0.write_all(b"}")?;
 
         Ok(())
     }
 
-    fn visit_u64(&mut self, value: u64) -> Result<(), log::kv::Error> {
-        self.0.write_all(value.to_string().as_bytes())?;
-        Ok(())
-    }
+    fn dump_anyhow(&mut self, err: &anyhow::Error) -> Result<(), error::Error> {
+        self.0.write_all(b"{\"causes\":[")?;
 
-    fn visit_f64(&mut self, value: f64) -> Result<(), log::kv::Error> {
-        if value.is_nan() {
-            self.0.write_all(b"\"$nan\"")?;
-        } else if value.is_infinite() {
-            if value.is_sign_positive() {
-                self.0.write_all(b"\"$+inf\"")?;
+        let mut first = true;
+
+        for c in err.chain() {
+            if !first {
+                self.0.write_all(b",")?;
             } else {
-                self.0.write_all(b"\"$-inf\"")?;
+                first = false;
             }
-        } else {
-            self.0.write_all(value.to_string().as_bytes())?;
+
+            write_quoted_str_escaping(self.0, &format!("{c:#}"))?;
+        }
+        self.0.write_all(b"]")?;
+
+        if let std::backtrace::BacktraceStatus::Captured = err.backtrace().status() {
+            let trace_str = err.backtrace().to_string();
+
+            self.0.write_all(b",\"backtrace\":[")?;
+
+            let mut first = true;
+            for line in trace_str.lines() {
+                if !first {
+                    self.0.write_all(b",")?;
+                } else {
+                    first = false;
+                }
+
+                write_quoted_str_escaping(self.0, line)?;
+            }
+
+            self.0.write_all(b"]")?;
         }
 
-        Ok(())
-    }
-
-    fn visit_i64(&mut self, value: i64) -> Result<(), log::kv::Error> {
-        self.0.write_all(value.to_string().as_bytes())?;
-        Ok(())
-    }
-
-    fn visit_str(&mut self, value: &str) -> Result<(), log::kv::Error> {
-        self.0.write_all(b"\"")?;
-        write_str_escaping(&mut self.0, value)?;
-        self.0.write_all(b"\"")?;
-        Ok(())
-    }
-
-    fn visit_error(
-        &mut self,
-        err: &(dyn std::error::Error + 'static),
-    ) -> Result<(), log::kv::Error> {
-        self.0.write_all(b"{")?;
-        write_k_v_str_fast(self.0, "message", &format!("{err:#}"))?;
-        if let Some(source) = err.source() {
-            self.0.write_all(b",\"source\":")?;
-            self.visit_error(source)?;
-        }
         self.0.write_all(b"}")?;
-
-        Ok(())
-    }
-
-    fn visit_borrowed_error(
-        &mut self,
-        err: &'kv (dyn std::error::Error + 'static),
-    ) -> Result<(), log::kv::Error> {
-        self.0.write_all(b"{")?;
-        write_k_v_str_fast(self.0, "message", &format!("{err:#}"))?;
-        if let Some(source) = err.source() {
-            self.0.write_all(b",\"source\":")?;
-            self.visit_error(source)?;
-        }
-        self.0.write_all(b"}")?;
-
-        Ok(())
-    }
-}
-
-impl<'a, 'w> log::kv::VisitSource<'w> for Visitor<'a, 'w> {
-    #[inline]
-    fn visit_pair(
-        &mut self,
-        key: log::kv::Key<'w>,
-        value: log::kv::Value<'w>,
-    ) -> Result<(), log::kv::Error> {
-        self.0.write_all(b",\"")?;
-        write_str_escaping(&mut self.0, key.as_str())?;
-        self.0.write_all(b"\":")?;
-
-        value.visit(self)?;
 
         Ok(())
     }
 }
 
 impl Logger {
-    fn try_log(&self, record: &log::Record) -> std::result::Result<(), Error> {
+    pub fn __try_log(&self, record: Record<'_>) -> std::result::Result<(), Error> {
         LOG_BUFFER.with_borrow_mut(|buf| {
             buf.clear();
             let mut writer = std::io::Cursor::new(buf);
             writer.write_all(b"{")?;
 
-            writer.write_all(format!("\"level\":\"{}\",", record.level()).as_bytes())?;
-            write_k_v_str_fast(&mut writer, "target", record.target())?;
+            writer.write_all(format!("\"level\":\"{}\",", record.callsite.level).as_bytes())?;
+            write_k_v_str_fast(&mut writer, "target", record.callsite.target)?;
 
             write_comma(&mut writer)?;
 
-            if let Some(msg) = record.args().as_str() {
+            if let Some(msg) = record.args.as_str() {
                 write_k_v_str_fast(&mut writer, "message", msg)?;
             } else {
-                write_k_v_str_fast(&mut writer, "message", &record.args().to_string())?;
+                write_k_v_str_fast(&mut writer, "message", &record.args.to_string())?;
             }
 
             let mut visitor = Visitor(&mut writer);
-            record.key_values().visit(&mut visitor)?;
+            for (k, v) in record.kv {
+                write_comma(visitor.0)?;
+                write_quoted_str_escaping(visitor.0, k)?;
+                visitor.0.write_all(b":")?;
 
-            if let Some(file) = record.file() {
-                write_comma(&mut writer)?;
-
-                if let Some(line) = record.line() {
-                    writer.write_all(b"\"file\":\"")?;
-                    write_str_escaping(&mut writer, file)?;
-                    writer.write_all(b":")?;
-                    writer.write_all(line.to_string().as_bytes())?;
-                    writer.write_all(b"\"")?;
-                } else {
-                    write_k_v_str_fast(&mut writer, "file", file)?;
+                match v {
+                    Capture::Error(e) => visitor.dump_error(*e)?,
+                    Capture::Anyhow(e) => visitor.dump_anyhow(e)?,
+                    Capture::Str(s) => write_quoted_str_escaping(visitor.0, s)?,
+                    Capture::Display(d) => write_quoted_str_escaping(visitor.0, &d.to_string())?,
+                    Capture::Debug(d) => {
+                        write_quoted_str_escaping(visitor.0, &format!("{d:?}"))?;
+                    }
+                    Capture::Serde(serde_fn) => {
+                        serde_fn(visitor.0)?;
+                    }
                 }
             }
 
-            if let Some(module) = record.module_path() {
-                write_comma(&mut writer)?;
-                write_k_v_str_fast(&mut writer, "module", module)?;
-            }
+            write_comma(&mut writer)?;
+
+            writer.write_all(b"\"file\":\"")?;
+            write_str_escaping(&mut writer, record.file)?;
+            writer.write_all(b":")?;
+            writer.write_all(record.line.to_string().as_bytes())?;
+            writer.write_all(b"\"")?;
 
             write_comma(&mut writer)?;
             write_k_v_str_fast(
@@ -759,7 +1034,7 @@ impl Logger {
 
             let mut writer = self.default_writer.lock().unwrap();
 
-            writer.write_all(&buf)?;
+            writer.write_all(buf)?;
             writer.write_all(b"\n")?;
             writer.flush()?;
             buf.clear();
@@ -769,49 +1044,7 @@ impl Logger {
     }
 }
 
-impl log::Log for Logger {
-    #[inline(always)]
-    fn enabled(&self, metadata: &log::Metadata) -> bool {
-        if self.filter < metadata.level() {
-            return false;
-        }
-
-        match self.disabled.binary_search_by(|(off, to)| {
-            let cur = &self.disabled_buffer[*off..*to];
-
-            cur.cmp(metadata.target())
-        }) {
-            Ok(_) => return false, // exact match is skipped
-            Err(mut place) if place > 0 => {
-                place -= 1;
-
-                let cur_idx = self.disabled[place];
-                let cur = &self.disabled_buffer[cur_idx.0..cur_idx.1];
-
-                if cur.ends_with("::") && metadata.target().starts_with(cur) {
-                    return false;
-                }
-            }
-            _ => {}
-        };
-
-        true
-    }
-
-    fn log(&self, record: &log::Record) {
-        if !self.enabled(record.metadata()) {
-            return;
-        }
-
-        if let Err(e) = self.try_log(record) {
-            eprintln!("logging failed with error: {e:#}");
-        }
-    }
-
-    fn flush(&self) {}
-}
-
-pub fn initialize<W>(filter: log::LevelFilter, disabled: &str, writer: W)
+pub fn initialize<W>(filter: Level, disabled: &str, writer: W)
 where
     W: std::io::Write + Send + Sync + 'static,
 {
@@ -821,10 +1054,10 @@ where
     let mut disabled = Vec::with_capacity(disabled_src.len());
 
     for x in disabled_src {
-        if x.ends_with("*") {
-            disabled.push(x[..x.len() - 1].to_owned());
+        if let Some(stripped) = x.strip_suffix("*") {
+            disabled.push(stripped.to_owned());
             if !x.ends_with("::*") {
-                let mut my = x[..x.len() - 1].to_owned();
+                let mut my = stripped.to_owned();
                 my.push_str("::");
                 disabled.push(my);
             }
@@ -854,41 +1087,65 @@ where
         disabled_buffer: all_buffer,
     };
 
-    log::set_boxed_logger(Box::new(logger)).expect("Failed to set logger");
-    log::set_max_level(filter);
-
-    std::panic::set_hook(Box::new(log_panic));
+    if let Err(logger) = __LOGGER.set(logger) {
+        if let Ok(mut lock) = logger.default_writer.lock() {
+            let _ = lock.write_all(r#"{"error":"Logger already initialized"}"#.as_bytes());
+        }
+    } else {
+        let old_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            log_panic(info);
+            old_hook(info);
+        }));
+    }
 }
 
 fn log_panic(info: &std::panic::PanicHookInfo<'_>) {
     use std::backtrace::Backtrace;
     use std::thread;
 
-    let mut record = log::Record::builder();
     let thread = thread::current();
     let thread_name = thread.name().unwrap_or("unnamed");
     let backtrace = Backtrace::force_capture();
 
     let key_values = [
-        ("backtrace", log::kv::Value::from_debug(&backtrace)),
-        ("thread_name", log::kv::Value::from(thread_name)),
+        ("backtrace", Capture::Debug(&backtrace)),
+        ("thread_name", Capture::Str(thread_name)),
     ];
     let key_values = key_values.as_slice();
 
-    let _ = record
-        .level(log::Level::Error)
-        .target("panic")
-        .key_values(&key_values);
+    if let Some(logger) = __LOGGER.get() {
+        let _ = logger.__try_log(Record {
+            callsite: Callsite {
+                level: Level::Error,
+                target: "panic",
+            },
+            args: format_args!("thread '{thread_name}' panicked {info}"),
+            kv: key_values,
+            file: file!(),
+            line: line!(),
+        });
+    }
+}
 
-    if let Some(location) = info.location() {
-        let _ = record
-            .file(Some(location.file()))
-            .line(Some(location.line()));
-    };
+#[cfg(test)]
+mod tests {
 
-    log::logger().log(
-        &record
-            .args(format_args!("thread '{thread_name}' {info}"))
-            .build(),
-    );
+    #[derive(serde::Serialize)]
+    struct SerializableNoCopy(i32);
+
+    #[test]
+    fn compiles() {
+        log_error!(x = 11; "just string");
+        log_error!(x:? = 11; "just string");
+        log_error!(x:serde = 11; "just string");
+        let _bar = {
+            let ser = SerializableNoCopy(11);
+            log_error!(x:serde = ser; "just string");
+            log_error!(x:serde = ser; "just string");
+            log_error!(x:serde = ser.0; "just string");
+            ser
+        };
+        log_error!(x:serde = serde_json::json!({"foo": "bar"}); "just string");
+    }
 }

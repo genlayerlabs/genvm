@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{Context, Result};
+use genvm_common::*;
 
 use crate::{
     common,
@@ -98,7 +99,7 @@ pub fn entrypoint(args: CliArgs) -> Result<()> {
         .block_on(check_status(&webdriver_host))
         .with_context(|| "initial health check")?;
 
-    log::info!("health is OK");
+    log_info!("health is OK");
 
     runtime.block_on(loop_future)?;
 

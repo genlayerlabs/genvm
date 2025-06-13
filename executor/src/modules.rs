@@ -1,3 +1,4 @@
+use genvm_common::*;
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -37,7 +38,7 @@ async fn read_handling_pings(stream: &mut WSStream) -> anyhow::Result<Bytes> {
             Message::Text(text) => return Ok(text.into()),
             Message::Binary(text) => return Ok(text),
             x => {
-                log::info!(payload:? = x; "received unexpected");
+                log_info!(payload:? = x; "received unexpected");
                 let text = x.into_data();
                 return Ok(text);
             }
@@ -69,7 +70,7 @@ impl Module {
                 return;
             }
             if let Err(e) = stream.close(None).await {
-                log::error!(error:err = e; "closing stream");
+                log_error!(error:err = e; "closing stream");
             }
         }
     }
@@ -82,7 +83,7 @@ impl Module {
         let mut zelf = self.imp.lock().await;
 
         if zelf.stream.is_none() {
-            log::info!(url = zelf.url, name = self.name; "initializing connection to module");
+            log_info!(url = zelf.url, name = self.name; "initializing connection to module");
 
             let (mut ws_stream, _) = tokio_tungstenite::connect_async(&zelf.url).await?;
 
@@ -108,7 +109,7 @@ impl Module {
 
                 let response = calldata::decode(&response)?;
 
-                log::info!(name = self.name, question:serde = val, response:? = response; "answer from module");
+                log_info!(name = self.name, question:serde = val, response:? = response; "answer from module");
 
                 let res: genvm_modules_interfaces::Result<R> =
                     calldata::from_value(response).with_context(|| "parsing result of module")?;
@@ -117,7 +118,7 @@ impl Module {
                     genvm_modules_interfaces::Result::Ok(v) => Ok(Ok(v)),
                     genvm_modules_interfaces::Result::UserError(value) => Ok(Err(value)),
                     genvm_modules_interfaces::Result::FatalError(value) => {
-                        log::error!(error = value; "module error");
+                        log_error!(error = value; "module error");
                         Err(anyhow::anyhow!("module error: {value}"))
                     }
                 }

@@ -2,6 +2,8 @@ use anyhow::{Context, Result};
 use clap::builder::OsStr;
 use genvm::{caching, config, ustar::SharedBytes};
 
+use genvm_common::*;
+
 #[derive(clap::Args, Debug)]
 pub struct Args {
     #[arg(
@@ -25,7 +27,7 @@ fn compile_single_file_single_mode(
         .precompile_module(wasm_data)
         .with_context(|| "precompiling")?;
 
-    log::info!(target: "precompile", engine = engine_type, runner:? = runner_path, runner_path:? = path_in_runner, duration:? = time_start.elapsed();  "wasm compilation done");
+    log_info!(engine = engine_type, runner:? = runner_path, runner_path:? = path_in_runner, duration:? = time_start.elapsed();  "wasm compilation done");
 
     std::fs::create_dir_all(result_path.parent().unwrap())?;
 
@@ -33,7 +35,7 @@ fn compile_single_file_single_mode(
 
     std::fs::write(result_path, precompiled)?;
 
-    log::info!(target: "precompile", "size" = sz, result:? = result_path, engine = engine_type, runner:? = runner_path, runner_path:? = path_in_runner, duration:? = time_start.elapsed(); "wasm writing done");
+    log_info!("size" = sz, result:? = result_path, engine = engine_type, runner:? = runner_path, runner_path:? = path_in_runner, duration:? = time_start.elapsed(); "wasm writing done");
 
     Ok(())
 }
@@ -105,7 +107,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
     let mut precompile_dir = cache_dir.clone();
     precompile_dir.push(caching::PRECOMPILE_DIR_NAME);
 
-    log::info!(cache_dir:? = cache_dir, precompile_dir:? = precompile_dir; "information");
+    log_info!(cache_dir:? = cache_dir, precompile_dir:? = precompile_dir; "information");
 
     if args.info {
         return Ok(());

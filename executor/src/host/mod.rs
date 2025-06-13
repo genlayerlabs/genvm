@@ -2,6 +2,8 @@ mod host_fns;
 pub mod message;
 mod result_codes;
 
+use genvm_common::*;
+
 use genvm_common::calldata::Address;
 use genvm_common::calldata::ADDRESS_SIZE;
 use message::root_offsets;
@@ -312,7 +314,7 @@ impl Host {
             Err(e) => Err(e),
         };
         write_result(sock, res)?;
-        log::debug!("wrote consumed result to host");
+        log_debug!("wrote consumed result to host");
 
         let mut int_buf = [0; 1];
         sock.read_exact(&mut int_buf)?;

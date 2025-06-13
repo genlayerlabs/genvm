@@ -1,3 +1,4 @@
+use genvm_common::*;
 use std::ptr::NonNull;
 
 use anyhow::Context;
@@ -27,7 +28,7 @@ impl Drop for Mmap {
             match rustix::mm::munmap(ptr, len) {
                 Ok(_) => {}
                 Err(e) => {
-                    log::error!(errno:? = e; "munmap failed")
+                    log_error!(errno:? = e; "munmap failed")
                 }
             }
         }

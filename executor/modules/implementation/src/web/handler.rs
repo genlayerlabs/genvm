@@ -1,6 +1,8 @@
 use super::{config, ctx};
 use crate::{common, scripting};
 
+use genvm_common::*;
+
 use genvm_modules_interfaces::web::{self as web_iface, RenderAnswer};
 use mlua::LuaSerdeExt;
 use std::sync::Arc;
@@ -86,9 +88,9 @@ impl common::MessageHandler<web_iface::Message, web_iface::RenderAnswer> for Han
             .send()
             .await
         {
-            log::error!(error:err = err, id = session, cookie = self.0.ctx.data.hello.cookie; "session closed");
+            log_error!(error:err = err, id = session, cookie = self.0.ctx.data.hello.cookie; "session closed");
         } else {
-            log::debug!(id = session, cookie = self.0.ctx.data.hello.cookie; "session closed");
+            log_debug!(id = session, cookie = self.0.ctx.data.hello.cookie; "session closed");
         }
         Ok(())
     }

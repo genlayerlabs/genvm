@@ -11,6 +11,7 @@ pub mod vm;
 pub mod wasi;
 
 pub use genvm_common::calldata;
+use genvm_common::*;
 
 use errors::ContractError;
 use host::AbsentLeaderResult;
@@ -139,7 +140,7 @@ pub async fn run_with(
 ) -> vm::RunResult {
     let res = run_with_impl(entry_message, supervisor.clone(), permissions).await;
 
-    log::debug!("inspecting final result");
+    log_debug!("inspecting final result");
 
     let mut supervisor = supervisor.lock().await;
 
@@ -160,7 +161,7 @@ pub async fn run_with(
         Err(e) => match e.downcast() {
             Ok(AbsentLeaderResult) => Ok(RunOk::VMError("deterministic_violation".into(), None)),
             Err(e) => {
-                log::error!(error:serde = genvm_common::LogError(&e); "internal error");
+                log_error!(error:ah = &e; "internal error");
                 Err(e)
             }
         },
@@ -169,7 +170,7 @@ pub async fn run_with(
 
     supervisor.log_stats();
 
-    log::debug!("sending final result to host");
+    log_debug!("sending final result to host");
 
     supervisor.host.consume_result(&res)?;
 

@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use genvm_common::*;
+
 use genvm_modules_interfaces::GenericValue;
 use wiggle::GuestError;
 
@@ -255,7 +257,7 @@ impl From<std::num::TryFromIntError> for generated::types::Error {
 
 impl From<serde_json::Error> for generated::types::Error {
     fn from(err: serde_json::Error) -> Self {
-        log::info!(error:err = err; "deserialization failed, returning inval");
+        log_info!(error:err = err; "deserialization failed, returning inval");
 
         generated::types::Errno::Inval.into()
     }
@@ -330,19 +332,19 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let request = match calldata::decode(&request) {
             Err(e) => {
-                log::info!(error:serde = genvm_common::LogError(&e); "calldata parse failed");
+                log_info!(error:ah = &e; "calldata parse failed");
 
                 return Err(generated::types::Errno::Inval.into());
             }
             Ok(v) => v,
         };
 
-        log::trace!(request:serde = request; "gl_call");
+        log_trace!(request:serde = request; "gl_call");
 
         let request: gl_call::Message = match calldata::from_value(request) {
             Ok(v) => v,
             Err(e) => {
-                log::info!(error:err = e; "calldata deserialization failed");
+                log_info!(error:err = e; "calldata deserialization failed");
 
                 return Err(generated::types::Errno::Inval.into());
             }
@@ -981,7 +983,7 @@ impl ContextVFS<'_> {
                     Err(ContractError(format!("validator_disagrees call {}", call_no), None).into())
                 }
                 _ => {
-                    log::warn!(validator_result:? = my_res, leaders_result:? = leaders_res; "validator reported unexpected result");
+                    log_warn!(validator_result:? = my_res, leaders_result:? = leaders_res; "validator reported unexpected result");
                     Err(ContractError(format!("validator_disagrees call {}", call_no), None).into())
                 }
             },

@@ -2,6 +2,7 @@ use genvm_modules_interfaces::llm::{self as llm_iface};
 use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::Context;
+use genvm_common::*;
 use mlua::LuaSerdeExt;
 use serde::Deserialize;
 
@@ -30,7 +31,7 @@ impl CtxPart {
         provider_id: &str,
         format: prompt::ExtendedOutputFormat,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        log::debug!(
+        log_debug!(
             prompt:serde = prompt,
             provider_id = provider_id,
             model = model,
@@ -59,12 +60,12 @@ impl CtxPart {
         };
 
         res.inspect_err(|err| {
-            log::error!(
+            log_error!(
                 prompt:serde = prompt,
                 model = model,
                 mode:? = format,
                 provider_id = provider_id,
-                error:serde = genvm_common::LogError(err),
+                error:ah = err,
                 cookie = self.hello.cookie;
                 "prompt execution error"
             );

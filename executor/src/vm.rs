@@ -20,6 +20,7 @@ use crate::{
     wasi::{self, preview1::I32Exit},
 };
 use anyhow::{Context, Result};
+use genvm_common::*;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug)]
@@ -330,17 +331,17 @@ impl VM {
     #[allow(clippy::manual_try_fold)]
     pub async fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
         if let Ok(lck) = self.store.data().genlayer_ctx.lock() {
-            log::info!(wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "run");
+            log_info!(wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "run");
         }
 
         let func = instance
             .get_typed_func::<(), ()>(&mut self.store, "")
             .or_else(|_| instance.get_typed_func::<(), ()>(&mut self.store, "_start"))
             .with_context(|| "can't find entrypoint")?;
-        log::info!("execution start");
+        log_info!("execution start");
         let time_start = std::time::Instant::now();
         let res = func.call_async(&mut self.store, ()).await;
-        log::info!(duration:? = time_start.elapsed(); "vm execution finished");
+        log_info!(duration:? = time_start.elapsed(); "vm execution finished");
         let res: RunResult = match res {
             Ok(()) => Ok(RunOk::empty_return()),
             Err(e) => {
@@ -377,16 +378,16 @@ impl VM {
         };
         match &res {
             Ok(RunOk::Return(_)) => {
-                log::info!(target: "vm", result = "Return"; "execution result unwrapped")
+                log_info!(result = "Return"; "execution result unwrapped")
             }
             Ok(RunOk::UserError(_)) => {
-                log::info!(target: "vm", result = "Rollback"; "execution result unwrapped")
+                log_info!(result = "Rollback"; "execution result unwrapped")
             }
             Ok(RunOk::VMError(e, cause)) => {
-                log::info!(target: "vm", result = format!("ContractError({e})"), cause:? = cause; "execution result unwrapped")
+                log_info!(result = format!("ContractError({e})"), cause:? = cause; "execution result unwrapped")
             }
             Err(_) => {
-                log::info!(target: "vm", result = "Error"; "execution result unwrapped")
+                log_info!(result = "Error"; "execution result unwrapped")
             }
         };
         res
@@ -540,7 +541,7 @@ impl Supervisor {
         let entry = self.cached_modules.entry(data.wasm_uid);
         match entry {
             std::collections::hash_map::Entry::Occupied(entry) => {
-                log::debug!(target: "cache", cache_method = "rt", path = data.debug_path(); "using cached");
+                log_debug!(cache_method = "rt", path = data.debug_path(); "using cached");
                 self.stats.cache_hits += 1;
                 Ok(entry.get().clone())
             }
@@ -548,7 +549,7 @@ impl Supervisor {
                 let debug_path = data.debug_path();
 
                 let compile_here = || -> Result<PrecompiledModule> {
-                    log::info!(status = "start", path = debug_path, runner = data.runner_id.as_str(); "cache compiling");
+                    log_info!(status = "start", path = debug_path, runner = data.runner_id.as_str(); "cache compiling");
 
                     caching::validate_wasm(&self.engines, data.contents.as_ref())?;
 
@@ -566,7 +567,7 @@ impl Supervisor {
                             Some(std::path::Path::new(&debug_path)),
                         )?
                         .compile_module()?;
-                    log::info!(status = "done", duration:? = start_time.elapsed(), path = debug_path, runner = data.runner_id.as_str(); "cache compiling");
+                    log_info!(status = "done", duration:? = start_time.elapsed(), path = debug_path, runner = data.runner_id.as_str(); "cache compiling");
                     Ok(PrecompiledModule {
                         det: module_det,
                         non_det: module_non_det,
@@ -604,13 +605,13 @@ impl Supervisor {
                         &self.engines.non_det,
                     )?;
 
-                    log::debug!(target: "cache", cache_method = "precompiled", runner = data.runner_id.as_str(); "using cached");
+                    log_debug!(cache_method = "precompiled", runner = data.runner_id.as_str(); "using cached");
 
                     Ok(PrecompiledModule { det, non_det })
                 };
 
                 let ret = get_from_precompiled().inspect(|_| { self.stats.precompile_hits += 1; }).or_else(|e| {
-                    log::trace!(target: "cache", error:serde = genvm_common::LogError(&e), runner = data.runner_id.as_str(); "could not use precompiled");
+                    log_trace!(error:ah = &e, runner = data.runner_id.as_str(); "could not use precompiled");
                     self.stats.compiled_modules += 1;
                     compile_here()
                 })?;
@@ -799,7 +800,7 @@ impl Supervisor {
                 match instance.get_typed_func::<(), ()>(&mut vm.store, "_initialize") {
                     Err(_) => {}
                     Ok(func) => {
-                        log::info!(target: "rt", runner = self.runner_cache.get_unsafe(current).runner_id().as_str(), path = path; "calling _initialize");
+                        log_info!(runner = self.runner_cache.get_unsafe(current).runner_id().as_str(), path = path; "calling _initialize");
                         func.call_async(&mut vm.store, ()).await?;
                     }
                 }
@@ -981,7 +982,7 @@ impl Supervisor {
     }
 
     pub fn log_stats(&self) {
-        log::debug!(
+        log_debug!(
             all_wasm_modules:serde = self.cached_modules.keys().map(|x| x.as_str()).collect_vec(),
             stats:serde = self.stats,
             det_max_memory = u32::MAX - self.shared_data.limiter_det.get_least_remaining_memory(),

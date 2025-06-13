@@ -8,16 +8,14 @@ pub mod cancellation;
 pub mod logger;
 pub mod templater;
 
-pub use logger::LogError;
-
 #[cfg(not(debug_assertions))]
 fn default_log_level() -> log::LevelFilter {
-    log::LevelFilter::Info
+    logger::Level::Info
 }
 
 #[cfg(debug_assertions)]
-fn default_log_level() -> log::LevelFilter {
-    log::LevelFilter::Trace
+fn default_log_level() -> logger::Level {
+    logger::Level::Trace
 }
 
 #[derive(Serialize, Deserialize)]
@@ -26,7 +24,7 @@ pub struct BaseConfig {
     pub blocking_threads: usize,
 
     #[serde(default = "default_log_level")]
-    pub log_level: log::LevelFilter,
+    pub log_level: logger::Level,
     pub log_disable: String,
 }
 
@@ -44,11 +42,11 @@ impl BaseConfig {
         //    .with_target_writer(&self.log_disable, Box::new(NullWiriter))
         //    .init();
 
-        if log::STATIC_MAX_LEVEL < log::max_level() {
-            log::warn!(requested:? = log::max_level(), allowed:? = log::STATIC_MAX_LEVEL; "requested level is higher than allowed");
+        if logger::STATIC_MIN_LEVEL > self.log_level {
+            log_warn!(requested:? = self.log_level, allowed:? = logger::STATIC_MIN_LEVEL; "requested level is higher than allowed");
         }
 
-        log::info!(version = VERSION; "logging initialized");
+        log_info!(version = VERSION; "logging initialized");
 
         Ok(())
     }

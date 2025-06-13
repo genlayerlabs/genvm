@@ -13,12 +13,6 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl From<log::kv::Error> for Error {
-    fn from(e: log::kv::Error) -> Self {
-        Error(anyhow::Error::new(e))
-    }
-}
-
 impl std::error::Error for Error {}
 
 impl serde::de::Error for Error {
