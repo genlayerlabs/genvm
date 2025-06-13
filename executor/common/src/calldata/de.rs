@@ -307,6 +307,7 @@ where
     T: serde::de::DeserializeSeed<'de>,
 {
     let full_name = std::any::type_name::<T::Value>();
+
     match full_name {
         "num_bigint::bigint::BigInt" => match value {
             Value::Number(num) => {
@@ -338,6 +339,11 @@ where
             }
             _ => Err(serde::de::Error::custom("invalid type")),
         },
+        "genvm_common::calldata::types::Value" => {
+            let ptr = std::ptr::from_ref(&value) as *const T::Value;
+            std::mem::forget(value);
+            Ok(unsafe { ptr.read() })
+        }
         "genvm_common::calldata::types::Address" => match value {
             Value::Address(addr) => {
                 let ptr = std::ptr::from_ref(&addr) as *const T::Value;
