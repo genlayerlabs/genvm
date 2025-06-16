@@ -1,6 +1,11 @@
 local lib = require("lib-genvm")
 local llm = require("lib-llm")
 
+-- There is no guarantee that different genvm executions will be executed in the same lua VM.
+-- Moreover, multiple genvms can be executed in parallel, so avoid using global state.
+-- Instead, each genvm creates a session, which has a single `ctx` object,
+-- which is preserved across multiple calls
+
 local function just_in_backend(ctx, mapped_prompt)
 	---@cast mapped_prompt MappedPrompt
 
@@ -56,6 +61,14 @@ local function just_in_backend(ctx, mapped_prompt)
 	end
 
 	lib.log{level = "error", message = "no provider could handle prompt", search_in = search_in}
+	lib.rs.user_error({
+		causes = {"NO_PROVIDER_FOR_PROMPT"},
+		fatal = true,
+		ctx = {
+			prompt = mapped_prompt.prompt,
+			search_in = search_in,
+		}
+	})
 end
 
 function ExecPrompt(ctx, args)
