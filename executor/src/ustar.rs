@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, io::Read, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(Clone)]
 pub struct SharedBytes {
@@ -198,15 +198,30 @@ impl Archive {
 
     pub fn from_zip<R: std::io::Read + std::io::Seek>(
         zip: &mut zip::ZipArchive<R>,
-        total_size: u32,
+        bytes: SharedBytes,
     ) -> anyhow::Result<Self> {
         let mut res = BTreeMap::new();
 
         for i in 0..zip.len() {
-            let mut file = zip.by_index(i)?;
+            let file = zip.by_index(i)?;
 
-            let mut buf = Vec::new();
-            file.read_to_end(&mut buf)?;
+            if file.compression() != zip::CompressionMethod::Stored {
+                anyhow::bail!("unsupported compression method: {:?}", file.compression());
+            }
+
+            let start_index = file.data_start();
+            let end_index = file.data_start() + file.compressed_size();
+            if end_index > bytes.len() as u64 || start_index > bytes.len() as u64 {
+                anyhow::bail!(
+                    "file {} data_start={} compressed_size={} end_index={} bytes_len={}",
+                    file.name(),
+                    file.data_start(),
+                    file.compressed_size(),
+                    end_index,
+                    bytes.len()
+                );
+            }
+            let buf = bytes.slice(start_index as usize, end_index as usize);
 
             map_try_insert(
                 &mut res,
@@ -217,7 +232,7 @@ impl Archive {
 
         Ok(Self {
             data: res,
-            total_size,
+            total_size: bytes.len() as u32,
         })
     }
 

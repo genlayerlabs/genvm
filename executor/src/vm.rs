@@ -902,7 +902,7 @@ impl Supervisor {
 
     fn code_to_archive(code: SharedBytes) -> Result<Archive> {
         if let Ok(mut as_zip) = zip::ZipArchive::new(std::io::Cursor::new(code.clone())) {
-            return Archive::from_zip(&mut as_zip, code.len() as u32);
+            return Archive::from_zip(&mut as_zip, code);
         }
 
         if wasmparser::Parser::is_core_wasm(code.as_ref()) {
