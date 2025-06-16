@@ -12,11 +12,6 @@ pub struct SaveTok {
     remaining_memory: u32,
 }
 
-pub mod consts {
-    pub const TABLE_ENTRY_SIZE: u32 = 64;
-    pub const FILE_MAPPING_SIZE: u32 = 256;
-}
-
 impl Limiter {
     pub fn get_least_remaining_memory(&self) -> u32 {
         self.least_remaining_memory

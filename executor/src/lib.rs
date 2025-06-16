@@ -10,6 +10,8 @@ pub mod ustar;
 pub mod vm;
 pub mod wasi;
 
+pub mod public_abi;
+
 pub use genvm_common::calldata;
 use genvm_common::*;
 
@@ -18,7 +20,7 @@ use host::AbsentLeaderResult;
 pub use host::{Host, MessageData, SlotID};
 
 use anyhow::{Context, Result};
-use wasi::genlayer_sdk::{EntryKind, TransformedMessage};
+use wasi::genlayer_sdk::TransformedMessage;
 
 use std::{str::FromStr, sync::Arc};
 use vm::{Modules, RunOk};
@@ -101,7 +103,7 @@ pub async fn run_with_impl(
                 can_send_messages: permissions.contains("s"),
                 can_call_others: permissions.contains("c"),
                 can_spawn_nondet: permissions.contains("n"),
-                state_mode: crate::host::StorageType::Default,
+                state_mode: crate::public_abi::StorageType::Default,
             },
             message_data: TransformedMessage {
                 contract_address: calldata::Address::from(entry_message.contract_address.raw()),
@@ -114,11 +116,12 @@ pub async fn run_with_impl(
                 is_init: entry_message.is_init,
                 datetime: entry_message.datetime,
 
-                entry_kind: EntryKind::Main,
+                entry_kind: public_abi::EntryKind::Main,
                 entry_data: entrypoint,
                 entry_stage_data: calldata::Value::Null,
             },
             supervisor: supervisor_clone,
+            version: genvm_common::version::Version::ZERO,
         };
 
         let mut vm = supervisor.spawn(essential_data).await?;

@@ -19,8 +19,7 @@ import genlayer.gl._internal.gl_call as gl_call
 
 
 def emit_raw_event(
-	name: str,
-	indexed_fields_names: collections.abc.Sequence[str],
+	topics: list[bytes],
 	blob: calldata.Encodable,
 ) -> None:
 	"""
@@ -29,8 +28,7 @@ def emit_raw_event(
 	gl_call.gl_call_generic(
 		{
 			'EmitEvent': {
-				'name': name,
-				'indexed_fields': indexed_fields_names,
+				'topics': topics,
 				'blob': blob,
 			}
 		},

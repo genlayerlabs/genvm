@@ -7,6 +7,7 @@ pub mod calldata;
 pub mod cancellation;
 pub mod logger;
 pub mod templater;
+pub mod version;
 
 #[cfg(not(debug_assertions))]
 fn default_log_level() -> log::LevelFilter {

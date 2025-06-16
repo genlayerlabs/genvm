@@ -1,0 +1,63 @@
+[
+  {
+    "type": "enum",
+    "name": "result_code",
+    "repr": "u8",
+    "values": {
+      "return": 0,
+      "user_error": 1,
+      "vm_error": 2,
+      "internal_error": 3
+    }
+  },
+  {
+    "type": "enum",
+    "name": "storage_type",
+    "repr": "u8",
+    "values": {
+      "default": 0,
+      "latest_final": 1,
+      "latest_non_final": 2
+    }
+  },
+  {
+    "type": "enum",
+    "name": "entry_kind",
+    "repr": "u8",
+    "values": {
+      "main": 0,
+      "sandbox": 1,
+      "consensus_stage": 2
+    }
+  },
+  {
+    "type": "enum",
+    "name": "memory_limiter_consts",
+    "repr": "u32",
+    "values": {
+      "table_entry": 64,
+      "file_mapping": 256
+    }
+  },
+  {
+    "type": "enum",
+    "name": "special_method",
+    "repr": "str",
+    "values": {
+      "get_schema": "#get-schema",
+      "errored_message": "#error"
+    }
+  },
+  {
+    "type": "const",
+    "name": "event_max_topics",
+    "repr": "u32",
+    "value": 4
+  },
+  {
+    "type": "const",
+    "name": "absent_version",
+    "repr": "str",
+    "value": "v0.1.0"
+  }
+]

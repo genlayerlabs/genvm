@@ -221,12 +221,17 @@ impl Archive {
         })
     }
 
-    pub fn from_file_and_runner(file: SharedBytes, runner_comment: SharedBytes) -> Self {
+    pub fn from_file_and_runner(
+        file: SharedBytes,
+        version: SharedBytes,
+        runner_comment: SharedBytes,
+    ) -> Self {
         let total_size = file.len() as u32;
 
         Self {
             data: BTreeMap::from_iter([
                 ("runner.json".into(), runner_comment),
+                ("version".into(), version),
                 ("file".into(), file),
             ]),
             total_size,

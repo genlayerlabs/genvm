@@ -7,6 +7,7 @@ use genvm_modules_interfaces::GenericValue;
 use wiggle::GuestError;
 
 use crate::host::SlotID;
+use crate::public_abi;
 use crate::{
     calldata,
     errors::*,
@@ -16,9 +17,7 @@ use crate::{
 
 use super::{base, common::*, gl_call};
 
-pub use crate::host::EntryKind;
-
-fn entry_kind_as_int<S>(data: &EntryKind, d: S) -> Result<S::Ok, S::Error>
+fn entry_kind_as_int<S>(data: &public_abi::EntryKind, d: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
@@ -38,7 +37,7 @@ pub struct TransformedMessage {
     pub datetime: chrono::DateTime<chrono::Utc>,
 
     #[serde(serialize_with = "entry_kind_as_int")]
-    pub entry_kind: EntryKind,
+    pub entry_kind: public_abi::EntryKind,
     #[serde(with = "serde_bytes")]
     pub entry_data: Vec<u8>,
 
@@ -52,7 +51,7 @@ fn default_entry_stage_data() -> calldata::Value {
 impl TransformedMessage {
     pub fn fork_leader(
         &self,
-        entry_kind: EntryKind,
+        entry_kind: public_abi::EntryKind,
         entry_data: Vec<u8>,
         entry_leader_data: Option<RunOk>,
     ) -> Self {
@@ -79,7 +78,7 @@ impl TransformedMessage {
         }
     }
 
-    pub fn fork(&self, entry_kind: EntryKind, entry_data: Vec<u8>) -> Self {
+    pub fn fork(&self, entry_kind: public_abi::EntryKind, entry_data: Vec<u8>) -> Self {
         self.fork_leader(entry_kind, entry_data, None)
     }
 }
@@ -88,6 +87,7 @@ pub struct SingleVMData {
     pub conf: base::Config,
     pub message_data: TransformedMessage,
     pub supervisor: Arc<tokio::sync::Mutex<crate::vm::Supervisor>>,
+    pub version: genvm_common::version::Version,
 }
 
 pub struct Context {
@@ -318,6 +318,19 @@ fn file_fd_none() -> generated::types::Fd {
     generated::types::Fd::from(NO_FILE)
 }
 
+impl ContextVFS<'_> {
+    fn check_version(
+        &mut self,
+        lower_bound: genvm_common::version::Version,
+    ) -> Result<(), generated::types::Error> {
+        if self.context.data.version.is_greater_eq_than(lower_bound) {
+            Ok(())
+        } else {
+            Err(generated::types::Errno::Inval.into())
+        }
+    }
+}
+
 #[allow(unused_variables)]
 #[async_trait::async_trait]
 impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
@@ -419,8 +432,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
 
-                if state == crate::host::StorageType::Default {
-                    state = crate::host::StorageType::LatestNonFinal;
+                if state == public_abi::StorageType::Default {
+                    state = public_abi::StorageType::LatestNonFinal;
                 }
 
                 let supervisor = self.context.data.supervisor.clone();
@@ -433,7 +446,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .context
                     .data
                     .message_data
-                    .fork(EntryKind::Main, calldata_encoded);
+                    .fork(public_abi::EntryKind::Main, calldata_encoded);
                 my_data.stack.push(my_data.contract_address);
 
                 let calldata_encoded = calldata::encode(&calldata);
@@ -462,6 +475,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         stack: my_data.stack,
                     },
                     supervisor: supervisor.clone(),
+                    version: genvm_common::version::Version::ZERO,
                 };
 
                 let res = self
@@ -472,25 +486,19 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 self.set_vm_run_result(res).map(|x| x.0)
             }
-            gl_call::Message::EmitEvent {
-                name,
-                indexed_fields,
-                blob,
-            } => {
+            gl_call::Message::EmitEvent { topics, blob } => {
+                self.check_version(genvm_common::version::Version::new(0, 2, 0))?;
+
                 if !self.context.data.conf.is_deterministic {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
 
-                if indexed_fields.len() > 4 {
+                if topics.len() > public_abi::EVENT_MAX_TOPICS as usize {
                     return Err(generated::types::Errno::Inval.into());
                 }
 
-                if !indexed_fields.is_sorted() {
-                    return Err(generated::types::Errno::Inval.into());
-                }
-
-                for c in &indexed_fields {
-                    if !blob.contains_key(c) {
+                for c in &topics {
+                    if c.0.len() != 32 {
                         return Err(generated::types::Errno::Inval.into());
                     }
                 }
@@ -931,7 +939,7 @@ impl ContextVFS<'_> {
 
         let message_data = match &leaders_res {
             None => self.context.data.message_data.fork_leader(
-                EntryKind::ConsensusStage,
+                public_abi::EntryKind::ConsensusStage,
                 data_leader,
                 None,
             ),
@@ -942,7 +950,7 @@ impl ContextVFS<'_> {
                     RunOk::VMError(msg, _) => RunOk::VMError(msg.clone(), None),
                 };
                 self.context.data.message_data.fork_leader(
-                    EntryKind::ConsensusStage,
+                    public_abi::EntryKind::ConsensusStage,
                     data_validator,
                     Some(dup),
                 )
@@ -959,9 +967,10 @@ impl ContextVFS<'_> {
                 can_spawn_nondet: false,
                 can_call_others: false,
                 can_send_messages: false,
-                state_mode: crate::host::StorageType::Default,
+                state_mode: public_abi::StorageType::Default,
             },
             message_data,
+            version: self.context.data.version,
             supervisor: supervisor.clone(),
         };
 
@@ -1003,7 +1012,7 @@ impl ContextVFS<'_> {
             .context
             .data
             .message_data
-            .fork(EntryKind::Sandbox, data);
+            .fork(public_abi::EntryKind::Sandbox, data);
 
         let zelf_conf = &self.context.data.conf;
 
@@ -1019,6 +1028,7 @@ impl ContextVFS<'_> {
             },
             message_data,
             supervisor: supervisor.clone(),
+            version: genvm_common::version::Version::ZERO,
         };
 
         let my_res = self.context.spawn_and_run(&supervisor, vm_data).await;

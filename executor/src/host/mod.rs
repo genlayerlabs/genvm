@@ -1,13 +1,12 @@
 mod host_fns;
 pub mod message;
-mod result_codes;
 
 use genvm_common::*;
 
+use crate::public_abi::{ResultCode, StorageType};
 use genvm_common::calldata::Address;
 use genvm_common::calldata::ADDRESS_SIZE;
 use message::root_offsets;
-pub use result_codes::{EntryKind, ResultCode, StorageType};
 
 use std::sync::Mutex;
 

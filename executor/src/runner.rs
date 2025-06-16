@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
 use core::str;
+use genvm_common::{log_trace, log_warn};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 use symbol_table::GlobalSymbol;
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
@@ -71,7 +72,7 @@ pub enum InitAction {
     },
 }
 
-use crate::{calldata, errors::ContractError, memlimiter, ustar::*};
+use crate::{calldata, errors::ContractError, memlimiter, public_abi, ustar::*};
 
 pub struct ZipCache {
     id: symbol_table::GlobalSymbol,
@@ -92,6 +93,25 @@ impl ZipCache {
             files,
             actions: None,
         }
+    }
+
+    pub fn get_version(&self) -> Result<genvm_common::version::Version> {
+        let contents = match self.get_file("version") {
+            Ok(contents) => contents,
+            Err(e) => {
+                log_warn!(error:ah = e, runner = self.id; "failed to read version file for runner, using default");
+                SharedBytes::from(public_abi::ABSENT_VERSION.as_bytes())
+            }
+        };
+
+        let contents = str::from_utf8(contents.as_ref())
+            .with_context(|| format!("casting version to string {}", self.id))?;
+
+        let version = genvm_common::version::Version::from_str(contents)?;
+
+        log_trace!(from = contents, to = version; "version parsed");
+
+        Ok(version)
     }
 
     pub fn get_actions(&mut self) -> Result<Arc<InitAction>> {

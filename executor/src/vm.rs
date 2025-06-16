@@ -14,7 +14,7 @@ use crate::{
     caching, calldata, config,
     errors::ContractError,
     host::LockedSlotsSet,
-    memlimiter,
+    memlimiter, public_abi,
     runner::{self, InitAction, WasmMode},
     ustar::{Archive, SharedBytes},
     wasi::{self, preview1::I32Exit},
@@ -82,7 +82,7 @@ impl RunOk {
     }
 
     pub fn as_bytes_iter(&self) -> impl Iterator<Item = u8> + '_ {
-        use crate::host::ResultCode;
+        use crate::public_abi::ResultCode;
         match self {
             RunOk::Return(buf) => [ResultCode::Return as u8]
                 .into_iter()
@@ -166,7 +166,7 @@ impl wasmtime::ResourceLimiter for memlimiter::Limiter {
         }
 
         let delta = delta as u32;
-        let success = self.consume_mul(delta, memlimiter::consts::TABLE_ENTRY_SIZE);
+        let success = self.consume_mul(delta, public_abi::MemoryLimiterConsts::TableEntry.value());
 
         if current == 0 && !success {
             Err(ContractError::oom(None).into())
@@ -331,17 +331,17 @@ impl VM {
     #[allow(clippy::manual_try_fold)]
     pub async fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
         if let Ok(lck) = self.store.data().genlayer_ctx.lock() {
-            log_info!(wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "run");
+            log_debug!(wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "run");
         }
 
         let func = instance
             .get_typed_func::<(), ()>(&mut self.store, "")
             .or_else(|_| instance.get_typed_func::<(), ()>(&mut self.store, "_start"))
             .with_context(|| "can't find entrypoint")?;
-        log_info!("execution start");
+        log_debug!("execution start");
         let time_start = std::time::Instant::now();
         let res = func.call_async(&mut self.store, ()).await;
-        log_info!(duration:? = time_start.elapsed(); "vm execution finished");
+        log_debug!(duration:? = time_start.elapsed(); "vm execution finished");
         let res: RunResult = match res {
             Ok(()) => Ok(RunOk::empty_return()),
             Err(e) => {
@@ -378,16 +378,16 @@ impl VM {
         };
         match &res {
             Ok(RunOk::Return(_)) => {
-                log_info!(result = "Return"; "execution result unwrapped")
+                log_debug!(result = "Return"; "execution result unwrapped")
             }
-            Ok(RunOk::UserError(_)) => {
-                log_info!(result = "Rollback"; "execution result unwrapped")
+            Ok(RunOk::UserError(msg)) => {
+                log_debug!(result = "UserError", message = msg; "execution result unwrapped")
             }
             Ok(RunOk::VMError(e, cause)) => {
-                log_info!(result = format!("ContractError({e})"), cause:? = cause; "execution result unwrapped")
+                log_debug!(result = "VMError", message = e, cause:? = cause; "execution result unwrapped")
             }
-            Err(_) => {
-                log_info!(result = "Error"; "execution result unwrapped")
+            Err(e) => {
+                log_debug!(result = "Error", error:ah = e; "execution result unwrapped")
             }
         };
         res
@@ -739,7 +739,8 @@ impl Supervisor {
                         name_in_fs.push_str(&name[file.len()..]);
 
                         if !limiter.consume(
-                            memlimiter::consts::FILE_MAPPING_SIZE + name_in_fs.len() as u32,
+                            public_abi::MemoryLimiterConsts::FileMapping.value()
+                                + name_in_fs.len() as u32,
                         ) {
                             return Err(ContractError::oom(None).into());
                         }
@@ -751,7 +752,9 @@ impl Supervisor {
                             .map_file(&name_in_fs, file_contents.clone())?;
                     }
                 } else {
-                    if !limiter.consume(memlimiter::consts::FILE_MAPPING_SIZE + to.len() as u32) {
+                    if !limiter.consume(
+                        public_abi::MemoryLimiterConsts::FileMapping.value() + to.len() as u32,
+                    ) {
                         return Err(ContractError::oom(None).into());
                     }
 
@@ -905,15 +908,22 @@ impl Supervisor {
         if wasmparser::Parser::is_core_wasm(code.as_ref()) {
             return Ok(Archive::from_file_and_runner(
                 code,
-                SharedBytes::from(&b"{ \"StartWasm\": \"file\" }"[..]),
+                SharedBytes::from(b"v0.0.1".as_ref()),
+                SharedBytes::from(b"{ \"StartWasm\": \"file\" }".as_ref()),
             ));
         }
+
+        Self::code_to_archive_from_text(code)
+    }
+
+    fn code_to_archive_from_text(code: SharedBytes) -> Result<Archive> {
         let code_str = str::from_utf8(code.as_ref()).map_err(|e| {
             crate::errors::ContractError(
                 "invalid_contract non-utf8".into(),
                 Some(anyhow::Error::from(e)),
             )
         })?;
+
         let code_start = (|| {
             for c in ["//", "#", "--"] {
                 if code_str.starts_with(c) {
@@ -925,16 +935,35 @@ impl Supervisor {
                 None,
             ))
         })()?;
+
+        let mut version_string = String::new();
         let mut code_comment = String::new();
+        let mut first = true;
         for l in code_str.lines() {
             if !l.starts_with(code_start) {
                 break;
             }
-            code_comment.push_str(&l[code_start.len()..])
+
+            let l = &l[code_start.len()..];
+
+            if first {
+                first = false;
+                if l.trim().starts_with("v") {
+                    version_string.push_str(l);
+                } else {
+                    log_warn!("runner comment does not start with version, using default");
+                    version_string.push_str(public_abi::ABSENT_VERSION);
+
+                    code_comment.push_str(l)
+                }
+            } else {
+                code_comment.push_str(l)
+            }
         }
 
         Ok(Archive::from_file_and_runner(
             code,
+            SharedBytes::from(version_string.as_bytes()),
             SharedBytes::from(code_comment.as_bytes()),
         ))
     }
@@ -963,6 +992,15 @@ impl Supervisor {
         let cur_arch = self
             .runner_cache
             .get_or_create(contract_id, provide_arch, limiter)?;
+
+        let version = cur_arch.get_version()?;
+        vm.store
+            .data_mut()
+            .genlayer_ctx_mut()
+            .genlayer_sdk
+            .data
+            .version = version;
+
         let actions = cur_arch.get_actions()?;
 
         let mut ctx = ApplyActionCtx {

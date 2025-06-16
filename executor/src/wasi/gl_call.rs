@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{calldata, host};
+use crate::{calldata, public_abi};
 
 #[derive(Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Debug)]
 pub enum On {
@@ -12,14 +12,14 @@ pub enum On {
     Accepted,
 }
 
-fn storage_type_from_bigint<'de, D>(deserializer: D) -> Result<host::StorageType, D::Error>
+fn storage_type_from_bigint<'de, D>(deserializer: D) -> Result<public_abi::StorageType, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     struct Visitor;
 
     impl serde::de::Visitor<'_> for Visitor {
-        type Value = host::StorageType;
+        type Value = public_abi::StorageType;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
             formatter.write_str("a number")
@@ -30,7 +30,7 @@ where
             E: serde::de::Error,
         {
             let as_u8: u8 = v.try_into().map_err(|_e| E::custom("out of range"))?;
-            host::StorageType::try_from(as_u8).map_err(|_e| E::custom("out of range"))
+            public_abi::StorageType::try_from(as_u8).map_err(|_e| E::custom("out of range"))
         }
 
         fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
@@ -38,7 +38,7 @@ where
             E: serde::de::Error,
         {
             let as_u8: u8 = v.try_into().map_err(|_e| E::custom("out of range"))?;
-            host::StorageType::try_from(as_u8).map_err(|_e| E::custom("out of range"))
+            public_abi::StorageType::try_from(as_u8).map_err(|_e| E::custom("out of range"))
         }
     }
 
@@ -64,7 +64,7 @@ pub enum Message {
         address: calldata::Address,
         calldata: calldata::Value,
         #[serde(deserialize_with = "storage_type_from_bigint")]
-        state: host::StorageType,
+        state: public_abi::StorageType,
     },
     PostMessage {
         address: calldata::Address,
@@ -104,8 +104,11 @@ pub enum Message {
     Return(calldata::Value),
 
     EmitEvent {
-        name: String,
-        indexed_fields: Vec<String>,
+        topics: Vec<Bytes>,
         blob: BTreeMap<String, calldata::Value>,
     },
 }
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct Bytes(#[serde(with = "serde_bytes")] pub Vec<u8>);
