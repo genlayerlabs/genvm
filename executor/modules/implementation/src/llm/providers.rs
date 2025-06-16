@@ -617,6 +617,26 @@ mod tests {
     use super::super::{config, prompt};
     use genvm_common::templater;
 
+    fn is_overloaded(e: &anyhow::Error) -> bool {
+        let e = match e.downcast_ref::<common::ModuleError>() {
+            None => return false,
+            Some(e) => e,
+        };
+
+        if !e
+            .causes
+            .iter()
+            .any(|e| e == &common::ErrorKind::STATUS_NOT_OK.to_string())
+        {
+            return true;
+        }
+
+        match e.ctx.get("status").and_then(|x| x.as_num()) {
+            None => false,
+            Some(status) => [408, 503, 429, 504, 529].contains(&(status as i32)),
+        }
+    }
+
     mod conf {
         pub const openai: &str = r#"{
             "host": "https://api.openai.com",
@@ -706,8 +726,18 @@ mod tests {
                 },
                 backend.script_config.models.first_key_value().unwrap().0,
             )
-            .await
-            .unwrap();
+            .await;
+
+        let res = match res {
+            Ok(res) => res,
+            Err(e) if is_overloaded(&e) => {
+                eprintln!("Overloaded, skipping test: {e}");
+                return;
+            }
+            Err(e) => {
+                panic!("test failed: {e}");
+            }
+        };
 
         let res = res.trim().to_lowercase();
 
@@ -761,7 +791,17 @@ mod tests {
             )
             .await;
         eprintln!("{res:?}");
-        let res = res.unwrap();
+
+        let res = match res {
+            Ok(res) => res,
+            Err(e) if is_overloaded(&e) => {
+                eprintln!("Overloaded, skipping test: {e}");
+                return;
+            }
+            Err(e) => {
+                panic!("test failed: {e}");
+            }
+        };
 
         let as_val = serde_json::Value::Object(res);
 

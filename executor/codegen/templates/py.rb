@@ -9,7 +9,7 @@ def to_camel(s)
 end
 
 def dump(s)
-	s.kind_of?(String) ? s.dump : s.to_s
+	s.kind_of?(String) ? "'#{s}'" : s.to_s
 end
 
 def py_repr(s)

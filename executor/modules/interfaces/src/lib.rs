@@ -88,6 +88,13 @@ impl GenericValue {
             _ => None,
         }
     }
+
+    pub fn as_num(&self) -> Option<f64> {
+        match self {
+            GenericValue::Number(s) => Some(*s),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize)]

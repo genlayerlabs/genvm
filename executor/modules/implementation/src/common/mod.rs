@@ -15,7 +15,6 @@ pub enum ErrorKind {
     READING_BODY,
     SENDING_REQUEST,
     DESERIALIZING,
-    OVERLOADED,
     Other(String),
 }
 
@@ -37,7 +36,6 @@ impl ErrorKind {
             ErrorKind::READING_BODY => "READING_BODY".to_owned(),
             ErrorKind::SENDING_REQUEST => "SENDING_REQUEST".to_owned(),
             ErrorKind::DESERIALIZING => "DESERIALIZING".to_owned(),
-            ErrorKind::OVERLOADED => "OVERLOADED".to_owned(),
             ErrorKind::Other(str) => str.clone(),
         }
     }

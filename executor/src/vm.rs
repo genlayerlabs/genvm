@@ -12,7 +12,7 @@ use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
     caching, calldata, config,
-    errors::ContractError,
+    errors::VMError,
     host::LockedSlotsSet,
     memlimiter, public_abi,
     runner::{self, InitAction, WasmMode},
@@ -147,7 +147,7 @@ impl wasmtime::ResourceLimiter for memlimiter::Limiter {
         let success = self.consume(delta);
 
         if current == 0 && !success {
-            Err(ContractError::oom(None).into())
+            Err(VMError::oom(None).into())
         } else {
             Ok(success)
         }
@@ -169,7 +169,7 @@ impl wasmtime::ResourceLimiter for memlimiter::Limiter {
         let success = self.consume_mul(delta, public_abi::MemoryLimiterConsts::TableEntry.value());
 
         if current == 0 && !success {
-            Err(ContractError::oom(None).into())
+            Err(VMError::oom(None).into())
         } else {
             Ok(success)
         }
@@ -356,8 +356,8 @@ impl VM {
                             .map(|v| RunOk::VMError(format!("wasm_trap {v:?}"), Some(v.into())))
                     },
                     |e: anyhow::Error| {
-                        e.downcast::<crate::errors::ContractError>()
-                            .map(|crate::errors::ContractError(m, c)| RunOk::VMError(m, c))
+                        e.downcast::<crate::errors::VMError>()
+                            .map(|crate::errors::VMError(m, c)| RunOk::VMError(m, c))
                     },
                     |e: anyhow::Error| {
                         e.downcast::<crate::errors::UserError>()
@@ -742,7 +742,7 @@ impl Supervisor {
                             public_abi::MemoryLimiterConsts::FileMapping.value()
                                 + name_in_fs.len() as u32,
                         ) {
-                            return Err(ContractError::oom(None).into());
+                            return Err(VMError::oom(None).into());
                         }
 
                         vm.store
@@ -755,7 +755,7 @@ impl Supervisor {
                     if !limiter.consume(
                         public_abi::MemoryLimiterConsts::FileMapping.value() + to.len() as u32,
                     ) {
-                        return Err(ContractError::oom(None).into());
+                        return Err(VMError::oom(None).into());
                     }
 
                     vm.store
@@ -794,9 +794,7 @@ impl Supervisor {
                     let name = module
                         .name()
                         .ok_or_else(|| anyhow::anyhow!("can't link unnamed module {:?}", current))
-                        .map_err(|e| {
-                            crate::errors::ContractError("invalid_wasm".into(), Some(e))
-                        })?;
+                        .map_err(|e| crate::errors::VMError("invalid_wasm".into(), Some(e)))?;
                     linker.instance(&mut vm.store, name, instance)?;
                     instance
                 };
@@ -918,7 +916,7 @@ impl Supervisor {
 
     fn code_to_archive_from_text(code: SharedBytes) -> Result<Archive> {
         let code_str = str::from_utf8(code.as_ref()).map_err(|e| {
-            crate::errors::ContractError(
+            crate::errors::VMError(
                 "invalid_contract non-utf8".into(),
                 Some(anyhow::Error::from(e)),
             )
@@ -930,10 +928,7 @@ impl Supervisor {
                     return Ok(c);
                 }
             }
-            Err(crate::errors::ContractError(
-                "no_runner_comment".into(),
-                None,
-            ))
+            Err(crate::errors::VMError("no_runner_comment".into(), None))
         })()?;
 
         let mut version_string = String::new();

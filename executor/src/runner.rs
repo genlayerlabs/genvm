@@ -72,7 +72,7 @@ pub enum InitAction {
     },
 }
 
-use crate::{calldata, errors::ContractError, memlimiter, public_abi, ustar::*};
+use crate::{calldata, errors::VMError, memlimiter, public_abi, ustar::*};
 
 pub struct ZipCache {
     id: symbol_table::GlobalSymbol,
@@ -110,7 +110,7 @@ impl ZipCache {
         let version = genvm_common::version::Version::from_str(contents)?;
 
         if !genvm_common::version::CURRENT.is_greater_eq_than(version) {
-            return Err(ContractError("version_too_big".to_owned(), None).into());
+            return Err(VMError("version_too_big".to_owned(), None).into());
         }
 
         log_trace!(from = contents, to = version; "version parsed");
@@ -175,7 +175,7 @@ impl RunnerReaderCache {
         match self.cache.entry(name) {
             std::collections::hash_map::Entry::Occupied(occupied_entry) => {
                 if !limiter.consume(occupied_entry.get().files.total_size) {
-                    return Err(ContractError::oom(None).into());
+                    return Err(VMError::oom(None).into());
                 }
                 Ok(occupied_entry.into_mut())
             }

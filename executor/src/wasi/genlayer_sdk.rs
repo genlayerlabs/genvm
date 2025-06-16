@@ -270,9 +270,7 @@ impl ContextVFS<'_> {
     ) -> Result<(generated::types::Fd, usize), generated::types::Error> {
         let data = match data {
             RunOk::VMError(e, cause) => {
-                return Err(generated::types::Error::trap(
-                    ContractError(e, cause).into(),
-                ))
+                return Err(generated::types::Error::trap(VMError(e, cause).into()))
             }
             data => data,
         };
@@ -979,7 +977,7 @@ impl ContextVFS<'_> {
         };
 
         let my_res = self.context.spawn_and_run(&supervisor, vm_data).await;
-        let my_res = ContractError::unwrap_res(my_res).map_err(generated::types::Error::trap)?;
+        let my_res = VMError::unwrap_res(my_res).map_err(generated::types::Error::trap)?;
 
         let ret_res = match leaders_res {
             None => {
@@ -993,11 +991,11 @@ impl ContextVFS<'_> {
             Some(leaders_res) => match my_res {
                 RunOk::Return(v) if v == [16] => Ok(leaders_res),
                 RunOk::Return(v) if v == [8] => {
-                    Err(ContractError(format!("validator_disagrees call {}", call_no), None).into())
+                    Err(VMError(format!("validator_disagrees call {}", call_no), None).into())
                 }
                 _ => {
                     log_warn!(validator_result:? = my_res, leaders_result:? = leaders_res; "validator reported unexpected result");
-                    Err(ContractError(format!("validator_disagrees call {}", call_no), None).into())
+                    Err(VMError(format!("validator_disagrees call {}", call_no), None).into())
                 }
             },
         };
@@ -1036,7 +1034,7 @@ impl ContextVFS<'_> {
         };
 
         let my_res = self.context.spawn_and_run(&supervisor, vm_data).await;
-        let my_res = ContractError::unwrap_res(my_res).map_err(generated::types::Error::trap)?;
+        let my_res = VMError::unwrap_res(my_res).map_err(generated::types::Error::trap)?;
 
         let data: Box<[u8]> = my_res.as_bytes_iter().collect();
         Ok(generated::types::Fd::from(self.vfs.place_content(

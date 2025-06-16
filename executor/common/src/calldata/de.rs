@@ -311,9 +311,9 @@ where
     match full_name {
         "num_bigint::bigint::BigInt" => match value {
             Value::Number(num) => {
-                let ptr = std::ptr::from_ref(&num) as *const T::Value;
-                std::mem::forget(num);
-                Ok(unsafe { ptr.read() })
+                let num = std::mem::ManuallyDrop::new(num);
+                let ptr = std::ptr::from_ref(&num) as *const std::mem::ManuallyDrop<T::Value>;
+                Ok(std::mem::ManuallyDrop::into_inner(unsafe { ptr.read() }))
             }
             _ => Err(serde::de::Error::custom("invalid type")),
         },
@@ -340,9 +340,9 @@ where
             _ => Err(serde::de::Error::custom("invalid type")),
         },
         "genvm_common::calldata::types::Value" => {
-            let ptr = std::ptr::from_ref(&value) as *const T::Value;
-            std::mem::forget(value);
-            Ok(unsafe { ptr.read() })
+            let value = std::mem::ManuallyDrop::new(value);
+            let ptr = std::ptr::from_ref(&value) as *const std::mem::ManuallyDrop<T::Value>;
+            Ok(std::mem::ManuallyDrop::into_inner(unsafe { ptr.read() }))
         }
         "genvm_common::calldata::types::Address" => match value {
             Value::Address(addr) => {

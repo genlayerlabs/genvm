@@ -15,7 +15,7 @@ pub mod public_abi;
 pub use genvm_common::calldata;
 use genvm_common::*;
 
-use errors::ContractError;
+use errors::VMError;
 use host::AbsentLeaderResult;
 pub use host::{Host, MessageData, SlotID};
 
@@ -129,7 +129,7 @@ pub async fn run_with_impl(
             .apply_contract_actions(&mut vm)
             .await
             .with_context(|| "applying runner actions")
-            .map_err(|cause| crate::errors::ContractError::wrap("runner_actions".into(), cause))?;
+            .map_err(|cause| crate::errors::VMError::wrap("runner_actions".into(), cause))?;
         (vm, instance)
     };
 
@@ -157,7 +157,7 @@ pub async fn run_with(
             Err(e) => Ok(RunOk::VMError("timeout".into(), Some(e))),
         }
     } else {
-        ContractError::unwrap_res(res)
+        VMError::unwrap_res(res)
     };
 
     let res = match res {

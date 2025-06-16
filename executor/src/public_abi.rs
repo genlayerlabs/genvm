@@ -171,10 +171,10 @@ impl SpecialMethod {
     }
 }
 
-impl TryFrom<&'static str> for SpecialMethod {
+impl TryFrom<&str> for SpecialMethod {
     type Error = ();
 
-    fn try_from(value: &'static str) -> Result<Self, ()> {
+    fn try_from(value: &str) -> Result<Self, ()> {
         match value {
             "#get-schema" => Ok(SpecialMethod::GetSchema),
             "#error" => Ok(SpecialMethod::ErroredMessage),

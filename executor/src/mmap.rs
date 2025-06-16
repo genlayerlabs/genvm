@@ -3,7 +3,7 @@ use std::ptr::NonNull;
 
 use anyhow::Context;
 
-use crate::{errors::ContractError, memlimiter};
+use crate::{errors::VMError, memlimiter};
 
 #[derive(Debug)]
 struct Mmap(NonNull<[u8]>);
@@ -49,7 +49,7 @@ pub fn load_file(
 
     if let Some(limiter) = limiter {
         if !limiter.consume(file_len) {
-            return Err(ContractError::oom(None).into());
+            return Err(VMError::oom(None).into());
         }
     }
 

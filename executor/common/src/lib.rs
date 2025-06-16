@@ -10,7 +10,7 @@ pub mod templater;
 pub mod version;
 
 #[cfg(not(debug_assertions))]
-fn default_log_level() -> log::LevelFilter {
+fn default_log_level() -> logger::Level {
     logger::Level::Info
 }
 

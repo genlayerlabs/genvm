@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use anyhow::{Context, Result};
 
 use crate::calldata;
-use crate::errors::ContractError;
+use crate::errors::VMError;
 use crate::memlimiter;
 use crate::vm;
 pub use message::{MessageData, SlotID};
@@ -116,7 +116,7 @@ fn handle_host_error(sock: &mut dyn Sock) -> Result<()> {
     if e == host_fns::Errors::Ok {
         Ok(())
     } else {
-        Err(crate::errors::ContractError(e.str_snake_case().to_owned(), None).into())
+        Err(crate::errors::VMError(e.str_snake_case().to_owned(), None).into())
     }
 }
 
@@ -166,7 +166,7 @@ impl Host {
         let len = u32::from_le_bytes(len_buf);
 
         if !limiter.consume_mul(len, SlotID::SIZE) {
-            return Err(ContractError::oom(None).into());
+            return Err(VMError::oom(None).into());
         }
 
         let res = Box::new_uninit_slice(len as usize);
@@ -241,7 +241,7 @@ impl Host {
         let code_size = u32::from_le_bytes(len_buf);
 
         if !limiter.consume(code_size) {
-            return Err(ContractError::oom(None).into());
+            return Err(VMError::oom(None).into());
         }
 
         let res = Box::new_uninit_slice(code_size as usize);
@@ -337,11 +337,7 @@ impl Host {
             host_fns::Errors::Absent => {
                 anyhow::bail!(AbsentLeaderResult);
             }
-            e => {
-                return Err(
-                    crate::errors::ContractError(e.str_snake_case().to_owned(), None).into(),
-                )
-            }
+            e => return Err(crate::errors::VMError(e.str_snake_case().to_owned(), None).into()),
         }
 
         let mut has_some = [0; 1];

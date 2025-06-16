@@ -16,6 +16,14 @@ def rust_repr(s)
 	end
 end
 
+def rust_repr_from(s)
+	if s == "str"
+		"&str"
+	else
+		s
+	end
+end
+
 def dump(s)
 	s.kind_of?(String) ? s.dump : s.to_s
 end
@@ -55,10 +63,10 @@ impl <%= to_camel name %> {
     }
 }
 
-impl TryFrom<<%= rust_repr repr %>> for <%= to_camel name %> {
+impl TryFrom<<%= rust_repr_from repr %>> for <%= to_camel name %> {
     type Error = ();
 
-    fn try_from(value: <%= rust_repr repr %>) -> Result<Self, ()> {
+    fn try_from(value: <%= rust_repr_from repr %>) -> Result<Self, ()> {
         match value {
 % values.each { |k, v|
             <%= dump v %> => Ok(<%= to_camel name %>::<%= to_camel k %>),
