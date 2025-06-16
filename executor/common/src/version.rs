@@ -79,3 +79,17 @@ impl Version {
         }
     }
 }
+
+pub static CURRENT: std::sync::LazyLock<Version> = std::sync::LazyLock::new(|| {
+    regex::Regex::new(r"^v(\d+)\.(\d+)\.(\d+)")
+        .unwrap()
+        .captures(crate::VERSION)
+        .and_then(|caps| {
+            Some(Version {
+                major: caps[1].parse().ok()?,
+                minor: caps[2].parse().ok()?,
+                patch: caps[3].parse().ok()?,
+            })
+        })
+        .unwrap()
+});

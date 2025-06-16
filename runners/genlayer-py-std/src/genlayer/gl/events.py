@@ -14,6 +14,8 @@ def _emit(self: Event) -> None:
 		as_cd = calldata.encode(d)
 		if len(as_cd) > 32:
 			as_cd = Keccak256(as_cd).digest()
+		else:
+			as_cd = as_cd + b'\x00' * (32 - len(as_cd))
 		topics.append(as_cd)
 
 	emit_raw_event(topics, self._blob)

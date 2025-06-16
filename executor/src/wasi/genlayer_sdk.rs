@@ -326,6 +326,7 @@ impl ContextVFS<'_> {
         if self.context.data.version.is_greater_eq_than(lower_bound) {
             Ok(())
         } else {
+            log_info!(lower_bound = lower_bound, vm_version = self.context.data.version; "version check failed");
             Err(generated::types::Errno::Inval.into())
         }
     }
@@ -494,11 +495,14 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 }
 
                 if topics.len() > public_abi::EVENT_MAX_TOPICS as usize {
+                    log_info!(cnt = topics.len(), max = public_abi::EVENT_MAX_TOPICS; "too many topics");
                     return Err(generated::types::Errno::Inval.into());
                 }
 
                 for c in &topics {
                     if c.0.len() != 32 {
+                        log_info!(len = c.0.len(); "invalid topic length");
+
                         return Err(generated::types::Errno::Inval.into());
                     }
                 }

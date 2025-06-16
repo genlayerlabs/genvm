@@ -103,6 +103,8 @@ fn compile_single_file(
 }
 
 pub fn handle(args: Args, config: config::Config) -> Result<()> {
+    log_info!(version = genvm_common::version::CURRENT.clone(); "current version");
+
     let cache_dir = caching::get_cache_dir(&config.cache_dir)?;
     let mut precompile_dir = cache_dir.clone();
     precompile_dir.push(caching::PRECOMPILE_DIR_NAME);
