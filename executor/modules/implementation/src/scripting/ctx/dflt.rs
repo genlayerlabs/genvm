@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, str::FromStr, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
     common::{self, ErrorKind, MapUserError, ModuleError},
@@ -6,9 +6,11 @@ use crate::{
 };
 use anyhow::Context;
 use base64::Engine;
+use genvm_common::*;
 use genvm_modules_interfaces::GenericValue;
 use mlua::LuaSerdeExt;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 use genvm_modules_interfaces::web as web_iface;
 
@@ -44,7 +46,7 @@ impl mlua::UserData for CtxPart {}
 
 impl CtxPart {
     async fn request(&self, vm: &mlua::Lua, req: Request) -> anyhow::Result<mlua::Value> {
-        log::trace!(request:? = req; "received request");
+        log_trace!(request:? = req; "received request");
 
         let url = match reqwest::Url::parse(&req.url) {
             Ok(url) => url,
@@ -120,11 +122,11 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
         let mut as_serde: BTreeMap<String, genvm_modules_interfaces::GenericValue> = vm.from_value(data)?;
 
         let level = as_serde.remove("level");
-        let level = level.and_then(|x| x.as_str().map(|x| x.to_owned())).map(|x| log::Level::from_str(&x).unwrap_or(log::Level::Info)).unwrap_or(log::Level::Info);
+        let level = level.and_then(|x| x.as_str().map(|x| x.to_owned())).map(|x| logger::Level::from_str(&x).unwrap_or(logger::Level::Info)).unwrap_or(logger::Level::Info);
 
         let script_message = as_serde.remove("message").and_then(|x| x.as_str().map(|x| x.to_owned())).unwrap_or_else(|| "<none>".to_owned());
 
-        log::log!(level, log:serde = as_serde, cookie = crate::common::get_cookie(); "script_log: {script_message}");
+        log_with_level!(level, log:serde = as_serde, cookie = crate::common::get_cookie(); "script_log: {script_message}");
         Ok(())
     })?)?;
 
@@ -230,17 +232,17 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
     dflt.set(
         "as_user_error",
         vm.create_function(|vm: &mlua::Lua, args: mlua::Value| {
-            log::trace!(name = args.type_name(); "casting to user error (1)");
+            log_trace!(name = args.type_name(); "casting to user error (1)");
 
             let err = match args.as_error() {
                 None => return Ok(mlua::Value::Nil),
                 Some(err) => err,
             };
 
-            log::trace!(error:? = err; "casting to user error (2)");
+            log_trace!(error:? = err; "casting to user error (2)");
 
             if let Some(err) = super::try_unwrap_err(err) {
-                log::trace!(error:? = err; "casting to user error (3)");
+                log_trace!(error:? = err; "casting to user error (3)");
                 return vm.to_value(&err);
             }
 
@@ -282,6 +284,8 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
 
 #[cfg(test)]
 mod tests {
+    use genvm_common::*;
+
     use crate::{
         common,
         scripting::{self, Response},
@@ -371,7 +375,7 @@ mod tests {
 
         let res: Response = uvm.vm.from_value(res).unwrap();
 
-        log::trace!(response:? = res; "response");
+        log_trace!(response:? = res; "response");
 
         assert_eq!(res.status, 200);
         assert_eq!(res.body, expected);

@@ -1,56 +1,22 @@
-use std::{
-    backtrace::{self},
-    collections::HashMap,
-};
+use std::collections::HashMap;
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 pub mod calldata;
 pub mod cancellation;
+pub mod logger;
 pub mod templater;
-
-pub fn log_error(err: &anyhow::Error) -> impl log::kv::ToValue + '_ {
-    use log::kv::{ToValue, Value};
-
-    #[derive(serde::Serialize)]
-    struct Error4Log<'a> {
-        causes: Vec<Value<'a>>,
-        trace: Option<String>,
-    }
-
-    impl ToValue for Error4Log<'_> {
-        fn to_value(&self) -> Value {
-            Value::from_serde(self)
-        }
-    }
-
-    let mut all = Vec::new();
-
-    for c in err.chain() {
-        all.push(Value::from_dyn_error(c));
-    }
-
-    let bt = if let backtrace::BacktraceStatus::Captured = err.backtrace().status() {
-        Some(err.backtrace().to_string())
-    } else {
-        None
-    };
-
-    Error4Log {
-        causes: all,
-        trace: bt,
-    }
-}
+pub mod version;
 
 #[cfg(not(debug_assertions))]
-fn default_log_level() -> log::LevelFilter {
-    log::LevelFilter::Info
+fn default_log_level() -> logger::Level {
+    logger::Level::Info
 }
 
 #[cfg(debug_assertions)]
-fn default_log_level() -> log::LevelFilter {
-    log::LevelFilter::Trace
+fn default_log_level() -> logger::Level {
+    logger::Level::Trace
 }
 
 #[derive(Serialize, Deserialize)]
@@ -59,19 +25,8 @@ pub struct BaseConfig {
     pub blocking_threads: usize,
 
     #[serde(default = "default_log_level")]
-    pub log_level: log::LevelFilter,
+    pub log_level: logger::Level,
     pub log_disable: String,
-}
-
-struct NullWiriter;
-
-impl structured_logger::Writer for NullWiriter {
-    fn write_log(
-        &self,
-        _value: &std::collections::BTreeMap<log::kv::Key, log::kv::Value>,
-    ) -> std::result::Result<(), std::io::Error> {
-        Ok(())
-    }
 }
 
 pub const VERSION: &str = env!("GENVM_BUILD_ID");
@@ -81,16 +36,18 @@ impl BaseConfig {
     where
         W: std::io::Write + Sync + Send + 'static,
     {
-        structured_logger::Builder::with_level(self.log_level.as_str())
-            .with_default_writer(structured_logger::json::new_writer(writer))
-            .with_target_writer(&self.log_disable, Box::new(NullWiriter))
-            .init();
+        logger::initialize(self.log_level, &self.log_disable, writer);
 
-        if log::STATIC_MAX_LEVEL < log::max_level() {
-            log::warn!(requested:? = log::max_level(), allowed:? = log::STATIC_MAX_LEVEL; "requested level is higher than allowed");
+        //structured_logger::Builder::with_level(self.log_level.as_str())
+        //    .with_default_writer(structured_logger::json::new_writer(writer))
+        //    .with_target_writer(&self.log_disable, Box::new(NullWiriter))
+        //    .init();
+
+        if logger::STATIC_MIN_LEVEL > self.log_level {
+            log_warn!(requested:? = self.log_level, allowed:? = logger::STATIC_MIN_LEVEL; "requested level is higher than allowed");
         }
 
-        log::info!(version = VERSION; "logging initialized");
+        log_info!(version = VERSION; "logging initialized");
 
         Ok(())
     }

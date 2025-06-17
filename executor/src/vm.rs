@@ -12,14 +12,15 @@ use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
     caching, calldata, config,
-    errors::ContractError,
+    errors::VMError,
     host::LockedSlotsSet,
-    memlimiter,
+    memlimiter, public_abi,
     runner::{self, InitAction, WasmMode},
     ustar::{Archive, SharedBytes},
     wasi::{self, preview1::I32Exit},
 };
 use anyhow::{Context, Result};
+use genvm_common::*;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug)]
@@ -81,7 +82,7 @@ impl RunOk {
     }
 
     pub fn as_bytes_iter(&self) -> impl Iterator<Item = u8> + '_ {
-        use crate::host::ResultCode;
+        use crate::public_abi::ResultCode;
         match self {
             RunOk::Return(buf) => [ResultCode::Return as u8]
                 .into_iter()
@@ -146,7 +147,7 @@ impl wasmtime::ResourceLimiter for memlimiter::Limiter {
         let success = self.consume(delta);
 
         if current == 0 && !success {
-            Err(ContractError::oom(None).into())
+            Err(VMError::oom(None).into())
         } else {
             Ok(success)
         }
@@ -165,10 +166,10 @@ impl wasmtime::ResourceLimiter for memlimiter::Limiter {
         }
 
         let delta = delta as u32;
-        let success = self.consume_mul(delta, memlimiter::consts::TABLE_ENTRY_SIZE);
+        let success = self.consume_mul(delta, public_abi::MemoryLimiterConsts::TableEntry.value());
 
         if current == 0 && !success {
-            Err(ContractError::oom(None).into())
+            Err(VMError::oom(None).into())
         } else {
             Ok(success)
         }
@@ -330,17 +331,17 @@ impl VM {
     #[allow(clippy::manual_try_fold)]
     pub async fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
         if let Ok(lck) = self.store.data().genlayer_ctx.lock() {
-            log::info!(wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "run");
+            log_debug!(wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "run");
         }
 
         let func = instance
             .get_typed_func::<(), ()>(&mut self.store, "")
             .or_else(|_| instance.get_typed_func::<(), ()>(&mut self.store, "_start"))
             .with_context(|| "can't find entrypoint")?;
-        log::info!("execution start");
+        log_debug!("execution start");
         let time_start = std::time::Instant::now();
         let res = func.call_async(&mut self.store, ()).await;
-        log::info!(duration:? = time_start.elapsed(); "vm execution finished");
+        log_debug!(duration:? = time_start.elapsed(); "vm execution finished");
         let res: RunResult = match res {
             Ok(()) => Ok(RunOk::empty_return()),
             Err(e) => {
@@ -355,8 +356,8 @@ impl VM {
                             .map(|v| RunOk::VMError(format!("wasm_trap {v:?}"), Some(v.into())))
                     },
                     |e: anyhow::Error| {
-                        e.downcast::<crate::errors::ContractError>()
-                            .map(|crate::errors::ContractError(m, c)| RunOk::VMError(m, c))
+                        e.downcast::<crate::errors::VMError>()
+                            .map(|crate::errors::VMError(m, c)| RunOk::VMError(m, c))
                     },
                     |e: anyhow::Error| {
                         e.downcast::<crate::errors::UserError>()
@@ -377,16 +378,16 @@ impl VM {
         };
         match &res {
             Ok(RunOk::Return(_)) => {
-                log::info!(target: "vm", result = "Return"; "execution result unwrapped")
+                log_debug!(result = "Return"; "execution result unwrapped")
             }
-            Ok(RunOk::UserError(_)) => {
-                log::info!(target: "vm", result = "Rollback"; "execution result unwrapped")
+            Ok(RunOk::UserError(msg)) => {
+                log_debug!(result = "UserError", message = msg; "execution result unwrapped")
             }
             Ok(RunOk::VMError(e, cause)) => {
-                log::info!(target: "vm", result = format!("ContractError({e})"), cause:? = cause; "execution result unwrapped")
+                log_debug!(result = "VMError", message = e, cause:? = cause; "execution result unwrapped")
             }
-            Err(_) => {
-                log::info!(target: "vm", result = "Error"; "execution result unwrapped")
+            Err(e) => {
+                log_debug!(result = "Error", error:ah = e; "execution result unwrapped")
             }
         };
         res
@@ -540,7 +541,7 @@ impl Supervisor {
         let entry = self.cached_modules.entry(data.wasm_uid);
         match entry {
             std::collections::hash_map::Entry::Occupied(entry) => {
-                log::debug!(target: "cache", cache_method = "rt", path = data.debug_path(); "using cached");
+                log_debug!(cache_method = "rt", path = data.debug_path(); "using cached");
                 self.stats.cache_hits += 1;
                 Ok(entry.get().clone())
             }
@@ -548,7 +549,7 @@ impl Supervisor {
                 let debug_path = data.debug_path();
 
                 let compile_here = || -> Result<PrecompiledModule> {
-                    log::info!(status = "start", path = debug_path, runner = data.runner_id.as_str(); "cache compiling");
+                    log_info!(status = "start", path = debug_path, runner = data.runner_id.as_str(); "cache compiling");
 
                     caching::validate_wasm(&self.engines, data.contents.as_ref())?;
 
@@ -566,7 +567,7 @@ impl Supervisor {
                             Some(std::path::Path::new(&debug_path)),
                         )?
                         .compile_module()?;
-                    log::info!(status = "done", duration:? = start_time.elapsed(), path = debug_path, runner = data.runner_id.as_str(); "cache compiling");
+                    log_info!(status = "done", duration:? = start_time.elapsed(), path = debug_path, runner = data.runner_id.as_str(); "cache compiling");
                     Ok(PrecompiledModule {
                         det: module_det,
                         non_det: module_non_det,
@@ -604,13 +605,13 @@ impl Supervisor {
                         &self.engines.non_det,
                     )?;
 
-                    log::debug!(target: "cache", cache_method = "precompiled", runner = data.runner_id.as_str(); "using cached");
+                    log_debug!(cache_method = "precompiled", runner = data.runner_id.as_str(); "using cached");
 
                     Ok(PrecompiledModule { det, non_det })
                 };
 
                 let ret = get_from_precompiled().inspect(|_| { self.stats.precompile_hits += 1; }).or_else(|e| {
-                    log::trace!(target: "cache", error = genvm_common::log_error(&e), runner = data.runner_id.as_str(); "could not use precompiled");
+                    log_trace!(error:ah = &e, runner = data.runner_id.as_str(); "could not use precompiled");
                     self.stats.compiled_modules += 1;
                     compile_here()
                 })?;
@@ -738,9 +739,10 @@ impl Supervisor {
                         name_in_fs.push_str(&name[file.len()..]);
 
                         if !limiter.consume(
-                            memlimiter::consts::FILE_MAPPING_SIZE + name_in_fs.len() as u32,
+                            public_abi::MemoryLimiterConsts::FileMapping.value()
+                                + name_in_fs.len() as u32,
                         ) {
-                            return Err(ContractError::oom(None).into());
+                            return Err(VMError::oom(None).into());
                         }
 
                         vm.store
@@ -750,8 +752,10 @@ impl Supervisor {
                             .map_file(&name_in_fs, file_contents.clone())?;
                     }
                 } else {
-                    if !limiter.consume(memlimiter::consts::FILE_MAPPING_SIZE + to.len() as u32) {
-                        return Err(ContractError::oom(None).into());
+                    if !limiter.consume(
+                        public_abi::MemoryLimiterConsts::FileMapping.value() + to.len() as u32,
+                    ) {
+                        return Err(VMError::oom(None).into());
                     }
 
                     vm.store
@@ -790,16 +794,14 @@ impl Supervisor {
                     let name = module
                         .name()
                         .ok_or_else(|| anyhow::anyhow!("can't link unnamed module {:?}", current))
-                        .map_err(|e| {
-                            crate::errors::ContractError("invalid_wasm".into(), Some(e))
-                        })?;
+                        .map_err(|e| crate::errors::VMError("invalid_wasm".into(), Some(e)))?;
                     linker.instance(&mut vm.store, name, instance)?;
                     instance
                 };
                 match instance.get_typed_func::<(), ()>(&mut vm.store, "_initialize") {
                     Err(_) => {}
                     Ok(func) => {
-                        log::info!(target: "rt", runner = self.runner_cache.get_unsafe(current).runner_id().as_str(), path = path; "calling _initialize");
+                        log_info!(runner = self.runner_cache.get_unsafe(current).runner_id().as_str(), path = path; "calling _initialize");
                         func.call_async(&mut vm.store, ()).await?;
                     }
                 }
@@ -898,42 +900,65 @@ impl Supervisor {
 
     fn code_to_archive(code: SharedBytes) -> Result<Archive> {
         if let Ok(mut as_zip) = zip::ZipArchive::new(std::io::Cursor::new(code.clone())) {
-            return Archive::from_zip(&mut as_zip, code.len() as u32);
+            return Archive::from_zip(&mut as_zip, code);
         }
 
         if wasmparser::Parser::is_core_wasm(code.as_ref()) {
             return Ok(Archive::from_file_and_runner(
                 code,
-                SharedBytes::from(&b"{ \"StartWasm\": \"file\" }"[..]),
+                SharedBytes::from(b"v0.0.1".as_ref()),
+                SharedBytes::from(b"{ \"StartWasm\": \"file\" }".as_ref()),
             ));
         }
+
+        Self::code_to_archive_from_text(code)
+    }
+
+    fn code_to_archive_from_text(code: SharedBytes) -> Result<Archive> {
         let code_str = str::from_utf8(code.as_ref()).map_err(|e| {
-            crate::errors::ContractError(
+            crate::errors::VMError(
                 "invalid_contract non-utf8".into(),
                 Some(anyhow::Error::from(e)),
             )
         })?;
+
         let code_start = (|| {
             for c in ["//", "#", "--"] {
                 if code_str.starts_with(c) {
                     return Ok(c);
                 }
             }
-            Err(crate::errors::ContractError(
-                "no_runner_comment".into(),
-                None,
-            ))
+            Err(crate::errors::VMError("no_runner_comment".into(), None))
         })()?;
+
+        let mut version_string = String::new();
         let mut code_comment = String::new();
+        let mut first = true;
         for l in code_str.lines() {
             if !l.starts_with(code_start) {
                 break;
             }
-            code_comment.push_str(&l[code_start.len()..])
+
+            let l = &l[code_start.len()..];
+
+            if first {
+                first = false;
+                if l.trim().starts_with("v") {
+                    version_string.push_str(l);
+                } else {
+                    log_warn!("runner comment does not start with version, using default");
+                    version_string.push_str(public_abi::ABSENT_VERSION);
+
+                    code_comment.push_str(l)
+                }
+            } else {
+                code_comment.push_str(l)
+            }
         }
 
         Ok(Archive::from_file_and_runner(
             code,
+            SharedBytes::from(version_string.as_bytes()),
             SharedBytes::from(code_comment.as_bytes()),
         ))
     }
@@ -962,6 +987,15 @@ impl Supervisor {
         let cur_arch = self
             .runner_cache
             .get_or_create(contract_id, provide_arch, limiter)?;
+
+        let version = cur_arch.get_version()?;
+        vm.store
+            .data_mut()
+            .genlayer_ctx_mut()
+            .genlayer_sdk
+            .data
+            .version = version;
+
         let actions = cur_arch.get_actions()?;
 
         let mut ctx = ApplyActionCtx {
@@ -981,7 +1015,7 @@ impl Supervisor {
     }
 
     pub fn log_stats(&self) {
-        log::debug!(
+        log_debug!(
             all_wasm_modules:serde = self.cached_modules.keys().map(|x| x.as_str()).collect_vec(),
             stats:serde = self.stats,
             det_max_memory = u32::MAX - self.shared_data.limiter_det.get_least_remaining_memory(),

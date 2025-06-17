@@ -2,10 +2,10 @@ pub mod pool;
 
 mod ctx;
 
-use std::{collections::BTreeMap, future::Future, sync::Arc};
-
+use genvm_common::*;
 use genvm_modules_interfaces::{web::HeaderData, GenericValue};
 use serde::{Deserialize, Serialize};
+use std::{collections::BTreeMap, future::Future, sync::Arc};
 
 use crate::common::{self, MapUserError, ModuleError};
 
@@ -81,7 +81,7 @@ impl<T, C> UserVM<T, C> {
                 path.push_str(extra_lua_path);
             }
 
-            log::info!(path = path; "lua path");
+            log_info!(path = path; "lua path");
 
             path
         };
@@ -222,7 +222,7 @@ pub async fn send_request_get_lua_compatible_response_bytes(
         }
     };
 
-    log::trace!(body:? = body, len = body.len(); "read body");
+    log_trace!(body:? = body, len = body.len(); "read body");
 
     if error_on_status && status != 200 {
         return Err(ModuleError {
@@ -294,7 +294,7 @@ pub async fn send_request_get_lua_compatible_response_json(
         }
     };
 
-    log::trace!(body:? = body; "read body");
+    log_trace!(body:? = body; "read body");
 
     if error_on_status && status != 200 {
         return Err(ModuleError {

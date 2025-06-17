@@ -1,5 +1,6 @@
 use super::{ctx, prompt, providers, scripting, UserVM};
 use crate::common::{self, MessageHandler, MessageHandlerProvider, ModuleError, ModuleResult};
+use genvm_common::*;
 
 use genvm_modules_interfaces::llm::{self as llm_iface};
 use mlua::LuaSerdeExt;
@@ -94,7 +95,7 @@ impl Inner {
         _zelf: Arc<Inner>,
         payload: llm_iface::PromptPayload,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        log::debug!(payload:serde = payload, cookie = self.ctx.data.hello.cookie; "exec_prompt start");
+        log_debug!(payload:serde = payload, cookie = self.ctx.data.hello.cookie; "exec_prompt start");
 
         let payload = self.user_vm.vm.to_value(&payload)?;
 
@@ -107,7 +108,7 @@ impl Inner {
             .await?;
         let res = self.user_vm.vm.from_value(res)?;
 
-        log::debug!(result:serde = res, cookie = self.ctx.data.hello.cookie; "exec_prompt returned");
+        log_debug!(result:serde = res, cookie = self.ctx.data.hello.cookie; "exec_prompt returned");
 
         Ok(res)
     }
@@ -117,7 +118,7 @@ impl Inner {
         _zelf: Arc<Inner>,
         payload: llm_iface::PromptTemplatePayload,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        log::debug!(payload:serde = payload, cookie = self.ctx.data.hello.cookie; "exec_prompt_template start");
+        log_debug!(payload:serde = payload, cookie = self.ctx.data.hello.cookie; "exec_prompt_template start");
 
         let payload = self.user_vm.vm.to_value(&payload)?;
 
@@ -130,7 +131,7 @@ impl Inner {
             .await?;
         let res = self.user_vm.vm.from_value(res)?;
 
-        log::debug!(result:serde = res, cookie = self.ctx.data.hello.cookie; "exec_prompt_template returned");
+        log_debug!(result:serde = res, cookie = self.ctx.data.hello.cookie; "exec_prompt_template returned");
 
         Ok(res)
     }

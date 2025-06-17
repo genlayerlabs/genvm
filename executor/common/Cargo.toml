@@ -16,12 +16,10 @@ debug = true
 
 [dependencies]
 anyhow = "1.0.97"
-log = "0.4.27"
 regex = "1.11.1"
-serde = "1.0.219"
+serde = { version = "1.0.219", features = ["derive", "rc"] }
 serde_json = "1.0.140"
 serde_yaml = "0.9.34"
-structured-logger = "1.0.3"
 tokio = { version = "1.44.1", features = ["rt", "rt-multi-thread", "net", "time", "macros", "sync"], default-features = false}
 num-bigint = { version = "0.4.6", features = ["serde"] }
 hex = "0.4.3"

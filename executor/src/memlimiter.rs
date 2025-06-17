@@ -1,3 +1,4 @@
+use genvm_common::*;
 use std::sync::{atomic::AtomicU32, Arc};
 
 #[derive(Clone)]
@@ -9,11 +10,6 @@ pub struct Limiter {
 
 pub struct SaveTok {
     remaining_memory: u32,
-}
-
-pub mod consts {
-    pub const TABLE_ENTRY_SIZE: u32 = 64;
-    pub const FILE_MAPPING_SIZE: u32 = 256;
 }
 
 impl Limiter {
@@ -57,7 +53,7 @@ impl Limiter {
             .remaining_memory
             .load(std::sync::atomic::Ordering::SeqCst);
 
-        log::debug!(delta = delta, remaining_at_op_start = remaining, id = self.id; "consume");
+        log_debug!(delta = delta, remaining_at_op_start = remaining, id = self.id; "consume");
 
         loop {
             if delta > remaining {

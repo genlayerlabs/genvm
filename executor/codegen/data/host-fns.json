@@ -1,7 +1,7 @@
 [
     {
         "type": "enum",
-        "size": "u8",
+        "repr": "u8",
         "name": "methods",
         "values": {
             "get_calldata": 0,
@@ -21,7 +21,7 @@
     },
     {
       "type": "enum",
-      "size": "u8",
+      "repr": "u8",
       "name": "errors",
       "values": {
           "ok": 0,

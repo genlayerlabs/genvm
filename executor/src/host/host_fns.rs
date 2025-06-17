@@ -1,4 +1,7 @@
+#![allow(dead_code, clippy::redundant_static_lifetimes)]
+
 use serde_derive::{Deserialize, Serialize};
+
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Methods {
@@ -17,8 +20,24 @@ pub enum Methods {
     GetBalance = 12,
 }
 
-#[allow(dead_code)]
 impl Methods {
+    pub fn value(self) -> u8 {
+        match self {
+            Methods::GetCalldata => 0,
+            Methods::StorageRead => 1,
+            Methods::StorageWrite => 2,
+            Methods::ConsumeResult => 3,
+            Methods::GetLeaderNondetResult => 4,
+            Methods::PostNondetResult => 5,
+            Methods::PostMessage => 6,
+            Methods::PostEvent => 7,
+            Methods::ConsumeFuel => 8,
+            Methods::DeployContract => 9,
+            Methods::EthCall => 10,
+            Methods::EthSend => 11,
+            Methods::GetBalance => 12,
+        }
+    }
     pub fn str_snake_case(self) -> &'static str {
         match self {
             Methods::GetCalldata => "get_calldata",
@@ -69,8 +88,15 @@ pub enum Errors {
     IAmLeader = 3,
 }
 
-#[allow(dead_code)]
 impl Errors {
+    pub fn value(self) -> u8 {
+        match self {
+            Errors::Ok => 0,
+            Errors::Absent => 1,
+            Errors::Forbidden => 2,
+            Errors::IAmLeader => 3,
+        }
+    }
     pub fn str_snake_case(self) -> &'static str {
         match self {
             Errors::Ok => "ok",

@@ -18,7 +18,7 @@ from ._internal import _lazy_api
 import genlayer.py.calldata as calldata
 import genlayer.gl._internal.gl_call as gl_call
 
-from ._internal.result_codes import ResultCode
+from genlayer.py.public_abi import ResultCode
 
 
 @dataclasses.dataclass

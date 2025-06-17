@@ -4,6 +4,8 @@ import inspect
 import genlayer.py.calldata as calldata
 import genlayer.py._internal.reflect as reflect
 
+import genlayer.py.public_abi as ABI
+
 
 class Event:
 	"""
@@ -89,6 +91,13 @@ class Event:
 		signature += '('
 		signature += ','.join(indexed_args)
 		signature += ')'
+
+		if len(indexed_args) > ABI.EVENT_MAX_TOPICS:
+			import warnings
+
+			warnings.warn(
+				f'event has too many indexed fields, it may not be emitted correctly: `{signature}`'
+			)
 
 		cls.name = event_name
 		cls.signature = signature

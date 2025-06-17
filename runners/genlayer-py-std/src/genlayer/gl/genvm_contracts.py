@@ -51,7 +51,7 @@ def _make_calldata_obj(method, args, kwargs) -> calldata.Encodable:
 	return ret
 
 
-from ._internal.result_codes import StorageType
+from genlayer.py.public_abi import StorageType
 
 
 class _ContractAtViewMethod:

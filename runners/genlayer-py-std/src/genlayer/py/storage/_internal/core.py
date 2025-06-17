@@ -7,14 +7,24 @@ import hashlib
 from genlayer.py.types import u256
 
 
-class Manager(typing.Protocol):
-	def get_store_slot(self, addr: bytes) -> 'Slot': ...
+class Manager(metaclass=abc.ABCMeta):
+	def get_store_slot(self, addr: bytes, /) -> 'Slot': ...
+	def do_read(self, id: bytes, off: int, len: int, /) -> bytes: ...
+	def do_write(self, id: bytes, off: int, what: collections.abc.Buffer, /): ...
 
 
+@typing.final
 class Slot:
 	manager: Manager
 
 	__slots__ = ('manager', 'id', '_indir_cache')
+
+	def __getstate__(self):
+		return (self.manager, self.id)
+
+	def __setstate__(self, state):
+		self.manager, self.id = state
+		self._indir_cache = hashlib.sha3_256(self.id)
 
 	def __init__(self, addr: bytes, manager: Manager):
 		self.id = addr
@@ -27,19 +37,27 @@ class Slot:
 		hasher.update(off.to_bytes(4, 'little'))
 		return self.manager.get_store_slot(hasher.digest())
 
-	@abc.abstractmethod
 	def read(self, off: int, len: int, /) -> bytes:
-		raise NotImplementedError()
+		return self.manager.do_read(self.id, off, len)
 
-	@abc.abstractmethod
 	def write(self, off: int, what: collections.abc.Buffer, /) -> None:
-		raise NotImplementedError()
+		return self.manager.do_write(self.id, off, what)
 
 	def as_int(self) -> u256:
 		return u256(int.from_bytes(self.id, 'little', signed=False))
 
+	def __eq__(self, r: object) -> bool:
+		if not isinstance(r, Slot):
+			return False
+		if r.manager is not self.manager:
+			return False
+		return self.id == r.id
+
+	def __hash__(self) -> int:
+		return hash(self.id)
+
 	def __repr__(self):
-		return f'{type(self).__name__}({self.id.hex()})'
+		return f'Slot({self.id.hex()})'
 
 	def __str__(self):
 		return f'Slot({self.id.hex()})'
@@ -176,6 +194,9 @@ class Indirection[T](_WithStorageSlotAndTD):
 	def get(self) -> T:
 		return self._item_desc.get(self._storage_slot.indirect(self._off), 0)
 
+	def set(self, val: T) -> None:
+		self._item_desc.set(self._storage_slot.indirect(self._off), 0, val)
+
 	def slot(self) -> Slot:
 		"""
 		:returns: :py:class:`Slot` at which data resides
@@ -300,45 +321,42 @@ class VLATypeDesc[T](SpecialTypeDesc, TypeDesc[VLA[T]], ComplexCopyAction):
 		return VLATypeDesc.SIZE
 
 
-class InmemSlot(Slot):
-	"""
-	In-memory storage slot which can be used to create storage entities without "Host"
-	"""
-
-	__slots__ = ('_mem',)
-
-	_mem: bytearray
-
-	def __init__(self, addr: bytes, manager: Manager):
-		Slot.__init__(self, addr, manager)
-		self._mem = bytearray()
-
-	def read(self, off: int, le: int) -> bytes:
-		self._mem.extend(b'\x00' * (off + le - len(self._mem)))
-		return bytes(memoryview(self._mem)[off : off + le])
-
-	def write(self, off: int, what: collections.abc.Buffer) -> None:
-		what = memoryview(what)
-		l = len(what)
-		self._mem.extend(b'\x00' * (off + l - len(self._mem)))
-		memoryview(self._mem)[off : off + l] = what
-
-
 class InmemManager(Manager):
-	_parts: dict[bytes, InmemSlot]
+	_parts: dict[bytes, tuple[Slot, bytearray]]
 
 	__slots__ = ('_parts',)
 
 	def __init__(self):
 		self._parts = {}
 
-	def get_store_slot(self, addr: bytes) -> Slot:
-		return self._parts.setdefault(addr, InmemSlot(addr, self))
+	def get_store_slot(self, id: bytes) -> Slot:
+		res = self._parts.get(id, None)
+		if res is None:
+			slt = Slot(id, self)
+			self._parts[id] = (slt, bytearray())
+			return slt
+		return res[0]
+
+	def do_read(self, id: bytes, off: int, le: int) -> bytes:
+		res = self._parts.get(id, None)
+		if res is None:
+			res = (Slot(id, self), bytearray())
+			self._parts[id] = res
+		_, mem = res
+		mem.extend(b'\x00' * (off + le - len(mem)))
+		return bytes(memoryview(mem)[off : off + le])
+
+	def do_write(self, id: bytes, off: int, what: collections.abc.Buffer) -> None:
+		_, mem = self._parts[id]
+		what = memoryview(what)
+		l = len(what)
+		mem.extend(b'\x00' * (off + l - len(mem)))
+		memoryview(mem)[off : off + l] = what
 
 	def debug(self):
 		print('=== fake storage ===')
 		for k, v in self._parts.items():
-			print(f'{k.hex()}\n\t{v._mem}')
+			print(f'{k.hex()}\n\t{v[1]}')
 
 
 ROOT_SLOT_ID: typing.Final = b'\x00' * 32

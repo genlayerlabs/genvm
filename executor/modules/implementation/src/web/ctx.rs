@@ -1,3 +1,4 @@
+use genvm_common::*;
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -38,7 +39,7 @@ impl CtxPart {
             .post(format!("{}/session", &self.config.webdriver_host))
             .header("Content-Type", "application/json; charset=utf-8")
             .body(self.config.session_create_request.clone());
-        log::trace!(request:? = create_request, body = self.config.session_create_request, cookie = self.hello.cookie; "creating session");
+        log_trace!(request:? = create_request, body = self.config.session_create_request, cookie = self.hello.cookie; "creating session");
         let opened_session_res = create_request
             .send()
             .await

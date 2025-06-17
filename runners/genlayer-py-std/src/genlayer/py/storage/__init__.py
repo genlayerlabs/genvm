@@ -50,3 +50,17 @@ def inmem_allocate[T](t: typing.Type[T], *init_args, **init_kwargs) -> T:
 		init(instance, *init_args, **init_kwargs)
 
 	return instance
+
+
+def copy_to_memory[T](val: T) -> T:
+	# we know that val is a storage type
+	td = getattr(val, '__type_desc__', None)
+	if td is None:
+		td = _known_descs[val]  # type: ignore
+
+	man = InmemManager()
+	slot = man.get_store_slot(ROOT_SLOT_ID)
+
+	td.set(slot, 0, val)
+
+	return td.get(slot, 0)

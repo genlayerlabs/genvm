@@ -3,6 +3,8 @@ use std::{borrow::BorrowMut, io::Write, iter};
 use tracing::instrument;
 use wiggle::{GuestError, GuestMemory, GuestPtr};
 
+use genvm_common::*;
+
 use crate::ustar::SharedBytes;
 use crate::wasi::base;
 
@@ -1175,7 +1177,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
         if !self.context.conf.is_deterministic {
             if let Err(e) = getrandom::fill(&mut mem) {
-                log::error!(error:err = e; "random failed");
+                log_error!(error:err = e; "random failed");
             }
         }
 

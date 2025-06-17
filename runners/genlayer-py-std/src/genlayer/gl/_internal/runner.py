@@ -5,7 +5,7 @@ Module that is used to run python contracts in the default way
 __all__ = ()
 
 from ..msg import message_raw, MessageRawType
-from .result_codes import EntryKind
+from genlayer.py.public_abi import EntryKind
 
 import genlayer.py.calldata as calldata
 
@@ -35,6 +35,7 @@ def _handle_main() -> typing.NoReturn:
 	from ..genvm_contracts import Contract
 
 	import genlayer.py.get_schema as _get_schema
+	import genlayer.py.public_abi as ABI
 
 	import genlayer as gl_std
 
@@ -66,10 +67,10 @@ def _handle_main() -> typing.NoReturn:
 			return meth
 		# now it is not init
 		match ctx.cd.get('method', ''):
-			case '#error':
+			case ABI.SpecialMethod.ERRORED_MESSAGE:
 				# no checks
 				return ctx.contract_type.__on_errored_message__
-			case '#get-schema':
+			case ABI.SpecialMethod.GET_SCHEMA:
 				_give_result(ctx.contract_type.__get_schema__)
 			case '':
 				if err := check_abstracts(ctx, ctx.contract_type.__receive__):

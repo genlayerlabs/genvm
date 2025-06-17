@@ -1,5 +1,5 @@
 use futures_util::{SinkExt, StreamExt};
-use genvm_common::cancellation;
+use genvm_common::*;
 use genvm_modules_interfaces::GenericValue;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, sync::Arc};
@@ -15,7 +15,6 @@ pub enum ErrorKind {
     READING_BODY,
     SENDING_REQUEST,
     DESERIALIZING,
-    OVERLOADED,
     Other(String),
 }
 
@@ -37,7 +36,6 @@ impl ErrorKind {
             ErrorKind::READING_BODY => "READING_BODY".to_owned(),
             ErrorKind::SENDING_REQUEST => "SENDING_REQUEST".to_owned(),
             ErrorKind::DESERIALIZING => "DESERIALIZING".to_owned(),
-            ErrorKind::OVERLOADED => "OVERLOADED".to_owned(),
             ErrorKind::Other(str) => str.clone(),
         }
     }
@@ -148,9 +146,9 @@ pub fn censor_debug(res: &impl std::fmt::Debug) -> String {
 pub async fn read_response(res: reqwest::Response) -> Result<String> {
     let status = res.status();
     if status != 200 {
-        log::error!(response = censor_debug(&res), status = status.as_u16(), cookie = get_cookie(); "request error (1)");
+        log_error!(response = censor_debug(&res), status = status.as_u16(), cookie = get_cookie(); "request error (1)");
         let text = res.text().await;
-        log::error!(body:? = text, cookie = get_cookie(); "request error (2)");
+        log_error!(body:? = text, cookie = get_cookie(); "request error (2)");
         return Err(anyhow::anyhow!(
             "request error status={} body={:?}",
             status.as_u16(),
@@ -159,13 +157,13 @@ pub async fn read_response(res: reqwest::Response) -> Result<String> {
     }
     let text = res.text().await.with_context(|| "reading body as text")?;
 
-    if log::log_enabled!(log::Level::Debug) {
+    if log_enabled!(logger::Level::Debug) {
         match serde_json::from_str::<serde_json::Value>(&text) {
             Ok(val) => {
-                log::debug!(body_json:serde = val, cookie = get_cookie(); "read response");
+                log_debug!(body_json:serde = val, cookie = get_cookie(); "read response");
             }
             Err(_) => {
-                log::debug!(body_text = text, cookie = get_cookie(); "read response");
+                log_debug!(body_text = text, cookie = get_cookie(); "read response");
             }
         }
     }
@@ -246,7 +244,7 @@ where
                             }
                         }
                         Err(err) => {
-                            log::error!(error = genvm_common::log_error(&err), cookie = cookie; "handler fatal error");
+                            log_error!(error:ah = &err, cookie = cookie; "handler fatal error");
                             genvm_modules_interfaces::Result::FatalError(format!("{err:#}"))
                         }
                     },
@@ -305,12 +303,12 @@ where
     let res = loop_one_inner(&mut handler, stream, &cookie).await;
 
     if let Err(close) = handler.cleanup().await {
-        log::error!(error = genvm_common::log_error(&close), cookie = cookie; "cleanup error");
+        log_error!(error:ah = &close, cookie = cookie; "cleanup error");
     }
 
     if res.is_err() {
         if let Err(close) = stream.close(None).await {
-            log::error!(error:err = close, cookie = cookie; "stream closing error")
+            log_error!(error:err = close, cookie = cookie; "stream closing error")
         }
     }
 
@@ -324,37 +322,39 @@ async fn loop_one<T, R>(
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
 {
-    log::trace!("sock -> ws upgrade");
+    log_trace!("sock -> ws upgrade");
     let mut stream = match tokio_tungstenite::accept_async(stream).await {
         Err(e) => {
             let e = e.into();
-            log::error!(error = genvm_common::log_error(&e); "accept failed");
+            log_error!(error:ah = &e; "accept failed");
             return;
         }
         Ok(stream) => stream,
     };
 
-    log::trace!("reading hello");
+    log_trace!("reading hello");
     let hello = match read_hello(&mut stream).await {
         Err(e) => {
-            log::error!(error = genvm_common::log_error(&e); "read hello failed");
+            log_error!(error:ah = &e; "read hello failed");
             return;
         }
         Ok(None) => return,
         Ok(Some(hello)) => hello,
     };
 
-    log::trace!(hello:serde = hello; "read hello");
+    log_trace!(hello:serde = hello; "read hello");
 
     let cookie = hello.cookie.clone();
     let cookie: &str = &cookie;
-    COOKIE.scope(Arc::from(cookie), async {
-        log::debug!(cookie = cookie; "peer accepted");
-        if let Err(e) = loop_one_impl(handler_provider, &mut stream, hello).await {
-            log::error!(error = genvm_common::log_error(&e), cookie = cookie; "internal loop error");
-        }
-        log::debug!(cookie = cookie; "peer done");
-    }).await;
+    COOKIE
+        .scope(Arc::from(cookie), async {
+            log_debug!(cookie = cookie; "peer accepted");
+            if let Err(e) = loop_one_impl(handler_provider, &mut stream, hello).await {
+                log_error!(error:ah = &e, cookie = cookie; "internal loop error");
+            }
+            log_debug!(cookie = cookie; "peer done");
+        })
+        .await;
 }
 
 pub async fn run_loop<T, R>(
@@ -368,19 +368,19 @@ where
 {
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
 
-    log::info!(address = bind_address; "loop started");
+    log_info!(address = bind_address; "loop started");
 
     loop {
         tokio::select! {
             _ = cancel.chan.closed() => {
-                log::info!("loop cancelled");
+                log_info!("loop cancelled");
                 return Ok(())
             }
             accepted = listener.accept() => {
                 if let Ok((stream, _)) = accepted {
                     tokio::spawn(loop_one(handler_provider.clone(), stream));
                 } else {
-                    log::info!("accepted None");
+                    log_info!("accepted None");
                     return Ok(())
                 }
             }
@@ -422,7 +422,7 @@ pub fn setup_cancels(
 
     let canceller_cloned = canceller.clone();
     let handle_sigterm = move || {
-        log::info!("sigterm received");
+        log_info!("sigterm received");
         canceller_cloned();
     };
     unsafe {
@@ -434,7 +434,7 @@ pub fn setup_cancels(
         let parent_pid = std::os::unix::process::parent_id();
         let token = token.clone();
 
-        log::info!(parent_pid = parent_pid; "monitoring parent pid to exit when it changes");
+        log_info!(parent_pid = parent_pid; "monitoring parent pid to exit when it changes");
 
         rt.spawn(async move {
             loop {
@@ -445,7 +445,7 @@ pub fn setup_cancels(
                             continue;
                         }
 
-                        log::warn!(old = parent_pid, new_parent_pid = new_parent_pid; "parent pid changed, closing");
+                        log_warn!(old = parent_pid, new_parent_pid = new_parent_pid; "parent pid changed, closing");
                         canceller();
                    },
                    _ = token.chan.closed() => {
@@ -463,6 +463,8 @@ pub fn setup_cancels(
 pub mod tests {
     use std::sync::Once;
 
+    use genvm_common::logger;
+
     static INIT: Once = Once::new();
 
     pub fn setup() {
@@ -470,7 +472,7 @@ pub mod tests {
             let base_conf = genvm_common::BaseConfig {
                 blocking_threads: 0,
                 log_disable: Default::default(),
-                log_level: log::LevelFilter::Trace,
+                log_level: logger::Level::Trace,
                 threads: 0,
             };
             base_conf.setup_logging(std::io::stdout()).unwrap();

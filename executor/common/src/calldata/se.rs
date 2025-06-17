@@ -26,8 +26,15 @@ impl serde::Serialize for Value {
                 }
                 map.end()
             }
-            Value::Address(_) => Err(S::Error::custom("can't serialize address")),
-            Value::Number(_) => Err(S::Error::custom("can't serialize number")),
+            Value::Address(addr) => addr.serialize(serializer),
+            Value::Number(num) => {
+                if let Ok(num) = num.try_into() {
+                    let num: i64 = num;
+                    serializer.serialize_i64(num)
+                } else {
+                    num.serialize(serializer)
+                }
+            }
         }
     }
 }

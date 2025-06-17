@@ -10,14 +10,17 @@ pub mod ustar;
 pub mod vm;
 pub mod wasi;
 
-pub use genvm_common::calldata;
+pub mod public_abi;
 
-use errors::ContractError;
+pub use genvm_common::calldata;
+use genvm_common::*;
+
+use errors::VMError;
 use host::AbsentLeaderResult;
 pub use host::{Host, MessageData, SlotID};
 
 use anyhow::{Context, Result};
-use wasi::genlayer_sdk::{EntryKind, TransformedMessage};
+use wasi::genlayer_sdk::TransformedMessage;
 
 use std::{str::FromStr, sync::Arc};
 use vm::{Modules, RunOk};
@@ -100,7 +103,7 @@ pub async fn run_with_impl(
                 can_send_messages: permissions.contains("s"),
                 can_call_others: permissions.contains("c"),
                 can_spawn_nondet: permissions.contains("n"),
-                state_mode: crate::host::StorageType::Default,
+                state_mode: crate::public_abi::StorageType::Default,
             },
             message_data: TransformedMessage {
                 contract_address: calldata::Address::from(entry_message.contract_address.raw()),
@@ -113,11 +116,12 @@ pub async fn run_with_impl(
                 is_init: entry_message.is_init,
                 datetime: entry_message.datetime,
 
-                entry_kind: EntryKind::Main,
+                entry_kind: public_abi::EntryKind::Main,
                 entry_data: entrypoint,
                 entry_stage_data: calldata::Value::Null,
             },
             supervisor: supervisor_clone,
+            version: genvm_common::version::Version::ZERO,
         };
 
         let mut vm = supervisor.spawn(essential_data).await?;
@@ -125,7 +129,7 @@ pub async fn run_with_impl(
             .apply_contract_actions(&mut vm)
             .await
             .with_context(|| "applying runner actions")
-            .map_err(|cause| crate::errors::ContractError::wrap("runner_actions".into(), cause))?;
+            .map_err(|cause| crate::errors::VMError::wrap("runner_actions".into(), cause))?;
         (vm, instance)
     };
 
@@ -139,7 +143,7 @@ pub async fn run_with(
 ) -> vm::RunResult {
     let res = run_with_impl(entry_message, supervisor.clone(), permissions).await;
 
-    log::debug!("inspecting final result");
+    log_debug!("inspecting final result");
 
     let mut supervisor = supervisor.lock().await;
 
@@ -153,14 +157,14 @@ pub async fn run_with(
             Err(e) => Ok(RunOk::VMError("timeout".into(), Some(e))),
         }
     } else {
-        ContractError::unwrap_res(res)
+        VMError::unwrap_res(res)
     };
 
     let res = match res {
         Err(e) => match e.downcast() {
             Ok(AbsentLeaderResult) => Ok(RunOk::VMError("deterministic_violation".into(), None)),
             Err(e) => {
-                log::error!(error = genvm_common::log_error(&e); "internal error");
+                log_error!(error:ah = &e; "internal error");
                 Err(e)
             }
         },
@@ -169,7 +173,7 @@ pub async fn run_with(
 
     supervisor.log_stats();
 
-    log::debug!("sending final result to host");
+    log_debug!("sending final result to host");
 
     supervisor.host.consume_result(&res)?;
 

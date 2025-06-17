@@ -8,18 +8,52 @@ def to_camel(s)
 	s.split('_').map { |x| if x.size() == 0 then x else x[0].upcase + x[1..].downcase end }.join('')
 end
 
+def rust_repr(s)
+	if s == "str"
+		"&'static str"
+	else
+		s
+	end
+end
+
+def rust_repr_from(s)
+	if s == "str"
+		"&str"
+	else
+		s
+	end
+end
+
+def dump(s)
+	s.kind_of?(String) ? s.dump : s.to_s
+end
+
 # editorconfig-checker-disable
 ENUM_TEMPLATE_STR = <<-EOF
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
-#[repr(<%= size %>)]
+% if repr != "str"
+#[repr(<%= repr %>)]
 pub enum <%= to_camel name %> {
 % values.each { |k, v|
-    <%= to_camel k %> = <%= v %>,
+    <%= to_camel k %> = <%= dump v %>,
 % }
 }
+% else
+pub enum <%= to_camel name %> {
+% values.each { |k, v|
+    <%= to_camel k %>,
+% }
+}
+% end
 
-#[allow(dead_code)]
 impl <%= to_camel name %> {
+    pub fn value(self) -> <%= rust_repr repr %> {
+        match self {
+%   values.each { |k, v|
+            <%= to_camel name %>::<%= to_camel k %> => <%= dump v %>,
+%   }
+        }
+    }
     pub fn str_snake_case(self) -> &'static str {
         match self {
 % values.each { |k, v|
@@ -29,13 +63,13 @@ impl <%= to_camel name %> {
     }
 }
 
-impl TryFrom<<%= size %>> for <%= to_camel name %> {
+impl TryFrom<<%= rust_repr_from repr %>> for <%= to_camel name %> {
     type Error = ();
 
-    fn try_from(value: <%= size %>) -> Result<Self, ()> {
+    fn try_from(value: <%= rust_repr_from repr %>) -> Result<Self, ()> {
         match value {
 % values.each { |k, v|
-            <%= v %> => Ok(<%= to_camel name %>::<%= to_camel k %>),
+            <%= dump v %> => Ok(<%= to_camel name %>::<%= to_camel k %>),
 % }
             _ => Err(()),
         }
@@ -50,19 +84,19 @@ json_path, out_path = ARGV
 
 buf = String.new
 
-buf << "use serde_derive::{Deserialize, Serialize};\n"
+buf << "#![allow(dead_code, clippy::redundant_static_lifetimes)]\n\n";
+buf << "use serde_derive::{Deserialize, Serialize};\n\n"
 
 JSON.load_file(Pathname.new(json_path)).each { |t|
 	t_os = OpenStruct.new(t)
 	case t_os.type
 	when "enum"
 		buf << ENUM_TEMPLATE.result(t_os.instance_eval { binding })
+	when "const"
+		buf << "pub const #{t_os.name.upcase}: #{rust_repr t_os.repr} = #{dump t_os.value};\n"
 	else
 		raise "unknown type #{t_os.type}"
 	end
 }
 
 File.write(Pathname.new(out_path), buf)
-
-# Pathname.new(__dir__).parent.join('data', 'host-fns.json')
-# Pathname.new(__dir__).parent.parent.join('src', 'host', 'host_fns.rs')
