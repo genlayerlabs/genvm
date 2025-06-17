@@ -41,6 +41,7 @@ jobs:
           git fetch origin 'refs/tags/*:refs/tags/*'
       - uses: actions-ecosystem/action-get-latest-tag@v1
         id: get-latest-tag
+        if: ${{ inputs.tag == 'none' }}
       - name: Get source
         uses: ./.github/actions/get-src
         with:

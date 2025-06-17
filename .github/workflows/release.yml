@@ -4,9 +4,18 @@ on:
   workflow_dispatch:
     inputs:
       bump:
+        type: choice
+        required: false
+        description: "Version bump type (ignored if version_override is set)"
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+      version_override:
         type: string
-        required: true
-        description: "version to bump: "
+        required: false
+        description: "Override version (e.g., v1.2.3). If set, bump is ignored"
 
 defaults:
   run:
@@ -19,19 +28,34 @@ jobs:
   gen-tag:
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.bump-semver.outputs.new_version }}
+      tag: ${{ steps.determine-version.outputs.new_version }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions-ecosystem/action-get-latest-tag@v1
         id: get-latest-tag
+        if: github.event.inputs.version_override == ''
 
       - uses: actions-ecosystem/action-bump-semver@v1
         id: bump-semver
+        if: github.event.inputs.version_override == ''
         with:
           current_version: ${{ steps.get-latest-tag.outputs.tag }}
           level: ${{ github.event.inputs.bump }}
+
+      - name: Determine final version
+        id: determine-version
+        run: |
+          if [ -n "${{ github.event.inputs.version_override }}" ]; then
+            echo "Using override version: ${{ github.event.inputs.version_override }}"
+            echo "new_version=${{ github.event.inputs.version_override }}" >> $GITHUB_OUTPUT
+          else
+            echo "Using bumped version: ${{ steps.bump-semver.outputs.new_version }}"
+            echo "new_version=${{ steps.bump-semver.outputs.new_version }}" >> $GITHUB_OUTPUT
+          fi
+
       - run: |
-          echo "new version will be: ${{ steps.bump-semver.outputs.new_version }}"
+          echo "new version will be: ${{ steps.determine-version.outputs.new_version }}"
 
   build-runners:
     uses: ./.github/workflows/genvm-build-runners.yaml
