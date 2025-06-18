@@ -35,9 +35,11 @@ impl
         >,
     > {
         let client = common::create_client()?;
+        let hello = Arc::new(hello);
 
         let ctx = scripting::RSContext {
             client: client.clone(),
+            hello: hello.clone(),
             data: Arc::new(ctx::CtxPart {
                 hello,
                 providers: self.providers.clone(),

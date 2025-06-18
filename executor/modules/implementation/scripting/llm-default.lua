@@ -54,7 +54,8 @@ local function just_in_backend(ctx, mapped_prompt)
 		else
 			lib.log{level = "error", message = "provider failed", error = as_user_error, request = request}
 
-			lib.rs.user_error(result)
+			as_user_error.fatal = true
+			lib.rs.user_error(as_user_error)
 		end
 
 		::continue::

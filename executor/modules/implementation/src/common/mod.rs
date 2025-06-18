@@ -366,9 +366,11 @@ where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
 {
+    log_info!(address = bind_address; "trying to bind");
+
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
 
-    log_info!(address = bind_address; "loop started");
+    log_info!(address = bind_address, local_address:? = listener.local_addr(); "loop started");
 
     loop {
         tokio::select! {
@@ -422,7 +424,8 @@ pub fn setup_cancels(
 
     let canceller_cloned = canceller.clone();
     let handle_sigterm = move || {
-        log_info!("sigterm received");
+        // unfortunately, we cannot log here, as log may `malloc` and it will lead to deadlock
+        // in case signal handler is invoked from `malloc` itself...
         canceller_cloned();
     };
     unsafe {

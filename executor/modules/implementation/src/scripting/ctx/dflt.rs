@@ -323,6 +323,10 @@ mod tests {
 
         let rs_ctx = scripting::RSContext {
             client: common::create_client().unwrap(),
+            hello: Arc::new(genvm_modules_interfaces::GenVMHello {
+                cookie: "<test cookie>".to_owned(),
+                host_data: serde_json::Map::new(),
+            }),
             data: Arc::new(()),
         };
 
@@ -366,6 +370,10 @@ mod tests {
 
         let rs_ctx = scripting::RSContext {
             client: common::create_client().unwrap(),
+            hello: Arc::new(genvm_modules_interfaces::GenVMHello {
+                cookie: "<test cookie>".to_owned(),
+                host_data: serde_json::Map::new(),
+            }),
             data: Arc::new(()),
         };
 

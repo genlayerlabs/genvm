@@ -4,6 +4,7 @@ mod ctx;
 
 use genvm_common::*;
 use genvm_modules_interfaces::{web::HeaderData, GenericValue};
+use mlua::LuaSerdeExt;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, future::Future, sync::Arc};
 
@@ -11,6 +12,7 @@ use crate::common::{self, MapUserError, ModuleError};
 
 pub struct RSContext<C> {
     pub client: reqwest::Client,
+    pub hello: Arc<genvm_modules_interfaces::GenVMHello>,
     pub data: Arc<C>,
 }
 
@@ -109,6 +111,16 @@ impl<T, C> UserVM<T, C> {
             }))?;
 
             ctx.set("__ctx_dflt", my_ctx)?;
+
+            let hello_value = vm.to_value(&rs_ctx.hello)?;
+            let hello_value = hello_value
+                .as_table()
+                .ok_or_else(|| mlua::Error::external("expected hello value to be a table"))?;
+
+            for kv in hello_value.pairs() {
+                let (k, v): (mlua::Value, mlua::Value) = kv?;
+                ctx.set(k, v)?;
+            }
 
             Ok(())
         }));

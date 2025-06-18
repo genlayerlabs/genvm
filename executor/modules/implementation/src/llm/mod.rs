@@ -362,13 +362,15 @@ mod tests {
             .unwrap();
 
         let client = reqwest::Client::new();
+        let hello = Arc::new(genvm_modules_interfaces::GenVMHello {
+            cookie: "test_cookie".to_string(),
+            host_data: serde_json::Map::new(),
+        });
         let rs_ctx = scripting::RSContext {
             client: client.clone(),
+            hello: hello.clone(),
             data: Arc::new(ctx::CtxPart {
-                hello: genvm_modules_interfaces::GenVMHello {
-                    cookie: "test_cookie".to_string(),
-                    host_data: Arc::new(serde_json::Value::Null),
-                },
+                hello,
                 providers: Arc::new(BTreeMap::from([
                     ("1".to_owned(), provider_test),
                     ("2".to_owned(), provider_real),

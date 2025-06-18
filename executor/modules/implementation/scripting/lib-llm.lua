@@ -20,7 +20,7 @@ local lib = require('lib-genvm')
 ---@alias LLMExecPromptTemplatePayload { template: "EqComparative" | "EqNonComparativeValidator" | "EqNonComparativeLeader", vars: table<string, string> }
 
 ---@class LLM
----@field exec_prompt_in_provider fun(ctx, data: { prompt: Prompt, format: Format, model: string }): any
+---@field exec_prompt_in_provider fun(ctx, data: { prompt: Prompt, format: Format, model: string, provider: string }): any
 ---@field providers ProvidersDB
 ---@field templates { eq_comparative: any, eq_non_comparative_leader: any, eq_non_comparative_validator: any }
 

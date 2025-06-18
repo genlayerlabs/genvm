@@ -37,6 +37,7 @@ impl FromStr for Level {
             "debug" => Ok(Self::Debug),
             "info" => Ok(Self::Info),
             "warn" => Ok(Self::Warn),
+            "warning" => Ok(Self::Warn),
             "error" => Ok(Self::Error),
             _ => Err(()),
         }
@@ -276,9 +277,8 @@ macro_rules! log_trace {
     ($($arg:tt)+) => ($crate::log_static!($crate::logger::Level::Trace, $($arg)+))
 }
 
-thread_local! {
-    static LOG_BUFFER: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
-}
+static LOG_CACHED_BUFFERS: std::sync::LazyLock<crossbeam::queue::ArrayQueue<Vec<u8>>> =
+    std::sync::LazyLock::new(|| crossbeam::queue::ArrayQueue::new(64));
 
 fn write_str_part_escaping(
     buf: &mut std::io::Cursor<&mut Vec<u8>>,
@@ -971,76 +971,88 @@ impl<'a> Visitor<'a, '_> {
 }
 
 impl Logger {
-    pub fn __try_log(&self, record: Record<'_>) -> std::result::Result<(), Error> {
-        LOG_BUFFER.with_borrow_mut(|buf| {
-            buf.clear();
-            let mut writer = std::io::Cursor::new(buf);
-            writer.write_all(b"{")?;
+    fn log_inner(&self, buf: &mut Vec<u8>, record: Record<'_>) -> std::result::Result<(), Error> {
+        buf.clear();
+        let mut writer = std::io::Cursor::new(buf);
+        writer.write_all(b"{")?;
 
-            writer.write_all(format!("\"level\":\"{}\",", record.callsite.level).as_bytes())?;
-            write_k_v_str_fast(&mut writer, "target", record.callsite.target)?;
+        writer.write_all(format!("\"level\":\"{}\",", record.callsite.level).as_bytes())?;
+        write_k_v_str_fast(&mut writer, "target", record.callsite.target)?;
 
-            write_comma(&mut writer)?;
+        write_comma(&mut writer)?;
 
-            if let Some(msg) = record.args.as_str() {
-                write_k_v_str_fast(&mut writer, "message", msg)?;
-            } else {
-                write_k_v_str_fast(&mut writer, "message", &record.args.to_string())?;
-            }
+        if let Some(msg) = record.args.as_str() {
+            write_k_v_str_fast(&mut writer, "message", msg)?;
+        } else {
+            write_k_v_str_fast(&mut writer, "message", &record.args.to_string())?;
+        }
 
-            let mut visitor = Visitor(&mut writer);
-            for (k, v) in record.kv {
-                write_comma(visitor.0)?;
-                write_quoted_str_escaping(visitor.0, k)?;
-                visitor.0.write_all(b":")?;
+        let mut visitor = Visitor(&mut writer);
+        for (k, v) in record.kv {
+            write_comma(visitor.0)?;
+            write_quoted_str_escaping(visitor.0, k)?;
+            visitor.0.write_all(b":")?;
 
-                match v {
-                    Capture::Error(e) => visitor.dump_error(*e)?,
-                    Capture::Anyhow(e) => visitor.dump_anyhow(e)?,
-                    Capture::Str(s) => write_quoted_str_escaping(visitor.0, s)?,
-                    Capture::Display(d) => write_quoted_str_escaping(visitor.0, &d.to_string())?,
-                    Capture::Debug(d) => {
-                        write_quoted_str_escaping(visitor.0, &format!("{d:?}"))?;
-                    }
-                    Capture::Serde(serde_fn) => {
-                        serde_fn(visitor.0)?;
-                    }
+            match v {
+                Capture::Error(e) => visitor.dump_error(*e)?,
+                Capture::Anyhow(e) => visitor.dump_anyhow(e)?,
+                Capture::Str(s) => write_quoted_str_escaping(visitor.0, s)?,
+                Capture::Display(d) => write_quoted_str_escaping(visitor.0, &d.to_string())?,
+                Capture::Debug(d) => {
+                    write_quoted_str_escaping(visitor.0, &format!("{d:?}"))?;
+                }
+                Capture::Serde(serde_fn) => {
+                    serde_fn(visitor.0)?;
                 }
             }
+        }
 
-            write_comma(&mut writer)?;
+        write_comma(&mut writer)?;
 
-            writer.write_all(b"\"file\":\"")?;
-            write_str_escaping(&mut writer, record.file)?;
-            writer.write_all(b":")?;
-            writer.write_all(record.line.to_string().as_bytes())?;
-            writer.write_all(b"\"")?;
+        writer.write_all(b"\"file\":\"")?;
+        write_str_escaping(&mut writer, record.file)?;
+        writer.write_all(b":")?;
+        writer.write_all(record.line.to_string().as_bytes())?;
+        writer.write_all(b"\"")?;
 
-            write_comma(&mut writer)?;
-            write_k_v_str_fast(
-                &mut writer,
-                "ts",
-                &std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis()
-                    .to_string(),
-            )?;
+        write_comma(&mut writer)?;
+        write_k_v_str_fast(
+            &mut writer,
+            "ts",
+            &std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+                .to_string(),
+        )?;
 
-            writer.write_all(b"}")?;
-            writer.flush()?;
+        writer.write_all(b"}")?;
+        writer.flush()?;
 
-            let buf = writer.into_inner();
+        Ok(())
+    }
 
-            let mut writer = self.default_writer.lock().unwrap();
+    pub fn __try_log(&self, record: Record<'_>) -> std::result::Result<(), Error> {
+        let mut buf = LOG_CACHED_BUFFERS.pop().unwrap_or_default();
 
-            writer.write_all(buf)?;
-            writer.write_all(b"\n")?;
-            writer.flush()?;
-            buf.clear();
+        buf.clear();
 
-            Ok(())
-        })
+        let res = self.log_inner(&mut buf, record);
+
+        let mut writer = self.default_writer.lock().unwrap();
+
+        writer.write_all(&buf)?;
+        writer.write_all(b"\n")?;
+        writer.flush()?;
+
+        std::mem::drop(writer);
+
+        buf.clear();
+        buf.shrink_to(4 * 1024);
+
+        let _ = LOG_CACHED_BUFFERS.push(buf);
+
+        res
     }
 }
 

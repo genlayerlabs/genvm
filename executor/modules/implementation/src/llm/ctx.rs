@@ -16,7 +16,7 @@ pub struct VMData {
 }
 
 pub struct CtxPart {
-    pub hello: genvm_modules_interfaces::GenVMHello,
+    pub hello: Arc<genvm_modules_interfaces::GenVMHello>,
     pub providers: Arc<BTreeMap<String, Box<dyn providers::Provider + Send + Sync>>>,
     pub client: reqwest::Client,
 }

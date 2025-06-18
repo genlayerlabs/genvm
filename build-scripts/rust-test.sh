@@ -90,6 +90,21 @@ LLVM_TOOLS_BIN="$(rustc --print target-libdir)/../bin"
 
 PROFILE_FILES=""
 
+FUZZ_HELP_SHOWN=false
+
+function help_with_fuzz() {
+    if [ "$FUZZ_HELP_SHOWN" = true ]; then
+        return
+    fi
+    FUZZ_HELP_SHOWN=true
+    echo "To run fuzzing you may need to run:"
+    echo '=== commands ==='
+    echo 'echo core | sudo tee /proc/sys/kernel/core_pattern'
+    echo 'echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor'
+    echo 'echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope'
+    echo '=== end ==='
+}
+
 for dir in $(git ls-files | grep -P 'Cargo\.toml' | sort)
 do
     dir="$(dirname -- $dir)"
@@ -119,6 +134,8 @@ do
             then
                 echo "warn: skip $dir/fuzz/$name"
             else
+                help_with_fuzz
+
                 echo "=== fuzzing $dir/fuzz/$name ==="
 
                 cargo afl build \

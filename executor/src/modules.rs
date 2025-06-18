@@ -20,7 +20,7 @@ pub struct Module {
     cancellation: Arc<genvm_common::cancellation::Token>,
     imp: tokio::sync::Mutex<ModuleImpl>,
     cookie: String,
-    host_data: Arc<serde_json::Value>,
+    host_data: Arc<serde_json::Map<String, serde_json::Value>>,
 }
 
 async fn read_handling_pings(stream: &mut WSStream) -> anyhow::Result<Bytes> {
@@ -52,7 +52,7 @@ impl Module {
         url: String,
         cancellation: Arc<genvm_common::cancellation::Token>,
         cookie: String,
-        host_data: Arc<serde_json::Value>,
+        host_data: Arc<serde_json::Map<String, serde_json::Value>>,
     ) -> Self {
         Self {
             imp: tokio::sync::Mutex::new(ModuleImpl { url, stream: None }),
@@ -89,7 +89,7 @@ impl Module {
 
             let msg = calldata::to_value(&genvm_modules_interfaces::GenVMHello {
                 cookie: self.cookie.clone(),
-                host_data: self.host_data.clone(),
+                host_data: self.host_data.as_ref().clone(),
             })?;
 
             ws_stream

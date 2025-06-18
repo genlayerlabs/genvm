@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
 
 use serde_derive::{Deserialize, Serialize};
 
@@ -355,5 +355,5 @@ pub mod web {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenVMHello {
     pub cookie: String,
-    pub host_data: Arc<serde_json::Value>,
+    pub host_data: serde_json::Map<String, serde_json::Value>,
 }

@@ -615,6 +615,7 @@ name = "genvm-common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "crossbeam",
  "hex",
  "num-bigint",
  "primitive-types",

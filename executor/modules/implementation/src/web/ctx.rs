@@ -20,7 +20,7 @@ pub struct VMData {
 }
 
 pub struct CtxPart {
-    pub hello: genvm_modules_interfaces::GenVMHello,
+    pub hello: Arc<genvm_modules_interfaces::GenVMHello>,
     pub session: tokio::sync::Mutex<Option<String>>,
     pub client: reqwest::Client,
     pub config: Arc<config::Config>,

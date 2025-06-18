@@ -24,6 +24,7 @@ tokio = { version = "1.44.1", features = ["rt", "rt-multi-thread", "net", "time"
 num-bigint = { version = "0.4.6", features = ["serde"] }
 hex = "0.4.3"
 primitive-types = { version = "0.13.1", default-features = false, features = ["impl-serde", "std"] }
+crossbeam = "0.8.4"
 
 [dev-dependencies]
 afl = { version = "0.15.18", features = ["no_cfg_fuzzing"] }
