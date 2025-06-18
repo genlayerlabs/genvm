@@ -37,7 +37,7 @@ pub fn create_supervisor(
     config: &config::Config,
     mut host: Host,
     cancellation: Arc<genvm_common::cancellation::Token>,
-    host_data: Arc<serde_json::Map<String, serde_json::Value>>,
+    host_data: genvm_modules_interfaces::HostData,
     pub_args: PublicArgs,
 ) -> Result<Arc<tokio::sync::Mutex<vm::Supervisor>>> {
     let modules = Modules {

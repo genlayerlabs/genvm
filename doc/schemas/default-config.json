@@ -217,6 +217,29 @@
             "type": "integer",
             "description": "amount of lua vm to create",
             "minimum": 1
+        },
+        "extra_lua_path": {
+            "type": "string",
+            "description": "extra lua path to search for modules",
+            "default": "",
+            "examples": [
+              "/etc/a/?.lua;/etc/b/init.lua"
+            ]
+        },
+        "signer_url": {
+            "type": "string",
+            "description": "url of the signer service to use for signing requests, can have ${node_address} and other interpolations, present in --host-arg",
+            "examples": [
+              "localhost:${node_port}/genvm/sign"
+            ]
+        },
+        "signer_headers": {
+            "type": "object",
+            "description": "headers to send with signer requests, can have ${node_address} and other interpolations, present in --host-arg",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {}
         }
       },
       "required": ["bind_address", "lua_script_path", "vm_count"]

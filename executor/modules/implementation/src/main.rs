@@ -6,6 +6,7 @@ mod web;
 
 use anyhow::Result;
 use clap::Parser;
+use genvm_common::log_error;
 
 #[derive(clap::Subcommand, Debug)]
 enum Commands {
@@ -30,4 +31,10 @@ fn main() -> Result<()> {
         Commands::Llm(a) => llm::entrypoint_run(a),
         Commands::LlmCheck(a) => llm::entrypoint_check(a),
     }
+    .inspect_err(|e| {
+        log_error!(
+            error:ah = e;
+            "error in main"
+        );
+    })
 }

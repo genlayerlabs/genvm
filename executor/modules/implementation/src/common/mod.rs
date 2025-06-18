@@ -15,6 +15,7 @@ pub enum ErrorKind {
     READING_BODY,
     SENDING_REQUEST,
     DESERIALIZING,
+    ABSENT_HEADER,
     Other(String),
 }
 
@@ -36,6 +37,7 @@ impl ErrorKind {
             ErrorKind::READING_BODY => "READING_BODY".to_owned(),
             ErrorKind::SENDING_REQUEST => "SENDING_REQUEST".to_owned(),
             ErrorKind::DESERIALIZING => "DESERIALIZING".to_owned(),
+            ErrorKind::ABSENT_HEADER => "ABSENT_HEADER".to_owned(),
             ErrorKind::Other(str) => str.clone(),
         }
     }
@@ -58,6 +60,18 @@ impl ModuleError {
 
         None
     }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ModuleBaseConfig {
+    pub bind_address: String,
+
+    pub lua_script_path: String,
+    pub vm_count: usize,
+    pub extra_lua_path: String,
+
+    pub signer_url: Arc<str>,
+    pub signer_headers: Arc<BTreeMap<String, String>>,
 }
 
 pub trait MapUserError {
@@ -464,7 +478,7 @@ pub fn setup_cancels(
 
 #[cfg(test)]
 pub mod tests {
-    use std::sync::Once;
+    use std::sync::{Arc, Once};
 
     use genvm_common::logger;
 
@@ -480,5 +494,16 @@ pub mod tests {
             };
             base_conf.setup_logging(std::io::stdout()).unwrap();
         });
+    }
+
+    pub fn get_hello() -> Arc<genvm_modules_interfaces::GenVMHello> {
+        Arc::new(genvm_modules_interfaces::GenVMHello {
+            cookie: "test_cookie".to_owned(),
+            host_data: genvm_modules_interfaces::HostData {
+                node_address: "test_node_address".to_owned(),
+                tx_id: "test_tx_id".to_owned(),
+                rest: serde_json::Map::new(),
+            },
+        })
     }
 }
