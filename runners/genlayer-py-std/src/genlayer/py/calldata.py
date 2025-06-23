@@ -97,10 +97,20 @@ Type that can be encoded into calldata, provided ``default`` function ``T -> Enc
 """
 
 
+def encode_default_parameter(b):
+	if not dataclasses.is_dataclass(b):
+		return b
+	assert not isinstance(b, type)
+
+	return {field.name: getattr(b, field.name) for field in dataclasses.fields(b)}
+
+
 def encode[T](
 	x: EncodableWithDefault[T],
 	*,
-	default: typing.Callable[[EncodableWithDefault[T]], Encodable] | None = None,
+	default: typing.Callable[
+		[EncodableWithDefault[T]], Encodable
+	] = encode_default_parameter,
 ) -> bytes:
 	"""
 	Encodes python object into calldata bytes
@@ -114,13 +124,6 @@ def encode[T](
 		#. :py:class:`CalldataEncodable`
 		#. :py:mod:`dataclasses`
 	"""
-	if default is None:
-
-		def default_default(x: EncodableWithDefault[T]) -> Encodable:
-			return x  # type: ignore
-
-		default = default_default
-
 	mem = bytearray()
 
 	def append_uleb128(i):
@@ -191,10 +194,6 @@ def encode[T](
 				impl(x)
 		elif isinstance(b, collections.abc.Mapping):
 			impl_dict(b)
-		elif dataclasses.is_dataclass(b):
-			assert not isinstance(b, type)
-			with reflect.context_type(type(b)):
-				impl_dict(dataclasses.asdict(b))
 		else:
 			raise TypeError(f'not calldata encodable {b!r}: {reflect.repr_type(type(b))}')
 
