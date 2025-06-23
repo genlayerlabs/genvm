@@ -794,7 +794,12 @@ impl Supervisor {
                     let name = module
                         .name()
                         .ok_or_else(|| anyhow::anyhow!("can't link unnamed module {:?}", current))
-                        .map_err(|e| crate::errors::VMError("invalid_wasm".into(), Some(e)))?;
+                        .map_err(|e| {
+                            crate::errors::VMError(
+                                format!("{} wasm", public_abi::VmError::InvalidContract.value()),
+                                Some(e),
+                            )
+                        })?;
                     linker.instance(&mut vm.store, name, instance)?;
                     instance
                 };
@@ -917,7 +922,10 @@ impl Supervisor {
     fn code_to_archive_from_text(code: SharedBytes) -> Result<Archive> {
         let code_str = str::from_utf8(code.as_ref()).map_err(|e| {
             crate::errors::VMError(
-                "invalid_contract non-utf8".into(),
+                format!(
+                    "{} not_utf8_text",
+                    public_abi::VmError::InvalidContract.value()
+                ),
                 Some(anyhow::Error::from(e)),
             )
         })?;
@@ -928,7 +936,13 @@ impl Supervisor {
                     return Ok(c);
                 }
             }
-            Err(crate::errors::VMError("no_runner_comment".into(), None))
+            Err(crate::errors::VMError(
+                format!(
+                    "{} absent_runner_comment",
+                    public_abi::VmError::InvalidContract.value()
+                ),
+                None,
+            ))
         })()?;
 
         let mut version_string = String::new();
@@ -946,7 +960,7 @@ impl Supervisor {
                 if l.trim().starts_with("v") {
                     version_string.push_str(l);
                 } else {
-                    log_warn!("runner comment does not start with version, using default");
+                    log_warn!(default = public_abi::ABSENT_VERSION; "runner comment does not start with version, using default");
                     version_string.push_str(public_abi::ABSENT_VERSION);
 
                     code_comment.push_str(l)

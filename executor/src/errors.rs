@@ -1,3 +1,5 @@
+use crate::public_abi;
+
 #[derive(Debug)]
 pub struct VMError(pub String, pub Option<anyhow::Error>);
 
@@ -11,7 +13,7 @@ impl std::fmt::Display for VMError {
 
 impl VMError {
     pub fn oom(cause: Option<anyhow::Error>) -> Self {
-        VMError("OOM".to_owned(), cause)
+        VMError(public_abi::VmError::Oom.value().into(), cause)
     }
 
     pub fn wrap(message: String, cause: anyhow::Error) -> Self {

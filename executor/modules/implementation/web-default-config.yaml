@@ -6,7 +6,7 @@ webdriver_host: http://127.0.0.1:4444
 lua_script_path: ${genvmRoot}/scripts/web-default.lua
 vm_count: 6
 extra_lua_path: ""
-signer_url: "http://localhost:9155/admin/genvm/sign"
+signer_url: "#{signerUrl}"
 signer_headers: {}
 
 threads: 4

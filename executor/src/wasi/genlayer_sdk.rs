@@ -990,12 +990,26 @@ impl ContextVFS<'_> {
             }
             Some(leaders_res) => match my_res {
                 RunOk::Return(v) if v == [16] => Ok(leaders_res),
-                RunOk::Return(v) if v == [8] => {
-                    Err(VMError(format!("validator_disagrees call {}", call_no), None).into())
-                }
+                RunOk::Return(v) if v == [8] => Err(VMError(
+                    format!(
+                        "{} call {}",
+                        public_abi::VmError::ValidatorDisagrees.value(),
+                        call_no
+                    ),
+                    None,
+                )
+                .into()),
                 _ => {
                     log_warn!(validator_result:? = my_res, leaders_result:? = leaders_res; "validator reported unexpected result");
-                    Err(VMError(format!("validator_disagrees call {}", call_no), None).into())
+                    Err(VMError(
+                        format!(
+                            "{} call {}",
+                            public_abi::VmError::ValidatorDisagrees.value(),
+                            call_no
+                        ),
+                        None,
+                    )
+                    .into())
                 }
             },
         };

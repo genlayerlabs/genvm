@@ -135,7 +135,7 @@ impl Module {
     {
         tokio::select! {
             _ = self.cancellation.chan.closed() => {
-                anyhow::bail!("timeout")
+                anyhow::bail!("timeout") // it will be replaced later
             }
             res = self.send_impl(val) => {
                 res.with_context(|| "sending request to module")

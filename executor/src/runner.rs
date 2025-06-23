@@ -110,7 +110,7 @@ impl ZipCache {
         let version = genvm_common::version::Version::from_str(contents)?;
 
         if !genvm_common::version::CURRENT.is_greater_eq_than(version) {
-            return Err(VMError("version_too_big".to_owned(), None).into());
+            return Err(VMError(public_abi::VmError::VersionTooBig.value().into(), None).into());
         }
 
         log_trace!(from = contents, to = version; "version parsed");

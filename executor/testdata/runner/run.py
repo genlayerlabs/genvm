@@ -223,6 +223,8 @@ def run(jsonnet_rel_path):
 				json.dumps(config['message']),
 				'--print=shrink',
 				'--allow-latest',
+				'--host-data',
+				'{"node_address": "0x", "tx_id": "0x"}',
 			]
 		)
 		if config['sync']:

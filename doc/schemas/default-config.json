@@ -228,14 +228,14 @@
         },
         "signer_url": {
             "type": "string",
-            "description": "url of the signer service to use for signing requests, can have ${node_address} and other interpolations, present in --host-arg",
+            "description": "url of the signer service to use for signing requests, can have #{node_address} and other interpolations, present in --host-arg",
             "examples": [
               "localhost:${node_port}/genvm/sign"
             ]
         },
         "signer_headers": {
             "type": "object",
-            "description": "headers to send with signer requests, can have ${node_address} and other interpolations, present in --host-arg",
+            "description": "headers to send with signer requests, can have #{node_address} and other interpolations, present in --host-arg",
             "additionalProperties": {
               "type": "string"
             },

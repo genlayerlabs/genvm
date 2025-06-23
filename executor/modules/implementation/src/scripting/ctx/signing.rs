@@ -45,7 +45,7 @@ impl Request {
         let sign_url = genvm_common::templater::patch_str(
             &ctx.sign_vars,
             &ctx.sign_url,
-            &genvm_common::templater::DOLLAR_UNFOLDER_RE,
+            &genvm_common::templater::HASH_UNFOLDER_RE,
         )
         .map_err(|e| ModuleError {
             causes: vec!["SIGN_URL_PATCH_FAILED".to_owned()],
@@ -59,7 +59,7 @@ impl Request {
             let new_v = genvm_common::templater::patch_str(
                 &ctx.sign_vars,
                 v,
-                &genvm_common::templater::DOLLAR_UNFOLDER_RE,
+                &genvm_common::templater::HASH_UNFOLDER_RE,
             )
             .map_err(|e| ModuleError {
                 causes: vec!["SIGN_URL_PATCH_FAILED".to_owned()],

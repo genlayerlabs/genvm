@@ -150,11 +150,14 @@ pub async fn run_with(
     let res = if supervisor.shared_data.cancellation.is_cancelled() {
         match res {
             Ok(RunOk::VMError(msg, cause)) => Ok(RunOk::VMError(
-                "timeout".into(),
+                public_abi::VmError::Timeout.value().into(),
                 cause.map(|v| v.context(msg)),
             )),
             Ok(r) => Ok(r),
-            Err(e) => Ok(RunOk::VMError("timeout".into(), Some(e))),
+            Err(e) => Ok(RunOk::VMError(
+                public_abi::VmError::Timeout.value().into(),
+                Some(e),
+            )),
         }
     } else {
         VMError::unwrap_res(res)
