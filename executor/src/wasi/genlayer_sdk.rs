@@ -452,6 +452,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let vm_data = SingleVMData {
                     conf: base::Config {
+                        needs_error_fingerprint: true,
                         is_deterministic: true,
                         can_read_storage: my_conf.can_read_storage,
                         can_write_storage: false,
@@ -483,7 +484,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .await
                     .map_err(generated::types::Error::trap)?;
 
-                self.set_vm_run_result(res).map(|x| x.0)
+                self.set_vm_run_result(res.0).map(|x| x.0)
             }
             gl_call::Message::EmitEvent { topics, blob } => {
                 self.check_version(genvm_common::version::Version::new(0, 2, 0))?;
@@ -963,6 +964,7 @@ impl ContextVFS<'_> {
 
         let vm_data = SingleVMData {
             conf: base::Config {
+                needs_error_fingerprint: false,
                 is_deterministic: false,
                 can_read_storage: false,
                 can_write_storage: false,
@@ -977,7 +979,9 @@ impl ContextVFS<'_> {
         };
 
         let my_res = self.context.spawn_and_run(&supervisor, vm_data).await;
-        let my_res = VMError::unwrap_res(my_res).map_err(generated::types::Error::trap)?;
+        let my_res = VMError::unwrap_res(my_res)
+            .map_err(generated::types::Error::trap)?
+            .0;
 
         let ret_res = match leaders_res {
             None => {
@@ -1034,6 +1038,7 @@ impl ContextVFS<'_> {
 
         let vm_data = SingleVMData {
             conf: base::Config {
+                needs_error_fingerprint: false,
                 is_deterministic: zelf_conf.is_deterministic,
                 can_read_storage: false,
                 can_write_storage: zelf_conf.can_write_storage & allow_write_ops,
@@ -1050,7 +1055,7 @@ impl ContextVFS<'_> {
         let my_res = self.context.spawn_and_run(&supervisor, vm_data).await;
         let my_res = VMError::unwrap_res(my_res).map_err(generated::types::Error::trap)?;
 
-        let data: Box<[u8]> = my_res.as_bytes_iter().collect();
+        let data: Box<[u8]> = my_res.0.as_bytes_iter().collect();
         Ok(generated::types::Fd::from(self.vfs.place_content(
             FileContentsUnevaluated::from_contents(SharedBytes::new(data), 0),
         )))

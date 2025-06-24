@@ -16,7 +16,6 @@ pub use genvm_common::calldata;
 use genvm_common::*;
 
 use errors::VMError;
-use host::AbsentLeaderResult;
 pub use host::{Host, MessageData, SlotID};
 
 use anyhow::{Context, Result};
@@ -97,6 +96,7 @@ pub async fn run_with_impl(
 
         let essential_data = wasi::genlayer_sdk::SingleVMData {
             conf: wasi::base::Config {
+                needs_error_fingerprint: true,
                 is_deterministic: true,
                 can_read_storage: permissions.contains("r"),
                 can_write_storage: permissions.contains("w"),
@@ -149,30 +149,26 @@ pub async fn run_with(
 
     let res = if supervisor.shared_data.cancellation.is_cancelled() {
         match res {
-            Ok(RunOk::VMError(msg, cause)) => Ok(RunOk::VMError(
-                public_abi::VmError::Timeout.value().into(),
-                cause.map(|v| v.context(msg)),
+            Ok((RunOk::VMError(msg, cause), fp)) => Ok((
+                RunOk::VMError(
+                    public_abi::VmError::Timeout.value().into(),
+                    cause.map(|v| v.context(msg)),
+                ),
+                fp,
             )),
             Ok(r) => Ok(r),
-            Err(e) => Ok(RunOk::VMError(
-                public_abi::VmError::Timeout.value().into(),
-                Some(e),
+            Err(e) => Ok((
+                RunOk::VMError(public_abi::VmError::Timeout.value().into(), Some(e)),
+                None,
             )),
         }
     } else {
         VMError::unwrap_res(res)
     };
 
-    let res = match res {
-        Err(e) => match e.downcast() {
-            Ok(AbsentLeaderResult) => Ok(RunOk::VMError("deterministic_violation".into(), None)),
-            Err(e) => {
-                log_error!(error:ah = &e; "internal error");
-                Err(e)
-            }
-        },
-        e => e,
-    };
+    let res = res.inspect_err(|e| {
+        log_error!(error:ah = &e; "internal error");
+    });
 
     supervisor.log_stats();
 

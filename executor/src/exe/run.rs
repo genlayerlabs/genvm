@@ -120,8 +120,9 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
 
     let res: Option<String> = match (res, args.print) {
         (_, PrintOption::None) => None,
-        (Ok(RunOk::VMError(e, cause)), PrintOption::Shrink) => {
+        (Ok((RunOk::VMError(e, cause), fp)), PrintOption::Shrink) => {
             eprintln!("genvm: contract error {:?}", cause);
+            eprintln!("genvm: contract error {:?}", fp);
             Some(format!("VMError(\"{e}\")"))
         }
         (Err(e), PrintOption::Shrink) => {

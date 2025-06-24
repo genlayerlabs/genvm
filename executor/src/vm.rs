@@ -12,7 +12,7 @@ use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
     caching, calldata, config,
-    errors::VMError,
+    errors::{self, VMError},
     host::LockedSlotsSet,
     memlimiter, public_abi,
     runner::{self, InitAction, WasmMode},
@@ -74,7 +74,7 @@ pub enum RunOk {
     VMError(String, #[serde(skip_serializing)] Option<anyhow::Error>),
 }
 
-pub type RunResult = Result<RunOk>;
+pub type RunResult = Result<(RunOk, Option<errors::Fingerprint>)>;
 
 impl RunOk {
     pub fn empty_return() -> Self {
@@ -343,8 +343,37 @@ impl VM {
         let res = func.call_async(&mut self.store, ()).await;
         log_debug!(duration:? = time_start.elapsed(); "vm execution finished");
         let res: RunResult = match res {
-            Ok(()) => Ok(RunOk::empty_return()),
+            Ok(()) => Ok((RunOk::empty_return(), None)),
             Err(e) => {
+                let mut fingerprint = errors::Fingerprint {
+                    frames: Vec::new(),
+                    module_instances: BTreeMap::new(),
+                };
+
+                if self.config_copy.needs_error_fingerprint {
+                    if let Some(bt) = e.downcast_ref::<wasmtime::WasmBacktrace>() {
+                        let frames = bt
+                            .frames()
+                            .iter()
+                            .map(|f| errors::Frame {
+                                module_name: f.module().name().unwrap_or("").to_string(),
+                                func: f.func_index(),
+                            })
+                            .collect();
+
+                        fingerprint.frames = frames;
+                    } else {
+                        log_warn!("no backtrace attached");
+                    }
+                    if let Some(fp) = e.downcast_ref::<wasmtime::Fingerprint>() {
+                        fingerprint.module_instances = fp.module_instances.clone();
+                    } else {
+                        log_warn!("no memories attached");
+                    }
+                }
+
+                log_debug!(fp:serde = fingerprint; "top level fingerprint");
+
                 let res: Result<RunOk> = [
                     |e: anyhow::Error| match e.downcast::<crate::wasi::preview1::I32Exit>() {
                         Ok(I32Exit(0)) => Ok(RunOk::empty_return()),
@@ -373,17 +402,18 @@ impl VM {
                     Ok(acc) => Ok(acc),
                     Err(e) => func(e),
                 });
-                res
+
+                res.map(|f| (f, Some(fingerprint)))
             }
         };
         match &res {
-            Ok(RunOk::Return(_)) => {
+            Ok((RunOk::Return(_), _)) => {
                 log_debug!(result = "Return"; "execution result unwrapped")
             }
-            Ok(RunOk::UserError(msg)) => {
+            Ok((RunOk::UserError(msg), _)) => {
                 log_debug!(result = "UserError", message = msg; "execution result unwrapped")
             }
-            Ok(RunOk::VMError(e, cause)) => {
+            Ok((RunOk::VMError(e, cause), _)) => {
                 log_debug!(result = "VMError", message = e, cause:? = cause; "execution result unwrapped")
             }
             Err(e) => {
@@ -411,28 +441,33 @@ impl Engines {
         base_conf.wasm_relaxed_simd(false);
         base_conf.wasm_simd(true);
         base_conf.wasm_relaxed_simd(false);
-        base_conf.wasm_feature(WasmFeatures::BULK_MEMORY, true);
-        base_conf.wasm_feature(WasmFeatures::REFERENCE_TYPES, false);
-        base_conf.wasm_feature(WasmFeatures::SIGN_EXTENSION, true);
-        base_conf.wasm_feature(WasmFeatures::MUTABLE_GLOBAL, true);
-        base_conf.wasm_feature(WasmFeatures::SATURATING_FLOAT_TO_INT, false);
-        base_conf.wasm_feature(WasmFeatures::MULTI_VALUE, true);
+
+        base_conf
+            .wasm_feature(WasmFeatures::BULK_MEMORY, true)
+            .wasm_feature(WasmFeatures::REFERENCE_TYPES, false)
+            .wasm_feature(WasmFeatures::SIGN_EXTENSION, true)
+            .wasm_feature(WasmFeatures::MUTABLE_GLOBAL, true)
+            .wasm_feature(WasmFeatures::SATURATING_FLOAT_TO_INT, false)
+            .wasm_feature(WasmFeatures::MULTI_VALUE, true);
 
         base_conf.consume_fuel(false);
         //base_conf.wasm_threads(false);
         //base_conf.wasm_reference_types(false);
         base_conf.wasm_simd(false);
         base_conf.relaxed_simd_deterministic(false);
+        base_conf.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable);
 
         base_conf.cranelift_opt_level(wasmtime::OptLevel::None);
         config_base(&mut base_conf)?;
 
         let mut det_conf = base_conf.clone();
-        det_conf.wasm_floats_enabled(false);
-        det_conf.cranelift_nan_canonicalization(true);
+        det_conf
+            .wasm_floats_enabled(false)
+            .cranelift_nan_canonicalization(true)
+            .wasm_backtrace(true);
 
         let mut non_det_conf = base_conf.clone();
-        non_det_conf.wasm_floats_enabled(true);
+        non_det_conf.wasm_floats_enabled(true).wasm_backtrace(false);
 
         let det_engine = Engine::new(&det_conf)?;
         let non_det_engine = Engine::new(&non_det_conf)?;

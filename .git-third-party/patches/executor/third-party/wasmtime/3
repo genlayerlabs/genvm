@@ -1,0 +1,117 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: kp2pml30 <kp2pml30@gmail.com>
+Date: Tue, 24 Jun 2025 21:16:53 +0400
+Subject: [PATCH] feat: add fingerprinting for genvm
+
+---
+ crates/wasmtime/Cargo.toml          |  2 +
+ crates/wasmtime/src/lib.rs          |  2 +
+ crates/wasmtime/src/runtime/func.rs | 65 ++++++++++++++++++++++++++++-
+ 3 files changed, 68 insertions(+), 1 deletion(-)
+
+diff --git a/crates/wasmtime/Cargo.toml b/crates/wasmtime/Cargo.toml
+index bd10631b..f767a075 100644
+--- a/crates/wasmtime/Cargo.toml
++++ b/crates/wasmtime/Cargo.toml
+@@ -17,6 +17,8 @@ workspace = true
+ all-features = true
+ 
+ [dependencies]
++sha3 = "0.10.8"
++serde_bytes = "0.11.17"
+ wasmtime-asm-macros = { workspace = true, optional = true }
+ wasmtime-environ = { workspace = true }
+ wasmtime-jit-debug = { workspace = true, features = ["gdb_jit_int", "perf_jitdump"], optional = true }
+diff --git a/crates/wasmtime/src/lib.rs b/crates/wasmtime/src/lib.rs
+index 9a8139fb..f9392f6a 100644
+--- a/crates/wasmtime/src/lib.rs
++++ b/crates/wasmtime/src/lib.rs
+@@ -404,3 +404,5 @@ pub mod _internal {
+     // Exported just for the CLI.
+     pub use crate::runtime::vm::MmapVec;
+ }
++
++pub use crate::runtime::func::Fingerprint;
+diff --git a/crates/wasmtime/src/runtime/func.rs b/crates/wasmtime/src/runtime/func.rs
+index fd45ba84..75ea54dc 100644
+--- a/crates/wasmtime/src/runtime/func.rs
++++ b/crates/wasmtime/src/runtime/func.rs
+@@ -1587,6 +1587,33 @@ impl Func {
+     }
+ }
+ 
++#[derive(Debug, Clone, serde::Serialize)]
++/// A fingerprint of a module's memory state.
++pub struct MemoryFingerprint(#[serde(with = "serde_bytes")] pub [u8; 32]);
++
++
++#[derive(Debug, Clone, serde::Serialize)]
++/// A fingerprint of a module's memory state.
++pub struct ModuleFingerprint {
++    /// memory fingerprints
++    pub memories: Vec<MemoryFingerprint>,
++}
++
++use std::collections::BTreeMap;
++
++#[derive(Debug, Clone)]
++/// A fingerprint of the current state of the Wasm store, except backtrace
++pub struct Fingerprint {
++    /// all modules by name
++    pub module_instances: BTreeMap<String, ModuleFingerprint>,
++}
++
++impl std::fmt::Display for Fingerprint {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        write!(f, "{self:?}")
++    }
++}
++
+ /// Prepares for entrance into WebAssembly.
+ ///
+ /// This function will set up context such that `closure` is allowed to call a
+@@ -1616,7 +1643,43 @@ pub(crate) fn invoke_wasm_and_catch_traps<T>(
+         );
+         exit_wasm(store, exit);
+         store.0.call_hook(CallHook::ReturningFromWasm)?;
+-        result.map_err(|t| crate::trap::from_runtime_box(store.0, t))
++        result
++            .map_err(|t| crate::trap::from_runtime_box(store.0, t))
++            .map_err(|e| {
++                use crate::runtime::vm::VMStore;
++                use sha3::Digest;
++
++                if !store.0.engine().config().wasm_backtrace {
++                    return e;
++                }
++
++                let mut fp = Fingerprint {
++                    module_instances: BTreeMap::new(),
++                };
++
++                for inst in store.0.all_instances().collect::<Vec<_>>() {
++                    let mut mod_fp = ModuleFingerprint {
++                        memories: Vec::new(),
++                    };
++
++                    let inst_mod_name = inst.module(&mut store.0).name().unwrap_or("").to_owned();
++
++                    for mem in inst.all_memories(store.0.store_opaque_mut()).collect::<Vec<_>>() {
++                        let data = mem.1.data(&store);
++
++                        mod_fp.memories.push(
++                            MemoryFingerprint(sha3::Sha3_256::digest(data).into())
++                        );
++                    }
++
++                    fp.module_instances.insert(
++                        inst_mod_name,
++                        mod_fp,
++                    );
++                }
++
++                e.context(fp)
++            })
+     }
+ }
+ 
