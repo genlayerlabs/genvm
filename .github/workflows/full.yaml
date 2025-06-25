@@ -105,6 +105,7 @@ jobs:
           sudo apt-get install -y wabt && \
           cargo install cargo-afl && \
           python3 -m pip install -r executor/testdata/runner/requirements.txt && \
+          docker pull yeagerai/genlayer-genvm-webdriver:latest && \
           true
 
       - name: Test
@@ -114,7 +115,7 @@ jobs:
           ls /sys/devices/system/cpu/ || true
 
           echo core | sudo tee /proc/sys/kernel/core_pattern && \
-          ./executor/testdata/web-container/run-test-docker.sh && \
+          docker run -p 4444:4444 --rm -d yeagerai/genlayer-genvm-webdriver:latest && \
           ./build-scripts/rust-test.sh --precompile
         env:
           OPENAIKEY: ${{ secrets.OPENAIKEY }}

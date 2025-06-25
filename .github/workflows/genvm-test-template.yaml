@@ -52,16 +52,13 @@ jobs:
           popd
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: mock-${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            mock-${{ runner.os }}-buildx-
       - name: Precompile
         run: |
           ./build/out/bin/genvm precompile
+      - name: Install
+        run: |
+          python3.12 -m pip install -r executor/testdata/runner/requirements.txt && \
+          docker pull yeagerai/genlayer-genvm-webdriver:latest
       - name: Run
         env:
           OPENAIKEY: ${{ secrets.OPENAIKEY }}
@@ -70,8 +67,7 @@ jobs:
           XAIKEY: ${{ secrets.XAIKEY }}
           GEMINIKEY: ${{ secrets.GEMINIKEY }}
         run: |
-          python3.12 -m pip install -r executor/testdata/runner/requirements.txt && \
-          ./executor/testdata/web-container/run-test-docker.sh && \
+          docker run -p 4444:4444 --rm -d yeagerai/genlayer-genvm-webdriver:latest && \
           sleep 5 && \
           (./build/out/bin/genvm-modules web &) && \
           (./build/out/bin/genvm-modules llm &) && \
