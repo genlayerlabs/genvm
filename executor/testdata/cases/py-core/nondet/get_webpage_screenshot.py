@@ -8,7 +8,9 @@ class Contract(gl.Contract):
 	@gl.public.write
 	def main(self, mode: str):
 		def run():
-			img = gl.nondet.web.render('http://genvm-test/hello.html', mode='screenshot')
+			img = gl.nondet.web.render(
+				'https://test-server.genlayer.com/static/genvm/hello.html', mode='screenshot'
+			)
 
 			res = gl.nondet.exec_prompt(
 				'what image says? respond only with its contents', images=[img]

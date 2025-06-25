@@ -240,6 +240,9 @@ def run(jsonnet_rel_path):
 		with config['host'] as mock_host:
 			_env = dict(os.environ)
 
+			import time
+
+			time_start = time.monotonic()
 			try:
 				res = asyncio.run(
 					run_host_and_program(
@@ -251,6 +254,7 @@ def run(jsonnet_rel_path):
 					)
 				)
 			except Exception as e:
+				time_elapsed = time.monotonic() - time_start
 				report_single(
 					test_name,
 					{
@@ -258,16 +262,20 @@ def run(jsonnet_rel_path):
 						'steps': steps,
 						'exception': 'internal error',
 						'exc': e,
+						'elapsed': time_elapsed,
 						**e.args[-1],
 					},
 				)
 				return
+
+		time_elapsed = time.monotonic() - time_start
 
 		base = {
 			'steps': steps,
 			'stdout': res.stdout,
 			'stderr': res.stderr,
 			'genvm_log': res.genvm_log,
+			'elapsed': time_elapsed,
 		}
 
 		got_stdout_path = tmp_dir.joinpath('stdout.txt')
@@ -349,7 +357,7 @@ prnt_mutex = Lock()
 
 def prnt(path, res):
 	with prnt_mutex:
-		print(f"{sign_by_category[res['category']]} {path}")
+		print(f"{sign_by_category[res['category']]} {path} in {res['elapsed']:.3f}s")
 		if 'reason' in res:
 			for l in map(lambda x: '\t' + x, res['reason'].split('\n')):
 				print(l)

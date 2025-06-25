@@ -6,18 +6,18 @@ Subject: [PATCH] feat: add fingerprinting for genvm
 ---
  crates/wasmtime/Cargo.toml          |  2 +
  crates/wasmtime/src/lib.rs          |  2 +
- crates/wasmtime/src/runtime/func.rs | 65 ++++++++++++++++++++++++++++-
- 3 files changed, 68 insertions(+), 1 deletion(-)
+ crates/wasmtime/src/runtime/func.rs | 64 ++++++++++++++++++++++++++++-
+ 3 files changed, 67 insertions(+), 1 deletion(-)
 
 diff --git a/crates/wasmtime/Cargo.toml b/crates/wasmtime/Cargo.toml
-index bd10631b..f767a075 100644
+index bd10631b..d49a5948 100644
 --- a/crates/wasmtime/Cargo.toml
 +++ b/crates/wasmtime/Cargo.toml
 @@ -17,6 +17,8 @@ workspace = true
  all-features = true
  
  [dependencies]
-+sha3 = "0.10.8"
++blake3 = "1.8.2"
 +serde_bytes = "0.11.17"
  wasmtime-asm-macros = { workspace = true, optional = true }
  wasmtime-environ = { workspace = true }
@@ -33,7 +33,7 @@ index 9a8139fb..f9392f6a 100644
 +
 +pub use crate::runtime::func::Fingerprint;
 diff --git a/crates/wasmtime/src/runtime/func.rs b/crates/wasmtime/src/runtime/func.rs
-index fd45ba84..75ea54dc 100644
+index fd45ba84..a4fdcf76 100644
 --- a/crates/wasmtime/src/runtime/func.rs
 +++ b/crates/wasmtime/src/runtime/func.rs
 @@ -1587,6 +1587,33 @@ impl Func {
@@ -70,7 +70,7 @@ index fd45ba84..75ea54dc 100644
  /// Prepares for entrance into WebAssembly.
  ///
  /// This function will set up context such that `closure` is allowed to call a
-@@ -1616,7 +1643,43 @@ pub(crate) fn invoke_wasm_and_catch_traps<T>(
+@@ -1616,7 +1643,42 @@ pub(crate) fn invoke_wasm_and_catch_traps<T>(
          );
          exit_wasm(store, exit);
          store.0.call_hook(CallHook::ReturningFromWasm)?;
@@ -79,7 +79,6 @@ index fd45ba84..75ea54dc 100644
 +            .map_err(|t| crate::trap::from_runtime_box(store.0, t))
 +            .map_err(|e| {
 +                use crate::runtime::vm::VMStore;
-+                use sha3::Digest;
 +
 +                if !store.0.engine().config().wasm_backtrace {
 +                    return e;
@@ -100,7 +99,7 @@ index fd45ba84..75ea54dc 100644
 +                        let data = mem.1.data(&store);
 +
 +                        mod_fp.memories.push(
-+                            MemoryFingerprint(sha3::Sha3_256::digest(data).into())
++                            MemoryFingerprint(blake3::hash(data).into())
 +                        );
 +                    }
 +

@@ -115,7 +115,6 @@ jobs:
 
           echo core | sudo tee /proc/sys/kernel/core_pattern && \
           ./executor/testdata/web-container/run-test-docker.sh && \
-          perl -pe 's/(always_allow_hosts:) \[\]/$1 ["localhost", "genvm-test"]/' -i ./build/out/config/genvm-module-web.yaml && \
           ./build-scripts/rust-test.sh --precompile
         env:
           OPENAIKEY: ${{ secrets.OPENAIKEY }}
