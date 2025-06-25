@@ -6,7 +6,8 @@ use base64::Engine;
 use genvm_modules_interfaces::web as web_iface;
 use genvm_modules_interfaces::GenericValue;
 
-const SIGN_ALGORITHM: &str = "ed25519";
+const SIGN_ALGORITHM: &str = "ES256K";
+
 const ALWAYS_SIGN: &[&str] = &[
     "@method",
     "@authority",
@@ -55,6 +56,10 @@ impl Request {
 
         let mut sign_request = ctx.client.post(sign_url).body(signature_base.clone());
 
+        //let signature_base_hashed = ring::digest::digest(&ring::digest::SHA256, signature_base.as_bytes());
+        //let signature_base_hashed = Vec::from(signature_base_hashed.as_ref());
+        //let mut sign_request = ctx.client.post(sign_url).body(signature_base_hashed);
+
         for (k, v) in ctx.sign_headers.iter() {
             let new_v = genvm_common::templater::patch_str(
                 &ctx.sign_vars,
@@ -75,6 +80,17 @@ impl Request {
             ctx: BTreeMap::from([("error".to_string(), GenericValue::Str(e.to_string()))]),
             fatal: true,
         })?;
+
+        if resp.status() != 200 {
+            return Err(ModuleError {
+                causes: vec!["SIGN_URL_BAD_STATUS".to_owned()],
+                ctx: BTreeMap::from([(
+                    "status".to_string(),
+                    GenericValue::Str(resp.status().to_string()),
+                )]),
+                fatal: true,
+            });
+        }
 
         let signature = resp.bytes().await.map_err(|e| ModuleError {
             causes: vec!["SIGN_URL_READ_FAILED".to_owned()],
@@ -235,7 +251,7 @@ impl Request {
         )
         .map_err(map_fmt_to_fatal)?;
 
-        writeln!(
+        write!(
             signature_value,
             "\"@signature-params\": {}",
             signature_params
@@ -251,7 +267,7 @@ impl Request {
         params: &str,
     ) -> Result<(), ModuleError> {
         // Add Signature-Input header
-        let sig_input = format!("sig1={}", params);
+        let sig_input = format!("genvm={}", params);
         self.headers.insert(
             "signature-input".to_string(),
             web_iface::HeaderData(sig_input.into_bytes()),
@@ -259,7 +275,7 @@ impl Request {
 
         // Add Signature header
         let sig_value = format!(
-            "sig1=:{}:",
+            "genvm=:{}:",
             base64::prelude::BASE64_STANDARD.encode(signature)
         );
         self.headers.insert(
@@ -277,6 +293,7 @@ mod tests {
 
     use crate::common;
     use genvm_modules_interfaces::web as web_iface;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_signing_get() {
@@ -318,7 +335,7 @@ mod tests {
 
         assert_eq!(
             signature_params,
-            r#"("@method" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "@query");created=1750171014;alg="ed25519""#
+            r#"("@method" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "@query");created=1750171014;alg="ES256K""#
         );
         let base = r#"
 "@method": GET
@@ -328,7 +345,7 @@ mod tests {
 "genlayer-tx-id": test_tx_id
 "genlayer-salt": <replaced>
 "@query": ?a=b
-"@signature-params": ("@method" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "@query");created=1750171014;alg="ed25519"
+"@signature-params": ("@method" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "@query");created=1750171014;alg="ES256K"
         "#;
         let base = base.trim();
         assert_eq!(signature_base.trim(), base);
@@ -374,7 +391,7 @@ mod tests {
 
         assert_eq!(
             signature_params,
-            r#"("@method" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "content-digest");created=1750171014;alg="ed25519""#
+            r#"("@method" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "content-digest");created=1750171014;alg="ES256K""#
         );
         let base = r#"
 "@method": POST
@@ -384,9 +401,51 @@ mod tests {
 "genlayer-tx-id": test_tx_id
 "genlayer-salt": <replaced>
 "content-digest": sha-256=:Y++zFe1xzH5aH8ICQ0uzrsIJHng4cH4UigF/rrt0ZP4=:
-"@signature-params": ("@method" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "content-digest");created=1750171014;alg="ed25519"
+"@signature-params": ("@method" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "content-digest");created=1750171014;alg="ES256K"
         "#;
         let base = base.trim();
         assert_eq!(signature_base.trim(), base);
+    }
+
+    #[tokio::test]
+    async fn test_signing_post_with_server() {
+        use crate::scripting::ctx::dflt::CtxPart;
+
+        common::tests::setup();
+
+        let mut req = crate::scripting::ctx::req::Request {
+            url: url::Url::parse("http://test-server.genlayer.com/body/echo-signed").unwrap(),
+            method: web_iface::RequestMethod::POST,
+            headers: BTreeMap::new(),
+            body: Some(b"test body".to_vec()),
+            json: false,
+            error_on_status: true,
+            sign: true,
+        };
+
+        let part = CtxPart {
+            client: reqwest::Client::new(),
+            sign_url: Arc::from("https://test-server.genlayer.com/genvm/sign"),
+            sign_headers: Arc::new(BTreeMap::new()),
+            sign_vars: BTreeMap::new(),
+            node_address: "node_address".to_string(),
+            tx_id: "tx_id".to_string(),
+        };
+
+        req.add_rfc9421_sign_headers(&part).await.unwrap();
+
+        eprintln!("req: {req:?}");
+
+        let reqwst = req.into_reqwest(&part.client).unwrap();
+
+        let res = reqwst.send().await.unwrap();
+        let status = res.status();
+        let body = res.bytes().await;
+        eprintln!("Response status: {:?}, body: {:?}", status, body);
+        assert_eq!(status, 200);
+
+        let body = body.unwrap();
+
+        assert_eq!(body.as_ref(), b"test body");
     }
 }

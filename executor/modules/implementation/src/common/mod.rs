@@ -82,6 +82,12 @@ pub trait MapUserError {
         message: impl Into<String>,
         fatal: bool,
     ) -> Result<Self::Output, anyhow::Error>;
+
+    fn map_user_error_module(
+        self,
+        message: impl Into<String>,
+        fatal: bool,
+    ) -> Result<Self::Output, ModuleError>;
 }
 
 impl<T, E> MapUserError for Result<T, E>
@@ -95,6 +101,15 @@ where
         message: impl Into<String>,
         fatal: bool,
     ) -> Result<Self::Output, anyhow::Error> {
+        self.map_user_error_module(message, fatal)
+            .map_err(Into::into)
+    }
+
+    fn map_user_error_module(
+        self,
+        message: impl Into<String>,
+        fatal: bool,
+    ) -> Result<Self::Output, ModuleError> {
         match self {
             Ok(s) => Ok(s),
             Err(e) => {
@@ -106,8 +121,7 @@ where
                             causes: e.causes,
                             fatal: fatal || e.fatal,
                             ctx: e.ctx,
-                        }
-                        .into())
+                        })
                     }
                     Err(e) => Err(ModuleError {
                         causes: vec![message.into()],
@@ -116,8 +130,7 @@ where
                             "rust_error".to_owned(),
                             genvm_modules_interfaces::GenericValue::Str(format!("{e:#}")),
                         )]),
-                    }
-                    .into()),
+                    }),
                 }
             }
         }

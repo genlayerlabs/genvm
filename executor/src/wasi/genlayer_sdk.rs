@@ -643,6 +643,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
 
+                if prompt_payload.images.len() > 2 {
+                    return Err(generated::types::Errno::Inval.into());
+                }
+
                 let llm = self.context.shared_data.modules.llm.clone();
                 let task = tokio::spawn(taskify(async move {
                     llm.send::<genvm_modules_interfaces::llm::PromptAnswer, _>(

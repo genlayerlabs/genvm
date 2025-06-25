@@ -12,8 +12,6 @@ use std::str::FromStr;
 
 use super::req::Request;
 
-use genvm_modules_interfaces::web as web_iface;
-
 pub struct CtxPart {
     pub client: reqwest::Client,
     pub sign_url: Arc<str>,
@@ -29,54 +27,25 @@ impl CtxPart {
     async fn request(&self, vm: &mlua::Lua, req: Request) -> anyhow::Result<mlua::Value> {
         log_trace!(request:? = req; "received request");
 
-        let method = match req.method {
-            web_iface::RequestMethod::GET => reqwest::Method::GET,
-            web_iface::RequestMethod::POST => reqwest::Method::POST,
-            web_iface::RequestMethod::DELETE => reqwest::Method::DELETE,
-            web_iface::RequestMethod::HEAD => reqwest::Method::HEAD,
-            web_iface::RequestMethod::OPTIONS => reqwest::Method::OPTIONS,
-            web_iface::RequestMethod::PATCH => reqwest::Method::PATCH,
-        };
+        let is_json = req.json;
+        let error_on_status = req.error_on_status;
+        let url = req.url.as_str().to_owned();
 
-        let mut headers: reqwest::header::HeaderMap<reqwest::header::HeaderValue> =
-            reqwest::header::HeaderMap::with_capacity(req.headers.len());
-        for (k, v) in req.headers.into_iter() {
-            let name: reqwest::header::HeaderName = k
-                .as_bytes()
-                .try_into()
-                .map_user_error(ErrorKind::DESERIALIZING.to_string(), true)?;
-            let data: &[u8] = &v.0;
-            headers.insert(
-                name,
-                data.try_into()
-                    .map_user_error("invalid header value", true)?,
-            );
-        }
+        let request = req.into_reqwest(&self.client)?;
 
-        let request = self
-            .client
-            .request(method, req.url.clone())
-            .headers(headers);
-
-        let request = if let Some(body) = req.body {
-            request.body(body)
-        } else {
-            request
-        };
-
-        if req.json {
+        if is_json {
             let res = scripting::send_request_get_lua_compatible_response_json(
-                req.url.as_str(),
+                &url,
                 request,
-                req.error_on_status,
+                error_on_status,
             )
             .await?;
             Ok(vm.to_value_with(&res, DEFAULT_LUA_SER_OPTIONS)?)
         } else {
             let res = scripting::send_request_get_lua_compatible_response_bytes(
-                req.url.as_str(),
+                &url,
                 request,
-                req.error_on_status,
+                error_on_status,
             )
             .await?;
             Ok(vm.to_value_with(&res, DEFAULT_LUA_SER_OPTIONS)?)
