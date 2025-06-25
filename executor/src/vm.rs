@@ -17,7 +17,7 @@ use crate::{
     memlimiter, public_abi,
     runner::{self, InitAction, WasmMode},
     ustar::{Archive, SharedBytes},
-    wasi::{self, preview1::I32Exit},
+    wasi,
 };
 use anyhow::{Context, Result};
 use genvm_common::*;
@@ -74,7 +74,7 @@ pub enum RunOk {
     VMError(String, #[serde(skip_serializing)] Option<anyhow::Error>),
 }
 
-pub type RunResult = Result<(RunOk, Option<errors::Fingerprint>)>;
+pub type FullRunOk = (RunOk, Option<errors::Fingerprint>);
 
 impl RunOk {
     pub fn empty_return() -> Self {
@@ -329,7 +329,7 @@ impl VM {
     }
 
     #[allow(clippy::manual_try_fold)]
-    pub async fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
+    pub async fn run(&mut self, instance: &wasmtime::Instance) -> anyhow::Result<FullRunOk> {
         if let Ok(lck) = self.store.data().genlayer_ctx.lock() {
             log_debug!(wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "run");
         }
@@ -342,68 +342,14 @@ impl VM {
         let time_start = std::time::Instant::now();
         let res = func.call_async(&mut self.store, ()).await;
         log_debug!(duration:? = time_start.elapsed(); "vm execution finished");
-        let res: RunResult = match res {
+        let res: anyhow::Result<FullRunOk> = match res {
             Ok(()) => Ok((RunOk::empty_return(), None)),
             Err(e) => {
-                let mut fingerprint = errors::Fingerprint {
-                    frames: Vec::new(),
-                    module_instances: BTreeMap::new(),
-                };
-
                 if self.config_copy.needs_error_fingerprint {
-                    if let Some(bt) = e.downcast_ref::<wasmtime::WasmBacktrace>() {
-                        let frames = bt
-                            .frames()
-                            .iter()
-                            .map(|f| errors::Frame {
-                                module_name: f.module().name().unwrap_or("").to_string(),
-                                func: f.func_index(),
-                            })
-                            .collect();
-
-                        fingerprint.frames = frames;
-                    } else {
-                        log_warn!("no backtrace attached");
-                    }
-                    if let Some(fp) = e.downcast_ref::<wasmtime::Fingerprint>() {
-                        fingerprint.module_instances = fp.module_instances.clone();
-                    } else {
-                        log_warn!("no memories attached");
-                    }
+                    errors::unwrap_vm_errors_fingerprint(e).map(|(a, b)| (a, Some(b)))
+                } else {
+                    errors::unwrap_vm_errors(e).map(|a| (a, None))
                 }
-
-                log_debug!(fp:serde = fingerprint; "top level fingerprint");
-
-                let res: Result<RunOk> = [
-                    |e: anyhow::Error| match e.downcast::<crate::wasi::preview1::I32Exit>() {
-                        Ok(I32Exit(0)) => Ok(RunOk::empty_return()),
-                        Ok(I32Exit(v)) => Ok(RunOk::VMError(format!("exit_code {}", v), None)),
-                        Err(e) => Err(e),
-                    },
-                    |e: anyhow::Error| {
-                        e.downcast::<wasmtime::Trap>()
-                            .map(|v| RunOk::VMError(format!("wasm_trap {v:?}"), Some(v.into())))
-                    },
-                    |e: anyhow::Error| {
-                        e.downcast::<crate::errors::VMError>()
-                            .map(|crate::errors::VMError(m, c)| RunOk::VMError(m, c))
-                    },
-                    |e: anyhow::Error| {
-                        e.downcast::<crate::errors::UserError>()
-                            .map(|crate::errors::UserError(v)| RunOk::UserError(v))
-                    },
-                    |e: anyhow::Error| {
-                        e.downcast::<crate::wasi::genlayer_sdk::ContractReturn>()
-                            .map(|crate::wasi::genlayer_sdk::ContractReturn(v)| RunOk::Return(v))
-                    },
-                ]
-                .into_iter()
-                .fold(Err(e), |acc, func| match acc {
-                    Ok(acc) => Ok(acc),
-                    Err(e) => func(e),
-                });
-
-                res.map(|f| (f, Some(fingerprint)))
             }
         };
         match &res {

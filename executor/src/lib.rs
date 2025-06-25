@@ -15,7 +15,6 @@ pub mod public_abi;
 pub use genvm_common::calldata;
 use genvm_common::*;
 
-use errors::VMError;
 pub use host::{Host, MessageData, SlotID};
 
 use anyhow::{Context, Result};
@@ -85,7 +84,7 @@ pub async fn run_with_impl(
     entry_message: MessageData,
     supervisor: Arc<tokio::sync::Mutex<vm::Supervisor>>,
     permissions: &str,
-) -> vm::RunResult {
+) -> anyhow::Result<vm::FullRunOk> {
     let (mut vm, instance) = {
         let supervisor_clone = supervisor.clone();
 
@@ -140,7 +139,7 @@ pub async fn run_with(
     entry_message: MessageData,
     supervisor: Arc<tokio::sync::Mutex<vm::Supervisor>>,
     permissions: &str,
-) -> vm::RunResult {
+) -> anyhow::Result<vm::FullRunOk> {
     let res = run_with_impl(entry_message, supervisor.clone(), permissions).await;
 
     log_debug!("inspecting final result");
@@ -163,7 +162,10 @@ pub async fn run_with(
             )),
         }
     } else {
-        VMError::unwrap_res(res)
+        match res {
+            Ok(res) => Ok(res),
+            Err(e) => errors::unwrap_vm_errors_fingerprint(e).map(|(x, y)| (x, Some(y))),
+        }
     };
 
     let res = res.inspect_err(|e| {

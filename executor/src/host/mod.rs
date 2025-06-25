@@ -292,7 +292,7 @@ impl Host {
         Ok(())
     }
 
-    pub fn consume_result(&mut self, res: &vm::RunResult) -> Result<()> {
+    pub fn consume_result(&mut self, res: &Result<vm::FullRunOk>) -> Result<()> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -302,7 +302,7 @@ impl Host {
             Ok(res) => Ok(res),
             Err(e) => Err(e),
         };
-        write_result(sock, res.map(|r| &r.0))?;
+        write_result(sock, res.map(|r| &r.0))?; //FIXME
         log_debug!("wrote consumed result to host");
 
         let mut int_buf = [0; 1];
@@ -361,6 +361,7 @@ impl Host {
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::PostNondetResult as u8])?;
         sock.write_all(&call_no.to_le_bytes())?;
+
         write_result(sock, Ok(res))?;
 
         sock.flush()?;

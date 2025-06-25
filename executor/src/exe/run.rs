@@ -6,11 +6,12 @@ use anyhow::{Context, Result};
 use clap::ValueEnum;
 use genvm::{config, vm::RunOk, PublicArgs};
 
-#[derive(Debug, Clone, ValueEnum, PartialEq)]
+#[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
 #[clap(rename_all = "kebab_case")]
 enum PrintOption {
-    Shrink,
-    None,
+    Result,
+    Fingerprint,
+    StderrFull,
 }
 
 impl std::fmt::Display for PrintOption {
@@ -21,17 +22,20 @@ impl std::fmt::Display for PrintOption {
 
 #[derive(clap::Args, Debug)]
 pub struct Args {
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "whenever to allow `:latest` and `:test` as runners version"
+    )]
     allow_latest: bool,
 
     #[arg(long)]
     message: String,
-    #[arg(long)]
+    #[arg(long, help = "host uri, preferably unix://")]
     host: String,
-    #[arg(long)]
+    #[arg(long, help = "id to pass to modules, useful for aggregating logs")]
     cookie: Option<String>,
-    #[clap(long, default_value_t = PrintOption::None)]
-    print: PrintOption,
+    #[clap(long, help = "what to output to stdout/stderr")]
+    print: Vec<PrintOption>,
     #[clap(long, default_value_t = false)]
     sync: bool,
     #[clap(
@@ -41,7 +45,7 @@ pub struct Args {
     )]
     permissions: String,
 
-    #[clap(long, default_value = "{}")]
+    #[clap(long, default_value = "{}", help = "value to pass to modules")]
     host_data: String,
 }
 
@@ -118,26 +122,28 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         log_error!(error:ah = err; "error running genvm");
     }
 
-    let res: Option<String> = match (res, args.print) {
-        (_, PrintOption::None) => None,
-        (Ok((RunOk::VMError(e, cause), fp)), PrintOption::Shrink) => {
-            eprintln!("genvm: contract error {:?}", cause);
-            eprintln!("genvm: contract error {:?}", fp);
-            Some(format!("VMError(\"{e}\")"))
-        }
-        (Err(e), PrintOption::Shrink) => {
-            eprintln!("genvm: internal error {:?}", e);
+    if args.print.contains(&PrintOption::StderrFull) {
+        eprintln!("{res:?}");
+    }
 
-            match e.downcast_ref::<wasmtime::Trap>() {
-                None => Some("Error(\"\")".into()),
-                Some(e) => Some(format!("Error(\"{e:?}\")")),
+    if args.print.contains(&PrintOption::Result) {
+        match &res {
+            Ok((RunOk::VMError(e, _), _)) => {
+                println!("executed with `VMError(\"{e}\")`");
+            }
+            Ok((res, _)) => {
+                println!("executed with `{:?}`", res)
+            }
+            Err(_) => {
+                println!("executed with `InternalError(\"\")`");
             }
         }
-        (Ok(res), _) => Some(format!("{:?}", &res)),
-    };
-    match res {
-        None => {}
-        Some(res) => println!("executed with `{res}`"),
+    }
+
+    if args.print.contains(&PrintOption::Fingerprint) {
+        if let Ok((_, fp)) = &res {
+            println!("Fingerprint: {fp:?}");
+        }
     }
 
     runtime.block_on(async {

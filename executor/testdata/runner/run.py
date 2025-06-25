@@ -221,7 +221,7 @@ def run(jsonnet_rel_path):
 				'unix://' + config['host'].path,
 				'--message',
 				json.dumps(config['message']),
-				'--print=shrink',
+				'--print=result',
 				'--allow-latest',
 				'--host-data',
 				'{"node_address": "0x", "tx_id": "0x"}',
