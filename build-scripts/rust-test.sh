@@ -105,6 +105,11 @@ function help_with_fuzz() {
     echo '=== end ==='
 }
 
+function echo_and_run() {
+    echo ">>> cd '$(pwd)' && " "$@"
+    "$@"
+}
+
 for dir in $(git ls-files | grep -P 'Cargo\.toml' | sort)
 do
     dir="$(dirname -- $dir)"
@@ -117,7 +122,7 @@ do
             echo "warn: skip $dir/tests"
         else
             echo "=== testing $dir ==="
-            cargo test --target-dir "$TARGET_DIR" --tests
+            echo_and_run cargo test --target-dir "$TARGET_DIR" --tests
 
             BUILT_FILE="$(cargo test --no-run --message-format=json | jq -r 'select(.reason == "compiler-artifact" and .target.kind[] == "bin") | .executable')"
             PROFILE_FILES="$PROFILE_FILES --object $BUILT_FILE"
@@ -144,7 +149,7 @@ do
 
                 mkdir -p "$BUILD_DIR/genvm-testdata-out/fuzz/" || true
 
-                cargo afl fuzz \
+                echo_and_run cargo afl fuzz \
                     -c - \
                     -i "./fuzz/inputs-$name" \
                     -o "$BUILD_DIR/genvm-testdata-out/fuzz/$name" \

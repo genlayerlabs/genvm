@@ -6,6 +6,10 @@ class Contract(gl.Contract):
 	@gl.public.write
 	def main(self):
 		def run():
-			return gl.nondet.web.request(f'http://localhost:4445/body', method='GET').body
+			return gl.nondet.web.request(
+				f'https://test-server.genlayer.com/body/echo',
+				method='POST',
+				body=b'\xde\xad\xbe\xef',
+			).body
 
 		print(gl.eq_principle.strict_eq(run))

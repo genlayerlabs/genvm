@@ -7,13 +7,13 @@ use genvm_modules_interfaces::GenericValue;
 use wiggle::GuestError;
 
 use crate::host::SlotID;
-use crate::public_abi;
 use crate::{
     calldata,
     errors::*,
     ustar::SharedBytes,
     vm::{self, RunOk},
 };
+use crate::{errors, public_abi};
 
 use super::{base, common::*, gl_call};
 
@@ -452,6 +452,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let vm_data = SingleVMData {
                     conf: base::Config {
+                        needs_error_fingerprint: true,
                         is_deterministic: true,
                         can_read_storage: my_conf.can_read_storage,
                         can_write_storage: false,
@@ -640,6 +641,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             gl_call::Message::ExecPrompt(prompt_payload) => {
                 if self.context.data.conf.is_deterministic {
                     return Err(generated::types::Errno::Forbidden.into());
+                }
+
+                if prompt_payload.images.len() > 2 {
+                    return Err(generated::types::Errno::Inval.into());
                 }
 
                 let llm = self.context.shared_data.modules.llm.clone();
@@ -882,7 +887,7 @@ impl Context {
         &mut self,
         supervisor: &Arc<tokio::sync::Mutex<crate::vm::Supervisor>>,
         essential_data: SingleVMData,
-    ) -> vm::RunResult {
+    ) -> anyhow::Result<vm::RunOk> {
         let limiter = if essential_data.conf.is_deterministic {
             self.shared_data.limiter_det.clone()
         } else {
@@ -901,7 +906,7 @@ impl Context {
 
         limiter.restore(limiter_save);
 
-        result
+        result.map(|x| x.0)
     }
 }
 
@@ -963,6 +968,7 @@ impl ContextVFS<'_> {
 
         let vm_data = SingleVMData {
             conf: base::Config {
+                needs_error_fingerprint: false,
                 is_deterministic: false,
                 can_read_storage: false,
                 can_write_storage: false,
@@ -977,7 +983,11 @@ impl ContextVFS<'_> {
         };
 
         let my_res = self.context.spawn_and_run(&supervisor, vm_data).await;
-        let my_res = VMError::unwrap_res(my_res).map_err(generated::types::Error::trap)?;
+        let my_res = match my_res {
+            Ok(res) => Ok(res),
+            Err(e) => errors::unwrap_vm_errors(e),
+        }
+        .map_err(generated::types::Error::trap)?;
 
         let ret_res = match leaders_res {
             None => {
@@ -990,12 +1000,26 @@ impl ContextVFS<'_> {
             }
             Some(leaders_res) => match my_res {
                 RunOk::Return(v) if v == [16] => Ok(leaders_res),
-                RunOk::Return(v) if v == [8] => {
-                    Err(VMError(format!("validator_disagrees call {}", call_no), None).into())
-                }
+                RunOk::Return(v) if v == [8] => Err(VMError(
+                    format!(
+                        "{} call {}",
+                        public_abi::VmError::ValidatorDisagrees.value(),
+                        call_no
+                    ),
+                    None,
+                )
+                .into()),
                 _ => {
                     log_warn!(validator_result:? = my_res, leaders_result:? = leaders_res; "validator reported unexpected result");
-                    Err(VMError(format!("validator_disagrees call {}", call_no), None).into())
+                    Err(VMError(
+                        format!(
+                            "{} call {}",
+                            public_abi::VmError::ValidatorDisagrees.value(),
+                            call_no
+                        ),
+                        None,
+                    )
+                    .into())
                 }
             },
         };
@@ -1020,6 +1044,7 @@ impl ContextVFS<'_> {
 
         let vm_data = SingleVMData {
             conf: base::Config {
+                needs_error_fingerprint: false,
                 is_deterministic: zelf_conf.is_deterministic,
                 can_read_storage: false,
                 can_write_storage: zelf_conf.can_write_storage & allow_write_ops,
@@ -1034,7 +1059,11 @@ impl ContextVFS<'_> {
         };
 
         let my_res = self.context.spawn_and_run(&supervisor, vm_data).await;
-        let my_res = VMError::unwrap_res(my_res).map_err(generated::types::Error::trap)?;
+        let my_res = match my_res {
+            Ok(res) => Ok(res),
+            Err(e) => errors::unwrap_vm_errors(e),
+        }
+        .map_err(generated::types::Error::trap)?;
 
         let data: Box<[u8]> = my_res.as_bytes_iter().collect();
         Ok(generated::types::Fd::from(self.vfs.place_content(

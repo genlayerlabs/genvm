@@ -49,6 +49,18 @@
     }
   },
   {
+    "type": "enum",
+    "name": "vm_error",
+    "repr": "str",
+    "values": {
+      "timeout": "timeout",
+      "validator_disagrees": "validator_disagrees",
+      "version_too_big": "version_too_big",
+      "oom": "OOM",
+      "invalid_contract": "invalid_contract"
+    }
+  },
+  {
     "type": "const",
     "name": "event_max_topics",
     "repr": "u32",
@@ -59,5 +71,11 @@
     "name": "absent_version",
     "repr": "str",
     "value": "v0.1.0"
+  },
+  {
+    "type": "const",
+    "name": "code_slot_offset",
+    "repr": "u32",
+    "value": 1
   }
 ]

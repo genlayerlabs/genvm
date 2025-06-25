@@ -26,3 +26,7 @@ futures-util = "0.3.31"
 base64 = "0.22.1"
 serde_bytes = "0.11.17"
 rand = "0.9.1"
+chrono = "0.4.41"
+ring = { version = "0.17.14", features = ["std"] }
+url = { version = "2.5.4", features = ["serde"] }
+hex = "0.4.3"

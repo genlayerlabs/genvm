@@ -28,6 +28,6 @@ class Contract(gl.Contract):
 	@gl.public.write
 	def det_viol(self):
 		gl.nondet.web.render(
-			'http://genvm-test/hello.html',
+			'https://test-server.genlayer.com/static/genvm/hello.html',
 			mode='text',
 		)

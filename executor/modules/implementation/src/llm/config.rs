@@ -2,6 +2,8 @@ use std::collections::BTreeMap;
 
 use serde_derive::{Deserialize, Serialize};
 
+use crate::common;
+
 use super::providers;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, clap::ValueEnum)]
@@ -66,16 +68,14 @@ pub struct PromptTemplates {
 
 #[derive(Deserialize)]
 pub struct Config {
-    pub bind_address: String,
-
-    pub lua_script_path: String,
-
     pub backends: BTreeMap<String, BackendConfig>,
     pub prompt_templates: PromptTemplates,
-    pub vm_count: usize,
 
     #[serde(flatten)]
     pub base: genvm_common::BaseConfig,
+
+    #[serde(flatten)]
+    pub mod_base: common::ModuleBaseConfig,
 }
 
 impl BackendConfig {

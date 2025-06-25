@@ -20,7 +20,7 @@ pub struct Module {
     cancellation: Arc<genvm_common::cancellation::Token>,
     imp: tokio::sync::Mutex<ModuleImpl>,
     cookie: String,
-    host_data: Arc<serde_json::Map<String, serde_json::Value>>,
+    host_data: genvm_modules_interfaces::HostData,
 }
 
 async fn read_handling_pings(stream: &mut WSStream) -> anyhow::Result<Bytes> {
@@ -52,7 +52,7 @@ impl Module {
         url: String,
         cancellation: Arc<genvm_common::cancellation::Token>,
         cookie: String,
-        host_data: Arc<serde_json::Map<String, serde_json::Value>>,
+        host_data: genvm_modules_interfaces::HostData,
     ) -> Self {
         Self {
             imp: tokio::sync::Mutex::new(ModuleImpl { url, stream: None }),
@@ -85,11 +85,13 @@ impl Module {
         if zelf.stream.is_none() {
             log_info!(url = zelf.url, name = self.name; "initializing connection to module");
 
-            let (mut ws_stream, _) = tokio_tungstenite::connect_async(&zelf.url).await?;
+            let (mut ws_stream, _) = tokio_tungstenite::connect_async(&zelf.url)
+                .await
+                .with_context(|| format!("connecting to {}", zelf.url))?;
 
             let msg = calldata::to_value(&genvm_modules_interfaces::GenVMHello {
                 cookie: self.cookie.clone(),
-                host_data: self.host_data.as_ref().clone(),
+                host_data: self.host_data.clone(),
             })?;
 
             ws_stream
@@ -133,10 +135,10 @@ impl Module {
     {
         tokio::select! {
             _ = self.cancellation.chan.closed() => {
-                anyhow::bail!("timeout")
+                anyhow::bail!("timeout") // it will be replaced later
             }
             res = self.send_impl(val) => {
-                res
+                res.with_context(|| "sending request to module")
             }
         }
     }

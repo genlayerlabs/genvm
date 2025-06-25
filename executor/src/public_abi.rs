@@ -182,5 +182,50 @@ impl TryFrom<&str> for SpecialMethod {
         }
     }
 }
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+pub enum VmError {
+    Timeout,
+    ValidatorDisagrees,
+    VersionTooBig,
+    Oom,
+    InvalidContract,
+}
+
+impl VmError {
+    pub fn value(self) -> &'static str {
+        match self {
+            VmError::Timeout => "timeout",
+            VmError::ValidatorDisagrees => "validator_disagrees",
+            VmError::VersionTooBig => "version_too_big",
+            VmError::Oom => "OOM",
+            VmError::InvalidContract => "invalid_contract",
+        }
+    }
+    pub fn str_snake_case(self) -> &'static str {
+        match self {
+            VmError::Timeout => "timeout",
+            VmError::ValidatorDisagrees => "validator_disagrees",
+            VmError::VersionTooBig => "version_too_big",
+            VmError::Oom => "oom",
+            VmError::InvalidContract => "invalid_contract",
+        }
+    }
+}
+
+impl TryFrom<&str> for VmError {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, ()> {
+        match value {
+            "timeout" => Ok(VmError::Timeout),
+            "validator_disagrees" => Ok(VmError::ValidatorDisagrees),
+            "version_too_big" => Ok(VmError::VersionTooBig),
+            "OOM" => Ok(VmError::Oom),
+            "invalid_contract" => Ok(VmError::InvalidContract),
+            _ => Err(()),
+        }
+    }
+}
 pub const EVENT_MAX_TOPICS: u32 = 4;
 pub const ABSENT_VERSION: &'static str = "v0.1.0";
+pub const CODE_SLOT_OFFSET: u32 = 1;

@@ -1,45 +1,24 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
-    common::{self, ErrorKind, MapUserError, ModuleError},
+    common::{ErrorKind, MapUserError, ModuleError},
     scripting::{self, DEFAULT_LUA_SER_OPTIONS},
 };
 use anyhow::Context;
 use base64::Engine;
 use genvm_common::*;
-use genvm_modules_interfaces::GenericValue;
 use mlua::LuaSerdeExt;
-use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-use genvm_modules_interfaces::web as web_iface;
-
-fn default_none<T>() -> Option<T> {
-    None
-}
-
-fn default_false() -> bool {
-    false
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Request {
-    pub method: web_iface::RequestMethod,
-    pub url: String,
-    pub headers: BTreeMap<String, web_iface::HeaderData>,
-
-    #[serde(with = "serde_bytes", default = "default_none")]
-    pub body: Option<Vec<u8>>,
-    #[serde(default = "default_false")]
-    pub sign: bool,
-    #[serde(default = "default_false")]
-    pub json: bool,
-    #[serde(default = "default_false")]
-    pub error_on_status: bool,
-}
+use super::req::Request;
 
 pub struct CtxPart {
     pub client: reqwest::Client,
+    pub sign_url: Arc<str>,
+    pub sign_headers: Arc<BTreeMap<String, String>>,
+    pub sign_vars: BTreeMap<String, String>,
+    pub node_address: String,
+    pub tx_id: String,
 }
 
 impl mlua::UserData for CtxPart {}
@@ -48,66 +27,25 @@ impl CtxPart {
     async fn request(&self, vm: &mlua::Lua, req: Request) -> anyhow::Result<mlua::Value> {
         log_trace!(request:? = req; "received request");
 
-        let url = match reqwest::Url::parse(&req.url) {
-            Ok(url) => url,
-            Err(err) => {
-                return Err(common::ModuleError {
-                    causes: vec![ErrorKind::DESERIALIZING.into()],
-                    ctx: BTreeMap::from([
-                        ("url".into(), GenericValue::Str(req.url)),
-                        ("rust_error".into(), GenericValue::Str(format!("{err:#}"))),
-                    ]),
-                    fatal: true,
-                }
-                .into());
-            }
-        };
+        let is_json = req.json;
+        let error_on_status = req.error_on_status;
+        let url = req.url.as_str().to_owned();
 
-        let method = match req.method {
-            web_iface::RequestMethod::GET => reqwest::Method::GET,
-            web_iface::RequestMethod::POST => reqwest::Method::POST,
-            web_iface::RequestMethod::DELETE => reqwest::Method::DELETE,
-            web_iface::RequestMethod::HEAD => reqwest::Method::HEAD,
-            web_iface::RequestMethod::OPTIONS => reqwest::Method::OPTIONS,
-            web_iface::RequestMethod::PATCH => reqwest::Method::PATCH,
-        };
+        let request = req.into_reqwest(&self.client)?;
 
-        let mut headers: reqwest::header::HeaderMap<reqwest::header::HeaderValue> =
-            reqwest::header::HeaderMap::with_capacity(req.headers.len());
-        for (k, v) in req.headers.into_iter() {
-            let name: reqwest::header::HeaderName = k
-                .as_bytes()
-                .try_into()
-                .map_user_error(ErrorKind::DESERIALIZING.to_string(), true)?;
-            let data: &[u8] = &v.0;
-            headers.insert(
-                name,
-                data.try_into()
-                    .map_user_error("invalid header value", true)?,
-            );
-        }
-
-        let request = self.client.request(method, url).headers(headers);
-
-        let request = if let Some(body) = req.body {
-            request.body(body)
-        } else {
-            request
-        };
-
-        if req.json {
+        if is_json {
             let res = scripting::send_request_get_lua_compatible_response_json(
-                &req.url,
+                &url,
                 request,
-                req.error_on_status,
+                error_on_status,
             )
             .await?;
             Ok(vm.to_value_with(&res, DEFAULT_LUA_SER_OPTIONS)?)
         } else {
             let res = scripting::send_request_get_lua_compatible_response_bytes(
-                &req.url,
+                &url,
                 request,
-                req.error_on_status,
+                error_on_status,
             )
             .await?;
             Ok(vm.to_value_with(&res, DEFAULT_LUA_SER_OPTIONS)?)
@@ -262,10 +200,17 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
                     .with_context(|| "unboxing userdata")
                     .map_err(scripting::anyhow_to_lua_error)?;
 
-                let request: Request = vm
+                let mut request: Request = vm
                     .from_value(req)
                     .with_context(|| "deserializing request")
                     .map_err(scripting::anyhow_to_lua_error)?;
+
+                if request.sign {
+                    request
+                        .add_rfc9421_sign_headers(&zelf)
+                        .await
+                        .map_err(mlua::Error::external)?;
+                }
 
                 let response = zelf
                     .request(&vm, request)
@@ -300,7 +245,16 @@ mod tests {
         let mut extra_path = cwd.to_str().unwrap().to_owned();
         extra_path.push_str("/?.lua");
 
-        scripting::UserVM::create(&extra_path, |_| async { Ok(()) })
+        let conf = common::ModuleBaseConfig {
+            bind_address: "".to_owned(),
+            vm_count: 1,
+            lua_script_path: "".to_owned(),
+            extra_lua_path: extra_path,
+            signer_headers: Arc::new(BTreeMap::new()),
+            signer_url: Arc::from(""),
+        };
+
+        scripting::UserVM::create(&conf, |_| async { Ok(()) })
             .await
             .unwrap()
     }
@@ -323,11 +277,15 @@ mod tests {
 
         let rs_ctx = scripting::RSContext {
             client: common::create_client().unwrap(),
-            hello: Arc::new(genvm_modules_interfaces::GenVMHello {
-                cookie: "<test cookie>".to_owned(),
-                host_data: serde_json::Map::new(),
-            }),
             data: Arc::new(()),
+            hello: Arc::new(genvm_modules_interfaces::GenVMHello {
+                cookie: "test_cookie".to_owned(),
+                host_data: genvm_modules_interfaces::HostData {
+                    node_address: "test_node_address".to_owned(),
+                    tx_id: "test_tx_id".to_owned(),
+                    rest: serde_json::Map::new(),
+                },
+            }),
         };
 
         let ctx_lua = uvm.create_ctx(&rs_ctx).unwrap();
@@ -368,13 +326,12 @@ mod tests {
 
         let expected = b"\xde\xad\xbe\xef";
 
+        let hello = common::tests::get_hello();
+
         let rs_ctx = scripting::RSContext {
             client: common::create_client().unwrap(),
-            hello: Arc::new(genvm_modules_interfaces::GenVMHello {
-                cookie: "<test cookie>".to_owned(),
-                host_data: serde_json::Map::new(),
-            }),
             data: Arc::new(()),
+            hello,
         };
 
         let ctx_lua = uvm.create_ctx(&rs_ctx).unwrap();

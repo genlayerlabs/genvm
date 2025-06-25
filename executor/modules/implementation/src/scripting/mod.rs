@@ -55,7 +55,7 @@ impl<T, C> UserVM<T, C> {
     }
 
     pub async fn create<F>(
-        extra_lua_path: &str,
+        mod_config: &common::ModuleBaseConfig,
         data_getter: impl FnOnce(mlua::Lua) -> F,
     ) -> anyhow::Result<Self>
     where
@@ -78,9 +78,9 @@ impl<T, C> UserVM<T, C> {
                 .to_owned();
             path.push_str("/?.lua");
 
-            if !extra_lua_path.is_empty() {
+            if !mod_config.extra_lua_path.is_empty() {
                 path.push(';');
-                path.push_str(extra_lua_path);
+                path.push_str(&mod_config.extra_lua_path);
             }
 
             log_info!(path = path; "lua path");
@@ -105,9 +105,30 @@ impl<T, C> UserVM<T, C> {
 
         let mut ctx_creators: Vec<Box<CtxCreator<C>>> = Vec::new();
 
-        ctx_creators.push(Box::new(|rs_ctx, vm, ctx| {
+        let signer_headers = mod_config.signer_headers.clone();
+        let sign_url = mod_config.signer_url.clone();
+
+        ctx_creators.push(Box::new(move |rs_ctx, vm, ctx| {
+            let mut sign_vars = BTreeMap::new();
+
+            sign_vars.insert(
+                "node_address".to_owned(),
+                rs_ctx.hello.host_data.node_address.clone(),
+            );
+            sign_vars.insert("tx_id".to_owned(), rs_ctx.hello.host_data.tx_id.clone());
+            for (k, v) in &rs_ctx.hello.host_data.rest {
+                if let serde_json::Value::String(s) = v {
+                    sign_vars.insert(k.clone(), s.clone());
+                }
+            }
+
             let my_ctx = vm.create_userdata(Arc::new(ctx::dflt::CtxPart {
                 client: rs_ctx.client.clone(),
+                node_address: rs_ctx.hello.host_data.node_address.clone(),
+                tx_id: rs_ctx.hello.host_data.tx_id.clone(),
+                sign_vars,
+                sign_headers: signer_headers.clone(),
+                sign_url: sign_url.clone(),
             }))?;
 
             ctx.set("__ctx_dflt", my_ctx)?;

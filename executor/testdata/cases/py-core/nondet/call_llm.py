@@ -8,7 +8,7 @@ class Contract(gl.Contract):
 		def run():
 			return (
 				gl.nondet.exec_prompt(
-					"respond with a single word 'yes' (without quotes) and nothing else"
+					"respond with two letters 'OK' (without quotes) and nothing else, no repetition"
 				)
 				.lower()
 				.strip()

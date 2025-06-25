@@ -59,25 +59,28 @@ pub fn entrypoint(args: CliArgs) -> Result<()> {
 
     let moved_config = config.clone();
 
-    let vm_pool = runtime.block_on(scripting::pool::new(config.vm_count, move || {
+    let vm_pool = runtime.block_on(scripting::pool::new(config.mod_base.vm_count, move || {
+        let moved_config_1 = moved_config.clone();
         let moved_config = moved_config.clone();
-        async {
-            let mut user_vm =
-                crate::scripting::UserVM::create("", move |vm: mlua::Lua| async move {
+        async move {
+            let mut user_vm = crate::scripting::UserVM::create(
+                &moved_config_1.mod_base,
+                move |vm: mlua::Lua| async move {
                     // set llm-related globals
                     vm.globals()
                         .set("__web", ctx::create_global(&vm, &moved_config)?)?;
 
                     // load script
-                    scripting::load_script(&vm, &moved_config.lua_script_path).await?;
+                    scripting::load_script(&vm, &moved_config.mod_base.lua_script_path).await?;
 
                     // get functions populated by script
                     let render: mlua::Function = vm.globals().get("Render")?;
                     let request: mlua::Function = vm.globals().get("Request")?;
 
                     Ok(ctx::VMData { render, request })
-                })
-                .await?;
+                },
+            )
+            .await?;
 
             user_vm.add_ctx_creator(Box::new(|ctx: &RSContext<ctx::CtxPart>, vm, table| {
                 table.set("__ctx_web", vm.create_userdata(ctx.data.clone())?)?;
@@ -90,7 +93,7 @@ pub fn entrypoint(args: CliArgs) -> Result<()> {
     }))?;
 
     let loop_future = crate::common::run_loop(
-        config.bind_address.clone(),
+        config.mod_base.bind_address.clone(),
         token,
         Arc::new(handler::HandlerProvider { vm_pool, config }),
     );

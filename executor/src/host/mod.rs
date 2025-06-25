@@ -3,6 +3,7 @@ pub mod message;
 
 use genvm_common::*;
 
+use crate::errors;
 use crate::public_abi::{ResultCode, StorageType};
 use genvm_common::calldata::Address;
 use genvm_common::calldata::ADDRESS_SIZE;
@@ -26,17 +27,6 @@ impl Sock for bufreaderwriter::seq::BufReaderWriterSeq<std::net::TcpStream> {}
 
 pub struct Host {
     sock: Box<Mutex<dyn Sock>>,
-}
-
-#[derive(Debug)]
-pub struct AbsentLeaderResult;
-
-impl std::error::Error for AbsentLeaderResult {}
-
-impl std::fmt::Display for AbsentLeaderResult {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "AbsentLeaderResult")
-    }
 }
 
 impl Host {
@@ -302,7 +292,7 @@ impl Host {
         Ok(())
     }
 
-    pub fn consume_result(&mut self, res: &vm::RunResult) -> Result<()> {
+    pub fn consume_result(&mut self, res: &Result<vm::FullRunOk>) -> Result<()> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -312,7 +302,7 @@ impl Host {
             Ok(res) => Ok(res),
             Err(e) => Err(e),
         };
-        write_result(sock, res)?;
+        write_result(sock, res.map(|r| &r.0))?; //FIXME
         log_debug!("wrote consumed result to host");
 
         let mut int_buf = [0; 1];
@@ -335,7 +325,7 @@ impl Host {
                 return Ok(None);
             }
             host_fns::Errors::Absent => {
-                anyhow::bail!(AbsentLeaderResult);
+                return Err(errors::VMError("absent_leader_result".to_owned(), None).into());
             }
             e => return Err(crate::errors::VMError(e.str_snake_case().to_owned(), None).into()),
         }
@@ -371,6 +361,7 @@ impl Host {
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::PostNondetResult as u8])?;
         sock.write_all(&call_no.to_le_bytes())?;
+
         write_result(sock, Ok(res))?;
 
         sock.flush()?;

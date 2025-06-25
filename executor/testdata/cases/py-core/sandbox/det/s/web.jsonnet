@@ -3,7 +3,7 @@ simple.run('${jsonnetDir}/../code.py') {
     "calldata": |||
         {
             "method": "main",
-            "args": ["gl.nondet.web.render('http://genvm-test/hello.html', mode='text')"]
+            "args": ["gl.nondet.web.render('https://test-server.genlayer.com/static/genvm/hello.html', mode='text')"]
         }
     |||
 }

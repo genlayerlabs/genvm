@@ -117,7 +117,6 @@ impl
         >,
     > {
         let client = reqwest::Client::new();
-
         let hello = Arc::new(hello);
 
         let ctx = scripting::RSContext {

@@ -352,8 +352,16 @@ pub mod web {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HostData {
+    pub node_address: String,
+    pub tx_id: String,
+    #[serde(flatten)]
+    pub rest: serde_json::Map<String, serde_json::Value>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenVMHello {
     pub cookie: String,
-    pub host_data: serde_json::Map<String, serde_json::Value>,
+    pub host_data: HostData,
 }

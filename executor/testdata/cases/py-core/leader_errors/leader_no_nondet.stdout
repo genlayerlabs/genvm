@@ -1,1 +1,1 @@
-executed with `VMError("deterministic_violation")`
+VMError("absent_leader_result")
