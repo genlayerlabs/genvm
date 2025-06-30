@@ -146,6 +146,20 @@ See [mock implementation](../../executor/testdata/runner/mock_host.py)
 
 ## Types
 
+### VM results
+There are following codes:
+- `Return`
+- `VMError` indicating vm-produced error that usually can't be handled
+- `UserError` user-produced error
+
+#### Nondet blocks and sandbox encoding
+- 1 byte of result code
+- result as-is (calldata for `Return`, string for `VMError|UserError`)
+
+#### Parent VM result
+- 1 byte of result code
+- calldata for `Return`, `{ "message": "string", "fingerprint": ... }` for `VMError|UserError`
+
 ### Calldata
 `get_calldata` method must return [calldata encoded](../calldata.md) bytes that conform to ABI:
 ```typescript

@@ -9,6 +9,7 @@ use genvm_common::calldata::Address;
 use genvm_common::calldata::ADDRESS_SIZE;
 use message::root_offsets;
 
+use std::collections::BTreeMap;
 use std::sync::Mutex;
 
 use anyhow::{Context, Result};
@@ -16,7 +17,7 @@ use anyhow::{Context, Result};
 use crate::calldata;
 use crate::errors::VMError;
 use crate::memlimiter;
-use crate::vm;
+use crate::vm::{self, RunOk};
 pub use message::{MessageData, SlotID};
 
 trait Sock: std::io::Read + std::io::Write + Send + Sync {}
@@ -293,12 +294,38 @@ impl Host {
             anyhow::bail!("can't take lock")
         };
         let sock: &mut dyn Sock = &mut *sock;
-        sock.write_all(&[host_fns::Methods::ConsumeResult as u8])?;
-        let res = match res {
-            Ok(res) => Ok(res),
-            Err(e) => Err(e),
+        let (code, data) = match res {
+            Ok((RunOk::Return(data), _)) => (ResultCode::Return, data.clone()),
+            Ok((RunOk::UserError(data), fp)) => {
+                let fp = calldata::to_value(fp)?;
+                let val = calldata::Value::Map(BTreeMap::from([
+                    ("message".to_owned(), data.as_str().into()),
+                    ("fingerprint".to_owned(), fp),
+                ]));
+                let val_encoded = calldata::encode(&val);
+
+                (ResultCode::UserError, val_encoded)
+            }
+            Ok((RunOk::VMError(data, _), fp)) => {
+                let fp = calldata::to_value(fp)?;
+                let val = calldata::Value::Map(BTreeMap::from([
+                    ("message".to_owned(), data.as_str().into()),
+                    ("fingerprint".to_owned(), fp),
+                ]));
+                let val_encoded = calldata::encode(&val);
+
+                (ResultCode::VmError, val_encoded)
+            }
+            Err(e) => {
+                let data = calldata::Value::Str(format!("{e:?}"));
+                let val = calldata::encode(&data);
+
+                (ResultCode::InternalError, val)
+            }
         };
-        write_result(sock, res.map(|r| &r.0))?; //FIXME
+        sock.write_all(&[host_fns::Methods::ConsumeResult as u8, code as u8])?;
+        sock.write_all(&(data.len() as u32).to_le_bytes())?;
+        sock.write_all(&data)?;
         log_debug!("wrote consumed result to host");
 
         let mut int_buf = [0; 1];
