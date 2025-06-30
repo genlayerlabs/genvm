@@ -20,7 +20,7 @@ else:
 	exec(Path(__file__).parent.joinpath('result_codes.py').read_text())
 
 ACCOUNT_ADDR_SIZE = 20
-GENERIC_ADDR_SIZE = 32
+SLOT_ID_SIZE = 32
 
 
 class HostException(Exception):
@@ -167,7 +167,7 @@ async def host_loop(handler: IHost):
 				mode = await read_exact(1)
 				mode = StorageType(mode[0])
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
-				slot = await read_exact(GENERIC_ADDR_SIZE)
+				slot = await read_exact(SLOT_ID_SIZE)
 				index = await recv_int()
 				le = await recv_int()
 				try:
@@ -179,7 +179,7 @@ async def host_loop(handler: IHost):
 					await send_all(bytes([Errors.OK]))
 					await send_all(res)
 			case Methods.STORAGE_WRITE:
-				slot = await read_exact(GENERIC_ADDR_SIZE)
+				slot = await read_exact(SLOT_ID_SIZE)
 				index = await recv_int()
 				le = await recv_int()
 				got = await read_exact(le)
@@ -235,10 +235,7 @@ async def host_loop(handler: IHost):
 					await send_all(bytes([Errors.OK]))
 			case Methods.CONSUME_FUEL:
 				gas = await recv_int(8)
-				try:
-					await handler.consume_gas(gas)
-				except HostException as e:
-					await send_all(bytes([e.error_code]))
+				await handler.consume_gas(gas)
 			case Methods.DEPLOY_CONTRACT:
 				calldata_len = await recv_int()
 				calldata = await read_exact(calldata_len)
