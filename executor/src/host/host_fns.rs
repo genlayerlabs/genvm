@@ -1,3 +1,5 @@
+// This file is auto-generated. Do not edit!
+
 #![allow(dead_code, clippy::redundant_static_lifetimes)]
 
 use serde_derive::{Deserialize, Serialize};
@@ -86,6 +88,7 @@ pub enum Errors {
     Absent = 1,
     Forbidden = 2,
     IAmLeader = 3,
+    OutOfStorageGas = 4,
 }
 
 impl Errors {
@@ -95,6 +98,7 @@ impl Errors {
             Errors::Absent => 1,
             Errors::Forbidden => 2,
             Errors::IAmLeader => 3,
+            Errors::OutOfStorageGas => 4,
         }
     }
     pub fn str_snake_case(self) -> &'static str {
@@ -103,6 +107,7 @@ impl Errors {
             Errors::Absent => "absent",
             Errors::Forbidden => "forbidden",
             Errors::IAmLeader => "i_am_leader",
+            Errors::OutOfStorageGas => "out_of_storage_gas",
         }
     }
 }
@@ -116,6 +121,7 @@ impl TryFrom<u8> for Errors {
             1 => Ok(Errors::Absent),
             2 => Ok(Errors::Forbidden),
             3 => Ok(Errors::IAmLeader),
+            4 => Ok(Errors::OutOfStorageGas),
             _ => Err(()),
         }
     }

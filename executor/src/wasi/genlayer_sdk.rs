@@ -782,7 +782,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::Inval.into());
         }
 
-        let account = self.context.data.message_data.contract_address;
         let slot = SlotID::read_from_mem(mem, slot)?;
 
         if self.context.shared_data.locked_slots.contains(slot) {
@@ -796,7 +795,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         supervisor
             .host
-            .storage_write(account, slot, index, &buf)
+            .storage_write(slot, index, &buf)
             .map_err(generated::types::Error::trap)
     }
 

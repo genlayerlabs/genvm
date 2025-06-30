@@ -1,3 +1,5 @@
+# This file is auto-generated. Do not edit!
+
 from enum import IntEnum, StrEnum
 import typing
 
@@ -23,3 +25,4 @@ class Errors(IntEnum):
 	ABSENT = 1
 	FORBIDDEN = 2
 	I_AM_LEADER = 3
+	OUT_OF_STORAGE_GAS = 4

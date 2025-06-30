@@ -264,22 +264,18 @@ impl Host {
         handle_host_error(sock)?;
 
         sock.read_exact(buf)?;
+
+        log_trace!(slot:? = slot.0, index = index, data:serde = buf; "read");
+
         Ok(())
     }
 
-    pub fn storage_write(
-        &mut self,
-        account: calldata::Address,
-        slot: SlotID,
-        index: u32,
-        buf: &[u8],
-    ) -> Result<()> {
+    pub fn storage_write(&mut self, slot: SlotID, index: u32, buf: &[u8]) -> Result<()> {
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::StorageWrite as u8])?;
-        sock.write_all(&account.raw())?;
         sock.write_all(&slot.raw())?;
         sock.write_all(&index.to_le_bytes())?;
         sock.write_all(&(buf.len() as u32).to_le_bytes())?;
@@ -365,6 +361,9 @@ impl Host {
         write_result(sock, Ok(res))?;
 
         sock.flush()?;
+
+        handle_host_error(sock)?;
+
         Ok(())
     }
 
@@ -388,6 +387,9 @@ impl Host {
         sock.write_all(data.as_bytes())?;
 
         sock.flush()?;
+
+        handle_host_error(sock)?;
+
         Ok(())
     }
 
@@ -408,6 +410,9 @@ impl Host {
         sock.write_all(data.as_bytes())?;
 
         sock.flush()?;
+
+        handle_host_error(sock)?;
+
         Ok(())
     }
 
@@ -461,6 +466,9 @@ impl Host {
         sock.write_all(data.as_bytes())?;
 
         sock.flush()?;
+
+        handle_host_error(sock)?;
+
         Ok(())
     }
 

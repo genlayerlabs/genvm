@@ -128,14 +128,18 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
 
     if args.print.contains(&PrintOption::Result) {
         match &res {
-            Ok((RunOk::VMError(e, _), _)) => {
+            Ok((RunOk::VMError(e, cause), _)) => {
                 println!("executed with `VMError(\"{e}\")`");
+                if let Some(cause) = cause {
+                    eprintln!("{cause:?}");
+                }
             }
             Ok((res, _)) => {
                 println!("executed with `{:?}`", res)
             }
-            Err(_) => {
+            Err(err) => {
                 println!("executed with `InternalError(\"\")`");
+                eprintln!("{err:?}");
             }
         }
     }

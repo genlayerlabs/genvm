@@ -66,7 +66,9 @@ class MockHost(IHost):
 		storage_path_post: Path,
 		balances: dict[Address, int],
 		leader_nondet,
+		running_address: Address,
 	):
+		self.running_address = running_address
 		self.path = path
 		self.calldata = calldata
 		self.storage_path_pre = storage_path_pre
@@ -125,13 +127,12 @@ class MockHost(IHost):
 
 	async def storage_write(
 		self,
-		account: bytes,
 		slot: bytes,
 		index: int,
 		got: collections.abc.Buffer,
 	) -> None:
 		assert self.storage is not None
-		self.storage.write(Address(account), slot, index, got)
+		self.storage.write(self.running_address, slot, index, got)
 
 	async def consume_result(
 		self, type: ResultCode, data: collections.abc.Buffer

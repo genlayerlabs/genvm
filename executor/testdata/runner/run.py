@@ -130,7 +130,7 @@ def run(jsonnet_rel_path):
 			code = Path(code)
 		code = Path(code).read_bytes()
 		base_host.save_code_callback(
-			addr, code, lambda a, b, c, d: base_mock_storage.write(Address(a), b, c, d)
+			code, lambda b, c, d: base_mock_storage.write(Address(addr), b, c, d)
 		)
 	empty_storage = seq_tmp_dir.joinpath('empty-storage.pickle')
 	with open(empty_storage, 'wb') as f:
@@ -186,6 +186,7 @@ def run(jsonnet_rel_path):
 			balances={
 				Address(k): v for k, v in single_conf_form_file.get('balances', {}).items()
 			},
+			running_address=Address(single_conf_form_file['message']['contract_address']),
 		)
 
 		mock_host_path = my_tmp_dir.joinpath('mock-host.pickle')

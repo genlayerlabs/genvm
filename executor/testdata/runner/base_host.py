@@ -23,8 +23,12 @@ ACCOUNT_ADDR_SIZE = 20
 GENERIC_ADDR_SIZE = 32
 
 
-class GenVMTimeoutException(Exception):
-	"Exception that is raised when time limit is exceeded"
+class HostException(Exception):
+	def __init__(self, error_code: Errors, message: str = ''):
+		if error_code == Errors.OK:
+			raise ValueError('Error code cannot be OK')
+		self.error_code = error_code
+		super().__init__(message or f'GenVM error: {error_code}')
 
 
 class DefaultEthTransactionData(typing.TypedDict):
@@ -54,7 +58,6 @@ class IHost(metaclass=abc.ABCMeta):
 	@abc.abstractmethod
 	async def storage_write(
 		self,
-		account: bytes,
 		slot: bytes,
 		index: int,
 		got: collections.abc.Buffer,
@@ -97,7 +100,7 @@ class IHost(metaclass=abc.ABCMeta):
 
 
 def save_code_callback[T](
-	address: bytes, code: bytes, cb: typing.Callable[[bytes, bytes, int, bytes], T]
+	code: bytes, cb: typing.Callable[[bytes, int, bytes], T]
 ) -> tuple[T, T]:
 	import hashlib
 
@@ -105,17 +108,15 @@ def save_code_callback[T](
 	CODE_OFFSET = 1
 	code_digest.update(CODE_OFFSET.to_bytes(4, byteorder='little'))
 	code_slot = code_digest.digest()
-	r1 = cb(
-		address, code_slot, 0, len(code).to_bytes(4, byteorder='little', signed=False)
-	)
+	r1 = cb(code_slot, 0, len(code).to_bytes(4, byteorder='little', signed=False))
 
-	r2 = cb(address, code_slot, 4, code)
+	r2 = cb(code_slot, 4, code)
 
 	return (r1, r2)
 
 
-async def save_code_to_host(host: IHost, address: bytes, code: bytes):
-	r1, r2 = save_code_callback(address, code, host.storage_write)
+async def save_code_to_host(host: IHost, code: bytes):
+	r1, r2 = save_code_callback(code, host.storage_write)
 	await r1
 	await r2
 
@@ -154,10 +155,14 @@ async def host_loop(handler: IHost):
 		meth_id = Methods(await recv_int(1))
 		match meth_id:
 			case Methods.GET_CALLDATA:
-				cd = await handler.get_calldata()
-				await send_all(bytes([Errors.OK]))
-				await send_int(len(cd))
-				await send_all(cd)
+				try:
+					cd = await handler.get_calldata()
+				except HostException as e:
+					await send_all(bytes([e.error_code]))
+				else:
+					await send_all(bytes([Errors.OK]))
+					await send_int(len(cd))
+					await send_all(cd)
 			case Methods.STORAGE_READ:
 				mode = await read_exact(1)
 				mode = StorageType(mode[0])
@@ -165,37 +170,53 @@ async def host_loop(handler: IHost):
 				slot = await read_exact(GENERIC_ADDR_SIZE)
 				index = await recv_int()
 				le = await recv_int()
-				res = await handler.storage_read(mode, account, slot, index, le)
-				assert len(res) == le
-				await send_all(bytes([Errors.OK]))
-				await send_all(res)
+				try:
+					res = await handler.storage_read(mode, account, slot, index, le)
+					assert len(res) == le
+				except HostException as e:
+					await send_all(bytes([e.error_code]))
+				else:
+					await send_all(bytes([Errors.OK]))
+					await send_all(res)
 			case Methods.STORAGE_WRITE:
-				account = await read_exact(ACCOUNT_ADDR_SIZE)
 				slot = await read_exact(GENERIC_ADDR_SIZE)
 				index = await recv_int()
 				le = await recv_int()
 				got = await read_exact(le)
-				await handler.storage_write(account, slot, index, got)
-				await send_all(bytes([Errors.OK]))
+				try:
+					await handler.storage_write(slot, index, got)
+				except HostException as e:
+					await send_all(bytes([e.error_code]))
+				else:
+					await send_all(bytes([Errors.OK]))
 			case Methods.CONSUME_RESULT:
 				await handler.consume_result(*await read_result())
 				await send_all(b'\x00')
 				return
 			case Methods.GET_LEADER_NONDET_RESULT:
 				call_no = await recv_int()
-				data = await handler.get_leader_nondet_result(call_no)
-				if isinstance(data, Errors):
-					await send_all(bytes([data]))
+				try:
+					data = await handler.get_leader_nondet_result(call_no)
+				except HostException as e:
+					await send_all(bytes([e.error_code]))
 				else:
-					await send_all(bytes([Errors.OK]))
-					code, as_bytes = data
-					await send_all(bytes([code]))
-					as_bytes = memoryview(as_bytes)
-					await send_int(len(as_bytes))
-					await send_all(as_bytes)
+					if isinstance(data, Errors):
+						await send_all(bytes([data]))
+					else:
+						await send_all(bytes([Errors.OK]))
+						code, as_bytes = data
+						await send_all(bytes([code]))
+						as_bytes = memoryview(as_bytes)
+						await send_int(len(as_bytes))
+						await send_all(as_bytes)
 			case Methods.POST_NONDET_RESULT:
 				call_no = await recv_int()
-				await handler.post_nondet_result(call_no, *await read_result())
+				try:
+					await handler.post_nondet_result(call_no, *await read_result())
+				except HostException as e:
+					await send_all(bytes([e.error_code]))
+				else:
+					await send_all(bytes([Errors.OK]))
 			case Methods.POST_MESSAGE:
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
 
@@ -206,10 +227,18 @@ async def host_loop(handler: IHost):
 				message_data_bytes = await read_exact(message_data_len)
 				message_data = json.loads(str(message_data_bytes, 'utf-8'))
 
-				await handler.post_message(account, calldata, message_data)
+				try:
+					await handler.post_message(account, calldata, message_data)
+				except HostException as e:
+					await send_all(bytes([e.error_code]))
+				else:
+					await send_all(bytes([Errors.OK]))
 			case Methods.CONSUME_FUEL:
 				gas = await recv_int(8)
-				await handler.consume_gas(gas)
+				try:
+					await handler.consume_gas(gas)
+				except HostException as e:
+					await send_all(bytes([e.error_code]))
 			case Methods.DEPLOY_CONTRACT:
 				calldata_len = await recv_int()
 				calldata = await read_exact(calldata_len)
@@ -221,7 +250,12 @@ async def host_loop(handler: IHost):
 				message_data_bytes = await read_exact(message_data_len)
 				message_data = json.loads(str(message_data_bytes, 'utf-8'))
 
-				await handler.deploy_contract(calldata, code, message_data)
+				try:
+					await handler.deploy_contract(calldata, code, message_data)
+				except HostException as e:
+					await send_all(bytes([e.error_code]))
+				else:
+					await send_all(bytes([Errors.OK]))
 
 			case Methods.ETH_SEND:
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
@@ -232,21 +266,34 @@ async def host_loop(handler: IHost):
 				message_data_bytes = await read_exact(message_data_len)
 				message_data = json.loads(str(message_data_bytes, 'utf-8'))
 
-				await handler.eth_send(account, calldata, message_data)
+				try:
+					await handler.eth_send(account, calldata, message_data)
+				except HostException as e:
+					await send_all(bytes([e.error_code]))
+				else:
+					await send_all(bytes([Errors.OK]))
 			case Methods.ETH_CALL:
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
 				calldata_len = await recv_int()
 				calldata = await read_exact(calldata_len)
 
-				res = await handler.eth_call(account, calldata)
-				await send_all(bytes([Errors.OK]))
-				await send_int(len(res))
-				await send_all(res)
+				try:
+					res = await handler.eth_call(account, calldata)
+				except HostException as e:
+					await send_all(bytes([e.error_code]))
+				else:
+					await send_all(bytes([Errors.OK]))
+					await send_int(len(res))
+					await send_all(res)
 			case Methods.GET_BALANCE:
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
-				res = await handler.get_balance(account)
-				await send_all(bytes([Errors.OK]))
-				await send_all(res.to_bytes(32, byteorder='little', signed=False))
+				try:
+					res = await handler.get_balance(account)
+				except HostException as e:
+					await send_all(bytes([e.error_code]))
+				else:
+					await send_all(bytes([Errors.OK]))
+					await send_all(res.to_bytes(32, byteorder='little', signed=False))
 			case x:
 				raise Exception(f'unknown method {x}')
 

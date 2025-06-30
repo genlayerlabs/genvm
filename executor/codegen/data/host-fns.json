@@ -27,7 +27,8 @@
           "ok": 0,
           "absent": 1,
           "forbidden": 2,
-          "i_am_leader": 3
+          "i_am_leader": 3,
+          "out_of_storage_gas": 4
       }
   }
 ]

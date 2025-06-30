@@ -21,7 +21,7 @@ impl Drop for Mmap {
     fn drop(&mut self) {
         unsafe {
             let ptr = self.0.as_ptr().cast();
-            let len = (*self.0.as_ptr()).len();
+            let len = self.0.as_ref().len();
             if len == 0 {
                 return;
             }
