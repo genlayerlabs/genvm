@@ -117,7 +117,7 @@ impl std::fmt::Debug for RunOk {
                         }
                     })
                     .join("");
-                f.write_fmt(format_args!("Return(\"{}\")", str))
+                f.write_fmt(format_args!("Return(\"{str}\")"))
             }
             Self::UserError(r) => f.debug_tuple("UserError").field(r).finish(),
             Self::VMError(r, _) => f.debug_tuple("VMError").field(r).finish(),
@@ -320,7 +320,7 @@ fn make_new_runner_arch_from_tar(
     let contents = crate::mmap::load_file(&path, Some(limiter))?;
 
     crate::ustar::Archive::from_ustar(SharedBytes::new(contents))
-        .with_context(|| format!("path {:?}", path))
+        .with_context(|| format!("path {path:?}"))
 }
 
 impl VM {

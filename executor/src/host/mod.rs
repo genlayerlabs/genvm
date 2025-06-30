@@ -83,7 +83,7 @@ fn write_result(sock: &mut dyn Sock, res: Result<&vm::RunOk, &anyhow::Error>) ->
         }
         Err(e) => {
             sock.write_all(&[ResultCode::InternalError as u8])?;
-            str = format!("{:#}", e);
+            str = format!("{e:#}");
             str.as_bytes()
         }
     };

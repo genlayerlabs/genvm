@@ -236,14 +236,14 @@ impl From<GuestError> for generated::types::Error {
             // > function needs to dereference it, the function shall trap.
             //
             // so this turns OOB and misalignment errors into traps.
-            PtrOverflow { .. } | PtrOutOfBounds { .. } | PtrNotAligned { .. } => {
+            PtrOverflow | PtrOutOfBounds { .. } | PtrNotAligned { .. } => {
                 generated::types::Error::trap(err.into())
             }
             PtrBorrowed { .. } => generated::types::Errno::Fault.into(),
             InvalidUtf8 { .. } => generated::types::Errno::Ilseq.into(),
             TryFromIntError { .. } => generated::types::Errno::Overflow.into(),
-            SliceLengthsDiffer { .. } => generated::types::Errno::Fault.into(),
-            BorrowCheckerOutOfHandles { .. } => generated::types::Errno::Fault.into(),
+            SliceLengthsDiffer => generated::types::Errno::Fault.into(),
+            BorrowCheckerOutOfHandles => generated::types::Errno::Fault.into(),
             InFunc { err, .. } => generated::types::Error::from(*err),
         }
     }

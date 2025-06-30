@@ -16,7 +16,7 @@ enum PrintOption {
 
 impl std::fmt::Display for PrintOption {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.write_str(&format!("{:?}", self).to_ascii_lowercase())
+        f.write_str(&format!("{self:?}").to_ascii_lowercase())
     }
 }
 
@@ -87,7 +87,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
 
             let mut cookie_str = String::new();
             for c in cookie {
-                cookie_str.push_str(&format!("{:x}", c));
+                cookie_str.push_str(&format!("{c:x}"));
             }
             cookie_str
         }
@@ -135,7 +135,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
                 }
             }
             Ok((res, _)) => {
-                println!("executed with `{:?}`", res)
+                println!("executed with `{res:?}`")
             }
             Err(err) => {
                 println!("executed with `InternalError(\"\")`");

@@ -12,8 +12,7 @@ fn get_len(r: &mut impl std::io::Read) -> anyhow::Result<usize> {
 fn fetch_str(r: &mut impl std::io::Read) -> anyhow::Result<String> {
     let bytes_len = get_len(r)?;
 
-    let mut ret = Vec::new();
-    ret.resize(bytes_len, 0);
+    let mut ret = vec![0; bytes_len];
     r.read_exact(&mut ret)?;
 
     Ok(String::from_utf8(ret)?)
@@ -35,8 +34,7 @@ fn gen_atom(r: &mut impl std::io::Read) -> anyhow::Result<calldata::Value> {
         }
         4 => {
             let bytes_len = get_len(r)?;
-            let mut ret = Vec::new();
-            ret.resize(bytes_len, 0);
+            let mut ret = vec![0; bytes_len];
 
             r.read_exact(&mut ret)?;
 
@@ -46,8 +44,7 @@ fn gen_atom(r: &mut impl std::io::Read) -> anyhow::Result<calldata::Value> {
         6 => {
             let bytes_len = get_len(r)?;
 
-            let mut ret = Vec::new();
-            ret.resize(bytes_len, 0);
+            let mut ret = vec![0; bytes_len];
             r.read_exact(&mut ret)?;
 
             Ok(calldata::Value::Number(

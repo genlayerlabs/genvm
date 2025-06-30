@@ -469,7 +469,7 @@ impl Visitor<'_, '_> {
                         .as_ref()
                         .unwrap()
                 };
-                self.0.write_fmt(format_args!("{}", casted))?;
+                self.0.write_fmt(format_args!("{casted}"))?;
 
                 Ok(())
             }
@@ -479,7 +479,7 @@ impl Visitor<'_, '_> {
                         .as_ref()
                         .unwrap()
                 };
-                self.0.write_fmt(format_args!("{}", casted))?;
+                self.0.write_fmt(format_args!("{casted}"))?;
 
                 Ok(())
             }

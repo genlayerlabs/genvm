@@ -25,7 +25,7 @@ pub struct CliArgs {
 async fn check_status(webdriver_host: &str) -> anyhow::Result<()> {
     let client = reqwest::Client::new();
     let status_res = client
-        .get(format!("{}/status", webdriver_host))
+        .get(format!("{webdriver_host}/status"))
         .header("Content-Type", "application/json; charset=utf-8")
         .send()
         .await

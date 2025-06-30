@@ -39,7 +39,7 @@ pub fn load_file(
     path: &std::path::Path,
     limiter: Option<&memlimiter::Limiter>,
 ) -> anyhow::Result<impl AsRef<[u8]> + Send + Sync + 'static> {
-    let file = std::fs::File::open(path).with_context(|| format!("opening {:?}", path))?;
+    let file = std::fs::File::open(path).with_context(|| format!("opening {path:?}"))?;
 
     let file_len = file
         .metadata()

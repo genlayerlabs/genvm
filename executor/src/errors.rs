@@ -33,7 +33,7 @@ pub fn unwrap_vm_errors(err: anyhow::Error) -> anyhow::Result<vm::RunOk> {
         |e: anyhow::Error| match e.downcast::<crate::wasi::preview1::I32Exit>() {
             Ok(crate::wasi::preview1::I32Exit(0)) => Ok(vm::RunOk::empty_return()),
             Ok(crate::wasi::preview1::I32Exit(v)) => {
-                Ok(vm::RunOk::VMError(format!("exit_code {}", v), None))
+                Ok(vm::RunOk::VMError(format!("exit_code {v}"), None))
             }
             Err(e) => Err(e),
         },

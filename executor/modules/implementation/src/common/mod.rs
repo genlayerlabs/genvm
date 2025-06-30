@@ -139,7 +139,7 @@ where
 
 impl std::fmt::Display for ModuleError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{:?}", self))
+        f.write_fmt(format_args!("{self:?}"))
     }
 }
 
@@ -165,7 +165,7 @@ pub fn censor_str(debug: &str) -> String {
 }
 
 pub fn censor_debug(res: &impl std::fmt::Debug) -> String {
-    let debug = format!("{:?}", res);
+    let debug = format!("{res:?}");
 
     censor_str(&debug)
 }
@@ -220,7 +220,7 @@ where
     T: serde::de::DeserializeOwned + 'static,
 {
     let payload = genvm_common::calldata::decode(text)
-        .with_context(|| format!("parsing calldata format {:?}", text))?;
+        .with_context(|| format!("parsing calldata format {text:?}"))?;
     let payload =
         genvm_common::calldata::from_value(payload).with_context(|| "parsing calldata value")?;
     handler.handle(payload).await.with_context(|| "handling")

@@ -240,23 +240,18 @@ impl Request {
             signature_params.push('"');
 
             let value = self.rfc9421_get_component_value(c)?;
-            writeln!(signature_value, "\"{}\": {}", c, value).map_err(map_fmt_to_fatal)?;
+            writeln!(signature_value, "\"{c}\": {value}").map_err(map_fmt_to_fatal)?;
         }
 
         let created = chrono::Utc::now().timestamp();
         write!(
             signature_params,
-            ");created={};alg=\"{}\"",
-            created, SIGN_ALGORITHM
+            ");created={created};alg=\"{SIGN_ALGORITHM}\""
         )
         .map_err(map_fmt_to_fatal)?;
 
-        write!(
-            signature_value,
-            "\"@signature-params\": {}",
-            signature_params
-        )
-        .map_err(map_fmt_to_fatal)?;
+        write!(signature_value, "\"@signature-params\": {signature_params}")
+            .map_err(map_fmt_to_fatal)?;
 
         Ok((signature_params, signature_value))
     }
@@ -267,7 +262,7 @@ impl Request {
         params: &str,
     ) -> Result<(), ModuleError> {
         // Add Signature-Input header
-        let sig_input = format!("genvm={}", params);
+        let sig_input = format!("genvm={params}");
         self.headers.insert(
             "signature-input".to_string(),
             web_iface::HeaderData(sig_input.into_bytes()),
@@ -441,7 +436,7 @@ mod tests {
         let res = reqwst.send().await.unwrap();
         let status = res.status();
         let body = res.bytes().await;
-        eprintln!("Response status: {:?}, body: {:?}", status, body);
+        eprintln!("Response status: {status:?}, body: {body:?}");
         assert_eq!(status, 200);
 
         let body = body.unwrap();
