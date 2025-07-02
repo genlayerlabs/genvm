@@ -18,6 +18,7 @@ class Methods(IntEnum):
 	ETH_CALL = 10
 	ETH_SEND = 11
 	GET_BALANCE = 12
+	REMAINING_FUEL = 13
 
 
 class Errors(IntEnum):

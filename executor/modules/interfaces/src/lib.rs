@@ -239,21 +239,33 @@ pub mod llm {
 
     #[derive(Serialize, Deserialize)]
     pub enum Message {
-        Prompt(PromptPayload),
-        PromptTemplate(PromptTemplatePayload),
+        Prompt {
+            payload: PromptPayload,
+            remaining_fuel_as_gen: u64,
+        },
+        PromptTemplate {
+            payload: PromptTemplatePayload,
+            remaining_fuel_as_gen: u64,
+        },
     }
 
     #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
     #[serde(untagged)]
-    pub enum PromptAnswer {
+    pub enum PromptAnswerData {
         Text(String),
         Bool(bool),
         Object(serde_json::Map<String, serde_json::Value>),
     }
 
+    #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct PromptAnswer {
+        pub data: PromptAnswerData,
+        pub consumed_gen: u64,
+    }
+
     impl PromptAnswer {
         pub fn map_text(&mut self, f: impl FnOnce(&mut String)) {
-            if let PromptAnswer::Text(t) = self {
+            if let PromptAnswerData::Text(t) = &mut self.data {
                 f(t)
             }
         }

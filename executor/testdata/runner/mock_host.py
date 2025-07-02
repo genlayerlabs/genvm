@@ -125,6 +125,9 @@ class MockHost(IHost):
 		assert self.storage is not None
 		return self.storage.read(Address(account), slot, index, le)
 
+	async def remaining_fuel_as_gen(self) -> int:
+		return 2**32
+
 	async def storage_write(
 		self,
 		slot: bytes,

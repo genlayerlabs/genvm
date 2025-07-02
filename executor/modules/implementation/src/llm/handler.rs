@@ -67,7 +67,10 @@ impl crate::common::MessageHandler<llm_iface::Message, llm_iface::PromptAnswer> 
         message: llm_iface::Message,
     ) -> crate::common::ModuleResult<llm_iface::PromptAnswer> {
         match message {
-            llm_iface::Message::Prompt(payload) => {
+            llm_iface::Message::Prompt {
+                payload,
+                remaining_fuel_as_gen,
+            } => {
                 for img in &payload.images {
                     if prompt::ImageType::sniff(&img.0).is_none() {
                         return Err(ModuleError {
@@ -78,10 +81,17 @@ impl crate::common::MessageHandler<llm_iface::Message, llm_iface::PromptAnswer> 
                         .into());
                     }
                 }
-                self.0.exec_prompt(self.0.clone(), payload).await
+                self.0
+                    .exec_prompt(self.0.clone(), payload, remaining_fuel_as_gen)
+                    .await
             }
-            llm_iface::Message::PromptTemplate(payload) => {
-                self.0.exec_prompt_template(self.0.clone(), payload).await
+            llm_iface::Message::PromptTemplate {
+                payload,
+                remaining_fuel_as_gen,
+            } => {
+                self.0
+                    .exec_prompt_template(self.0.clone(), payload, remaining_fuel_as_gen)
+                    .await
             }
         }
     }
@@ -96,16 +106,18 @@ impl Inner {
         &self,
         _zelf: Arc<Inner>,
         payload: llm_iface::PromptPayload,
+        remaining_fuel_as_gen: u64,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        log_debug!(payload:serde = payload, cookie = self.ctx.data.hello.cookie; "exec_prompt start");
+        log_debug!(payload:serde = payload, remaining_fuel_as_gen = remaining_fuel_as_gen, cookie = self.ctx.data.hello.cookie; "exec_prompt start");
 
         let payload = self.user_vm.vm.to_value(&payload)?;
+        let fuel = self.user_vm.vm.to_value(&remaining_fuel_as_gen)?;
 
         let res: mlua::Value = self
             .user_vm
             .call_fn(
                 &self.user_vm.data.exec_prompt,
-                (self.ctx_val.clone(), payload),
+                (self.ctx_val.clone(), payload, fuel),
             )
             .await?;
         let res = self.user_vm.vm.from_value(res)?;
@@ -119,16 +131,18 @@ impl Inner {
         &self,
         _zelf: Arc<Inner>,
         payload: llm_iface::PromptTemplatePayload,
+        remaining_fuel_as_gen: u64,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        log_debug!(payload:serde = payload, cookie = self.ctx.data.hello.cookie; "exec_prompt_template start");
+        log_debug!(payload:serde = payload, remaining_fuel_as_gen = remaining_fuel_as_gen, cookie = self.ctx.data.hello.cookie; "exec_prompt_template start");
 
         let payload = self.user_vm.vm.to_value(&payload)?;
+        let fuel = self.user_vm.vm.to_value(&remaining_fuel_as_gen)?;
 
         let res: mlua::Value = self
             .user_vm
             .call_fn(
                 &self.user_vm.data.exec_prompt_template,
-                (self.ctx_val.clone(), payload),
+                (self.ctx_val.clone(), payload, fuel),
             )
             .await?;
         let res = self.user_vm.vm.from_value(res)?;

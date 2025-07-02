@@ -97,6 +97,8 @@ class IHost(metaclass=abc.ABCMeta):
 	async def eth_call(self, account: bytes, calldata: bytes, /) -> bytes: ...
 	@abc.abstractmethod
 	async def get_balance(self, account: bytes, /) -> int: ...
+	@abc.abstractmethod
+	async def remaining_fuel_as_gen(self, /) -> int: ...
 
 
 def save_code_callback[T](
@@ -291,6 +293,15 @@ async def host_loop(handler: IHost):
 				else:
 					await send_all(bytes([Errors.OK]))
 					await send_all(res.to_bytes(32, byteorder='little', signed=False))
+			case Methods.REMAINING_FUEL:
+				try:
+					res = await handler.remaining_fuel_as_gen()
+				except HostException as e:
+					await send_all(bytes([e.error_code]))
+				else:
+					res = min(res, 2**53 - 1)
+					await send_all(bytes([Errors.OK]))
+					await send_all(res.to_bytes(8, byteorder='little', signed=False))
 			case x:
 				raise Exception(f'unknown method {x}')
 

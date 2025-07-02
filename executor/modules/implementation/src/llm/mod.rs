@@ -391,15 +391,16 @@ mod tests {
         };
 
         let payload = user_vm.vm.to_value(&payload).unwrap();
+        let fuel = user_vm.vm.to_value(&0u64).unwrap(); // Mock fuel value
 
         let res = user_vm
-            .call_fn(&user_vm.data.exec_prompt, (ctx_lua, payload))
+            .call_fn(&user_vm.data.exec_prompt, (ctx_lua, payload, fuel))
             .await
             .unwrap();
         let res: llm_iface::PromptAnswer = user_vm.vm.from_value(res).unwrap();
 
-        match res {
-            llm_iface::PromptAnswer::Text(text) => {
+        match res.data {
+            llm_iface::PromptAnswerData::Text(text) => {
                 assert_eq!(text.trim().to_lowercase(), "ok");
             }
             _ => panic!("unexpected response format"),

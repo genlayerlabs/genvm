@@ -514,4 +514,18 @@ impl Host {
         sock.read_exact(&mut buf)?;
         Ok(primitive_types::U256::from_little_endian(&buf))
     }
+
+    pub fn remaining_fuel_as_gen(&mut self) -> Result<u64> {
+        let Ok(mut sock) = (*self.sock).lock() else {
+            anyhow::bail!("can't take lock")
+        };
+        let sock: &mut dyn Sock = &mut *sock;
+        sock.write_all(&[host_fns::Methods::RemainingFuelAsGen as u8])?;
+
+        handle_host_error(sock)?;
+
+        let mut buf: [u8; 8] = [0; 8];
+        sock.read_exact(&mut buf)?;
+        Ok(u64::from_le_bytes(buf))
+    }
 }

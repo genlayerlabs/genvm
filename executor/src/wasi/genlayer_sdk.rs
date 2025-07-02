@@ -647,12 +647,37 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     return Err(generated::types::Errno::Inval.into());
                 }
 
+                // Get remaining fuel from host
+                let supervisor = self.context.data.supervisor.clone();
+                let mut sup = supervisor.lock().await;
+                let remaining_fuel_as_gen = sup
+                    .host
+                    .remaining_fuel_as_gen()
+                    .map_err(generated::types::Error::trap)?;
+                std::mem::drop(sup);
+
                 let llm = self.context.shared_data.modules.llm.clone();
                 let task = tokio::spawn(taskify(async move {
-                    llm.send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
-                        genvm_modules_interfaces::llm::Message::Prompt(prompt_payload),
-                    )
-                    .await
+                    let result = llm
+                        .send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
+                            genvm_modules_interfaces::llm::Message::Prompt {
+                                payload: prompt_payload,
+                                remaining_fuel_as_gen,
+                            },
+                        )
+                        .await?;
+
+                    use genvm_modules_interfaces::llm::PromptAnswer;
+
+                    if let Ok(PromptAnswer { consumed_gen, .. }) = &result {
+                        let mut sup = supervisor.lock().await;
+                        sup.host
+                            .consume_fuel(*consumed_gen)
+                            .map_err(generated::types::Error::trap)?;
+                        std::mem::drop(sup);
+                    }
+
+                    Ok(result.map(|r| r.data))
                 }));
 
                 Ok(generated::types::Fd::from(
@@ -670,24 +695,50 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     genvm_modules_interfaces::llm::PromptTemplatePayload::EqNonComparativeLeader(_)
                 );
 
+                // Get remaining fuel from host
+                let supervisor = self.context.data.supervisor.clone();
+                let mut sup = supervisor.lock().await;
+                let remaining_fuel_as_gen = sup
+                    .host
+                    .remaining_fuel_as_gen()
+                    .map_err(generated::types::Error::trap)?;
+                std::mem::drop(sup);
+
                 let llm = self.context.shared_data.modules.llm.clone();
                 let task = tokio::spawn(taskify(async move {
                     let answer = llm
                         .send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
-                            genvm_modules_interfaces::llm::Message::PromptTemplate(
-                                prompt_template_payload,
-                            ),
+                            genvm_modules_interfaces::llm::Message::PromptTemplate {
+                                payload: prompt_template_payload,
+                                remaining_fuel_as_gen,
+                            },
                         )
                         .await?;
-                    use genvm_modules_interfaces::llm::PromptAnswer;
+                    use genvm_modules_interfaces::llm::{PromptAnswer, PromptAnswerData};
+
+                    if let Ok(PromptAnswer { consumed_gen, .. }) = &answer {
+                        let mut sup = supervisor.lock().await;
+                        sup.host
+                            .consume_fuel(*consumed_gen)
+                            .map_err(generated::types::Error::trap)?;
+                    }
+
                     match (expect_bool, answer) {
                         (_, Err(e)) => Ok(Err(e)),
-                        (true, Ok(PromptAnswer::Bool(answer))) => {
-                            Ok(Ok(PromptAnswer::Bool(answer)))
-                        }
-                        (false, Ok(PromptAnswer::Text(answer))) => {
-                            Ok(Ok(PromptAnswer::Text(answer)))
-                        }
+                        (
+                            true,
+                            Ok(PromptAnswer {
+                                data: PromptAnswerData::Bool(answer),
+                                consumed_gen,
+                            }),
+                        ) => Ok(Ok(PromptAnswerData::Bool(answer))),
+                        (
+                            false,
+                            Ok(PromptAnswer {
+                                data: PromptAnswerData::Text(answer),
+                                consumed_gen,
+                            }),
+                        ) => Ok(Ok(PromptAnswerData::Text(answer))),
                         (_, Ok(_)) => Err(anyhow::anyhow!("unmatched result")),
                     }
                 }));

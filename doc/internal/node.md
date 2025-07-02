@@ -140,6 +140,13 @@ loop:
       else:
         write_byte json/errors/ok
         write_bytes balance.to_le_bytes(32) # 256-bit integer
+    json/methods/remaining_fuel_as_gen:
+      fuel, err := host_remaining_fuel_as_gen()
+      if err != json/errors/ok:
+        write_byte err
+      else:
+        write_byte json/errors/ok
+        write_bytes fuel.to_le_bytes(8) # 64-bit integer, must be safe integer (fits in double)
 ```
 
 See [mock implementation](../../executor/testdata/runner/mock_host.py)

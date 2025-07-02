@@ -20,6 +20,7 @@ pub enum Methods {
     EthCall = 10,
     EthSend = 11,
     GetBalance = 12,
+    RemainingFuelAsGen = 13,
 }
 
 impl Methods {
@@ -38,6 +39,7 @@ impl Methods {
             Methods::EthCall => 10,
             Methods::EthSend => 11,
             Methods::GetBalance => 12,
+            Methods::RemainingFuelAsGen => 13,
         }
     }
     pub fn str_snake_case(self) -> &'static str {
@@ -55,6 +57,7 @@ impl Methods {
             Methods::EthCall => "eth_call",
             Methods::EthSend => "eth_send",
             Methods::GetBalance => "get_balance",
+            Methods::RemainingFuelAsGen => "remaining_fuel_as_gen",
         }
     }
 }
@@ -77,6 +80,7 @@ impl TryFrom<u8> for Methods {
             10 => Ok(Methods::EthCall),
             11 => Ok(Methods::EthSend),
             12 => Ok(Methods::GetBalance),
+            13 => Ok(Methods::RemainingFuelAsGen),
             _ => Err(()),
         }
     }

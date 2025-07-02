@@ -6,7 +6,7 @@ local llm = require("lib-llm")
 -- Instead, each genvm creates a session, which has a single `ctx` object,
 -- which is preserved across multiple calls
 
-local function just_in_backend(ctx, mapped_prompt)
+local function just_in_backend(ctx, mapped_prompt, remaining_gen)
 	---@cast mapped_prompt MappedPrompt
 
 	local search_in = llm.select_providers_for(mapped_prompt.prompt, mapped_prompt.format)
@@ -40,6 +40,8 @@ local function just_in_backend(ctx, mapped_prompt)
 		lib.log{level = "debug", message = "executed with", type = type(result), success = success, result = result}
 
 		if success then
+			result.consumed_gen = 0
+
 			return result
 		end
 
@@ -72,18 +74,20 @@ local function just_in_backend(ctx, mapped_prompt)
 	})
 end
 
-function ExecPrompt(ctx, args)
+function ExecPrompt(ctx, args, remaining_gen)
 	---@cast args LLMExecPromptPayload
+	---@cast remaining_gen number
 
 	local mapped = llm.exec_prompt_transform(args)
 
-	return just_in_backend(ctx, mapped)
+	return just_in_backend(ctx, mapped, remaining_gen)
 end
 
-function ExecPromptTemplate(ctx, args)
+function ExecPromptTemplate(ctx, args, remaining_gen)
 	---@cast args LLMExecPromptTemplatePayload
+	---@cast remaining_gen number
 
 	local mapped = llm.exec_prompt_template_transform(args)
 
-	return just_in_backend(ctx, mapped)
+	return just_in_backend(ctx, mapped, remaining_gen)
 end
