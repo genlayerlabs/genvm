@@ -1,0 +1,133 @@
+name: Build and Deploy Documentation Version
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., main, v1.0, v2.0)'
+        required: true
+        type: string
+    secrets:
+      DEPLOY_TOKEN:
+        description: 'GitHub token with access to target repository'
+        required: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., main, v1.0, v2.0)'
+        required: true
+        type: string
+        default: 'main'
+      revision:
+        description: 'Git revision to build from (defaults to trigger ref)'
+        required: false
+        type: string
+
+env:
+  TARGET_REPO: 'genlayerlabs/sdk.genlayer.com'
+  DOCS_DOMAIN: 'sdk.genlayer.com'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          ref: ${{ inputs.revision || github.ref }}
+
+      - uses: Gr1N/setup-poetry@v9
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: poetry
+
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          load_submodules: "true"
+          third_party: "none"
+
+      - name: Install dependencies
+        run: |
+          python3.12 -m pip install poetry && \
+            pushd doc/website/ && \
+            poetry install --no-root && \
+            popd
+
+      - name: Configure and build documentation
+        run: |
+          ./tools/ya-build/ya-build config
+          ninja -v -C build genvm/docs
+
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TARGET_REPO }}
+          token: ${{ secrets.DEPLOY_TOKEN || secrets.SDK_GENLAYER_COM_RW }}
+          path: target-repo
+
+      - name: Deploy version to target repository
+        run: |
+          cd target-repo
+
+          # Create version directory
+          mkdir -p "_site/${{ inputs.version }}"
+
+          # Copy built docs to version directory
+          cp -r ../build/out/docs/* "_site/${{ inputs.version }}/"
+
+          # Update versions.json only for non-main versions
+          if [ "${{ inputs.version }}" != "main" ]; then
+            if [ -f "_site/versions.json" ]; then
+              # Read existing versions.json
+              existing_versions=$(cat _site/versions.json)
+            else
+              existing_versions='[]'
+            fi
+
+            # Create new version entry
+            new_entry='{
+              "name": "${{ inputs.version }}",
+              "version": "${{ inputs.version }}",
+              "url": "https://${{ env.DOCS_DOMAIN }}/${{ inputs.version }}/"
+            }'
+
+            # Add new version to versions.json
+            echo "$existing_versions" | jq --argjson newEntry "$new_entry" '
+              map(select(.version != $newEntry.version)) + [$newEntry] | sort_by(.version == "main" | not)
+            ' > _site/versions.json
+          fi
+
+          # Create/update root redirect to main if this is main version
+          if [ "${{ inputs.version }}" = "main" ]; then
+            cat > _site/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <meta charset="utf-8">
+              <meta http-equiv="refresh" content="0; url=./main/">
+              <link rel="canonical" href="./main/">
+          </head>
+          <body>
+              <p>Redirecting to <a href="./main/">latest documentation</a>...</p>
+          </body>
+          </html>
+          EOF
+          fi
+
+      - name: Commit and push changes
+        run: |
+          cd target-repo
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Deploy documentation version ${{ inputs.version }}"
+            git push
+          fi

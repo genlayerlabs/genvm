@@ -1,0 +1,14 @@
+name: Deploy Documentation to Pages
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-docs.yml
+    with:
+      version: 'main'
+    secrets:
+      DEPLOY_TOKEN: ${{ secrets.SDK_GENLAYER_COM_RW }}

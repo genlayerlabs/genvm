@@ -1,0 +1,14 @@
+name: Deploy Documentation on Tag
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on version tags like v1.0, v2.1, etc.
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-docs.yml
+    with:
+      version: ${{ github.ref_name }}
+    secrets:
+      DEPLOY_TOKEN: ${{ secrets.SDK_GENLAYER_COM_RW }}

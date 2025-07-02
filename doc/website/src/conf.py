@@ -10,6 +10,8 @@ import sphinx.ext.autodoc
 project = 'GenLayer'
 copyright = '2025, GenLayer'
 author = 'GenLayer team'
+release = os.environ.get('DOCS_VERSION', 'main')
+version = release
 
 extensions = [
 	'sphinx.ext.autodoc',
@@ -29,6 +31,11 @@ html_static_path = ['_static']
 html_theme_options = {
 	'show_nav_level': 2,
 	'show_toc_level': 2,
+	'navbar_start': ['navbar-logo', 'version-switcher'],
+	'switcher': {
+		'json_url': f'https://{os.environ.get("DOCS_DOMAIN", "sdk.genlayer.com")}/versions.json',
+		'version_match': version,
+	},
 }
 
 todo_include_todos = True
