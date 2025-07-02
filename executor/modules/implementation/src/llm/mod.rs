@@ -42,14 +42,14 @@ pub struct CliArgsCheck {
 
 mod ctx;
 
-async fn create_vm(config: &config::Config, extra_path: &str) -> anyhow::Result<UserVM> {
+async fn create_vm(config: &config::Config) -> anyhow::Result<UserVM> {
     let mut user_vm =
-        crate::scripting::UserVM::create(extra_path, move |vm: mlua::Lua| async move {
+        crate::scripting::UserVM::create(&config.mod_base, move |vm: mlua::Lua| async move {
             // set llm-related globals
             vm.globals()
                 .set("__llm", ctx::create_global(&vm, config)?)?;
 
-            scripting::load_script(&vm, &config.lua_script_path).await?;
+            scripting::load_script(&vm, &config.mod_base.lua_script_path).await?;
 
             // get functions populated by script
             let exec_prompt: mlua::Function = vm.globals().get("ExecPrompt")?;
@@ -114,17 +114,17 @@ fn handle_run(mut config: config::Config, args: CliArgsRun) -> Result<()> {
 
     let moved_config = config.clone();
 
-    let vm_pool = runtime.block_on(scripting::pool::new(config.vm_count, move || {
+    let vm_pool = runtime.block_on(scripting::pool::new(config.mod_base.vm_count, move || {
         let moved_config = moved_config.clone();
         async move {
-            create_vm(&moved_config, "")
+            create_vm(&moved_config)
                 .await
                 .with_context(|| "creating user VM")
         }
     }))?;
 
     let loop_future = crate::common::run_loop(
-        config.bind_address.clone(),
+        config.mod_base.bind_address.clone(),
         token,
         Arc::new(handler::Provider {
             vm_pool,
@@ -309,15 +309,20 @@ mod tests {
         extra_path.push_str("/?.lua");
 
         let config = Arc::new(config::Config {
-            bind_address: "".to_owned(),
             base: genvm_common::BaseConfig {
                 log_level: logger::Level::Debug,
                 threads: 1,
                 blocking_threads: 3,
                 log_disable: "".to_owned(),
             },
-            vm_count: 1,
-            lua_script_path: "scripting/llm-default.lua".to_string(),
+            mod_base: common::ModuleBaseConfig {
+                vm_count: 1,
+                lua_script_path: "scripting/llm-default.lua".to_string(),
+                bind_address: "".to_owned(),
+                extra_lua_path: extra_path,
+                signer_url: Arc::from(""),
+                signer_headers: Arc::new(BTreeMap::new()),
+            },
             prompt_templates: config::PromptTemplates {
                 eq_comparative: serde_json::Value::Null,
                 eq_non_comparative_leader: serde_json::Value::Null,
@@ -329,7 +334,7 @@ mod tests {
             ]),
         });
 
-        let user_vm = create_vm(&config, &extra_path).await.unwrap();
+        let user_vm = create_vm(&config).await.unwrap();
 
         // this ensures order
         user_vm
@@ -362,10 +367,8 @@ mod tests {
             .unwrap();
 
         let client = reqwest::Client::new();
-        let hello = Arc::new(genvm_modules_interfaces::GenVMHello {
-            cookie: "test_cookie".to_string(),
-            host_data: serde_json::Map::new(),
-        });
+        let hello = common::tests::get_hello();
+
         let rs_ctx = scripting::RSContext {
             client: client.clone(),
             hello: hello.clone(),
@@ -388,15 +391,16 @@ mod tests {
         };
 
         let payload = user_vm.vm.to_value(&payload).unwrap();
+        let fuel = user_vm.vm.to_value(&0u64).unwrap(); // Mock fuel value
 
         let res = user_vm
-            .call_fn(&user_vm.data.exec_prompt, (ctx_lua, payload))
+            .call_fn(&user_vm.data.exec_prompt, (ctx_lua, payload, fuel))
             .await
             .unwrap();
         let res: llm_iface::PromptAnswer = user_vm.vm.from_value(res).unwrap();
 
-        match res {
-            llm_iface::PromptAnswer::Text(text) => {
+        match res.data {
+            llm_iface::PromptAnswerData::Text(text) => {
                 assert_eq!(text.trim().to_lowercase(), "ok");
             }
             _ => panic!("unexpected response format"),

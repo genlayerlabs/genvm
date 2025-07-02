@@ -165,8 +165,8 @@ M.exec_prompt_template_transform = function(args)
 	my_data = my_data[args.template]
 	local my_template = M.rs.templates[my_data.template_id]
 
-	args.template = nil
-	local vars = args
+	local vars = shallow_copy(args)
+	vars.template = nil
 
 	local as_user_text = my_template.user
 	for key, val in pairs(vars) do

@@ -15,6 +15,7 @@ pub enum ErrorKind {
     READING_BODY,
     SENDING_REQUEST,
     DESERIALIZING,
+    ABSENT_HEADER,
     Other(String),
 }
 
@@ -36,6 +37,7 @@ impl ErrorKind {
             ErrorKind::READING_BODY => "READING_BODY".to_owned(),
             ErrorKind::SENDING_REQUEST => "SENDING_REQUEST".to_owned(),
             ErrorKind::DESERIALIZING => "DESERIALIZING".to_owned(),
+            ErrorKind::ABSENT_HEADER => "ABSENT_HEADER".to_owned(),
             ErrorKind::Other(str) => str.clone(),
         }
     }
@@ -60,6 +62,18 @@ impl ModuleError {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct ModuleBaseConfig {
+    pub bind_address: String,
+
+    pub lua_script_path: String,
+    pub vm_count: usize,
+    pub extra_lua_path: String,
+
+    pub signer_url: Arc<str>,
+    pub signer_headers: Arc<BTreeMap<String, String>>,
+}
+
 pub trait MapUserError {
     type Output;
 
@@ -68,6 +82,12 @@ pub trait MapUserError {
         message: impl Into<String>,
         fatal: bool,
     ) -> Result<Self::Output, anyhow::Error>;
+
+    fn map_user_error_module(
+        self,
+        message: impl Into<String>,
+        fatal: bool,
+    ) -> Result<Self::Output, ModuleError>;
 }
 
 impl<T, E> MapUserError for Result<T, E>
@@ -81,6 +101,15 @@ where
         message: impl Into<String>,
         fatal: bool,
     ) -> Result<Self::Output, anyhow::Error> {
+        self.map_user_error_module(message, fatal)
+            .map_err(Into::into)
+    }
+
+    fn map_user_error_module(
+        self,
+        message: impl Into<String>,
+        fatal: bool,
+    ) -> Result<Self::Output, ModuleError> {
         match self {
             Ok(s) => Ok(s),
             Err(e) => {
@@ -92,8 +121,7 @@ where
                             causes: e.causes,
                             fatal: fatal || e.fatal,
                             ctx: e.ctx,
-                        }
-                        .into())
+                        })
                     }
                     Err(e) => Err(ModuleError {
                         causes: vec![message.into()],
@@ -102,8 +130,7 @@ where
                             "rust_error".to_owned(),
                             genvm_modules_interfaces::GenericValue::Str(format!("{e:#}")),
                         )]),
-                    }
-                    .into()),
+                    }),
                 }
             }
         }
@@ -112,7 +139,7 @@ where
 
 impl std::fmt::Display for ModuleError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{:?}", self))
+        f.write_fmt(format_args!("{self:?}"))
     }
 }
 
@@ -138,7 +165,7 @@ pub fn censor_str(debug: &str) -> String {
 }
 
 pub fn censor_debug(res: &impl std::fmt::Debug) -> String {
-    let debug = format!("{:?}", res);
+    let debug = format!("{res:?}");
 
     censor_str(&debug)
 }
@@ -193,7 +220,7 @@ where
     T: serde::de::DeserializeOwned + 'static,
 {
     let payload = genvm_common::calldata::decode(text)
-        .with_context(|| format!("parsing calldata format {:?}", text))?;
+        .with_context(|| format!("parsing calldata format {text:?}"))?;
     let payload =
         genvm_common::calldata::from_value(payload).with_context(|| "parsing calldata value")?;
     handler.handle(payload).await.with_context(|| "handling")
@@ -464,7 +491,7 @@ pub fn setup_cancels(
 
 #[cfg(test)]
 pub mod tests {
-    use std::sync::Once;
+    use std::sync::{Arc, Once};
 
     use genvm_common::logger;
 
@@ -480,5 +507,16 @@ pub mod tests {
             };
             base_conf.setup_logging(std::io::stdout()).unwrap();
         });
+    }
+
+    pub fn get_hello() -> Arc<genvm_modules_interfaces::GenVMHello> {
+        Arc::new(genvm_modules_interfaces::GenVMHello {
+            cookie: "test_cookie".to_owned(),
+            host_data: genvm_modules_interfaces::HostData {
+                node_address: "test_node_address".to_owned(),
+                tx_id: "test_tx_id".to_owned(),
+                rest: serde_json::Map::new(),
+            },
+        })
     }
 }

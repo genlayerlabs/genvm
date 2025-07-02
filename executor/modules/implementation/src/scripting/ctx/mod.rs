@@ -3,6 +3,8 @@ use std::sync::Arc;
 use crate::common::ModuleError;
 
 pub mod dflt;
+pub mod req;
+mod signing;
 
 fn arc_to_ref<T>(x: &Arc<T>) -> &T
 where

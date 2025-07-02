@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/message.json",
+  "$schema": "https://raw.githubusercontent.com/genlayerlabs/genvm/refs/heads/main/doc/schemas/message.json",
   "contract_address": "AQAAAAAAAAAAAAAAAAAAAAAAAAA=",
   "sender_address": "AgAAAAAAAAAAAAAAAAAAAAAAAAA=",
   "origin_address": "AgAAAAAAAAAAAAAAAAAAAAAAAAA=",

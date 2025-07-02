@@ -84,6 +84,7 @@ json_path, out_path = ARGV
 
 buf = String.new
 
+buf << "// This file is auto-generated. Do not edit!\n\n"
 buf << "#![allow(dead_code, clippy::redundant_static_lifetimes)]\n\n";
 buf << "use serde_derive::{Deserialize, Serialize};\n\n"
 

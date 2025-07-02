@@ -21,7 +21,7 @@ impl Drop for Mmap {
     fn drop(&mut self) {
         unsafe {
             let ptr = self.0.as_ptr().cast();
-            let len = (*self.0.as_ptr()).len();
+            let len = self.0.as_ref().len();
             if len == 0 {
                 return;
             }
@@ -39,7 +39,7 @@ pub fn load_file(
     path: &std::path::Path,
     limiter: Option<&memlimiter::Limiter>,
 ) -> anyhow::Result<impl AsRef<[u8]> + Send + Sync + 'static> {
-    let file = std::fs::File::open(path).with_context(|| format!("opening {:?}", path))?;
+    let file = std::fs::File::open(path).with_context(|| format!("opening {path:?}"))?;
 
     let file_len = file
         .metadata()

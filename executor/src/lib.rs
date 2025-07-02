@@ -15,8 +15,6 @@ pub mod public_abi;
 pub use genvm_common::calldata;
 use genvm_common::*;
 
-use errors::VMError;
-use host::AbsentLeaderResult;
 pub use host::{Host, MessageData, SlotID};
 
 use anyhow::{Context, Result};
@@ -37,7 +35,7 @@ pub fn create_supervisor(
     config: &config::Config,
     mut host: Host,
     cancellation: Arc<genvm_common::cancellation::Token>,
-    host_data: Arc<serde_json::Map<String, serde_json::Value>>,
+    host_data: genvm_modules_interfaces::HostData,
     pub_args: PublicArgs,
 ) -> Result<Arc<tokio::sync::Mutex<vm::Supervisor>>> {
     let modules = Modules {
@@ -86,7 +84,7 @@ pub async fn run_with_impl(
     entry_message: MessageData,
     supervisor: Arc<tokio::sync::Mutex<vm::Supervisor>>,
     permissions: &str,
-) -> vm::RunResult {
+) -> anyhow::Result<vm::FullRunOk> {
     let (mut vm, instance) = {
         let supervisor_clone = supervisor.clone();
 
@@ -97,6 +95,7 @@ pub async fn run_with_impl(
 
         let essential_data = wasi::genlayer_sdk::SingleVMData {
             conf: wasi::base::Config {
+                needs_error_fingerprint: true,
                 is_deterministic: true,
                 can_read_storage: permissions.contains("r"),
                 can_write_storage: permissions.contains("w"),
@@ -140,7 +139,7 @@ pub async fn run_with(
     entry_message: MessageData,
     supervisor: Arc<tokio::sync::Mutex<vm::Supervisor>>,
     permissions: &str,
-) -> vm::RunResult {
+) -> anyhow::Result<vm::FullRunOk> {
     let res = run_with_impl(entry_message, supervisor.clone(), permissions).await;
 
     log_debug!("inspecting final result");
@@ -149,27 +148,29 @@ pub async fn run_with(
 
     let res = if supervisor.shared_data.cancellation.is_cancelled() {
         match res {
-            Ok(RunOk::VMError(msg, cause)) => Ok(RunOk::VMError(
-                "timeout".into(),
-                cause.map(|v| v.context(msg)),
+            Ok((RunOk::VMError(msg, cause), fp)) => Ok((
+                RunOk::VMError(
+                    public_abi::VmError::Timeout.value().into(),
+                    cause.map(|v| v.context(msg)),
+                ),
+                fp,
             )),
             Ok(r) => Ok(r),
-            Err(e) => Ok(RunOk::VMError("timeout".into(), Some(e))),
+            Err(e) => Ok((
+                RunOk::VMError(public_abi::VmError::Timeout.value().into(), Some(e)),
+                None,
+            )),
         }
     } else {
-        VMError::unwrap_res(res)
+        match res {
+            Ok(res) => Ok(res),
+            Err(e) => errors::unwrap_vm_errors_fingerprint(e).map(|(x, y)| (x, Some(y))),
+        }
     };
 
-    let res = match res {
-        Err(e) => match e.downcast() {
-            Ok(AbsentLeaderResult) => Ok(RunOk::VMError("deterministic_violation".into(), None)),
-            Err(e) => {
-                log_error!(error:ah = &e; "internal error");
-                Err(e)
-            }
-        },
-        e => e,
-    };
+    let res = res.inspect_err(|e| {
+        log_error!(error:ah = &e; "internal error");
+    });
 
     supervisor.log_stats();
 

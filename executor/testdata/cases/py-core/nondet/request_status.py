@@ -9,7 +9,7 @@ class Contract(gl.Contract):
 	def main(self, status: int):
 		def run():
 			res = gl.nondet.web.request(
-				f'http://localhost:4445/status/{status}', method='GET'
+				f'https://test-server.genlayer.com/status/{status}', method='GET'
 			)
 			print(res, file=sys.stderr)
 			return res.status

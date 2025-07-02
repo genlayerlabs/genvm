@@ -36,6 +36,8 @@ ENUM_TEMPLATE = ERB.new(ENUM_TEMPLATE_STR, trim_mode: "%")
 buf = String.new
 
 buf << <<-EOF
+# This file is auto-generated. Do not edit!
+
 from enum import IntEnum, StrEnum
 import typing
 EOF

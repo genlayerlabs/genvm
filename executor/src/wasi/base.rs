@@ -4,6 +4,7 @@ use crate::public_abi;
 
 #[derive(Clone, Copy, Serialize)]
 pub struct Config {
+    pub needs_error_fingerprint: bool,
     pub is_deterministic: bool,
     pub can_read_storage: bool,
     pub can_write_storage: bool,

@@ -48,15 +48,24 @@ impl CtxPart {
             prompt::ExtendedOutputFormat::Text => provider
                 .exec_prompt_text(&self.client, prompt, model)
                 .await
-                .map(llm_iface::PromptAnswer::Text),
+                .map(|text| llm_iface::PromptAnswer {
+                    data: llm_iface::PromptAnswerData::Text(text),
+                    consumed_gen: 0,
+                }),
             prompt::ExtendedOutputFormat::JSON => provider
                 .exec_prompt_json(&self.client, prompt, model)
                 .await
-                .map(llm_iface::PromptAnswer::Object),
+                .map(|obj| llm_iface::PromptAnswer {
+                    data: llm_iface::PromptAnswerData::Object(obj),
+                    consumed_gen: 0,
+                }),
             prompt::ExtendedOutputFormat::Bool => provider
                 .exec_prompt_bool_reason(&self.client, prompt, model)
                 .await
-                .map(llm_iface::PromptAnswer::Bool),
+                .map(|b| llm_iface::PromptAnswer {
+                    data: llm_iface::PromptAnswerData::Bool(b),
+                    consumed_gen: 0,
+                }),
         };
 
         res.inspect_err(|err| {

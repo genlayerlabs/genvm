@@ -6,6 +6,8 @@ class Contract(gl.Contract):
 	@gl.public.write
 	def main(self, mode: str):
 		def run():
-			return gl.nondet.web.render('http://genvm-test/hello.html', mode=mode)  # type: ignore
+			return gl.nondet.web.render(
+				'https://test-server.genlayer.com/static/genvm/hello.html', mode=mode
+			)  # type: ignore
 
 		print(gl.eq_principle.strict_eq(run))

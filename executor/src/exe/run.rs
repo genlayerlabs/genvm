@@ -6,32 +6,64 @@ use anyhow::{Context, Result};
 use clap::ValueEnum;
 use genvm::{config, vm::RunOk, PublicArgs};
 
-#[derive(Debug, Clone, ValueEnum, PartialEq)]
+#[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
 #[clap(rename_all = "kebab_case")]
 enum PrintOption {
-    Shrink,
-    None,
+    Result,
+    Fingerprint,
+    StderrFull,
 }
 
 impl std::fmt::Display for PrintOption {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.write_str(&format!("{:?}", self).to_ascii_lowercase())
+        f.write_str(&format!("{self:?}").to_ascii_lowercase())
     }
 }
 
+macro_rules! combine {
+    ($A:expr, $B:expr) => {{
+        const LEN: usize = $A.len() + $B.len();
+        const fn combine(a: &'static str, b: &'static str) -> [u8; LEN] {
+            let mut out = [0u8; LEN];
+            out = copy_slice(a.as_bytes(), out, 0);
+            out = copy_slice(b.as_bytes(), out, a.len());
+            out
+        }
+        const fn copy_slice(input: &[u8], mut output: [u8; LEN], offset: usize) -> [u8; LEN] {
+            let mut index = 0;
+            loop {
+                output[offset + index] = input[index];
+                index += 1;
+                if index == input.len() {
+                    break;
+                }
+            }
+            output
+        }
+        const COMBINED_TO_ARRAY: [u8; LEN] = combine($A, $B);
+        unsafe { std::str::from_utf8_unchecked(&COMBINED_TO_ARRAY as &[u8]) }
+    }};
+}
+
+const MESSAGE_SCHEMA: &str = include_str!("../../../doc/schemas/message.json");
+const MESSAGE_SCHEMA_HELP: &str = combine!("message, follows schema:\n", MESSAGE_SCHEMA);
+
 #[derive(clap::Args, Debug)]
 pub struct Args {
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "whenever to allow `:latest` and `:test` as runners version"
+    )]
     allow_latest: bool,
 
-    #[arg(long)]
+    #[arg(long, help = MESSAGE_SCHEMA_HELP)]
     message: String,
-    #[arg(long)]
+    #[arg(long, help = "host uri, preferably unix://")]
     host: String,
-    #[arg(long)]
+    #[arg(long, help = "id to pass to modules, useful for aggregating logs")]
     cookie: Option<String>,
-    #[clap(long, default_value_t = PrintOption::None)]
-    print: PrintOption,
+    #[clap(long, help = "what to output to stdout/stderr")]
+    print: Vec<PrintOption>,
     #[clap(long, default_value_t = false)]
     sync: bool,
     #[clap(
@@ -41,7 +73,7 @@ pub struct Args {
     )]
     permissions: String,
 
-    #[clap(long, default_value = "{}")]
+    #[clap(long, default_value = "{}", help = "value to pass to modules")]
     host_data: String,
 }
 
@@ -83,7 +115,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
 
             let mut cookie_str = String::new();
             for c in cookie {
-                cookie_str.push_str(&format!("{:x}", c));
+                cookie_str.push_str(&format!("{c:x}"));
             }
             cookie_str
         }
@@ -118,25 +150,32 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         log_error!(error:ah = err; "error running genvm");
     }
 
-    let res: Option<String> = match (res, args.print) {
-        (_, PrintOption::None) => None,
-        (Ok(RunOk::VMError(e, cause)), PrintOption::Shrink) => {
-            eprintln!("genvm: contract error {:?}", cause);
-            Some(format!("VMError(\"{e}\")"))
-        }
-        (Err(e), PrintOption::Shrink) => {
-            eprintln!("genvm: internal error {:?}", e);
+    if args.print.contains(&PrintOption::StderrFull) {
+        eprintln!("{res:?}");
+    }
 
-            match e.downcast_ref::<wasmtime::Trap>() {
-                None => Some("Error(\"\")".into()),
-                Some(e) => Some(format!("Error(\"{e:?}\")")),
+    if args.print.contains(&PrintOption::Result) {
+        match &res {
+            Ok((RunOk::VMError(e, cause), _)) => {
+                println!("executed with `VMError(\"{e}\")`");
+                if let Some(cause) = cause {
+                    eprintln!("{cause:?}");
+                }
+            }
+            Ok((res, _)) => {
+                println!("executed with `{res:?}`")
+            }
+            Err(err) => {
+                println!("executed with `InternalError(\"\")`");
+                eprintln!("{err:?}");
             }
         }
-        (Ok(res), _) => Some(format!("{:?}", &res)),
-    };
-    match res {
-        None => {}
-        Some(res) => println!("executed with `{res}`"),
+    }
+
+    if args.print.contains(&PrintOption::Fingerprint) {
+        if let Ok((_, fp)) = &res {
+            println!("Fingerprint: {fp:?}");
+        }
     }
 
     runtime.block_on(async {

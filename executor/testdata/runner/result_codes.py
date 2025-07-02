@@ -1,3 +1,5 @@
+# This file is auto-generated. Do not edit!
+
 from enum import IntEnum, StrEnum
 import typing
 
@@ -31,7 +33,18 @@ class SpecialMethod(StrEnum):
 	ERRORED_MESSAGE = '#error'
 
 
+class VmError(StrEnum):
+	TIMEOUT = 'timeout'
+	VALIDATOR_DISAGREES = 'validator_disagrees'
+	VERSION_TOO_BIG = 'version_too_big'
+	OOM = 'OOM'
+	INVALID_CONTRACT = 'invalid_contract'
+
+
 EVENT_MAX_TOPICS: typing.Final[int] = 4
 
 
 ABSENT_VERSION: typing.Final[str] = 'v0.1.0'
+
+
+CODE_SLOT_OFFSET: typing.Final[int] = 1

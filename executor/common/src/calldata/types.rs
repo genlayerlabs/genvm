@@ -105,6 +105,18 @@ impl std::fmt::Debug for Value {
     }
 }
 
+impl From<&str> for Value {
+    fn from(v: &str) -> Self {
+        Value::Str(v.to_owned())
+    }
+}
+
+impl From<String> for Value {
+    fn from(v: std::string::String) -> Self {
+        Value::Str(v)
+    }
+}
+
 impl Value {
     pub fn as_str(&self) -> Option<&str> {
         match self {

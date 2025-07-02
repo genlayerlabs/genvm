@@ -1,5 +1,5 @@
 use anyhow::Context as _;
-use std::{borrow::BorrowMut, io::Write, iter};
+use std::{borrow::BorrowMut, io::Write};
 use tracing::instrument;
 use wiggle::{GuestError, GuestMemory, GuestPtr};
 
@@ -116,14 +116,14 @@ impl From<GuestError> for generated::types::Error {
             // > function needs to dereference it, the function shall trap.
             //
             // so this turns OOB and misalignment errors into traps.
-            PtrOverflow { .. } | PtrOutOfBounds { .. } | PtrNotAligned { .. } => {
+            PtrOverflow | PtrOutOfBounds { .. } | PtrNotAligned { .. } => {
                 generated::types::Error::trap(err.into())
             }
             PtrBorrowed { .. } => generated::types::Errno::Fault.into(),
             InvalidUtf8 { .. } => generated::types::Errno::Ilseq.into(),
             TryFromIntError { .. } => generated::types::Errno::Overflow.into(),
-            SliceLengthsDiffer { .. } => generated::types::Errno::Fault.into(),
-            BorrowCheckerOutOfHandles { .. } => generated::types::Errno::Fault.into(),
+            SliceLengthsDiffer => generated::types::Errno::Fault.into(),
+            BorrowCheckerOutOfHandles => generated::types::Errno::Fault.into(),
             InFunc { err, .. } => generated::types::Error::from(*err),
         }
     }
@@ -1171,9 +1171,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         buf: GuestPtr<u8>,
         buf_len: generated::types::Size,
     ) -> Result<(), generated::types::Error> {
-        let mut mem: Vec<u8> = iter::repeat(0)
-            .take(usize::try_from(buf_len).unwrap())
-            .collect();
+        let mut mem: Vec<u8> = std::iter::repeat_n(0, usize::try_from(buf_len).unwrap()).collect();
 
         if !self.context.conf.is_deterministic {
             if let Err(e) = getrandom::fill(&mut mem) {

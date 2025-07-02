@@ -5,6 +5,9 @@ bind_address: 127.0.0.1:3031
 
 lua_script_path: ${genvmRoot}/scripts/llm-default.lua
 vm_count: 6
+extra_lua_path: ""
+signer_url: "http://localhost:9155/genvm/sign"
+signer_headers: {}
 
 threads: 4
 blocking_threads: 16

@@ -1,3 +1,5 @@
+// This file is auto-generated. Do not edit!
+
 #![allow(dead_code, clippy::redundant_static_lifetimes)]
 
 use serde_derive::{Deserialize, Serialize};
@@ -18,6 +20,7 @@ pub enum Methods {
     EthCall = 10,
     EthSend = 11,
     GetBalance = 12,
+    RemainingFuelAsGen = 13,
 }
 
 impl Methods {
@@ -36,6 +39,7 @@ impl Methods {
             Methods::EthCall => 10,
             Methods::EthSend => 11,
             Methods::GetBalance => 12,
+            Methods::RemainingFuelAsGen => 13,
         }
     }
     pub fn str_snake_case(self) -> &'static str {
@@ -53,6 +57,7 @@ impl Methods {
             Methods::EthCall => "eth_call",
             Methods::EthSend => "eth_send",
             Methods::GetBalance => "get_balance",
+            Methods::RemainingFuelAsGen => "remaining_fuel_as_gen",
         }
     }
 }
@@ -75,6 +80,7 @@ impl TryFrom<u8> for Methods {
             10 => Ok(Methods::EthCall),
             11 => Ok(Methods::EthSend),
             12 => Ok(Methods::GetBalance),
+            13 => Ok(Methods::RemainingFuelAsGen),
             _ => Err(()),
         }
     }
@@ -86,6 +92,7 @@ pub enum Errors {
     Absent = 1,
     Forbidden = 2,
     IAmLeader = 3,
+    OutOfStorageGas = 4,
 }
 
 impl Errors {
@@ -95,6 +102,7 @@ impl Errors {
             Errors::Absent => 1,
             Errors::Forbidden => 2,
             Errors::IAmLeader => 3,
+            Errors::OutOfStorageGas => 4,
         }
     }
     pub fn str_snake_case(self) -> &'static str {
@@ -103,6 +111,7 @@ impl Errors {
             Errors::Absent => "absent",
             Errors::Forbidden => "forbidden",
             Errors::IAmLeader => "i_am_leader",
+            Errors::OutOfStorageGas => "out_of_storage_gas",
         }
     }
 }
@@ -116,6 +125,7 @@ impl TryFrom<u8> for Errors {
             1 => Ok(Errors::Absent),
             2 => Ok(Errors::Forbidden),
             3 => Ok(Errors::IAmLeader),
+            4 => Ok(Errors::OutOfStorageGas),
             _ => Err(()),
         }
     }

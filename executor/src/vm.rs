@@ -12,12 +12,12 @@ use wasmtime::{Engine, Linker, Module, Store};
 
 use crate::{
     caching, calldata, config,
-    errors::VMError,
+    errors::{self, VMError},
     host::LockedSlotsSet,
     memlimiter, public_abi,
     runner::{self, InitAction, WasmMode},
     ustar::{Archive, SharedBytes},
-    wasi::{self, preview1::I32Exit},
+    wasi,
 };
 use anyhow::{Context, Result};
 use genvm_common::*;
@@ -74,7 +74,7 @@ pub enum RunOk {
     VMError(String, #[serde(skip_serializing)] Option<anyhow::Error>),
 }
 
-pub type RunResult = Result<RunOk>;
+pub type FullRunOk = (RunOk, Option<errors::Fingerprint>);
 
 impl RunOk {
     pub fn empty_return() -> Self {
@@ -117,7 +117,7 @@ impl std::fmt::Debug for RunOk {
                         }
                     })
                     .join("");
-                f.write_fmt(format_args!("Return(\"{}\")", str))
+                f.write_fmt(format_args!("Return(\"{str}\")"))
             }
             Self::UserError(r) => f.debug_tuple("UserError").field(r).finish(),
             Self::VMError(r, _) => f.debug_tuple("VMError").field(r).finish(),
@@ -320,7 +320,7 @@ fn make_new_runner_arch_from_tar(
     let contents = crate::mmap::load_file(&path, Some(limiter))?;
 
     crate::ustar::Archive::from_ustar(SharedBytes::new(contents))
-        .with_context(|| format!("path {:?}", path))
+        .with_context(|| format!("path {path:?}"))
 }
 
 impl VM {
@@ -329,7 +329,7 @@ impl VM {
     }
 
     #[allow(clippy::manual_try_fold)]
-    pub async fn run(&mut self, instance: &wasmtime::Instance) -> RunResult {
+    pub async fn run(&mut self, instance: &wasmtime::Instance) -> anyhow::Result<FullRunOk> {
         if let Ok(lck) = self.store.data().genlayer_ctx.lock() {
             log_debug!(wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "run");
         }
@@ -342,48 +342,24 @@ impl VM {
         let time_start = std::time::Instant::now();
         let res = func.call_async(&mut self.store, ()).await;
         log_debug!(duration:? = time_start.elapsed(); "vm execution finished");
-        let res: RunResult = match res {
-            Ok(()) => Ok(RunOk::empty_return()),
+        let res: anyhow::Result<FullRunOk> = match res {
+            Ok(()) => Ok((RunOk::empty_return(), None)),
             Err(e) => {
-                let res: Result<RunOk> = [
-                    |e: anyhow::Error| match e.downcast::<crate::wasi::preview1::I32Exit>() {
-                        Ok(I32Exit(0)) => Ok(RunOk::empty_return()),
-                        Ok(I32Exit(v)) => Ok(RunOk::VMError(format!("exit_code {}", v), None)),
-                        Err(e) => Err(e),
-                    },
-                    |e: anyhow::Error| {
-                        e.downcast::<wasmtime::Trap>()
-                            .map(|v| RunOk::VMError(format!("wasm_trap {v:?}"), Some(v.into())))
-                    },
-                    |e: anyhow::Error| {
-                        e.downcast::<crate::errors::VMError>()
-                            .map(|crate::errors::VMError(m, c)| RunOk::VMError(m, c))
-                    },
-                    |e: anyhow::Error| {
-                        e.downcast::<crate::errors::UserError>()
-                            .map(|crate::errors::UserError(v)| RunOk::UserError(v))
-                    },
-                    |e: anyhow::Error| {
-                        e.downcast::<crate::wasi::genlayer_sdk::ContractReturn>()
-                            .map(|crate::wasi::genlayer_sdk::ContractReturn(v)| RunOk::Return(v))
-                    },
-                ]
-                .into_iter()
-                .fold(Err(e), |acc, func| match acc {
-                    Ok(acc) => Ok(acc),
-                    Err(e) => func(e),
-                });
-                res
+                if self.config_copy.needs_error_fingerprint {
+                    errors::unwrap_vm_errors_fingerprint(e).map(|(a, b)| (a, Some(b)))
+                } else {
+                    errors::unwrap_vm_errors(e).map(|a| (a, None))
+                }
             }
         };
         match &res {
-            Ok(RunOk::Return(_)) => {
+            Ok((RunOk::Return(_), _)) => {
                 log_debug!(result = "Return"; "execution result unwrapped")
             }
-            Ok(RunOk::UserError(msg)) => {
+            Ok((RunOk::UserError(msg), _)) => {
                 log_debug!(result = "UserError", message = msg; "execution result unwrapped")
             }
-            Ok(RunOk::VMError(e, cause)) => {
+            Ok((RunOk::VMError(e, cause), _)) => {
                 log_debug!(result = "VMError", message = e, cause:? = cause; "execution result unwrapped")
             }
             Err(e) => {
@@ -411,28 +387,33 @@ impl Engines {
         base_conf.wasm_relaxed_simd(false);
         base_conf.wasm_simd(true);
         base_conf.wasm_relaxed_simd(false);
-        base_conf.wasm_feature(WasmFeatures::BULK_MEMORY, true);
-        base_conf.wasm_feature(WasmFeatures::REFERENCE_TYPES, false);
-        base_conf.wasm_feature(WasmFeatures::SIGN_EXTENSION, true);
-        base_conf.wasm_feature(WasmFeatures::MUTABLE_GLOBAL, true);
-        base_conf.wasm_feature(WasmFeatures::SATURATING_FLOAT_TO_INT, false);
-        base_conf.wasm_feature(WasmFeatures::MULTI_VALUE, true);
+
+        base_conf
+            .wasm_feature(WasmFeatures::BULK_MEMORY, true)
+            .wasm_feature(WasmFeatures::REFERENCE_TYPES, false)
+            .wasm_feature(WasmFeatures::SIGN_EXTENSION, true)
+            .wasm_feature(WasmFeatures::MUTABLE_GLOBAL, true)
+            .wasm_feature(WasmFeatures::SATURATING_FLOAT_TO_INT, false)
+            .wasm_feature(WasmFeatures::MULTI_VALUE, true);
 
         base_conf.consume_fuel(false);
         //base_conf.wasm_threads(false);
         //base_conf.wasm_reference_types(false);
         base_conf.wasm_simd(false);
         base_conf.relaxed_simd_deterministic(false);
+        base_conf.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable);
 
         base_conf.cranelift_opt_level(wasmtime::OptLevel::None);
         config_base(&mut base_conf)?;
 
         let mut det_conf = base_conf.clone();
-        det_conf.wasm_floats_enabled(false);
-        det_conf.cranelift_nan_canonicalization(true);
+        det_conf
+            .wasm_floats_enabled(false)
+            .cranelift_nan_canonicalization(true)
+            .wasm_backtrace(true);
 
         let mut non_det_conf = base_conf.clone();
-        non_det_conf.wasm_floats_enabled(true);
+        non_det_conf.wasm_floats_enabled(true).wasm_backtrace(false);
 
         let det_engine = Engine::new(&det_conf)?;
         let non_det_engine = Engine::new(&non_det_conf)?;
@@ -794,7 +775,12 @@ impl Supervisor {
                     let name = module
                         .name()
                         .ok_or_else(|| anyhow::anyhow!("can't link unnamed module {:?}", current))
-                        .map_err(|e| crate::errors::VMError("invalid_wasm".into(), Some(e)))?;
+                        .map_err(|e| {
+                            crate::errors::VMError(
+                                format!("{} wasm", public_abi::VmError::InvalidContract.value()),
+                                Some(e),
+                            )
+                        })?;
                     linker.instance(&mut vm.store, name, instance)?;
                     instance
                 };
@@ -917,7 +903,10 @@ impl Supervisor {
     fn code_to_archive_from_text(code: SharedBytes) -> Result<Archive> {
         let code_str = str::from_utf8(code.as_ref()).map_err(|e| {
             crate::errors::VMError(
-                "invalid_contract non-utf8".into(),
+                format!(
+                    "{} not_utf8_text",
+                    public_abi::VmError::InvalidContract.value()
+                ),
                 Some(anyhow::Error::from(e)),
             )
         })?;
@@ -928,7 +917,13 @@ impl Supervisor {
                     return Ok(c);
                 }
             }
-            Err(crate::errors::VMError("no_runner_comment".into(), None))
+            Err(crate::errors::VMError(
+                format!(
+                    "{} absent_runner_comment",
+                    public_abi::VmError::InvalidContract.value()
+                ),
+                None,
+            ))
         })()?;
 
         let mut version_string = String::new();
@@ -946,7 +941,7 @@ impl Supervisor {
                 if l.trim().starts_with("v") {
                     version_string.push_str(l);
                 } else {
-                    log_warn!("runner comment does not start with version, using default");
+                    log_warn!(default = public_abi::ABSENT_VERSION; "runner comment does not start with version, using default");
                     version_string.push_str(public_abi::ABSENT_VERSION);
 
                     code_comment.push_str(l)

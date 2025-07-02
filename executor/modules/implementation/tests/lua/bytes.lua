@@ -3,8 +3,9 @@ local value2json = require("value2json")
 
 function Test(ctx)
 	return value2json(lib_genvm.rs.request(ctx, {
-		method = "GET",
-		url = "http://localhost:4445/body",
+		method = "POST",
+		url = "https://test-server.genlayer.com/body/echo",
 		headers = {},
+		body = "\xde\xad\xbe\xef",
 	}))
 end
