@@ -15,12 +15,15 @@
 - patch [workflow](../../.github/workflows/module-test-cargo.yaml) to pass secret
 - provide api key to repository owners
 
+## Adding new wasm function to gl_call
+It is an easier approach than next. Just add definition to `executor/src/wasi/gl_call.rs`. You must also add version check to implementation in `executor/src/wasi/genlayer_sdk.rs`.
+
 ## Adding new wasm function
 - `executor/src/wasi/witx/genlayer_sdk.witx`<br>
     add declaration here
 - `executor/src/wasi/genlayer_sdk.rs`<br>
     add implementation here (under `impl` trait)
-- `runners/nix/trg/py/modules/genvm-cpython-ext/src/lib.rs`<br>
+- `runners/cpython/modules/_genlayer_wasi/genlayer.c`<br>
     add python proxy<br>
     NOTE: this will change hash, rebuilding will show you the new one
 

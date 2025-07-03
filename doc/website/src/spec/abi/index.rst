@@ -7,3 +7,4 @@ GenVM ABI
    calldata
    contract_startup
    runners
+   upgradability
