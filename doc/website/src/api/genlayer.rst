@@ -35,6 +35,16 @@ gl
    :undoc-members:
    :show-inheritance:
 
+#####
+gl.vm
+#####
+
+.. automodule:: genlayer.gl.vm
+   :members:
+   :imported-members:
+   :undoc-members:
+   :show-inheritance:
+
 ###########
 gl.advanced
 ###########
