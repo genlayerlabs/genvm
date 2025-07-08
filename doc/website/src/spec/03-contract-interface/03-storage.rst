@@ -16,7 +16,7 @@ Storage Architecture
 Design Principles
 ~~~~~~~~~~~~~~~~~
 
--  **Deterministic Access**: Consistent storage behavior across all validator nodes. Reading uninitialied memory must return zeroes
+  **Deterministic Access**: Consistent storage behavior across all validator nodes. Reading uninitialized memory must return zeroes
 -  **Efficiency**: Optimized storage layout and access patterns for
    blockchain use
 -  **Language Agnostic**: Storage abstractions that work across
