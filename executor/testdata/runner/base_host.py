@@ -74,7 +74,7 @@ class IHost(metaclass=abc.ABCMeta):
 	@abc.abstractmethod
 	async def get_leader_nondet_result(
 		self, call_no: int, /
-	) -> tuple[ResultCode, collections.abc.Buffer] | Errors: ...
+	) -> collections.abc.Buffer: ...
 	@abc.abstractmethod
 	async def post_nondet_result(
 		self, call_no: int, type: ResultCode, data: collections.abc.Buffer, /
@@ -202,15 +202,13 @@ async def host_loop(handler: IHost):
 				except HostException as e:
 					await send_all(bytes([e.error_code]))
 				else:
-					if isinstance(data, Errors):
-						await send_all(bytes([data]))
-					else:
-						await send_all(bytes([Errors.OK]))
-						code, as_bytes = data
-						await send_all(bytes([code]))
-						as_bytes = memoryview(as_bytes)
-						await send_int(len(as_bytes))
-						await send_all(as_bytes)
+					code = memoryview(data)[0]
+					as_bytes = memoryview(data)[1:]
+					await send_all(bytes([Errors.OK]))
+					await send_all(bytes([code]))
+
+					await send_int(len(as_bytes))
+					await send_all(as_bytes)
 			case Methods.POST_NONDET_RESULT:
 				call_no = await recv_int()
 				try:
@@ -293,7 +291,7 @@ async def host_loop(handler: IHost):
 				else:
 					await send_all(bytes([Errors.OK]))
 					await send_all(res.to_bytes(32, byteorder='little', signed=False))
-			case Methods.REMAINING_FUEL:
+			case Methods.REMAINING_FUEL_AS_GEN:
 				try:
 					res = await handler.remaining_fuel_as_gen()
 				except HostException as e:

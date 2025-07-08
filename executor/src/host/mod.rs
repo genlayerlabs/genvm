@@ -316,12 +316,7 @@ impl Host {
 
                 (ResultCode::VmError, val_encoded)
             }
-            Err(e) => {
-                let data = calldata::Value::Str(format!("{e:?}"));
-                let val = calldata::encode(&data);
-
-                (ResultCode::InternalError, val)
-            }
+            Err(e) => (ResultCode::InternalError, Vec::from(format!("{e:?}"))),
         };
         sock.write_all(&[host_fns::Methods::ConsumeResult as u8, code as u8])?;
         sock.write_all(&(data.len() as u32).to_le_bytes())?;

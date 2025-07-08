@@ -46,8 +46,9 @@ local function just_in_backend(ctx, mapped_prompt, remaining_gen)
 		end
 
 		local as_user_error = lib.rs.as_user_error(result)
-		lib.log{level = "warning", message = "error as user", type = type(as_user_error), as_user_error = as_user_error}
 		if as_user_error == nil then
+			lib.log{level = "warning", message = "non-user-error", original = result}
+
 			error(result)
 		end
 
