@@ -39,7 +39,7 @@ Root Slot Management
 
 -  **Metadata Storage**: Contract metadata and control information in
    root slot
--  **Access Control**: Upgrade permissions and slot locking :doc:`mechanisms <03-upgradability>`
+  **Access Control**: Upgrade permissions and slot locking :doc:`mechanisms <04-upgradability>`
 -  **Code Management**: Contract code storage and versioning
 -  **Lifecycle Control**: Contract initialization and upgrade
    coordination
