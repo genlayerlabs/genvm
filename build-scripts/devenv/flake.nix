@@ -1,6 +1,6 @@
 {
 	inputs = {
-		nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+		nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
 		systems = {
 			url = "github:nix-systems/default";
 			inputs.nixpkgs.follows = "nixpkgs";
@@ -36,7 +36,6 @@
 							xz
 							zlib
 							glibc
-							libstdcxx5
 							aflplusplus
 
 							wabt
@@ -45,6 +44,9 @@
 							nodePackages.npm
 
 							glibc
+
+							mermaid-cli
+							ripgrep
 						];
 
 						shellHook = ''
