@@ -18,12 +18,17 @@ extensions = [
 	'sphinx.ext.viewcode',
 	'sphinx.ext.todo',
 	'sphinx.ext.intersphinx',
+	'sphinxcontrib.mermaid',
 ]
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 language = 'en'
+
+mermaid_version = '11.6.0'
+mermaid_output_format = 'svg'
+mermaid_params = ['--theme', 'dark', '--backgroundColor', 'transparent']
 
 # html_theme = 'alabaster'
 html_theme = 'pydata_sphinx_theme'

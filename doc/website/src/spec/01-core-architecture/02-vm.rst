@@ -1,0 +1,269 @@
+:term:`Sub-VM` Architecture
+===========================
+
+Overview
+--------
+
+GenVM is built on a modified WebAssembly runtime that enables the
+execution of “Intelligent Contracts” - smart contracts capable of
+performing both deterministic blockchain operations and
+non-deterministic AI/web operations while maintaining consensus. The
+VM's core innovation is its dual-mode execution model that isolates
+deterministic and non-deterministic operations.
+
+WebAssembly Foundation
+----------------------
+
+GenVM uses WebAssembly (WASM) as its core execution environment,
+providing:
+
+-  **Language Agnostic Execution**: Support for multiple programming
+   languages compiled to WASM
+-  **Security**: Memory-safe execution with controlled access to system
+   resources
+-  **Performance**: Near-native execution speed with efficient
+   compilation
+-  **Portability**: Consistent behavior across different hardware
+   architectures
+
+Modified *Wasmtime* Runtime
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+GenVM is based on Wasmtime, the reference WebAssembly runtime, with
+specific modifications for blockchain use:
+
+-  **Deterministic Execution**: Modified for reproducible results across validators
+-  **Resource Limits**: Integrated memory constraints
+-  **Error fingerprinting**: Capturing VM state on errors
+-  **Floating Point Handling**: Floating point operations bad in deterministic mode
+
+Dual-Mode Execution Model
+-------------------------
+
+The core architectural innovation of GenVM is its dual execution model
+that separates deterministic and non-deterministic operations.
+
+.. mermaid::
+
+   graph TD
+   Det1["Deterministic code"]
+
+   Det1 ~~~ Leader
+   Det1 ~~~ Validator
+
+   subgraph Nondet
+    subgraph Leader
+        LeaderFN
+        LeaderFN -.-> LeaderResult
+    end
+    subgraph Validator
+        ValidatorFN
+        ValidatorFN -.-> ValidatorAgreement
+    end
+   end
+
+   LeaderResult -.-> ValidatorFN
+
+   Leader ~~~ Validator
+
+   Det1 ---> Nondet
+
+   LeaderResult -.-> Det2
+
+   Nondet ---> Det2["Deterministic code"]
+
+Deterministic Mode
+~~~~~~~~~~~~~~~~~~
+
+**Purpose**: Executes blockchain consensus logic that must produce
+identical results across all validators.
+
+**Characteristics**:
+
+- Reproducible execution across all network participants
+- Access to blockchain state (storage, balances, ...)
+- Standard computational operations and business logic
+- Inter-contract communication and message passing
+
+**Restrictions**: - No access to external networks or services -
+Controlled randomness and time access - Software-based floating point
+operations - No file system access beyond virtual file system
+
+Non-Deterministic Mode
+~~~~~~~~~~~~~~~~~~~~~~
+
+**Purpose**: Executes operations that may produce different results, so
+that they require consensus validation.
+
+**Characteristics**:
+
+- AI inference and ML operations
+- Web scraping and HTTP requests
+- External data source access
+
+**Isolation**: - Separate VM instance to prevent state contamination
+
+- Results passed back to deterministic mode are leader-substituted
+- No direct access to blockchain state
+- No file system access beyond virtual file system
+- Communication only through validated results
+
+VM Instance Management
+----------------------
+
+Supervisor Architecture
+~~~~~~~~~~~~~~~~~~~~~~~
+
+GenVM uses a supervisor pattern to manage multiple VM instances:
+deterministic and non-deterministic
+
+**Resource Management**:
+
+- Memory limits per execution mode (4GB for deterministic VMs, 4GB for non-deterministic VMs)
+- Time gas metering and consumption tracking
+- Execution timeouts
+
+Memory Model
+------------
+
+Linear Memory Management
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each VM instance operates with WebAssembly's linear memory model.
+
+**Memory Isolation**: - Strict boundaries between VM instances - No
+shared memory between deterministic and non-deterministic modes - Strict
+memory allocation limits
+
+Storage Interface
+~~~~~~~~~~~~~~~~~
+
+-  Storage operations through `host interface <./03-host-interface.rst#storage-operations>`
+-  Custom calldata format for deterministic serialization (see :doc:`Calldata specification <../03-contract-interface/04-calldata>`)
+
+Gas and Resource Metering
+-------------------------
+
+GenVM implements a sophisticated three-dimensional gas model to ensure
+fair resource allocation and prevent abuse. For detailed information on
+gas metering, resource limits, and cost management, see :doc:`Gas Model specification <../04-system-integration/03-gas-model>`.
+
+Execution Modes
+---------------
+
+Leader Execution
+~~~~~~~~~~~~~~~~
+
+When a node acts as a leader:
+
+1. **Full Execution**: Runs both deterministic and non-deterministic
+   operations
+2. **Result Proposal**: Proposes non-deterministic operation results to
+   validators
+3. **Consensus Participation**: Provides ground truth for validator
+   verification
+
+Validator Execution
+~~~~~~~~~~~~~~~~~~~
+
+When a node acts as a validator:
+
+1. **Deterministic Execution**: Runs consensus logic normally, using
+   leader-provided results
+2. **Non-Deterministic Validation**: Executes validator functions to
+   verify leader results
+3. **Consensus Voting**: Votes on acceptance of leader-proposed results
+
+Validation Strategies
+~~~~~~~~~~~~~~~~~~~~~
+
+Multiple validation strategies for non-deterministic results (see `Consensus specification <../04-system-integration/01-consensus.rst#validation-strategies>`)
+
+Error Handling
+--------------
+
+Error Categories
+~~~~~~~~~~~~~~~~
+
+**VM Errors**:
+
+- Resource limit violations
+- Invalid WASM module issues
+
+**User Errors**:
+
+- Contract logic exceptions
+
+**System Errors**:
+
+- :term:`Host` communication failures
+- :term:`Module` unavailability
+
+System errors are not visible by the contracts. Most likely node will
+vote *timeout* if encounters such an error
+
+Error Fingerprinting
+~~~~~~~~~~~~~~~~~~~~
+
+**Consensus Security**: When WebAssembly execution fails and backtraces
+are enabled, GenVM automatically generates a cryptographic fingerprint
+of the memory state to prevent nodes from cheating by skipping actual
+execution.
+
+**Cryptographic Hashing**: Uses BLAKE3 cryptographic hash function to
+generate deterministic fingerprints of memory regions.
+
+**Fingerprint Structure**:
+
+::
+
+   {
+     "frames": [
+       {
+         "module_name": "<module_name>",
+         "func": <function_index>
+       }
+     ],
+     "module_instances": {
+       "<module_name>": {
+         "memories": [
+           <32_byte_blake3_hash>
+         ]
+       }
+     }
+   }
+
+**Components**:
+
+- **Call Stack Frames**: Module name and function index for each frame in the call stack (:math:`0` corresponds to last frame where error occurred)
+- **Memory Fingerprints**: BLAKE3 hash (32 bytes) of each WebAssembly memory region per wasm module, ordered as wasm memory indexes
+- **Module Organization**: Fingerprints organized by wasm module instance name
+
+**Result Format**: Error results with fingerprints are encoded in calldata format as:
+
+::
+
+   {
+     "message": "<error_message_string>",
+     "fingerprint": <structured_fingerprint_data>
+   }
+
+**Coverage**: Fingerprinting applies to ``UserError`` and ``VMError`` results but not ``InternalError`` cases.
+
+**Anti-Cheating Mechanism**: Error fingerprints provide consensus
+participants with proof that actual execution occurred up to the point
+of failure, making it computationally infeasible for malicious nodes to
+fabricate execution results without performing the actual computation.
+
+Sandboxing
+----------
+
+For the sake of running prompt-generated code users are provided with ability to spawn a separate :term:`sub-VM` for executing it.
+
+This VM:
+
+#. Has the same non-deterministic level as parent :term:`sub-VM`
+#. Can not switch into non-deterministic mode
+#. Can be configured to be able to update storage (privilege escalation is forbidden)
+
+Users can catch both ``VMError`` and ``UserError`` produced by it, but storage writes can not be reverted
