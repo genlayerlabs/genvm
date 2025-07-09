@@ -7,4 +7,5 @@ Overview of GenVM's core architectural components and design patterns.
    :maxdepth: 2
 
    01-components
-   02-vm
+   02-host-interface
+   03-modules

@@ -7,3 +7,4 @@ GenLayer SDK API Documentation
 
    api/index
    spec/index
+   impl-spec/index

@@ -97,8 +97,8 @@ The :term:`host` processes requests in a loop until ``consume_result``:
            write_byte json/errors/ok
 
        json/methods/consume_result:
-         host_result := read_result()
-         # ensures genvm doesn't close socket before all data is read
+         host_result := read_slice()
+         # this is needed to ensure that genvm doesn't close socket before all data is read
          write_byte 0x00
          break
 
@@ -109,7 +109,7 @@ The :term:`host` processes requests in a loop until ``consume_result``:
            write_byte err
          else:
            write_byte json/errors/ok
-           write_byte_slice data
+           write_byte_slice result_data
 
        json/methods/post_nondet_result:
          call_no := read_u32_le

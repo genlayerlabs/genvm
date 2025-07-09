@@ -24,7 +24,7 @@ Format
 ULEB128 Encoding
 ~~~~~~~~~~~~~~~~
 
-“Unsigned little endian base 128” is a variable-length code compression
+"Unsigned little endian base 128" is a variable-length code compression
 used to store arbitrarily large integers.
 
 **Encoding**: Split number into groups of 7 bits, little-endian, zero

@@ -25,7 +25,7 @@ Contract Execution Flow
 
 -  GenVM receives contract address from message
 -  Reads contract's locked slots and code from storage
--  Checks upgradability-related data from :doc:`03-upgradability`
+-  Checks upgradability-related data from :doc:`04-upgradability`
 -  Creates empty VFS, empty arguments list and empty environment variables map
 -  Inspects contract runner as in :doc:`../02-execution-environment/03-runners`
 -  Processes actions until ``StartWasm`` is encountered
