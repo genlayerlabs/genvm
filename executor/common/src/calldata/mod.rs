@@ -4,7 +4,7 @@ mod error;
 mod se;
 mod types;
 
-pub use bin::{decode, encode};
+pub use bin::{decode, encode, encode_to};
 pub use error::*;
 pub use types::*;
 

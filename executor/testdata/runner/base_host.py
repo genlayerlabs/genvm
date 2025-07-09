@@ -77,7 +77,7 @@ class IHost(metaclass=abc.ABCMeta):
 	) -> collections.abc.Buffer: ...
 	@abc.abstractmethod
 	async def post_nondet_result(
-		self, call_no: int, type: ResultCode, data: collections.abc.Buffer, /
+		self, call_no: int, data: collections.abc.Buffer, /
 	) -> None: ...
 	@abc.abstractmethod
 	async def post_message(
@@ -147,11 +147,10 @@ async def host_loop(handler: IHost):
 	async def send_int(i: int, bytes=4):
 		await send_all(int.to_bytes(i, bytes, byteorder='little', signed=False))
 
-	async def read_result() -> tuple[ResultCode, bytes]:
-		type = await recv_int(1)
+	async def read_slice() -> memoryview:
 		le = await recv_int()
 		data = await read_exact(le)
-		return (ResultCode(type), data)
+		return memoryview(data)
 
 	while True:
 		meth_id = Methods(await recv_int(1))
@@ -192,7 +191,8 @@ async def host_loop(handler: IHost):
 				else:
 					await send_all(bytes([Errors.OK]))
 			case Methods.CONSUME_RESULT:
-				await handler.consume_result(*await read_result())
+				res = await read_slice()
+				await handler.consume_result(ResultCode(res[0]), res[1:])
 				await send_all(b'\x00')
 				return
 			case Methods.GET_LEADER_NONDET_RESULT:
@@ -202,17 +202,14 @@ async def host_loop(handler: IHost):
 				except HostException as e:
 					await send_all(bytes([e.error_code]))
 				else:
-					code = memoryview(data)[0]
-					as_bytes = memoryview(data)[1:]
 					await send_all(bytes([Errors.OK]))
-					await send_all(bytes([code]))
-
-					await send_int(len(as_bytes))
-					await send_all(as_bytes)
+					data = memoryview(data)
+					await send_int(len(data))
+					await send_all(data)
 			case Methods.POST_NONDET_RESULT:
 				call_no = await recv_int()
 				try:
-					await handler.post_nondet_result(call_no, *await read_result())
+					await handler.post_nondet_result(call_no, await read_slice())
 				except HostException as e:
 					await send_all(bytes([e.error_code]))
 				else:

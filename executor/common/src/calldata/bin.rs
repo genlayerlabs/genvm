@@ -206,7 +206,7 @@ fn append_uleb(to: &mut Vec<u8>, mut num: num_bigint::BigUint) {
     }
 }
 
-fn encode_to(to: &mut Vec<u8>, value: &Value) {
+pub fn encode_to(to: &mut Vec<u8>, value: &Value) {
     match value {
         Value::Null => to.push(SPECIAL_NULL),
         Value::Bool(false) => to.push(SPECIAL_FALSE),

@@ -3,12 +3,12 @@ pub mod message;
 
 use genvm_common::*;
 
-use crate::errors;
 use crate::public_abi::{ResultCode, StorageType};
 use genvm_common::calldata::Address;
 use genvm_common::calldata::ADDRESS_SIZE;
 use message::root_offsets;
 
+use core::str;
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
@@ -67,29 +67,12 @@ fn read_bytes(sock: &mut dyn Sock) -> Result<Box<[u8]>> {
     Ok(res)
 }
 
-fn write_result(sock: &mut dyn Sock, res: Result<&vm::RunOk, &anyhow::Error>) -> Result<()> {
-    let str: String;
-    let data = match res {
-        Ok(vm::RunOk::Return(r)) => {
-            sock.write_all(&[ResultCode::Return as u8])?;
-            r
-        }
-        Ok(vm::RunOk::UserError(r)) => {
-            sock.write_all(&[ResultCode::UserError as u8])?;
-            r.as_bytes()
-        }
-        Ok(vm::RunOk::VMError(r, _)) => {
-            sock.write_all(&[ResultCode::VmError as u8])?;
-            r.as_bytes()
-        }
-        Err(e) => {
-            sock.write_all(&[ResultCode::InternalError as u8])?;
-            str = format!("{e:#}");
-            str.as_bytes()
-        }
-    };
-    sock.write_all(&(data.len() as u32).to_le_bytes())?;
+fn write_slice(sock: &mut dyn Sock, data: &[u8]) -> Result<()> {
+    let len = data.len() as u32;
+
+    sock.write_all(&len.to_le_bytes())?;
     sock.write_all(data)?;
+
     Ok(())
 }
 
@@ -279,8 +262,7 @@ impl Host {
         sock.write_all(&[host_fns::Methods::StorageWrite as u8])?;
         sock.write_all(&slot.raw())?;
         sock.write_all(&index.to_le_bytes())?;
-        sock.write_all(&(buf.len() as u32).to_le_bytes())?;
-        sock.write_all(buf)?;
+        write_slice(sock, buf)?;
 
         sock.flush()?;
 
@@ -290,46 +272,68 @@ impl Host {
     }
 
     pub fn consume_result(&mut self, res: &Result<vm::FullRunOk>) -> Result<()> {
+        log_trace!("consume_result");
+
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
         let sock: &mut dyn Sock = &mut *sock;
-        let (code, data) = match res {
-            Ok((RunOk::Return(data), _)) => (ResultCode::Return, data.clone()),
+        let data = match res {
+            Ok((RunOk::Return(data), _)) => {
+                let mut encoded = Vec::from([ResultCode::Return as u8]);
+                encoded.extend_from_slice(data);
+
+                encoded
+            }
             Ok((RunOk::UserError(data), fp)) => {
                 let fp = calldata::to_value(fp)?;
                 let val = calldata::Value::Map(BTreeMap::from([
                     ("message".to_owned(), data.as_str().into()),
                     ("fingerprint".to_owned(), fp),
                 ]));
-                let val_encoded = calldata::encode(&val);
 
-                (ResultCode::UserError, val_encoded)
+                let mut encoded = Vec::from([ResultCode::UserError as u8]);
+                calldata::encode_to(&mut encoded, &val);
+
+                encoded
             }
             Ok((RunOk::VMError(data, _), fp)) => {
+                let mut encoded = Vec::from([ResultCode::VmError as u8]);
+
                 let fp = calldata::to_value(fp)?;
                 let val = calldata::Value::Map(BTreeMap::from([
                     ("message".to_owned(), data.as_str().into()),
                     ("fingerprint".to_owned(), fp),
                 ]));
-                let val_encoded = calldata::encode(&val);
 
-                (ResultCode::VmError, val_encoded)
+                calldata::encode_to(&mut encoded, &val);
+
+                encoded
             }
-            Err(e) => (ResultCode::InternalError, Vec::from(format!("{e:?}"))),
+            Err(e) => {
+                let mut encoded = Vec::from([ResultCode::VmError as u8]);
+                encoded.extend_from_slice(format!("{e:?}").as_bytes());
+
+                encoded
+            }
         };
-        sock.write_all(&[host_fns::Methods::ConsumeResult as u8, code as u8])?;
-        sock.write_all(&(data.len() as u32).to_le_bytes())?;
-        sock.write_all(&data)?;
+
+        sock.write_all(&[host_fns::Methods::ConsumeResult as u8])?;
+        write_slice(sock, &data)?;
+
         log_debug!("wrote consumed result to host");
 
         let mut int_buf = [0; 1];
         sock.read_exact(&mut int_buf)?;
 
+        log_debug!("consume_result: ACK");
+
         Ok(())
     }
 
     pub fn get_leader_result(&mut self, call_no: u32) -> Result<Option<vm::RunOk>> {
+        log_trace!("get_leader_result");
+
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -342,30 +346,20 @@ impl Host {
             host_fns::Errors::IAmLeader => {
                 return Ok(None);
             }
-            host_fns::Errors::Absent => {
-                return Err(errors::VMError("absent_leader_result".to_owned(), None).into());
-            }
             e => return Err(crate::errors::VMError(e.str_snake_case().to_owned(), None).into()),
         }
 
-        let mut has_some = [0; 1];
-        sock.read_exact(&mut has_some)?;
-        let len = read_u32(sock)?;
+        let leaders_result = read_bytes(sock)?;
 
-        let mut buf = Vec::with_capacity(len as usize);
-        let slice = buf.spare_capacity_mut();
-        let slice =
-            unsafe { core::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, slice.len()) };
-        sock.read_exact(slice)?;
-        unsafe {
-            buf.set_len(len as usize);
-        }
+        let rest = &leaders_result[1..];
 
-        let res = match has_some[0] {
-            x if x == ResultCode::Return as u8 => vm::RunOk::Return(buf),
-            x if x == ResultCode::UserError as u8 => vm::RunOk::UserError(String::from_utf8(buf)?),
+        let res = match leaders_result[0] {
+            x if x == ResultCode::Return as u8 => vm::RunOk::Return(rest.into()),
+            x if x == ResultCode::UserError as u8 => {
+                vm::RunOk::UserError(String::from(str::from_utf8(rest)?))
+            }
             x if x == ResultCode::VmError as u8 => {
-                vm::RunOk::VMError(String::from_utf8(buf)?, None)
+                vm::RunOk::VMError(String::from(str::from_utf8(rest)?), None)
             }
             x => anyhow::bail!("host returned incorrect result id {}", x),
         };
@@ -373,6 +367,8 @@ impl Host {
     }
 
     pub fn post_nondet_result(&mut self, call_no: u32, res: &vm::RunOk) -> Result<()> {
+        log_trace!(call_no = call_no; "post_nondet_result");
+
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -380,7 +376,7 @@ impl Host {
         sock.write_all(&[host_fns::Methods::PostNondetResult as u8])?;
         sock.write_all(&call_no.to_le_bytes())?;
 
-        write_result(sock, Ok(res))?;
+        write_slice(sock, &Vec::from_iter(res.as_bytes_iter()))?;
 
         sock.flush()?;
 
@@ -395,6 +391,8 @@ impl Host {
         calldata: &[u8],
         data: &str,
     ) -> Result<()> {
+        log_trace!("post_message");
+
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -402,11 +400,8 @@ impl Host {
         sock.write_all(&[host_fns::Methods::PostMessage as u8])?;
         sock.write_all(&account.raw())?;
 
-        sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
-        sock.write_all(calldata)?;
-
-        sock.write_all(&(data.len() as u32).to_le_bytes())?;
-        sock.write_all(data.as_bytes())?;
+        write_slice(sock, calldata)?;
+        write_slice(sock, data.as_bytes())?;
 
         sock.flush()?;
 
@@ -416,20 +411,17 @@ impl Host {
     }
 
     pub fn deploy_contract(&mut self, calldata: &[u8], code: &[u8], data: &str) -> Result<()> {
+        log_trace!("deploy_contract");
+
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
         let sock: &mut dyn Sock = &mut *sock;
         sock.write_all(&[host_fns::Methods::DeployContract as u8])?;
 
-        sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
-        sock.write_all(calldata)?;
-
-        sock.write_all(&(code.len() as u32).to_le_bytes())?;
-        sock.write_all(code)?;
-
-        sock.write_all(&(data.len() as u32).to_le_bytes())?;
-        sock.write_all(data.as_bytes())?;
+        write_slice(sock, calldata)?;
+        write_slice(sock, code)?;
+        write_slice(sock, data.as_bytes())?;
 
         sock.flush()?;
 
@@ -439,6 +431,8 @@ impl Host {
     }
 
     pub fn consume_fuel(&mut self, gas: u64) -> Result<()> {
+        log_trace!("consume_fuel");
+
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -451,6 +445,8 @@ impl Host {
     }
 
     pub fn eth_call(&mut self, address: calldata::Address, calldata: &[u8]) -> Result<Box<[u8]>> {
+        log_trace!("eth_call");
+
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -473,6 +469,8 @@ impl Host {
         calldata: &[u8],
         data: &str,
     ) -> Result<()> {
+        log_trace!("eth_send");
+
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -495,6 +493,8 @@ impl Host {
     }
 
     pub fn get_balance(&mut self, address: calldata::Address) -> Result<primitive_types::U256> {
+        log_trace!("get_balance");
+
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };
@@ -511,6 +511,8 @@ impl Host {
     }
 
     pub fn remaining_fuel_as_gen(&mut self) -> Result<u64> {
+        log_trace!("remaining_fuel_as_gen");
+
         let Ok(mut sock) = (*self.sock).lock() else {
             anyhow::bail!("can't take lock")
         };

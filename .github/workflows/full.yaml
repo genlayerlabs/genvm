@@ -74,7 +74,7 @@ jobs:
         id: get-latest-tag
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: 1.84.0
+          toolchain: 1.87.0
           cache: false
           components: llvm-tools-preview
           rustflags: ""
@@ -103,6 +103,7 @@ jobs:
       - name: Install test tools
         run: |
           sudo apt-get install -y wabt && \
+          cargo --version && \
           cargo install cargo-afl && \
           python3 -m pip install -r executor/testdata/runner/requirements.txt && \
           docker pull yeagerai/genlayer-genvm-webdriver:latest && \
