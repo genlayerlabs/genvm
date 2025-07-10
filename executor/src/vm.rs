@@ -959,9 +959,12 @@ impl Supervisor {
     }
 
     pub async fn apply_contract_actions(&mut self, vm: &mut VM) -> Result<wasmtime::Instance> {
-        let contract_address = {
+        let (contract_address, datetime) = {
             let lock = vm.store.data().genlayer_ctx.lock().unwrap();
-            lock.genlayer_sdk.data.message_data.contract_address
+            (
+                lock.genlayer_sdk.data.message_data.contract_address,
+                lock.genlayer_sdk.data.message_data.datetime,
+            )
         };
 
         let contract_id = runner::get_id_of_contract(contract_address);
@@ -984,6 +987,20 @@ impl Supervisor {
             .get_or_create(contract_id, provide_arch, limiter)?;
 
         let version = cur_arch.get_version()?;
+
+        //self.shared_data.
+        let transaction_ts = datetime.timestamp() as u64;
+        let max_version_index =
+            match crate::version_timestamps::DATA.binary_search_by_key(&transaction_ts, |x| x.0) {
+                Ok(index) => index,
+                Err(0) => 0,
+                Err(index) => index - 1,
+            };
+
+        if version > crate::version_timestamps::DATA[max_version_index].1 {
+            return Err(VMError(public_abi::VmError::VersionTooBig.value().into(), None).into());
+        }
+
         vm.store
             .data_mut()
             .genlayer_ctx_mut()

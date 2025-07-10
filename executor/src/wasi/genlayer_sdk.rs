@@ -321,7 +321,7 @@ impl ContextVFS<'_> {
         &mut self,
         lower_bound: genvm_common::version::Version,
     ) -> Result<(), generated::types::Error> {
-        if self.context.data.version.is_greater_eq_than(lower_bound) {
+        if self.context.data.version >= lower_bound {
             Ok(())
         } else {
             log_warn!(lower_bound = lower_bound, vm_version = self.context.data.version; "version check failed");

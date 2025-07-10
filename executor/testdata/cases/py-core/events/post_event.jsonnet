@@ -5,5 +5,8 @@ simple.run('${jsonnetDir}/post_event.py') {
             "method": "main",
             "args": []
         }
-    |||
+    |||,
+    "message"+: {
+        "datetime": "2025-07-11T00:00:00Z"
+    }
 }

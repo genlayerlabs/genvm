@@ -1,6 +1,6 @@
 use anyhow::Context;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Version {
     pub major: u16,
     pub minor: u16,
@@ -65,17 +65,6 @@ impl Version {
             major,
             minor,
             patch,
-        }
-    }
-
-    pub fn is_greater_eq_than(self, other: Version) -> bool {
-        if self.major != other.major {
-            return self.major > other.major;
-        }
-        if self.major == 0 {
-            (self.minor, self.patch) >= (other.minor, other.patch)
-        } else {
-            (self.major, self.minor) >= (other.major, other.minor)
         }
     }
 }
