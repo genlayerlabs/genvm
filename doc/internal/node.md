@@ -12,7 +12,7 @@ Send it `SIGTERM`. If it doesn't quit in some sensible amount of time just `SIGK
 It is for node to decide. GenVM knows only about the calldata (and potentially message) and nothing else
 
 ## Communication protocol
-All further communication is done via socket. If genvm process exited before sending the result, it means that genvm crushed. Potential bug should be reported
+All further communication is done via socket. If the GenVM process exited before sending the result, it means that GenVM crashed. Potential bugs should be reported
 
 Method ids list is available as [json](../../executor/codegen/data/host-fns.json). It is advised to use it in the build system to codegen constants
 
