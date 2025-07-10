@@ -99,6 +99,8 @@ class IHost(metaclass=abc.ABCMeta):
 	async def get_balance(self, account: bytes, /) -> int: ...
 	@abc.abstractmethod
 	async def remaining_fuel_as_gen(self, /) -> int: ...
+	@abc.abstractmethod
+	async def post_event(self, topics: list[bytes], blob: bytes, /) -> None: ...
 
 
 def save_code_callback[T](
@@ -297,6 +299,19 @@ async def host_loop(handler: IHost):
 					res = min(res, 2**53 - 1)
 					await send_all(bytes([Errors.OK]))
 					await send_all(res.to_bytes(8, byteorder='little', signed=False))
+			case Methods.POST_EVENT:
+				topics_len = await recv_int(1)
+				topics = []
+				for i in range(topics_len):
+					topic = await read_exact(32)
+					topics.append(topic)
+				blob = await read_slice()
+				try:
+					await handler.post_event(topics, blob)
+				except HostException as e:
+					await send_all(bytes([e.error_code]))
+				else:
+					await send_all(bytes([Errors.OK]))
 			case x:
 				raise Exception(f'unknown method {x}')
 

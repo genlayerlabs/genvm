@@ -321,10 +321,10 @@ impl ContextVFS<'_> {
         &mut self,
         lower_bound: genvm_common::version::Version,
     ) -> Result<(), generated::types::Error> {
-        if self.context.data.version.is_greater_eq_than(lower_bound) {
+        if self.context.data.version >= lower_bound {
             Ok(())
         } else {
-            log_info!(lower_bound = lower_bound, vm_version = self.context.data.version; "version check failed");
+            log_warn!(lower_bound = lower_bound, vm_version = self.context.data.version; "version check failed");
             Err(generated::types::Errno::Inval.into())
         }
     }
@@ -487,30 +487,40 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 self.set_vm_run_result(res).map(|x| x.0)
             }
             gl_call::Message::EmitEvent { topics, blob } => {
-                self.check_version(genvm_common::version::Version::new(0, 2, 0))?;
+                self.check_version(genvm_common::version::Version::new(0, 1, 5))?;
 
                 if !self.context.data.conf.is_deterministic {
+                    log_warn!("forbidden emit event in deterministic mode");
+
                     return Err(generated::types::Errno::Forbidden.into());
                 }
 
                 if topics.len() > public_abi::EVENT_MAX_TOPICS as usize {
-                    log_info!(cnt = topics.len(), max = public_abi::EVENT_MAX_TOPICS; "too many topics");
+                    log_warn!(cnt = topics.len(), max = public_abi::EVENT_MAX_TOPICS; "too many topics");
                     return Err(generated::types::Errno::Inval.into());
                 }
 
-                for c in &topics {
-                    if c.0.len() != 32 {
-                        log_info!(len = c.0.len(); "invalid topic length");
+                let mut real_topics = [[0; 32]; public_abi::EVENT_MAX_TOPICS as usize];
+
+                for (i, gl_call::Bytes(t)) in topics.iter().enumerate() {
+                    if t.len() != 32 {
+                        log_warn!(len = t.len(); "invalid topic length");
 
                         return Err(generated::types::Errno::Inval.into());
                     }
+
+                    real_topics[i].copy_from_slice(t);
                 }
 
-                let supervisor = self.context.data.supervisor.clone();
-                let supervisor = supervisor.lock().await;
+                let blob_data = calldata::encode(&calldata::Value::Map(blob));
 
-                // todo
-                _ = supervisor;
+                let supervisor = self.context.data.supervisor.clone();
+
+                let mut supervisor = supervisor.lock().await;
+                supervisor
+                    .host
+                    .post_event(&real_topics[..topics.len()], &blob_data)
+                    .map_err(generated::types::Error::trap)?;
 
                 return Ok(file_fd_none());
             }
