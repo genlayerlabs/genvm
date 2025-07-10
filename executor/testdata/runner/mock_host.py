@@ -192,6 +192,11 @@ class MockHost(IHost):
 	async def get_balance(self, account: bytes) -> int:
 		return self.balances.get(Address(account), 0)
 
+	async def post_event(self, topics: list[bytes], blob: bytes) -> None:
+		if self.messages_file is None:
+			self.messages_file = open(self.messages_path, 'wt')
+		self.messages_file.write(f'post_event:\n\t{topics}\n\t{bytes(blob)}\n')
+
 
 if __name__ == '__main__':
 	with pickle.loads(Path(sys.argv[1]).read_bytes()) as host:

@@ -165,6 +165,19 @@ The :term:`host` processes requests in a loop until ``consume_result``:
          else:
            write_byte json/errors/ok
 
+        json/methods/post_event:
+          read_byte topics_len
+          topics := []
+          for i in range(topics_len):
+            topic := read_bytes(32) # 32 bytes each
+            topics.append(topic)
+          blob := read_slice
+          err := host_post_event(topics, blob)
+          if err != json/errors/ok:
+            write_byte err
+          else:
+            write_byte json/errors/ok
+
        json/methods/get_balance:
          address := read_bytes(ACCOUNT_ADDR_SIZE)
          balance, err := host_get_balance(address)

@@ -525,4 +525,27 @@ impl Host {
         sock.read_exact(&mut buf)?;
         Ok(u64::from_le_bytes(buf))
     }
+
+    pub fn post_event(&mut self, topics: &[[u8; 32]], blob: &[u8]) -> Result<()> {
+        log_trace!("post_event");
+
+        let Ok(mut sock) = (*self.sock).lock() else {
+            anyhow::bail!("can't take lock")
+        };
+        let sock: &mut dyn Sock = &mut *sock;
+        sock.write_all(&[host_fns::Methods::PostEvent as u8])?;
+        sock.write_all(&[topics.len() as u8])?;
+
+        for topic in topics {
+            sock.write_all(topic.as_ref())?;
+        }
+
+        write_slice(sock, blob)?;
+
+        sock.flush()?;
+
+        handle_host_error(sock)?;
+
+        Ok(())
+    }
 }
