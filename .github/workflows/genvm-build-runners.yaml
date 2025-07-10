@@ -30,7 +30,7 @@ jobs:
         id: gen_url
         run: |
           git ls-files runners/ | grep -vP '(^runners/genlayer-py-std/tests/)|(/\.gitignore$)|(\.md$)' | sort | xargs sha256sum > /tmp/sha
-          git submodule | grep -P '^runners/' >> /tmp/sha
+          git submodule | grep -P 'runners/' >> /tmp/sha
           cat /tmp/sha
           SHA="$(cat /tmp/sha | sha256sum | sed 's/\s*-\s*$//')"
           DIR_NAME="genvm_runners_${SHA}"
@@ -59,6 +59,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
+          submodules: true
       - name: Get source
         uses: ./.github/actions/get-src
       - name: Restore and cache Nix store
