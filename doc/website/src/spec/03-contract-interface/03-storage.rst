@@ -47,6 +47,10 @@ Root Slot Management
 Default Derivation Algorithm
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+.. note::
+
+   This is a proposed default algorithm, but using it is not mandatory.
+
 Consider following structure:
 
 .. code-block:: python

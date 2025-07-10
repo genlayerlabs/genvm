@@ -1,7 +1,7 @@
 GenVM Specification
 ===================
 
-This specification describes GenLayer's virtual machine, that runs :term:`Intelligent Contract`\s.
+This specification describes abstract GenLayer's virtual machine, that runs :term:`Intelligent Contract`\s.
 
 The specification has been split into multiple sections for better organization and maintainability.
 

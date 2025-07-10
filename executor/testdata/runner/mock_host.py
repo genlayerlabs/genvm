@@ -145,25 +145,21 @@ class MockHost(IHost):
 	def has_result(self) -> bool:
 		return self._has_result
 
-	async def get_leader_nondet_result(
-		self, call_no: int, /
-	) -> tuple[ResultCode, collections.abc.Buffer] | Errors:
+	async def get_leader_nondet_result(self, call_no: int, /) -> collections.abc.Buffer:
 		if self.leader_nondet is None:
-			return Errors.I_AM_LEADER
+			raise HostException(Errors.I_AM_LEADER)
 		if call_no >= len(self.leader_nondet):
-			return Errors.ABSENT
+			raise HostException(Errors.ABSENT)
 		res = self.leader_nondet[call_no]
 		if res['kind'] == 'return':
-			return (ResultCode.RETURN, _calldata.encode(res['value']))
+			return bytes([ResultCode.RETURN]) + _calldata.encode(res['value'])
 		if res['kind'] == 'rollback':
-			return (ResultCode.USER_ERROR, res['value'].encode('utf-8'))
+			return bytes([ResultCode.USER_ERROR]) + res['value'].encode('utf-8')
 		if res['kind'] == 'contract_error':
-			return (ResultCode.VM_ERROR, res['value'].encode('utf-8'))
+			return bytes([ResultCode.VM_ERROR]) + res['value'].encode('utf-8')
 		assert False
 
-	async def post_nondet_result(
-		self, call_no: int, type: ResultCode, data: collections.abc.Buffer
-	):
+	async def post_nondet_result(self, call_no: int, data: collections.abc.Buffer):
 		pass
 
 	async def post_message(

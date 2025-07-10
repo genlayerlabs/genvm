@@ -409,7 +409,7 @@ mod tests {
         common::tests::setup();
 
         let mut req = crate::scripting::ctx::req::Request {
-            url: url::Url::parse("http://test-server.genlayer.com/body/echo-signed").unwrap(),
+            url: url::Url::parse("https://test-server.genlayer.com/body/echo-signed").unwrap(),
             method: web_iface::RequestMethod::POST,
             headers: BTreeMap::new(),
             body: Some(b"test body".to_vec()),

@@ -1,10 +1,10 @@
-:term:`Modules <Module>`
-========================
+:term:`Module`\s
+================
 
 Overview
 --------
 
-:term:`Modules <Module>` provide GenVM with non-deterministic capabilities that extend
+:term:`Module`\s provide GenVM with non-deterministic capabilities that extend
 beyond traditional blockchain operations. These modules enable
 intelligent contracts to interact with AI services, access web content,
 and process real-world data while maintaining consensus through
@@ -16,7 +16,7 @@ Module Architecture
 Design Principles
 ~~~~~~~~~~~~~~~~~
 
--  **Isolation**: :term:`Modules <Module>` run in separate processes to prevent
+-  **Isolation**: :term:`Module`\s run in separate processes to prevent
    contamination of deterministic execution
 -  **Extensibility**: Lua scripting support
 -  **Security**: Controlled access
