@@ -29,7 +29,10 @@ jobs:
       - name: Generate upload url
         id: gen_url
         run: |
-          SHA="$(git ls-files runners/ | grep -vP '(^runners/genlayer-py-std/tests/)|(/\.gitignore$)|(\.md$)' | sort | xargs sha256sum | sha256sum | sed 's/\s*-\s*$//')"
+          git ls-files runners/ | grep -vP '(^runners/genlayer-py-std/tests/)|(/\.gitignore$)|(\.md$)' | sort | xargs sha256sum > /tmp/sha
+          git submodule | grep -P '^runners/' >> /tmp/sha
+          cat /tmp/sha
+          SHA="$(cat /tmp/sha | sha256sum | sed 's/\s*-\s*$//')"
           DIR_NAME="genvm_runners_${SHA}"
           echo "dirname=$DIR_NAME" >> $GITHUB_OUTPUT
           BASE_NAME="runners.zip"
