@@ -3,8 +3,8 @@ License text copyright (c) 2017 MariaDB Corporation Ab, All Rights Reserved. "Bu
 
 
 Parameters
-Licensor: YeagerAI Corp.
-Licensed Work: GenLayer GenVM, Copyright © 2024 YeagerAI Corp.
+Licensor: GenLayer Labs Corp.
+Licensed Work: GenLayer GenVM, Copyright © 2024 GenLayer Labs Corp.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the “Software”), to deal
@@ -12,7 +12,7 @@ in the Software subject to the terms listed below.
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
-Change Date: 2025-04-18 or if specified, the date in the 'change-date' record on genlayer.com/license
+Change Date: Four years from the date the Licensed Work is published
 Change License: Apache License, Version 2.0
 Terms
 
@@ -63,4 +63,4 @@ Licensor or its affiliates (provided that you may use a trademark or logo of
 Licensor as expressly required by this License).
 
 For additional terms, questions, or licensing requests, please contact
-contact@yeager.ai
+contact@genlayerlabs.com
