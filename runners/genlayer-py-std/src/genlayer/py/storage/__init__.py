@@ -55,8 +55,7 @@ def inmem_allocate[T](t: typing.Type[T], *init_args, **init_kwargs) -> T:
 def copy_to_memory[T](val: T) -> T:
 	# we know that val is a storage type
 	td = getattr(val, '__type_desc__', None)
-	if td is None:
-		td = _known_descs[val]  # type: ignore
+	assert td is not None
 
 	man = InmemManager()
 	slot = man.get_store_slot(ROOT_SLOT_ID)

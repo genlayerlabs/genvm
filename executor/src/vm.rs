@@ -125,6 +125,26 @@ impl std::fmt::Debug for RunOk {
     }
 }
 
+fn detect_version_from_wasm(code: &[u8]) -> anyhow::Result<String> {
+    let parser = wasmparser::Parser::new(0);
+
+    for payload in parser.parse_all(code) {
+        match payload? {
+            wasmparser::Payload::CustomSection(section) if section.name() == "genvm.version" => {
+                let version = section.data().to_vec();
+                if let Ok(version_str) = str::from_utf8(&version) {
+                    return Ok(version_str.to_string());
+                } else {
+                    return Err(anyhow::anyhow!("Invalid UTF-8 in version section"));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Err(anyhow::anyhow!("version section not found"))
+}
+
 #[derive(Clone)]
 pub struct WasmContext {
     genlayer_ctx: Arc<Mutex<wasi::Context>>,
@@ -890,9 +910,16 @@ impl Supervisor {
         }
 
         if wasmparser::Parser::is_core_wasm(code.as_ref()) {
+            let version = match detect_version_from_wasm(code.as_ref()) {
+                Ok(v) => v,
+                Err(e) => {
+                    log_warn!(default = public_abi::ABSENT_VERSION, error = e; "could not detect version from wasm");
+                    public_abi::ABSENT_VERSION.to_string()
+                }
+            };
             return Ok(Archive::from_file_and_runner(
                 code,
-                SharedBytes::from(b"v0.0.1".as_ref()),
+                SharedBytes::from(version.as_bytes()),
                 SharedBytes::from(b"{ \"StartWasm\": \"file\" }".as_ref()),
             ));
         }

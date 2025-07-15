@@ -76,3 +76,78 @@ Passing invalid request to ``gl_call`` results in ``error_inval``.
 Passing data that turned out to be compatible with future version
 is filtered out by version limitation. And will result in ``error_inval``
 if method wasn't available at given version
+
+Function Descriptions
+---------------------
+
+``gl_call``
+~~~~~~~~~~~
+
+``storage_read``
+~~~~~~~~~~~~~~~~
+
+Reads data from contract storage at the specified slot and index.
+
+**Parameters:**
+- ``slot``: Storage slot identifier (32 bytes)
+- ``index``: Byte offset within the slot (u32)
+- ``buf``: Buffer to read data into
+- ``buf_len``: Length of the buffer (u32)
+
+**Returns:** Error code (0 for success)
+
+**Requirements:**
+- Contract must be in deterministic mode
+- Contract must have read storage permission
+- Index + buf_len must not overflow
+
+``storage_write``
+~~~~~~~~~~~~~~~~~
+
+Writes data to contract storage at the specified slot and index.
+
+**Parameters:**
+- ``slot``: Storage slot identifier (32 bytes)
+- ``index``: Byte offset within the slot (u32)
+- ``buf``: Buffer containing data to write
+- ``buf_len``: Length of the data to write (u32)
+
+**Returns:** Error code (0 for success)
+
+**Requirements:**
+- Contract must be in deterministic mode
+- Contract must have write storage permission
+- Index + buf_len must not overflow
+- Storage slot must not be locked, unless the sender is in ``upgraders``
+
+``get_balance``
+~~~~~~~~~~~~~~~
+
+Queries the balance of a specified contract address.
+
+**Parameters:**
+- ``address``: Contract address (20 bytes)
+- ``result``: Buffer to store the balance result (32 bytes, little-endian)
+
+**Returns:** Error code (0 for success)
+
+**Behavior:**
+- Returns the current balance of the specified address
+- Balance is returned as a 32-byte little-endian encoded value
+
+``get_self_balance``
+~~~~~~~~~~~~~~~~~~~~
+
+Gets the current contract's balance, adjusted for the current transaction context.
+
+**Parameters:**
+- ``result``: Buffer to store the balance result (32 bytes, little-endian)
+
+**Returns:** Error code (0 for success)
+
+**Requirements:**
+- Contract must be in deterministic mode
+
+**Behavior:**
+- Returns: balance_before_transaction + message.value - value_consumed_by_current_tx
+- Balance is returned as a 32-byte little-endian encoded value

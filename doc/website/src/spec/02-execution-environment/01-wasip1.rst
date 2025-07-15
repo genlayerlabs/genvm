@@ -87,3 +87,77 @@ WASI Specification Compliance
    -  Compatibility with existing WASI libraries
    -  Tool chain integration and support
    -  Community standard compliance
+
+.. _Fd Allocation and Deallocation:
+
+:term:`FD` Allocation and Deallocation
+--------------------------------------
+
+.. code-block::
+
+   allocate() → FD:
+      if free_pool.is_empty():
+         next_id += 1
+         allocated.insert(next_id)
+         return next_id
+      else:
+         fd = free_pool.pop()
+         allocated.insert(fd)
+         return fd
+
+   deallocate(fd: FD):
+      require: fd ∈ allocated
+      allocated.remove(fd)
+      free_pool.push(fd)
+
+Invariants:
+
+- allocated ∩ free_pool = ∅ (no descriptor in both sets)
+- next_id ≥ max(allocated ∪ free_pool) (counter never decreases)
+- All returned descriptors are unique until deallocated
+
+Functions specification
+-----------------------
+
+Always Erroring Operations
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Fail with ``Acces`` error code:
+
+- ``sock_accept``
+- ``sock_recv``
+- ``sock_send``
+- ``sock_shutdown``
+
+Fail with ``Rofs`` error code:
+
+- ``fd_allocate``
+- ``fd_fdstat_set_flags``
+- ``fd_fdstat_set_rights``
+- ``fd_filestat_set_size``
+- ``fd_filestat_set_times``
+- ``path_create_directory``
+- ``path_filestat_set_times``
+- ``path_link``
+- ``path_remove_directory``
+- ``path_symlink``
+- ``path_unlink_file``
+
+Fail with ``Badf`` error code:
+
+- ``path_readlink``
+
+Fail with ``Notsup`` error code:
+
+- ``poll_oneoff``
+- ``proc_raise``
+- ``sched_yield``
+
+
+``random_get``
+~~~~~~~~~~~~~~
+
+Deterministic mode: mt19937 that is initialized with "GenLayer" as ascii bytes
+
+Non-deterministic mode: cryptographically secure random number generator,
+with optional fallback to pseudo-random numbers, if secure source is exhausted or unavailable.
