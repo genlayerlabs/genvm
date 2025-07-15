@@ -1,6 +1,6 @@
 local simple = import 'templates/simple.jsonnet';
 [
-    simple.run('${jsonnetDir}/persists.py') {
+    simple.run('${jsonnetDir}/${fileBaseName}.py') {
         "calldata": |||
             {
                 "method": "first",
@@ -8,7 +8,7 @@ local simple = import 'templates/simple.jsonnet';
             }
         |||
     },
-    simple.run('${jsonnetDir}/persists.py') {
+    simple.run('${jsonnetDir}/${fileBaseName}.py') {
         "calldata": |||
             {
                 "method": "second",

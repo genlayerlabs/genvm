@@ -1,5 +1,5 @@
 local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/simple.py') {
+simple.run('${jsonnetDir}/${fileBaseName}.py') {
     "calldata": |||
         {
             "method": "main",

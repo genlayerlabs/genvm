@@ -96,7 +96,10 @@ def run(jsonnet_rel_path):
 	if not isinstance(jsonnet_conf, list):
 		jsonnet_conf = [jsonnet_conf]
 
-	jsonnet_conf = unfold_conf(jsonnet_conf, {'jsonnetDir': str(jsonnet_path.parent)})
+	jsonnet_conf = unfold_conf(
+		jsonnet_conf,
+		{'jsonnetDir': str(jsonnet_path.parent), 'fileBaseName': jsonnet_path.stem},
+	)
 
 	seq_tmp_dir = root_tmp_dir.joinpath(jsonnet_rel_path).with_suffix('')
 

@@ -1,2 +1,2 @@
 local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/re.py')
+simple.run('${jsonnetDir}/${fileBaseName}.py')

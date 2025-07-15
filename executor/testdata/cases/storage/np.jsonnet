@@ -1,2 +1,2 @@
 local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/np.py')
+simple.run('${jsonnetDir}/${fileBaseName}.py')
