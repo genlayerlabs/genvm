@@ -151,3 +151,12 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+
+  deploy-docs:
+    needs:
+      - release-publish
+    uses: ./.github/workflows/deploy-docs.yml
+    with:
+      version: ${{ needs.gen-tag.outputs.tag }}
+    secrets:
+      DEPLOY_TOKEN: ${{ secrets.SDK_GENLAYER_COM_RW }}
