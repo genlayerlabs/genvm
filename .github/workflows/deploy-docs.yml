@@ -37,13 +37,10 @@ jobs:
           lfs: true
           ref: ${{ inputs.revision || github.ref }}
 
-      - uses: Gr1N/setup-poetry@v9
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: cachix/install-nix-action@v30
         with:
-          python-version: '3.12'
-          cache: poetry
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          install_url: https://releases.nixos.org/nix/nix-2.24.11/install
 
       - name: Get source
         uses: ./.github/actions/get-src
@@ -51,16 +48,15 @@ jobs:
           load_submodules: "true"
           third_party: "none"
 
-      - name: Install dependencies
+      - name: Build
         run: |
-          python3.12 -m pip install poetry && \
-            pushd doc/website/ && \
-            poetry install --no-root && \
-            popd
+          nix develop ./build-scripts/devenv#docs
 
-      - name: Configure and build documentation
-        run: |
-          ./tools/ya-build/ya-build config
+          pushd doc/website/ && \
+          poetry install --no-root && \
+          popd
+
+          ya-build config
           ninja -v -C build genvm/docs
 
       - name: Checkout target repository
@@ -100,23 +96,6 @@ jobs:
             echo "$existing_versions" | jq --argjson newEntry "$new_entry" '
               map(select(.version != $newEntry.version)) + [$newEntry] | sort_by(.version == "main" | not)
             ' > _site/versions.json
-          fi
-
-          # Create/update root redirect to main if this is main version
-          if [ "${{ inputs.version }}" = "main" ]; then
-            cat > _site/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <meta charset="utf-8">
-              <meta http-equiv="refresh" content="0; url=./main/">
-              <link rel="canonical" href="./main/">
-          </head>
-          <body>
-              <p>Redirecting to <a href="./main/">latest documentation</a>...</p>
-          </body>
-          </html>
-          EOF
           fi
 
       - name: Commit and push changes

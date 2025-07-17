@@ -15,7 +15,7 @@ Interface Design
 
 Throughput-heavy operations are exposed as regular wasm functions.
 Others functions are hidden behind ``gl_call`` function,
-which accepts calldata-encoded message and returns an error code or :term:`fd`.
+which accepts :ref:`Calldata Encoded <gvm-def-calldata-encoding>` message and returns an error code.
 
 Interface Definition
 --------------------
@@ -63,7 +63,7 @@ WebAssembly Integration
 
 -  **Data Serialization**:
 
-   -  Custom calldata format for complex data structures
+   -  :ref:`gvm-def-calldata-encoding` for complex data structures
    -  Efficient binary encoding for blockchain primitives
    -  Cross-language type compatibility
    -  Deterministic serialization for consensus

@@ -1,9 +1,6 @@
 Package genlayer
 ================
 
-.. note::
-    `Single text file docs for AI <../_static/full4ai.txt>`_
-
 #########
 Top level
 #########

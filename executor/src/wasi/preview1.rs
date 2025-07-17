@@ -366,13 +366,13 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         _memory: &mut GuestMemory<'_>,
         id: generated::types::Clockid,
     ) -> Result<generated::types::Timestamp, generated::types::Error> {
-        panic!("todo")
+        Ok(1)
     }
 
     fn clock_time_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
-        id: generated::types::Clockid,
+        _id: generated::types::Clockid,
         _precision: generated::types::Timestamp,
     ) -> Result<generated::types::Timestamp, generated::types::Error> {
         Ok(self.context.unix_timestamp)

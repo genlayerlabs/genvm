@@ -62,13 +62,6 @@ jobs:
           submodules: true
       - name: Get source
         uses: ./.github/actions/get-src
-      - name: Restore and cache Nix store
-        uses: nix-community/cache-nix-action@v5
-        with:
-          primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-
-          gc-max-store-size-linux: 1073741824
-          purge: false
       - name: Configure
         run: |
           source env.sh && \

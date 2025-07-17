@@ -27,7 +27,7 @@ Communication Protocol
 -  **WebSocket Interface**:
 
    -  Asynchronous communication between GenVM and modules
-   -  Message serialization using calldata format
+   -  Message serialization using :ref:`gvm-def-calldata-encoding`
    -  Request-response pattern with timeout handling
    -  Connection lifecycle management and reconnection
 

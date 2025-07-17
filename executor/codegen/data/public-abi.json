@@ -36,7 +36,8 @@
     "repr": "u32",
     "values": {
       "table_entry": 64,
-      "file_mapping": 256
+      "file_mapping": 256,
+      "fd_allocation": 64
     }
   },
   {
@@ -54,6 +55,7 @@
     "repr": "str",
     "values": {
       "timeout": "timeout",
+      "exit_code": "exit_code",
       "validator_disagrees": "validator_disagrees",
       "version_too_big": "version_too_big",
       "oom": "OOM",

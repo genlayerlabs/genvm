@@ -399,31 +399,28 @@ impl Engines {
     pub fn create(config_base: impl FnOnce(&mut wasmtime::Config) -> Result<()>) -> Result<Self> {
         let mut base_conf = wasmtime::Config::default();
 
-        base_conf.debug_info(true);
-        base_conf.async_support(true);
-        //base_conf.cranelift_opt_level(wasmtime::OptLevel::Speed);
-        base_conf.wasm_tail_call(true);
-        base_conf.wasm_bulk_memory(true);
-        base_conf.wasm_relaxed_simd(false);
-        base_conf.wasm_simd(true);
-        base_conf.wasm_relaxed_simd(false);
+        base_conf
+            .debug_info(true)
+            .wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable)
+            .async_support(true)
+            .consume_fuel(false)
+            .cranelift_opt_level(wasmtime::OptLevel::None);
+
+        base_conf
+            .wasm_tail_call(true)
+            .wasm_bulk_memory(true)
+            .wasm_simd(false)
+            .relaxed_simd_deterministic(true)
+            .wasm_relaxed_simd(false);
 
         base_conf
             .wasm_feature(WasmFeatures::BULK_MEMORY, true)
-            .wasm_feature(WasmFeatures::REFERENCE_TYPES, false)
             .wasm_feature(WasmFeatures::SIGN_EXTENSION, true)
             .wasm_feature(WasmFeatures::MUTABLE_GLOBAL, true)
+            .wasm_feature(WasmFeatures::MULTI_VALUE, true)
             .wasm_feature(WasmFeatures::SATURATING_FLOAT_TO_INT, false)
-            .wasm_feature(WasmFeatures::MULTI_VALUE, true);
+            .wasm_feature(WasmFeatures::REFERENCE_TYPES, false);
 
-        base_conf.consume_fuel(false);
-        //base_conf.wasm_threads(false);
-        //base_conf.wasm_reference_types(false);
-        base_conf.wasm_simd(false);
-        base_conf.relaxed_simd_deterministic(false);
-        base_conf.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable);
-
-        base_conf.cranelift_opt_level(wasmtime::OptLevel::None);
         config_base(&mut base_conf)?;
 
         let mut det_conf = base_conf.clone();

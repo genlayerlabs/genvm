@@ -55,6 +55,22 @@
 							export LD_LIBRARY_PATH="${toString pkgs.xz.out}/lib:${toString pkgs.zlib.out}/lib:${toString pkgs.stdenv.cc.cc.lib}/lib:${toString pkgs.glibc}/lib:$LD_LIBRARY_PATH"
 						'';
 					};
+
+					devShells.docs = pkgs.mkShell {
+						packages = with pkgs; [
+							python312
+							poetry
+
+							ninja
+							ruby
+
+							mermaid-cli
+						];
+
+						shellHook = ''
+							export PATH="$(pwd)/tools/ya-build:$(pwd)/tools/git-third-party:$PATH"
+						'';
+					};
 				}
 			);
 }

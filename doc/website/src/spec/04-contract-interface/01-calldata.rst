@@ -1,42 +1,45 @@
-Calldata format
-===============
+.. _gvm-def-calldata-encoding:
 
-Calldata is a format that is used within GenVM to exchange data between contracts and VMs. It is designed with following in mind:
-- be safe to load
-- be dynamically typed and json-like
-- be binary and compact
-- support blockchain specific types
+Calldata Encoding
+=================
+
+Calldata is a format used within GenVM to exchange data between
+contracts and VMs. It is designed to be safe to load, dynamically typed
+and JSON-like, binary and compact, and supports blockchain specific
+types.
 
 Types
 -----
-*Calldata* is one of:
 
-#. arbitrary big integer
-#. raw bytes
-#. utf8 string
-#. array of *Calldata*
-#. mapping from strings to *Calldata*
-#. Address (20 bytes)
+Calldata is one of:
+
+1. Arbitrary big integer
+2. Raw bytes
+3. UTF-8 string
+4. Array of Calldata
+5. Mapping from strings to Calldata
+6. Address (20 bytes)
 
 Format
 ------
 
-"uleb128"
-^^^^^^^^^
-"unsigned little endian base 128" is a variable-length code compression used to store arbitrarily large integers
+ULEB128 Encoding
+~~~~~~~~~~~~~~~~
 
-Encoding: split number into groups of 7 bits, little-endian, zero extend the biggest one. For each except the biggest one (rightmost), set 8th bit to one and concatenate
+"Unsigned little endian base 128" is a variable-length code compression
+used to store arbitrarily large integers.
 
-Examples:
+**Encoding**: Split number into groups of 7 bits, little-endian, zero
+extend the biggest one. For each except the biggest one (rightmost), set
+8th bit to one and concatenate.
 
-* 0 ↔ 0x00
-* 1 ↔ 0x01
-* 128 ↔ 0x80 0x01
+**Examples**: - 0 ↔ 0x00 - 1 ↔ 0x01 - 128 ↔ 0x80 0x01
 
-Calldata
-^^^^^^^^
+Calldata Encoding
+~~~~~~~~~~~~~~~~~
 
-Each calldata value starts with uleb128 number, which is treated as follows:
+Each calldata value starts with a ULEB128 number, which is treated as
+follows:
 
 +------------------------+------------------+-----------------------------+-----------------------------------------------+
 |least significant 3 bits| interpreted as   |number shifted by this 3 bits|followed by                                    |
@@ -71,4 +74,6 @@ Each calldata value starts with uleb128 number, which is treated as follows:
 |                        |future use        |                             |                                               |
 +------------------------+------------------+-----------------------------+-----------------------------------------------+
 
-``FastString`` is encoded as uleb128 length followed by utf8 encoded bytes (difference is that it does not have a type)
+
+**FastString** is encoded as ULEB128 length followed by UTF-8 encoded
+bytes (difference is that it does not have a type).

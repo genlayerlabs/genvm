@@ -88,39 +88,8 @@ WASI Specification Compliance
    -  Tool chain integration and support
    -  Community standard compliance
 
-.. _Fd Allocation and Deallocation:
-
-:term:`FD` Allocation and Deallocation
---------------------------------------
-
-.. code-block::
-
-   allocate() → FD:
-      if free_pool.is_empty():
-         next_id += 1
-         allocated.insert(next_id)
-         return next_id
-      else:
-         fd = free_pool.pop()
-         allocated.insert(fd)
-         return fd
-
-   deallocate(fd: FD):
-      require: fd ∈ allocated
-      allocated.remove(fd)
-      free_pool.push(fd)
-
-Invariants:
-
-- allocated ∩ free_pool = ∅ (no descriptor in both sets)
-- next_id ≥ max(allocated ∪ free_pool) (counter never decreases)
-- All returned descriptors are unique until deallocated
-
-Functions specification
------------------------
-
 Always Erroring Operations
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+--------------------------
 
 Fail with ``Acces`` error code:
 
@@ -152,12 +121,154 @@ Fail with ``Notsup`` error code:
 - ``poll_oneoff``
 - ``proc_raise``
 - ``sched_yield``
+- ``fd_pwrite``
 
 
-``random_get``
-~~~~~~~~~~~~~~
+Functions
+---------
 
-Deterministic mode: mt19937 that is initialized with "GenLayer" as ascii bytes
+``random_get`` Function
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Deterministic mode: mt19937 that is initialized with ``GenLayer`` as ascii bytes
 
 Non-deterministic mode: cryptographically secure random number generator,
 with optional fallback to pseudo-random numbers, if secure source is exhausted or unavailable.
+
+``proc_exit`` Function
+~~~~~~~~~~~~~~~~~~~~~~
+
+#. ``proc_exit(0)`` is equivalent to :ref:`gvm-def-return` of ``null`` value.
+#. ``proc_exit(x)`` where :math:`x \neq 0` results in :ref:`gvm-def-vm-error`
+
+``path_open`` Function
+~~~~~~~~~~~~~~~~~~~~~~
+
+``path_filestat_get`` Function
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``fd_readdir`` Function
+~~~~~~~~~~~~~~~~~~~~~~~
+
+``fd_tell`` Function
+~~~~~~~~~~~~~~~~~~~~
+
+``fd_datasync`` Function
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Does nothing and always returns success.
+
+``fd_sync`` Function
+~~~~~~~~~~~~~~~~~~~~
+
+Does nothing and always returns success.
+
+``fd_seek`` Function
+~~~~~~~~~~~~~~~~~~~~
+
+``fd_renumber`` Function
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+``fd_prestat_dir_name`` Function
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``fd_prestat_get`` Function
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#. If file descriptor does not exist, returns ``Badf`` error code
+#. Returns ``Notsup`` otherwise
+
+``fd_write`` Function
+~~~~~~~~~~~~~~~~~~~~~
+
+``fd_pread`` Function
+~~~~~~~~~~~~~~~~~~~~~
+
+``fd_read`` Function
+~~~~~~~~~~~~~~~~~~~~
+
+``fd_filestat_get`` Function
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``fd_fdstat_get`` Function
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``fd_close`` Function
+~~~~~~~~~~~~~~~~~~~~~
+
+``fd_advise`` Function
+~~~~~~~~~~~~~~~~~~~~~~
+
+Does nothing and always returns success.
+
+``clock_time_get`` Function
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Returns transaction unix timestamp in **both** modes
+
+``clock_res_get`` Function
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Always returns ``1``
+
+``environ_sizes_get`` Function
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``environ_get`` Function
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+``args_sizes_get`` Function
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``args_get`` Function
+~~~~~~~~~~~~~~~~~~~~~
+
+Virtual File System
+-------------------
+
+Initial State
+~~~~~~~~~~~~~
+
+- :term:`FD` 0 is a file that contains :ref:`Calldata Encoded <gvm-def-calldata-encoding>` extended message
+- :term:`FD` 1 is ``stdout``
+- :term:`FD` 2 is ``stderr``
+- :term:`FD` 3 is directory ``/`` (file system root)
+
+.. _Fd Allocation and Deallocation:
+
+:ref:`gvm-def-det-mode` :term:`FD` Allocation and Deallocation
+--------------------------------------------------------------
+
+Pseudocode
+~~~~~~~~~~
+
+.. code-block::
+
+   allocate() → FD:
+      if free_pool.is_empty():
+         consume_ram()
+         next_id += 1
+         allocated.insert(next_id)
+         return next_id
+      else:
+         fd = free_pool.pop()
+         allocated.insert(fd)
+         return fd
+
+   deallocate(fd: FD):
+      require: fd ∈ allocated
+      allocated.remove(fd)
+      free_pool.push(fd)
+
+Allocating a new :term:`FD` implies :ref:`gvm-def-ram-consumption` of :ref:`_gvm-def-enum-value-memory-limiter-consts-fd-allocation`\.
+
+Invariants
+~~~~~~~~~~
+
+#. :math:`\texttt{allocated}\cap\texttt{free_pool} = \emptyset`
+#. :math:`\texttt{next_id} \ge \operatorname{max}(\texttt{allocated}\cup\texttt{free_pool})`
+#. All returned descriptors are unique until deallocated
+
+.. warning::
+
+   :ref:`gvm-def-non-det-mode` is not obligated to follow this pattern
