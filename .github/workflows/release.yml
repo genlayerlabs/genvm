@@ -155,6 +155,7 @@ jobs:
   deploy-docs:
     needs:
       - release-publish
+      - gen-tag
     uses: ./.github/workflows/deploy-docs.yml
     with:
       version: ${{ needs.gen-tag.outputs.tag }}

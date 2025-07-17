@@ -14,7 +14,7 @@ RAM Consumption
 RAM is consumed by subtracting specified amount of memory from limit of current :ref:`gvm-def-vm-mode` of given :term:`sub-VM`\.
 
 When consuming RAM would lead to remaining RAM to be negative,
-the :term:`Sub-VM` exists with :ref:`gvm-def-vm-error` with :ref:`gvm-def-enum-value-vm-error-oom` message.
+the :term:`Sub-VM` exits with :ref:`gvm-def-vm-error` with :ref:`gvm-def-enum-value-vm-error-oom` message.
 
 RAM Release
 -----------

@@ -76,7 +76,7 @@ The :term:`host` processes requests in a loop until ``consume_result``:
            write_byte err
          else:
            write_byte json/errors/ok
-           write_byte_slice result_data
+           write_byte_slice data
 
        json/methods/post_nondet_result:
          call_no := read_u32_le

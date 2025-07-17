@@ -6,7 +6,7 @@ buf = String.new
 
 src_dir = Pathname.new(src_dir)
 
-src_dir.glob('**/*.txt').each do |file|
+src_dir.glob('**/*.txt').sort.each do |file|
 	name = file.relative_path_from(src_dir).to_s
 	buf << "### #{name}\n\n"
 	buf << file.read

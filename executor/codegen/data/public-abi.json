@@ -37,7 +37,7 @@
     "values": {
       "table_entry": 64,
       "file_mapping": 256,
-      "fd_allocation": 64
+      "fd_allocation": 96
     }
   },
   {
