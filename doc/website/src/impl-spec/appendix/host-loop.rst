@@ -1,5 +1,5 @@
-Appendix: Host Loop Pseudocode
-==============================
+Host Loop Pseudocode
+====================
 
 **Constants**:
 

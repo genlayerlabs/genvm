@@ -19,13 +19,15 @@ target_alias(
 			['rm', '-rf', docs_out_txt],
 			['mkdir', '-p', docs_out_txt],
 
+			[config.tools.python3, root_src.join('runners', 'support', 'match-tags.py'), cur_src.join('src', 'impl-spec', 'appendix', 'runners-versions.json')],
+
 			[*POETRY_RUN, 'sphinx-build', '-b', 'html', cur_src.join('src'), docs_out],
 			[*POETRY_RUN, 'sphinx-build', '-b', 'text', cur_src.join('src'), docs_out_txt],
 			[RbConfig.ruby, cur_src.join('merge-txts.rb'), docs_out_txt.join('api'), docs_out.join('_static', 'ai', 'api.txt')],
 			[RbConfig.ruby, cur_src.join('merge-txts.rb'), docs_out_txt.join('spec'), docs_out.join('_static', 'ai', 'spec.txt')],
 			[RbConfig.ruby, cur_src.join('merge-txts.rb'), docs_out_txt.join('impl-spec'), docs_out.join('_static', 'ai', 'impl-spec.txt')],
 		],
-		cwd: cur_src,
+		cwd: root_src,
 		output_file: cur_build.join('docs.trg'), # always dirty
 		dependencies: [],
 	)

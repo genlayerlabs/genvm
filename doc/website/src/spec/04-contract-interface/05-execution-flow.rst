@@ -24,7 +24,7 @@ contract execution experience.
 #. Checks upgradability-related data from :doc:`04-upgradability`
 #. Creates empty VFS, empty arguments list and empty environment variables map
 #. Inspects contract runner as in :doc:`../02-execution-environment/04-runners`
-#. Processes actions until :ref:`gvm-def-start-wasm`` is encountered
+#. Processes actions until :ref:`gvm-def-start-wasm` is encountered
 
 3. WebAssembly Execution
 ------------------------

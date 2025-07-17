@@ -7,7 +7,7 @@ contracts interact with each other. The ABI provides a standardized way
 to encode method calls, handle parameters, and manage contract schemas
 while supporting both deterministic and non-deterministic operations.
 
-.. gvm-def-contract-call-conv:
+.. _gvm-def-contract-call-conv:
 
 Method Calling Convention
 -------------------------
