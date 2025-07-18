@@ -35,7 +35,7 @@ def extract_tar(base_dir, path, trim_first: true)
 	if path.to_s.end_with?('.xz')
 		require 'rubygems/package'
 		begin
-			Gem::Specification::find_by_name('ruby-xz')
+			Gem::Specification::find_by_name('ruby-xz', '1.0.3')
 		rescue Gem::LoadError
 			require 'rubygems/commands/install_command'
 			cmd = Gem::Commands::InstallCommand.new

@@ -37,10 +37,13 @@ jobs:
           lfs: true
           ref: ${{ inputs.revision || github.ref }}
 
-      - uses: cachix/install-nix-action@v30
+      - uses: Gr1N/setup-poetry@v9
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
-          install_url: https://releases.nixos.org/nix/nix-2.24.11/install
+          python-version: '3.12'
+          cache: poetry
 
       - name: Get source
         uses: ./.github/actions/get-src
@@ -48,15 +51,23 @@ jobs:
           load_submodules: "true"
           third_party: "none"
 
-      - name: Build
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
         run: |
-          nix develop ./build-scripts/devenv#docs --command bash -c '
+          npm install -g @mermaid-js/mermaid-cli@11.6.0 && \
+          python3.12 -m pip install poetry && \
             pushd doc/website/ && \
             poetry install --no-root && \
-            popd && \
-            ruby ./tools/ya-build/ya-build config && \
-            ninja -v -C build genvm/docs
-          '
+            popd
+
+      - name: Build
+        run: |
+          ./tools/ya-build/ya-build config
+          ninja -v -C build genvm/docs
 
       - name: Checkout target repository
         uses: actions/checkout@v4
