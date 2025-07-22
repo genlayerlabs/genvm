@@ -71,8 +71,8 @@ Reads data from contract storage at the specified slot and index.
 Requirements
 ^^^^^^^^^^^^
 
-#. :def:`Sub-VM` must be in deterministic mode
-#. :def:`Sub-VM` must have read storage permission
+#. :term:`Sub-VM` must be in deterministic mode
+#. :term:`Sub-VM` must have read storage permission
 #. index + buf_len must not overflow
 
 ``storage_write``
@@ -83,10 +83,10 @@ Writes data to contract storage at the specified slot and index.
 Requirements
 ^^^^^^^^^^^^
 
-#. :def:`Sub-VM` must be in deterministic mode
-#. :def:`Sub-VM` must have write storage permission
+#. :term:`Sub-VM` must be in deterministic mode
+#. :term:`Sub-VM` must have write storage permission
 #. index + buf_len must not overflow
-#. :def:`Sub-VM` Storage slot must not be locked, unless the sender is in ``upgraders``
+#. :term:`Sub-VM` Storage slot must not be locked, unless the sender is in ``upgraders``
 
 ``get_balance``
 ~~~~~~~~~~~~~~~

@@ -4,6 +4,8 @@ import sys, os
 from pathlib import Path
 import hashlib
 
+sys.path.append(str(Path(__file__).parent.parent.parent.joinpath('py-libs', 'pure-py')))
+
 
 def do_fuzzing(target):
 	real_stdin = os.fdopen(0, 'rb', closefd=False)
@@ -31,6 +33,11 @@ class StopFuzzingException(Exception):
 class FuzzerBuilder:
 	def __init__(self, buf: bytes):
 		self.buf = buf
+
+	def fetch_float(self) -> float:
+		import struct
+
+		return struct.unpack('<f', self.fetch(4))[0]
 
 	def fetch(self, le: int) -> bytes:
 		if len(self.buf) < le:

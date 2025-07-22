@@ -30,5 +30,6 @@ target_alias(
 		cwd: root_src,
 		output_file: cur_build.join('docs.trg'), # always dirty
 		dependencies: [],
+		pool: 'console',
 	)
 )

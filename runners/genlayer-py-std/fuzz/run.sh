@@ -4,6 +4,7 @@ set -ex
 
 UPDATE_CORPUS=false
 SHOW_HELP=false
+FILTER=""
 
 show_help() {
     cat << EOF
@@ -12,6 +13,7 @@ Usage: $0 [OPTIONS]
 OPTIONS:
     --help              Show this help message
     --update-corpus     Update input corpus
+    --filter REGEXP     Only run fuzz tests matching the regular expression
 EOF
 }
 
@@ -24,6 +26,16 @@ while [[ $# -gt 0 ]]; do
         --update-corpus)
             UPDATE_CORPUS=true
             shift
+        ;;
+        --filter)
+            if [[ -n $2 ]]; then
+                FILTER="$2"
+                shift 2
+            else
+                echo "Error: --filter requires a regular expression argument" >&2
+                show_help
+                exit 1
+            fi
         ;;
         *)
             echo "Error: Unknown option $1" >&2
@@ -46,9 +58,15 @@ cd "$SCRIPT_DIR/.."
 for i in $(ls fuzz/src/*.py | sort)
 do
     name="$(basename "$i" ".py")"
+
+    # Skip if filter is set and name doesn't match
+    if [[ -n "$FILTER" ]] && ! [[ "$name" =~ $FILTER ]]; then
+        continue
+    fi
+
     echo "=== $name ==="
     mkdir -p "fuzz/outputs/$name"
-    poetry run py-afl-fuzz -i "fuzz/inputs/$name" -o "fuzz/outputs/$name" -V 30 -- "fuzz/src/$name.py"
+    poetry run -- py-afl-fuzz -i "fuzz/inputs/$name" -o "fuzz/outputs/$name" -V 60 -- "fuzz/src/$name.py"
 
 
     if [[ "$UPDATE_CORPUS" == true ]]
@@ -57,13 +75,13 @@ do
         mkdir -p "fuzz/outputs/opt/$name"
 
         AFL_SKIP_BIN_CHECK=1 PYTHON_AFL_SIGNAL="SIGUSR1" \
-            poetry run afl-cmin.bash \
+            poetry run -- afl-cmin.bash \
             -T all \
             -o "fuzz/outputs/opt/$name" \
             -i "fuzz/outputs/$name" -- "./fuzz/src/$name.py"
 
         rm -rf "fuzz/inputs/$name" || true
         mkdir -p "fuzz/inputs/$name"
-        poetry run ./fuzz/resave.py "fuzz/outputs/opt/$name" "fuzz/inputs/$name"
+        poetry run -- ./fuzz/resave.py "fuzz/outputs/opt/$name" "fuzz/inputs/$name"
     fi
 done

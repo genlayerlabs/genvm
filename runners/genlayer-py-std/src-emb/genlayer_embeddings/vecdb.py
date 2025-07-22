@@ -136,6 +136,15 @@ class VecDB[T: np.number, S: int, V]:
 			dist = cosine_distance_fast(cur_key, v)
 
 			lst.append((dist, i))
+
+		idx_last = 0
+		for i in range(len(lst)):
+			if not np.isfinite(lst[i][0]):
+				continue
+			lst[idx_last] = lst[i]
+			idx_last += 1
+		lst = lst[:idx_last]
+
 		lst.sort(key=lambda x: x[0])
 		return lst
 

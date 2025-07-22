@@ -72,7 +72,7 @@ Arbitrary structure in :ref:`gvm-def-calldata-encoding`
       "module_instances": {
         "<module_name>": {
           "memories": [
-            <bytes: 32_byte_blake3_hash>
+            "<bytes: 32_byte_blake3_hash>"
           ]
         }
       }
