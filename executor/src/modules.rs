@@ -83,7 +83,9 @@ impl Module {
         let mut zelf = self.imp.lock().await;
 
         if zelf.stream.is_none() {
-            log_info!(url = zelf.url, name = self.name; "initializing connection to module");
+            log_debug!(url = zelf.url, name = self.name; "initializing connection to module");
+
+            let creator_tracker = genvm_common::metrics::TimeTracker::new(genvm_common::metrics::Metric::ModuleCall);
 
             let (mut ws_stream, _) = tokio_tungstenite::connect_async(&zelf.url)
                 .await
@@ -98,12 +100,16 @@ impl Module {
                 .send(Message::Binary(calldata::encode(&msg).into()))
                 .await?;
 
+            log_debug!(name = self.name, elapsed:? = creator_tracker.end(); "connection to module initialized");
+
             zelf.stream = Some(ws_stream);
         }
 
         match &mut zelf.stream {
             None => unreachable!(),
             Some(stream) => {
+                let msg_tracker = genvm_common::metrics::TimeTracker::new(genvm_common::metrics::Metric::ModuleCall);
+
                 let val = calldata::to_value(&val)?;
                 let payload = calldata::encode(&val);
                 stream.send(Message::Binary(payload.into())).await?;
@@ -111,7 +117,7 @@ impl Module {
 
                 let response = calldata::decode(&response)?;
 
-                log_info!(name = self.name, question:serde = val, response:? = response; "answer from module");
+                log_info!(name = self.name, question:serde = val, response:? = response, elapsed:? = msg_tracker.end(); "answer from module");
 
                 let res: genvm_modules_interfaces::Result<R> =
                     calldata::from_value(response).with_context(|| "parsing result of module")?;

@@ -184,6 +184,8 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         supervisor.shared_data.modules.web.close().await;
     });
 
+    genvm_common::metrics::log_all();
+
     let _ = std::io::stdout().flush();
     let _ = std::io::stderr().flush();
 

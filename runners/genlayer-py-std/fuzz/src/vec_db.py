@@ -8,7 +8,7 @@ from fuzz_common import do_fuzzing, StopFuzzingException, FuzzerBuilder
 
 import numpy as np
 import typing
-from genlayer_embeddings import VecDB
+from genlayer_embeddings import VecDB, EuclidianDistanceSquared
 from genlayer.py.types import u32
 
 from genlayer.py.storage import inmem_allocate
@@ -47,7 +47,8 @@ def vec_db(buf):
 
 	try:
 		etalon = Etalon()
-		db = inmem_allocate(VecDB[np.float32, typing.Literal[5], u32])
+		db = inmem_allocate(VecDB[np.float32, typing.Literal[5], u32, EuclidianDistanceSquared])
+		db._base = 1.3
 
 		cnt = builder.fetch(1)[0] % 30 + 10
 
@@ -56,33 +57,16 @@ def vec_db(buf):
 			db.insert(key, u32(i))
 			etalon.add(key, u32(i))
 
-		query_arond = gen_vec()
+		query_around = gen_vec()
 
 		k = builder.fetch(1)[0] % 3 + 3
 
-		got = list((x.distance, x.value) for x in db.knn(query_arond, k))
+		got = list((x.distance, x.value) for x in db.knn(query_around, k))
 		got.sort(key=lambda x: x[0])
 
-		dot_products = np.dot(etalon.data, query_arond)
-		norms = np.linalg.norm(etalon.data, axis=1) * np.linalg.norm(query_arond)
-		similarities = dot_products / norms
-		distances = 1 - similarities
-
-		# Filter out non-finite distances
-		finite_mask = np.isfinite(distances)
-		finite_distances = distances[finite_mask]
-		finite_indices = np.where(finite_mask)[0]
-
-		if len(finite_distances) == 0:
-			return  # Skip if no finite distances
-
-		# Get k closest from finite distances only
-		if len(finite_distances) < k:
-			closest_finite_indices = np.arange(len(finite_distances))
-		else:
-			closest_finite_indices = np.argpartition(finite_distances, k)[:k]
-
-		closest_indices = finite_indices[closest_finite_indices]
+		d = EuclidianDistanceSquared()
+		distances = d.batch(etalon.data, query_around)
+		closest_indices = np.argsort(distances)[:k]
 
 		exp = list((distances[i], etalon.vals[i]) for i in closest_indices)
 		exp.sort(key=lambda x: x[0])
@@ -93,7 +77,7 @@ def vec_db(buf):
 
 		if norm > 1e-5:
 			print(f'k: {k}')
-			print(f'query: {query_arond}')
+			print(f'query: {query_around}')
 			print(f'expected: {exp}')
 			print(f'got: {got}')
 

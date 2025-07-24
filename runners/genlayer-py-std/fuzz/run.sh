@@ -66,7 +66,7 @@ do
 
     echo "=== $name ==="
     mkdir -p "fuzz/outputs/$name"
-    poetry run -- py-afl-fuzz -i "fuzz/inputs/$name" -o "fuzz/outputs/$name" -V 60 -- "fuzz/src/$name.py"
+    poetry run -- py-afl-fuzz -i "fuzz/inputs/$name" -o "fuzz/outputs/$name" -V 6000 -- "fuzz/src/$name.py"
 
 
     if [[ "$UPDATE_CORPUS" == true ]]

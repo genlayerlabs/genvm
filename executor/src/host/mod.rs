@@ -102,17 +102,21 @@ impl LockedSlotsSet {
     }
 }
 
+fn lock_sock<'a, 'b>(metric: metrics::Metric, sock: &'a mut std::sync::Mutex<dyn Sock + 'b>) -> Result<metrics::Lock<std::sync::MutexGuard<'a, dyn Sock + 'b>>> {
+    match sock.lock() {
+        Ok(locked_sock) => Ok(metrics::Lock::new(metric, locked_sock)),
+        Err(e) => Err(anyhow::anyhow!("can't take lock: {e}")),
+    }
+}
+
 impl Host {
     pub fn get_calldata(&mut self, calldata: &mut Vec<u8>) -> Result<()> {
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
+        let mut sock = lock_sock(metrics::Metric::HostCall, &mut *self.sock)?;
         sock.write_all(&[host_fns::Methods::GetCalldata as u8])?;
 
-        handle_host_error(sock)?;
+        handle_host_error(&mut **sock)?;
 
-        let len = read_u32(sock)? as usize;
+        let len = read_u32(&mut **sock)? as usize;
         calldata.reserve(len);
         let index = calldata.len();
         unsafe {

@@ -16,7 +16,13 @@
 		flake-utils.lib.eachDefaultSystem
 			(system:
 				let
-					pkgs = nixpkgs.legacyPackages.${system};
+					pkgs = import nixpkgs {
+						inherit system;
+						config.allowUnfreePredicate = pkg:
+							builtins.elem (pkgs.lib.getName pkg) [
+								"vscode"
+							];
+					};
 				in
 				{
 					devShells.default = pkgs.mkShell {
@@ -47,6 +53,14 @@
 
 							mermaid-cli
 							ripgrep
+
+							(vscode.overrideAttrs (oldAttrs: rec {
+								src = (builtins.fetchTarball {
+									url = "https://update.code.visualstudio.com/1.102.2/linux-x64/stable";
+									sha256 = "sha256:1h7g8gng7yqzjp90r835mhjbswykynjsys09d3z2llbwqdqj7nvd";
+								});
+								version = "1.102.2";
+							}))
 						];
 
 						shellHook = ''
