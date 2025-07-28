@@ -35,7 +35,7 @@ contract execution experience.
 4. Contract Entry Point Processing
 ----------------------------------
 
-The contract startup requires specific fields in the :ref:`Calldata Encoded <gvm-def-calldata-encoding>` message:
+The contract startup requires specific fields in the :ref:`Calldata Encoded <gvm-def-calldata-encoding>` extended-message:
 
 - ``entry_kind``: Determines execution context
 
@@ -50,3 +50,30 @@ The contract startup requires specific fields in the :ref:`Calldata Encoded <gvm
 
    -  ``null`` for leader nodes
    -  ``{leaders_result: <calldata>}`` for validator nodes
+
+Extended-Message Format
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: rust
+
+   pub struct ExtendedMessage {
+      pub contract_address: calldata::Address,
+      pub sender_address: calldata::Address,
+      pub origin_address: calldata::Address,
+      /// View methods call chain.
+      /// It is empty for entrypoint (refer to [`contract_address`])
+      pub stack: Vec<calldata::Address>,
+
+      pub chain_id: num_bigint::BigInt,
+      pub value: num_bigint::BigInt,
+      pub is_init: bool,
+      /// Transaction timestamp
+      pub datetime: chrono::DateTime<chrono::Utc>,
+
+      #[serde(serialize_with = "entry_kind_as_int")]
+      pub entry_kind: public_abi::EntryKind,
+      #[serde(with = "serde_bytes")]
+      pub entry_data: Vec<u8>,
+
+      pub entry_stage_data: calldata::Value,
+   }

@@ -209,7 +209,7 @@ generate deterministic fingerprints of memory regions.
      "fingerprint": <structured_fingerprint_data>
    }
 
-**Coverage**: Fingerprinting applies to ``UserError`` and ``VMError`` results but not ``InternalError`` cases.
+**Coverage**: Fingerprinting applies to :ref:`gvm-def-vm-error` and :ref:`gvm-def-user-error` results but not :ref:`gvm-def-internal-error` cases.
 
 **Anti-Cheating Mechanism**: Error fingerprints provide consensus
 participants with proof that actual execution occurred up to the point

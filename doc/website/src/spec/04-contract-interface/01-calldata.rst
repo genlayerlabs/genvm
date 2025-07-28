@@ -33,7 +33,11 @@ used to store arbitrarily large integers.
 extend the biggest one. For each except the biggest one (rightmost), set
 8th bit to one and concatenate.
 
-**Examples**: - 0 ↔ 0x00 - 1 ↔ 0x01 - 128 ↔ 0x80 0x01
+**Examples**:
+
+- 0 ↔ 0x00
+- 1 ↔ 0x01
+- 128 ↔ 0x80 0x01
 
 Calldata Encoding
 ~~~~~~~~~~~~~~~~~

@@ -25,15 +25,18 @@ where
 }
 
 #[derive(serde::Serialize, Debug)]
-pub struct TransformedMessage {
+pub struct ExtendedMessage {
     pub contract_address: calldata::Address,
     pub sender_address: calldata::Address,
     pub origin_address: calldata::Address,
+    /// View methods call chain.
+    /// It is empty for entrypoint (refer to [`contract_address`])
     pub stack: Vec<calldata::Address>,
 
     pub chain_id: num_bigint::BigInt,
     pub value: num_bigint::BigInt,
     pub is_init: bool,
+    /// Transaction timestamp
     pub datetime: chrono::DateTime<chrono::Utc>,
 
     #[serde(serialize_with = "entry_kind_as_int")]
@@ -48,7 +51,7 @@ fn default_entry_stage_data() -> calldata::Value {
     calldata::Value::Null
 }
 
-impl TransformedMessage {
+impl ExtendedMessage {
     pub fn fork_leader(
         &self,
         entry_kind: public_abi::EntryKind,
@@ -63,7 +66,7 @@ impl TransformedMessage {
             )])),
         };
 
-        TransformedMessage {
+        ExtendedMessage {
             contract_address: self.contract_address,
             sender_address: self.sender_address,
             origin_address: self.origin_address,
@@ -85,7 +88,7 @@ impl TransformedMessage {
 
 pub struct SingleVMData {
     pub conf: base::Config,
-    pub message_data: TransformedMessage,
+    pub message_data: ExtendedMessage,
     pub supervisor: Arc<tokio::sync::Mutex<crate::vm::Supervisor>>,
     pub version: genvm_common::version::Version,
     pub should_capture_fp: Arc<std::sync::atomic::AtomicBool>,
@@ -469,7 +472,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         can_send_messages: my_conf.can_send_messages,
                         state_mode: state,
                     },
-                    message_data: TransformedMessage {
+                    message_data: ExtendedMessage {
                         contract_address: address,
                         sender_address: my_data.sender_address,
                         origin_address: my_data.origin_address,

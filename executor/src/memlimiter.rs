@@ -48,6 +48,11 @@ impl Limiter {
         self.consume(delta)
     }
 
+    pub fn get_remaining_memory(&self) -> u32 {
+        self.remaining_memory
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
+
     pub fn consume(&self, delta: u32) -> bool {
         let mut remaining = self
             .remaining_memory

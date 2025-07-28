@@ -20,7 +20,7 @@ use genvm_common::*;
 pub use host::{Host, MessageData, SlotID};
 
 use anyhow::{Context, Result};
-use wasi::genlayer_sdk::TransformedMessage;
+use wasi::genlayer_sdk::ExtendedMessage;
 
 use std::{str::FromStr, sync::Arc};
 use vm::{Modules, RunOk};
@@ -106,7 +106,7 @@ pub async fn run_with_impl(
                 can_spawn_nondet: permissions.contains("n"),
                 state_mode: crate::public_abi::StorageType::Default,
             },
-            message_data: TransformedMessage {
+            message_data: ExtendedMessage {
                 contract_address: calldata::Address::from(entry_message.contract_address.raw()),
                 sender_address: calldata::Address::from(entry_message.sender_address.raw()),
                 origin_address: calldata::Address::from(entry_message.origin_address.raw()),

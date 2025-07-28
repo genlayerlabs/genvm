@@ -178,6 +178,7 @@ macro_rules! __make_capture {
 #[macro_export]
 macro_rules! __do_log {
     ($callsite:tt, $log:tt, $($key:tt $(:$capture:tt)? $(= $value:expr)?),+; $($arg:tt)+) => ({
+        #[allow(unused_variables)]
         let res = $log.__try_log($crate::logger::Record {
             callsite: $callsite,
             args: format_args!($($arg)+),
