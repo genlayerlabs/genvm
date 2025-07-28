@@ -47,10 +47,12 @@ def vec_db(buf):
 
 	try:
 		etalon = Etalon()
-		db = inmem_allocate(VecDB[np.float32, typing.Literal[5], u32, EuclidianDistanceSquared])
+		db = inmem_allocate(
+			VecDB[np.float32, typing.Literal[5], u32, EuclidianDistanceSquared]
+		)
 		db._base = 1.3
 
-		cnt = builder.fetch(1)[0] % 30 + 10
+		cnt = builder.fetch(1)[0] % 80 + 10
 
 		for i in range(cnt):
 			key = gen_vec()

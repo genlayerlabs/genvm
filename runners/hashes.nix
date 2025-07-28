@@ -25,11 +25,11 @@ let
 			};
 
 			genlayer-std = {
-				hash = "sha256-JrYoHiDX6RrWanIdD49YBgLDscd1wfnlCGZ0qBPgulY=";
+				hash = "test";
 			};
 
 			genlayer-embeddings = {
-				hash = "sha256-0ffWSIkGcJu1H4VyyfrRLoIODEvHGYR/J/BnnoCIACY=";
+				hash = "test";
 
 				depends = [
 					models.all-MiniLM-L6-v2

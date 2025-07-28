@@ -11,17 +11,19 @@ import typing
 import numpy as np
 import math
 
+
 class Distance(typing.Protocol):
-	def __call__(self, l, r) -> typing.Any:
-		...
+	def __call__(self, l, r) -> typing.Any: ...
+
 
 @allow_storage
 class EuclidianDistanceSquared(Distance):
 	def __call__(self, l, r):
-		return ((l - r) ** 2).sum()
+		return np.sum((l - r) ** 2)
 
 	def batch(self, l, r):
 		return ((l - r) ** 2).sum(axis=1)
+
 
 Id = typing.NewType('Id', int)
 _Id = Id
@@ -241,7 +243,9 @@ class VecDB[T: np.number, S: int, V, D: Distance]:
 		best_distance = float('inf')
 
 		for candidate_idx in parent_candidates:
-			dist = self._distance(self._nodes[candidate_idx].element_id, self._nodes[new_node_idx].element_id)
+			dist = self._distance(
+				self._nodes[candidate_idx].element_id, self._nodes[new_node_idx].element_id
+			)
 			if dist < best_distance:
 				best_distance = dist
 				best_parent_idx = candidate_idx
@@ -285,7 +289,7 @@ class VecDB[T: np.number, S: int, V, D: Distance]:
 			parent = self._nodes[parent_idx]
 			for i in range(len(parent.children)):
 				if parent.children[i] == node_idx:
-					parent.children[i:i+1] = []
+					parent.children[i : i + 1] = []
 					break
 
 			# Reattach children to parent

@@ -28,7 +28,7 @@ use vm::{Modules, RunOk};
 #[derive(Debug, Clone)]
 pub struct PublicArgs<'a> {
     pub cookie: String,
-    pub allow_latest: bool,
+    pub debug_mode: bool,
     pub is_sync: bool,
     pub message: &'a MessageData,
 }
@@ -70,7 +70,7 @@ pub fn create_supervisor(
         cancellation,
         pub_args.is_sync,
         pub_args.cookie.clone(),
-        pub_args.allow_latest,
+        pub_args.debug_mode,
         limiter_det,
         locked_slots,
     ));
@@ -123,6 +123,7 @@ pub async fn run_with_impl(
             },
             supervisor: supervisor_clone,
             version: genvm_common::version::Version::ZERO,
+            should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         };
 
         let mut vm = supervisor.spawn(essential_data).await?;

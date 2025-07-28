@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import os
 import typing
 from numpy.typing import ArrayLike, DTypeLike
 from collections.abc import Sequence
@@ -71,9 +72,10 @@ class Tensor:
 		assert False
 
 	def _populate_tb(self):
-		import traceback
+		if os.getenv('GENLAYER_NN_TENSOR_TB', 'false') == 'true':
+			import traceback
 
-		self._tb = ''.join(traceback.format_stack())
+			self._tb = ''.join(traceback.format_stack())
 
 	@property
 	def ndim(self) -> int:

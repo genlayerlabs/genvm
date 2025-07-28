@@ -69,7 +69,12 @@ def _unfold(x: np.ndarray):
 	return x.reshape(prod(x.shape))
 
 
+_cache_SentenceTransformer: dict[str, typing.Callable[[str], np.ndarray]] = {}
+
+
 def SentenceTransformer(model: str) -> typing.Callable[[str], np.ndarray]:
+	if res := _cache_SentenceTransformer.get(model):
+		return res
 	from word_piece_tokenizer import WordPieceTokenizer
 
 	tokenizer = WordPieceTokenizer()
@@ -96,5 +101,7 @@ def SentenceTransformer(model: str) -> typing.Callable[[str], np.ndarray]:
 				outputs=['embedding'],
 			)['embedding']
 		)
+
+	_cache_SentenceTransformer[model] = ret
 
 	return ret

@@ -102,8 +102,11 @@ impl LockedSlotsSet {
     }
 }
 
-fn lock_sock<'a, 'b>(metric: metrics::Metric, sock: &'a mut std::sync::Mutex<dyn Sock + 'b>) -> Result<metrics::Lock<std::sync::MutexGuard<'a, dyn Sock + 'b>>> {
-    match sock.lock() {
+fn lock_sock<'a, 'b>(
+    metric: metrics::Metric,
+    sock: &'a mut std::sync::Mutex<dyn Sock + 'b>,
+) -> Result<metrics::Lock<&'a mut (dyn Sock + 'b)>> {
+    match sock.get_mut() {
         Ok(locked_sock) => Ok(metrics::Lock::new(metric, locked_sock)),
         Err(e) => Err(anyhow::anyhow!("can't take lock: {e}")),
     }

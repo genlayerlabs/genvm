@@ -1,6 +1,6 @@
 import numpy as np
 
-from genlayer_embeddings import VecDB
+from genlayer_embeddings import VecDB, EuclidianDistanceSquared
 from genlayer.py.storage._internal.generate import generate_storage
 import typing
 
@@ -9,7 +9,7 @@ import pytest
 
 @generate_storage
 class DB:
-	x: VecDB[np.int32, typing.Literal[5], str]
+	x: VecDB[np.int32, typing.Literal[5], str, EuclidianDistanceSquared]
 
 
 def test_store_inv_shape():

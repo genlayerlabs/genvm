@@ -184,6 +184,9 @@ class DynArray[T](_WithStorageSlotAndTD, collections.abc.MutableSequence[T]):
 		ret.append(']')
 		return ''.join(ret)
 
+	def clear(self) -> None:
+		_u32_desc.set(self._storage_slot, self._off, 0)
+
 
 class _DynArrayDesc(SpecialTypeDesc, ComplexCopyAction):
 	__slots__ = ('item_desc', 'view_ctor')

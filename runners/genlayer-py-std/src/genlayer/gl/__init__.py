@@ -103,6 +103,31 @@ class MessageType(typing.NamedTuple):
 	"""
 
 
+def trace(*objs: typing.Any, sep: str = ' '):
+	wasi.gl_call(
+		calldata.encode(
+			{
+				'Trace': {
+					'Message': sep.join(str(obj) for obj in objs),
+				},
+			}
+		)
+	)
+
+
+def trace_time_micro() -> int:
+	import genlayer.gl._internal.gl_call as gl_call
+
+	return gl_call.gl_call_generic(
+		{
+			'Trace': {
+				'RuntimeMicroSec': None,
+			},
+		},
+		lambda x: typing.cast(int, calldata.decode(x)),
+	).get()
+
+
 if os.getenv('GENERATING_DOCS', 'false') == 'true':
 	message_raw: MessageRawType = ...  # type: ignore
 	"""

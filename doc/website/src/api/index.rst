@@ -10,3 +10,5 @@ Public API
 
    genlayer
    genlayer_embeddings
+
+   changelog

@@ -5,6 +5,7 @@ set -ex
 UPDATE_CORPUS=false
 SHOW_HELP=false
 FILTER=""
+DURATION=30
 
 show_help() {
     cat << EOF
@@ -14,6 +15,7 @@ OPTIONS:
     --help              Show this help message
     --update-corpus     Update input corpus
     --filter REGEXP     Only run fuzz tests matching the regular expression
+    --duration SECONDS  Duration in seconds for AFL fuzzing (default: $DURATION)
 EOF
 }
 
@@ -33,6 +35,16 @@ while [[ $# -gt 0 ]]; do
                 shift 2
             else
                 echo "Error: --filter requires a regular expression argument" >&2
+                show_help
+                exit 1
+            fi
+        ;;
+        --duration)
+            if [[ -n $2 ]] && [[ $2 =~ ^[0-9]+$ ]]; then
+                DURATION="$2"
+                shift 2
+            else
+                echo "Error: --duration requires a numeric argument" >&2
                 show_help
                 exit 1
             fi
@@ -66,7 +78,7 @@ do
 
     echo "=== $name ==="
     mkdir -p "fuzz/outputs/$name"
-    poetry run -- py-afl-fuzz -i "fuzz/inputs/$name" -o "fuzz/outputs/$name" -V 6000 -- "fuzz/src/$name.py"
+    poetry run -- py-afl-fuzz -i "fuzz/inputs/$name" -o "fuzz/outputs/$name" -V "$DURATION" -- "fuzz/src/$name.py"
 
 
     if [[ "$UPDATE_CORPUS" == true ]]

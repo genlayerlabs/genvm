@@ -26,6 +26,7 @@ class EntryKind(IntEnum):
 class MemoryLimiterConsts(IntEnum):
 	TABLE_ENTRY = 64
 	FILE_MAPPING = 256
+	FD_ALLOCATION = 96
 
 
 class SpecialMethod(StrEnum):
@@ -35,6 +36,7 @@ class SpecialMethod(StrEnum):
 
 class VmError(StrEnum):
 	TIMEOUT = 'timeout'
+	EXIT_CODE = 'exit_code'
 	VALIDATOR_DISAGREES = 'validator_disagrees'
 	VERSION_TOO_BIG = 'version_too_big'
 	OOM = 'OOM'

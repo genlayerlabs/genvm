@@ -238,7 +238,7 @@ pub struct SharedData {
     pub balances: dashmap::DashMap<calldata::Address, primitive_types::U256>,
     pub is_sync: bool,
     pub cookie: String,
-    pub allow_latest: bool,
+    pub debug_mode: bool,
 
     pub limiter_det: memlimiter::Limiter,
     pub limiter_non_det: memlimiter::Limiter,
@@ -251,7 +251,7 @@ impl SharedData {
         cancellation: Arc<genvm_common::cancellation::Token>,
         is_sync: bool,
         cookie: String,
-        allow_latest: bool,
+        debug_mode: bool,
         limiter_det: memlimiter::Limiter,
         locked_slots: LockedSlotsSet,
     ) -> Self {
@@ -262,7 +262,7 @@ impl SharedData {
             modules,
             balances: dashmap::DashMap::new(),
             cookie,
-            allow_latest,
+            debug_mode,
             limiter_det,
             limiter_non_det: memlimiter::Limiter::new("non-det"),
             locked_slots,
@@ -361,7 +361,13 @@ impl VM {
         log_debug!("execution start");
         let time_start = std::time::Instant::now();
         let res = func.call_async(&mut self.store, ()).await;
-        log_debug!(duration:? = time_start.elapsed(); "vm execution finished");
+        if let Ok(lck) = self.store.data().genlayer_ctx.lock() {
+            log_debug!(
+                elapsed:? = lck.genlayer_sdk.start_time.elapsed(),
+                wasm_start_elapsed:? = time_start.elapsed();
+                "vm execution finished"
+            );
+        }
         let res: anyhow::Result<FullRunOk> = match res {
             Ok(()) => Ok((RunOk::empty_return(), None)),
             Err(e) => {
@@ -631,10 +637,15 @@ impl Supervisor {
             )
         };
 
+        let should_capture_fp = data.should_capture_fp.clone();
+
         let mut store = Store::new(
             engine,
             WasmContext::new(data, self.shared_data.clone(), limiter)?,
-            self.shared_data.cancellation.should_quit.clone(),
+            wasmtime::GenVMCtx {
+                should_capture_fp,
+                should_quit: self.shared_data.cancellation.should_quit.clone(),
+            },
         );
 
         store.limiter(|ctx| &mut ctx.limits);
@@ -684,7 +695,7 @@ impl Supervisor {
                 runner::verify_runner(id.as_str()).with_context(|| format!("verifying {id}"))?;
 
             if runner_hash == "test" || runner_hash == "latest" {
-                if !self.shared_data.allow_latest {
+                if !self.shared_data.debug_mode {
                     anyhow::bail!("test/latest runner not allowed")
                 }
 

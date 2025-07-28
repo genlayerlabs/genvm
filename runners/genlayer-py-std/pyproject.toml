@@ -35,4 +35,4 @@ build-backend = "poetry.core.masonry.api"
 testpaths = [
     "tests",
 ]
-addopts = "--cov=src/genlayer/py --cov-report term-missing --cov-fail-under=75"
+addopts = "--cov=src/genlayer/py --cov=src-emb/genlayer_embeddings/ --cov-report term-missing --cov-fail-under=75"

@@ -85,7 +85,8 @@ impl Module {
         if zelf.stream.is_none() {
             log_debug!(url = zelf.url, name = self.name; "initializing connection to module");
 
-            let creator_tracker = genvm_common::metrics::TimeTracker::new(genvm_common::metrics::Metric::ModuleCall);
+            let creator_tracker =
+                genvm_common::metrics::TimeTracker::new(genvm_common::metrics::Metric::ModuleCall);
 
             let (mut ws_stream, _) = tokio_tungstenite::connect_async(&zelf.url)
                 .await
@@ -108,7 +109,9 @@ impl Module {
         match &mut zelf.stream {
             None => unreachable!(),
             Some(stream) => {
-                let msg_tracker = genvm_common::metrics::TimeTracker::new(genvm_common::metrics::Metric::ModuleCall);
+                let msg_tracker = genvm_common::metrics::TimeTracker::new(
+                    genvm_common::metrics::Metric::ModuleCall,
+                );
 
                 let val = calldata::to_value(&val)?;
                 let payload = calldata::encode(&val);

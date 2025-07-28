@@ -45,6 +45,12 @@ where
     deserializer.deserialize_any(Visitor)
 }
 
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub enum TracePayload {
+    Message(String),
+    RuntimeMicroSec,
+}
+
 #[allow(clippy::enum_variant_names)]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -107,6 +113,8 @@ pub enum Message {
         topics: Vec<Bytes>,
         blob: BTreeMap<String, calldata::Value>,
     },
+
+    Trace(TracePayload),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

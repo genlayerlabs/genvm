@@ -52,9 +52,9 @@ const MESSAGE_SCHEMA_HELP: &str = combine!("message, follows schema:\n", MESSAGE
 pub struct Args {
     #[arg(
         long,
-        help = "whenever to allow `:latest` and `:test` as runners version"
+        help = "whenever to allow `:latest` and `:test` as runners version, tracing, etc."
     )]
-    allow_latest: bool,
+    debug_mode: bool,
 
     #[arg(long, help = MESSAGE_SCHEMA_HELP)]
     message: String,
@@ -132,7 +132,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         PublicArgs {
             cookie,
             is_sync: args.sync,
-            allow_latest: args.allow_latest,
+            debug_mode: args.debug_mode,
             message: &message,
         },
     )

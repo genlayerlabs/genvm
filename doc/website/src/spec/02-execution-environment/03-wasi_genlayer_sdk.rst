@@ -282,3 +282,38 @@ Causes VM to exit with ``UserError``. Terminates contract execution immediately.
 Returns value from contract execution and terminates.
 
 Causes VM to exit with ``ContractReturn``. Encodes return value using :ref:`Calldata Encoded <gvm-def-calldata-encoding>` format.
+
+``Trace.Message`` Message
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Logs a debug message with timing information including:
+
+- Custom message text
+- Total elapsed time since VM start
+- Time elapsed since last trace call
+
+.. note::
+
+   Implementations may choose to ignore this message and return an error.
+
+Requirements
+^^^^^^^^^^^^
+
+#. GenVM version 0.1.10 or higher
+#. :term:`GenVM` implementation is allowed ignore this message
+
+``Trace.RuntimeMicroSec`` Sub-Message
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In :ref:`gvm-def-non-det-mode` returns the elapsed execution time in microseconds since VM start.
+In :ref:`gvm-def-det-mode`, it always returns ``0``.
+
+.. note::
+
+   Implementations may choose to ignore this message and return an error.
+
+Requirements
+^^^^^^^^^^^^
+
+#. GenVM version 0.1.10 or higher
+#. :term:`GenVM` implementation is allowed ignore this message

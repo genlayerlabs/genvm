@@ -88,12 +88,16 @@ pub struct SingleVMData {
     pub message_data: TransformedMessage,
     pub supervisor: Arc<tokio::sync::Mutex<crate::vm::Supervisor>>,
     pub version: genvm_common::version::Version,
+    pub should_capture_fp: Arc<std::sync::atomic::AtomicBool>,
 }
 
 pub struct Context {
     pub data: SingleVMData,
     pub shared_data: Arc<vm::SharedData>,
     pub messages_decremented: primitive_types::U256,
+
+    pub start_time: std::time::Instant,
+    pub prev_time: std::time::Instant,
 }
 
 pub struct ContextVFS<'a> {
@@ -169,10 +173,14 @@ fn read_owned_vec(
 
 impl Context {
     pub fn new(data: SingleVMData, shared_data: Arc<vm::SharedData>) -> Self {
+        let now = std::time::Instant::now();
+
         Self {
             data,
             shared_data,
             messages_decremented: primitive_types::U256::zero(),
+            start_time: now,
+            prev_time: now,
         }
     }
 }
@@ -476,6 +484,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     },
                     supervisor: supervisor.clone(),
                     version: genvm_common::version::Version::ZERO,
+                    should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(true)),
                 };
 
                 let res = self
@@ -763,6 +772,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             }
             gl_call::Message::Return(value) => {
                 let ret = calldata::encode(&value);
+
+                // for return we are not interested in it
+                self.context
+                    .data
+                    .should_capture_fp
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
+
                 Err(generated::types::Error::trap(ContractReturn(ret).into()))
             }
             gl_call::Message::RunNondet {
@@ -773,6 +789,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 data,
                 allow_write_ops,
             } => self.sandbox(data, allow_write_ops).await,
+            gl_call::Message::Trace(message) => self.gl_call_trace(message).await,
         }
     }
 
@@ -971,6 +988,46 @@ impl Context {
 }
 
 impl ContextVFS<'_> {
+    async fn gl_call_trace(
+        &mut self,
+        msg: gl_call::TracePayload,
+    ) -> Result<generated::types::Fd, generated::types::Error> {
+        self.check_version(genvm_common::version::Version::new(0, 1, 10))?;
+        match msg {
+            gl_call::TracePayload::Message(text) => {
+                let now = std::time::Instant::now();
+                let since_prev = now.duration_since(self.context.prev_time);
+                self.context.prev_time = now;
+
+                log_info!(
+                    message = text,
+                    elapsed:? = now.duration_since(self.context.start_time),
+                    since_last_trace:? = since_prev;
+                    "trace"
+                );
+
+                Ok(file_fd_none())
+            }
+            gl_call::TracePayload::RuntimeMicroSec => {
+                let elapsed_micros = if self.context.data.conf.is_deterministic
+                    && !self.context.shared_data.debug_mode
+                {
+                    0u64
+                } else {
+                    let elapsed = std::time::Instant::now().duration_since(self.context.start_time);
+                    elapsed.as_micros() as u64
+                };
+
+                let data = calldata::encode(&calldata::Value::Number(num_bigint::BigInt::from(
+                    elapsed_micros,
+                )));
+                Ok(generated::types::Fd::from(self.vfs.place_content(
+                    FileContentsUnevaluated::from_contents(SharedBytes::new(data), 0),
+                )))
+            }
+        }
+    }
+
     async fn run_nondet(
         &mut self,
         data_leader: Vec<u8>,
@@ -1040,6 +1097,7 @@ impl ContextVFS<'_> {
             message_data,
             version: self.context.data.version,
             supervisor: supervisor.clone(),
+            should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
 
         let my_res = self.context.spawn_and_run(&supervisor, vm_data).await;
@@ -1116,6 +1174,7 @@ impl ContextVFS<'_> {
             message_data,
             supervisor: supervisor.clone(),
             version: genvm_common::version::Version::ZERO,
+            should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
 
         let my_res = self.context.spawn_and_run(&supervisor, vm_data).await;

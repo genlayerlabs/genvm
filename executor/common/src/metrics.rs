@@ -1,20 +1,19 @@
-use crate::{log_info};
+use crate::log_info;
 
 pub struct TimeTracker {
     start: std::time::Instant,
     metric: Metric,
 }
 
-static ALL_METRICS: [std::sync::atomic::AtomicU64; Metric::Size as usize] = [
-    const { std::sync::atomic::AtomicU64::new(0) }; Metric::Size as usize
-];
+static ALL_METRICS: [std::sync::atomic::AtomicU64; Metric::Size as usize] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; Metric::Size as usize];
 
 pub fn log_all() {
     for (i, metric) in ALL_METRICS.iter().enumerate() {
         let value = metric.load(std::sync::atomic::Ordering::Relaxed);
         if value > 0 {
             let micros_dur = std::time::Duration::from_micros(value);
-            let metric = unsafe { std::mem::transmute::<_, Metric>(i as u8) };
+            let metric = unsafe { std::mem::transmute::<u8, Metric>(i as u8) };
             log_info!(metric:? = metric, duration:? = micros_dur; "metric");
         }
     }
@@ -31,8 +30,10 @@ impl TimeTracker {
     fn end_mut(&mut self) -> std::time::Duration {
         let duration = self.start.elapsed();
 
-        ALL_METRICS[self.metric as usize]
-            .fetch_add(duration.as_micros() as u64, std::sync::atomic::Ordering::AcqRel);
+        ALL_METRICS[self.metric as usize].fetch_add(
+            duration.as_micros() as u64,
+            std::sync::atomic::Ordering::AcqRel,
+        );
 
         duration
     }
@@ -55,7 +56,7 @@ pub fn measured<R>(metric: Metric, f: impl FnOnce() -> R) -> R {
 pub enum Metric {
     ModuleCall,
     HostCall,
-    Size
+    Size,
 }
 
 pub struct Lock<T>(T, TimeTracker);
@@ -87,7 +88,7 @@ impl<T> std::ops::DerefMut for Lock<T> {
     }
 }
 
-impl <T> std::ops::Drop for Lock<T> {
+impl<T> std::ops::Drop for Lock<T> {
     fn drop(&mut self) {
         self.1.end_mut();
     }

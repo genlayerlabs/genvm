@@ -1,3 +1,5 @@
+import numpy as np
+
 from pathlib import Path
 
 src_dir = Path(__file__).parent.parent.joinpath('fuzz', 'src')
@@ -12,11 +14,13 @@ for test in sorted(src_dir.iterdir()):
 	exec(src_py, new_globs)
 	fun = new_globs[name]
 
-	def cur_test():
-		print('I MADE IT TO TEST')
-		for testcase in src_dir.parent.joinpath('inputs', name).iterdir():
+	for testcase in src_dir.parent.joinpath('inputs', name).iterdir():
+
+		def cur_test(testcase=testcase):
 			fun(testcase.read_bytes())
 
-	cur_test.__name__ = 'test_' + name
+		testname = 'test_' + name + '_' + testcase.name.replace('.', '_')
 
-	globals()[cur_test.__name__] = cur_test
+		cur_test.__name__ = testname
+
+		globals()[testname] = cur_test
