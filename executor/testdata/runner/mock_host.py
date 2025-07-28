@@ -107,10 +107,21 @@ class MockHost(IHost):
 			self.sock.close()
 		Path(self.path).unlink(missing_ok=True)
 
-	async def loop_enter(self):
+	async def loop_enter(self, cancellation: asyncio.Event):
 		async_loop = asyncio.get_event_loop()
 		assert self.sock_listener is not None
-		self.sock, _addr = await async_loop.sock_accept(self.sock_listener)
+
+		interesting = asyncio.ensure_future(async_loop.sock_accept(self.sock_listener))
+		canc = asyncio.ensure_future(cancellation.wait())
+
+		done, pending = await asyncio.wait(
+			[canc, interesting], return_when=asyncio.FIRST_COMPLETED
+		)
+		if canc in done:
+			raise Exception('Program failed')
+		canc.cancel()
+
+		self.sock, _addr = interesting.result()
 		self.sock.setblocking(False)
 		self.sock_listener.close()
 		self.sock_listener = None

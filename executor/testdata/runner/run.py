@@ -230,7 +230,7 @@ def run(jsonnet_rel_path):
 				'--message',
 				json.dumps(config['message']),
 				'--print=result',
-				'--allow-latest',
+				'--debug-mode',
 				'--host-data',
 				'{"node_address": "0x", "tx_id": "0x"}',
 			]

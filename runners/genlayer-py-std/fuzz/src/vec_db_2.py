@@ -8,7 +8,7 @@ from fuzz_common import do_fuzzing, StopFuzzingException, FuzzerBuilder
 
 import numpy as np
 import typing
-from genlayer_embeddings import VecDB, EuclidianDistanceSquared
+from genlayer_embeddings import VecDB, EuclideanDistanceSquared
 from genlayer.py.types import u32
 
 from genlayer.py.storage import inmem_allocate
@@ -158,7 +158,7 @@ def vec_db_2(buf):
 	try:
 		etalon = Etalon()
 		db = inmem_allocate(
-			VecDB[np.float32, typing.Literal[5], u32, EuclidianDistanceSquared]
+			VecDB[np.float32, typing.Literal[5], u32, EuclideanDistanceSquared]
 		)
 
 		id_to_value: dict[VecDB.Id, u32] = {}
@@ -213,7 +213,7 @@ def vec_db_2(buf):
 					got = list((x.distance, x.value) for x in db.knn(query_around, k))
 					got.sort(key=lambda x: x[0])
 
-					d = EuclidianDistanceSquared()
+					d = EuclideanDistanceSquared()
 					distances = d.batch(etalon.data, query_around)
 					closest_indices = np.argsort(distances)[:k]
 

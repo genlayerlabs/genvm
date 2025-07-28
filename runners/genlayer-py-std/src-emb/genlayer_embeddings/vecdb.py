@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__all__ = ('VecDB', 'VecDBElement', 'Distance', 'EuclidianDistanceSquared')
+__all__ = ('VecDB', 'VecDBElement', 'Distance', 'EuclideanDistanceSquared')
 
 from genlayer.py.storage import DynArray, TreeMap
 from genlayer.py.types import u32
@@ -17,7 +17,7 @@ class Distance(typing.Protocol):
 
 
 @allow_storage
-class EuclidianDistanceSquared(Distance):
+class EuclideanDistanceSquared(Distance):
 	def __call__(self, l, r):
 		return np.sum((l - r) ** 2)
 
@@ -130,7 +130,15 @@ class VecDB[T: np.number, S: int, V, D: Distance]:
 	_max_level: u32
 	_dist_func: D
 
+	_initialized: bool = False
+
 	def __init__(self):
+		self._do_init()
+
+	def _do_init(self):
+		if self._initialized:
+			return
+		self._initialized = True
 		self._root_idx = NO_PARENT
 		self._base = 1.3
 		self._max_level = u32(0)
@@ -173,6 +181,7 @@ class VecDB[T: np.number, S: int, V, D: Distance]:
 		self._free_nodes[node_idx] = None
 
 	def insert(self, key: np.ndarray[tuple[S], np.dtype[T]], val: V) -> Id:
+		self._do_init()
 		# Add to storage arrays
 		if len(self._free_idx) > 0:
 			idx = self._free_idx.popitem()[0]
@@ -345,6 +354,8 @@ class VecDB[T: np.number, S: int, V, D: Distance]:
 		self, v: np.ndarray[tuple[S], np.dtype[T]], k: int
 	) -> typing.Iterator[VecDBElement[T, S, V, T]]:
 		"""Find k nearest neighbors using cover tree"""
+		self._do_init()
+
 		if self._root_idx == NO_PARENT or k <= 0:
 			return
 
@@ -376,6 +387,8 @@ class VecDB[T: np.number, S: int, V, D: Distance]:
 			count += 1
 
 	def __iter__(self):
+		self._do_init()
+
 		for i in range(len(self._keys)):
 			if u32(i) in self._free_idx:
 				continue

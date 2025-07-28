@@ -2,7 +2,7 @@ __all__ = (
 	'VecDB',
 	'Model',
 	'SentenceTransformer',
-	'EuclidianDistanceSquared',
+	'EuclideanDistanceSquared',
 	'Distance',
 )
 
