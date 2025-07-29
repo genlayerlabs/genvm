@@ -10,7 +10,7 @@ let
 				"py" # interpreter exe name
 				"-u" # unbuffered
 				"-B" # don't write .pyc
-				"-c" "import contract; import genlayer.gl._internal.runner"
+				"/py/libs/_genlayer_runner.py" # runner script
 			];
 		}
 		{ Depends = "${runnersLib.hashes.pyLibs.cloudpickle.uid}"; }
@@ -22,7 +22,7 @@ in
 		inherit (runnersLib.hashes.pyLibs.genlayer-std) id hash;
 
 		expr = {
-			MapFile = { file = "genlayer/"; to = "/py/libs/genlayer/"; };
+			MapFile = { file = "/"; to = "/py/libs/"; };
 		};
 
 		baseDerivation = lib.sources.cleanSourceWith {

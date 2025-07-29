@@ -4,7 +4,44 @@ Module that is used to run python contracts in the default way
 
 __all__ = ()
 
-from ..msg import message_raw, MessageRawType
+import sys
+import os
+
+sys.path.append('/')
+
+if os.getenv('GENLAYER_ENABLE_PROFILER', 'false') == 'true':
+	import cProfile
+	from genlayer import gl
+
+	p = cProfile.Profile(timer=gl.trace_time_micro, timeunit=1_000_000)
+	p.enable()
+
+	def exit_hook():
+		p.disable()
+		p.create_stats()
+		import marshal, io
+		import gzip
+		import base64
+
+		stats_io = io.BytesIO()
+		marshal.dump(p.stats, stats_io)
+		stats_io.flush()
+		stats_bytes_raw = stats_io.getvalue()
+		stats_bytes_compressed = gzip.compress(stats_bytes_raw, mtime=0)
+
+		print(
+			'=== stats (gzip, base64) ===\n',
+			base64.b64encode(stats_bytes_compressed).decode('ascii'),
+			sep='',
+			file=sys.stderr,
+		)
+
+	import atexit
+
+	atexit.register(exit_hook)
+
+
+from genlayer._internal.msg import message_raw, MessageRawType
 from genlayer.py.public_abi import EntryKind
 
 import genlayer.py.calldata as calldata
@@ -32,7 +69,7 @@ def _give_result(res_fn: typing.Callable[[], typing.Any]) -> typing.NoReturn:
 
 
 def _handle_main() -> typing.NoReturn:
-	from ..genvm_contracts import Contract
+	from genlayer.gl.genvm_contracts import Contract
 
 	import genlayer.py.get_schema as _get_schema
 	import genlayer.py.public_abi as ABI
@@ -58,7 +95,7 @@ def _handle_main() -> typing.NoReturn:
 
 	def resolve_method(ctx) -> typing.Callable:
 		if ctx.msg['is_init']:
-			meth = getattr(__known_contact__, '__init__')
+			meth = getattr(__known_contract__, '__init__')
 			if _get_schema._is_public(meth):
 				raise TypeError(f'__init__ must be private')
 			if meth is object.__init__:
@@ -111,9 +148,9 @@ def _handle_main() -> typing.NoReturn:
 	# load contract, it should set __known_contact__
 	import contract as _user_contract_module  # type: ignore
 
-	from ..genvm_contracts import __known_contact__
+	from genlayer.gl.genvm_contracts import __known_contract__
 
-	if __known_contact__ is None:
+	if __known_contract__ is None:
 		raise Exception('no contract defined')
 
 	cd_raw = calldata.decode(message_raw['entry_data'])
@@ -126,10 +163,10 @@ def _handle_main() -> typing.NoReturn:
 		root_slot.lock_default()
 
 	cd = typing.cast(CalldataSchema, cd_raw)
-	ctx = MethodResolverInfo(cd, message_raw, __known_contact__)
+	ctx = MethodResolverInfo(cd, message_raw, __known_contract__)
 	meth2call = resolve_method(ctx)
 
-	contract_instance = root_slot.get_contract_instance(__known_contact__)
+	contract_instance = root_slot.get_contract_instance(__known_contract__)
 	_give_result(
 		lambda: meth2call(contract_instance, *cd.get('args', []), **cd.get('kwargs', {}))
 	)
@@ -142,15 +179,15 @@ if os.getenv('GENERATING_DOCS', 'false') != 'true':
 		case EntryKind.MAIN:
 			_handle_main()
 		case EntryKind.SANDBOX:
-			import cloudpickle
+			import pickle
 
-			runner = cloudpickle.loads(message_raw['entry_data'])
+			runner = pickle.loads(message_raw['entry_data'])
 
 			_give_result(runner)
 		case EntryKind.CONSENSUS_STAGE:
-			import cloudpickle
+			import pickle
 
-			runner = cloudpickle.loads(message_raw['entry_data'])
+			runner = pickle.loads(message_raw['entry_data'])
 			stage_data = message_raw['entry_stage_data']
 
 			_give_result(lambda: runner(stage_data))

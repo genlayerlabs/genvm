@@ -14,7 +14,7 @@ let
 			__prefix = "py-lib-";
 
 			cloudpickle = {
-				hash = "sha256-KxOzgp6P2EXWubDDEbFeL+fDA5pHkWWM3lnqTo9VHd8=";
+				hash = "test";
 			};
 			protobuf = {
 				hash = "sha256-gbbFLhPUVsefodopQthwDPhwDmlDU06rZUPVMLeJOWY=";

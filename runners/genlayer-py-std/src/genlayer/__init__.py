@@ -93,14 +93,19 @@ if not typing.TYPE_CHECKING and not _gen_docs:
 		proxy to :py:mod:`genlayer.gl` used for lazy loading
 		"""
 
+		# unfortunately, we have to cache it because with star import it won't be auto-substituted on the first access
+		_cached_gl = None
+
 		def __getattr__(self, attr):
-			globals().pop('gl', None)
-			import genlayer.gl as _imp
+			if self._cached_gl is None:
+				globals().pop('gl', None)
+				import genlayer.gl as _imp
 
-			# below is needed to trick cloudpickle
-			globals()['gl'] = _imp
+				# below is needed to trick cloudpickle
+				globals()['gl'] = _imp
+				self._cached_gl = _imp
 
-			return getattr(_imp, attr)
+			return getattr(self._cached_gl, attr)
 
 	gl = GL()
 	del GL

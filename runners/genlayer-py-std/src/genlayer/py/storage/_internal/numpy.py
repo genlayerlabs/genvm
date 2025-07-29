@@ -9,8 +9,14 @@ from .core import *
 
 _imp: typing.Callable[['_Instantiation'], TypeDesc | None] | None = None
 
+_populated = False
+
 
 def _populate_np_descs():
+	global _populated
+	if _populated:
+		return
+	_populated = True
 	import numpy as np
 
 	class _NumpyNDDesc(TypeDesc[np.ndarray]):
@@ -95,5 +101,13 @@ def try_handle_np(cls: '_Instantiation') -> TypeDesc | None:
 
 from .generate import _known_descs, _Instantiation, LitTuple, LitPy
 
-if 'numpy' in sys.modules:
-	_populate_np_descs()
+
+def populate_np_descs_if_loaded():
+	"""
+	Call this function to populate numpy descs if numpy is loaded.
+	"""
+	if 'numpy' in sys.modules:
+		_populate_np_descs()
+
+
+populate_np_descs_if_loaded()

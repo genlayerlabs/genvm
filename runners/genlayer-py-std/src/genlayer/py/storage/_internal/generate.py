@@ -37,6 +37,7 @@ def allow_storage[T: type](cls: T) -> T:
 
 
 def generate_storage[T: type](cls: T) -> T:
+	populate_np_descs_if_loaded()
 	cls = allow_storage(cls)
 	_storage_build(cls, {})
 	return cls
@@ -250,15 +251,15 @@ def _storage_build_inner(
 	return description
 
 
+from .numpy import try_handle_np, populate_np_descs_if_loaded
+
+
 def _storage_build(
 	cls: type | _Instantiation,
 	generics_map: dict[str, TypeDesc | Lit],
 ) -> TypeDesc | Lit:
 	with reflect.context_type(cls):
 		return _storage_build_inner(cls, generics_map)
-
-
-from .numpy import try_handle_np
 
 
 def _storage_build_generic(

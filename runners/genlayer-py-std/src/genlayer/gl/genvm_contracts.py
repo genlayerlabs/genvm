@@ -457,17 +457,17 @@ class Contract(BaseContract):
 
 		:raises TypeError: If another Contract subclass already exists in this module
 		"""
-		global __known_contact__
-		if __known_contact__ is not None:
+		global __known_contract__
+		if __known_contract__ is not None:
 			raise TypeError(
-				f'only one contract is allowed; first: `{__known_contact__}` second: `{cls}`'
+				f'only one contract is allowed; first: `{__known_contract__}` second: `{cls}`'
 			)
 
 		cls.__gl_contract__ = True
 		from genlayer.py.storage._internal.generate import generate_storage
 
 		generate_storage(cls)
-		__known_contact__ = cls
+		__known_contract__ = cls
 
 	@property
 	def balance(self) -> u256:
@@ -571,4 +571,4 @@ class Contract(BaseContract):
 Contract.__handle_undefined_method__.__isabstractmethod__ = True  # type: ignore
 Contract.__receive__.__isabstractmethod__ = True  # type: ignore
 
-__known_contact__: type[Contract] | None = None
+__known_contract__: type[Contract] | None = None

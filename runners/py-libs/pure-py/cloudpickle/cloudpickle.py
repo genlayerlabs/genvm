@@ -64,8 +64,6 @@ import logging
 import opcode
 import pickle
 from pickle import _getattribute
-import platform
-import struct
 import sys
 import threading
 import types
@@ -95,12 +93,9 @@ _DYNAMIC_CLASS_TRACKER_BY_CLASS = weakref.WeakKeyDictionary()
 _DYNAMIC_CLASS_TRACKER_BY_ID = weakref.WeakValueDictionary()
 _DYNAMIC_CLASS_TRACKER_LOCK = threading.Lock()
 
-PYPY = platform.python_implementation() == "PyPy"
+PYPY = False
 
 builtin_code_type = None
-if PYPY:
-    # builtin-code objects only exist in pypy
-    builtin_code_type = type(float.__new__.__code__)
 
 _extract_code_globals_cache = weakref.WeakKeyDictionary()
 
@@ -1371,114 +1366,6 @@ class Pickler(pickle.Pickler):
                 # fallback to save_global, including the Pickler's
                 # dispatch_table
                 return NotImplemented
-
-    else:
-        # When reducer_override is not available, hack the pure-Python
-        # Pickler's types.FunctionType and type savers. Note: the type saver
-        # must override Pickler.save_global, because pickle.py contains a
-        # hard-coded call to save_global when pickling meta-classes.
-        dispatch = pickle.Pickler.dispatch.copy()
-
-        def _save_reduce_pickle5(
-            self,
-            func,
-            args,
-            state=None,
-            listitems=None,
-            dictitems=None,
-            state_setter=None,
-            obj=None,
-        ):
-            save = self.save
-            write = self.write
-            self.save_reduce(
-                func,
-                args,
-                state=None,
-                listitems=listitems,
-                dictitems=dictitems,
-                obj=obj,
-            )
-            # backport of the Python 3.8 state_setter pickle operations
-            save(state_setter)
-            save(obj)  # simple BINGET opcode as obj is already memoized.
-            save(state)
-            write(pickle.TUPLE2)
-            # Trigger a state_setter(obj, state) function call.
-            write(pickle.REDUCE)
-            # The purpose of state_setter is to carry-out an
-            # inplace modification of obj. We do not care about what the
-            # method might return, so its output is eventually removed from
-            # the stack.
-            write(pickle.POP)
-
-        def save_global(self, obj, name=None, pack=struct.pack):
-            """Main dispatch method.
-
-            The name of this method is somewhat misleading: all types get
-            dispatched here.
-            """
-            if obj is type(None):  # noqa
-                return self.save_reduce(type, (None,), obj=obj)
-            elif obj is type(Ellipsis):
-                return self.save_reduce(type, (Ellipsis,), obj=obj)
-            elif obj is type(NotImplemented):
-                return self.save_reduce(type, (NotImplemented,), obj=obj)
-            elif obj in _BUILTIN_TYPE_NAMES:
-                return self.save_reduce(
-                    _builtin_type, (_BUILTIN_TYPE_NAMES[obj],), obj=obj
-                )
-
-            if name is not None:
-                super().save_global(obj, name=name)
-            elif not _should_pickle_by_reference(obj, name=name):
-                self._save_reduce_pickle5(*_dynamic_class_reduce(obj), obj=obj)
-            else:
-                super().save_global(obj, name=name)
-
-        dispatch[type] = save_global
-
-        def save_function(self, obj, name=None):
-            """Registered with the dispatch to handle all function types.
-
-            Determines what kind of function obj is (e.g. lambda, defined at
-            interactive prompt, etc) and handles the pickling appropriately.
-            """
-            if _should_pickle_by_reference(obj, name=name):
-                return super().save_global(obj, name=name)
-            elif PYPY and isinstance(obj.__code__, builtin_code_type):
-                return self.save_pypy_builtin_func(obj)
-            else:
-                return self._save_reduce_pickle5(
-                    *self._dynamic_function_reduce(obj), obj=obj
-                )
-
-        def save_pypy_builtin_func(self, obj):
-            """Save pypy equivalent of builtin functions.
-
-            PyPy does not have the concept of builtin-functions. Instead,
-            builtin-functions are simple function instances, but with a
-            builtin-code attribute.
-            Most of the time, builtin functions should be pickled by attribute.
-            But PyPy has flaky support for __qualname__, so some builtin
-            functions such as float.__new__ will be classified as dynamic. For
-            this reason only, we created this special routine. Because
-            builtin-functions are not expected to have closure or globals,
-            there is no additional hack (compared the one already implemented
-            in pickle) to protect ourselves from reference cycles. A simple
-            (reconstructor, newargs, obj.__dict__) tuple is save_reduced.  Note
-            also that PyPy improved their support for __qualname__ in v3.6, so
-            this routing should be removed when cloudpickle supports only PyPy
-            3.6 and later.
-            """
-            rv = (
-                types.FunctionType,
-                (obj.__code__, {}, obj.__name__, obj.__defaults__, obj.__closure__),
-                obj.__dict__,
-            )
-            self.save_reduce(*rv, obj=obj)
-
-        dispatch[types.FunctionType] = save_function
 
 
 # Shorthands similar to pickle.dump/pickle.dumps

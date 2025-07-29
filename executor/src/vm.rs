@@ -728,16 +728,28 @@ impl Supervisor {
                 };
 
                 if file.ends_with("/") {
+                    let is_root = file.as_ref() == "/";
+
                     let arch = self.runner_cache.get_unsafe(current);
 
                     let file_name_str = String::from(&file[..]);
 
-                    for (name, file_contents) in arch.files.data.range(file_name_str..) {
+                    let range = if is_root {
+                        arch.files.data.range::<str, std::ops::RangeFull>(..)
+                    } else {
+                        arch.files.data.range(file_name_str..)
+                    };
+
+                    let must_start_with: &str = if is_root { "" } else { file.as_ref() };
+
+                    for (name, file_contents) in range {
                         if name.ends_with("/") {
                             continue;
                         }
 
-                        if !name.starts_with(&file[..]) {
+                        if !name.starts_with(must_start_with) {
+                            log_trace!(from = file, to = to, name = name; "aborting file mapping");
+
                             break;
                         }
 
@@ -745,7 +757,7 @@ impl Supervisor {
                         if !name_in_fs.ends_with("/") {
                             name_in_fs.push('/');
                         }
-                        name_in_fs.push_str(&name[file.len()..]);
+                        name_in_fs.push_str(&name[must_start_with.len()..]);
 
                         if !limiter.consume(
                             public_abi::MemoryLimiterConsts::FileMapping.value()
@@ -1033,6 +1045,12 @@ impl Supervisor {
             };
 
         if version > crate::version_timestamps::DATA[max_version_index].1 {
+            log_info!(
+                version = version,
+                max_version = crate::version_timestamps::DATA[max_version_index].1,
+                requested_timestamp = transaction_ts;
+                "version is too big, rejecting"
+            );
             return Err(VMError(public_abi::VmError::VersionTooBig.value().into(), None).into());
         }
 

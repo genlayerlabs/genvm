@@ -80,7 +80,7 @@ else:
 
 from .genvm_contracts import *
 from .annotations import *
-from .msg import MessageRawType, message_raw as _message_raw_original
+from genlayer._internal.msg import MessageRawType, message_raw as _message_raw_original
 
 
 class MessageType(typing.NamedTuple):

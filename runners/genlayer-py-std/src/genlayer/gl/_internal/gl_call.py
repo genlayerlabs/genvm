@@ -1,5 +1,6 @@
 import typing
 import os
+import atexit
 
 import genlayer.py.calldata as calldata
 import collections.abc
@@ -12,11 +13,13 @@ def _imp(data: calldata.Encodable) -> int:
 
 
 def contract_return(data: calldata.Encodable) -> typing.NoReturn:
+	atexit._run_exitfuncs()
 	_imp({'Return': data})
 	assert False
 
 
 def rollback(data: str) -> typing.NoReturn:
+	atexit._run_exitfuncs()
 	_imp({'Rollback': data})
 	assert False
 

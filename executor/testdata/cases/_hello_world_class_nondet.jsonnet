@@ -5,5 +5,8 @@ simple.run('${jsonnetDir}/${fileBaseName}.py') {
             "method": "foo",
             "args": []
         }
-    |||
+    |||,
+    message+: {
+        datetime: "2025-07-29T19:34:20+09:00",
+    },
 }
