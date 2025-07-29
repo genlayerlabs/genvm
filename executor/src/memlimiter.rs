@@ -53,6 +53,11 @@ impl Limiter {
             .load(std::sync::atomic::Ordering::SeqCst)
     }
 
+    pub fn release(&self, delta: u32) {
+        self.remaining_memory
+            .fetch_add(delta, std::sync::atomic::Ordering::SeqCst);
+    }
+
     pub fn consume(&self, delta: u32) -> bool {
         let mut remaining = self
             .remaining_memory

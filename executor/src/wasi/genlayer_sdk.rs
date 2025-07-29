@@ -15,7 +15,7 @@ use crate::{
 };
 use crate::{errors, public_abi};
 
-use super::{base, common::*, gl_call};
+use super::{base, gl_call, vfs};
 
 fn entry_kind_as_int<S>(data: &public_abi::EntryKind, d: S) -> Result<S::Ok, S::Error>
 where
@@ -104,7 +104,7 @@ pub struct Context {
 }
 
 pub struct ContextVFS<'a> {
-    pub(super) vfs: &'a mut VFS,
+    pub(super) vfs: &'a mut vfs::VFS,
     pub(super) context: &'a mut Context,
 }
 
@@ -288,9 +288,15 @@ impl ContextVFS<'_> {
         let data: Box<[u8]> = data.as_bytes_iter().collect();
         let len = data.len();
         Ok((
-            generated::types::Fd::from(self.vfs.place_content(
-                FileContentsUnevaluated::from_contents(SharedBytes::new(data), 0),
-            )),
+            generated::types::Fd::from(
+                self.vfs
+                    .place_content(vfs::FileContents {
+                        contents: SharedBytes::new(data),
+                        pos: 0,
+                        release_memory: true,
+                    })
+                    .map_err(generated::types::Error::trap)?,
+            ),
             len,
         ))
     }
@@ -426,9 +432,15 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .host
                     .eth_call(address, &calldata)
                     .map_err(generated::types::Error::trap)?;
-                Ok(generated::types::Fd::from(self.vfs.place_content(
-                    FileContentsUnevaluated::from_contents(SharedBytes::new(res), 0),
-                )))
+                Ok(generated::types::Fd::from(
+                    self.vfs
+                        .place_content(vfs::FileContents {
+                            contents: SharedBytes::new(res),
+                            pos: 0,
+                            release_memory: true,
+                        })
+                        .map_err(generated::types::Error::trap)?,
+                ))
             }
             gl_call::Message::CallContract {
                 address,
@@ -630,16 +642,23 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 }
 
                 let web = self.context.shared_data.modules.web.clone();
-                let task = tokio::spawn(taskify(async move {
+                let task = taskify(async move {
                     web.send::<genvm_modules_interfaces::web::RenderAnswer, _>(
                         genvm_modules_interfaces::web::Message::Render(render_payload),
                     )
                     .await
-                }));
+                })
+                .await
+                .map_err(generated::types::Error::trap)?;
 
                 Ok(generated::types::Fd::from(
                     self.vfs
-                        .place_content(FileContentsUnevaluated::from_task(task)),
+                        .place_content(vfs::FileContents {
+                            contents: SharedBytes::new(task),
+                            pos: 0,
+                            release_memory: true,
+                        })
+                        .map_err(generated::types::Error::trap)?,
                 ))
             }
             gl_call::Message::WebRequest(request_payload) => {
@@ -648,16 +667,23 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 }
 
                 let web = self.context.shared_data.modules.web.clone();
-                let task = tokio::spawn(taskify(async move {
+                let task = taskify(async move {
                     web.send::<genvm_modules_interfaces::web::RenderAnswer, _>(
                         genvm_modules_interfaces::web::Message::Request(request_payload),
                     )
                     .await
-                }));
+                })
+                .await
+                .map_err(generated::types::Error::trap)?;
 
                 Ok(generated::types::Fd::from(
                     self.vfs
-                        .place_content(FileContentsUnevaluated::from_task(task)),
+                        .place_content(vfs::FileContents {
+                            contents: SharedBytes::new(task),
+                            pos: 0,
+                            release_memory: true,
+                        })
+                        .map_err(generated::types::Error::trap)?,
                 ))
             }
             gl_call::Message::ExecPrompt(prompt_payload) => {
@@ -679,7 +705,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 std::mem::drop(sup);
 
                 let llm = self.context.shared_data.modules.llm.clone();
-                let task = tokio::spawn(taskify(async move {
+                let task = taskify(async move {
                     let result = llm
                         .send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
                             genvm_modules_interfaces::llm::Message::Prompt {
@@ -700,11 +726,18 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
 
                     Ok(result.map(|r| r.data))
-                }));
+                })
+                .await
+                .map_err(generated::types::Error::trap)?;
 
                 Ok(generated::types::Fd::from(
                     self.vfs
-                        .place_content(FileContentsUnevaluated::from_task(task)),
+                        .place_content(vfs::FileContents {
+                            contents: SharedBytes::new(task),
+                            pos: 0,
+                            release_memory: true,
+                        })
+                        .map_err(generated::types::Error::trap)?,
                 ))
             }
             gl_call::Message::ExecPromptTemplate(prompt_template_payload) => {
@@ -727,7 +760,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 std::mem::drop(sup);
 
                 let llm = self.context.shared_data.modules.llm.clone();
-                let task = tokio::spawn(taskify(async move {
+                let task = taskify(async move {
                     let answer = llm
                         .send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
                             genvm_modules_interfaces::llm::Message::PromptTemplate {
@@ -763,11 +796,18 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         ) => Ok(Ok(PromptAnswerData::Text(answer))),
                         (_, Ok(_)) => Err(anyhow::anyhow!("unmatched result")),
                     }
-                }));
+                })
+                .await
+                .map_err(generated::types::Error::trap)?;
 
                 Ok(generated::types::Fd::from(
                     self.vfs
-                        .place_content(FileContentsUnevaluated::from_task(task)),
+                        .place_content(vfs::FileContents {
+                            contents: SharedBytes::new(task),
+                            pos: 0,
+                            release_memory: true,
+                        })
+                        .map_err(generated::types::Error::trap)?,
                 ))
             }
             gl_call::Message::Rollback(msg) => {
@@ -1024,9 +1064,15 @@ impl ContextVFS<'_> {
                 let data = calldata::encode(&calldata::Value::Number(num_bigint::BigInt::from(
                     elapsed_micros,
                 )));
-                Ok(generated::types::Fd::from(self.vfs.place_content(
-                    FileContentsUnevaluated::from_contents(SharedBytes::new(data), 0),
-                )))
+                Ok(generated::types::Fd::from(
+                    self.vfs
+                        .place_content(vfs::FileContents {
+                            contents: SharedBytes::new(data),
+                            pos: 0,
+                            release_memory: true,
+                        })
+                        .map_err(generated::types::Error::trap)?,
+                ))
             }
         }
     }
@@ -1188,8 +1234,14 @@ impl ContextVFS<'_> {
         .map_err(generated::types::Error::trap)?;
 
         let data: Box<[u8]> = my_res.as_bytes_iter().collect();
-        Ok(generated::types::Fd::from(self.vfs.place_content(
-            FileContentsUnevaluated::from_contents(SharedBytes::new(data), 0),
-        )))
+        Ok(generated::types::Fd::from(
+            self.vfs
+                .place_content(vfs::FileContents {
+                    contents: SharedBytes::new(data),
+                    pos: 0,
+                    release_memory: true,
+                })
+                .map_err(generated::types::Error::trap)?,
+        ))
     }
 }

@@ -8,7 +8,7 @@ use genvm_common::*;
 use crate::ustar::SharedBytes;
 use crate::wasi::base;
 
-use super::common::*;
+use super::vfs;
 use std::collections::BTreeMap;
 
 pub struct Context {
@@ -25,7 +25,7 @@ pub struct Context {
 }
 
 pub struct ContextVFS<'a> {
-    pub(super) vfs: &'a mut VFS,
+    pub(super) vfs: &'a mut vfs::VFS,
     pub(super) context: &'a mut Context,
 }
 
@@ -68,6 +68,7 @@ pub(crate) mod generated {
 
         async: {
             wasi_snapshot_preview1::{
+                fd_close,
                 fd_read, fd_pread,
                 fd_filestat_get, fd_seek, fd_tell,
             },
@@ -82,6 +83,7 @@ pub(crate) mod generated {
 
         async: {
             wasi_snapshot_preview1::{
+                fd_close,
                 fd_read, fd_pread,
                 fd_filestat_get, fd_seek, fd_tell,
             },
@@ -408,19 +410,16 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Close a file descriptor.
     /// NOTE: This is similar to `close` in POSIX.
-    fn fd_close(
+    async fn fd_close(
         &mut self,
         _memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
     ) -> Result<(), generated::types::Error> {
         let fdi: u32 = fd.into();
-        match self.vfs.fds.remove(&fdi) {
-            Some(_) => {
-                self.vfs.free_fd(fdi);
-                Ok(())
-            }
-            None => Err(generated::types::Errno::Badf.into()),
+        if self.vfs.pop_fd(fdi).is_none() {
+            return Err(generated::types::Errno::Badf.into());
         }
+        Ok(())
     }
 
     /// Synchronize the data of a file to disk.
@@ -441,19 +440,21 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         fd: generated::types::Fd,
     ) -> Result<generated::types::Fdstat, generated::types::Error> {
         match self.get_fd_desc(fd)? {
-            FileDescriptor::Stdin => Ok(generated::types::Fdstat {
+            vfs::FileDescriptor::Stdin => Ok(generated::types::Fdstat {
                 fs_filetype: generated::types::Filetype::Unknown,
                 fs_flags: generated::types::Fdflags::empty(),
                 fs_rights_base: generated::types::Rights::FD_READ,
                 fs_rights_inheriting: generated::types::Rights::FD_READ,
             }),
-            FileDescriptor::Stdout | FileDescriptor::Stderr => Ok(generated::types::Fdstat {
-                fs_filetype: generated::types::Filetype::Unknown,
-                fs_flags: generated::types::Fdflags::empty(),
-                fs_rights_base: generated::types::Rights::FD_WRITE,
-                fs_rights_inheriting: generated::types::Rights::FD_WRITE,
-            }),
-            FileDescriptor::File { .. } => {
+            vfs::FileDescriptor::Stdout | vfs::FileDescriptor::Stderr => {
+                Ok(generated::types::Fdstat {
+                    fs_filetype: generated::types::Filetype::Unknown,
+                    fs_flags: generated::types::Fdflags::empty(),
+                    fs_rights_base: generated::types::Rights::FD_WRITE,
+                    fs_rights_inheriting: generated::types::Rights::FD_WRITE,
+                })
+            }
+            vfs::FileDescriptor::File { .. } => {
                 let rights = generated::types::Rights::FD_DATASYNC
                     | generated::types::Rights::FD_READ
                     | generated::types::Rights::FD_SEEK
@@ -472,7 +473,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                     fs_rights_inheriting: rights,
                 })
             }
-            FileDescriptor::Dir { .. } => {
+            vfs::FileDescriptor::Dir { .. } => {
                 let rights = generated::types::Rights::FD_READ
                     | generated::types::Rights::PATH_OPEN
                     | generated::types::Rights::FD_READDIR
@@ -521,32 +522,29 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         fd: generated::types::Fd,
     ) -> Result<generated::types::Filestat, generated::types::Error> {
         match self.get_fd_desc_mut(fd)? {
-            FileDescriptor::Stdin | FileDescriptor::Stdout | FileDescriptor::Stderr => {
-                Ok(generated::types::Filestat {
-                    dev: 0,
-                    ino: 0,
-                    filetype: generated::types::Filetype::CharacterDevice,
-                    nlink: 1,
-                    size: 0,
-                    atim: 0,
-                    mtim: 0,
-                    ctim: 0,
-                })
-            }
-            FileDescriptor::File(file) => {
-                let contents = file.get().await.map_err(generated::types::Error::trap)?;
-                Ok(generated::types::Filestat {
-                    dev: 0,
-                    ino: 0,
-                    filetype: generated::types::Filetype::RegularFile,
-                    nlink: 1,
-                    size: contents.contents.len().try_into()?,
-                    atim: 0,
-                    mtim: 0,
-                    ctim: 0,
-                })
-            }
-            FileDescriptor::Dir { .. } => Ok(generated::types::Filestat {
+            vfs::FileDescriptor::Stdin
+            | vfs::FileDescriptor::Stdout
+            | vfs::FileDescriptor::Stderr => Ok(generated::types::Filestat {
+                dev: 0,
+                ino: 0,
+                filetype: generated::types::Filetype::CharacterDevice,
+                nlink: 1,
+                size: 0,
+                atim: 0,
+                mtim: 0,
+                ctim: 0,
+            }),
+            vfs::FileDescriptor::File(contents) => Ok(generated::types::Filestat {
+                dev: 0,
+                ino: 0,
+                filetype: generated::types::Filetype::RegularFile,
+                nlink: 1,
+                size: contents.contents.len().try_into()?,
+                atim: 0,
+                mtim: 0,
+                ctim: 0,
+            }),
+            vfs::FileDescriptor::Dir { .. } => Ok(generated::types::Filestat {
                 dev: 0,
                 ino: 0,
                 filetype: generated::types::Filetype::Directory,
@@ -595,13 +593,11 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         iovs: generated::types::IovecArray,
     ) -> Result<generated::types::Size, generated::types::Error> {
         match self.get_fd_desc_mut(fd)? {
-            FileDescriptor::Stdin => Ok(0),
-            FileDescriptor::Stdout | FileDescriptor::Stderr => {
+            vfs::FileDescriptor::Stdin => Ok(0),
+            vfs::FileDescriptor::Stdout | vfs::FileDescriptor::Stderr => {
                 Err(generated::types::Errno::Acces.into())
             }
-            FileDescriptor::File(file) => {
-                let FileContents { contents, pos } =
-                    file.get().await.map_err(generated::types::Error::trap)?;
+            vfs::FileDescriptor::File(vfs::FileContents { contents, pos, .. }) => {
                 let mut written: u32 = 0;
                 for iov in iovs.iter() {
                     let iov = iov?;
@@ -620,7 +616,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                 }
                 Ok(written)
             }
-            FileDescriptor::Dir { .. } => Err(generated::types::Errno::Isdir.into()),
+            vfs::FileDescriptor::Dir { .. } => Err(generated::types::Errno::Isdir.into()),
         }
     }
 
@@ -635,14 +631,14 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         offset: generated::types::Filesize,
     ) -> Result<generated::types::Size, generated::types::Error> {
         match self.get_fd_desc(fd)? {
-            FileDescriptor::Stdin => Ok(0),
-            FileDescriptor::Stdout | FileDescriptor::Stderr => {
+            vfs::FileDescriptor::Stdin => Ok(0),
+            vfs::FileDescriptor::Stdout | vfs::FileDescriptor::Stderr => {
                 Err(generated::types::Errno::Acces.into())
             }
-            FileDescriptor::File(_) => {
+            vfs::FileDescriptor::File(_) => {
                 todo!()
             }
-            FileDescriptor::Dir { .. } => Err(generated::types::Errno::Isdir.into()),
+            vfs::FileDescriptor::Dir { .. } => Err(generated::types::Errno::Isdir.into()),
         }
     }
 
@@ -656,9 +652,9 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         ciovs: generated::types::CiovecArray,
     ) -> Result<generated::types::Size, generated::types::Error> {
         let mut stream: Box<dyn Write> = match self.get_fd_desc(fd)? {
-            FileDescriptor::Stdout => Box::new(std::io::stdout().lock()),
-            FileDescriptor::Stderr => Box::new(std::io::stderr().lock()),
-            FileDescriptor::Stdin => return Err(generated::types::Errno::Notsup.into()),
+            vfs::FileDescriptor::Stdout => Box::new(std::io::stdout().lock()),
+            vfs::FileDescriptor::Stderr => Box::new(std::io::stderr().lock()),
+            vfs::FileDescriptor::Stdin => return Err(generated::types::Errno::Notsup.into()),
             _ => return Err(generated::types::Errno::Rofs.into()),
         };
         let mut size: u32 = 0;
@@ -702,7 +698,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         fd: generated::types::Fd,
     ) -> Result<generated::types::Prestat, generated::types::Error> {
         return match self.get_fd_desc(fd)? {
-            FileDescriptor::Dir { path } => {
+            vfs::FileDescriptor::Dir { path } => {
                 let path_last = if path.is_empty() {
                     "/"
                 } else {
@@ -728,7 +724,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         path_max_len: generated::types::Size,
     ) -> Result<(), generated::types::Error> {
         match self.get_fd_desc(fd)? {
-            FileDescriptor::Dir { path: dir_path } => {
+            vfs::FileDescriptor::Dir { path: dir_path } => {
                 let path_last = if dir_path.is_empty() {
                     "/"
                 } else {
@@ -766,15 +762,13 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         whence: generated::types::Whence,
     ) -> Result<generated::types::Filesize, generated::types::Error> {
         match self.get_fd_desc_mut(fd)? {
-            FileDescriptor::Stdin | FileDescriptor::Stderr | FileDescriptor::Stdout => {
-                Err(generated::types::Errno::Spipe.into())
-            }
-            FileDescriptor::File(file) => {
+            vfs::FileDescriptor::Stdin
+            | vfs::FileDescriptor::Stderr
+            | vfs::FileDescriptor::Stdout => Err(generated::types::Errno::Spipe.into()),
+            vfs::FileDescriptor::File(vfs::FileContents { contents, pos, .. }) => {
                 const {
                     assert!(std::mem::size_of::<usize>() <= std::mem::size_of::<u64>());
                 }
-                let FileContents { contents, pos } =
-                    file.get().await.map_err(generated::types::Error::trap)?;
                 match whence {
                     generated::types::Whence::Cur => {
                         if offset < 0 {
@@ -808,7 +802,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                 };
                 return u64::try_from(*pos).map_err(|_e| generated::types::Errno::Overflow.into());
             }
-            FileDescriptor::Dir { .. } => Err(generated::types::Errno::Notsup.into()),
+            vfs::FileDescriptor::Dir { .. } => Err(generated::types::Errno::Notsup.into()),
         }
     }
 
@@ -830,14 +824,11 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         fd: generated::types::Fd,
     ) -> Result<generated::types::Filesize, generated::types::Error> {
         match self.get_fd_desc_mut(fd)? {
-            FileDescriptor::Stdin | FileDescriptor::Stderr | FileDescriptor::Stdout => {
-                Err(generated::types::Errno::Spipe.into())
-            }
-            FileDescriptor::File(file) => {
-                let file = file.get().await.map_err(generated::types::Error::trap)?;
-                Ok(file.pos.try_into()?)
-            }
-            FileDescriptor::Dir { .. } => Err(generated::types::Errno::Notsup.into()),
+            vfs::FileDescriptor::Stdin
+            | vfs::FileDescriptor::Stderr
+            | vfs::FileDescriptor::Stdout => Err(generated::types::Errno::Spipe.into()),
+            vfs::FileDescriptor::File(file) => Ok(file.pos.try_into()?),
+            vfs::FileDescriptor::Dir { .. } => Err(generated::types::Errno::Notsup.into()),
         }
     }
 
@@ -850,7 +841,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         buf_len: generated::types::Size,
         cookie: generated::types::Dircookie,
     ) -> Result<generated::types::Size, generated::types::Error> {
-        let FileDescriptor::Dir { path: dir_path } = self.get_fd_desc(fd)? else {
+        let vfs::FileDescriptor::Dir { path: dir_path } = self.get_fd_desc(fd)? else {
             return Err(generated::types::Errno::Badf.into());
         };
 
@@ -955,7 +946,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     ) -> Result<generated::types::Filestat, generated::types::Error> {
         let fdi: u32 = dirfd.into();
         let path = super::common::read_string(memory, path)?;
-        let Some(FileDescriptor::Dir { path: dir_path }) = self.vfs.fds.get(&fdi) else {
+        let Some(vfs::FileDescriptor::Dir { path: dir_path }) = self.vfs.fds.get(&fdi) else {
             return Err(generated::types::Errno::Badf.into());
         };
         let mut result_path = dir_path.clone();
@@ -1036,9 +1027,9 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         let file_path = super::common::read_string(memory, path)?;
         let fdi: u32 = dirfd.into();
         let fdi: u32 = dirfd.into();
-        let new_fd = self.vfs.alloc_fd();
+        let new_fd = self.vfs.alloc_fd().map_err(generated::types::Error::trap)?;
         {
-            let Some(FileDescriptor::Dir { path: dir_path }) = self.vfs.fds.get(&fdi) else {
+            let Some(vfs::FileDescriptor::Dir { path: dir_path }) = self.vfs.fds.get(&fdi) else {
                 return Err(generated::types::Errno::Badf.into());
             };
             let mut resulting_path = dir_path.clone();
@@ -1049,14 +1040,16 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
             }
             match cur_trie {
                 FilesTrie::File { data } => {
-                    let f = FileDescriptor::File(
-                        super::common::FileContentsUnevaluated::from_contents(data.clone(), 0),
-                    );
+                    let f = vfs::FileDescriptor::File(vfs::FileContents {
+                        contents: data.clone(),
+                        pos: 0,
+                        release_memory: false,
+                    });
                     self.vfs.fds.insert(new_fd, f);
                     Ok(new_fd.into())
                 }
                 FilesTrie::Dir { .. } => {
-                    let f = FileDescriptor::Dir {
+                    let f = vfs::FileDescriptor::Dir {
                         path: resulting_path,
                     };
                     self.vfs.fds.insert(new_fd, f);
@@ -1282,7 +1275,7 @@ impl ContextVFS<'_> {
     fn get_fd_desc(
         &self,
         fd: generated::types::Fd,
-    ) -> Result<&FileDescriptor, generated::types::Error> {
+    ) -> Result<&vfs::FileDescriptor, generated::types::Error> {
         let fdi: u32 = fd.into();
         match self.vfs.fds.get(&fdi) {
             Some(x) => Ok(x),
@@ -1293,7 +1286,7 @@ impl ContextVFS<'_> {
     fn get_fd_desc_mut(
         &mut self,
         fd: generated::types::Fd,
-    ) -> Result<&mut FileDescriptor, generated::types::Error> {
+    ) -> Result<&mut vfs::FileDescriptor, generated::types::Error> {
         let fdi: u32 = fd.into();
         match self.vfs.fds.get_mut(&fdi) {
             Some(x) => Ok(x),

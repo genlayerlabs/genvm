@@ -7,9 +7,10 @@ mod common;
 pub mod genlayer_sdk;
 mod gl_call;
 pub mod preview1;
+mod vfs;
 
 pub struct Context {
-    vfs: common::VFS,
+    vfs: vfs::VFS,
     pub preview1: preview1::Context,
     pub genlayer_sdk: genlayer_sdk::Context,
 }
@@ -21,8 +22,13 @@ impl Context {
     ) -> anyhow::Result<Self> {
         let as_value = calldata::to_value(&data.message_data)?;
         let as_bytes = calldata::encode(&as_value);
+        let limiter = if data.conf.is_deterministic {
+            shared_data.limiter_det.clone()
+        } else {
+            shared_data.limiter_non_det.clone()
+        };
         Ok(Self {
-            vfs: common::VFS::new(as_bytes),
+            vfs: vfs::VFS::new(as_bytes, limiter),
             preview1: preview1::Context::new(data.message_data.datetime, data.conf),
             genlayer_sdk: genlayer_sdk::Context::new(data, shared_data),
         })
