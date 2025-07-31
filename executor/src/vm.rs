@@ -211,7 +211,7 @@ impl wasmtime::ResourceLimiter for memlimiter::Limiter {
 impl WasmContext {
     fn new(
         data: crate::wasi::genlayer_sdk::SingleVMData,
-        shared_data: Arc<SharedData>,
+        shared_data: Arc<SupervisorSharedData>,
         limiter: memlimiter::Limiter,
     ) -> anyhow::Result<WasmContext> {
         Ok(WasmContext {
@@ -230,7 +230,7 @@ impl WasmContext {
     }
 }
 
-/// shared across all deterministic VMs
+/// shared across all VMs
 pub struct SharedData {
     pub nondet_call_no: AtomicU32,
     pub cancellation: Arc<genvm_common::cancellation::Token>,
@@ -287,9 +287,109 @@ struct SupervisorStats {
     compiled_modules: usize,
 }
 
+pub struct SpawnAndEval {
+    pub supervisor: std::sync::Arc<tokio::sync::Mutex<Supervisor>>,
+    pub vm_data: wasi::genlayer_sdk::SingleVMData,
+    pub shared_data: Arc<SharedData>,
+}
+
+pub struct NonDetVMTask {
+    pub call_no: u32,
+    pub spawn_and_eval: SpawnAndEval,
+}
+
+impl SpawnAndEval {
+    pub async fn eval(self) -> anyhow::Result<RunOk> {
+        let limiter = if self.vm_data.conf.is_deterministic {
+            self.shared_data.limiter_det.clone()
+        } else {
+            self.shared_data.limiter_non_det.clone()
+        };
+
+        let (mut vm, instance, limiter_save) = {
+            let mut supervisor = self.supervisor.lock().await;
+
+            let mut vm = supervisor.spawn(self.vm_data).await?;
+            let instance = supervisor.apply_contract_actions(&mut vm).await?;
+
+            (vm, instance, limiter.save())
+        };
+        let result = vm.run(&instance).await;
+
+        limiter.restore(limiter_save);
+
+        match result {
+            Ok((res, _)) => Ok(res),
+            Err(e) => errors::unwrap_vm_errors(e),
+        }
+    }
+}
+
+pub struct SupervisorSharedData {
+    pub shared_data: Arc<SharedData>,
+
+    nondet_validator_queue_sender:
+        tokio::sync::mpsc::Sender<SupervisorSharedDataLock<NonDetVMTask>>,
+
+    nondet_call_disagree: std::sync::atomic::AtomicU32,
+    vm_countdown: genvm_common::sync::Waiter,
+    tasks_loop_done: tokio::sync::Notify,
+
+    encountered_error: crossbeam::atomic::AtomicCell<Option<anyhow::Error>>,
+}
+
+pub struct VMCountDecrementer(Arc<SupervisorSharedData>);
+
+impl std::ops::Drop for VMCountDecrementer {
+    fn drop(&mut self) {
+        self.0.vm_countdown.decrement();
+    }
+}
+
+pub struct SupervisorSharedDataLock<T>(VMCountDecrementer, T);
+
+impl<T> std::ops::Deref for SupervisorSharedDataLock<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.1
+    }
+}
+
+impl<T> std::ops::DerefMut for SupervisorSharedDataLock<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.1
+    }
+}
+
+impl<T> SupervisorSharedDataLock<T> {
+    pub fn new(shared_data: Arc<SupervisorSharedData>, data: T) -> Self {
+        shared_data.vm_countdown.increment();
+        Self(VMCountDecrementer(shared_data), data)
+    }
+
+    pub fn into_inner(self) -> (VMCountDecrementer, T) {
+        (self.0, self.1)
+    }
+}
+
+impl SupervisorSharedData {
+    pub async fn submit_vm_task(
+        zelf: &Arc<SupervisorSharedData>,
+        task: NonDetVMTask,
+    ) -> anyhow::Result<()> {
+        let task = SupervisorSharedDataLock::new(zelf.clone(), task);
+
+        zelf.nondet_validator_queue_sender.send(task).await?;
+
+        Ok(())
+    }
+}
+
 pub struct Supervisor {
     pub host: crate::Host,
     pub shared_data: Arc<SharedData>,
+    pub supervisor_shared_data: Arc<SupervisorSharedData>,
 
     engines: Engines,
     cached_modules: HashMap<symbol_table::GlobalSymbol, Arc<PrecompiledModule>>,
@@ -482,6 +582,94 @@ impl WasmFileDesc {
     }
 }
 
+impl SupervisorSharedData {
+    pub async fn finish(&self) -> anyhow::Result<Option<u32>> {
+        self.vm_countdown.decrement();
+
+        self.vm_countdown.wait().await;
+
+        self.tasks_loop_done.notified().await;
+
+        let res = self
+            .nondet_call_disagree
+            .load(std::sync::atomic::Ordering::SeqCst);
+
+        log_trace!(disagree = res; "nondet call disagreement");
+
+        if let Some(err) = self.encountered_error.swap(None) {
+            return Err(err);
+        }
+
+        if res == u32::MAX {
+            Ok(None)
+        } else {
+            Ok(Some(res))
+        }
+    }
+
+    async fn nondet_vm_processor(
+        zelf: std::sync::Arc<Self>,
+        mut nondet_validator_queue_receiver: tokio::sync::mpsc::Receiver<
+            SupervisorSharedDataLock<NonDetVMTask>,
+        >,
+    ) {
+        let mut count = 0;
+        loop {
+            tokio::select! {
+                _ = zelf.shared_data.cancellation.chan.closed() => {
+                    log_debug!("cancellation requested, stopping nondet validator queue");
+                    break;
+                }
+
+                _ = zelf.vm_countdown.wait() => {
+                    log_debug!("vm countdown reached zero, stopping nondet validator queue");
+                    break;
+                }
+
+                Some(task) = nondet_validator_queue_receiver.recv() => {
+                    count += 1;
+                    if zelf.nondet_call_disagree.load(std::sync::atomic::Ordering::SeqCst) != u32::MAX {
+                        log_info!("skipped nondet block due to disagreement in previous one");
+                        continue;
+                    }
+
+                    let (tok, task) = task.into_inner();
+
+                    let res = task.spawn_and_eval.eval().await;
+
+                    std::mem::drop(tok);
+
+                    let do_disagree = match res {
+                        Ok(RunOk::Return(v)) if v == [16] => false,
+                        Ok(RunOk::Return(v)) if v == [8] => true,
+                        Ok(other) => {
+                            log_warn!(result:? = other; "unexpected result in nondet block, setting to disagree");
+                            true
+                        }
+                        Err(e) => {
+                            if let Some(old_err) = zelf.encountered_error.swap(Some(e)) {
+                                log_error!(error:ah = old_err; "encountered another error, overwriting");
+                            }
+                            continue;
+                        }
+                    };
+
+                    log_trace!(call_no = task.call_no, do_disagree = do_disagree; "nondet call result");
+
+                    if do_disagree {
+                        zelf.nondet_call_disagree
+                            .fetch_min(task.call_no, std::sync::atomic::Ordering::SeqCst);
+                    }
+                }
+            }
+        }
+
+        log_debug!(count = count; "all nondet vms done");
+
+        zelf.tasks_loop_done.notify_one();
+    }
+}
+
 impl Supervisor {
     #[allow(clippy::unnecessary_literal_unwrap)]
     pub fn new(
@@ -525,12 +713,16 @@ impl Supervisor {
                 return Err(err.unwrap_err());
             }
         };
-        Ok(Self {
+
+        let (nondet_validator_queue_sender, nondet_validator_queue_receiver) =
+            tokio::sync::mpsc::channel(128);
+
+        let zelf = Self {
             engines,
             cached_modules: HashMap::new(),
             runner_cache: runner::RunnerReaderCache::new()?,
             host,
-            shared_data,
+            shared_data: shared_data.clone(),
             cache_dir: my_cache_dir,
 
             stats: SupervisorStats {
@@ -538,7 +730,23 @@ impl Supervisor {
                 precompile_hits: 0,
                 compiled_modules: 0,
             },
-        })
+
+            supervisor_shared_data: Arc::new(SupervisorSharedData {
+                nondet_validator_queue_sender,
+                shared_data,
+                nondet_call_disagree: std::sync::atomic::AtomicU32::new(u32::MAX),
+                vm_countdown: genvm_common::sync::Waiter::new(),
+                encountered_error: crossbeam::atomic::AtomicCell::new(None),
+                tasks_loop_done: tokio::sync::Notify::new(),
+            }),
+        };
+
+        tokio::spawn(SupervisorSharedData::nondet_vm_processor(
+            zelf.supervisor_shared_data.clone(),
+            nondet_validator_queue_receiver,
+        ));
+
+        Ok(zelf)
     }
 
     pub fn cache_module(&mut self, data: &WasmFileDesc) -> Result<Arc<PrecompiledModule>> {
@@ -625,7 +833,10 @@ impl Supervisor {
         }
     }
 
-    pub async fn spawn(&mut self, data: crate::wasi::genlayer_sdk::SingleVMData) -> Result<VM> {
+    pub async fn spawn(
+        &mut self,
+        data: crate::wasi::genlayer_sdk::SingleVMData,
+    ) -> Result<SupervisorSharedDataLock<VM>> {
         let config_copy = data.conf;
 
         let (engine, limiter) = if data.conf.is_deterministic {
@@ -641,7 +852,7 @@ impl Supervisor {
 
         let mut store = Store::new(
             engine,
-            WasmContext::new(data, self.shared_data.clone(), limiter)?,
+            WasmContext::new(data, self.supervisor_shared_data.clone(), limiter)?,
             wasmtime::GenVMCtx {
                 should_capture_fp,
                 should_quit: self.shared_data.cancellation.should_quit.clone(),
@@ -664,11 +875,14 @@ impl Supervisor {
             )?;
         }
 
-        Ok(VM {
-            store,
-            linker: linker_shared,
-            config_copy,
-        })
+        Ok(SupervisorSharedDataLock::new(
+            self.supervisor_shared_data.clone(),
+            VM {
+                store,
+                linker: linker_shared,
+                config_copy,
+            },
+        ))
     }
 
     fn link_wasm_into(&mut self, ret_vm: &mut VM, data: &WasmFileDesc) -> Result<wasmtime::Module> {
@@ -719,6 +933,12 @@ impl Supervisor {
         action: &InitAction,
         current: symbol_table::GlobalSymbol,
     ) -> Result<Option<wasmtime::Instance>> {
+        if self.shared_data.cancellation.is_cancelled() {
+            return Err(
+                errors::VMError(public_abi::VmError::Timeout.value().to_owned(), None).into(),
+            );
+        }
+
         match action {
             InitAction::MapFile { to, file } => {
                 let limiter = if vm.is_det() {
@@ -743,6 +963,14 @@ impl Supervisor {
                     let must_start_with: &str = if is_root { "" } else { file.as_ref() };
 
                     for (name, file_contents) in range {
+                        if self.shared_data.cancellation.is_cancelled() {
+                            return Err(errors::VMError(
+                                public_abi::VmError::Timeout.value().to_owned(),
+                                None,
+                            )
+                            .into());
+                        }
+
                         if name.ends_with("/") {
                             continue;
                         }

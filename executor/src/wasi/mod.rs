@@ -18,14 +18,14 @@ pub struct Context {
 impl Context {
     pub fn new(
         data: genlayer_sdk::SingleVMData,
-        shared_data: Arc<vm::SharedData>,
+        shared_data: Arc<vm::SupervisorSharedData>,
     ) -> anyhow::Result<Self> {
         let as_value = calldata::to_value(&data.message_data)?;
         let as_bytes = calldata::encode(&as_value);
         let limiter = if data.conf.is_deterministic {
-            shared_data.limiter_det.clone()
+            shared_data.shared_data.limiter_det.clone()
         } else {
-            shared_data.limiter_non_det.clone()
+            shared_data.shared_data.limiter_non_det.clone()
         };
         Ok(Self {
             vfs: vfs::VFS::new(as_bytes, limiter),

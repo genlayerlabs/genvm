@@ -107,6 +107,9 @@ class MockHost(IHost):
 			self.sock.close()
 		Path(self.path).unlink(missing_ok=True)
 
+	async def notify_nondet_disagreement(self, call_no: int) -> None:
+		pass
+
 	async def loop_enter(self, cancellation: asyncio.Event):
 		async_loop = asyncio.get_event_loop()
 		assert self.sock_listener is not None

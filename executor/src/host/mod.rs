@@ -555,4 +555,19 @@ impl Host {
 
         Ok(())
     }
+
+    pub fn notify_nondet_disagreement(&mut self, call_no: u32) -> Result<()> {
+        log_trace!(call_no = call_no; "notify_nondet_disagreement");
+
+        let Ok(mut sock) = (*self.sock).lock() else {
+            anyhow::bail!("can't take lock")
+        };
+        let sock: &mut dyn Sock = &mut *sock;
+        sock.write_all(&[host_fns::Methods::NotifyNondetDisagreement as u8])?;
+        sock.write_all(&call_no.to_le_bytes())?;
+
+        sock.flush()?;
+
+        Ok(())
+    }
 }

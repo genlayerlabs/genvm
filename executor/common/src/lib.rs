@@ -7,6 +7,7 @@ pub mod calldata;
 pub mod cancellation;
 pub mod logger;
 pub mod metrics;
+pub mod sync;
 pub mod templater;
 pub mod version;
 

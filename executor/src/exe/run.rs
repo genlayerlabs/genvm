@@ -124,6 +124,8 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
 
     log_info!(cookie = cookie; "genvm cookie");
 
+    let rt = runtime.enter();
+
     let supervisor = genvm::create_supervisor(
         &config,
         host,
@@ -137,6 +139,8 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         },
     )
     .with_context(|| "creating supervisor")?;
+
+    std::mem::drop(rt);
 
     let res = runtime
         .block_on(genvm::run_with(
@@ -156,14 +160,20 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
 
     if args.print.contains(&PrintOption::Result) {
         match &res {
-            Ok((RunOk::VMError(e, cause), _)) => {
+            Ok((RunOk::VMError(e, cause), _, nondet)) => {
                 println!("executed with `VMError(\"{e}\")`");
+                if let Some(disag) = nondet {
+                    println!("nondet disagreement: {disag}");
+                }
                 if let Some(cause) = cause {
                     eprintln!("{cause:?}");
                 }
             }
-            Ok((res, _)) => {
-                println!("executed with `{res:?}`")
+            Ok((res, _, nondet)) => {
+                println!("executed with `{res:?}`");
+                if let Some(disag) = nondet {
+                    println!("nondet disagreement: {disag}");
+                }
             }
             Err(err) => {
                 println!("executed with `InternalError(\"\")`");
@@ -173,7 +183,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
     }
 
     if args.print.contains(&PrintOption::Fingerprint) {
-        if let Ok((_, fp)) = &res {
+        if let Ok((_, fp, _)) = &res {
             println!("Fingerprint: {fp:?}");
         }
     }

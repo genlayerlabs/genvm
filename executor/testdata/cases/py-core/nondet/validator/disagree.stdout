@@ -1,1 +1,3 @@
-executed with `VMError("validator_disagrees call 0")`
+Hello world~
+executed with `Return("\x00")`
+nondet disagreement: 0

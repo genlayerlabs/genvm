@@ -21,6 +21,7 @@ pub enum Methods {
     EthSend = 11,
     GetBalance = 12,
     RemainingFuelAsGen = 13,
+    NotifyNondetDisagreement = 14,
 }
 
 impl Methods {
@@ -40,6 +41,7 @@ impl Methods {
             Methods::EthSend => 11,
             Methods::GetBalance => 12,
             Methods::RemainingFuelAsGen => 13,
+            Methods::NotifyNondetDisagreement => 14,
         }
     }
     pub fn str_snake_case(self) -> &'static str {
@@ -58,6 +60,7 @@ impl Methods {
             Methods::EthSend => "eth_send",
             Methods::GetBalance => "get_balance",
             Methods::RemainingFuelAsGen => "remaining_fuel_as_gen",
+            Methods::NotifyNondetDisagreement => "notify_nondet_disagreement",
         }
     }
 }
@@ -81,6 +84,7 @@ impl TryFrom<u8> for Methods {
             11 => Ok(Methods::EthSend),
             12 => Ok(Methods::GetBalance),
             13 => Ok(Methods::RemainingFuelAsGen),
+            14 => Ok(Methods::NotifyNondetDisagreement),
             _ => Err(()),
         }
     }

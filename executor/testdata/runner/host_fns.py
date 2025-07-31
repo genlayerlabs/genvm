@@ -19,6 +19,7 @@ class Methods(IntEnum):
 	ETH_SEND = 11
 	GET_BALANCE = 12
 	REMAINING_FUEL_AS_GEN = 13
+	NOTIFY_NONDET_DISAGREEMENT = 14
 
 
 class Errors(IntEnum):

@@ -142,44 +142,79 @@ pub async fn run_with(
     entry_message: MessageData,
     supervisor: Arc<tokio::sync::Mutex<vm::Supervisor>>,
     permissions: &str,
-) -> anyhow::Result<vm::FullRunOk> {
+) -> anyhow::Result<(RunOk, Option<errors::Fingerprint>, Option<u32>)> {
+    let sup_lock = supervisor.lock().await;
+    let supervisor_data = sup_lock.supervisor_shared_data.clone();
+    std::mem::drop(sup_lock);
+
     let res = run_with_impl(entry_message, supervisor.clone(), permissions).await;
 
-    log_debug!("inspecting final result");
+    log_debug!("deterministic execution done");
 
-    let mut supervisor = supervisor.lock().await;
+    let res = match res {
+        Ok(res) => Ok(res),
+        Err(e) => errors::unwrap_vm_errors_fingerprint(e).map(|(x, y)| (x, Some(y))),
+    };
 
-    let res = if supervisor.shared_data.cancellation.is_cancelled() {
-        match res {
-            Ok((RunOk::VMError(msg, cause), fp)) => Ok((
+    let nondet_disagree_res = supervisor_data.finish().await;
+
+    log_debug!("non-deterministic execution done");
+
+    let merged_result = match (res, nondet_disagree_res) {
+        (Err(e_res), Err(e_nondet)) => {
+            log_error!(error:ah = e_nondet; "non-deterministic execution failed");
+
+            Err(e_res)
+        }
+        (Err(e_res), Ok(_)) => Err(e_res),
+        (Ok(_), Err(e_nondet)) => Err(e_nondet),
+        (Ok((a, b)), Ok(c)) => Ok((a, b, c)),
+    };
+
+    let res = if supervisor_data.shared_data.cancellation.is_cancelled() {
+        match merged_result {
+            Ok((RunOk::VMError(msg, cause), fp, disag)) => Ok((
                 RunOk::VMError(
                     public_abi::VmError::Timeout.value().into(),
                     cause.map(|v| v.context(msg)),
                 ),
                 fp,
+                disag,
             )),
             Ok(r) => Ok(r),
             Err(e) => Ok((
                 RunOk::VMError(public_abi::VmError::Timeout.value().into(), Some(e)),
                 None,
+                None,
             )),
         }
     } else {
-        match res {
-            Ok(res) => Ok(res),
-            Err(e) => errors::unwrap_vm_errors_fingerprint(e).map(|(x, y)| (x, Some(y))),
-        }
+        merged_result
     };
 
     let res = res.inspect_err(|e| {
         log_error!(error:ah = &e; "internal error");
     });
 
+    let mut supervisor = supervisor.lock().await;
+
+    if let Ok((_, _, Some(disag))) = &res {
+        supervisor.host.notify_nondet_disagreement(*disag)?;
+    }
+
     supervisor.log_stats();
 
     log_debug!("sending final result to host");
 
+    let (res, nondet_disagree) = match res {
+        Ok((a, b, c)) => (Ok((a, b)), c),
+        Err(e) => (Err(e), None),
+    };
+
     supervisor.host.consume_result(&res)?;
 
-    res
+    match res {
+        Ok((a, b)) => Ok((a, b, nondet_disagree)),
+        Err(e) => Err(e),
+    }
 }

@@ -881,6 +881,7 @@ dependencies = [
  "bufreaderwriter",
  "chrono",
  "clap",
+ "crossbeam",
  "dashmap",
  "futures-util",
  "genvm-common",

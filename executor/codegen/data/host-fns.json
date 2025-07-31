@@ -17,7 +17,8 @@
             "eth_call": 10,
             "eth_send": 11,
             "get_balance": 12,
-            "remaining_fuel_as_gen": 13
+            "remaining_fuel_as_gen": 13,
+            "notify_nondet_disagreement": 14
         }
     },
     {

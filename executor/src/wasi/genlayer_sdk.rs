@@ -96,7 +96,7 @@ pub struct SingleVMData {
 
 pub struct Context {
     pub data: SingleVMData,
-    pub shared_data: Arc<vm::SharedData>,
+    pub shared_data: Arc<vm::SupervisorSharedData>,
     pub messages_decremented: primitive_types::U256,
 
     pub start_time: std::time::Instant,
@@ -175,7 +175,7 @@ fn read_owned_vec(
 }
 
 impl Context {
-    pub fn new(data: SingleVMData, shared_data: Arc<vm::SharedData>) -> Self {
+    pub fn new(data: SingleVMData, shared_data: Arc<vm::SupervisorSharedData>) -> Self {
         let now = std::time::Instant::now();
 
         Self {
@@ -641,7 +641,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
 
-                let web = self.context.shared_data.modules.web.clone();
+                let web = self.context.shared_data.shared_data.modules.web.clone();
                 let task = taskify(async move {
                     web.send::<genvm_modules_interfaces::web::RenderAnswer, _>(
                         genvm_modules_interfaces::web::Message::Render(render_payload),
@@ -666,7 +666,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
 
-                let web = self.context.shared_data.modules.web.clone();
+                let web = self.context.shared_data.shared_data.modules.web.clone();
                 let task = taskify(async move {
                     web.send::<genvm_modules_interfaces::web::RenderAnswer, _>(
                         genvm_modules_interfaces::web::Message::Request(request_payload),
@@ -704,7 +704,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .map_err(generated::types::Error::trap)?;
                 std::mem::drop(sup);
 
-                let llm = self.context.shared_data.modules.llm.clone();
+                let llm = self.context.shared_data.shared_data.modules.llm.clone();
                 let task = taskify(async move {
                     let result = llm
                         .send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
@@ -759,7 +759,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .map_err(generated::types::Error::trap)?;
                 std::mem::drop(sup);
 
-                let llm = self.context.shared_data.modules.llm.clone();
+                let llm = self.context.shared_data.shared_data.modules.llm.clone();
                 let task = taskify(async move {
                     let answer = llm
                         .send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
@@ -905,7 +905,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let slot = SlotID::read_from_mem(mem, slot)?;
 
-        if self.context.shared_data.locked_slots.contains(slot) {
+        if self
+            .context
+            .shared_data
+            .shared_data
+            .locked_slots
+            .contains(slot)
+        {
             return Err(generated::types::Errno::Forbidden.into());
         }
 
@@ -977,7 +983,7 @@ impl Context {
         &mut self,
         address: calldata::Address,
     ) -> Result<primitive_types::U256, generated::types::Error> {
-        if let Some(res) = self.shared_data.balances.get(&address) {
+        if let Some(res) = self.shared_data.shared_data.balances.get(&address) {
             return Ok(*res);
         }
 
@@ -988,7 +994,7 @@ impl Context {
             .get_balance(address)
             .map_err(generated::types::Error::trap)?;
 
-        let _ = self.shared_data.balances.insert(address, res);
+        let _ = self.shared_data.shared_data.balances.insert(address, res);
 
         Ok(res)
     }
@@ -1009,9 +1015,9 @@ impl Context {
         essential_data: SingleVMData,
     ) -> anyhow::Result<vm::RunOk> {
         let limiter = if essential_data.conf.is_deterministic {
-            self.shared_data.limiter_det.clone()
+            self.shared_data.shared_data.limiter_det.clone()
         } else {
-            self.shared_data.limiter_non_det.clone()
+            self.shared_data.shared_data.limiter_non_det.clone()
         };
 
         let (mut vm, instance, limiter_save) = {
@@ -1053,7 +1059,7 @@ impl ContextVFS<'_> {
             }
             gl_call::TracePayload::RuntimeMicroSec => {
                 let elapsed_micros = if self.context.data.conf.is_deterministic
-                    && !self.context.shared_data.debug_mode
+                    && !self.context.shared_data.shared_data.debug_mode
                 {
                     0u64
                 } else {
@@ -1086,12 +1092,12 @@ impl ContextVFS<'_> {
             return Err(generated::types::Errno::Forbidden.into());
         }
 
-        // relaxed reason: only deterministic VM can run it
         let call_no = self
             .context
             .shared_data
+            .shared_data
             .nondet_call_no
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
         let leaders_res = {
             let supervisor = self.context.data.supervisor.clone();
@@ -1100,98 +1106,82 @@ impl ContextVFS<'_> {
         }
         .map_err(generated::types::Error::trap)?;
 
-        let leaders_res = match (leaders_res, self.context.shared_data.is_sync) {
-            (leaders_res, false) => leaders_res,
-            (Some(leaders_res), true) => return self.set_vm_run_result(leaders_res).map(|x| x.0),
-            (_, true) => {
-                return Err(generated::types::Error::trap(anyhow::anyhow!(
-                    "absent leader result in sync mode"
-                )))
-            }
-        };
-
-        let message_data = match &leaders_res {
-            None => self.context.data.message_data.fork_leader(
-                public_abi::EntryKind::ConsensusStage,
-                data_leader,
-                None,
-            ),
-            Some(leaders_res) => {
-                let dup = match leaders_res {
-                    RunOk::Return(items) => RunOk::Return(items.clone()),
-                    RunOk::UserError(msg) => RunOk::UserError(msg.clone()),
-                    RunOk::VMError(msg, _) => RunOk::VMError(msg.clone(), None),
-                };
-                self.context.data.message_data.fork_leader(
-                    public_abi::EntryKind::ConsensusStage,
-                    data_validator,
-                    Some(dup),
-                )
-            }
-        };
-
-        let supervisor = self.context.data.supervisor.clone();
-
-        let vm_data = SingleVMData {
-            conf: base::Config {
-                needs_error_fingerprint: false,
-                is_deterministic: false,
-                can_read_storage: false,
-                can_write_storage: false,
-                can_spawn_nondet: false,
-                can_call_others: false,
-                can_send_messages: false,
-                state_mode: public_abi::StorageType::Default,
-            },
-            message_data,
-            version: self.context.data.version,
-            supervisor: supervisor.clone(),
-            should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        };
-
-        let my_res = self.context.spawn_and_run(&supervisor, vm_data).await;
-        let my_res = match my_res {
-            Ok(res) => Ok(res),
-            Err(e) => errors::unwrap_vm_errors(e),
-        }
-        .map_err(generated::types::Error::trap)?;
-
-        let ret_res = match leaders_res {
-            None => {
-                let mut supervisor = supervisor.lock().await;
-                supervisor
-                    .host
-                    .post_nondet_result(call_no, &my_res)
-                    .map_err(generated::types::Error::trap)?;
-                Ok(my_res)
-            }
-            Some(leaders_res) => match my_res {
-                RunOk::Return(v) if v == [16] => Ok(leaders_res),
-                RunOk::Return(v) if v == [8] => Err(VMError(
-                    format!(
-                        "{} call {}",
-                        public_abi::VmError::ValidatorDisagrees.value(),
+        let result_to_return = if self.context.shared_data.shared_data.is_sync {
+            match leaders_res {
+                None => {
+                    return Err(generated::types::Error::trap(anyhow::anyhow!(
+                        "absent leader result in sync mode, call_no: {}",
                         call_no
-                    ),
-                    None,
-                )
-                .into()),
-                _ => {
-                    log_warn!(validator_result:? = my_res, leaders_result:? = leaders_res; "validator reported unexpected result");
-                    Err(VMError(
-                        format!(
-                            "{} call {}",
-                            public_abi::VmError::ValidatorDisagrees.value(),
-                            call_no
-                        ),
-                        None,
-                    )
-                    .into())
+                    )))
                 }
-            },
+                Some(v) => v,
+            }
+        } else {
+            let message_data = match &leaders_res {
+                None => self.context.data.message_data.fork_leader(
+                    public_abi::EntryKind::ConsensusStage,
+                    data_leader,
+                    None,
+                ),
+                Some(leaders_res) => {
+                    let dup = match leaders_res {
+                        RunOk::Return(items) => RunOk::Return(items.clone()),
+                        RunOk::UserError(msg) => RunOk::UserError(msg.clone()),
+                        RunOk::VMError(msg, _) => RunOk::VMError(msg.clone(), None),
+                    };
+                    self.context.data.message_data.fork_leader(
+                        public_abi::EntryKind::ConsensusStage,
+                        data_validator,
+                        Some(dup),
+                    )
+                }
+            };
+
+            let supervisor = self.context.data.supervisor.clone();
+
+            let vm_data = SingleVMData {
+                conf: base::Config {
+                    needs_error_fingerprint: false,
+                    is_deterministic: false,
+                    can_read_storage: false,
+                    can_write_storage: false,
+                    can_spawn_nondet: false,
+                    can_call_others: false,
+                    can_send_messages: false,
+                    state_mode: public_abi::StorageType::Default,
+                },
+                message_data,
+                version: self.context.data.version,
+                supervisor: supervisor.clone(),
+                should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            };
+
+            let task = vm::SpawnAndEval {
+                vm_data,
+                supervisor,
+                shared_data: self.context.shared_data.shared_data.clone(),
+            };
+
+            let my_result = match leaders_res {
+                None => task.eval().await,
+                Some(leaders_res) => {
+                    let task = vm::NonDetVMTask {
+                        spawn_and_eval: task,
+                        call_no,
+                    };
+
+                    vm::SupervisorSharedData::submit_vm_task(&self.context.shared_data, task)
+                        .await
+                        .map_err(generated::types::Error::trap)?;
+
+                    Ok(leaders_res)
+                }
+            };
+
+            my_result.map_err(generated::types::Error::trap)?
         };
-        let ret_res = ret_res.map_err(generated::types::Error::trap)?;
-        self.set_vm_run_result(ret_res).map(|x| x.0)
+
+        self.set_vm_run_result(result_to_return).map(|x| x.0)
     }
 
     async fn sandbox(

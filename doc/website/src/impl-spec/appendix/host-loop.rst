@@ -161,3 +161,7 @@ The :term:`host` processes requests in a loop until ``consume_result``:
          else:
            write_byte json/errors/ok
            write_bytes fuel.to_le_bytes(8) # 64-bit integer, must be safe integer (fits in double)
+
+       json/methods/notify_nondet_disagreement:
+          call_no := read_u32_le
+          host_notify_nondet_disagreement(call_no)

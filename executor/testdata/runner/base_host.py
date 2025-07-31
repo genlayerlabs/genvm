@@ -101,6 +101,8 @@ class IHost(metaclass=abc.ABCMeta):
 	async def remaining_fuel_as_gen(self, /) -> int: ...
 	@abc.abstractmethod
 	async def post_event(self, topics: list[bytes], blob: bytes, /) -> None: ...
+	@abc.abstractmethod
+	async def notify_nondet_disagreement(self, call_no: int, /) -> None: ...
 
 
 def save_code_callback[T](
@@ -312,6 +314,10 @@ async def host_loop(handler: IHost, cancellation: asyncio.Event):
 					await send_all(bytes([e.error_code]))
 				else:
 					await send_all(bytes([Errors.OK]))
+			case Methods.NOTIFY_NONDET_DISAGREEMENT:
+				call_no = await recv_int()
+				await handler.notify_nondet_disagreement(call_no)
+				# No response needed according to the spec
 			case x:
 				raise Exception(f'unknown method {x}')
 
