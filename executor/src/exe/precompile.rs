@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::builder::OsStr;
-use genvm::{caching, config, ustar::SharedBytes};
+use genvm::{caching, config};
 
 use genvm_common::*;
 
@@ -42,7 +42,7 @@ fn compile_single_file_single_mode(
 
 fn compile_single_file(
     precompile_dir: &std::path::Path,
-    engines: &genvm::vm::Engines,
+    engines: &genvm::rt::DetNondet<wasmtime::Engine>,
     runners_dir: &std::path::Path,
     zip_path: &std::path::Path,
 ) -> Result<()> {
@@ -59,9 +59,9 @@ fn compile_single_file(
     let mut result_dir_path = precompile_dir.to_owned();
     result_dir_path.push(base_path);
 
-    let data = genvm::mmap::load_file(zip_path, None)?;
+    let data = util::mmap_file(zip_path)?;
 
-    let arch = genvm::ustar::Archive::from_ustar(SharedBytes::new(data))?;
+    let arch = genvm::runners::Archive::from_ustar(util::SharedBytes::new(data))?;
 
     for (entry_name, contents) in arch
         .data
@@ -114,12 +114,12 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
     if args.info {
         return Ok(());
     }
-    let engines = genvm::vm::Engines::create(|conf| {
+    let engines = genvm::rt::supervisor::create_engines(|conf| {
         conf.cranelift_opt_level(wasmtime::OptLevel::Speed);
         Ok(())
     })?;
 
-    let runners_dir = genvm::runner::path()?;
+    let runners_dir = genvm::runners::path()?;
 
     for runner_id in std::fs::read_dir(&runners_dir)? {
         let runner_id = runner_id?;

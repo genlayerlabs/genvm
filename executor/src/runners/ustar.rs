@@ -1,96 +1,9 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
 
-#[derive(Clone)]
-pub struct SharedBytes {
-    bytes: Arc<dyn AsRef<[u8]> + Sync + Send>,
-    begin: usize,
-    end: usize,
-}
-
-impl std::fmt::Debug for SharedBytes {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SharedBytes")
-            .field("data", &self.as_ref())
-            .finish()
-    }
-}
-
-impl std::cmp::PartialEq for SharedBytes {
-    fn eq(&self, other: &Self) -> bool {
-        self.as_slice() == other.as_slice()
-    }
-}
-
-impl std::cmp::Eq for SharedBytes {}
-
-impl std::hash::Hash for SharedBytes {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.as_ref().hash(state);
-    }
-}
-
-impl AsRef<[u8]> for SharedBytes {
-    fn as_ref(&self) -> &[u8] {
-        self.as_slice()
-    }
-}
-
-impl From<&[u8]> for SharedBytes {
-    fn from(value: &[u8]) -> Self {
-        let data: Box<[u8]> = Box::from(value);
-        Self {
-            begin: 0,
-            end: value.len(),
-            bytes: Arc::new(data),
-        }
-    }
-}
-
-impl SharedBytes {
-    pub fn len(&self) -> usize {
-        self.end - self.begin
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    fn as_slice(&self) -> &[u8] {
-        let as_slice: &[u8] = (*self.bytes).as_ref();
-        &as_slice[self.begin..self.end]
-    }
-
-    pub fn new(value: impl AsRef<[u8]> + Sync + Send + 'static) -> Self {
-        let vl: &[u8] = value.as_ref();
-        let len = vl.len();
-        Self {
-            begin: 0,
-            end: len,
-            bytes: Arc::new(value),
-        }
-    }
-
-    pub fn slice(&self, begin: usize, end: usize) -> SharedBytes {
-        if begin > end {
-            panic!("INVALID");
-        }
-        if self.begin + begin > self.end {
-            panic!("INVALID");
-        }
-
-        if self.begin + end > self.end {
-            panic!("INVALID");
-        }
-        Self {
-            bytes: self.bytes.clone(),
-            begin: self.begin + begin,
-            end: usize::min(self.begin + end, self.end),
-        }
-    }
-}
+use genvm_common::*;
 
 pub struct Archive {
-    pub data: BTreeMap<String, SharedBytes>,
+    pub data: BTreeMap<String, util::SharedBytes>,
     pub total_size: u32,
 }
 
@@ -115,7 +28,7 @@ fn trim_zeroes(x: &[u8]) -> &[u8] {
 }
 
 impl Archive {
-    pub fn from_ustar(original_data: SharedBytes) -> anyhow::Result<Self> {
+    pub fn from_ustar(original_data: util::SharedBytes) -> anyhow::Result<Self> {
         const BLOCK_SIZE: usize = 512;
         const _RECORD_SIZE: usize = BLOCK_SIZE * 20;
 
@@ -198,7 +111,7 @@ impl Archive {
 
     pub fn from_zip<R: std::io::Read + std::io::Seek>(
         zip: &mut zip::ZipArchive<R>,
-        bytes: SharedBytes,
+        bytes: util::SharedBytes,
     ) -> anyhow::Result<Self> {
         let mut res = BTreeMap::new();
 
@@ -226,7 +139,7 @@ impl Archive {
             map_try_insert(
                 &mut res,
                 String::from(file.name()),
-                SharedBytes::from(buf.as_slice()),
+                util::SharedBytes::from(buf.as_slice()),
             )?;
         }
 
@@ -237,9 +150,9 @@ impl Archive {
     }
 
     pub fn from_file_and_runner(
-        file: SharedBytes,
-        version: SharedBytes,
-        runner_comment: SharedBytes,
+        file: util::SharedBytes,
+        version: util::SharedBytes,
+        runner_comment: util::SharedBytes,
     ) -> Self {
         let total_size = file.len() as u32;
 

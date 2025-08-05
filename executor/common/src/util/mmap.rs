@@ -1,9 +1,8 @@
-use genvm_common::*;
 use std::ptr::NonNull;
 
 use anyhow::Context;
 
-use crate::{errors::VMError, memlimiter};
+use crate::log_error;
 
 #[derive(Debug)]
 struct Mmap(NonNull<[u8]>);
@@ -35,9 +34,8 @@ impl Drop for Mmap {
     }
 }
 
-pub fn load_file(
+pub fn mmap_file(
     path: &std::path::Path,
-    limiter: Option<&memlimiter::Limiter>,
 ) -> anyhow::Result<impl AsRef<[u8]> + Send + Sync + 'static> {
     let file = std::fs::File::open(path).with_context(|| format!("opening {path:?}"))?;
 
@@ -47,12 +45,6 @@ pub fn load_file(
         .len();
     let file_len = u32::try_from(file_len).map_err(|_| anyhow::anyhow!("file too large to map"))?;
 
-    if let Some(limiter) = limiter {
-        if !limiter.consume(file_len) {
-            return Err(VMError::oom(None).into());
-        }
-    }
-
     let file_len = file_len as usize;
 
     let ptr = unsafe {
@@ -61,9 +53,10 @@ pub fn load_file(
             file_len,
             rustix::mm::ProtFlags::READ,
             rustix::mm::MapFlags::PRIVATE,
-            &file,
+            file,
             0,
-        )?
+        )
+        .with_context(|| format!("mmaping {path:?}"))?
     };
 
     let memory = std::ptr::slice_from_raw_parts_mut(ptr.cast(), file_len);

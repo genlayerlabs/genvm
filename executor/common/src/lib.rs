@@ -6,10 +6,12 @@ use serde::{Deserialize, Serialize};
 pub mod calldata;
 pub mod cancellation;
 pub mod logger;
-pub mod metrics;
+pub mod stats;
 pub mod sync;
 pub mod templater;
 pub mod version;
+
+pub mod util;
 
 #[cfg(not(debug_assertions))]
 fn default_log_level() -> logger::Level {

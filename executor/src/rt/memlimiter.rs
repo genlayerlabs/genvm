@@ -1,6 +1,8 @@
 use genvm_common::*;
 use std::sync::{atomic::AtomicU32, Arc};
 
+use crate::{public_abi, rt};
+
 #[derive(Clone)]
 pub struct Limiter {
     id: &'static str,
@@ -87,5 +89,62 @@ impl Limiter {
         }
 
         true
+    }
+}
+
+impl wasmtime::ResourceLimiter for Limiter {
+    fn memory_growing(
+        &mut self,
+        current: usize,
+        desired: usize,
+        _maximum: Option<usize>,
+    ) -> anyhow::Result<bool> {
+        let delta = desired - current;
+        if delta > u32::MAX as usize {
+            return Ok(false);
+        }
+
+        let delta = delta as u32;
+        let success = self.consume(delta);
+
+        if current == 0 && !success {
+            Err(rt::errors::VMError::oom(None).into())
+        } else {
+            Ok(success)
+        }
+    }
+
+    fn table_growing(
+        &mut self,
+        current: usize,
+        desired: usize,
+        _maximum: Option<usize>,
+    ) -> anyhow::Result<bool> {
+        let delta = desired - current;
+
+        if delta > u32::MAX as usize {
+            return Ok(false);
+        }
+
+        let delta = delta as u32;
+        let success = self.consume_mul(delta, public_abi::MemoryLimiterConsts::TableEntry.value());
+
+        if current == 0 && !success {
+            Err(rt::errors::VMError::oom(None).into())
+        } else {
+            Ok(success)
+        }
+    }
+
+    fn instances(&self) -> usize {
+        1000
+    }
+
+    fn tables(&self) -> usize {
+        100
+    }
+
+    fn memories(&self) -> usize {
+        100
     }
 }

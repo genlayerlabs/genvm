@@ -37,6 +37,8 @@ impl Address {
     }
 }
 
+pub type Map = BTreeMap<String, Value>;
+
 #[derive(Clone, PartialEq, Eq)]
 pub enum Value {
     Null,

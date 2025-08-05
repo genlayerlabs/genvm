@@ -247,6 +247,8 @@ pub mod llm {
             payload: PromptTemplatePayload,
             remaining_fuel_as_gen: u64,
         },
+
+        GetStats,
     }
 
     #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -351,6 +353,7 @@ pub mod web {
     pub enum Message {
         Render(RenderPayload),
         Request(RequestPayload),
+        GetStats,
     }
 
     #[derive(Serialize, Deserialize)]

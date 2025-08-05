@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 
-use crate::{errors::VMError, ustar::SharedBytes};
+use crate::{public_abi, rt};
+use genvm_common::*;
 
 pub struct FileContents {
-    pub contents: SharedBytes,
+    pub contents: util::SharedBytes,
     pub pos: usize,
 
     pub release_memory: bool,
@@ -20,17 +21,17 @@ pub enum FileDescriptor {
 #[allow(dead_code)]
 const _: FileDescriptor = FileDescriptor::Stdin;
 
-pub(super) struct VFS {
+pub(crate) struct VFS {
     pub fds: BTreeMap<u32, FileDescriptor>,
     pub free_descriptors: Vec<u32>,
     pub next_free_descriptor: u32,
 
-    pub limiter: crate::memlimiter::Limiter,
+    pub limiter: rt::memlimiter::Limiter,
 }
 
 impl VFS {
-    pub fn new(stdin: Vec<u8>, limiter: crate::memlimiter::Limiter) -> Self {
-        let stdin_data = SharedBytes::new(stdin);
+    pub fn new(stdin: Vec<u8>, limiter: rt::memlimiter::Limiter) -> Self {
+        let stdin_data = util::SharedBytes::new(stdin);
 
         let fds = BTreeMap::from([
             (
@@ -61,9 +62,9 @@ impl VFS {
             None => {
                 if !self
                     .limiter
-                    .consume(crate::public_abi::MemoryLimiterConsts::FdAllocation as u32)
+                    .consume(public_abi::MemoryLimiterConsts::FdAllocation as u32)
                 {
-                    return Err(VMError::oom(None).into());
+                    return Err(rt::errors::VMError::oom(None).into());
                 }
                 self.next_free_descriptor += 1;
                 Ok(self.next_free_descriptor)
@@ -95,7 +96,7 @@ impl VFS {
 
     pub fn place_content(&mut self, value: FileContents) -> anyhow::Result<u32> {
         if value.release_memory && !self.limiter.consume(value.contents.len() as u32) {
-            return Err(VMError::oom(None).into());
+            return Err(rt::errors::VMError::oom(None).into());
         }
 
         let fd = self.alloc_fd()?;

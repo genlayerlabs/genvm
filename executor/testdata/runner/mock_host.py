@@ -214,4 +214,4 @@ class MockHost(IHost):
 
 if __name__ == '__main__':
 	with pickle.loads(Path(sys.argv[1]).read_bytes()) as host:
-		asyncio.run(host_loop(host))
+		asyncio.run(host_loop(host, asyncio.Event()))

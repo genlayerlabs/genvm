@@ -1,3 +1,247 @@
+mod darc {
+    use std::marker::PhantomData;
+    use std::ptr::NonNull;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct DArcControlBlock {
+        ref_count: AtomicUsize,
+        root_ptr: NonNull<()>,
+        deleter: fn(*mut ()),
+    }
+
+    #[repr(C)]
+    struct DArcControlWithData<T> {
+        control_block: DArcControlBlock,
+        data: T,
+    }
+
+    pub struct DArc<T>
+    where
+        T: 'static,
+    {
+        control_block: NonNull<DArcControlBlock>,
+        actual_ptr: NonNull<T>,
+        _phantom: PhantomData<T>,
+    }
+
+    impl<T> serde::Serialize for DArc<T>
+    where
+        T: serde::Serialize + 'static,
+    {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            let data_ref: &T = self;
+            data_ref.serialize(serializer)
+        }
+    }
+
+    impl<T> DArc<T>
+    where
+        T: 'static,
+    {
+        pub fn new(value: T) -> Self {
+            let boxed = Box::new(DArcControlWithData {
+                control_block: DArcControlBlock {
+                    ref_count: AtomicUsize::new(1),
+                    root_ptr: NonNull::dangling(), // Will be set below
+                    deleter: Self::delete_control_with_data::<T>,
+                },
+                data: value,
+            });
+
+            let ptr = NonNull::from(Box::leak(boxed));
+
+            // SAFETY: We just created this pointer and know it's valid
+            unsafe {
+                (*ptr.as_ptr()).control_block.root_ptr = ptr.cast();
+            }
+
+            // SAFETY: The control block is at the beginning of the struct
+            let control_block = ptr.cast::<DArcControlBlock>();
+
+            // SAFETY: We know the data field exists and is properly aligned
+            let actual_ptr = unsafe { NonNull::new_unchecked(&mut (*ptr.as_ptr()).data as *mut T) };
+
+            DArc {
+                control_block,
+                actual_ptr,
+                _phantom: PhantomData,
+            }
+        }
+
+        pub fn into_gep<'a, R>(self, getter: impl FnOnce(&'a T) -> &'a R) -> DArc<R>
+        where
+            R: 'static,
+        {
+            // SAFETY: actual_ptr is valid for the lifetime of self
+            let data_ref = unsafe { self.actual_ptr.as_ref() };
+            let derived_ref = getter(data_ref);
+
+            // SAFETY: derived_ref is a reference to a subobject of T
+            let derived_ptr = unsafe { NonNull::new_unchecked(derived_ref as *const R as *mut R) };
+
+            let control_block = self.control_block;
+
+            std::mem::forget(self);
+
+            DArc {
+                control_block,
+                actual_ptr: derived_ptr,
+                _phantom: PhantomData,
+            }
+        }
+
+        pub async fn into_gep_async<'a, R, F>(self, getter: impl FnOnce(&'a T) -> F) -> DArc<R>
+        where
+            R: 'static,
+            F: std::future::Future<Output = &'a R>,
+        {
+            // SAFETY: actual_ptr is valid for the lifetime of self
+            let data_ref = unsafe { self.actual_ptr.as_ref() };
+            let derived_ref = getter(data_ref).await;
+
+            // SAFETY: derived_ref is a reference to a subobject of T
+            let derived_ptr = unsafe { NonNull::new_unchecked(derived_ref as *const R as *mut R) };
+
+            let control_block = self.control_block;
+
+            std::mem::forget(self);
+
+            DArc {
+                control_block,
+                actual_ptr: derived_ptr,
+                _phantom: PhantomData,
+            }
+        }
+
+        /// Get a derived pointer to a field or subobject
+        pub fn gep<'a, R>(&self, getter: impl FnOnce(&'a T) -> &'a R) -> DArc<R>
+        where
+            R: 'static,
+        {
+            self.clone().into_gep(getter)
+        }
+
+        pub async fn gep_async<'a, R, F>(&self, getter: impl FnOnce(&'a T) -> F) -> DArc<R>
+        where
+            R: 'static,
+            F: std::future::Future<Output = &'a R>,
+        {
+            self.clone().into_gep_async(getter).await
+        }
+
+        pub async fn gep_async_err<'a, R, F, Err>(
+            &self,
+            getter: impl FnOnce(&'a T) -> F,
+        ) -> core::result::Result<DArc<R>, Err>
+        where
+            R: 'static,
+            F: std::future::Future<Output = core::result::Result<&'a R, Err>>,
+        {
+            // SAFETY: actual_ptr is valid for the lifetime of self
+            let data_ref = unsafe { self.actual_ptr.as_ref() };
+            let derived_ref = getter(data_ref).await?;
+
+            // SAFETY: derived_ref is a reference to a subobject of T
+            let derived_ptr = unsafe { NonNull::new_unchecked(derived_ref as *const R as *mut R) };
+
+            // Increment reference count
+            // SAFETY: control_block is valid
+            unsafe {
+                (*self.control_block.as_ptr())
+                    .ref_count
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+
+            Ok(DArc {
+                control_block: self.control_block,
+                actual_ptr: derived_ptr,
+                _phantom: PhantomData,
+            })
+        }
+
+        /// Get the current reference count
+        pub fn strong_count(&self) -> usize {
+            // SAFETY: control_block is valid
+            unsafe {
+                (*self.control_block.as_ptr())
+                    .ref_count
+                    .load(Ordering::Relaxed)
+            }
+        }
+
+        fn delete_control_with_data<U>(ptr: *mut ()) {
+            // SAFETY: This function is only called with the correct type
+            std::mem::drop(unsafe { Box::from_raw(ptr as *mut DArcControlWithData<U>) })
+        }
+    }
+
+    impl<T> Clone for DArc<T>
+    where
+        T: 'static,
+    {
+        fn clone(&self) -> Self {
+            // SAFETY: control_block is valid
+            unsafe {
+                (*self.control_block.as_ptr())
+                    .ref_count
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+
+            DArc {
+                control_block: self.control_block,
+                actual_ptr: self.actual_ptr,
+                _phantom: PhantomData,
+            }
+        }
+    }
+
+    impl<T> Drop for DArc<T>
+    where
+        T: 'static,
+    {
+        fn drop(&mut self) {
+            // SAFETY: control_block is valid
+            let prev_count = unsafe {
+                (*self.control_block.as_ptr())
+                    .ref_count
+                    .fetch_sub(1, Ordering::Release)
+            };
+
+            if prev_count == 1 {
+                // This was the last reference
+                std::sync::atomic::fence(Ordering::Acquire);
+
+                // SAFETY: control_block is valid
+                unsafe {
+                    let control = &*self.control_block.as_ptr();
+                    (control.deleter)(control.root_ptr.as_ptr());
+                }
+            }
+        }
+    }
+
+    impl<T> std::ops::Deref for DArc<T>
+    where
+        T: 'static,
+    {
+        type Target = T;
+
+        fn deref(&self) -> &Self::Target {
+            // SAFETY: actual_ptr is valid for the lifetime of self
+            unsafe { self.actual_ptr.as_ref() }
+        }
+    }
+
+    // SAFETY: DArc can be sent between threads if T can be
+    unsafe impl<T: Send + Sync + 'static> Send for DArc<T> {}
+    unsafe impl<T: Send + Sync + 'static> Sync for DArc<T> {}
+}
+
+pub use darc::DArc;
+
 struct WaiterInner {
     counter: std::sync::atomic::AtomicUsize,
     reached_zero: tokio::sync::Notify,
@@ -49,5 +293,78 @@ impl Waiter {
         if self.0.counter.load(std::sync::atomic::Ordering::SeqCst) > 0 {
             self.0.reached_zero.notified().await;
         }
+    }
+}
+
+pub struct CacheMap<T: 'static>(
+    dashmap::DashMap<symbol_table::GlobalSymbol, DArc<tokio::sync::OnceCell<T>>>,
+);
+
+impl<T> CacheMap<T> {
+    pub fn new() -> Self {
+        Self(dashmap::DashMap::new())
+    }
+
+    pub async fn get_or_create<Err, F>(
+        &self,
+        key: symbol_table::GlobalSymbol,
+        creator: impl FnOnce() -> F,
+    ) -> Result<DArc<T>, Err>
+    where
+        F: std::future::Future<Output = Result<T, Err>>,
+    {
+        let entry = match self.0.entry(key) {
+            dashmap::Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
+            dashmap::Entry::Vacant(vacant_entry) => vacant_entry
+                .insert(DArc::new(tokio::sync::OnceCell::new()))
+                .clone(),
+        };
+
+        let res = entry
+            .gep_async_err(|zelf| zelf.get_or_try_init(creator))
+            .await?;
+
+        Ok(res)
+    }
+}
+
+impl<T> Default for CacheMap<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub struct Lock<T, Token>(T, Token);
+
+impl<T, Token> Lock<T, Token> {
+    pub fn new(value: T, tok: Token) -> Self {
+        Self(value, tok)
+    }
+
+    pub fn into_inner(self) -> T {
+        self.deconstruct().0
+    }
+
+    pub fn deconstruct(self) -> (T, Token) {
+        let zelf = std::mem::ManuallyDrop::new(self);
+
+        let fst = unsafe { std::ptr::read(&zelf.0) };
+        let snd = unsafe { std::ptr::read(&zelf.1) };
+
+        (fst, snd)
+    }
+}
+
+impl<T, Token> std::ops::Deref for Lock<T, Token> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T, Token> std::ops::DerefMut for Lock<T, Token> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }

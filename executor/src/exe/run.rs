@@ -4,7 +4,7 @@ use genvm_common::*;
 
 use anyhow::{Context, Result};
 use clap::ValueEnum;
-use genvm::{config, vm::RunOk, PublicArgs};
+use genvm::{config, rt::vm::RunOk};
 
 #[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
 #[clap(rename_all = "kebab_case")]
@@ -80,19 +80,6 @@ pub struct Args {
 pub fn handle(args: Args, config: config::Config) -> Result<()> {
     let message: genvm::MessageData = serde_json::from_str(&args.message)?;
 
-    let host = genvm::Host::new(&args.host)?;
-
-    let mut perm_size = 0;
-    for perm in ["r", "w", "s", "c", "n"] {
-        if args.permissions.contains(perm) {
-            perm_size += 1;
-        }
-    }
-
-    if perm_size != args.permissions.len() {
-        anyhow::bail!("Invalid permissions {}", &args.permissions)
-    }
-
     let runtime = config.base.create_rt()?;
 
     let (token, canceller) = genvm_common::cancellation::make();
@@ -105,8 +92,6 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         signal_hook::low_level::register(signal_hook::consts::SIGTERM, handle_sigterm.clone())?;
         signal_hook::low_level::register(signal_hook::consts::SIGINT, handle_sigterm)?;
     }
-
-    let host_data = serde_json::from_str(&args.host_data)?;
 
     let cookie = match &args.cookie {
         None => {
@@ -122,23 +107,35 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         Some(v) => v.clone(),
     };
 
+    let shared_data = sync::DArc::new(genvm::rt::SharedData {
+        cancellation: token,
+        is_sync: args.sync,
+        cookie: cookie.clone(),
+        debug_mode: args.debug_mode,
+        metrics: genvm::Metrics::default(),
+    });
+
+    let host = genvm::Host::new(&args.host, shared_data.gep(|x| &x.metrics.host))?;
+
+    let mut perm_size = 0;
+    for perm in ["r", "w", "s", "c", "n"] {
+        if args.permissions.contains(perm) {
+            perm_size += 1;
+        }
+    }
+
+    if perm_size != args.permissions.len() {
+        anyhow::bail!("Invalid permissions {}", &args.permissions)
+    }
+
+    let host_data = serde_json::from_str(&args.host_data)?;
+
     log_info!(cookie = cookie; "genvm cookie");
 
     let rt = runtime.enter();
 
-    let supervisor = genvm::create_supervisor(
-        &config,
-        host,
-        token,
-        host_data,
-        PublicArgs {
-            cookie,
-            is_sync: args.sync,
-            debug_mode: args.debug_mode,
-            message: &message,
-        },
-    )
-    .with_context(|| "creating supervisor")?;
+    let supervisor = genvm::create_supervisor(&config, host, host_data, shared_data, &message)
+        .with_context(|| "creating supervisor")?;
 
     std::mem::drop(rt);
 
@@ -189,12 +186,9 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
     }
 
     runtime.block_on(async {
-        let supervisor = supervisor.lock().await;
-        supervisor.shared_data.modules.llm.close().await;
-        supervisor.shared_data.modules.web.close().await;
+        supervisor.ctor.modules.llm.close().await;
+        supervisor.ctor.modules.web.close().await;
     });
-
-    genvm_common::metrics::log_all();
 
     let _ = std::io::stdout().flush();
     let _ = std::io::stderr().flush();

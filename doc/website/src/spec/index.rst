@@ -1,7 +1,8 @@
 GenVM Specification
 ===================
 
-`Single text file docs for AI <../_static/ai/spec.txt>`_
+.. note::
+    `Single text file docs for AI <../_static/ai/api.txt>`_
 
 This specification describes abstract GenLayer's virtual machine, that runs :term:`Intelligent Contract`\s.
 

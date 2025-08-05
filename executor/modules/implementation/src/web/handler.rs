@@ -66,6 +66,10 @@ impl common::MessageHandler<web_iface::Message, web_iface::RenderAnswer> for Han
 
                 Ok(res)
             }
+
+            web_iface::Message::GetStats => {
+                todo!()
+            }
         }
     }
 

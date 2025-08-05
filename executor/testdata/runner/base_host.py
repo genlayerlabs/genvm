@@ -381,6 +381,8 @@ async def run_host_and_program(
 				if read is None or len(read) == 0:
 					break
 				put_to.append(read)
+
+				# print(program, read)
 		finally:
 			try:
 				transport.close()

@@ -25,6 +25,9 @@ num-bigint = { version = "0.4.6", features = ["serde"] }
 hex = "0.4.3"
 primitive-types = { version = "0.13.1", default-features = false, features = ["impl-serde", "std"] }
 crossbeam = "0.8.4"
+rustix = { version = "0.38.44", features = ["mm", "std"], default-features = false}
+symbol_table = { version = "0.4.0", features = ["global"] }
+dashmap = "6.1.0"
 
 [dev-dependencies]
 afl = { version = "0.15.18", features = ["no_cfg_fuzzing"] }

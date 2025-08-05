@@ -5,8 +5,8 @@ use wiggle::{GuestError, GuestMemory, GuestPtr};
 
 use genvm_common::*;
 
-use crate::ustar::SharedBytes;
 use crate::wasi::base;
+use genvm_common::util::SharedBytes;
 
 use super::vfs;
 use std::collections::BTreeMap;

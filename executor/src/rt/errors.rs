@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::{public_abi, vm};
+use crate::{public_abi, rt};
 use genvm_common::*;
 
 #[derive(Debug)]
@@ -28,30 +28,30 @@ impl VMError {
 }
 
 #[allow(clippy::manual_try_fold)]
-pub fn unwrap_vm_errors(err: anyhow::Error) -> anyhow::Result<vm::RunOk> {
-    let res: anyhow::Result<vm::RunOk> = [
+pub fn unwrap_vm_errors(err: anyhow::Error) -> anyhow::Result<rt::vm::RunOk> {
+    let res: anyhow::Result<rt::vm::RunOk> = [
         |e: anyhow::Error| match e.downcast::<crate::wasi::preview1::I32Exit>() {
-            Ok(crate::wasi::preview1::I32Exit(0)) => Ok(vm::RunOk::empty_return()),
+            Ok(crate::wasi::preview1::I32Exit(0)) => Ok(rt::vm::RunOk::empty_return()),
             Ok(crate::wasi::preview1::I32Exit(v)) => {
-                Ok(vm::RunOk::VMError(format!("exit_code {v}"), None))
+                Ok(rt::vm::RunOk::VMError(format!("exit_code {v}"), None))
             }
             Err(e) => Err(e),
         },
         |e: anyhow::Error| {
             e.downcast::<wasmtime::Trap>()
-                .map(|v| vm::RunOk::VMError(format!("wasm_trap {v:?}"), Some(v.into())))
+                .map(|v| rt::vm::RunOk::VMError(format!("wasm_trap {v:?}"), Some(v.into())))
         },
         |e: anyhow::Error| {
-            e.downcast::<crate::errors::VMError>()
-                .map(|crate::errors::VMError(m, c)| vm::RunOk::VMError(m, c))
+            e.downcast::<rt::errors::VMError>()
+                .map(|rt::errors::VMError(m, c)| rt::vm::RunOk::VMError(m, c))
         },
         |e: anyhow::Error| {
-            e.downcast::<crate::errors::UserError>()
-                .map(|crate::errors::UserError(v)| vm::RunOk::UserError(v))
+            e.downcast::<rt::errors::UserError>()
+                .map(|rt::errors::UserError(v)| rt::vm::RunOk::UserError(v))
         },
         |e: anyhow::Error| {
             e.downcast::<crate::wasi::genlayer_sdk::ContractReturn>()
-                .map(|crate::wasi::genlayer_sdk::ContractReturn(v)| vm::RunOk::Return(v))
+                .map(|crate::wasi::genlayer_sdk::ContractReturn(v)| rt::vm::RunOk::Return(v))
         },
     ]
     .into_iter()
@@ -65,7 +65,7 @@ pub fn unwrap_vm_errors(err: anyhow::Error) -> anyhow::Result<vm::RunOk> {
 
 pub fn unwrap_vm_errors_fingerprint(
     err: anyhow::Error,
-) -> anyhow::Result<(vm::RunOk, Fingerprint)> {
+) -> anyhow::Result<(rt::vm::RunOk, Fingerprint)> {
     let mut fingerprint = Fingerprint {
         frames: Vec::new(),
         module_instances: BTreeMap::new(),

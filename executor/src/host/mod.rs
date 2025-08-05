@@ -14,10 +14,7 @@ use std::sync::Mutex;
 
 use anyhow::{Context, Result};
 
-use crate::calldata;
-use crate::errors::VMError;
-use crate::memlimiter;
-use crate::vm::{self, RunOk};
+use crate::{calldata, rt};
 pub use message::{MessageData, SlotID};
 
 trait Sock: std::io::Read + std::io::Write + Send + Sync {}
@@ -28,10 +25,16 @@ impl Sock for bufreaderwriter::seq::BufReaderWriterSeq<std::net::TcpStream> {}
 
 pub struct Host {
     sock: Box<Mutex<dyn Sock>>,
+    metrics: sync::DArc<Metrics>,
+}
+
+#[derive(Default, serde::Serialize, Debug)]
+pub struct Metrics {
+    pub time: stats::metric::Time,
 }
 
 impl Host {
-    pub fn new(addr: &str) -> Result<Host> {
+    pub fn new(addr: &str, metrics: sync::DArc<Metrics>) -> Result<Host> {
         const UNIX: &str = "unix://";
         let sock: Box<Mutex<dyn Sock>> = if let Some(addr_suff) = addr.strip_prefix(UNIX) {
             Box::new(Mutex::new(
@@ -48,7 +51,7 @@ impl Host {
                 ),
             ))
         };
-        Ok(Host { sock })
+        Ok(Host { sock, metrics })
     }
 }
 
@@ -90,7 +93,7 @@ fn handle_host_error(sock: &mut dyn Sock) -> Result<()> {
     if e == host_fns::Errors::Ok {
         Ok(())
     } else {
-        Err(crate::errors::VMError(e.str_snake_case().to_owned(), None).into())
+        Err(rt::errors::VMError(e.str_snake_case().to_owned(), None).into())
     }
 }
 
@@ -102,19 +105,21 @@ impl LockedSlotsSet {
     }
 }
 
-fn lock_sock<'a, 'b>(
-    metric: metrics::Metric,
-    sock: &'a mut std::sync::Mutex<dyn Sock + 'b>,
-) -> Result<metrics::Lock<&'a mut (dyn Sock + 'b)>> {
-    match sock.get_mut() {
-        Ok(locked_sock) => Ok(metrics::Lock::new(metric, locked_sock)),
-        Err(e) => Err(anyhow::anyhow!("can't take lock: {e}")),
-    }
-}
-
 impl Host {
+    fn lock_sock<'a, 'b>(
+        &'a mut self,
+    ) -> Result<sync::Lock<&'a mut (dyn Sock + 'b), stats::tracker::Time>> {
+        match self.sock.get_mut() {
+            Ok(locked_sock) => Ok(sync::Lock::new(
+                locked_sock,
+                stats::tracker::Time::new(self.metrics.gep(|x| &x.time)),
+            )),
+            Err(e) => Err(anyhow::anyhow!("can't take lock: {e}")),
+        }
+    }
+
     pub fn get_calldata(&mut self, calldata: &mut Vec<u8>) -> Result<()> {
-        let mut sock = lock_sock(metrics::Metric::HostCall, &mut *self.sock)?;
+        let mut sock = self.lock_sock()?;
         sock.write_all(&[host_fns::Methods::GetCalldata as u8])?;
 
         handle_host_error(&mut **sock)?;
@@ -132,7 +137,7 @@ impl Host {
     fn get_locked_slots(
         &mut self,
         contract_address: calldata::Address,
-        limiter: &memlimiter::Limiter,
+        limiter: &rt::memlimiter::Limiter,
     ) -> Result<LockedSlotsSet> {
         let locked_slot = SlotID::ZERO.indirection(root_offsets::LOCKED_SLOTS);
 
@@ -147,7 +152,7 @@ impl Host {
         let len = u32::from_le_bytes(len_buf);
 
         if !limiter.consume_mul(len, SlotID::SIZE) {
-            return Err(VMError::oom(None).into());
+            return Err(rt::errors::VMError::oom(None).into());
         }
 
         let res = Box::new_uninit_slice(len as usize);
@@ -176,7 +181,7 @@ impl Host {
         &mut self,
         contract_address: calldata::Address,
         sender: calldata::Address,
-        limiter: &memlimiter::Limiter,
+        limiter: &rt::memlimiter::Limiter,
     ) -> Result<LockedSlotsSet> {
         let upgraders_slot = SlotID::ZERO.indirection(root_offsets::UPGRADERS);
 
@@ -213,7 +218,7 @@ impl Host {
         &mut self,
         mode: StorageType,
         account: calldata::Address,
-        limiter: &memlimiter::Limiter,
+        limiter: &rt::memlimiter::Limiter,
     ) -> Result<Box<[u8]>> {
         let code_slot = SlotID::ZERO.indirection(root_offsets::CODE);
 
@@ -222,7 +227,7 @@ impl Host {
         let code_size = u32::from_le_bytes(len_buf);
 
         if !limiter.consume(code_size) {
-            return Err(VMError::oom(None).into());
+            return Err(rt::errors::VMError::oom(None).into());
         }
 
         let res = Box::new_uninit_slice(code_size as usize);
@@ -241,10 +246,8 @@ impl Host {
         index: u32,
         buf: &mut [u8],
     ) -> Result<()> {
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
+        let mut sock = self.lock_sock()?;
+
         sock.write_all(&[host_fns::Methods::StorageRead as u8])?;
         sock.write_all(&[mode as u8; 1])?;
         sock.write_all(&account.raw())?;
@@ -252,7 +255,7 @@ impl Host {
         sock.write_all(&index.to_le_bytes())?;
         sock.write_all(&(buf.len() as u32).to_le_bytes())?;
 
-        handle_host_error(sock)?;
+        handle_host_error(*sock)?;
 
         sock.read_exact(buf)?;
 
@@ -262,37 +265,33 @@ impl Host {
     }
 
     pub fn storage_write(&mut self, slot: SlotID, index: u32, buf: &[u8]) -> Result<()> {
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
+        let mut sock = self.lock_sock()?;
+
         sock.write_all(&[host_fns::Methods::StorageWrite as u8])?;
         sock.write_all(&slot.raw())?;
         sock.write_all(&index.to_le_bytes())?;
-        write_slice(sock, buf)?;
+        write_slice(*sock, buf)?;
 
         sock.flush()?;
 
-        handle_host_error(sock)?;
+        handle_host_error(*sock)?;
 
         Ok(())
     }
 
-    pub fn consume_result(&mut self, res: &Result<vm::FullRunOk>) -> Result<()> {
+    pub fn consume_result(&mut self, res: &Result<rt::vm::FullRunOk>) -> Result<()> {
         log_trace!("consume_result");
 
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
+        let mut sock = self.lock_sock()?;
+
         let data = match res {
-            Ok((RunOk::Return(data), _)) => {
+            Ok((rt::vm::RunOk::Return(data), _)) => {
                 let mut encoded = Vec::from([ResultCode::Return as u8]);
                 encoded.extend_from_slice(data);
 
                 encoded
             }
-            Ok((RunOk::UserError(data), fp)) => {
+            Ok((rt::vm::RunOk::UserError(data), fp)) => {
                 let fp = calldata::to_value(fp)?;
                 let val = calldata::Value::Map(BTreeMap::from([
                     ("message".to_owned(), data.as_str().into()),
@@ -304,7 +303,7 @@ impl Host {
 
                 encoded
             }
-            Ok((RunOk::VMError(data, _), fp)) => {
+            Ok((rt::vm::RunOk::VMError(data, _), fp)) => {
                 let mut encoded = Vec::from([ResultCode::VmError as u8]);
 
                 let fp = calldata::to_value(fp)?;
@@ -326,7 +325,7 @@ impl Host {
         };
 
         sock.write_all(&[host_fns::Methods::ConsumeResult as u8])?;
-        write_slice(sock, &data)?;
+        write_slice(*sock, &data)?;
 
         log_debug!("wrote consumed result to host");
 
@@ -338,7 +337,7 @@ impl Host {
         Ok(())
     }
 
-    pub fn get_leader_result(&mut self, call_no: u32) -> Result<Option<vm::RunOk>> {
+    pub fn get_leader_result(&mut self, call_no: u32) -> Result<Option<rt::vm::RunOk>> {
         log_trace!("get_leader_result");
 
         let Ok(mut sock) = (*self.sock).lock() else {
@@ -353,7 +352,7 @@ impl Host {
             host_fns::Errors::IAmLeader => {
                 return Ok(None);
             }
-            e => return Err(crate::errors::VMError(e.str_snake_case().to_owned(), None).into()),
+            e => return Err(rt::errors::VMError(e.str_snake_case().to_owned(), None).into()),
         }
 
         let leaders_result = read_bytes(sock)?;
@@ -361,19 +360,19 @@ impl Host {
         let rest = &leaders_result[1..];
 
         let res = match leaders_result[0] {
-            x if x == ResultCode::Return as u8 => vm::RunOk::Return(rest.into()),
+            x if x == ResultCode::Return as u8 => rt::vm::RunOk::Return(rest.into()),
             x if x == ResultCode::UserError as u8 => {
-                vm::RunOk::UserError(String::from(str::from_utf8(rest)?))
+                rt::vm::RunOk::UserError(String::from(str::from_utf8(rest)?))
             }
             x if x == ResultCode::VmError as u8 => {
-                vm::RunOk::VMError(String::from(str::from_utf8(rest)?), None)
+                rt::vm::RunOk::VMError(String::from(str::from_utf8(rest)?), None)
             }
             x => anyhow::bail!("host returned incorrect result id {}", x),
         };
         Ok(Some(res))
     }
 
-    pub fn post_nondet_result(&mut self, call_no: u32, res: &vm::RunOk) -> Result<()> {
+    pub fn post_nondet_result(&mut self, call_no: u32, res: &rt::vm::RunOk) -> Result<()> {
         log_trace!(call_no = call_no; "post_nondet_result");
 
         let Ok(mut sock) = (*self.sock).lock() else {

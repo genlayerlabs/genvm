@@ -93,6 +93,10 @@ impl crate::common::MessageHandler<llm_iface::Message, llm_iface::PromptAnswer> 
                     .exec_prompt_template(self.0.clone(), payload, remaining_fuel_as_gen)
                     .await
             }
+
+            llm_iface::Message::GetStats => {
+                todo!()
+            }
         }
     }
 
