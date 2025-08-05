@@ -41,7 +41,7 @@ impl Ctx<'_, '_> {
             .get(self.vm.config_copy.is_deterministic);
 
         let Some((runner_id, runner_hash)) = runners::verify_runner(uid.as_str()) else {
-            return Err(anyhow::anyhow!("invalid runner id: {}", uid).into());
+            anyhow::bail!("invalid runner id: {}", uid);
         };
 
         let new_arch = self
@@ -55,7 +55,7 @@ impl Ctx<'_, '_> {
                     path.push(runner_hash);
                     path.set_extension("tar");
                     if !path.exists() {
-                        return Err(anyhow::anyhow!("runner {} not found", uid));
+                        anyhow::bail!("runner {} not found", uid);
                     }
 
                     let data = util::mmap_file(&path)

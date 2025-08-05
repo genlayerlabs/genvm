@@ -93,7 +93,10 @@ impl Module {
 
         let zelf = self.imp.lock().await;
 
-        let mut zelf = sync::Lock::new(zelf, stats::tracker::Time::new(self.metrics.gep(|x| &x.time)));
+        let mut zelf = sync::Lock::new(
+            zelf,
+            stats::tracker::Time::new(self.metrics.gep(|x| &x.time)),
+        );
 
         if zelf.stream.is_none() {
             log_debug!(url = zelf.url, name = self.name; "initializing connection to module");

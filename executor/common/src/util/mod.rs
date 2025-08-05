@@ -1,7 +1,7 @@
 mod mmap;
 pub mod str;
 
-use std::sync::Arc;
+use crate::sync::DArc;
 
 pub use mmap::mmap_file;
 
@@ -30,11 +30,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct SharedBytes {
-    bytes: Arc<dyn AsRef<[u8]> + Sync + Send>,
-    begin: usize,
-    end: usize,
-}
+pub struct SharedBytes(DArc<[u8]>);
 
 impl std::fmt::Debug for SharedBytes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -46,7 +42,7 @@ impl std::fmt::Debug for SharedBytes {
 
 impl std::cmp::PartialEq for SharedBytes {
     fn eq(&self, other: &Self) -> bool {
-        self.as_slice() == other.as_slice()
+        *self.0 == *other.0
     }
 }
 
@@ -54,66 +50,48 @@ impl std::cmp::Eq for SharedBytes {}
 
 impl std::hash::Hash for SharedBytes {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.as_ref().hash(state);
+        (*self.0).hash(state);
     }
 }
 
 impl AsRef<[u8]> for SharedBytes {
     fn as_ref(&self) -> &[u8] {
-        self.as_slice()
+        &self.0
     }
 }
 
 impl From<&[u8]> for SharedBytes {
     fn from(value: &[u8]) -> Self {
         let data: Box<[u8]> = Box::from(value);
-        Self {
-            begin: 0,
-            end: value.len(),
-            bytes: Arc::new(data),
-        }
+        Self(DArc::new(data).gep(|x| x.as_ref()))
     }
 }
 
 impl SharedBytes {
     pub fn len(&self) -> usize {
-        self.end - self.begin
+        self.0.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.0.is_empty()
     }
 
     pub fn as_slice(&self) -> &[u8] {
-        let as_slice: &[u8] = (*self.bytes).as_ref();
-        &as_slice[self.begin..self.end]
+        &self.0
     }
 
-    pub fn new(value: impl AsRef<[u8]> + Sync + Send + 'static) -> Self {
-        let vl: &[u8] = value.as_ref();
-        let len = vl.len();
-        Self {
-            begin: 0,
-            end: len,
-            bytes: Arc::new(value),
-        }
+    pub fn new(value: impl AsRef<[u8]>) -> Self {
+        let data: Box<[u8]> = Box::from(value.as_ref());
+        Self(DArc::new(data).gep(|x| x.as_ref()))
     }
 
     pub fn slice(&self, begin: usize, end: usize) -> SharedBytes {
         if begin > end {
             panic!("INVALID");
         }
-        if self.begin + begin > self.end {
+        if begin > self.0.len() || end > self.0.len() {
             panic!("INVALID");
         }
-
-        if self.begin + end > self.end {
-            panic!("INVALID");
-        }
-        Self {
-            bytes: self.bytes.clone(),
-            begin: self.begin + begin,
-            end: usize::min(self.begin + end, self.end),
-        }
+        Self(self.0.gep(|data| &data[begin..end]))
     }
 }

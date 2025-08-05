@@ -52,10 +52,10 @@ impl Reader {
             })
             .await?;
 
-        if !called.load(std::sync::atomic::Ordering::SeqCst) {
-            if !limiter.consume(res.files.total_size) {
-                return Err(anyhow::Error::from(rt::errors::VMError::oom(None)));
-            }
+        if !called.load(std::sync::atomic::Ordering::SeqCst)
+            && !limiter.consume(res.files.total_size)
+        {
+            return Err(anyhow::Error::from(rt::errors::VMError::oom(None)));
         }
 
         Ok(res)

@@ -17,7 +17,7 @@ mod darc {
 
     pub struct DArc<T>
     where
-        T: 'static,
+        T: 'static + ?Sized,
     {
         control_block: NonNull<DArcControlBlock>,
         actual_ptr: NonNull<T>,
@@ -70,10 +70,15 @@ mod darc {
                 _phantom: PhantomData,
             }
         }
+    }
 
+    impl<T> DArc<T>
+    where
+        T: 'static + ?Sized,
+    {
         pub fn into_gep<'a, R>(self, getter: impl FnOnce(&'a T) -> &'a R) -> DArc<R>
         where
-            R: 'static,
+            R: 'static + ?Sized,
         {
             // SAFETY: actual_ptr is valid for the lifetime of self
             let data_ref = unsafe { self.actual_ptr.as_ref() };
@@ -95,7 +100,7 @@ mod darc {
 
         pub async fn into_gep_async<'a, R, F>(self, getter: impl FnOnce(&'a T) -> F) -> DArc<R>
         where
-            R: 'static,
+            R: 'static + ?Sized,
             F: std::future::Future<Output = &'a R>,
         {
             // SAFETY: actual_ptr is valid for the lifetime of self
@@ -119,14 +124,14 @@ mod darc {
         /// Get a derived pointer to a field or subobject
         pub fn gep<'a, R>(&self, getter: impl FnOnce(&'a T) -> &'a R) -> DArc<R>
         where
-            R: 'static,
+            R: 'static + ?Sized,
         {
             self.clone().into_gep(getter)
         }
 
         pub async fn gep_async<'a, R, F>(&self, getter: impl FnOnce(&'a T) -> F) -> DArc<R>
         where
-            R: 'static,
+            R: 'static + ?Sized,
             F: std::future::Future<Output = &'a R>,
         {
             self.clone().into_gep_async(getter).await
@@ -180,7 +185,7 @@ mod darc {
 
     impl<T> Clone for DArc<T>
     where
-        T: 'static,
+        T: 'static + ?Sized,
     {
         fn clone(&self) -> Self {
             // SAFETY: control_block is valid
@@ -200,7 +205,7 @@ mod darc {
 
     impl<T> Drop for DArc<T>
     where
-        T: 'static,
+        T: 'static + ?Sized,
     {
         fn drop(&mut self) {
             // SAFETY: control_block is valid
@@ -225,7 +230,7 @@ mod darc {
 
     impl<T> std::ops::Deref for DArc<T>
     where
-        T: 'static,
+        T: 'static + ?Sized,
     {
         type Target = T;
 
@@ -236,8 +241,8 @@ mod darc {
     }
 
     // SAFETY: DArc can be sent between threads if T can be
-    unsafe impl<T: Send + Sync + 'static> Send for DArc<T> {}
-    unsafe impl<T: Send + Sync + 'static> Sync for DArc<T> {}
+    unsafe impl<T: Send + Sync + 'static + ?Sized> Send for DArc<T> {}
+    unsafe impl<T: Send + Sync + 'static + ?Sized> Sync for DArc<T> {}
 }
 
 pub use darc::DArc;
