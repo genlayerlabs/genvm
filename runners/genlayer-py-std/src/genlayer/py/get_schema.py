@@ -48,6 +48,8 @@ def _is_dict(t, permissive: bool) -> bool:
 def _repr_type(t: typing.Any, permissive: bool) -> typing.Any:
 	if t is inspect.Signature.empty:
 		return 'any'
+	if type(t) is typing.NewType:
+		return _repr_type(t.__supertype__, permissive)
 	# primitive
 	if t is None or t is types.NoneType:
 		return 'null'

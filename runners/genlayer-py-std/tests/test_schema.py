@@ -1,6 +1,8 @@
 from genlayer.py.get_schema import get_schema
 import genlayer.py.get_schema as _get_schema
 
+from genlayer.py.types import u256, Address
+
 import typing
 
 
@@ -67,7 +69,7 @@ class B_data:
 
 
 class B:
-	def __init__(self):
+	def __init__(self, x: u256, y: Address):
 		pass
 
 	@public_view
@@ -77,7 +79,7 @@ class B:
 def test_dataclass():
 	print(get_schema(B))
 	assert get_schema(B) == {
-		'ctor': {'params': [], 'kwparams': {}},
+		'ctor': {'params': [['x', 'int'], ['y', 'address']], 'kwparams': {}},
 		'methods': {
 			'tst': {
 				'params': [],
