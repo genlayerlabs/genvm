@@ -87,10 +87,10 @@ impl SharedBytes {
 
     pub fn slice(&self, begin: usize, end: usize) -> SharedBytes {
         if begin > end {
-            panic!("INVALID");
+            panic!("SharedBytes::slice: begin ({}) > end ({})", begin, end);
         }
         if begin > self.0.len() || end > self.0.len() {
-            panic!("INVALID");
+            panic!("SharedBytes::slice: range [{}..{}] out of bounds for length {}", begin, end, self.0.len());
         }
         Self(self.0.gep(|data| &data[begin..end]))
     }
