@@ -56,7 +56,10 @@ pub struct Ctor {
 }
 
 pub struct Supervisor {
-    pub ctor: Ctor,
+    pub shared_data: sync::DArc<rt::SharedData>,
+    pub modules: crate::modules::All,
+    pub limiter: rt::DetNondet<rt::memlimiter::Limiter>,
+    pub locked_slots: host::LockedSlotsSet,
 
     pub nondet_call_no: AtomicU32,
     pub balances: dashmap::DashMap<calldata::Address, primitive_types::U256>,
@@ -186,7 +189,10 @@ impl Supervisor {
         let (sender, receiver) = tokio::sync::mpsc::channel(100);
 
         let zelf = Arc::new(Self {
-            ctor,
+            shared_data: ctor.shared_data,
+            modules: ctor.modules,
+            limiter: ctor.limiter,
+            locked_slots: ctor.locked_slots,
             nondet_call_no: AtomicU32::new(0),
             balances: dashmap::DashMap::new(),
             queue: NondetQueue {
@@ -218,7 +224,7 @@ pub async fn spawn(
     let config_copy = vm.conf;
 
     let engine = zelf.engines.get(vm.conf.is_deterministic);
-    let limiter = zelf.ctor.limiter.get(vm.conf.is_deterministic);
+    let limiter = zelf.limiter.get(vm.conf.is_deterministic);
 
     let should_capture_fp = std::sync::Arc::new(vm.conf.is_deterministic.into());
 
@@ -233,7 +239,7 @@ pub async fn spawn(
         },
         wasmtime::GenVMCtx {
             should_capture_fp,
-            should_quit: zelf.ctor.shared_data.cancellation.should_quit.clone(),
+            should_quit: zelf.shared_data.cancellation.should_quit.clone(),
         },
     );
 
@@ -272,10 +278,7 @@ pub async fn apply_contract_actions(
 
     let contract_id = runners::get_runner_of_contract(contract_address);
 
-    let limiter = zelf
-        .ctor
-        .limiter
-        .get(vm.vm_base.config_copy.is_deterministic);
+    let limiter = zelf.limiter.get(vm.vm_base.config_copy.is_deterministic);
 
     let arch = zelf
         .runner_cache
@@ -383,7 +386,7 @@ async fn nondet_vm_processor(
     let mut count = 0;
     loop {
         tokio::select! {
-            _ = zelf.ctor.shared_data.cancellation.chan.closed() => {
+            _ = zelf.shared_data.cancellation.chan.closed() => {
                 log_debug!("cancellation requested, stopping nondet validator queue");
                 break;
             }

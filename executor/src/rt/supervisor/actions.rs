@@ -36,7 +36,6 @@ impl Ctx<'_, '_> {
 
         let limiter = self
             .supervisor
-            .ctor
             .limiter
             .get(self.vm.config_copy.is_deterministic);
 
@@ -86,7 +85,7 @@ impl Ctx<'_, '_> {
             return id;
         }
 
-        if !self.supervisor.ctor.shared_data.debug_mode {
+        if !self.supervisor.shared_data.debug_mode {
             log_warn!(":test/ :latest runner used in non-debug mode, this is not allowed");
 
             return id;
@@ -136,7 +135,6 @@ impl Ctx<'_, '_> {
         }
 
         self.supervisor
-            .ctor
             .shared_data
             .metrics
             .supervisor
@@ -192,7 +190,7 @@ impl Ctx<'_, '_> {
     ) -> anyhow::Result<Option<wasmtime::Instance>> {
         use runners::InitAction;
 
-        if self.supervisor.ctor.shared_data.cancellation.is_cancelled() {
+        if self.supervisor.shared_data.cancellation.is_cancelled() {
             return Err(
                 rt::errors::VMError(public_abi::VmError::Timeout.value().to_owned(), None).into(),
             );
@@ -202,7 +200,6 @@ impl Ctx<'_, '_> {
             InitAction::MapFile { to, file } => {
                 let limiter = self
                     .supervisor
-                    .ctor
                     .limiter
                     .get(self.vm.config_copy.is_deterministic);
 
@@ -223,7 +220,7 @@ impl Ctx<'_, '_> {
                     let must_start_with: &str = if is_root { "" } else { file.as_ref() };
 
                     for (name, file_contents) in range {
-                        if self.supervisor.ctor.shared_data.cancellation.is_cancelled() {
+                        if self.supervisor.shared_data.cancellation.is_cancelled() {
                             return Err(rt::errors::VMError(
                                 public_abi::VmError::Timeout.value().to_owned(),
                                 None,

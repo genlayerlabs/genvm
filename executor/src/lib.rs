@@ -153,7 +153,7 @@ pub async fn run_with(
         (Ok((a, b)), Ok(c)) => Ok((a, b, c)),
     };
 
-    let res = if supervisor.ctor.shared_data.cancellation.is_cancelled() {
+    let res = if supervisor.shared_data.cancellation.is_cancelled() {
         match merged_result {
             Ok((rt::vm::RunOk::VMError(msg, cause), fp, disag)) => Ok((
                 rt::vm::RunOk::VMError(
@@ -186,14 +186,12 @@ pub async fn run_with(
     log_debug!("all executions done, collecting stats");
 
     let web_metrics = supervisor
-        .ctor
         .modules
         .web
         .send::<calldata::Value, _>(genvm_modules_interfaces::web::Message::GetStats)
         .await?
         .ok();
     let llm_metrics = supervisor
-        .ctor
         .modules
         .llm
         .send::<calldata::Value, _>(genvm_modules_interfaces::llm::Message::GetStats)
@@ -210,7 +208,7 @@ pub async fn run_with(
     let all_metrics = AllMetrics {
         web: web_metrics,
         llm: llm_metrics,
-        gvm: &supervisor.ctor.shared_data.metrics,
+        gvm: &supervisor.shared_data.metrics,
     };
 
     let all_metrics = calldata::to_value(&all_metrics)

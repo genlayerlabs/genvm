@@ -186,8 +186,8 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
     }
 
     runtime.block_on(async {
-        supervisor.ctor.modules.llm.close().await;
-        supervisor.ctor.modules.web.close().await;
+        supervisor.modules.llm.close().await;
+        supervisor.modules.web.close().await;
     });
 
     let _ = std::io::stdout().flush();

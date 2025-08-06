@@ -627,7 +627,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
 
-                let web = self.context.data.supervisor.ctor.modules.web.clone();
+                let web = self.context.data.supervisor.modules.web.clone();
                 let task = taskify(async move {
                     web.send::<genvm_modules_interfaces::web::RenderAnswer, _>(
                         genvm_modules_interfaces::web::Message::Render(render_payload),
@@ -652,7 +652,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
 
-                let web = self.context.data.supervisor.ctor.modules.web.clone();
+                let web = self.context.data.supervisor.modules.web.clone();
                 let task = taskify(async move {
                     web.send::<genvm_modules_interfaces::web::RenderAnswer, _>(
                         genvm_modules_interfaces::web::Message::Request(request_payload),
@@ -691,7 +691,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let task = taskify(async move {
                     let result = sup
-                        .ctor
                         .modules
                         .llm
                         .send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
@@ -746,7 +745,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let sup = self.context.data.supervisor.clone();
                 let task = taskify(async move {
                     let answer = sup
-                        .ctor
                         .modules
                         .llm
                         .send::<genvm_modules_interfaces::llm::PromptAnswer, _>(
@@ -890,14 +888,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let slot = SlotID::read_from_mem(mem, slot)?;
 
-        if self
-            .context
-            .data
-            .supervisor
-            .ctor
-            .locked_slots
-            .contains(slot)
-        {
+        if self.context.data.supervisor.locked_slots.contains(slot) {
             return Err(generated::types::Errno::Forbidden.into());
         }
 
@@ -998,7 +989,6 @@ impl Context {
         let limiter = self
             .data
             .supervisor
-            .ctor
             .limiter
             .get(essential_data.conf.is_deterministic)
             .clone();
@@ -1044,7 +1034,7 @@ impl ContextVFS<'_> {
             }
             gl_call::TracePayload::RuntimeMicroSec => {
                 let elapsed_micros = if self.context.data.conf.is_deterministic
-                    && !self.context.data.supervisor.ctor.shared_data.debug_mode
+                    && !self.context.data.supervisor.shared_data.debug_mode
                 {
                     0u64
                 } else {
@@ -1090,7 +1080,7 @@ impl ContextVFS<'_> {
         }
         .map_err(generated::types::Error::trap)?;
 
-        let result_to_return = if self.context.data.supervisor.ctor.shared_data.is_sync {
+        let result_to_return = if self.context.data.supervisor.shared_data.is_sync {
             match leaders_res {
                 None => {
                     return Err(generated::types::Error::trap(anyhow::anyhow!(

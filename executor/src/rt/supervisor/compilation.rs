@@ -41,15 +41,13 @@ impl super::Supervisor {
         debug_path: &str,
     ) -> anyhow::Result<rt::DetNondet<wasmtime::Module>> {
         log_debug!(path = debug_path; "compilation");
-        self.ctor
-            .shared_data
+        self.shared_data
             .metrics
             .supervisor
             .compiled_modules
             .increment();
         let tok = stats::tracker::Time::new(
-            self.ctor
-                .shared_data
+            self.shared_data
                 .gep(|x| &x.metrics.supervisor.compilation_time),
         );
 
