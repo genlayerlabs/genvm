@@ -9,10 +9,7 @@ use crate::{
     scripting::{self, DEFAULT_LUA_SER_OPTIONS},
 };
 
-use super::{
-    config::{self, Config},
-    domains,
-};
+use super::{config, domains};
 
 pub struct VMData {
     pub render: mlua::Function,
@@ -20,10 +17,9 @@ pub struct VMData {
 }
 
 pub struct CtxPart {
-    pub hello: Arc<genvm_modules_interfaces::GenVMHello>,
+    pub dflt_ctx: Arc<scripting::CtxPart>,
     pub session: tokio::sync::Mutex<Option<String>>,
-    pub client: reqwest::Client,
-    pub config: Arc<config::Config>,
+    pub config: sync::DArc<config::Config>,
 }
 
 impl mlua::UserData for CtxPart {}
@@ -35,11 +31,12 @@ impl CtxPart {
         }
 
         let create_request = self
+            .dflt_ctx
             .client
             .post(format!("{}/session", &self.config.webdriver_host))
             .header("Content-Type", "application/json; charset=utf-8")
             .body(self.config.session_create_request.clone());
-        log_trace!(request:? = create_request, body = self.config.session_create_request, cookie = self.hello.cookie; "creating session");
+        log_trace!(request:? = create_request, body = self.config.session_create_request, cookie = self.dflt_ctx.hello.cookie; "creating session");
         let opened_session_res = create_request
             .send()
             .await
@@ -62,7 +59,7 @@ impl CtxPart {
     }
 }
 
-pub fn create_global(vm: &mlua::Lua, config: &Config) -> anyhow::Result<mlua::Value> {
+pub fn create_global(vm: &mlua::Lua, config: &config::Config) -> anyhow::Result<mlua::Value> {
     let web = vm.create_table()?;
 
     web.set("config", vm.to_value_with(config, DEFAULT_LUA_SER_OPTIONS)?)?;

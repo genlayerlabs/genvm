@@ -1,4 +1,4 @@
-use super::{config, ctx};
+use super::ctx;
 use crate::{common, scripting};
 
 use genvm_common::*;
@@ -7,22 +7,21 @@ use genvm_modules_interfaces::web::{self as web_iface, RenderAnswer};
 use mlua::LuaSerdeExt;
 use std::sync::Arc;
 
-type UserVM = scripting::UserVM<ctx::VMData, ctx::CtxPart>;
+type UserVM = scripting::UserVM<ctx::VMData, Arc<ctx::CtxPart>>;
 
 pub struct Inner {
     user_vm: Arc<UserVM>,
 
-    ctx: scripting::RSContext<ctx::CtxPart>,
+    ctx: Arc<ctx::CtxPart>,
     ctx_val: mlua::Value,
+
+    metrics: sync::DArc<super::Metrics>,
 }
 
 struct Handler(Arc<Inner>);
 
-impl common::MessageHandler<web_iface::Message, web_iface::RenderAnswer> for Handler {
-    async fn handle(
-        &self,
-        message: web_iface::Message,
-    ) -> common::ModuleResult<web_iface::RenderAnswer> {
+impl common::MessageHandler<web_iface::Message, FullResponse> for Handler {
+    async fn handle(&self, message: web_iface::Message) -> common::ModuleResult<FullResponse> {
         match message {
             web_iface::Message::Request(payload) => {
                 let vm = &self.0.user_vm.vm;
@@ -40,7 +39,7 @@ impl common::MessageHandler<web_iface::Message, web_iface::RenderAnswer> for Han
 
                 let res = self.0.user_vm.vm.from_value(res)?;
 
-                Ok(RenderAnswer::Response(res))
+                Ok(FullResponse::Answer(RenderAnswer::Response(res)))
             }
             web_iface::Message::Render(payload) => {
                 let vm = &self.0.user_vm.vm;
@@ -64,17 +63,25 @@ impl common::MessageHandler<web_iface::Message, web_iface::RenderAnswer> for Han
 
                 let res = self.0.user_vm.vm.from_value(res)?;
 
-                Ok(res)
+                Ok(FullResponse::Answer(res))
             }
 
             web_iface::Message::GetStats => {
-                todo!()
+                let res = match calldata::to_value(&self.0.metrics) {
+                    Ok(stats) => stats,
+                    Err(e) => {
+                        log_error!(error:err = e; "Failed to serialize metrics");
+                        calldata::Value::Null
+                    }
+                };
+
+                Ok(FullResponse::GetStats(res))
             }
         }
     }
 
     async fn cleanup(&self) -> anyhow::Result<()> {
-        let lock = self.0.ctx.data.session.lock().await;
+        let lock = self.0.ctx.session.lock().await;
 
         let session = match lock.as_ref() {
             None => return Ok(()),
@@ -84,64 +91,56 @@ impl common::MessageHandler<web_iface::Message, web_iface::RenderAnswer> for Han
         if let Err(err) = self
             .0
             .ctx
+            .dflt_ctx
             .client
             .delete(format!(
                 "{}/session/{}",
-                self.0.ctx.data.config.webdriver_host, session
+                self.0.ctx.config.webdriver_host, session
             ))
             .send()
             .await
         {
-            log_error!(error:err = err, id = session, cookie = self.0.ctx.data.hello.cookie; "session closed");
+            log_error!(error:err = err, id = session, cookie = self.0.ctx.dflt_ctx.hello.cookie; "session closed");
         } else {
-            log_debug!(id = session, cookie = self.0.ctx.data.hello.cookie; "session closed");
+            log_debug!(id = session, cookie = self.0.ctx.dflt_ctx.hello.cookie; "session closed");
         }
         Ok(())
     }
 }
 
-pub struct HandlerProvider {
-    pub config: Arc<config::Config>,
-    pub vm_pool: scripting::pool::Pool<ctx::VMData, ctx::CtxPart>,
+#[derive(serde::Serialize)]
+#[serde(untagged)]
+pub enum FullResponse {
+    Answer(web_iface::RenderAnswer),
+    GetStats(calldata::Value),
 }
 
-impl
-    common::MessageHandlerProvider<
-        genvm_modules_interfaces::web::Message,
-        genvm_modules_interfaces::web::RenderAnswer,
-    > for HandlerProvider
+pub struct HandlerProvider {
+    pub vm_pool: scripting::pool::Pool<ctx::VMData, Arc<ctx::CtxPart>>,
+}
+
+impl common::MessageHandlerProvider<genvm_modules_interfaces::web::Message, FullResponse>
+    for HandlerProvider
 {
     async fn new_handler(
         &self,
         hello: genvm_modules_interfaces::GenVMHello,
     ) -> anyhow::Result<
-        impl common::MessageHandler<
-            genvm_modules_interfaces::web::Message,
-            genvm_modules_interfaces::web::RenderAnswer,
-        >,
+        impl common::MessageHandler<genvm_modules_interfaces::web::Message, FullResponse>,
     > {
-        let client = reqwest::Client::new();
         let hello = Arc::new(hello);
 
-        let ctx = scripting::RSContext {
-            client: client.clone(),
-            hello: hello.clone(),
-            data: Arc::new(ctx::CtxPart {
-                client,
-                hello,
-                session: tokio::sync::Mutex::new(None),
-                config: self.config.clone(),
-            }),
-        };
+        let metrics = sync::DArc::new(super::Metrics::default());
 
         let user_vm = self.vm_pool.get();
 
-        let ctx_val = user_vm.create_ctx(&ctx)?;
+        let (ctx, ctx_val) = user_vm.create_ctx(&hello)?;
 
         Ok(Handler(Arc::new(Inner {
             user_vm,
             ctx,
             ctx_val,
+            metrics,
         })))
     }
 }

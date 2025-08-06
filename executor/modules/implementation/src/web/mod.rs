@@ -3,15 +3,17 @@ use std::{collections::HashMap, sync::Arc};
 use anyhow::{Context, Result};
 use genvm_common::*;
 
-use crate::{
-    common,
-    scripting::{self, RSContext},
-};
+use crate::{common, scripting};
 
 mod config;
 mod ctx;
 mod domains;
 mod handler;
+
+#[derive(serde::Serialize, Debug, Default)]
+struct Metrics {
+    pub scripting: scripting::Metrics,
+}
 
 #[derive(clap::Args, Debug)]
 pub struct CliArgs {
@@ -47,7 +49,7 @@ async fn check_status(webdriver_host: &str) -> anyhow::Result<()> {
 pub fn entrypoint(args: CliArgs) -> Result<()> {
     let config = genvm_common::load_config(HashMap::new(), &args.config)
         .with_context(|| "loading config")?;
-    let config: Arc<config::Config> = Arc::new(serde_yaml::from_value(config)?);
+    let config: sync::DArc<config::Config> = sync::DArc::new(serde_yaml::from_value(config)?);
 
     config.base.setup_logging(std::io::stdout())?;
 
@@ -61,9 +63,10 @@ pub fn entrypoint(args: CliArgs) -> Result<()> {
 
     let vm_pool = runtime.block_on(scripting::pool::new(config.mod_base.vm_count, move || {
         let moved_config_1 = moved_config.clone();
+        let moved_config_2 = moved_config.clone();
         let moved_config = moved_config.clone();
         async move {
-            let mut user_vm = crate::scripting::UserVM::create(
+            let user_vm = crate::scripting::UserVM::create(
                 &moved_config_1.mod_base,
                 move |vm: mlua::Lua| async move {
                     // set llm-related globals
@@ -79,14 +82,29 @@ pub fn entrypoint(args: CliArgs) -> Result<()> {
 
                     Ok(ctx::VMData { render, request })
                 },
+                Box::new(move |vm: &mlua::Lua, table: &mlua::Table, hello| {
+                    let metrics = sync::DArc::new(Metrics::default());
+
+                    let dflt_ctx = scripting::create_default_ctx(
+                        hello,
+                        moved_config_2.gep(|x| &x.mod_base),
+                        metrics.gep(|x| &x.scripting),
+                        vm,
+                        table,
+                    )?;
+
+                    let ctx = Arc::new(ctx::CtxPart {
+                        dflt_ctx,
+                        session: tokio::sync::Mutex::new(None),
+                        config: moved_config_2.clone(),
+                    });
+
+                    table.set("__ctx_web", vm.create_userdata(ctx.clone())?)?;
+
+                    Ok(ctx)
+                }),
             )
             .await?;
-
-            user_vm.add_ctx_creator(Box::new(|ctx: &RSContext<ctx::CtxPart>, vm, table| {
-                table.set("__ctx_web", vm.create_userdata(ctx.data.clone())?)?;
-
-                Ok(())
-            }));
 
             Ok(user_vm)
         }
@@ -95,7 +113,7 @@ pub fn entrypoint(args: CliArgs) -> Result<()> {
     let loop_future = crate::common::run_loop(
         config.mod_base.bind_address.clone(),
         token,
-        Arc::new(handler::HandlerProvider { vm_pool, config }),
+        Arc::new(handler::HandlerProvider { vm_pool }),
     );
 
     runtime

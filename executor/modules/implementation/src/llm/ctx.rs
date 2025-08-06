@@ -16,9 +16,9 @@ pub struct VMData {
 }
 
 pub struct CtxPart {
-    pub hello: Arc<genvm_modules_interfaces::GenVMHello>,
+    pub dflt: Arc<scripting::CtxPart>,
     pub providers: Arc<BTreeMap<String, Box<dyn providers::Provider + Send + Sync>>>,
-    pub client: reqwest::Client,
+    pub metrics: sync::DArc<super::Metrics>,
 }
 
 impl mlua::UserData for CtxPart {}
@@ -46,21 +46,21 @@ impl CtxPart {
 
         let res = match format {
             prompt::ExtendedOutputFormat::Text => provider
-                .exec_prompt_text(&self.client, prompt, model)
+                .exec_prompt_text(&self.dflt, prompt, model)
                 .await
                 .map(|text| llm_iface::PromptAnswer {
                     data: llm_iface::PromptAnswerData::Text(text),
                     consumed_gen: 0,
                 }),
             prompt::ExtendedOutputFormat::JSON => provider
-                .exec_prompt_json(&self.client, prompt, model)
+                .exec_prompt_json(&self.dflt, prompt, model)
                 .await
                 .map(|obj| llm_iface::PromptAnswer {
                     data: llm_iface::PromptAnswerData::Object(obj),
                     consumed_gen: 0,
                 }),
             prompt::ExtendedOutputFormat::Bool => provider
-                .exec_prompt_bool_reason(&self.client, prompt, model)
+                .exec_prompt_bool_reason(&self.dflt, prompt, model)
                 .await
                 .map(|b| llm_iface::PromptAnswer {
                     data: llm_iface::PromptAnswerData::Bool(b),
@@ -75,7 +75,7 @@ impl CtxPart {
                 mode:? = format,
                 provider_id = provider_id,
                 error:ah = err,
-                cookie = self.hello.cookie;
+                cookie = self.dflt.hello.cookie;
                 "prompt execution error"
             );
         })

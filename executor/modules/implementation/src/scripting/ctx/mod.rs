@@ -1,6 +1,8 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use crate::common::ModuleError;
+
+use genvm_common::*;
 
 pub mod dflt;
 pub mod req;
@@ -23,4 +25,22 @@ pub(super) fn try_unwrap_err(err: &mlua::Error) -> Option<ModuleError> {
         }),
         _ => None,
     }
+}
+
+pub struct CtxPart {
+    pub client: reqwest::Client,
+    pub sign_url: Arc<str>,
+    pub sign_headers: Arc<BTreeMap<String, String>>,
+    pub sign_vars: BTreeMap<String, String>,
+    pub node_address: String,
+    pub metrics: sync::DArc<Metrics>,
+    pub hello: Arc<genvm_modules_interfaces::GenVMHello>,
+}
+
+impl mlua::UserData for CtxPart {}
+
+#[derive(Debug, serde::Serialize, Default)]
+pub struct Metrics {
+    pub requests_count: stats::metric::Count,
+    pub requests_time: stats::metric::Time,
 }

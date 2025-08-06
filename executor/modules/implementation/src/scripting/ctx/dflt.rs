@@ -12,16 +12,7 @@ use std::str::FromStr;
 
 use super::req::Request;
 
-pub struct CtxPart {
-    pub client: reqwest::Client,
-    pub sign_url: Arc<str>,
-    pub sign_headers: Arc<BTreeMap<String, String>>,
-    pub sign_vars: BTreeMap<String, String>,
-    pub node_address: String,
-    pub tx_id: String,
-}
-
-impl mlua::UserData for CtxPart {}
+use super::CtxPart;
 
 impl CtxPart {
     async fn request(&self, vm: &mlua::Lua, req: Request) -> anyhow::Result<mlua::Value> {
@@ -35,6 +26,7 @@ impl CtxPart {
 
         if is_json {
             let res = scripting::send_request_get_lua_compatible_response_json(
+                &self.metrics,
                 &url,
                 request,
                 error_on_status,
@@ -43,6 +35,7 @@ impl CtxPart {
             Ok(vm.to_value_with(&res, DEFAULT_LUA_SER_OPTIONS)?)
         } else {
             let res = scripting::send_request_get_lua_compatible_response_bytes(
+                &self.metrics,
                 &url,
                 request,
                 error_on_status,
@@ -245,18 +238,28 @@ mod tests {
         let mut extra_path = cwd.to_str().unwrap().to_owned();
         extra_path.push_str("/?.lua");
 
-        let conf = common::ModuleBaseConfig {
+        let conf = sync::DArc::new(common::ModuleBaseConfig {
             bind_address: "".to_owned(),
             vm_count: 1,
             lua_script_path: "".to_owned(),
             extra_lua_path: extra_path,
             signer_headers: Arc::new(BTreeMap::new()),
             signer_url: Arc::from(""),
-        };
+        });
 
-        scripting::UserVM::create(&conf, |_| async { Ok(()) })
-            .await
-            .unwrap()
+        let metrics = sync::DArc::new(super::super::Metrics::default());
+
+        scripting::UserVM::create(
+            &conf.clone(),
+            |_| async { Ok(()) },
+            Box::new(move |vm, table, hello| {
+                scripting::create_default_ctx(hello, conf.clone(), metrics.clone(), vm, table)?;
+
+                Ok(())
+            }),
+        )
+        .await
+        .unwrap()
     }
 
     async fn test_status(status: u16) {
@@ -275,20 +278,9 @@ mod tests {
 
         let f: mlua::Function = uvm.vm.globals().get("Test").unwrap();
 
-        let rs_ctx = scripting::RSContext {
-            client: common::create_client().unwrap(),
-            data: Arc::new(()),
-            hello: Arc::new(genvm_modules_interfaces::GenVMHello {
-                cookie: "test_cookie".to_owned(),
-                host_data: genvm_modules_interfaces::HostData {
-                    node_address: "test_node_address".to_owned(),
-                    tx_id: "test_tx_id".to_owned(),
-                    rest: serde_json::Map::new(),
-                },
-            }),
-        };
+        let hello = common::tests::get_hello();
 
-        let ctx_lua = uvm.create_ctx(&rs_ctx).unwrap();
+        let (_, ctx_lua) = uvm.create_ctx(&hello).unwrap();
 
         let res: mlua::Value = f.call_async((ctx_lua, status.to_string())).await.unwrap();
 
@@ -328,13 +320,7 @@ mod tests {
 
         let hello = common::tests::get_hello();
 
-        let rs_ctx = scripting::RSContext {
-            client: common::create_client().unwrap(),
-            data: Arc::new(()),
-            hello,
-        };
-
-        let ctx_lua = uvm.create_ctx(&rs_ctx).unwrap();
+        let (_, ctx_lua) = uvm.create_ctx(&hello).unwrap();
 
         let res: mlua::Value = f.call_async((ctx_lua,)).await.unwrap();
 

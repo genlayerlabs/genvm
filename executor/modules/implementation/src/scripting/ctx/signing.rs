@@ -28,13 +28,13 @@ fn map_fmt_to_fatal(e: std::fmt::Error) -> ModuleError {
 impl Request {
     pub async fn add_rfc9421_sign_headers(
         &mut self,
-        ctx: &super::dflt::CtxPart,
+        ctx: &super::CtxPart,
     ) -> Result<(), ModuleError> {
         self.normalize_headers();
         self.add_node_headers(
             &mut ring::rand::SystemRandom::new(),
             &ctx.node_address,
-            &ctx.tx_id,
+            &ctx.hello.host_data.tx_id,
         )?;
 
         self.add_content_digest_header()?;
@@ -287,6 +287,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::common;
+    use genvm_common::*;
     use genvm_modules_interfaces::web as web_iface;
     use std::sync::Arc;
 
@@ -404,7 +405,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_signing_post_with_server() {
-        use crate::scripting::ctx::dflt::CtxPart;
+        use crate::scripting::ctx::CtxPart;
 
         common::tests::setup();
 
@@ -419,12 +420,20 @@ mod tests {
         };
 
         let part = CtxPart {
+            hello: Arc::new(genvm_modules_interfaces::GenVMHello {
+                host_data: genvm_modules_interfaces::HostData {
+                    node_address: "test_address".to_string(),
+                    tx_id: "test_tx_id".to_string(),
+                    rest: serde_json::Map::new(),
+                },
+                cookie: "test_cookie".to_string(),
+            }),
             client: reqwest::Client::new(),
             sign_url: Arc::from("https://test-server.genlayer.com/genvm/sign"),
             sign_headers: Arc::new(BTreeMap::new()),
             sign_vars: BTreeMap::new(),
             node_address: "node_address".to_string(),
-            tx_id: "tx_id".to_string(),
+            metrics: sync::DArc::new(crate::scripting::ctx::Metrics::default()),
         };
 
         req.add_rfc9421_sign_headers(&part).await.unwrap();

@@ -8,27 +8,27 @@ use super::{config, prompt};
 pub trait Provider {
     async fn exec_prompt_text(
         &self,
-        client: &reqwest::Client,
+        ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String>;
 
     async fn exec_prompt_json_as_text(
         &self,
-        client: &reqwest::Client,
+        ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
-        self.exec_prompt_text(client, prompt, model).await
+        self.exec_prompt_text(ctx, prompt, model).await
     }
 
     async fn exec_prompt_json(
         &self,
-        client: &reqwest::Client,
+        ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<serde_json::Map<String, serde_json::Value>> {
-        let res = self.exec_prompt_json_as_text(client, prompt, model).await?;
+        let res = self.exec_prompt_json_as_text(ctx, prompt, model).await?;
         let res = sanitize_json_str(&res);
         let res = serde_json::from_str(res).with_context(|| format!("parsing {res:?}"))?;
 
@@ -37,11 +37,11 @@ pub trait Provider {
 
     async fn exec_prompt_bool_reason(
         &self,
-        client: &reqwest::Client,
+        ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<bool> {
-        let res = self.exec_prompt_json(client, prompt, model).await?;
+        let res = self.exec_prompt_json(ctx, prompt, model).await?;
         let res = res
             .get("result")
             .and_then(|x| x.as_bool())
@@ -144,7 +144,7 @@ impl prompt::Internal {
 impl Provider for OpenAICompatible {
     async fn exec_prompt_text(
         &self,
-        client: &reqwest::Client,
+        ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
@@ -169,13 +169,19 @@ impl Provider for OpenAICompatible {
 
         let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/chat/completions", self.config.host);
-        let request = client
+        let request = ctx
+            .client
             .post(&url)
             .header("Content-Type", "application/json")
             .header("Authorization", &format!("Bearer {}", &self.config.key))
             .body(request.clone());
-        let res =
-            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
+        let res = scripting::send_request_get_lua_compatible_response_json(
+            &ctx.metrics,
+            &url,
+            request,
+            true,
+        )
+        .await?;
 
         let response = res
             .body
@@ -188,7 +194,7 @@ impl Provider for OpenAICompatible {
 
     async fn exec_prompt_json(
         &self,
-        client: &reqwest::Client,
+        ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<serde_json::Map<String, serde_json::Value>> {
@@ -214,13 +220,19 @@ impl Provider for OpenAICompatible {
 
         let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/chat/completions", self.config.host);
-        let request = client
+        let request = ctx
+            .client
             .post(&url)
             .header("Content-Type", "application/json")
             .header("Authorization", &format!("Bearer {}", &self.config.key))
             .body(request.clone());
-        let res =
-            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
+        let res = scripting::send_request_get_lua_compatible_response_json(
+            &ctx.metrics,
+            &url,
+            request,
+            true,
+        )
+        .await?;
 
         let response = res
             .body
@@ -272,7 +284,7 @@ impl prompt::Internal {
 impl Provider for OLlama {
     async fn exec_prompt_text(
         &self,
-        client: &reqwest::Client,
+        ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
@@ -280,9 +292,14 @@ impl Provider for OLlama {
 
         let request = serde_json::to_vec(&request)?;
         let url = format!("{}/api/generate", self.config.host);
-        let request = client.post(&url).body(request.clone());
-        let res =
-            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
+        let request = ctx.client.post(&url).body(request.clone());
+        let res = scripting::send_request_get_lua_compatible_response_json(
+            &ctx.metrics,
+            &url,
+            request,
+            true,
+        )
+        .await?;
 
         let response = res
             .body
@@ -295,7 +312,7 @@ impl Provider for OLlama {
 
     async fn exec_prompt_json_as_text(
         &self,
-        client: &reqwest::Client,
+        ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
@@ -327,9 +344,14 @@ impl Provider for OLlama {
 
         let request = serde_json::to_vec(&request)?;
         let url = format!("{}/api/generate", self.config.host);
-        let request = client.post(&url).body(request.clone());
-        let res =
-            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
+        let request = ctx.client.post(&url).body(request.clone());
+        let res = scripting::send_request_get_lua_compatible_response_json(
+            &ctx.metrics,
+            &url,
+            request,
+            true,
+        )
+        .await?;
 
         let response = res
             .body
@@ -345,7 +367,7 @@ impl Provider for OLlama {
 impl Provider for Gemini {
     async fn exec_prompt_text(
         &self,
-        client: &reqwest::Client,
+        ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
@@ -364,12 +386,18 @@ impl Provider for Gemini {
             "{}/v1beta/models/{}:generateContent?key={}",
             self.config.host, model, self.config.key
         );
-        let request = client
+        let request = ctx
+            .client
             .post(&url)
             .header("Content-Type", "application/json")
             .body(request.clone());
-        let res =
-            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
+        let res = scripting::send_request_get_lua_compatible_response_json(
+            &ctx.metrics,
+            &url,
+            request,
+            true,
+        )
+        .await?;
 
         let res = res
             .body
@@ -381,7 +409,7 @@ impl Provider for Gemini {
 
     async fn exec_prompt_json_as_text(
         &self,
-        client: &reqwest::Client,
+        ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
@@ -400,12 +428,18 @@ impl Provider for Gemini {
             "{}/v1beta/models/{}:generateContent?key={}",
             self.config.host, model, self.config.key
         );
-        let request = client
+        let request = ctx
+            .client
             .post(&url)
             .header("Content-Type", "application/json")
             .body(request.clone());
-        let res =
-            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
+        let res = scripting::send_request_get_lua_compatible_response_json(
+            &ctx.metrics,
+            &url,
+            request,
+            true,
+        )
+        .await?;
 
         let res = res
             .body
@@ -455,7 +489,7 @@ impl prompt::Internal {
 impl Provider for Anthropic {
     async fn exec_prompt_text(
         &self,
-        client: &reqwest::Client,
+        ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<String> {
@@ -463,14 +497,20 @@ impl Provider for Anthropic {
 
         let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/messages", self.config.host);
-        let request = client
+        let request = ctx
+            .client
             .post(&url)
             .header("Content-Type", "application/json")
             .header("x-api-key", &self.config.key)
             .header("anthropic-version", "2023-06-01")
             .body(request.clone());
-        let res =
-            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
+        let res = scripting::send_request_get_lua_compatible_response_json(
+            &ctx.metrics,
+            &url,
+            request,
+            true,
+        )
+        .await?;
 
         res.body
             .pointer("/content/0/text")
@@ -481,7 +521,7 @@ impl Provider for Anthropic {
 
     async fn exec_prompt_json(
         &self,
-        client: &reqwest::Client,
+        ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<serde_json::Map<String, serde_json::Value>> {
@@ -521,14 +561,20 @@ impl Provider for Anthropic {
 
         let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/messages", self.config.host);
-        let request = client
+        let request = ctx
+            .client
             .post(&url)
             .header("Content-Type", "application/json")
             .header("x-api-key", &self.config.key)
             .header("anthropic-version", "2023-06-01")
             .body(request.clone());
-        let res =
-            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
+        let res = scripting::send_request_get_lua_compatible_response_json(
+            &ctx.metrics,
+            &url,
+            request,
+            true,
+        )
+        .await?;
 
         let val = res
             .body
@@ -541,7 +587,7 @@ impl Provider for Anthropic {
 
     async fn exec_prompt_bool_reason(
         &self,
-        client: &reqwest::Client,
+        ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<bool> {
@@ -578,14 +624,20 @@ impl Provider for Anthropic {
 
         let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/messages", self.config.host);
-        let request = client
+        let request = ctx
+            .client
             .post(&url)
             .header("Content-Type", "application/json")
             .header("x-api-key", &self.config.key)
             .header("anthropic-version", "2023-06-01")
             .body(request.clone());
-        let res =
-            scripting::send_request_get_lua_compatible_response_json(&url, request, true).await?;
+        let res = scripting::send_request_get_lua_compatible_response_json(
+            &ctx.metrics,
+            &url,
+            request,
+            true,
+        )
+        .await?;
 
         let val = res
             .body
@@ -610,11 +662,14 @@ fn sanitize_json_str(s: &str) -> &str {
 #[cfg(test)]
 #[allow(non_upper_case_globals, dead_code)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::collections::HashMap;
 
     use crate::common;
+    use crate::scripting;
 
     use super::super::{config, prompt};
+    use genvm_common::sync;
     use genvm_common::templater;
 
     fn is_overloaded(e: &anyhow::Error) -> bool {
@@ -711,11 +766,26 @@ mod tests {
         let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
         let provider = backend.to_provider();
 
-        let client = common::create_client().unwrap();
+        let ctx = scripting::CtxPart {
+            client: common::create_client().unwrap(),
+            metrics: sync::DArc::new(scripting::Metrics::default()),
+            node_address: "test_node".to_owned(),
+            sign_headers: std::sync::Arc::new(BTreeMap::new()),
+            sign_url: std::sync::Arc::from("test_url"),
+            sign_vars: BTreeMap::new(),
+            hello: std::sync::Arc::new(genvm_modules_interfaces::GenVMHello {
+                cookie: "test_cookie".to_owned(),
+                host_data: genvm_modules_interfaces::HostData {
+                    tx_id: "test_tx".to_owned(),
+                    node_address: "test_node".to_owned(),
+                    rest: serde_json::Map::new(),
+                },
+            }),
+        };
 
         let res = provider
             .exec_prompt_text(
-                &client,
+                &ctx,
                 &prompt::Internal {
                     system_message: None,
                     temperature: 0.7,
@@ -773,12 +843,27 @@ mod tests {
 
         let provider = backend.to_provider();
 
-        let client = common::create_client().unwrap();
+        let ctx = scripting::CtxPart {
+            client: common::create_client().unwrap(),
+            metrics: sync::DArc::new(scripting::Metrics::default()),
+            node_address: "test_node".to_owned(),
+            sign_headers: std::sync::Arc::new(BTreeMap::new()),
+            sign_url: std::sync::Arc::from("test_url"),
+            sign_vars: BTreeMap::new(),
+            hello: std::sync::Arc::new(genvm_modules_interfaces::GenVMHello {
+                cookie: "test_cookie".to_owned(),
+                host_data: genvm_modules_interfaces::HostData {
+                    tx_id: "test_tx".to_owned(),
+                    node_address: "test_node".to_owned(),
+                    rest: serde_json::Map::new(),
+                },
+            }),
+        };
 
         const PROMPT: &str = r#"respond with json object containing single key "result" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes. This object must not be wrapped into other objects. Example: {"result": 10}"#;
         let res = provider
             .exec_prompt_json(
-                &client,
+                &ctx,
                 &prompt::Internal {
                     system_message: Some("respond with json".to_owned()),
                     temperature: 0.7,

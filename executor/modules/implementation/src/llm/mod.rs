@@ -1,18 +1,23 @@
 use anyhow::{Context, Result};
 use genvm_common::*;
-use std::{collections::HashMap, sync::Arc};
-
-use crate::{
-    common,
-    scripting::{self, RSContext},
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
 };
+
+use crate::{common, scripting};
 
 mod config;
 mod handler;
 mod prompt;
 mod providers;
 
-type UserVM = scripting::UserVM<ctx::VMData, ctx::CtxPart>;
+type UserVM = scripting::UserVM<ctx::VMData, Arc<ctx::CtxPart>>;
+
+#[derive(serde::Serialize, Debug, Default)]
+struct Metrics {
+    pub scripting: scripting::Metrics,
+}
 
 #[derive(clap::Args, Debug)]
 pub struct CliArgsRun {
@@ -42,9 +47,14 @@ pub struct CliArgsCheck {
 
 mod ctx;
 
-async fn create_vm(config: &config::Config) -> anyhow::Result<UserVM> {
-    let mut user_vm =
-        crate::scripting::UserVM::create(&config.mod_base, move |vm: mlua::Lua| async move {
+async fn create_vm(
+    config: &sync::DArc<config::Config>,
+    providers: Arc<BTreeMap<String, Box<dyn providers::Provider + Send + Sync>>>,
+) -> anyhow::Result<UserVM> {
+    let moved_config = config.clone();
+    let user_vm = crate::scripting::UserVM::create(
+        &config.mod_base,
+        move |vm: mlua::Lua| async move {
             // set llm-related globals
             vm.globals()
                 .set("__llm", ctx::create_global(&vm, config)?)?;
@@ -59,14 +69,32 @@ async fn create_vm(config: &config::Config) -> anyhow::Result<UserVM> {
                 exec_prompt,
                 exec_prompt_template,
             })
-        })
-        .await?;
+        },
+        Box::new(move |vm, table, hello| {
+            let metrics = sync::DArc::new(Metrics::default());
 
-    user_vm.add_ctx_creator(Box::new(|ctx: &RSContext<ctx::CtxPart>, vm, table| {
-        table.set("__ctx_llm", vm.create_userdata(ctx.data.clone())?)?;
+            let dflt_ctx = scripting::create_default_ctx(
+                hello,
+                moved_config.gep(|x| &x.mod_base),
+                metrics.gep(|x| &x.scripting),
+                vm,
+                table,
+            )?;
 
-        Ok(())
-    }));
+            //for
+
+            let ctx = Arc::new(ctx::CtxPart {
+                dflt: dflt_ctx.clone(),
+                providers: providers.clone(),
+                metrics: metrics.clone(),
+            });
+
+            table.set("__ctx_llm", vm.create_userdata(ctx.clone())?)?;
+
+            Ok(ctx)
+        }),
+    )
+    .await?;
 
     Ok(user_vm)
 }
@@ -104,20 +132,23 @@ fn handle_run(mut config: config::Config, args: CliArgsRun) -> Result<()> {
 
     let token = common::setup_cancels(&runtime, args.die_with_parent)?;
 
-    let config = Arc::new(config);
+    let config = sync::DArc::new(config);
 
-    let backends = config
+    let backends: BTreeMap<_, _> = config
         .backends
         .iter()
         .map(|(k, v)| (k.clone(), v.to_provider()))
         .collect();
 
+    let backends = Arc::new(backends);
+
     let moved_config = config.clone();
 
     let vm_pool = runtime.block_on(scripting::pool::new(config.mod_base.vm_count, move || {
         let moved_config = moved_config.clone();
+        let backends = backends.clone();
         async move {
-            create_vm(&moved_config)
+            create_vm(&moved_config, backends)
                 .await
                 .with_context(|| "creating user VM")
         }
@@ -126,10 +157,7 @@ fn handle_run(mut config: config::Config, args: CliArgsRun) -> Result<()> {
     let loop_future = crate::common::run_loop(
         config.mod_base.bind_address.clone(),
         token,
-        Arc::new(handler::Provider {
-            vm_pool,
-            providers: Arc::new(backends),
-        }),
+        Arc::new(handler::Provider { vm_pool }),
     );
 
     runtime.block_on(loop_future)?;
@@ -170,11 +198,26 @@ fn handle_check(config: config::Config, args: CliArgsCheck) -> Result<()> {
     let backend: config::BackendConfig = serde_json::from_value(backend)?;
     let provider = backend.to_provider();
 
-    let client = common::create_client()?;
+    let ctx = scripting::CtxPart {
+        client: common::create_client().unwrap(),
+        metrics: sync::DArc::new(scripting::Metrics::default()),
+        node_address: "test_node".to_owned(),
+        sign_headers: std::sync::Arc::new(BTreeMap::new()),
+        sign_url: std::sync::Arc::from("test_url"),
+        sign_vars: BTreeMap::new(),
+        hello: Arc::new(genvm_modules_interfaces::GenVMHello {
+            cookie: "test_cookie".to_owned(),
+            host_data: genvm_modules_interfaces::HostData {
+                node_address: "test_node".to_owned(),
+                tx_id: "test_tx".to_owned(),
+                rest: serde_json::Map::new(),
+            },
+        }),
+    };
 
     let res = runtime.block_on(
         provider.exec_prompt_text(
-            &client,
+            &ctx,
             &prompt::Internal {
                 system_message: None,
                 temperature: 0.7,
@@ -308,7 +351,7 @@ mod tests {
             .to_owned();
         extra_path.push_str("/?.lua");
 
-        let config = Arc::new(config::Config {
+        let config = sync::DArc::new(config::Config {
             base: genvm_common::BaseConfig {
                 log_level: logger::Level::Debug,
                 threads: 1,
@@ -334,7 +377,12 @@ mod tests {
             ]),
         });
 
-        let user_vm = create_vm(&config).await.unwrap();
+        let providers = std::sync::Arc::new(BTreeMap::from([
+            ("1".to_owned(), provider_test),
+            ("2".to_owned(), provider_real),
+        ]));
+
+        let user_vm = create_vm(&config, providers).await.unwrap();
 
         // this ensures order
         user_vm
@@ -366,23 +414,9 @@ mod tests {
             .exec()
             .unwrap();
 
-        let client = reqwest::Client::new();
         let hello = common::tests::get_hello();
 
-        let rs_ctx = scripting::RSContext {
-            client: client.clone(),
-            hello: hello.clone(),
-            data: Arc::new(ctx::CtxPart {
-                hello,
-                providers: Arc::new(BTreeMap::from([
-                    ("1".to_owned(), provider_test),
-                    ("2".to_owned(), provider_real),
-                ])),
-                client,
-            }),
-        };
-
-        let ctx_lua = user_vm.create_ctx(&rs_ctx).unwrap();
+        let (_ctx, ctx_lua) = user_vm.create_ctx(&hello).unwrap();
 
         let payload = llm_iface::PromptPayload {
             images: Vec::new(),

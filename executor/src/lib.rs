@@ -183,7 +183,41 @@ pub async fn run_with(
         host.notify_nondet_disagreement(*disag)?;
     }
 
-    let metrics = &supervisor.ctor.shared_data.metrics;
+    log_debug!("all executions done, collecting stats");
+
+    let web_metrics = supervisor
+        .ctor
+        .modules
+        .web
+        .send::<calldata::Value, _>(genvm_modules_interfaces::web::Message::GetStats)
+        .await?
+        .ok();
+    let llm_metrics = supervisor
+        .ctor
+        .modules
+        .llm
+        .send::<calldata::Value, _>(genvm_modules_interfaces::llm::Message::GetStats)
+        .await?
+        .ok();
+
+    #[derive(serde::Serialize)]
+    struct AllMetrics<'a> {
+        web: Option<calldata::Value>,
+        llm: Option<calldata::Value>,
+        gvm: &'a crate::Metrics,
+    }
+
+    let all_metrics = AllMetrics {
+        web: web_metrics,
+        llm: llm_metrics,
+        gvm: &supervisor.ctor.shared_data.metrics,
+    };
+
+    let all_metrics = calldata::to_value(&all_metrics)
+        .ok()
+        .unwrap_or(calldata::Value::Null);
+
+    log_info!(metrics:serde = all_metrics; "metrics");
 
     log_debug!("sending final result to host");
 
@@ -195,8 +229,6 @@ pub async fn run_with(
     let mut host = supervisor.host.lock().await;
     host.consume_result(&res)?;
     std::mem::drop(host);
-
-    log_info!(metrics:serde = metrics; "metrics");
 
     match res {
         Ok((a, b)) => Ok((a, b, nondet_disagree)),

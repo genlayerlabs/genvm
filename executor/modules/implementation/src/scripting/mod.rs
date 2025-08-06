@@ -2,7 +2,7 @@ pub mod pool;
 
 mod ctx;
 
-use genvm_common::*;
+use genvm_common::{sync::DArc, *};
 use genvm_modules_interfaces::{web::HeaderData, GenericValue};
 use mlua::LuaSerdeExt;
 use serde::{Deserialize, Serialize};
@@ -10,20 +10,18 @@ use std::{collections::BTreeMap, future::Future, sync::Arc};
 
 use crate::common::{self, MapUserError, ModuleError};
 
-pub struct RSContext<C> {
-    pub client: reqwest::Client,
-    pub hello: Arc<genvm_modules_interfaces::GenVMHello>,
-    pub data: Arc<C>,
-}
+pub use ctx::CtxPart;
+pub use ctx::Metrics;
 
-pub type CtxCreator<C> =
-    dyn Fn(&RSContext<C>, &mlua::Lua, &mlua::Table) -> anyhow::Result<()> + Send + Sync;
+pub type CtxCreator<R> = dyn Fn(&mlua::Lua, &mlua::Table, &Arc<genvm_modules_interfaces::GenVMHello>) -> anyhow::Result<R>
+    + Send
+    + Sync;
 
-pub struct UserVM<T, C> {
+pub struct UserVM<T, R> {
     pub vm: mlua::Lua,
     pub data: T,
 
-    ctx_creators: Vec<Box<CtxCreator<C>>>,
+    ctx_creator: Box<CtxCreator<R>>,
 }
 
 pub fn anyhow_to_lua_error(e: anyhow::Error) -> mlua::Error {
@@ -39,24 +37,69 @@ pub fn anyhow_to_lua_error(e: anyhow::Error) -> mlua::Error {
     }
 }
 
-impl<T, C> UserVM<T, C> {
-    pub fn add_ctx_creator(&mut self, creator: Box<CtxCreator<C>>) {
-        self.ctx_creators.push(creator);
+pub fn create_default_ctx(
+    hello: &Arc<genvm_modules_interfaces::GenVMHello>,
+    base_config: sync::DArc<common::ModuleBaseConfig>,
+    metrics: sync::DArc<Metrics>,
+    vm: &mlua::Lua,
+    table: &mlua::Table,
+) -> anyhow::Result<std::sync::Arc<ctx::CtxPart>> {
+    let mut sign_vars = BTreeMap::new();
+
+    sign_vars.insert(
+        "node_address".to_owned(),
+        hello.host_data.node_address.clone(),
+    );
+    sign_vars.insert("tx_id".to_owned(), hello.host_data.tx_id.clone());
+    for (k, v) in &hello.host_data.rest {
+        if let serde_json::Value::String(s) = v {
+            sign_vars.insert(k.clone(), s.clone());
+        }
     }
 
-    pub fn create_ctx(&self, rs_ctx: &RSContext<C>) -> anyhow::Result<mlua::Value> {
+    let my_ctx_arc = Arc::new(ctx::CtxPart {
+        hello: hello.clone(),
+        client: common::create_client()?,
+        node_address: hello.host_data.node_address.clone(),
+        sign_vars,
+        sign_headers: base_config.signer_headers.clone(),
+        sign_url: base_config.signer_url.clone(),
+        metrics,
+    });
+
+    let my_ctx = vm.create_userdata(my_ctx_arc.clone())?;
+
+    table.set("__ctx_dflt", my_ctx)?;
+
+    let hello_value = vm.to_value(hello)?;
+    let hello_value = hello_value
+        .as_table()
+        .ok_or_else(|| mlua::Error::external("expected hello value to be a table"))?;
+
+    for kv in hello_value.pairs() {
+        let (k, v): (mlua::Value, mlua::Value) = kv?;
+        table.set(k, v)?;
+    }
+
+    Ok(my_ctx_arc)
+}
+
+impl<T, R> UserVM<T, R> {
+    pub fn create_ctx(
+        &self,
+        hello: &Arc<genvm_modules_interfaces::GenVMHello>,
+    ) -> anyhow::Result<(R, mlua::Value)> {
         let ctx = self.vm.create_table()?;
 
-        for c in &self.ctx_creators {
-            c(rs_ctx, &self.vm, &ctx)?;
-        }
+        let res = (self.ctx_creator)(&self.vm, &ctx, hello)?;
 
-        Ok(mlua::Value::Table(ctx))
+        Ok((res, mlua::Value::Table(ctx)))
     }
 
     pub async fn create<F>(
         mod_config: &common::ModuleBaseConfig,
         data_getter: impl FnOnce(mlua::Lua) -> F,
+        ctx_creator: Box<CtxCreator<R>>,
     ) -> anyhow::Result<Self>
     where
         F: Future<Output = anyhow::Result<T>>,
@@ -103,63 +146,20 @@ impl<T, C> UserVM<T, C> {
 
         vm.globals().set("__dflt", ctx::dflt::create_global(&vm)?)?;
 
-        let mut ctx_creators: Vec<Box<CtxCreator<C>>> = Vec::new();
-
-        let signer_headers = mod_config.signer_headers.clone();
-        let sign_url = mod_config.signer_url.clone();
-
-        ctx_creators.push(Box::new(move |rs_ctx, vm, ctx| {
-            let mut sign_vars = BTreeMap::new();
-
-            sign_vars.insert(
-                "node_address".to_owned(),
-                rs_ctx.hello.host_data.node_address.clone(),
-            );
-            sign_vars.insert("tx_id".to_owned(), rs_ctx.hello.host_data.tx_id.clone());
-            for (k, v) in &rs_ctx.hello.host_data.rest {
-                if let serde_json::Value::String(s) = v {
-                    sign_vars.insert(k.clone(), s.clone());
-                }
-            }
-
-            let my_ctx = vm.create_userdata(Arc::new(ctx::dflt::CtxPart {
-                client: rs_ctx.client.clone(),
-                node_address: rs_ctx.hello.host_data.node_address.clone(),
-                tx_id: rs_ctx.hello.host_data.tx_id.clone(),
-                sign_vars,
-                sign_headers: signer_headers.clone(),
-                sign_url: sign_url.clone(),
-            }))?;
-
-            ctx.set("__ctx_dflt", my_ctx)?;
-
-            let hello_value = vm.to_value(&rs_ctx.hello)?;
-            let hello_value = hello_value
-                .as_table()
-                .ok_or_else(|| mlua::Error::external("expected hello value to be a table"))?;
-
-            for kv in hello_value.pairs() {
-                let (k, v): (mlua::Value, mlua::Value) = kv?;
-                ctx.set(k, v)?;
-            }
-
-            Ok(())
-        }));
-
         Ok(Self {
             data: data_getter(vm.clone()).await?,
-            ctx_creators,
             vm,
+            ctx_creator,
         })
     }
 
-    pub async fn call_fn<R>(
+    pub async fn call_fn<RR>(
         &self,
         f: &mlua::Function,
         args: impl mlua::IntoLuaMulti,
-    ) -> anyhow::Result<R>
+    ) -> anyhow::Result<RR>
     where
-        R: mlua::FromLuaMulti,
+        RR: mlua::FromLuaMulti,
     {
         let res = f.call_async(args).await;
 
@@ -214,10 +214,14 @@ pub struct ResponseJSON {
 }
 
 pub async fn send_request_get_lua_compatible_response_bytes(
+    metrics: &DArc<Metrics>,
     url: &str,
     request: reqwest::RequestBuilder,
     error_on_status: bool,
 ) -> anyhow::Result<Response> {
+    metrics.requests_count.increment();
+    let lock = stats::tracker::Time::new(metrics.gep(|x| &x.requests_time));
+
     let response = request
         .send()
         .await
@@ -230,6 +234,7 @@ pub async fn send_request_get_lua_compatible_response_bytes(
     }
 
     let body = response.bytes().await;
+    std::mem::drop(lock);
 
     let body = match body {
         Ok(body) => body,
@@ -286,10 +291,14 @@ pub async fn send_request_get_lua_compatible_response_bytes(
 }
 
 pub async fn send_request_get_lua_compatible_response_json(
+    metrics: &DArc<Metrics>,
     url: &str,
     request: reqwest::RequestBuilder,
     error_on_status: bool,
 ) -> anyhow::Result<ResponseJSON> {
+    metrics.requests_count.increment();
+    let lock = stats::tracker::Time::new(metrics.gep(|x| &x.requests_time));
+
     let response = request
         .send()
         .await
@@ -302,6 +311,8 @@ pub async fn send_request_get_lua_compatible_response_json(
     }
 
     let body = response.json().await;
+
+    std::mem::drop(lock);
 
     let body: serde_json::Value = match body {
         Ok(body) => body,
