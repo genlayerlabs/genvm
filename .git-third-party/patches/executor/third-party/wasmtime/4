@@ -1,0 +1,83 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: kp2pml30 <kp2pml30@gmail.com>
+Date: Wed, 6 Aug 2025 22:58:05 +0900
+Subject: [PATCH] fix: make fp capturing optional
+
+---
+ crates/wasmtime/src/lib.rs           |  1 +
+ crates/wasmtime/src/runtime/func.rs  |  4 ++++
+ crates/wasmtime/src/runtime/store.rs | 16 +++++++++++++---
+ 3 files changed, 18 insertions(+), 3 deletions(-)
+
+diff --git a/crates/wasmtime/src/lib.rs b/crates/wasmtime/src/lib.rs
+index f9392f6a..3d7abdf5 100644
+--- a/crates/wasmtime/src/lib.rs
++++ b/crates/wasmtime/src/lib.rs
+@@ -406,3 +406,4 @@ pub mod _internal {
+ }
+ 
+ pub use crate::runtime::func::Fingerprint;
++pub use crate::runtime::store::GenVMCtx;
+diff --git a/crates/wasmtime/src/runtime/func.rs b/crates/wasmtime/src/runtime/func.rs
+index a4fdcf76..a03bb1d3 100644
+--- a/crates/wasmtime/src/runtime/func.rs
++++ b/crates/wasmtime/src/runtime/func.rs
+@@ -1652,6 +1652,10 @@ pub(crate) fn invoke_wasm_and_catch_traps<T>(
+                     return e;
+                 }
+ 
++                if !store.0.store_opaque().genvm_ctx.should_capture_fp.load(std::sync::atomic::Ordering::Acquire) {
++                    return e;
++                }
++
+                 let mut fp = Fingerprint {
+                     module_instances: BTreeMap::new(),
+                 };
+diff --git a/crates/wasmtime/src/runtime/store.rs b/crates/wasmtime/src/runtime/store.rs
+index 03b3e667..43641e50 100644
+--- a/crates/wasmtime/src/runtime/store.rs
++++ b/crates/wasmtime/src/runtime/store.rs
+@@ -309,7 +309,7 @@ pub struct StoreOpaque {
+     // within a `Store`.
+     _marker: marker::PhantomPinned,
+ 
+-    genvm_ctx: Arc<std::sync::atomic::AtomicU32>,
++    pub genvm_ctx: GenVMCtx,
+ 
+     engine: Engine,
+     runtime_limits: VMRuntimeLimits,
+@@ -519,6 +519,14 @@ enum StoreInstanceKind {
+     Dummy,
+ }
+ 
++/// Context for the GenVM, used to control the behavior of the VM.
++pub struct GenVMCtx {
++    /// non-zero if should quit
++    pub should_quit: Arc<std::sync::atomic::AtomicU32>,
++    /// true if fp should be captured
++    pub should_capture_fp: Arc<std::sync::atomic::AtomicBool>,
++}
++
+ impl<T> Store<T> {
+     /// Creates a new [`Store`] to be associated with the given [`Engine`] and
+     /// `data` provided.
+@@ -529,7 +537,7 @@ impl<T> Store<T> {
+     /// The store will limit the number of instances, linear memories, and
+     /// tables created to 10,000. This can be overridden with the
+     /// [`Store::limiter`] configuration method.
+-    pub fn new(engine: &Engine, data: T, genvm_ctx: Arc<std::sync::atomic::AtomicU32>) -> Self {
++    pub fn new(engine: &Engine, data: T, genvm_ctx: GenVMCtx) -> Self {
+         let pkey = engine.allocator().next_available_pkey();
+ 
+         let mut inner = Box::new(StoreInner {
+@@ -580,7 +588,9 @@ impl<T> Store<T> {
+             epoch_deadline_behavior: None,
+             data: ManuallyDrop::new(data),
+         });
+-        inner.runtime_limits.should_quit_bool = core::cell::UnsafeCell::new(inner.genvm_ctx.as_ptr() as usize);
++
++        let should_quit_ptr: *const std::sync::atomic::AtomicU32 = std::ptr::from_ref(&*inner.genvm_ctx.should_quit);
++        inner.runtime_limits.should_quit_bool = core::cell::UnsafeCell::new(should_quit_ptr as usize);
+ 
+         // Wasmtime uses the callee argument to host functions to learn about
+         // the original pointer to the `Store` itself, allowing it to
