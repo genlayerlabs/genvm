@@ -90,7 +90,12 @@ impl SharedBytes {
             panic!("SharedBytes::slice: begin ({}) > end ({})", begin, end);
         }
         if begin > self.0.len() || end > self.0.len() {
-            panic!("SharedBytes::slice: range [{}..{}] out of bounds for length {}", begin, end, self.0.len());
+            panic!(
+                "SharedBytes::slice: range [{}..{}] out of bounds for length {}",
+                begin,
+                end,
+                self.0.len()
+            );
         }
         Self(self.0.gep(|data| &data[begin..end]))
     }

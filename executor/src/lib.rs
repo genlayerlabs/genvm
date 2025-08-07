@@ -24,7 +24,8 @@ use std::{str::FromStr, sync::Arc};
 pub struct Metrics {
     pub supervisor: rt::Metrics,
     pub host: host::Metrics,
-    pub module: modules::Metrics,
+    pub web_module: modules::Metrics,
+    pub llm_module: modules::Metrics,
 }
 
 pub fn create_supervisor(
@@ -43,7 +44,7 @@ pub fn create_supervisor(
             shared_data.cancellation.clone(),
             shared_data.cookie.clone(),
             host_data.clone(),
-            metrics.gep(|x| &x.module),
+            metrics.gep(|x| &x.web_module),
         )),
         llm: Arc::new(modules::Module::new(
             "llm".into(),
@@ -51,7 +52,7 @@ pub fn create_supervisor(
             shared_data.cancellation.clone(),
             shared_data.cookie.clone(),
             host_data,
-            metrics.gep(|x| &x.module),
+            metrics.gep(|x| &x.llm_module),
         )),
     };
 
@@ -188,14 +189,14 @@ pub async fn run_with(
     let web_metrics = supervisor
         .modules
         .web
-        .send::<calldata::Value, _>(genvm_modules_interfaces::web::Message::GetStats)
-        .await?
+        .get_stats(genvm_modules_interfaces::web::Message::GetStats)
+        .await
         .ok();
     let llm_metrics = supervisor
         .modules
         .llm
-        .send::<calldata::Value, _>(genvm_modules_interfaces::llm::Message::GetStats)
-        .await?
+        .get_stats(genvm_modules_interfaces::llm::Message::GetStats)
+        .await
         .ok();
 
     #[derive(serde::Serialize)]
