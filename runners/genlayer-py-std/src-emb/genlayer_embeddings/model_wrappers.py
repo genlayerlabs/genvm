@@ -2,7 +2,7 @@ __all__ = ('Model', 'SentenceTransformer')
 
 import numpy as np
 from numpy.typing import DTypeLike
-from ._nn.tensor import Tensor, InputTensor, TensorStorage
+from ._nn.builder import Builder
 from ._nn import get_run_onnx
 from pathlib import Path
 import json
@@ -25,37 +25,51 @@ for i in _models_paths:
 
 
 class Model:
-	_inputs: dict[str, InputTensor]
-	_outputs: dict[str, Tensor]
-	_store: TensorStorage
+	_compiled_model: typing.Callable
+	_input_names: list[str]
+	_output_names: list[str]
 
 	def __init__(
 		self, model: str, inputs: dict[str, DTypeLike], *, models_db=_ALL_MODELS
 	):
 		model_desc = models_db[model]
-		self._store = TensorStorage()
 		onnx_model = onnx.load_model(model_desc['path'], load_external_data=False)
-		self._inputs = {k: self._store.input(None, v) for k, v in inputs.items()}
-		res = get_run_onnx(
-			onnx_model, typing.cast(dict[str, Tensor], self._inputs), self._store
-		)
-		self._outputs = {
-			model_desc.get('rename-outputs', {}).get(k, k): v for k, v in res.items()
-		}
 
-		self._store.finish()
+		# Create input placeholders as variable names
+		user_inputs = {}
+		self._input_names = list(inputs.keys())
+		for k in inputs.keys():
+			user_inputs[k] = k
+
+		self._compiled_model = get_run_onnx(onnx_model, user_inputs)
+
+		# Extract output names from the ONNX model
+		self._output_names = [output.name for output in onnx_model.graph.output]
+
+		# Apply renaming if specified
+		rename_outputs = model_desc.get('rename-outputs', {})
+		self._output_names = [rename_outputs.get(name, name) for name in self._output_names]
 
 	def __call__(
 		self, inputs: dict[str, np.ndarray], outputs: list[str] | None = None
 	) -> dict[str, np.ndarray]:
 		if outputs is None:
-			outputs = list(self._outputs.keys())
+			outputs = self._output_names
 
-		self._store.reset()
-		for k, v in inputs.items():
-			self._inputs[k].set_input(v)
+		# Execute the compiled model with the inputs
+		result_values = self._compiled_model(**inputs)
 
-		return {v: self._outputs[v].compute() for v in outputs}
+		# If there's only one output, wrap in tuple
+		if not isinstance(result_values, tuple):
+			result_values = (result_values,)
+
+		# Map outputs to their names
+		result = {}
+		for i, output_name in enumerate(self._output_names):
+			if output_name in outputs and i < len(result_values):
+				result[output_name] = result_values[i]
+
+		return result
 
 
 def prod(x: collections.abc.Sequence[int]):

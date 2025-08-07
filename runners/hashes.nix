@@ -29,7 +29,7 @@ let
 			};
 
 			genlayer-embeddings = {
-				hash = "sha256-OJjPCc76aSzdv3ktsIDHiXE69FEbipeqxiWy0llrSok=";
+				hash = "sha256-4aH3t6P7KZpO3v7UTPF7W2lIqKuMQAfoVCv5HlxP4Jo=";
 
 				depends = [
 					models.all-MiniLM-L6-v2

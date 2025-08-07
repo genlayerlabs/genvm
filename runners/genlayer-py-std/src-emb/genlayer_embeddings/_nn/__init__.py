@@ -6,10 +6,12 @@ This file is highly inspired by `tinygrad <https://github.com/tinygrad/tinygrad>
 
 from __future__ import annotations
 
-__all__ = ('get_run_onnx', 'Tensor', 'TensorStorage')
+__all__ = ('get_run_onnx',)
 
 
-from .tensor import Tensor, TensorStorage, ConstTensor, shapeOfNNull
+from .builder import Builder
+
+Tensor = str  # String-based tensor representation
 
 from google.protobuf.internal.containers import RepeatedCompositeFieldContainer
 import numpy as np
@@ -67,98 +69,106 @@ def get_as_const(x: Tensor) -> np.ndarray:
 	return x.compute()
 
 
-def _op_split(opt: dict, inp: list[Tensor], n: NodeProto) -> tuple[Tensor, ...]:
+def _op_split(
+	builder: Builder, opt: dict, inp: list[Tensor], n: NodeProto
+) -> tuple[Tensor, ...]:
 	axis = opt.get('axis', 0)
 	splitting = inp[0]
-	if len(inp) == 1:
-		split = [shapeOfNNull(splitting)[axis] // len(n.output)] * len(n.output)
-		for i in range(shapeOfNNull(splitting)[axis] % len(n.output)):
-			split[i] += 1
-		split = np.array(split)
-	else:
-		split = get_as_const(inp[1])
 
-	ret: list[Tensor]
-	i, ret = 0, []
-	arg_1: list[None | tuple[int, int]] = [None] * splitting.ndim
-	for s in split:
-		arg_1[axis] = (i, i + s)
-		ret.append(splitting.shrink(arg=tuple(arg_1)))
-		i = i + s
+	if len(inp) == 1:
+		# Equal splits - calculate split points
+		num_outputs = len(n.output)
+		split_points = builder.add_decl(
+			f'np.array_split(range({splitting}.shape[{axis}]), {num_outputs})'
+		)
+		split_indices = builder.add_decl(f'[len(chunk) for chunk in {split_points}]')
+	else:
+		# Split sizes provided as second input
+		split_indices = inp[1]
+
+	# Generate cumulative indices for splitting
+	cumsum = builder.add_decl(f'np.cumsum([0] + list({split_indices}))')
+
+	# Generate split tensors
+	ret = []
+	for i in range(len(n.output)):
+		start_idx = builder.add_decl(f'{cumsum}[{i}]')
+		end_idx = builder.add_decl(f'{cumsum}[{i+1}]')
+
+		# Create slice object for the split
+		slice_obj = builder.add_decl(
+			f'tuple(slice(None) if i != {axis} else slice({start_idx}, {end_idx}) for i in range({splitting}.ndim))'
+		)
+		split_tensor = builder.add_decl(f'{splitting}[{slice_obj}]')
+		ret.append(split_tensor)
+
 	return tuple(ret)
 
 
-def _op_slice(onnx_model_version, opt: dict, inp: list[Tensor]) -> Tensor:
+def _do_slicing(slicing_tensor, axes, ends, starts, steps):
+	arg: list[tuple[int, int, int]] = [(0, x, 1) for x in slicing_tensor.shape]
+	for i, axis in enumerate(axes):
+		axis = int(axis) + slicing_tensor.ndim if axis < 0 else int(axis)
+		if starts[i] < 0:
+			starts[i] += slicing_tensor.shape[axis]
+		if ends[i] < 0:
+			ends[i] += slicing_tensor.shape[axis]
+		starts[i], ends[i] = (
+			max(0, min(starts[i], slicing_tensor.shape[axis])),
+			max(0, min(ends[i], slicing_tensor.shape[axis])),
+		)
+		if starts[i] > ends[i] and steps[i] >= 0:
+			steps[i] = -steps[i]
+		arg[axis] = (starts[i], ends[i], steps[i])
+
+	def unwrap(x):
+		if isinstance(x, np.ndarray) and prod(x.shape) == 1:
+			return x.reshape((1,))[0]
+		return x
+
+	return slicing_tensor[
+		tuple([slice(unwrap(s), unwrap(e), unwrap(st)) for s, e, st in arg])
+	]
+
+
+def _op_slice(
+	builder: Builder, onnx_model_version, opt: dict, inp: list[Tensor]
+) -> Tensor:
 	slicing_tensor = inp[0]
 	if onnx_model_version < 10:
-		axes = slicing_tensor._store.const(
-			np.array(opt.get('axes', range(inp[0].ndim)), dtype=np.int32)
+		# For older ONNX versions, axes and shape info come from attributes
+		# We'll handle this dynamically at runtime
+		axes = builder.add_decl(
+			f'np.array({opt.get("axes", [])}, dtype=np.int32) if {opt.get("axes", [])} else np.arange({slicing_tensor}.ndim, dtype=np.int32)'
 		)
-		ends = slicing_tensor._store.const(np.array(opt['ends'], dtype=np.int32))
-		starts = slicing_tensor._store.const(np.array(opt['starts'], dtype=np.int32))
-		steps = slicing_tensor._store.const(
-			np.array([1] * slicing_tensor.ndim, dtype=np.int32)
-		)
+		ends = builder.add_const(np.array(opt['ends'], dtype=np.int32))
+		starts = builder.add_const(np.array(opt['starts'], dtype=np.int32))
+		steps = builder.add_decl(f'np.ones({slicing_tensor}.ndim, dtype=np.int32)')
 	else:
 		starts, ends = inp[1:3]
 		if len(inp) <= 3:
-			axes = slicing_tensor._store.const(
-				np.array(range(slicing_tensor.ndim), dtype=np.int32)
-			)
+			axes = builder.add_decl(f'np.arange({slicing_tensor}.ndim, dtype=np.int32)')
 		else:
-			axes = inp[3].cast(np.int32)
+			axes = builder.add_decl(f'{inp[3]}.astype(np.int32)')
 
 		if len(inp) > 4:
-			steps = inp[4].cast(np.int32)
+			steps = builder.add_decl(f'{inp[4]}.astype(np.int32)')
 		else:
-			steps = slicing_tensor._store.const(
-				np.array([1] * slicing_tensor.ndim, dtype=np.int32)
-			)
+			steps = builder.add_decl(f'np.ones({slicing_tensor}.ndim, dtype=np.int32)')
 
-	def compute(
-		slicing_tensor=slicing_tensor, axes=axes, ends=ends, starts=starts, steps=steps
-	):
-		slicing_tensor = slicing_tensor.compute()
-		axes = axes.compute()
-		ends = ends.compute()
-		starts = starts.compute()
-		steps = steps.compute()
-		arg: list[tuple[int, int, int]] = [(0, x, 1) for x in slicing_tensor.shape]
-		for i, axis in enumerate(axes):
-			axis = int(axis) + slicing_tensor.ndim if axis < 0 else int(axis)
-			if starts[i] < 0:
-				starts[i] += slicing_tensor.shape[axis]
-			if ends[i] < 0:
-				ends[i] += slicing_tensor.shape[axis]
-			starts[i], ends[i] = (
-				max(0, min(starts[i], slicing_tensor.shape[axis])),
-				max(0, min(ends[i], slicing_tensor.shape[axis])),
-			)
-			if starts[i] > ends[i] and steps[i] >= 0:
-				steps[i] = -steps[i]
-			arg[axis] = (starts[i], ends[i], steps[i])
+	func = builder.add_const(_do_slicing)
 
-		# new_shape = tuple((s, e) if st > 0 else (e + 1, s + 1) for s, e, st in arg)
-		# if any(s == e for s, e in new_shape):
-		# return slicing_tensor.shrink(new_shape)
-
-		def unwrap(x):
-			if isinstance(x, np.ndarray) and prod(x.shape) == 1:
-				return x.reshape((1,))[0]
-			return x
-
-		return slicing_tensor[
-			tuple([slice(unwrap(s), unwrap(e), unwrap(st)) for s, e, st in arg])
-		]
-
-	return slicing_tensor._store.new(None, slicing_tensor.dtype, compute)
+	return builder.add_decl(
+		f'{func}({slicing_tensor}, {axes}, {ends}, {starts}, {steps})'
+	)
 
 
 def get_run_onnx(
 	onnx_model: ModelProto,
 	user_inputs: dict[str, Tensor],
-	tensor_storage: TensorStorage,
 ):
+	builder = Builder(onnx_model.graph.name)
+
 	def type_parse(type_proto: TypeProto) -> tuple[int, ...]:
 		ret = []
 		while True:
@@ -192,9 +202,9 @@ def get_run_onnx(
 			raise Exception(f'data type not supported {inp.name} {inp.dims} {inp.data_type}')
 		dtype = DTYPE_MAP[inp.data_type]
 		if dat := list(inp.float_data) or list(inp.int32_data) or list(inp.int64_data):
-			return tensor_storage.const(np.array(dat, dtype=dtype).reshape(inp.dims))
+			return builder.add_const(np.array(dat, dtype=dtype).reshape(inp.dims))
 		if len(inp.raw_data) > 0:
-			return tensor_storage.const(
+			return builder.add_const(
 				np.frombuffer(inp.raw_data, dtype=tensor_dtype_to_np_dtype(inp.data_type))
 				.copy()
 				.astype(dtype)
@@ -247,9 +257,6 @@ def get_run_onnx(
 				continue
 			shape = type_parse(inp.type)
 			inp_tensor = user_inputs[inp.name]
-			assert (
-				inp_tensor.shape == shape or shape == ()
-			), f'user {inp_tensor.shape} ;; file {shape}'
 			tensors[inp.name] = inp_tensor
 
 	get_inputs()
@@ -275,9 +282,9 @@ def get_run_onnx(
 		opt: Dict = attribute_dict[num]
 
 		if n.op_type == 'Split':
-			ret = _op_split(opt, inp, n)
+			ret = _op_split(builder, opt, inp, n)
 		elif n.op_type == 'Slice':
-			ret = _op_slice(onnx_model_version, opt, inp)
+			ret = _op_slice(builder, onnx_model_version, opt, inp)
 		elif hasattr(onnx_ops, n.op_type):
 			fxn = getattr(onnx_ops, n.op_type)
 			if isinstance(fxn, dict):
@@ -286,12 +293,8 @@ def get_run_onnx(
 						real_fxn = fxn[k]
 			else:
 				real_fxn = fxn
-			import inspect
 
-			if 'storage' in inspect.getfullargspec(real_fxn).kwonlyargs:
-				ret = real_fxn(*inp, storage=tensor_storage, **opt)
-			else:
-				ret = real_fxn(*inp, **opt)
+			ret = real_fxn(builder, *inp, **opt)
 		else:
 			raise Exception(f'op_type {n.op_type} not supported')
 
@@ -304,7 +307,12 @@ def get_run_onnx(
 		for i in range(len(n.output)):
 			intermediate_tensors[n.output[i]] = ret[i]
 
-	return {
-		output_name: intermediate_tensors[output_name]
-		for output_name in output_tensor_names
-	}
+	# Generate return statement
+	return_vars = [
+		intermediate_tensors[output_name] for output_name in output_tensor_names
+	]
+	builder._data.append(f'return {", ".join(return_vars)}\n')
+
+	# Compile the function with input parameters
+	input_params = list(user_inputs.keys())
+	return builder.finish(parameters=input_params)
