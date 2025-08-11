@@ -17,6 +17,7 @@ local value2json = require('value2json')
 ---@field json_parse fun(val: string): any
 ---@field json_stringify fun(val: any): string
 ---@field as_user_error fun(val: any): nil | ModuleError
+---@field url_encode fun(url: string): string
 
 ---@type RS
 M.rs = __dflt;  ---@diagnostic disable-line

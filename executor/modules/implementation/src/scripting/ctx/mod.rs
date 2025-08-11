@@ -19,7 +19,9 @@ pub(super) fn try_unwrap_err(err: &mlua::Error) -> Option<ModuleError> {
     match err {
         mlua::Error::ExternalError(e) => ModuleError::try_unwrap_dyn(arc_to_ref(e)),
         mlua::Error::CallbackError { cause, traceback } => try_unwrap_err(cause).map(|mut e| {
-            e.causes.push(traceback.clone());
+            let _ = traceback;
+            // I wonder if we should keep it...
+            //e.causes.push(traceback.clone());
 
             e
         }),

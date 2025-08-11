@@ -12,7 +12,7 @@ type UserVM = scripting::UserVM<ctx::VMData, Arc<ctx::CtxPart>>;
 pub struct Inner {
     user_vm: Arc<UserVM>,
 
-    ctx: Arc<ctx::CtxPart>,
+    _ctx: Arc<ctx::CtxPart>,
     ctx_val: mlua::Value,
 
     metrics: sync::DArc<super::Metrics>,
@@ -81,29 +81,6 @@ impl common::MessageHandler<web_iface::Message, FullResponse> for Handler {
     }
 
     async fn cleanup(&self) -> anyhow::Result<()> {
-        let lock = self.0.ctx.session.lock().await;
-
-        let session = match lock.as_ref() {
-            None => return Ok(()),
-            Some(session) => session,
-        };
-
-        if let Err(err) = self
-            .0
-            .ctx
-            .dflt_ctx
-            .client
-            .delete(format!(
-                "{}/session/{}",
-                self.0.ctx.config.webdriver_host, session
-            ))
-            .send()
-            .await
-        {
-            log_error!(error:err = err, id = session, cookie = self.0.ctx.dflt_ctx.hello.cookie; "session closed");
-        } else {
-            log_debug!(id = session, cookie = self.0.ctx.dflt_ctx.hello.cookie; "session closed");
-        }
         Ok(())
     }
 }
@@ -138,7 +115,7 @@ impl common::MessageHandlerProvider<genvm_modules_interfaces::web::Message, Full
 
         Ok(Handler(Arc::new(Inner {
             user_vm,
-            ctx,
+            _ctx: ctx,
             ctx_val,
             metrics,
         })))

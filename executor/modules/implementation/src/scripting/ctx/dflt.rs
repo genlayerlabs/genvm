@@ -161,6 +161,15 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
     )?;
 
     dflt.set(
+        "url_encode",
+        vm.create_function(|vm: &mlua::Lua, data: mlua::String| {
+            let encoded =
+                url::form_urlencoded::byte_serialize(&data.as_bytes()).collect::<String>();
+            vm.create_string(encoded)
+        })?,
+    )?;
+
+    dflt.set(
         "as_user_error",
         vm.create_function(|vm: &mlua::Lua, args: mlua::Value| {
             log_trace!(name = args.type_name(); "casting to user error (1)");

@@ -24,28 +24,6 @@ pub struct CliArgs {
     die_with_parent: bool,
 }
 
-async fn check_status(webdriver_host: &str) -> anyhow::Result<()> {
-    let client = reqwest::Client::new();
-    let status_res = client
-        .get(format!("{webdriver_host}/status"))
-        .header("Content-Type", "application/json; charset=utf-8")
-        .send()
-        .await
-        .with_context(|| "creating sessions request")?;
-
-    let body = crate::common::read_response(status_res)
-        .await
-        .with_context(|| "reading response")?;
-
-    let val: serde_json::Value = serde_json::from_str(&body)?;
-
-    if val.pointer("/value/ready").and_then(|v| v.as_bool()) != Some(true) {
-        anyhow::bail!("not ready {}", val)
-    }
-
-    Ok(())
-}
-
 pub fn entrypoint(args: CliArgs) -> Result<()> {
     let config = genvm_common::load_config(HashMap::new(), &args.config)
         .with_context(|| "loading config")?;
@@ -57,7 +35,7 @@ pub fn entrypoint(args: CliArgs) -> Result<()> {
 
     let token = common::setup_cancels(&runtime, args.die_with_parent)?;
 
-    let webdriver_host = config.webdriver_host.clone();
+    let _webdriver_host = config.webdriver_host.clone();
 
     let moved_config = config.clone();
 
@@ -85,7 +63,7 @@ pub fn entrypoint(args: CliArgs) -> Result<()> {
                 Box::new(move |vm: &mlua::Lua, table: &mlua::Table, hello| {
                     let metrics = sync::DArc::new(Metrics::default());
 
-                    let dflt_ctx = scripting::create_default_ctx(
+                    let _dflt_ctx = scripting::create_default_ctx(
                         hello,
                         moved_config_2.gep(|x| &x.mod_base),
                         metrics.gep(|x| &x.scripting),
@@ -93,11 +71,7 @@ pub fn entrypoint(args: CliArgs) -> Result<()> {
                         table,
                     )?;
 
-                    let ctx = Arc::new(ctx::CtxPart {
-                        dflt_ctx,
-                        session: tokio::sync::Mutex::new(None),
-                        config: moved_config_2.clone(),
-                    });
+                    let ctx = Arc::new(ctx::CtxPart {});
 
                     table.set("__ctx_web", vm.create_userdata(ctx.clone())?)?;
 
@@ -115,12 +89,6 @@ pub fn entrypoint(args: CliArgs) -> Result<()> {
         token,
         Arc::new(handler::HandlerProvider { vm_pool }),
     );
-
-    runtime
-        .block_on(check_status(&webdriver_host))
-        .with_context(|| "initial health check")?;
-
-    log_info!("health is OK");
 
     runtime.block_on(loop_future)?;
 
