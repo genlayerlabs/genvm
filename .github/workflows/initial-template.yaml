@@ -20,7 +20,7 @@ jobs:
       python: ${{ contains( github.event.pull_request.labels.*.name, 'test:force:pr') || steps.changes.outputs.python }}
       rs: ${{ contains( github.event.pull_request.labels.*.name, 'test:force:pr') || steps.changes.outputs.rs }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Get source
         uses: ./.github/actions/get-src
       - uses: actions/setup-python@v5

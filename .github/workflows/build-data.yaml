@@ -22,7 +22,7 @@ jobs:
       artifact_url: ${{ steps.upload.outputs.gcs_url }}
     steps:
       - run: sudo apt-get install -y python3-poetry
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           lfs: true
       - uses: actions/setup-python@v5

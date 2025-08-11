@@ -30,7 +30,7 @@ jobs:
     outputs:
       tag: ${{ steps.determine-version.outputs.new_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions-ecosystem/action-get-latest-tag@v1
         id: get-latest-tag
@@ -106,7 +106,7 @@ jobs:
     permissions:
       contents: write  # Needed for creating releases
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           lfs: true
       - run: sudo apt-get install -y python3-poetry
