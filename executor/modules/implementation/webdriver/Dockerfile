@@ -1,4 +1,4 @@
-FROM debian:12.10
+FROM debian:13.0
 
 ENV PATH="/extra_path:${PATH}"
 ENV DEBIAN_FRONTEND=noninteractive
