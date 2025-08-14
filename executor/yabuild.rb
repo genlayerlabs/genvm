@@ -93,5 +93,3 @@ project('executor') {
 	run_codegen.(cur_src.join('codegen', 'data', 'host-fns.json'), cur_src.join('testdata', 'runner', 'host_fns.py'), type: "py", tags: ['testdata'])
 	run_codegen.(cur_src.join('codegen', 'data', 'public-abi.json'), cur_src.join('testdata', 'runner', 'result_codes.py'), type: "py", tags: ['testdata'])
 }
-
-include_dir 'modules'

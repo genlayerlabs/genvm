@@ -218,9 +218,9 @@
             "description": "amount of lua vm to create",
             "minimum": 1
         },
-        "extra_lua_path": {
+        "lua_path": {
             "type": "string",
-            "description": "extra lua path to search for modules",
+            "description": "lua path to search for modules",
             "default": "",
             "examples": [
               "/etc/a/?.lua;/etc/b/init.lua"
@@ -242,7 +242,7 @@
             "default": {}
         }
       },
-      "required": ["bind_address", "lua_script_path", "vm_count"]
+      "required": ["bind_address", "lua_script_path", "vm_count", "lua_path"]
     },
     "base-conf": {
       "type": "object",

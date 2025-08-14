@@ -3,9 +3,13 @@ name = "genvm-modules"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+vendored_lua = ["mlua/vendored"]
+
 [dependencies]
 genvm-modules-interfaces = { path = "../interfaces" }
-genvm-common = { path = "../../common" }
+genvm-common = { path = "../../executor/common" }
 
 anyhow = { version = "1.0.98", features = [] }
 serde = { version = "1.0.219", features = ["rc"]}
@@ -17,7 +21,7 @@ serde_yaml = "0.9.34"
 clap = { version = "4.5.35", features = ["derive"] }
 signal-hook = "0.3.17"
 # we do not use anyhow feature because it does not work with boxed downcast_ref
-mlua = { version = "0.10.3", default-features = false, features = ["lua53", "async", "serialize", "vendored", "send", "error-send", "userdata-wrappers"] }
+mlua = { version = "0.10.3", default-features = false, features = ["lua53", "async", "serialize", "send", "error-send", "userdata-wrappers"] }
 async-trait = "0.1.88"
 regex = "1.11.1"
 crossbeam = "0.8.4"

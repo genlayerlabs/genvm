@@ -24,7 +24,7 @@ wiggle = { path = "third-party/wasmtime/crates/wiggle", default-features = false
 wasmparser = { path = "third-party/wasm-tools/crates/wasmparser" }
 
 genvm-common = { path = "common" }
-genvm-modules-interfaces = { path = "modules/interfaces" }
+genvm-modules-interfaces = { path = "../modules/interfaces" }
 
 anyhow = { version = "1.0.97", default-features = false }
 tracing = "0.1.41"

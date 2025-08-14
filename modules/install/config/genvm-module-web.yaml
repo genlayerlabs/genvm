@@ -3,15 +3,15 @@
 bind_address: 127.0.0.1:3032
 webdriver_host: http://127.0.0.1:4444
 
-lua_script_path: ${genvmRoot}/scripts/web-default.lua
+lua_script_path: ${exeDir}/../config/genvm-web-default.lua
 vm_count: 6
-extra_lua_path: ""
+lua_path: ${exeDir}/../lib/genvm-lua/?.lua
 signer_url: "#{signerUrl}"
 signer_headers: {}
 
 threads: 4
 blocking_threads: 16
-log_disable: tracing*,polling*,tungstenite*,tokio_tungstenite*
+log_disable: ""
 #log_level: trace
 
 session_create_request: |
