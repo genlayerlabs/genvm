@@ -20,8 +20,6 @@ let
 	args = {
 		inherit pkgs runnersLib;
 		inherit (pkgs) lib stdenvNoCC;
-
-		genVMAllowTest = import ./dbg.nix;
 	};
 in
 	(import ./py-libs args) ++

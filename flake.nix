@@ -30,6 +30,8 @@
 
 				build-config = {
 					executor-version = "0.1.18";
+					repo-url = "https://github.com/genlayerlabs/genvm.git";
+					head-revision = "aboba";
 				};
 			};
 
@@ -38,6 +40,7 @@
 				(import ./modules args)
 				(import ./executor args)
 				(import ./runners/release.nix args)
+				(import ./runners/all args)
 			];
 
 			merge-all-for-platform = platform:

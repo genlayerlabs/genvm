@@ -1,4 +1,6 @@
 let
+	dev-mode = import ./dev-mode.nix;
+
 	src = rec {
 		__prefix = "";
 
@@ -71,8 +73,6 @@ let
 		};
 	};
 
-	genVMAllowTest = import ./dbg.nix;
-
 	hashHasSpecial = hsh: val:
 		if val.hash == hsh
 		then true
@@ -83,7 +83,7 @@ let
 
 	deduceHash = val:
 		if hashHasSpecial "test" val
-		then (if genVMAllowTest then "test" else "error")
+		then (if dev-mode then "test" else "error")
 		else if val.hash == null
 		then null
 		else if hashHasSpecial null val

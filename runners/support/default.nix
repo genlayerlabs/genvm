@@ -1,10 +1,11 @@
 { pkgs
 , stdenvNoCC
-, genVMAllowTest
 , ...
 }@args:
-rec {
-	hashes = import ../hashes.nix;
+let
+	dev-mode = import ./nix/dev-mode.nix;
+in rec {
+	hashes = import ./nix/current-hashes.nix;
 
 	wasi-sdk = import ./wasi-sdk.nix args;
 
@@ -34,7 +35,7 @@ rec {
 			'';
 
 			outputHashMode = "flat";
-		} // (if hash == "test" then assert genVMAllowTest; {} else { outputHash = hash; }));
+		} // (if hash == "test" then assert dev-mode; {} else { outputHash = hash; }));
 	};
 
 	packageWithRunnerJSON = { id, hash, baseDerivation, expr }: package {
