@@ -107,14 +107,3 @@ pub fn verify_runner(runner_id: &str) -> Option<(&str, &str)> {
     }
     Some((runner_id, runner_hash))
 }
-
-pub fn path() -> anyhow::Result<std::path::PathBuf> {
-    let mut runners_path = std::env::current_exe()?;
-    runners_path.pop();
-    runners_path.pop();
-    runners_path.push("share");
-    runners_path.push("lib");
-    runners_path.push("genvm");
-    runners_path.push("runners");
-    Ok(runners_path)
-}

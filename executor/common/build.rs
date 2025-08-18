@@ -1,13 +1,6 @@
 fn main() -> std::io::Result<()> {
-    println!("cargo:rerun-if-env-changed=GENVM_PROFILE_PATH");
-    let tag: String = match std::env::var("GENVM_PROFILE_PATH") {
-        Ok(path) => {
-            println!("cargo:rerun-if-changed={path}");
-            let tag = std::fs::read_to_string(std::path::PathBuf::from(&path))?;
-            tag.trim().into()
-        }
-        Err(_) => "test".into(),
-    };
+    println!("cargo:rerun-if-env-changed=GENVM_PROFILE");
+    let tag: String = std::env::var("GENVM_PROFILE").unwrap_or("vTEST".into());
 
     let arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();

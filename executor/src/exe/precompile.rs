@@ -119,7 +119,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         Ok(())
     })?;
 
-    let runners_dir = genvm::runners::path()?;
+    let runners_dir = std::path::Path::new(&config.runners_dir);
 
     for runner_id in std::fs::read_dir(&runners_dir)? {
         let runner_id = runner_id?;

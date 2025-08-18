@@ -41,9 +41,7 @@ arg_parser = argparse.ArgumentParser('genvm-test-runner')
 arg_parser.add_argument(
 	'--gen-vm',
 	metavar='EXE',
-	default=str(
-		Path(os.getenv('GENVM', root_dir.joinpath('build', 'out', 'bin', 'genvm')))
-	),
+	required=True,
 )
 arg_parser.add_argument('--filter', metavar='REGEX', default='.*')
 arg_parser.add_argument('--show-steps', default=False, action='store_true')

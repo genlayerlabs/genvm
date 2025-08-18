@@ -20,16 +20,15 @@ function Render(ctx, payload)
 		result = result,
 	})
 
-	if result.headers['resulting-status'] ~= 200 then
-		-- Check the Resulting-Status header for the actual webpage status
-		local webpage_status = tonumber(result.headers['resulting-status'])
+	local status = tonumber(result.headers['resulting-status'])
 
+	if status ~= 200 then
 		lib.rs.user_error({
 			causes = {"WEBPAGE_LOAD_FAILED"},
 			fatal = false,
 			ctx = {
 				url = payload.url,
-				status = webpage_status,
+				status = status,
 				body = result.body,
 			}
 		})

@@ -4,7 +4,7 @@ local simple = import 'templates/simple.jsonnet';
         "calldata": |||
             {
                 "method": "main",
-                "args": ["600ms"]
+                "args": ["5s"]
             }
         |||
     },

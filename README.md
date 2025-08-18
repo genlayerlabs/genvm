@@ -21,7 +21,7 @@ It is a monorepo for GenVM, which consists of the following sub-projects:
 
 For "getting started" documentation please refer to [GenLayer documentation](https://docs.genlayer.com/build-with-genlayer/intelligent-contracts)
 
-For more complex examples you can look into [this](./executor/testdata/cases/py-core) part of test suite
+For more complex examples you can look into [this](./tests/cases/py-core) part of test suite
 
 
 ## Building from source
@@ -31,36 +31,33 @@ Required tools:
 - ruby (3.\*)
 - ninja
 - rustup (cargo+rustc)
+- (for runners) nix and x86_64 system
 
 All of them (except for the git for obvious reasons) are provided by default shell in `build-scripts/devenv/flake.nix` (for direnv add `use flake ./build-scripts/devenv`)
 
 Prelude:
-- `./tools/ya-build/ya-build config`<br />
+- `./configure.rb`<br />
   This command scraps and configures all targets (similar to CMake)
 - `ninja` is an alternative to `make`, it runs build commands
 - Output is located at `build/out` as a "root" (`bin`, `share`)
 
-### Simple
+### Debug build
+
 1. `cd $PROJECT_DIR`
 2. `git submodule update --init --recursive --depth 1`
 3. `source env.sh` (not needed if you used flake)
 4. `git third-party update --all`
-5. `ya-build config` (for release build pass `--preload build-scripts/ci/release-conf.rb`)
-6. `ninja -C build genvm/executor/all`
-7. Get `genvm-runners.zip` from [github](https://github.com/yeagerai/genvm)
+5. `./configure.rb`
+6. `ninja -C build`
+7. Get `genvm-runners.zip` from [github](https://github.com/genlayerlabs/genvm)
 8. merge `build/out` and `genvm-runners.zip`
 
-### Full
-
-It will also require `docker` and `docker-buildx`
+### Production build
 
 1. `cd $PROJECT_DIR`
-2. `git submodule update --init --recursive --depth 1`
-3. `./build-scripts/install/install-deps.rb --os --rust --genvm --runners`
-4. `source env.sh` (not needed if you used flake)
-5. `ya-build config` (for release build pass `--preload build-scripts/ci/release-conf.rb`)
-6. `ninja -C build tags/all`
-7. full genvm (including runners) is located at `build/out`
+2. `nix build -o build/out-universal -v -L .#all-for-platform.universal`
+3. `nix build -o build/out-amd64-linux -v -L .#all-for-platform.amd64-linux`
+4. merge outputs
 
 ## Contributing
 

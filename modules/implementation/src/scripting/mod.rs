@@ -7,6 +7,7 @@ use genvm_modules_interfaces::{web::HeaderData, GenericValue};
 use mlua::LuaSerdeExt;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, future::Future, sync::Arc};
+use anyhow::Context;
 
 use crate::common::{self, MapUserError, ModuleError};
 
@@ -106,32 +107,7 @@ impl<T, R> UserVM<T, R> {
     {
         use mlua::StdLib;
 
-        let lua_lib_path = {
-            let mut lua_lib_path = std::env::current_exe()?;
-            lua_lib_path.pop();
-            lua_lib_path.pop();
-            lua_lib_path.push("share");
-            lua_lib_path.push("lib");
-            lua_lib_path.push("genvm");
-            lua_lib_path.push("lua");
-
-            let mut path = lua_lib_path
-                .to_str()
-                .ok_or_else(|| anyhow::anyhow!("could not detect default lib path"))?
-                .to_owned();
-            path.push_str("/?.lua");
-
-            if !mod_config.extra_lua_path.is_empty() {
-                path.push(';');
-                path.push_str(&mod_config.extra_lua_path);
-            }
-
-            log_info!(path = path; "lua path");
-
-            path
-        };
-
-        std::env::set_var("LUA_PATH", &lua_lib_path);
+        std::env::set_var("LUA_PATH", &mod_config.lua_path);
 
         let lua_libs = StdLib::COROUTINE
             | StdLib::TABLE
@@ -142,9 +118,9 @@ impl<T, R> UserVM<T, R> {
 
         let vm = mlua::Lua::new_with(lua_libs, mlua::LuaOptions::default())?;
 
-        vm.load_std_libs(lua_libs)?;
+        vm.load_std_libs(lua_libs).context("loading stdlib")?;
 
-        vm.globals().set("__dflt", ctx::dflt::create_global(&vm)?)?;
+        vm.globals().set("__dflt", ctx::dflt::create_global(&vm).context("creating global for __dflt")?)?;
 
         Ok(Self {
             data: data_getter(vm.clone()).await?,
@@ -180,9 +156,9 @@ pub const DEFAULT_LUA_SER_OPTIONS: mlua::SerializeOptions = mlua::SerializeOptio
 
 pub async fn load_script<P>(vm: &mlua::Lua, path: P) -> anyhow::Result<()>
 where
-    P: AsRef<std::path::Path> + Into<String>,
+    P: AsRef<std::path::Path> + Into<String> + std::fmt::Debug,
 {
-    let script_contents = std::fs::read_to_string(&path)?;
+    let script_contents = std::fs::read_to_string(&path).with_context(|| format!("reading script from {:?}", &path))?;
     let chunk = vm.load(script_contents);
 
     let mut name = String::from("@");

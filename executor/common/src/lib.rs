@@ -74,13 +74,12 @@ pub fn load_config(
 ) -> anyhow::Result<serde_yaml::Value> {
     let mut root_path = std::env::current_exe().with_context(|| "getting current exe")?;
     root_path.pop();
-    root_path.pop();
     let root_path = root_path
         .into_os_string()
         .into_string()
         .map_err(|e| anyhow::anyhow!("can't convert path to string `{e:?}`"))?;
 
-    vars.insert("genvmRoot".to_owned(), root_path);
+    vars.insert("exeDir".to_owned(), root_path);
     vars.insert("genvmVersion".to_owned(), VERSION.to_owned());
 
     for (mut name, value) in std::env::vars() {

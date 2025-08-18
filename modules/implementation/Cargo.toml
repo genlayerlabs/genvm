@@ -5,7 +5,7 @@ edition = "2021"
 
 [features]
 default = []
-vendored_lua = ["mlua/vendored"]
+vendored-lua = ["mlua/vendored"]
 
 [dependencies]
 genvm-modules-interfaces = { path = "../interfaces" }

@@ -16,14 +16,21 @@ logger.info(f'Executor root directory: {executor_root_dir}')
 
 installation_root_dir = executor_root_dir.parent.parent
 
-interpreter_path = installation_root_dir.joinpath('lib', 'libc.so').absolute()
-logger.info(f'Interpreter path: {interpreter_path}')
+_interpreter_path: Path | None = None
+def get_interpreter_path():
+	global _interpreter_path
+	if _interpreter_path is not None:
+		return _interpreter_path
+	interpreter_path = installation_root_dir.joinpath('lib', 'libc.so').absolute()
+	logger.info(f'Interpreter path: {interpreter_path}')
 
-if not interpreter_path.exists():
-	logger.error(
-		f'Interpreter path {interpreter_path} does not exist, cannot patch executables'
-	)
-	exit(1)
+	if not interpreter_path.exists():
+		logger.error(
+			f'Interpreter path {interpreter_path} does not exist, cannot patch executables'
+		)
+		exit(1)
+	_interpreter_path = interpreter_path
+	return interpreter_path
 
 
 def patch_interpreter(path: Path):
@@ -43,7 +50,7 @@ def patch_interpreter(path: Path):
 		logger.info(f'Interpreter {binary.interpreter} exists, skipping')
 		return
 
-	binary.interpreter = str(interpreter_path)
+	binary.interpreter = str(get_interpreter_path())
 	binary.write(path)
 
 
@@ -53,12 +60,16 @@ patch_interpreter(installation_root_dir.joinpath('bin', 'genvm-modules'))
 
 logger.info('checking installation')
 
+import shlex, os
 
 def run_check_command(command: list[str | Path]):
-	logger.info(f'Running check command: command')
-	subprocess.run(command, check=True, text=True)
+	env = os.environ.copy()
+	env['LLVM_PROFILE_FILE'] = '/dev/null'
+	logger.info(f'>> ' + ' '.join([shlex.quote(x if isinstance(x, str) else str(x)) for x in command]))
+	subprocess.run(command, check=True, text=True, env=env)
 
 
 run_check_command([executor_root_dir.joinpath('bin', 'genvm'), '--version'])
-
 run_check_command([installation_root_dir.joinpath('bin', 'genvm-modules'), '--version'])
+
+run_check_command([executor_root_dir.joinpath('bin', 'genvm'), 'precompile'])

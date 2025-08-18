@@ -8,8 +8,8 @@ pub struct Reader {
 }
 
 impl Reader {
-    pub fn new() -> anyhow::Result<Self> {
-        let runners_path = std::path::PathBuf::from(&path()?);
+    pub fn new(path: &std::path::Path, registry_path: &std::path::Path) -> anyhow::Result<Self> {
+        let runners_path = std::path::PathBuf::from(path);
         if !runners_path.exists() {
             anyhow::bail!("path {:#?} doesn't exist", &runners_path);
         }
@@ -17,7 +17,7 @@ impl Reader {
         Ok(Self {
             cache: sync::CacheMap::new(),
             runners_data_path: runners_path.clone(),
-            registry_path: runners_path,
+            registry_path: registry_path.to_owned(),
         })
     }
 

@@ -17,7 +17,7 @@ struct Metrics {
 
 #[derive(clap::Args, Debug)]
 pub struct CliArgs {
-    #[arg(long, default_value_t = String::from("${genvmRoot}/config/genvm-module-web.yaml"))]
+    #[arg(long, default_value_t = String::from("${exeDir}/../config/genvm-module-web.yaml"))]
     config: String,
 
     #[arg(long, default_value_t = false)]

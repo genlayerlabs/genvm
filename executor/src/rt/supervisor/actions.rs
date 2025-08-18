@@ -360,6 +360,13 @@ impl Ctx<'_, '_> {
             }
             InitAction::Seq(vec) => {
                 for act in vec {
+                    if self.supervisor.shared_data.cancellation.is_cancelled() {
+                        return Err(
+                            rt::errors::VMError(public_abi::VmError::Timeout.value().to_owned(), None)
+                                .into(),
+                        );
+                    }
+
                     if let Some(x) = Box::pin(self.apply(act, current, current_runner_arch)).await?
                     {
                         return Ok(Some(x));

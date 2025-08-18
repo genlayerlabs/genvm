@@ -68,7 +68,7 @@ pub struct ModuleBaseConfig {
 
     pub lua_script_path: String,
     pub vm_count: usize,
-    pub extra_lua_path: String,
+    pub lua_path: String,
 
     pub signer_url: Arc<str>,
     pub signer_headers: Arc<BTreeMap<String, String>>,

@@ -70,6 +70,14 @@ impl Version {
 }
 
 pub static CURRENT: std::sync::LazyLock<Version> = std::sync::LazyLock::new(|| {
+    if crate::VERSION.starts_with("vTEST") {
+        return Version{
+            major: 99,
+            minor: 0,
+            patch: 0,
+        };
+    }
+
     regex::Regex::new(r"^v(\d+)\.(\d+)\.(\d+)")
         .unwrap()
         .captures(crate::VERSION)

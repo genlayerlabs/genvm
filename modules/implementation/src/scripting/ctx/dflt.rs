@@ -242,8 +242,11 @@ mod tests {
 
     async fn create_test_vm() -> scripting::UserVM<(), ()> {
         let mut cwd = std::env::current_dir().unwrap();
-        cwd.push("scripting");
-        let cwd = cwd.canonicalize().unwrap();
+        cwd.pop();
+        cwd.push("install");
+        cwd.push("lib");
+        cwd.push("genvm-lua");
+        let cwd = cwd.canonicalize().with_context(|| format!("canonicalizing {:?}", cwd)).unwrap();
         let mut extra_path = cwd.to_str().unwrap().to_owned();
         extra_path.push_str("/?.lua");
 
@@ -251,7 +254,7 @@ mod tests {
             bind_address: "".to_owned(),
             vm_count: 1,
             lua_script_path: "".to_owned(),
-            extra_lua_path: extra_path,
+            lua_path: extra_path,
             signer_headers: Arc::new(BTreeMap::new()),
             signer_url: Arc::from(""),
         });

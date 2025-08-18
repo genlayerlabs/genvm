@@ -15,6 +15,8 @@ pub struct Modules {
 pub struct Config {
     pub modules: Modules,
     pub cache_dir: String,
+    pub runners_dir: String,
+    pub registry_dir: String,
 
     #[serde(flatten)]
     pub base: genvm_common::BaseConfig,

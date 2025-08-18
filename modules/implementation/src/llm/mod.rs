@@ -21,7 +21,7 @@ struct Metrics {
 
 #[derive(clap::Args, Debug)]
 pub struct CliArgsRun {
-    #[arg(long, default_value_t = String::from("${genvmRoot}/config/genvm-module-llm.yaml"))]
+    #[arg(long, default_value_t = String::from("${exeDir}/../config/genvm-module-llm.yaml"))]
     config: String,
 
     #[arg(long, default_value_t = false)]
@@ -33,7 +33,7 @@ pub struct CliArgsRun {
 
 #[derive(clap::Args, Debug)]
 pub struct CliArgsCheck {
-    #[arg(long, default_value_t = String::from("${genvmRoot}/config/genvm-module-llm.yaml"))]
+    #[arg(long, default_value_t = String::from("${exeDir}/../config/genvm-module-llm.yaml"))]
     config: String,
     #[arg(long, help = "url")]
     host: String,
@@ -59,7 +59,7 @@ async fn create_vm(
             vm.globals()
                 .set("__llm", ctx::create_global(&vm, config)?)?;
 
-            scripting::load_script(&vm, &config.mod_base.lua_script_path).await?;
+            scripting::load_script(&vm, &config.mod_base.lua_script_path).await.with_context(|| format!("loading script from {}", &config.mod_base.lua_script_path))?;
 
             // get functions populated by script
             let exec_prompt: mlua::Function = vm.globals().get("ExecPrompt")?;
@@ -343,7 +343,7 @@ mod tests {
         let provider_test = backend_test.to_provider();
         let provider_real = backend_real.to_provider();
 
-        let mut extra_path = std::path::PathBuf::from("scripting/")
+        let mut extra_path = std::path::PathBuf::from("../install/lib/genvm-lua")
             .canonicalize()
             .unwrap()
             .to_str()
@@ -360,9 +360,9 @@ mod tests {
             },
             mod_base: common::ModuleBaseConfig {
                 vm_count: 1,
-                lua_script_path: "scripting/llm-default.lua".to_string(),
+                lua_script_path: "../install/config/genvm-llm-default.lua".to_string(),
                 bind_address: "".to_owned(),
-                extra_lua_path: extra_path,
+                lua_path: extra_path,
                 signer_url: Arc::from(""),
                 signer_headers: Arc::new(BTreeMap::new()),
             },

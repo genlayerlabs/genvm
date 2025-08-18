@@ -12,3 +12,4 @@ log_disable: wasmtime*,cranelift*,tracing*,polling*,tungstenite*,tokio_tungsteni
 
 cache_dir: ${exeDir}/../.cache/
 runners_dir: ${exeDir}/../../../runners/
+registry_dir: ${exeDir}/../data

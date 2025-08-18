@@ -186,18 +186,24 @@ pub async fn run_with(
 
     log_debug!("all executions done, collecting stats");
 
-    let web_metrics = supervisor
-        .modules
-        .web
-        .get_stats(genvm_modules_interfaces::web::Message::GetStats)
-        .await
-        .ok();
-    let llm_metrics = supervisor
-        .modules
-        .llm
-        .get_stats(genvm_modules_interfaces::llm::Message::GetStats)
-        .await
-        .ok();
+    let is_timeout = supervisor.shared_data.cancellation.is_cancelled();
+
+    let web_metrics = if is_timeout { None } else {
+        supervisor
+            .modules
+            .web
+            .get_stats(genvm_modules_interfaces::web::Message::GetStats)
+            .await
+            .ok()
+    };
+    let llm_metrics = if is_timeout { None } else {
+        supervisor
+            .modules
+            .llm
+            .get_stats(genvm_modules_interfaces::llm::Message::GetStats)
+            .await
+            .ok()
+    };
 
     #[derive(serde::Serialize)]
     struct AllMetrics<'a> {

@@ -13,6 +13,8 @@ show_help() {
     cat << EOF
 Usage: $0 [OPTIONS]
 
+This must be ran after ./configure.rb
+
 OPTIONS:
     --help              Show this help message
     --filter REGEX      Set filter regex
@@ -20,7 +22,7 @@ OPTIONS:
     --precompile        Run precompile for genvm
 
 Examples:
-    $0 --filter ".*"
+    $0 --filter '.*'
     $0 --help
 
 to run it you need following packages:
@@ -76,13 +78,19 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 cd "$SCRIPT_DIR/.."
 
-BUILD_DIR="$(readlink -f "./build")"
-TARGET_DIR="$BUILD_DIR/rust-target"
-COVERAGE_DIR="$BUILD_DIR/genvm-testdata-out/coverage"
+if [ ! -f "build/info.json" ]
+then
+    echo "Error: Please run ./configure.rb first"
+    exit 1
+fi
 
-echo "coverage will be located at $COVERAGE_DIR"
+BUILD_DIR="$(cat build/info.json | jq -r '.build_dir')"
+TARGET_DIR="$(cat build/info.json | jq -r '.rust_target_dir')"
+COVERAGE_DIR="$(cat build/info.json | jq -r '.coverage_dir')"
 
-export RUSTFLAGS='-Cinstrument-coverage'
+printf "BUILD_DIR: %s\nTARGET_DIR: %s\nCOVERAGE_DIR: %s\n" "$BUILD_DIR" "$TARGET_DIR" "$COVERAGE_DIR"
+
+export RUSTFLAGS='-C instrument-coverage'
 export LLVM_PROFILE_FILE="$COVERAGE_DIR/cov-%p-%16m.profraw"
 export AFL_FUZZER_LOOPCOUNT=20 # without it no coverage will be written!
 
@@ -122,9 +130,15 @@ do
             echo "warn: skip $dir/tests"
         else
             echo "=== testing $dir ==="
-            echo_and_run cargo test --target-dir "$TARGET_DIR" --tests
+            if [[ "$dir" == "modules/implementation" ]]
+            then
+                EXTRA_ARGS="--features vendored-lua"
+            else
+                EXTRA_ARGS=""
+            fi
+            echo_and_run cargo test --target-dir "$TARGET_DIR" --tests $EXTRA_ARGS
 
-            BUILT_FILE="$(cargo test --no-run --message-format=json | jq -r 'select(.reason == "compiler-artifact" and .target.kind[] == "bin") | .executable')"
+            BUILT_FILE="$(cargo test --target-dir "$TARGET_DIR" --tests $EXTRA_ARGS --no-run --message-format=json | jq -r 'select(.reason == "compiler-artifact" and .target.kind[] == "bin") | .executable')"
             PROFILE_FILES="$PROFILE_FILES --object $BUILT_FILE"
         fi
     fi
@@ -164,9 +178,9 @@ do
     popd  2> /dev/null > /dev/null
 done
 
-if !(echo "executor/testdata" | grep -P "$FILTER" > /dev/null)
+if !(echo "tests" | grep -P "$FILTER" > /dev/null)
 then
-    echo "warn: skip executor/testdata"
+    echo "warn: skip tests"
 else
     PROFILE_FILES="$PROFILE_FILES --object $BUILD_DIR/out/bin/genvm --object $BUILD_DIR/out/bin/genvm-modules"
 
@@ -195,10 +209,13 @@ else
         exit 1
     fi
 
-    ./executor/testdata/runner/run.py --ci
+    trap "kill -TERM $LLM_JOB_ID $WEB_JOB_ID 2>/dev/null; exit" EXIT INT TERM
 
-    kill -TERM $LLM_JOB_ID
-    kill -TERM $WEB_JOB_ID
+    ./tests/runner/run.py --ci --gen-vm $(readlink -f ./build/out/executor/vTEST/bin/genvm)
+
+    trap - EXIT
+
+    kill -TERM $LLM_JOB_ID $WEB_JOB_ID
 
     wait $LLM_JOB_ID
     wait $WEB_JOB_ID

@@ -1,4 +1,4 @@
-use crate::{rt, wasi};
+use crate::{public_abi, rt, wasi};
 
 use anyhow::Context;
 use genvm_common::*;
@@ -65,6 +65,7 @@ impl std::fmt::Debug for RunOk {
 pub struct WasmtimeStoreData {
     pub(super) genlayer_ctx: std::sync::Arc<std::sync::Mutex<wasi::Context>>,
     pub(super) limits: rt::memlimiter::Limiter,
+    pub(super) supervisor: std::sync::Arc<rt::supervisor::Supervisor>,
 }
 
 impl WasmtimeStoreData {
@@ -93,8 +94,18 @@ impl VM<wasmtime::Instance> {
             .or_else(|_| {
                 self.data
                     .get_typed_func::<(), ()>(&mut self.vm_base.store, "_start")
-            })
-            .context("can't find entrypoint")?;
+            });
+
+        let func = match func {
+            Ok(func) => func,
+            Err(e) => {
+                return Ok((RunOk::VMError(
+                    public_abi::VmError::InvalidContract.value().to_owned(),
+                    Some(e.into()),
+                ), None));
+            }
+        };
+
         log_debug!("execution start");
         let time_start = std::time::Instant::now();
         let res = func.call_async(&mut self.vm_base.store, ()).await;
@@ -114,6 +125,24 @@ impl VM<wasmtime::Instance> {
                     rt::errors::unwrap_vm_errors(e).map(|a| (a, None))
                 }
             }
+        };
+        let res = if self.vm_base.store.data().supervisor.shared_data.cancellation.is_cancelled() {
+            match res {
+                Ok((rt::vm::RunOk::VMError(msg, cause), fp)) => Ok((
+                    rt::vm::RunOk::VMError(
+                        public_abi::VmError::Timeout.value().into(),
+                        cause.map(|v| v.context(msg)),
+                    ),
+                    fp,
+                )),
+                Ok(r) => Ok(r),
+                Err(e) => Ok((
+                    rt::vm::RunOk::VMError(public_abi::VmError::Timeout.value().into(), Some(e)),
+                    None,
+                )),
+            }
+        } else {
+            res
         };
         match &res {
             Ok((rt::vm::RunOk::Return(_), _)) => {
