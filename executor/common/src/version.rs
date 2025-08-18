@@ -71,7 +71,7 @@ impl Version {
 
 pub static CURRENT: std::sync::LazyLock<Version> = std::sync::LazyLock::new(|| {
     if crate::VERSION.starts_with("vTEST") {
-        return Version{
+        return Version {
             major: 99,
             minor: 0,
             patch: 0,

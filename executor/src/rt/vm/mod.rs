@@ -1,6 +1,5 @@
 use crate::{public_abi, rt, wasi};
 
-use anyhow::Context;
 use genvm_common::*;
 use itertools::Itertools;
 
@@ -99,10 +98,13 @@ impl VM<wasmtime::Instance> {
         let func = match func {
             Ok(func) => func,
             Err(e) => {
-                return Ok((RunOk::VMError(
-                    public_abi::VmError::InvalidContract.value().to_owned(),
-                    Some(e.into()),
-                ), None));
+                return Ok((
+                    RunOk::VMError(
+                        public_abi::VmError::InvalidContract.value().to_owned(),
+                        Some(e),
+                    ),
+                    None,
+                ));
             }
         };
 
@@ -126,7 +128,15 @@ impl VM<wasmtime::Instance> {
                 }
             }
         };
-        let res = if self.vm_base.store.data().supervisor.shared_data.cancellation.is_cancelled() {
+        let res = if self
+            .vm_base
+            .store
+            .data()
+            .supervisor
+            .shared_data
+            .cancellation
+            .is_cancelled()
+        {
             match res {
                 Ok((rt::vm::RunOk::VMError(msg, cause), fp)) => Ok((
                     rt::vm::RunOk::VMError(

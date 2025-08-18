@@ -59,7 +59,11 @@ async fn create_vm(
             vm.globals()
                 .set("__llm", ctx::create_global(&vm, config)?)?;
 
-            scripting::load_script(&vm, &config.mod_base.lua_script_path).await.with_context(|| format!("loading script from {}", &config.mod_base.lua_script_path))?;
+            scripting::load_script(&vm, &config.mod_base.lua_script_path)
+                .await
+                .with_context(|| {
+                    format!("loading script from {}", &config.mod_base.lua_script_path)
+                })?;
 
             // get functions populated by script
             let exec_prompt: mlua::Function = vm.globals().get("ExecPrompt")?;

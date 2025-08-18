@@ -264,7 +264,7 @@ end
 
 generator.rule(:HELP) do
 	command('ninja', Ninja::RawStr.new('$FILE_ARG'), '-t', 'targets', 'rule', 'phony', 'rule', 'CLEAN', 'rule', 'HELP')
-  description 'All primary targets available'
+	description 'All primary targets available'
 end
 
 generator.var 'build_dir', $build_dir.to_s
@@ -317,17 +317,6 @@ generator.rule(:cargo_build) do
 	var :pool, :console
 end
 
-generator.rule(:cargo_no_td) do
-	command \
-		'cd', Ninja::RawStr.new('$wd'),
-		Ninja::AND, 'cargo', Ninja::RawStr.new('$subcommand'), Ninja::RawStr.new('$extra_args'),
-		Ninja::AND, 'cd', $build_dir.expand_path.to_s,
-		Ninja::AND, 'touch', Ninja::VAR_OUT
-	description 'Running cargo $subcommand'
-
-	var :pool, :console
-end
-
 $info = {
 	coverage_dir: $build_dir.join('cov').expand_path.to_s,
 	build_dir: $build_dir.expand_path.to_s,
@@ -335,6 +324,10 @@ $info = {
 }
 
 Pathname.new($info[:coverage_dir]).mkpath
+
+$all_format = []
+$all_clippy = []
+$all_clippy_fix = []
 
 def generator.register_cargo(rel_path, extra_args: [], build_to: nil)
 	to = $build_dir.join('ya-build', *rel_path.split('/'))
@@ -360,24 +353,28 @@ def generator.register_cargo(rel_path, extra_args: [], build_to: nil)
 		add_dependency to.join('clippy.trg')
 		description 'Run cargo clippy for ' + rel_path
 	end
+	$all_clippy.push(to.join('clippy.trg'))
 
-	build(:cargo, rel_path + '/clippy/fix') do
+	build(:cargo, to.join('clippy.fix.trg')) do
 		add_dependency files_trg
 		var :subcommand, 'clippy'
 		var :wd, dir
 		var :extra_args, extra_args + ['--fix', '--allow-dirty', '--allow-staged', '--', '-A', 'clippy::upper_case_acronyms', '-Dwarnings']
 	end
+	$all_clippy_fix.push(to.join('clippy.fix.trg'))
 
-	build(:cargo_no_td, to.join('fmt.trg')) do
+	build(:CUSTOM_COMMAND, rel_path + '/fmt') do
 		add_dependency files_trg
-		var :subcommand, 'fmt'
-		var :wd, dir
-	end
 
-	build(:phony, rel_path + '/fmt') do
-		add_dependency to.join('fmt.trg')
+		var :command, [
+			'cd', dir,
+			Ninja::AND, 'cargo', 'fmt',
+		]
+
 		description 'Run cargo fmt for ' + rel_path
 	end
+
+	$all_format.push(rel_path + '/fmt')
 
 	if build_to != nil
 		bin_name = $rust_target_dir.join('debug', build_to.split('/').last).expand_path.to_s
@@ -432,6 +429,18 @@ generator.build(:CUSTOM_COMMAND, 'target/runners') do
 	}
 
 	var :pool, :console
+end
+
+generator.build(:phony, 'cargo/fmt') do
+	add_dependency $all_format
+end
+
+generator.build(:phony, 'cargo/clippy') do
+	add_dependency $all_clippy
+end
+
+generator.build(:phony, 'cargo/clippy/fix') do
+	add_dependency $all_clippy_fix
 end
 
 generator.build(:phony, 'all') do

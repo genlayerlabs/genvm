@@ -202,7 +202,10 @@ impl Supervisor {
                 vm_countdown: genvm_common::sync::Waiter::new(),
                 tasks_loop_done: tokio::sync::Notify::new(),
             },
-            runner_cache: runners::cache::Reader::new(std::path::Path::new(&config.runners_dir), std::path::Path::new(&config.registry_dir))?,
+            runner_cache: runners::cache::Reader::new(
+                std::path::Path::new(&config.runners_dir),
+                std::path::Path::new(&config.registry_dir),
+            )?,
             wasm_mod_cache: WasmModuleCache {
                 cache_dir: my_cache_dir,
                 wasm_modules_cache: sync::CacheMap::new(),

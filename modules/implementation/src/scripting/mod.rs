@@ -2,12 +2,12 @@ pub mod pool;
 
 mod ctx;
 
+use anyhow::Context;
 use genvm_common::{sync::DArc, *};
 use genvm_modules_interfaces::{web::HeaderData, GenericValue};
 use mlua::LuaSerdeExt;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, future::Future, sync::Arc};
-use anyhow::Context;
 
 use crate::common::{self, MapUserError, ModuleError};
 
@@ -120,7 +120,10 @@ impl<T, R> UserVM<T, R> {
 
         vm.load_std_libs(lua_libs).context("loading stdlib")?;
 
-        vm.globals().set("__dflt", ctx::dflt::create_global(&vm).context("creating global for __dflt")?)?;
+        vm.globals().set(
+            "__dflt",
+            ctx::dflt::create_global(&vm).context("creating global for __dflt")?,
+        )?;
 
         Ok(Self {
             data: data_getter(vm.clone()).await?,
@@ -158,7 +161,8 @@ pub async fn load_script<P>(vm: &mlua::Lua, path: P) -> anyhow::Result<()>
 where
     P: AsRef<std::path::Path> + Into<String> + std::fmt::Debug,
 {
-    let script_contents = std::fs::read_to_string(&path).with_context(|| format!("reading script from {:?}", &path))?;
+    let script_contents = std::fs::read_to_string(&path)
+        .with_context(|| format!("reading script from {:?}", &path))?;
     let chunk = vm.load(script_contents);
 
     let mut name = String::from("@");

@@ -121,7 +121,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
 
     let runners_dir = std::path::Path::new(&config.runners_dir);
 
-    for runner_id in std::fs::read_dir(&runners_dir)? {
+    for runner_id in std::fs::read_dir(runners_dir)? {
         let runner_id = runner_id?;
         if !runner_id.file_type()?.is_dir() {
             continue;
@@ -136,7 +136,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
                 continue;
             }
 
-            compile_single_file(&precompile_dir, &engines, &runners_dir, &zip_path)
+            compile_single_file(&precompile_dir, &engines, runners_dir, &zip_path)
                 .with_context(|| format!("processing {zip_path:?}"))?;
         }
     }

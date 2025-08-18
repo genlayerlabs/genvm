@@ -246,7 +246,10 @@ mod tests {
         cwd.push("install");
         cwd.push("lib");
         cwd.push("genvm-lua");
-        let cwd = cwd.canonicalize().with_context(|| format!("canonicalizing {:?}", cwd)).unwrap();
+        let cwd = cwd
+            .canonicalize()
+            .with_context(|| format!("canonicalizing {:?}", cwd))
+            .unwrap();
         let mut extra_path = cwd.to_str().unwrap().to_owned();
         extra_path.push_str("/?.lua");
 

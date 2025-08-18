@@ -188,7 +188,9 @@ pub async fn run_with(
 
     let is_timeout = supervisor.shared_data.cancellation.is_cancelled();
 
-    let web_metrics = if is_timeout { None } else {
+    let web_metrics = if is_timeout {
+        None
+    } else {
         supervisor
             .modules
             .web
@@ -196,7 +198,9 @@ pub async fn run_with(
             .await
             .ok()
     };
-    let llm_metrics = if is_timeout { None } else {
+    let llm_metrics = if is_timeout {
+        None
+    } else {
         supervisor
             .modules
             .llm

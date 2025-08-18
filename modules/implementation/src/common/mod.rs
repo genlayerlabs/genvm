@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context, Result};
-use regex::Regex;
 
 use crate::scripting;
 
@@ -146,57 +145,6 @@ impl std::fmt::Display for ModuleError {
 impl std::error::Error for ModuleError {}
 
 pub type ModuleResult<T> = anyhow::Result<T>;
-
-static CENSOR_RESPONSE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-    Regex::new(r#""[^"]*(authorization|key|set-cookie|cf-ray|access-control)[^"]*": "[^"]*""#)
-        .unwrap()
-});
-
-pub fn censor_str(debug: &str) -> String {
-    let debug = debug.to_lowercase();
-
-    let replacement = |caps: &regex::Captures| -> String {
-        format!(r#""{}": "<censored>""#, caps.get(1).unwrap().as_str())
-    };
-
-    CENSOR_RESPONSE
-        .replace_all(&debug, replacement)
-        .into_owned()
-}
-
-pub fn censor_debug(res: &impl std::fmt::Debug) -> String {
-    let debug = format!("{res:?}");
-
-    censor_str(&debug)
-}
-
-pub async fn read_response(res: reqwest::Response) -> Result<String> {
-    let status = res.status();
-    if status != 200 {
-        log_error!(response = censor_debug(&res), status = status.as_u16(), cookie = get_cookie(); "request error (1)");
-        let text = res.text().await;
-        log_error!(body:? = text, cookie = get_cookie(); "request error (2)");
-        return Err(anyhow::anyhow!(
-            "request error status={} body={:?}",
-            status.as_u16(),
-            text,
-        ));
-    }
-    let text = res.text().await.with_context(|| "reading body as text")?;
-
-    if log_enabled!(logger::Level::Debug) {
-        match serde_json::from_str::<serde_json::Value>(&text) {
-            Ok(val) => {
-                log_debug!(body_json:serde = val, cookie = get_cookie(); "read response");
-            }
-            Err(_) => {
-                log_debug!(body_text = text, cookie = get_cookie(); "read response");
-            }
-        }
-    }
-
-    Ok(text)
-}
 
 type WSStream = tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>;
 
