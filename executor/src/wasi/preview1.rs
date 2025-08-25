@@ -5,7 +5,7 @@ use wiggle::{GuestError, GuestMemory, GuestPtr};
 
 use genvm_common::*;
 
-use crate::wasi::base;
+use crate::wasi::{base, common::align_slice};
 use genvm_common::util::SharedBytes;
 
 use super::vfs;
@@ -874,8 +874,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
             ),
         ];
 
-        const DIRENT_SIZE: u32 = size_of::<generated::types::Dirent>() as _;
-
         let dirent_actual_iter = direntries.iter().zip(3u64..).map(|(x, idx)| {
             let name_len: u32 = x.0.len().try_into().unwrap();
             (
@@ -897,16 +895,22 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         let cookie = cookie.try_into()?;
         for (ref entry, path) in head.into_iter().chain(dirent_actual_iter).skip(cookie) {
             let mut path = path.into_bytes();
-            assert_eq!(
-                1,
-                size_of_val(&entry.d_type),
-                "Dirent member d_type should be endian-invariant"
-            );
-            let entry_len = cap.min(DIRENT_SIZE);
-            let entry = entry as *const _ as _;
-            let entry = unsafe { std::slice::from_raw_parts(entry, entry_len as _) };
-            cap = cap.checked_sub(entry_len).unwrap();
-            buf = write_bytes(memory, buf, entry)?;
+
+            const FOO: usize = std::mem::size_of::<generated::types::Dirent>();
+
+            const DIRENT_SIZE_BOUND: usize = 100;
+            let mut dirent_mem_buf: [u8; DIRENT_SIZE_BOUND] =
+                [0; DIRENT_SIZE_BOUND];
+
+            use wiggle::GuestType;
+            let dirent_mem_buf = &mut align_slice(&mut dirent_mem_buf, generated::types::Dirent::guest_align())[..generated::types::Dirent::guest_size() as usize];
+            let mut fake_mem = wiggle::GuestMemory::Unshared(dirent_mem_buf);
+
+            fake_mem.write(wiggle::GuestPtr::<generated::types::Dirent>::new(0), entry.clone())?;
+
+            let entry_len = cap.min(dirent_mem_buf.len() as u32);
+            buf = write_bytes(memory, buf, &dirent_mem_buf[..entry_len as usize])?;
+            cap -= entry_len;
             if cap == 0 {
                 return Ok(buf_len);
             }
