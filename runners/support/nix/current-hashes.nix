@@ -42,14 +42,14 @@ let
 		};
 
 		cpython = {
-			hash = "sha256-QEdbmqYOjTOnNRCozWWt825mPSTOK8HbUhCgRUhbxug=";
+			hash = "sha256-NqlOrqhBNjw/7Iab8Rl4mSjlOiOoTJrazRlU//54aa4=";
 			depends = [
 				softfloat
 			];
 		};
 
 		softfloat = {
-			hash = "sha256-lkSLHic0pVxCyuVcarKj80FKSxYhYq6oY1+mnJryZZ0=";
+			hash = "sha256-rT6x5x8Nh5U5UusJ4oFa2AYz/Q35he7l3s9Ktyot6CE=";
 		};
 
 		wrappers = {
