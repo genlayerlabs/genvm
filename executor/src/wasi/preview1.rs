@@ -912,6 +912,19 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
             let entry_len = cap.min(dirent_mem_buf.len() as u32);
             buf = write_bytes(memory, buf, &dirent_mem_buf[..entry_len as usize])?;
             cap -= entry_len;
+            if cap == 0 {
+                return Ok(buf_len);
+            }
+
+            if let Ok(cap) = cap.try_into() {
+                // `path` cannot be longer than `usize`, only truncate if `cap` fits in `usize`
+                path.truncate(cap);
+            }
+            cap = cap.checked_sub(path.len() as _).unwrap();
+            buf = write_bytes(memory, buf, &path)?;
+            if cap == 0 {
+                return Ok(buf_len);
+            }
         }
         Ok(buf_len.checked_sub(cap).unwrap())
     }
