@@ -106,6 +106,7 @@
 								shell-hook-base = ''
 									export PATH="$(pwd)/tools/git-third-party:$PATH"
 									export LD_LIBRARY_PATH="${toString pkgs.xz.out}/lib:${toString pkgs.zlib.out}/lib:${toString pkgs.stdenv.cc.cc.lib}/lib:${toString pkgs.glibc}/lib:$LD_LIBRARY_PATH"
+									export LLVM_PROFILE_FILE=/dev/null
 								'';
 							in
 							{

@@ -602,16 +602,11 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                 for iov in iovs.iter() {
                     let iov = iov?;
                     let iov = memory.read(iov)?;
-                    let remaining_len = contents.len() - *pos;
-                    let mut len = iov.buf_len;
-                    let len_usize: usize = len.try_into()?;
-                    if remaining_len < len_usize {
-                        len = remaining_len.try_into().unwrap();
-                    }
-                    let len_usize: usize = len.try_into()?;
-                    let cont_slice: &[u8] = &contents.as_ref()[*pos..(*pos + len_usize)];
+                    let remaining_len = contents.len_u32() - *pos;
+                    let len = iov.buf_len.min(remaining_len);
+                    let cont_slice: &[u8] = &contents.as_ref()[*pos as usize..(*pos + len) as usize];
                     memory.copy_from_slice(cont_slice, iov.buf.as_array(len))?;
-                    *pos += len_usize;
+                    *pos += len;
                     written += len;
                 }
                 Ok(written)
@@ -635,8 +630,21 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
             vfs::FileDescriptor::Stdout | vfs::FileDescriptor::Stderr => {
                 Err(generated::types::Errno::Acces.into())
             }
-            vfs::FileDescriptor::File(_) => {
-                todo!()
+            vfs::FileDescriptor::File(vfs::FileContents { contents, .. }) => {
+                let mut written: usize = 0;
+                let mut offset: usize = offset.try_into()?;
+                for iov in iovs.iter() {
+                    let iov = iov?;
+                    let iov = memory.read(iov)?;
+                    let remaining_len = contents.len().checked_sub(offset).unwrap_or(0);
+                    let mut buf_len: usize = iov.buf_len.try_into()?;
+                    buf_len = buf_len.min(remaining_len);
+                    let cont_slice: &[u8] = &contents.as_ref()[offset..(offset + buf_len)];
+                    memory.copy_from_slice(cont_slice, iov.buf.as_array(buf_len.try_into()?))?;
+                    offset += buf_len;
+                    written += buf_len;
+                }
+                Ok(written.try_into().unwrap_or(u32::MAX))
             }
             vfs::FileDescriptor::Dir { .. } => Err(generated::types::Errno::Isdir.into()),
         }
@@ -667,13 +675,13 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
             let cow = memory.as_cow(buf_to_rewrite)?;
             let add_size: u32 = cow.len().try_into()?;
             size += add_size;
-            stream
-                .write_all(&cow)
-                .unwrap_or_else(|_| panic!("Can't print to terminal"));
+            if let Err(e) = stream.write_all(&cow) {
+                log_error!(e: err = e; "Failed to write to stream");
+            }
         }
-        stream
-            .flush()
-            .unwrap_or_else(|_| panic!("Can't print to terminal"));
+        if let Err(e) = stream.flush() {
+            log_error!(e: err = e; "Failed to flush stream");
+        }
         Ok(size)
     }
 
@@ -749,7 +757,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         from: generated::types::Fd,
         to: generated::types::Fd,
     ) -> Result<(), generated::types::Error> {
-        todo!()
+        Err(generated::types::Errno::Notsup.into())
     }
 
     /// Move the offset of a file descriptor.
@@ -776,15 +784,15 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                             if offset > *pos as u64 {
                                 *pos = 0;
                             } else {
-                                *pos -= offset as usize;
+                                *pos -= offset as u32;
                             }
                         } else {
                             let offset = offset as u64;
-                            let rem = contents.len() - *pos;
+                            let rem = contents.len_u32() - *pos;
                             if offset > rem as u64 {
-                                *pos = contents.len();
+                                *pos = contents.len_u32();
                             } else {
-                                *pos += offset as usize;
+                                *pos += offset as u32;
                             }
                         }
                     }
@@ -793,10 +801,10 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                     }
                     generated::types::Whence::Set => {
                         let offset = if offset < 0 { 0 } else { offset as u64 };
-                        if offset > contents.len() as u64 {
-                            *pos = contents.len();
+                        if offset > contents.len_u32() as u64 {
+                            *pos = contents.len_u32();
                         } else {
-                            *pos = offset as usize;
+                            *pos = offset as u32;
                         }
                     }
                 };
@@ -827,7 +835,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
             vfs::FileDescriptor::Stdin
             | vfs::FileDescriptor::Stderr
             | vfs::FileDescriptor::Stdout => Err(generated::types::Errno::Spipe.into()),
-            vfs::FileDescriptor::File(file) => Ok(file.pos.try_into()?),
+            vfs::FileDescriptor::File(file) => Ok(file.pos.into()),
             vfs::FileDescriptor::Dir { .. } => Err(generated::types::Errno::Notsup.into()),
         }
     }
@@ -856,19 +864,19 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         let head = [
             (
                 generated::types::Dirent {
-                    d_next: 1u64.to_le(),
+                    d_next: 1u64,
                     d_ino: 0,
                     d_type: generated::types::Filetype::Directory,
-                    d_namlen: 1u32.to_le(),
+                    d_namlen: 1u32,
                 },
                 ".".into(),
             ),
             (
                 generated::types::Dirent {
-                    d_next: 2u64.to_le(),
+                    d_next: 2u64,
                     d_ino: 0,
                     d_type: generated::types::Filetype::Directory,
-                    d_namlen: 2u32.to_le(),
+                    d_namlen: 2u32,
                 },
                 "..".into(),
             ),
@@ -878,13 +886,13 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
             let name_len: u32 = x.0.len().try_into().unwrap();
             (
                 generated::types::Dirent {
-                    d_next: idx.to_le(),
+                    d_next: idx,
                     d_ino: 0,
                     d_type: match **x.1 {
                         FilesTrie::Dir { .. } => generated::types::Filetype::Directory,
                         FilesTrie::File { .. } => generated::types::Filetype::RegularFile,
                     },
-                    d_namlen: name_len.to_le(),
+                    d_namlen: name_len,
                 },
                 x.0.clone(),
             )
@@ -894,10 +902,6 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         let mut cap = buf_len;
         let cookie = cookie.try_into()?;
         for (ref entry, path) in head.into_iter().chain(dirent_actual_iter).skip(cookie) {
-            let mut path = path.into_bytes();
-
-            const FOO: usize = std::mem::size_of::<generated::types::Dirent>();
-
             const DIRENT_SIZE_BOUND: usize = 100;
             let mut dirent_mem_buf: [u8; DIRENT_SIZE_BOUND] =
                 [0; DIRENT_SIZE_BOUND];
@@ -908,24 +912,17 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
             fake_mem.write(wiggle::GuestPtr::<generated::types::Dirent>::new(0), entry.clone())?;
 
-            let entry_len = cap.min(dirent_mem_buf.len() as u32);
-            buf = write_bytes(memory, buf, &dirent_mem_buf[..entry_len as usize])?;
-            cap -= entry_len;
+            buf = write_bytes_capacity(memory, buf, &dirent_mem_buf[..generated::types::Dirent::guest_size() as usize], &mut cap)?;
             if cap == 0 {
                 return Ok(buf_len);
             }
 
-            if let Ok(cap) = cap.try_into() {
-                // `path` cannot be longer than `usize`, only truncate if `cap` fits in `usize`
-                path.truncate(cap);
-            }
-            cap = cap.checked_sub(path.len() as _).unwrap();
-            buf = write_bytes(memory, buf, &path)?;
+            buf = write_bytes_capacity(memory, buf, path.as_bytes(), &mut cap)?;
             if cap == 0 {
                 return Ok(buf_len);
             }
         }
-        Ok(buf_len.checked_sub(cap).unwrap())
+        Ok(buf_len - cap)
     }
 
     #[instrument(skip(self, memory))]
@@ -1143,9 +1140,10 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     ) -> anyhow::Error {
         // Check that the status is within WASI's range.
         if status >= 126 {
-            return anyhow::Error::msg("exit with invalid exit status outside of [0..126)");
+            I32Exit(125).into()
+        } else {
+            I32Exit(status as i32).into()
         }
-        I32Exit(status as i32).into()
     }
 
     fn proc_raise(
@@ -1170,7 +1168,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         buf: GuestPtr<u8>,
         buf_len: generated::types::Size,
     ) -> Result<(), generated::types::Error> {
-        let mut mem: Vec<u8> = std::iter::repeat_n(0, usize::try_from(buf_len).unwrap()).collect();
+        let mut mem: Vec<u8> = std::iter::repeat_n(0, buf_len as usize).collect();
 
         if self.context.conf.is_deterministic {
             use rand_core::RngCore as _;
@@ -1307,6 +1305,20 @@ fn write_bytes(
     let len = u32::try_from(buf.len())?;
 
     memory.copy_from_slice(buf, ptr.as_array(len))?;
+    let next = ptr.add(len)?;
+    Ok(next)
+}
+
+fn write_bytes_capacity(
+    memory: &mut GuestMemory<'_>,
+    ptr: GuestPtr<u8>,
+    buf: &[u8],
+    capacity: &mut u32,
+) -> Result<GuestPtr<u8>, generated::types::Error> {
+    let len = u32::try_from(buf.len())?.min(*capacity);
+
+    memory.copy_from_slice(&buf[..len as usize], ptr.as_array(len))?;
+    *capacity -= len;
     let next = ptr.add(len)?;
     Ok(next)
 }

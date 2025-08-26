@@ -72,6 +72,14 @@ impl SharedBytes {
         self.0.len()
     }
 
+    pub fn len_u32(&self) -> u32 {
+        self.0.len() as u32
+    }
+
+    pub fn len_u64(&self) -> u64 {
+        self.len_u32().into()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -82,6 +90,9 @@ impl SharedBytes {
 
     pub fn new(value: impl AsRef<[u8]>) -> Self {
         let data: Box<[u8]> = Box::from(value.as_ref());
+
+        assert!(data.len() as u64 <= u32::MAX as u64);
+
         Self(DArc::new(data).gep(|x| x.as_ref()))
     }
 

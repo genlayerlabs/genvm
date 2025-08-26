@@ -302,27 +302,25 @@ impl<'de> serde::Deserializer<'de> for MapKeyDeserializer {
     }
 }
 
-fn deserialize_with_seed<'de, T>(value: Value, seed: T) -> Result<T::Value, Error>
-where
-    T: serde::de::DeserializeSeed<'de>,
+fn try_deserialize_value<V>(value: Value) -> Result<V, Value>
 {
-    let full_name = std::any::type_name::<T::Value>();
+    let full_name = std::any::type_name::<V>();
 
     match full_name {
         "num_bigint::bigint::BigInt" => match value {
             Value::Number(num) => {
                 let num = std::mem::ManuallyDrop::new(num);
-                let ptr = std::ptr::from_ref(&num) as *const std::mem::ManuallyDrop<T::Value>;
+                let ptr = std::ptr::from_ref(&num) as *const std::mem::ManuallyDrop<V>;
                 Ok(std::mem::ManuallyDrop::into_inner(unsafe { ptr.read() }))
             }
-            _ => Err(serde::de::Error::custom("invalid type")),
+            _ => Err(value),
         },
         "primitive_types::U256" => match value {
             Value::Number(num) => {
                 let (sign, mut bytes) = num.to_bytes_le();
 
                 if sign == num_bigint::Sign::Minus {
-                    return Err(Error::custom("negative for u256"));
+                    return Err(Value::Number(num));
                 }
 
                 while bytes.len() < 32 {
@@ -330,28 +328,38 @@ where
                 }
 
                 if bytes.len() > 32 {
-                    return Err(Error::custom("too big for u256"));
+                    return Err(Value::Number(num));
                 }
 
                 let res = primitive_types::U256::from_little_endian(&bytes);
-                let ptr = std::ptr::from_ref(&res) as *const T::Value;
+                let ptr = std::ptr::from_ref(&res) as *const V;
                 Ok(unsafe { ptr.read() })
             }
-            _ => Err(serde::de::Error::custom("invalid type")),
+            _ => Err(value),
         },
         "genvm_common::calldata::types::Value" => {
             let value = std::mem::ManuallyDrop::new(value);
-            let ptr = std::ptr::from_ref(&value) as *const std::mem::ManuallyDrop<T::Value>;
+            let ptr = std::ptr::from_ref(&value) as *const std::mem::ManuallyDrop<V>;
             Ok(std::mem::ManuallyDrop::into_inner(unsafe { ptr.read() }))
         }
         "genvm_common::calldata::types::Address" => match value {
             Value::Address(addr) => {
-                let ptr = std::ptr::from_ref(&addr) as *const T::Value;
+                let ptr = std::ptr::from_ref(&addr) as *const V;
                 Ok(unsafe { ptr.read() })
             }
-            _ => Err(serde::de::Error::custom("invalid type")),
+            _ => Err(value),
         },
-        _ => seed.deserialize(value),
+        _ => Err(value),
+    }
+}
+
+fn deserialize_with_seed<'de, T>(value: Value, seed: T) -> Result<T::Value, Error>
+where
+    T: serde::de::DeserializeSeed<'de>,
+{
+    match try_deserialize_value(value) {
+        Ok(v) => Ok(v),
+        Err(value) => seed.deserialize(value),
     }
 }
 
@@ -566,7 +574,11 @@ impl<'de> serde::Deserializer<'de> for Value {
     where
         V: serde::de::Visitor<'de>,
     {
-        match self {
+        let value = match try_deserialize_value(self) {
+            Ok(v) => return Ok(v),
+            Err(value) => value,
+        };
+        match value {
             Value::Address(_a) => Err(Error(anyhow::anyhow!("unexpected address"))),
             Value::Null => visitor.visit_unit(),
             Value::Bool(v) => visitor.visit_bool(v),

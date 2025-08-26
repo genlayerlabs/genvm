@@ -44,6 +44,7 @@ let
 	] ++ (if !withLinters then [] else [
 		(simpleComponent manifest.pkg.clippy-preview.target.${systemAsRust})
 		(simpleComponent manifest.pkg.rustfmt-preview.target.${systemAsRust})
+		(simpleComponent manifest.pkg.rust-src.target."*")
 	]);
 in pkgs.stdenvNoCC.mkDerivation rec {
 		name = "genvm-rust";

@@ -5,7 +5,7 @@ use genvm_common::*;
 
 pub struct FileContents {
     pub contents: util::SharedBytes,
-    pub pos: usize,
+    pub pos: u32,
 
     pub release_memory: bool,
 }
