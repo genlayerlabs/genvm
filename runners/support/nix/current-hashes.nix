@@ -55,7 +55,7 @@ let
 		wrappers = {
 			__prefix = "";
 			py-genlayer = {
-				hash = "sha256-0K2PpnxgwsO5e7CcE2Q3Skr0drCXg/u8d1QVuW42TVE=";
+				hash = "sha256-Bibwr0QQOs0rluc6DkfCpWoEMT5r2J5YUgJaj5QqZMk=";
 				depends = [
 					cpython
 					pyLibs.cloudpickle
@@ -63,7 +63,7 @@ let
 				];
 			};
 			py-genlayer-multi = {
-				hash = "sha256-ws9mTY8AhgzrsVSgtDBQjeFo4SFMW3vTbOSZqzeMfd0=";
+				hash = "sha256-0xe4RSg0YAiERnd3Sqs06gKmZ76rXSpLA+rJHWne/hs=";
 				depends = [
 					cpython
 					pyLibs.cloudpickle

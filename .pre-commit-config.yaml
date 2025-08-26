@@ -64,12 +64,6 @@ repos:
 
       - id: cargo-fmt
         name: cargo fmt
-        entry: bash build-scripts/cargo-fmt.sh
-        language: system
-        files: .*\.rs$
-
-      - id: cargo-clippy
-        name: cargo clippy
-        entry: bash build-scripts/cargo-clippy.sh
+        entry: bash support/ci/cargo-fmt.sh
         language: system
         files: .*\.rs$

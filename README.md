@@ -48,11 +48,13 @@ Prelude:
 3. `source env.sh` (not needed if you used flake)
 4. `git third-party update --all`
 5. `./configure.rb`
-6. `ninja -C build`
+6. `ninja -C build` (or `ninja -C build all/bin`)
 7. Get `genvm-runners.zip` from [github](https://github.com/genlayerlabs/genvm)
 8. merge `build/out` and `genvm-runners.zip`
 
 ### Production build
+
+WARNING: currently it is supported only on x86_64 linux hosts
 
 1. `cd $PROJECT_DIR`
 2. `nix build -o build/out-universal -v -L .#all-for-platform.universal`

@@ -23,7 +23,7 @@
 		};
 	};
 
-	outputs = { self, nixpkgs }:
+	outputs = { self, nixpkgs, flake-utils, systems }:
 		let
 			genvm-release =
 				let
@@ -39,11 +39,7 @@
 					} // {
 						inherit components;
 
-						build-config = {
-							executor-version = "0.1.18";
-							repo-url = "https://github.com/genlayerlabs/genvm.git";
-							head-revision = "aboba";
-						};
+						build-config = builtins.fromJSON (builtins.readFile ./flake-config.json);
 					};
 
 					components = args.merge-components [
@@ -90,39 +86,40 @@
 							let
 								pkgs = import nixpkgs {
 									inherit system;
-									config.allowUnfreePredicate = pkg:
-										builtins.elem (pkgs.lib.getName pkg) [
-											"vscode"
-										];
 								};
+								packages-0 = with pkgs; [ xz zlib glibc git python312 ];
+								packages-lint = with pkgs; [ pre-commit ];
+								packages-debug-test = with pkgs; [
+									ninja
+									ruby
+									gcc
+									(import ./support/rust.nix { inherit pkgs system; withLinters = true; withZig = false; })
+
+									aflplusplus
+									python312Packages.jsonnet
+									wabt
+								];
+								packages-py-test = with pkgs; [
+									python312
+									poetry
+								];
+								shell-hook-base = ''
+									export PATH="$(pwd)/tools/git-third-party:$PATH"
+									export LD_LIBRARY_PATH="${toString pkgs.xz.out}/lib:${toString pkgs.zlib.out}/lib:${toString pkgs.stdenv.cc.cc.lib}/lib:${toString pkgs.glibc}/lib:$LD_LIBRARY_PATH"
+								'';
 							in
 							{
-								devShells.minimal = pkgs.mkShell {
-									packages = with pkgs; [
-										curl
-										ninja
-
-										ruby
-
-										python312
-										python312Packages.jsonnet
-										poetry
-										pre-commit
-
-										xz
-										zlib
-										glibc
-										aflplusplus
-
-										wabt
-
-										glibc
-									];
-
-									shellHook = ''
-										export PATH="$(pwd)/tools/git-third-party:$PATH"
-										export LD_LIBRARY_PATH="${toString pkgs.xz.out}/lib:${toString pkgs.zlib.out}/lib:${toString pkgs.stdenv.cc.cc.lib}/lib:${toString pkgs.glibc}/lib:$LD_LIBRARY_PATH"
-									'';
+								devShells.py-test = pkgs.mkShell {
+									packages = packages-py-test;
+									shellHook = shell-hook-base;
+								};
+								devShells.rust-test = pkgs.mkShell {
+									packages = packages-0 ++ packages-debug-test;
+									shellHook = shell-hook-base;
+								};
+								devShells.full = pkgs.mkShell {
+									packages = packages-0 ++ packages-debug-test ++ packages-py-test;
+									shellHook = shell-hook-base;
 								};
 							}
 						);

@@ -249,6 +249,25 @@ module Ninja
 	end
 end
 
+def detect_rust_target
+	rustc_output = `rustc -vV`
+	rust_target = nil
+	rustc_output.each_line do |line|
+		if line.start_with?('host: ')
+			rust_target = line[6..-1].strip
+			break
+		end
+	end
+
+	if rust_target == nil
+		raise "Failed to detect rust target from 'rustc -vV' output"
+	end
+
+	rust_target
+end
+
+$rust_target = detect_rust_target()
+
 $build_dir = Pathname.new('build')
 $build_dir.mkpath
 
@@ -297,7 +316,7 @@ $rust_target_dir.mkpath
 generator.rule(:cargo) do
 	command \
 		'cd', Ninja::RawStr.new('$wd'),
-		Ninja::AND, Ninja::RawStr.new('$env'), 'cargo', Ninja::RawStr.new('$subcommand'), '--target-dir', $rust_target_dir.to_s, Ninja::RawStr.new('$extra_args'),
+		Ninja::AND, Ninja::RawStr.new('$env'), 'cargo', Ninja::RawStr.new('$subcommand'), '--target', $rust_target, '--target-dir', $rust_target_dir.to_s, Ninja::RawStr.new('$extra_args'),
 		Ninja::AND, 'cd', $build_dir.expand_path.to_s,
 		Ninja::AND, 'touch', Ninja::VAR_OUT
 	description 'Running cargo $subcommand'
@@ -308,7 +327,7 @@ end
 generator.rule(:cargo_build) do
 	command \
 		'cd', Ninja::RawStr.new('$wd'),
-		Ninja::AND, Ninja::RawStr.new('$env'), 'cargo', 'build', '--target-dir', $rust_target_dir.to_s, Ninja::RawStr.new('$extra_args')
+		Ninja::AND, Ninja::RawStr.new('$env'), 'cargo', 'build', '--target', $rust_target, '--target-dir', $rust_target_dir.to_s, Ninja::RawStr.new('$extra_args')
 
 	description 'Running cargo $subcommand'
 
@@ -349,7 +368,7 @@ def generator.register_cargo(rel_path, extra_args: [], build_to: nil)
 		var :extra_args, extra_args + ['--', '-A', 'clippy::upper_case_acronyms', '-Dwarnings']
 	end
 
-	build(:phony, rel_path + '/clippy') do
+	build(:phony, 'target/' + rel_path + '/clippy') do
 		add_dependency to.join('clippy.trg')
 		description 'Run cargo clippy for ' + rel_path
 	end
@@ -363,7 +382,7 @@ def generator.register_cargo(rel_path, extra_args: [], build_to: nil)
 	end
 	$all_clippy_fix.push(to.join('clippy.fix.trg'))
 
-	build(:CUSTOM_COMMAND, rel_path + '/fmt') do
+	build(:CUSTOM_COMMAND, 'target/' + rel_path + '/fmt') do
 		add_dependency files_trg
 
 		var :command, [
@@ -374,10 +393,10 @@ def generator.register_cargo(rel_path, extra_args: [], build_to: nil)
 		description 'Run cargo fmt for ' + rel_path
 	end
 
-	$all_format.push(rel_path + '/fmt')
+	$all_format.push('target/' + rel_path + '/fmt')
 
 	if build_to != nil
-		bin_name = $rust_target_dir.join('debug', build_to.split('/').last).expand_path.to_s
+		bin_name = $rust_target_dir.join($rust_target, 'debug', build_to.split('/').last).expand_path.to_s
 		build(:cargo_build, bin_name) do
 			add_dependency files_trg
 			var :wd, dir
@@ -443,14 +462,9 @@ generator.build(:phony, 'cargo/clippy/fix') do
 	add_dependency $all_clippy_fix
 end
 
-generator.build(:phony, 'all') do
+generator.build(:phony, 'all/bin') do
 	add_dependency 'out/executor/vTEST/bin/genvm'
 	add_dependency 'out/bin/genvm-modules'
-
-	add_dependency 'out/executor/vTEST/data/latest.json'
-	add_dependency 'out/executor/vTEST/data/all.json'
-
-	add_dependency 'target/runners'
 
 	doInstall = Proc.new { |from, to|
 		install_dir = Pathname($source_dir).join(*from.split('/'))
@@ -467,6 +481,15 @@ generator.build(:phony, 'all') do
 
 	doInstall.('executor/install', 'out/executor/vTEST')
 	doInstall.('modules/install', 'out')
+end
+
+generator.build(:phony, 'all') do
+	add_dependency 'all/bin'
+
+	add_dependency 'out/executor/vTEST/data/latest.json'
+	add_dependency 'out/executor/vTEST/data/all.json'
+
+	add_dependency 'target/runners'
 end
 
 generator.buf << "default all\n\n"
