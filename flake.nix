@@ -87,13 +87,13 @@
 								pkgs = import nixpkgs {
 									inherit system;
 								};
-								packages-0 = with pkgs; [ xz zlib glibc git python312 ];
+								packages-0 = with pkgs; [ bash xz zlib glibc git python312 ];
 								packages-lint = with pkgs; [ pre-commit ];
+								packages-rust = [ (import ./support/rust.nix { inherit pkgs system; withLinters = true; withZig = false; }) ];
 								packages-debug-test = with pkgs; [
 									ninja
 									ruby
 									gcc
-									(import ./support/rust.nix { inherit pkgs system; withLinters = true; withZig = false; })
 
 									aflplusplus
 									python312Packages.jsonnet
@@ -114,12 +114,16 @@
 									packages = packages-py-test;
 									shellHook = shell-hook-base;
 								};
+								devShells.initial-check = pkgs.mkShell {
+									packages = packages-0 ++ packages-rust ++ packages-lint;
+									shellHook = shell-hook-base;
+								};
 								devShells.rust-test = pkgs.mkShell {
-									packages = packages-0 ++ packages-debug-test;
+									packages = packages-0 ++ packages-debug-test ++ packages-rust;
 									shellHook = shell-hook-base;
 								};
 								devShells.full = pkgs.mkShell {
-									packages = packages-0 ++ packages-debug-test ++ packages-py-test;
+									packages = packages-0 ++ packages-debug-test ++ packages-py-test ++ packages-rust ++ packages-lint;
 									shellHook = shell-hook-base;
 								};
 							}

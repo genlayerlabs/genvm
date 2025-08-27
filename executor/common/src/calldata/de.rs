@@ -302,8 +302,7 @@ impl<'de> serde::Deserializer<'de> for MapKeyDeserializer {
     }
 }
 
-fn try_deserialize_value<V>(value: Value) -> Result<V, Value>
-{
+fn try_deserialize_value<V>(value: Value) -> Result<V, Value> {
     let full_name = std::any::type_name::<V>();
 
     match full_name {

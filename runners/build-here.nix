@@ -17,12 +17,12 @@ let
 				if runner.hash == "test"
 				then "test"
 				else builtins.convertHash { hash = runner.hash; toHashFormat = "nix32"; };
-		in "${runner.id}/${hash32}.tar";
+		in "${runner.id}/${builtins.substring 0 2 hash32}/${builtins.substring 2 50 hash32}.tar";
 
 	installLines =
 		builtins.concatLists
 			(builtins.map
-				(x: ["mkdir -p \"$out/${x.id}\"" "cp ${x.derivation} $out/${pathOfRunner x}"])
+				(x: ["mkdir -p $out/$(dirname -- ${pathOfRunner x})" "cp ${x.derivation} $out/${pathOfRunner x}"])
 				allRunners);
 in pkgs.stdenvNoCC.mkDerivation {
 	name = "genvm-test-runners";

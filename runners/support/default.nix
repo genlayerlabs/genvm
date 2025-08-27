@@ -5,7 +5,7 @@
 let
 	dev-mode = import ./nix/dev-mode.nix;
 in rec {
-	hashes = import ./nix/current-hashes.nix;
+	hashes = import ./current/hashes.nix;
 
 	wasi-sdk = import ./wasi-sdk.nix args;
 

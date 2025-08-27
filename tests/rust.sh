@@ -184,10 +184,10 @@ then
 else
     PROFILE_FILES="$PROFILE_FILES --object $BUILD_DIR/out/bin/genvm --object $BUILD_DIR/out/bin/genvm-modules"
 
-    ./build/out/bin/genvm-modules llm &
+    ./build/out/bin/genvm-modules llm --die-with-parent &
     LLM_JOB_ID=$!
 
-    ./build/out/bin/genvm-modules web &
+    ./build/out/bin/genvm-modules web --die-with-parent &
     WEB_JOB_ID=$!
 
     if [ "$PRECOMPILE" == "true" ]

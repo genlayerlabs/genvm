@@ -10,9 +10,12 @@
 			dontConfigure = true;
 			dontBuild = true;
 			dontFixup = true;
-			installPhase = ''
-				mkdir -p "$out/runners/${x.id}"
-				cp ${x.derivation} "$out/runners/${x.id}/${builtins.convertHash { hash = x.hash; toHashFormat = "nix32"; }}.tar"
+			installPhase = let
+				hash32 = builtins.convertHash { hash = x.hash; toHashFormat = "nix32"; };
+				result-path = "runners/${x.id}/${builtins.substring 0 2 hash32}/${builtins.substring 2 50 hash32}.tar";
+			in ''
+				mkdir -p $out/$(dirname -- ${result-path})
+				cp ${x.derivation} "$out/${result-path}"
 			'';
 		};
 	}) {} (import ./all.nix args);

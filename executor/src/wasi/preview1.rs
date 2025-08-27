@@ -604,7 +604,8 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                     let iov = memory.read(iov)?;
                     let remaining_len = contents.len_u32() - *pos;
                     let len = iov.buf_len.min(remaining_len);
-                    let cont_slice: &[u8] = &contents.as_ref()[*pos as usize..(*pos + len) as usize];
+                    let cont_slice: &[u8] =
+                        &contents.as_ref()[*pos as usize..(*pos + len) as usize];
                     memory.copy_from_slice(cont_slice, iov.buf.as_array(len))?;
                     *pos += len;
                     written += len;
@@ -903,16 +904,25 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         let cookie = cookie.try_into()?;
         for (ref entry, path) in head.into_iter().chain(dirent_actual_iter).skip(cookie) {
             const DIRENT_SIZE_BOUND: usize = 100;
-            let mut dirent_mem_buf: [u8; DIRENT_SIZE_BOUND] =
-                [0; DIRENT_SIZE_BOUND];
+            let mut dirent_mem_buf: [u8; DIRENT_SIZE_BOUND] = [0; DIRENT_SIZE_BOUND];
 
             use wiggle::GuestType;
-            let dirent_mem_buf = &mut align_slice(&mut dirent_mem_buf, generated::types::Dirent::guest_align())[..generated::types::Dirent::guest_size() as usize];
+            let dirent_mem_buf =
+                &mut align_slice(&mut dirent_mem_buf, generated::types::Dirent::guest_align())
+                    [..generated::types::Dirent::guest_size() as usize];
             let mut fake_mem = wiggle::GuestMemory::Unshared(dirent_mem_buf);
 
-            fake_mem.write(wiggle::GuestPtr::<generated::types::Dirent>::new(0), entry.clone())?;
+            fake_mem.write(
+                wiggle::GuestPtr::<generated::types::Dirent>::new(0),
+                entry.clone(),
+            )?;
 
-            buf = write_bytes_capacity(memory, buf, &dirent_mem_buf[..generated::types::Dirent::guest_size() as usize], &mut cap)?;
+            buf = write_bytes_capacity(
+                memory,
+                buf,
+                &dirent_mem_buf[..generated::types::Dirent::guest_size() as usize],
+                &mut cap,
+            )?;
             if cap == 0 {
                 return Ok(buf_len);
             }

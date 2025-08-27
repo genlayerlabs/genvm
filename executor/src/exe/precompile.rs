@@ -1,6 +1,7 @@
+use std::collections::BTreeMap;
+
 use anyhow::{Context, Result};
-use clap::builder::OsStr;
-use genvm::{caching, config};
+use genvm::{caching, config, runners};
 
 use genvm_common::*;
 
@@ -109,7 +110,9 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
     let mut precompile_dir = cache_dir.clone();
     precompile_dir.push(caching::PRECOMPILE_DIR_NAME);
 
-    log_info!(cache_dir:? = cache_dir, precompile_dir:? = precompile_dir; "information");
+    let registry_dir = std::path::Path::new(&config.registry_dir);
+
+    log_info!(cache_dir:? = cache_dir, precompile_dir:? = precompile_dir, registry_dir:? = registry_dir; "information");
 
     if args.info {
         return Ok(());
@@ -119,25 +122,19 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         Ok(())
     })?;
 
+    let all_json = std::fs::read_to_string(registry_dir.join("all.json"))?;
+    let all: BTreeMap<String, Vec<String>> = serde_json::from_str(&all_json)?;
+
     let runners_dir = std::path::Path::new(&config.runners_dir);
 
-    for runner_id in std::fs::read_dir(runners_dir)? {
-        let runner_id = runner_id?;
-        if !runner_id.file_type()?.is_dir() {
-            continue;
-        }
-        for zip_path in std::fs::read_dir(runner_id.path())? {
-            let zip_path = zip_path?;
-            if !zip_path.file_type()?.is_file() {
-                continue;
-            }
-            let zip_path = zip_path.path();
-            if zip_path.extension() != Some(&OsStr::from("tar")) {
-                continue;
-            }
+    for (runner_id, hashes) in all {
+        for hash in hashes {
+            let mut runner_path = runners_dir.to_owned();
+            runners::append_runner_subpath(&runner_id, &hash, &mut runner_path);
+            runner_path.set_extension("tar");
 
-            compile_single_file(&precompile_dir, &engines, runners_dir, &zip_path)
-                .with_context(|| format!("processing {zip_path:?}"))?;
+            compile_single_file(&precompile_dir, &engines, runners_dir, &runner_path)
+                .with_context(|| format!("processing {runner_path:?}"))?;
         }
     }
 

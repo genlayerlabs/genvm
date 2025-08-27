@@ -117,8 +117,7 @@ impl Ctx<'_, '_> {
 
         let mut cache_dir = cache_dir.to_owned();
         cache_dir.push(caching::PRECOMPILE_DIR_NAME);
-        cache_dir.push(id);
-        cache_dir.push(hash);
+        runners::append_runner_subpath(id, hash, &mut cache_dir);
         cache_dir.push(special_name);
 
         let det_mod = cache_dir.with_extension(caching::DET_NON_DET_PRECOMPILED_SUFFIX.det);

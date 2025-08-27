@@ -17,6 +17,12 @@ use std::{str::FromStr as _, sync::Arc};
 
 use crate::{public_abi, rt};
 
+pub fn append_runner_subpath(id: &str, hash: &str, path: &mut std::path::PathBuf) {
+    path.push(id);
+    path.push(&hash[..2]);
+    path.push(&hash[2..]);
+}
+
 pub fn get_runner_of_contract(address: calldata::Address) -> symbol_table::GlobalSymbol {
     let mut contract_id = String::from("on_chain:0x");
     contract_id.push_str(&hex::encode(address.raw()));

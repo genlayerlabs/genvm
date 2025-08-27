@@ -143,7 +143,7 @@ def _download_single(name: str, hash: str) -> bytes:
 
 for name, hashes in all_runners.items():
 	for hash in hashes:
-		cur_dst = runners_dir.joinpath(name, hash + '.tar')
+		cur_dst = runners_dir.joinpath(name, hash[:2], hash[2:] + '.tar')
 
 		if cur_dst.exists():
 			data = cur_dst.read_bytes()
@@ -153,6 +153,7 @@ for name, hashes in all_runners.items():
 			logger.warning(f'exists corrupted {name}:{hash}, removing')
 			cur_dst.unlink()
 
+		logger.debug(f'not found {cur_dst}')
 		data = _download_single(name, hash)
 		if not runner_check_bytes(data, hash):
 			raise ValueError(f'hash mismatch for {name}:{hash}')

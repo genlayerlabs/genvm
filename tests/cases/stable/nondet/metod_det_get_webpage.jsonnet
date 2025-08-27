@@ -1,5 +1,5 @@
 local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/../methods.py') {
+simple.run('${jsonnetDir}/../py/other/meth/methods.py') {
     "calldata": |||
         {
             "method": "det_viol",
