@@ -209,11 +209,7 @@ else
         exit 1
     fi
 
-    trap "kill -TERM $LLM_JOB_ID $WEB_JOB_ID 2>/dev/null; exit" EXIT INT TERM
-
     ./tests/runner/run.py --ci --gen-vm $(readlink -f ./build/out/executor/vTEST/bin/genvm)
-
-    trap - EXIT
 
     kill -TERM $LLM_JOB_ID $WEB_JOB_ID
 

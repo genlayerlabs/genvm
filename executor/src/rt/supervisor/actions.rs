@@ -50,8 +50,7 @@ impl Ctx<'_, '_> {
                 uid,
                 || async {
                     let mut path = self.supervisor.runner_cache.runners_path().to_owned();
-                    path.push(runner_id);
-                    path.push(runner_hash);
+                    runners::append_runner_subpath(runner_id, runner_hash, &mut path);
                     path.set_extension("tar");
                     if !path.exists() {
                         anyhow::bail!("runner {} not found", uid);
@@ -385,11 +384,16 @@ impl Ctx<'_, '_> {
                     .with_context(|| format!("With {uid}"))
             }
             InitAction::Depends(uid) => {
-                if !self.visited.insert(*uid) {
+                let uid =
+                    self.unfold_test_id_if_any(*uid, self.supervisor.runner_cache.registry_path());
+
+                if !self.visited.insert(uid) {
                     return Ok(None);
                 }
 
-                let (uid, new_arch) = self.get_arch(*uid).await?;
+                log_trace!(uid = uid; "adding dependency");
+
+                let (uid, new_arch) = self.get_arch(uid).await?;
 
                 let new_action = new_arch
                     .get_actions()

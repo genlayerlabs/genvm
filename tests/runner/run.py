@@ -76,6 +76,14 @@ def unfold_conf(x: typing.Any, vars: dict[str, str]) -> typing.Any:
 
 
 def run(jsonnet_rel_path):
+	try:
+		return run_impl(jsonnet_rel_path)
+	except Exception as e:
+		e.add_note(f'running {jsonnet_rel_path}')
+		raise e
+
+
+def run_impl(jsonnet_rel_path):
 	debug_path_base = str(jsonnet_rel_path)
 	jsonnet_path = dir.joinpath(jsonnet_rel_path)
 	skipped = jsonnet_path.with_suffix('.skip')
@@ -363,7 +371,12 @@ prnt_mutex = Lock()
 
 def prnt(path, res):
 	with prnt_mutex:
-		print(f"{sign_by_category[res['category']]} {path} in {res['elapsed']:.3f}s")
+		elapsed = res.get('elapsed')
+		if elapsed:
+			elapsed = f'{elapsed:.3f}s'
+		else:
+			elapsed = 'NaN'
+		print(f"{sign_by_category[res['category']]} {path} in {elapsed}")
 		if 'reason' in res:
 			for l in map(lambda x: '\t' + x, res['reason'].split('\n')):
 				print(l)
@@ -461,11 +474,19 @@ with cfutures.ThreadPoolExecutor(MAX_WORKERS) as executor:
 			f'running the first test(s) sequentially ({len(firsts)}), it can take a while..'
 		)
 		for f in firsts:
-			process_result(f, lambda: run(f))
+			try:
+				process_result(f, lambda: run(f))
+			except Exception as e:
+				e.add_note(f'in file {f}')
+				raise e
 		future2path = {executor.submit(run_with_semaphore, path): path for path in lasts}
 		for future in cfutures.as_completed(future2path):
 			path = future2path[future]
-			process_result(future2path[future], lambda: future.result())
+			try:
+				process_result(future2path[future], lambda: future.result())
+			except Exception as e:
+				e.add_note(f'in file {path}')
+				raise e
 	import json
 
 	print(json.dumps(categories))
