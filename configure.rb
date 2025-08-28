@@ -438,7 +438,10 @@ end
 
 generator.build(:CUSTOM_COMMAND, 'target/runners') do
 	var :command, [
-		'nix', 'build', '-v', '-L', '-o', $build_dir.join('out', 'runners'), '--file', $source_dir.join('runners', 'build-here.nix'),
+		'nix', 'build', '-v', '-L', '-o', $build_dir.join('runners-nix'), '--file', $source_dir.join('runners', 'build-here.nix'),
+		Ninja::AND, 'mkdir', '-p', './out/runners',
+		Ninja::AND, 'cp', '-r', './runners-nix/.', './out/runners/.',
+		Ninja::AND, 'chmod', '-R', '+w', './out/runners/.',
 	]
 
 	add_dependency $source_dir.join('runners', 'build-here.nix')

@@ -1,8 +1,6 @@
-name: PR fast check
+name: GenVM full
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-
+  merge_group:
 defaults:
   run:
     shell: bash -x {0}
@@ -29,12 +27,29 @@ jobs:
           with_nix: "true"
       - run: ./support/ci/pipelines/test-python.sh
 
+  module-test-rust:
+    needs: [initial]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          load_submodules: "false"
+          with_nix: "true"
+      - name: Set up Cloud SDK # needed for gcloud to upload runners to GCS for caching
+        uses: google-github-actions/setup-gcloud@v2
+      - run: ./support/ci/pipelines/test-rust.sh && ./support/ci/cargo-clippy.sh
+
   validate-end:
     runs-on: ubuntu-latest
     if: ${{ always() }}
     needs:
       - initial
       - module-test-python
+      - module-test-rust
     steps:
       - name: check
         run: |

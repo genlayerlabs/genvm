@@ -42,37 +42,8 @@ jobs:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
           install_url: https://releases.nixos.org/nix/nix-2.24.11/install
 
-      - uses: Gr1N/setup-poetry@v9
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: poetry
-
-      - name: Get source
-        uses: ./.github/actions/get-src
-        with:
-          load_submodules: "true"
-          third_party: "none"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Install dependencies
-        run: |
-          npm install -g @mermaid-js/mermaid-cli@11.6.0 && \
-          python3.12 -m pip install poetry && \
-            pushd doc/website/ && \
-            poetry install --no-root && \
-            popd
-
       - name: Build
-        run: |
-          ./tools/ya-build/ya-build config
-          ninja -v -C build genvm/docs
+        run: ./support/ci/pipelines/docs.sh
 
       - name: Checkout target repository
         uses: actions/checkout@v4
@@ -89,7 +60,7 @@ jobs:
           mkdir -p "_site/${{ inputs.version }}"
 
           # Copy built docs to version directory
-          cp -r ../build/out/docs/* "_site/${{ inputs.version }}/"
+          cp -r ../build/docs/html/. "_site/${{ inputs.version }}/."
 
           # Update versions.json only for non-main versions
           if [ "${{ inputs.version }}" != "main" ]; then

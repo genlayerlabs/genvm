@@ -1,3 +1,5 @@
+#!/usr/bin/env ruby
+
 require 'pathname'
 
 src_dir, dst_file = ARGV

@@ -53,55 +53,73 @@ jobs:
             echo "Using bumped version: ${{ steps.bump-semver.outputs.new_version }}"
             echo "new_version=${{ steps.bump-semver.outputs.new_version }}" >> $GITHUB_OUTPUT
           fi
-
-      - run: |
           echo "new version will be: ${{ steps.determine-version.outputs.new_version }}"
 
-  build-runners:
-    uses: ./.github/workflows/genvm-build-runners.yaml
-    secrets: inherit
-
-  release-build-genvm-amd64-linux:
+  build-universal:
     needs: [gen-tag]
-    uses: ./.github/workflows/genvm-build-template.yaml
-    secrets: inherit
+    uses: ./.github/workflows/incl_build_trg.yaml
     with:
-      runs_on: ubuntu-latest
-      target: x86_64-unknown-linux-musl
-      preloads: --preload build-scripts/ci/release-conf.rb --preload build-scripts/ci/executor-target-linux-amd64.rb
-      tag: ${{ needs.gen-tag.outputs.tag }}
+      target: universal
+      executor_version: ${{ needs.gen-tag.outputs.tag }}
 
-  release-build-genvm-arm64-linux:
+  build-linux-amd64:
     needs: [gen-tag]
-    uses: ./.github/workflows/genvm-build-template.yaml
-    secrets: inherit
+    uses: ./.github/workflows/incl_build_trg.yaml
     with:
-      runs_on: ubuntu-latest
-      target: aarch64-unknown-linux-musl
-      preloads: --preload build-scripts/ci/release-conf.rb --preload build-scripts/ci/executor-target-linux-aarch64.rb
-      tag: ${{ needs.gen-tag.outputs.tag }}
+      target: linux-amd64
+      executor_version: ${{ needs.gen-tag.outputs.tag }}
 
-  release-build-genvm-arm64-macos:
+  build-linux-arm64:
     needs: [gen-tag]
-    uses: ./.github/workflows/genvm-build-template.yaml
-    secrets: inherit
+    uses: ./.github/workflows/incl_build_trg.yaml
     with:
-      runs_on: macos-latest
-      preloads: --preload build-scripts/ci/release-conf.rb
-      tag: ${{ needs.gen-tag.outputs.tag }}
+      target: linux-arm64
+      executor_version: ${{ needs.gen-tag.outputs.tag }}
 
-  release-data:
-    uses: ./.github/workflows/build-data.yaml
-    secrets: inherit
+  build-macos-arm64:
+    needs: [gen-tag]
+    uses: ./.github/workflows/incl_build_trg.yaml
+    with:
+      target: build-macos-arm64
+      executor_version: ${{ needs.gen-tag.outputs.tag }}
+
+  test-linux-amd64:
+    needs:
+      - build-linux-amd64
+      - build-universal
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          load_submodules: "false"
+          with_nix: "false"
+      - name: Download artifact
+        run: |
+          mkdir -p build/out && \
+          pushd build/out && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-amd64.tar.xz ${{ needs.build-linux-amd64.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-universal.tar.xz ${{ needs.build-universal.outputs.artifact_url }} && \
+          tar -xf genvm-linux-amd64.tar.xz && \
+          tar -xf genvm-universal.tar.xz && \
+          popd && \
+          true
+      - name: Run stable tests
+        run: |
+          ./build/out/executor/*/bin/post-install.py && \
+          ./tests/runner/run.py --gen-vm ./build/out/executor/*/bin/genvm --filter '^stable/'
 
   release-publish:
     needs:
       - gen-tag
-      - build-runners
-      - release-build-genvm-amd64-linux
-      - release-build-genvm-arm64-linux
-      - release-build-genvm-arm64-macos
-      - release-data
+      - build-linux-amd64
+      - build-linux-arm64
+      - build-macos-arm64
+      - build-universal
+      - test-linux-amd64
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Needed for creating releases
@@ -125,11 +143,10 @@ jobs:
             poetry publish -r test-pypi && \
             popd
       - run: |
-          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-runners.zip ${{ needs.build-runners.outputs.artifact_url }} && \
-          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-amd64.zip ${{ needs.release-build-genvm-amd64-linux.outputs.artifact_url }} && \
-          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-arm64.zip ${{ needs.release-build-genvm-arm64-linux.outputs.artifact_url }} && \
-          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-macos-arm64.zip ${{ needs.release-build-genvm-arm64-macos.outputs.artifact_url }} && \
-          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-py-docs.zip  ${{ needs.release-data.outputs.docs_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-universal.tar.xz ${{ needs.build-universal.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-amd64.tar.xz ${{ needs.build-linux-amd64.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-arm64.tar.xz ${{ needs.build-linux-arm64.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-macos-arm64.tar.xz ${{ needs.build-macos-arm64.outputs.artifact_url }} && \
           true
 
       - run: |
@@ -141,11 +158,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            genvm-runners.zip
-            genvm-linux-amd64.zip
-            genvm-linux-arm64.zip
-            genvm-macos-arm64.zip
-            genvm-py-docs.zip
+            genvm-universal.tar.xz
+            genvm-linux-amd64.tar.xz
+            genvm-linux-arm64.tar.xz
+            genvm-macos-arm64.tar.xz
           name: Release ${{ needs.gen-tag.outputs.tag }}
           tag_name: ${{ needs.gen-tag.outputs.tag }}
           draft: false
@@ -156,7 +172,7 @@ jobs:
     needs:
       - release-publish
       - gen-tag
-    uses: ./.github/workflows/deploy-docs.yml
+    uses: ./.github/workflows/incl_docs.yml
     with:
       version: ${{ needs.gen-tag.outputs.tag }}
     secrets:

@@ -1,0 +1,43 @@
+name: Build Release For Target
+
+on:
+  workflow_call:
+    inputs:
+      target:
+        description: 'Target to build'
+        required: true
+        type: string
+      executor_version:
+        description: 'Version name of the executor'
+        required: true
+        type: string
+    outputs:
+      artifact_url:
+        description: "URL to download the built artifact"
+        value: ${{ jobs.build.outputs.artifact_url }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_url: ${{ steps.upload-artifact.outputs.artifact-url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          load_submodules: "false"
+          with_nix: "true"
+
+      - name: Build
+        run: |
+          ./support/ci/pipelines/build.sh --target ${{ inputs.target }} --executor-version ${{ inputs.executor_version }}
+
+      - name: Upload artifact
+        id: upload-artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: genvm-${{ inputs.executor_version }}-${{ inputs.target }}
+          path: build/out/genvm-${{ inputs.target }}.tar.xz
