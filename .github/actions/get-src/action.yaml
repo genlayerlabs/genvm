@@ -13,6 +13,9 @@ inputs:
     description: third-party modules to install
     required: false
     default: --all
+  github_token:
+    description: GitHub token for nix setup
+    required: false
 runs:
   using: composite
   steps:
@@ -35,5 +38,5 @@ runs:
       if: ${{ inputs.with_nix == 'true' }}
       uses: cachix/install-nix-action@v30
       with:
-        github_access_token: ${{ secrets.GITHUB_TOKEN }}
+        github_access_token: ${{ inputs.github_token }}
         install_url: https://releases.nixos.org/nix/nix-2.24.11/install

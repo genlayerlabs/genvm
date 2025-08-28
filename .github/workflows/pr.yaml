@@ -12,10 +12,12 @@ env:
 
 jobs:
   initial:
-    uses: ./.github/workflows/inc_initial.yaml
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip:pr') }}
+    uses: ./.github/workflows/incl_initial.yaml
     secrets: inherit
 
   module-test-python:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip:pr') }}
     needs: [initial]
     runs-on: ubuntu-latest
     steps:
@@ -27,6 +29,7 @@ jobs:
         with:
           load_submodules: "false"
           with_nix: "true"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - run: ./support/ci/pipelines/test-python.sh
 
   validate-end:
@@ -38,4 +41,8 @@ jobs:
     steps:
       - name: check
         run: |
-          echo ${{ join(needs.*.result, ' ') }} | grep -vP 'failure|cancelled'
+          if [[ "${{ contains(github.event.pull_request.labels.*.name, 'test:skip:pr') }}" == "true" ]]; then
+            echo "PR tests skipped due to test:skip:pr label"
+          else
+            echo ${{ join(needs.*.result, ' ') }} | grep -vP 'failure|cancelled'
+          fi

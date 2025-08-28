@@ -30,6 +30,7 @@ jobs:
         with:
           load_submodules: "false"
           with_nix: "true"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build
         run: |

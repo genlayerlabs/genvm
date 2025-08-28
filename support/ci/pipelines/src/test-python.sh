@@ -4,6 +4,6 @@ set -ex
 
 cd ./runners/genlayer-py-std
 
-poetry install --no-root
+poetry install --with dev
 
 poetry run -- pytest
