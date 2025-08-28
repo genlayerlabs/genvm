@@ -34,14 +34,11 @@ impl Ctx<'_, '_> {
     )> {
         let uid = self.unfold_test_id_if_any(uid, self.supervisor.runner_cache.registry_path());
 
-        let limiter = self
-            .supervisor
-            .limiter
-            .get(self.vm.config_copy.is_deterministic);
-
         let Some((runner_id, runner_hash)) = runners::verify_runner(uid.as_str()) else {
             anyhow::bail!("invalid runner id: {}", uid);
         };
+
+        let limiter = &self.vm.store.data_mut().limits;
 
         let new_arch = self
             .supervisor
@@ -196,11 +193,6 @@ impl Ctx<'_, '_> {
 
         match action {
             InitAction::MapFile { to, file } => {
-                let limiter = self
-                    .supervisor
-                    .limiter
-                    .get(self.vm.config_copy.is_deterministic);
-
                 if file.ends_with("/") {
                     let is_root = file.as_ref() == "/";
 
@@ -242,6 +234,8 @@ impl Ctx<'_, '_> {
                         }
                         name_in_fs.push_str(&name[must_start_with.len()..]);
 
+                        let limiter = &self.vm.store.data_mut().limits;
+
                         if !limiter.consume(
                             public_abi::MemoryLimiterConsts::FileMapping.value()
                                 + name_in_fs.len() as u32,
@@ -257,6 +251,8 @@ impl Ctx<'_, '_> {
                             .map_file(&name_in_fs, file_contents.clone())?;
                     }
                 } else {
+                    let limiter = &self.vm.store.data_mut().limits;
+
                     if !limiter.consume(
                         public_abi::MemoryLimiterConsts::FileMapping.value() + to.len() as u32,
                     ) {

@@ -991,11 +991,9 @@ impl Context {
             .supervisor
             .limiter
             .get(essential_data.conf.is_deterministic)
-            .clone();
+            .derived();
 
-        let checkpoint = limiter.save();
-
-        let vm = rt::supervisor::spawn(supervisor, essential_data).await;
+        let vm = rt::supervisor::spawn(supervisor, essential_data, limiter).await;
         let vm = match vm {
             Ok(vm) => rt::supervisor::apply_contract_actions(supervisor, vm).await,
             Err(e) => Err(e),
@@ -1004,8 +1002,6 @@ impl Context {
             Ok(vm) => vm.run().await,
             Err(e) => Err(e),
         };
-
-        limiter.restore(checkpoint);
 
         result.map(|x| x.0)
     }

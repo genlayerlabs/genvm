@@ -3,42 +3,62 @@ use std::sync::{atomic::AtomicU32, Arc};
 
 use crate::{public_abi, rt};
 
-#[derive(Clone)]
-pub struct Limiter {
-    id: &'static str,
+struct LimiterInnerData {
     remaining_memory: Arc<AtomicU32>,
     least_remaining_memory: Arc<AtomicU32>,
 }
 
-pub struct SaveTok {
-    remaining_memory: u32,
+struct LimiterInner {
+    data: Arc<LimiterInnerData>,
+    id: &'static str,
+    consumed_memory: AtomicU32,
+}
+
+#[derive(Clone)]
+pub struct Limiter(Arc<LimiterInner>);
+
+impl Drop for LimiterInner {
+    fn drop(&mut self) {
+        let consumed = self
+            .consumed_memory
+            .load(std::sync::atomic::Ordering::SeqCst);
+
+        log_debug!(id = self.id, consumed = consumed; "limiter drop");
+
+        self.data
+            .remaining_memory
+            .fetch_add(consumed, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 impl Limiter {
     pub fn get_least_remaining_memory(&self) -> u32 {
-        self.least_remaining_memory
+        self.0
+            .data
+            .least_remaining_memory
             .load(std::sync::atomic::Ordering::SeqCst)
     }
 
     pub fn new(id: &'static str) -> Self {
-        Self {
+        Self(Arc::new(LimiterInner {
             id,
-            remaining_memory: Arc::new(AtomicU32::new(u32::MAX)),
-            least_remaining_memory: Arc::new(AtomicU32::new(u32::MAX)),
-        }
+            consumed_memory: AtomicU32::new(0),
+            data: Arc::new(LimiterInnerData {
+                remaining_memory: Arc::new(AtomicU32::new(u32::MAX)),
+                least_remaining_memory: Arc::new(AtomicU32::new(u32::MAX)),
+            }),
+        }))
     }
 
-    pub fn save(&self) -> SaveTok {
-        SaveTok {
-            remaining_memory: self
-                .remaining_memory
-                .load(std::sync::atomic::Ordering::SeqCst),
-        }
-    }
-
-    pub fn restore(&self, tok: SaveTok) {
-        self.remaining_memory
-            .store(tok.remaining_memory, std::sync::atomic::Ordering::SeqCst);
+    pub fn derived(&self) -> Self {
+        Self(Arc::new(LimiterInner {
+            id: self.0.id,
+            consumed_memory: AtomicU32::new(0),
+            data: Arc::new(LimiterInnerData {
+                remaining_memory: self.0.data.remaining_memory.clone(),
+                least_remaining_memory: self.0.data.least_remaining_memory.clone(),
+            }),
+        }))
     }
 
     pub fn consume_mul(&self, delta: u32, multiplier: u32) -> bool {
@@ -51,28 +71,34 @@ impl Limiter {
     }
 
     pub fn get_remaining_memory(&self) -> u32 {
-        self.remaining_memory
+        self.0
+            .data
+            .remaining_memory
             .load(std::sync::atomic::Ordering::SeqCst)
     }
 
     pub fn release(&self, delta: u32) {
-        self.remaining_memory
+        self.0
+            .data
+            .remaining_memory
             .fetch_add(delta, std::sync::atomic::Ordering::SeqCst);
     }
 
     pub fn consume(&self, delta: u32) -> bool {
         let mut remaining = self
+            .0
+            .data
             .remaining_memory
             .load(std::sync::atomic::Ordering::SeqCst);
 
-        log_debug!(delta = delta, remaining_at_op_start = remaining, id = self.id; "consume");
+        log_debug!(delta = delta, remaining_at_op_start = remaining, id = self.0.id; "consume");
 
         loop {
             if delta > remaining {
                 return false;
             }
 
-            match self.remaining_memory.compare_exchange(
+            match self.0.data.remaining_memory.compare_exchange(
                 remaining,
                 remaining - delta,
                 std::sync::atomic::Ordering::SeqCst,
@@ -80,8 +106,13 @@ impl Limiter {
             ) {
                 Ok(_) => {
                     let least_for_test = remaining - delta;
-                    self.least_remaining_memory
+                    self.0
+                        .data
+                        .least_remaining_memory
                         .fetch_min(least_for_test, std::sync::atomic::Ordering::SeqCst);
+                    self.0
+                        .consumed_memory
+                        .fetch_add(delta, std::sync::atomic::Ordering::SeqCst);
                     break;
                 }
                 Err(new_remaining) => remaining = new_remaining,

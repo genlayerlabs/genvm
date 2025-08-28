@@ -19,11 +19,10 @@ pub struct Context {
 impl Context {
     pub fn new(
         data: genlayer_sdk::SingleVMData,
-        shared_data: Arc<rt::supervisor::Supervisor>,
+        limiter: rt::memlimiter::Limiter,
     ) -> anyhow::Result<Self> {
         let as_value = calldata::to_value(&data.message_data)?;
         let as_bytes = calldata::encode(&as_value);
-        let limiter = shared_data.limiter.get(data.conf.is_deterministic).clone();
         Ok(Self {
             vfs: vfs::VFS::new(as_bytes, limiter),
             preview1: preview1::Context::new(data.message_data.datetime, data.conf),

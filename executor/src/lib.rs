@@ -120,7 +120,12 @@ pub async fn run_with_impl(
         should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(true)),
     };
 
-    let vm = rt::supervisor::spawn(&supervisor, essential_data).await?;
+    let limiter = supervisor
+        .limiter
+        .get(essential_data.conf.is_deterministic)
+        .derived();
+
+    let vm = rt::supervisor::spawn(&supervisor, essential_data, limiter).await?;
     let vm = rt::supervisor::apply_contract_actions(&supervisor, vm).await?;
     vm.run().await
 }

@@ -223,11 +223,11 @@ impl Supervisor {
 pub async fn spawn(
     zelf: &Arc<Supervisor>,
     vm: wasi::genlayer_sdk::SingleVMData,
+    limiter: rt::memlimiter::Limiter,
 ) -> anyhow::Result<rt::vm::VM<()>> {
     let config_copy = vm.conf;
 
     let engine = zelf.engines.get(vm.conf.is_deterministic);
-    let limiter = zelf.limiter.get(vm.conf.is_deterministic);
 
     let should_capture_fp = std::sync::Arc::new(vm.conf.is_deterministic.into());
 
@@ -236,8 +236,7 @@ pub async fn spawn(
         rt::vm::WasmtimeStoreData {
             limits: limiter.clone(),
             genlayer_ctx: std::sync::Arc::new(std::sync::Mutex::new(wasi::Context::new(
-                vm,
-                zelf.clone(),
+                vm, limiter,
             )?)),
             supervisor: zelf.clone(),
         },
@@ -282,7 +281,7 @@ pub async fn apply_contract_actions(
 
     let contract_id = runners::get_runner_of_contract(contract_address);
 
-    let limiter = zelf.limiter.get(vm.vm_base.config_copy.is_deterministic);
+    let limiter = vm.vm_base.store.data_mut().limits.clone();
 
     let arch = zelf
         .runner_cache
@@ -291,14 +290,17 @@ pub async fn apply_contract_actions(
             || async {
                 let mut host = zelf.host.lock().await;
 
-                let code =
-                    host.get_code(vm.vm_base.config_copy.state_mode, contract_address, limiter)?;
+                let code = host.get_code(
+                    vm.vm_base.config_copy.state_mode,
+                    contract_address,
+                    &limiter,
+                )?;
 
                 std::mem::drop(host);
 
                 runners::parse(util::SharedBytes::new(code))
             },
-            limiter,
+            &limiter,
         )
         .await
         .map_err(|e| {
@@ -376,7 +378,8 @@ async fn run_single_nondet(
     zelf: &std::sync::Arc<Supervisor>,
     task: NonDetVMTask,
 ) -> anyhow::Result<rt::vm::RunOk> {
-    let vm = spawn(zelf, task.task).await?;
+    let limiter = zelf.limiter.get(false).derived();
+    let vm = spawn(zelf, task.task, limiter).await?;
     let vm = apply_contract_actions(zelf, vm).await?;
     vm.run().await.map(|x| x.0)
 }
