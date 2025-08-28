@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
 
+export PATH="$NIX:$PATH"
+
 set -ex
 
-./configure.rb
+ruby ./configure.rb
 
-ninja -v -C build out/executor/vTEST/data/all.json
+ninja -v -C build all/bin
 
-./support/runner-script.py download --nix-preload --allow-partial --dest build/out/runners --registry build/out/executor/vTEST/data/all.json
+LOGLEVEL=DEBUG python3 ./build/out/executor/vTEST/bin/post-install.py
 
-ninja -v -C build all
-
-./support/runner-script.py upload --root build/out/runners --registry build/out/executor/vTEST/data/all.json || true
-
-LOGLEVEL=DEBUG ./build/out/executor/vTEST/bin/post-install.py
-
-./tests/rust.sh
+bash ./tests/rust.sh

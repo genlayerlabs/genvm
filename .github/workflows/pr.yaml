@@ -2,6 +2,8 @@ name: PR fast check
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
 
 defaults:
   run:
@@ -44,5 +46,8 @@ jobs:
           if [[ "${{ contains(github.event.pull_request.labels.*.name, 'test:skip:pr') }}" == "true" ]]; then
             echo "PR tests skipped due to test:skip:pr label"
           else
-            echo ${{ join(needs.*.result, ' ') }} | grep -vP 'failure|cancelled'
+            if echo "${{ join(needs.*.result, ' ') }}" | grep -Eq 'failure|cancelled'; then
+              echo "Detected failed or cancelled job(s): ${{ join(needs.*.result, ' ') }}"
+              exit 1
+            fi
           fi

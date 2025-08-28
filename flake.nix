@@ -87,11 +87,16 @@
 								pkgs = import nixpkgs {
 									inherit system;
 								};
-								packages-0 = with pkgs; [ bash xz zlib glibc git python312 ];
+								packages-0 = with pkgs; [ bash xz zlib glibc git python312 coreutils which ];
 								packages-lint = with pkgs; [ pre-commit ];
 								packages-rust = [ (import ./support/rust.nix { inherit pkgs system; withLinters = true; withZig = false; }) ];
 								packages-debug-test = with pkgs; [
-									ninja
+									(pkgs.ninja.overrideAttrs (old: {
+										postPatch = old.postPatch + ''
+											substituteInPlace src/subprocess-posix.cc \
+												--replace '"/bin/sh"' '"${pkgs.bash}/bin/bash"'
+										'';
+									}))
 									ruby
 									gcc
 

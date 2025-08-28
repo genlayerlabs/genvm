@@ -1,5 +1,5 @@
 name: GenVM get source
-description: ""
+description: Checkout sources, optionally update submodules/third-party, and (optionally) set up Nix.
 inputs:
   with_nix:
     description: if should setup nix
@@ -38,5 +38,7 @@ runs:
       if: ${{ inputs.with_nix == 'true' }}
       uses: cachix/install-nix-action@v30
       with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes recursive-nix
         github_access_token: ${{ inputs.github_token }}
-        install_url: https://releases.nixos.org/nix/nix-2.24.11/install
+        install_url: https://releases.nixos.org/nix/nix-2.24.14/install
