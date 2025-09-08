@@ -42,9 +42,15 @@ class WordPieceTokenizer:
         token_ids = []
 
         while text != "##":
+            old_text = text
+            # returns `unknown_token, text[1:]` if nothing matched, however, if we already added `##`
+            # then we get into infinite loop
             token_id, text = self.tokens_trie.getLongestMatchToken(text)
+            if token_id == self.tokens_trie.unk_token_id and len(old_text) > 2 and old_text.startswith('##'):
+                text = old_text[3:]
+                continue
             text = "##" + text
-            token_ids = [*token_ids, token_id]
+            token_ids.append(token_id)
 
         return token_ids
 

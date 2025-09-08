@@ -3,5 +3,6 @@
   "rename-outputs": {
     "last-hidden-state": "unpooled",
     "924": "embedding"
-  }
+  },
+  "tokens_truncate": 512
 }

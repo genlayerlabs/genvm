@@ -2,7 +2,7 @@ import functools, io, math
 import typing
 import operator
 from typing import Union, Tuple, Optional, List, Any
-from . import DTYPE_MAP
+from . import DTYPE_MAP_STR
 import numpy as np
 from collections.abc import Sequence
 
@@ -34,7 +34,7 @@ def Add(builder: Builder, x: Tensor, other: Tensor, broadcast=None, axis=None):
 
 
 def Cast(builder: Builder, x: Tensor, to: int, saturate=1):
-	typ = builder.add_const(DTYPE_MAP[to])
+	typ = DTYPE_MAP_STR[to]
 	return builder.add_decl(f'{x}.astype({typ})')
 
 

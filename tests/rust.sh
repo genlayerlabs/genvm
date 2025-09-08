@@ -209,7 +209,7 @@ else
         exit 1
     fi
 
-    ./tests/runner/run.py --ci --gen-vm $(readlink -f ./build/out/executor/vTEST/bin/genvm)
+    python3 ./tests/runner/run.py --ci --gen-vm $(readlink -f ./build/out/executor/vTEST/bin/genvm)
 
     kill -TERM $LLM_JOB_ID $WEB_JOB_ID
 
@@ -219,18 +219,12 @@ fi
 
 find "$COVERAGE_DIR" -name '*.profraw' > "$COVERAGE_DIR/files-list"
 
-"$LLVM_TOOLS_BIN/llvm-profdata" merge \
+echo_and_run "$LLVM_TOOLS_BIN/llvm-profdata" merge \
     -sparse \
     -f "$COVERAGE_DIR/files-list" \
     -o "$COVERAGE_DIR/merged.profdata"
 
-echo "$LLVM_TOOLS_BIN/llvm-cov" report \
-    -format=text \
-    -instr-profile="$COVERAGE_DIR/merged.profdata" \
-    --ignore-filename-regex='(^|/)(\.cargo|\.rustup|third-party)/|cranelift|target-lexicon' \
-    $PROFILE_FILES
-
-"$LLVM_TOOLS_BIN/llvm-cov" report \
+echo_and_run "$LLVM_TOOLS_BIN/llvm-cov" report \
     -format=text \
     -instr-profile="$COVERAGE_DIR/merged.profdata" \
     --ignore-filename-regex='(^|/)(\.cargo|\.rustup|third-party)/|cranelift|target-lexicon' \

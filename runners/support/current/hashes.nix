@@ -8,7 +8,7 @@ let
 			__prefix = "models-";
 
 			all-MiniLM-L6-v2 = {
-				hash = "sha256-C3vqRgr76VlY0G+HaZeGMrco+ya77R9mNE5bLWXE0Ok=";
+				hash = "sha256-OlZQmCyKA+ct9hV4G12vSRUYUYB2S1CdDjIG2ueaOjQ=";
 			};
 		};
 
@@ -23,7 +23,7 @@ let
 			};
 
 			word_piece_tokenizer = {
-				hash = "sha256-GI/J7iTPhXqn7RfUhIfQk/p8Zwi31vGIft5bvPLcnlQ=";
+				hash = "sha256-Wi1iFSYnBG4w/LweLuDfIiEETtS4UZXcfOtsjENPTG4=";
 			};
 
 			genlayer-std = {
@@ -31,7 +31,7 @@ let
 			};
 
 			genlayer-embeddings = {
-				hash = "sha256-4aH3t6P7KZpO3v7UTPF7W2lIqKuMQAfoVCv5HlxP4Jo=";
+				hash = "sha256-09sWp5hGkUdwuJhVfbD4/BAncd+jfFII9Lpz59moqy4=";
 
 				depends = [
 					models.all-MiniLM-L6-v2

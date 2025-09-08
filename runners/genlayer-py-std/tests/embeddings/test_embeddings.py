@@ -5,7 +5,7 @@ import numpy as np
 import onnx
 import torch
 
-from genlayer_embeddings.model_wrappers import Model
+from genlayer_embeddings.model_wrappers import get_model
 
 from . import root_dir
 
@@ -27,7 +27,7 @@ models_db = {
 	}
 }
 
-genvm_model = Model(
+genvm_model = get_model(
 	'all-MiniLM-L6-v2',
 	{
 		'input_ids': np.int64,
@@ -72,7 +72,7 @@ def test_is_same(txt: str):
 
 	# Run the GenVM model
 	genvm_outputs = genvm_model(
-		{
+		**{
 			'input_ids': data_got,
 			'attention_mask': np.ones(data_got.shape, data_got.dtype),
 			'token_type_ids': np.zeros(data_got.shape, data_got.dtype),

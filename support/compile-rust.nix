@@ -1,7 +1,7 @@
 { pkgs
 , zig
 , ...
-}@args:
+}@args0:
 let
 	lib = pkgs.lib;
 	importCargoLock = pkgs.rustPlatform.importCargoLock;
@@ -57,6 +57,7 @@ in {
 	buildAndTestSubdir ? null,
 
 	target,
+	installPhase ? null,
 	...
 }@args:
 let
@@ -64,9 +65,11 @@ let
 		amd64-linux = "x86_64-unknown-linux-musl";
 		arm64-linux = "aarch64-unknown-linux-musl";
 		arm64-macos = "aarch64-apple-darwin";
+
+		x86_64-linux = "x86_64-unknown-linux-gnu";
 	}.${target};
 
-	rust-pkg = import ./rust.nix args;
+	rust-pkg = import ./rust.nix args0;
 in
 
 stdenv.mkDerivation (
@@ -168,7 +171,7 @@ stdenv.mkDerivation (
 			done
 		'';
 
-		installPhase = ''
+		installPhase = if installPhase != null then installPhase else ''
 			cp "target/__out" "$out"
 		'';
 

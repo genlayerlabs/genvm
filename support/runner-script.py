@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import sys
+import os
 import typing
 import json
 import urllib.request
@@ -12,6 +13,14 @@ import hashlib
 import hashlib
 
 HASH_VALID_CHARS = '0123456789abcdfghijklmnpqrsvwxyz'
+
+ORIGINAL_ENV = os.environ.copy()
+if 'ORIGINAL_PATH' in ORIGINAL_ENV:
+	os.environ['PATH'] = ORIGINAL_ENV['ORIGINAL_PATH']
+if 'ORIGINAL_LD_LIBRARY_PATH' in ORIGINAL_ENV:
+	os.environ['LD_LIBRARY_PATH'] = ORIGINAL_ENV['ORIGINAL_LD_LIBRARY_PATH']
+else:
+	os.environ['LD_LIBRARY_PATH'] = '/usr/local/lib:/usr/lib:/lib'
 
 
 def digest_to_hash_id(got_hash: bytes) -> str:
@@ -98,6 +107,34 @@ def _download_single(name: str, hash: str) -> bytes:
 		return f.read()
 
 
+def _nix_preload(cur_dst: Path, name: str, hash: str):
+	if not args.nix_preload:
+		return
+	import subprocess
+
+	print(f'info: preloading {cur_dst} into nix store as genvm_runner_{name}_{hash}')
+
+	subprocess.run(
+		[
+			'nix',
+			'store',
+			'add',
+			'--hash-algo',
+			'sha256',
+			'--mode',
+			'flat',
+			'--name',
+			f'genvm_runner_{name}_{hash}',
+			str(cur_dst),
+		],
+		check=True,
+		text=True,
+		capture_output=True,
+		env=ORIGINAL_ENV,
+	)
+	print(f'info: done preloading {cur_dst} into nix store as genvm_runner_{name}_{hash}')
+
+
 def run_download(args):
 	registry = _load_registry(args.registry)
 
@@ -114,6 +151,7 @@ def run_download(args):
 					data = cur_dst.read_bytes()
 					if check_bytes(data, hash):
 						print(f'info: already exists {name}:{hash}, skipping')
+						_nix_preload(cur_dst, name, hash)
 						continue
 					print(f'err: exists corrupted {name}:{hash}, removing')
 					cur_dst.unlink()
@@ -128,27 +166,7 @@ def run_download(args):
 
 				cur_dst.write_bytes(data)
 
-				if args.nix_preload:
-					# Preload the file into nix store
-					import subprocess
-
-					subprocess.run(
-						[
-							'nix',
-							'store',
-							'add',
-							'--hash-algo',
-							'sha256',
-							'--mode',
-							'flat',
-							'--name',
-							f'genvm_runner_{name}_{hash}.tar',
-							str(cur_dst),
-						],
-						check=True,
-						text=True,
-						capture_output=True,
-					)
+				_nix_preload(cur_dst, name, hash)
 
 				successful.setdefault(name, []).append(hash)
 			except Exception as e:
@@ -187,7 +205,11 @@ def run_upload(args):
 	import subprocess
 
 	proc = subprocess.run(
-		['gcloud', 'auth', 'print-access-token'], check=True, text=True, capture_output=True
+		['gcloud', 'auth', 'print-access-token'],
+		check=True,
+		text=True,
+		capture_output=True,
+		env=ORIGINAL_ENV,
 	)
 	token = proc.stdout.strip()
 

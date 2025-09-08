@@ -58,15 +58,29 @@ DTYPE_MAP = {
 	19: np.float32,
 	20: np.float32,
 }
+DTYPE_MAP_STR = {
+	1: 'np.float32',
+	2: 'np.uint8',
+	3: 'np.int8',
+	4: 'np.uint16',
+	5: 'np.int16',
+	6: 'np.int32',
+	7: 'np.int64',
+	9: 'bool',
+	10: 'np.float32',
+	11: 'np.float64',
+	12: 'np.uint32',
+	13: 'np.uint64',
+	16: 'np.float32',
+	17: 'np.float32',
+	18: 'np.float32',
+	19: 'np.float32',
+	20: 'np.float32',
+}
 # TODO: fix buffer_parse to use this and fix get_weight_and_biases to only use buffer_parse
 import importlib
 
 onnx_ops = importlib.import_module('.onnx_ops', __name__)
-
-
-def get_as_const(x: Tensor) -> np.ndarray:
-	assert isinstance(x, ConstTensor), f'not const {x} {x._tb}'
-	return x.compute()
 
 
 def _op_split(
@@ -105,32 +119,6 @@ def _op_split(
 	return tuple(ret)
 
 
-def _do_slicing(slicing_tensor, axes, ends, starts, steps):
-	arg: list[tuple[int, int, int]] = [(0, x, 1) for x in slicing_tensor.shape]
-	for i, axis in enumerate(axes):
-		axis = int(axis) + slicing_tensor.ndim if axis < 0 else int(axis)
-		if starts[i] < 0:
-			starts[i] += slicing_tensor.shape[axis]
-		if ends[i] < 0:
-			ends[i] += slicing_tensor.shape[axis]
-		starts[i], ends[i] = (
-			max(0, min(starts[i], slicing_tensor.shape[axis])),
-			max(0, min(ends[i], slicing_tensor.shape[axis])),
-		)
-		if starts[i] > ends[i] and steps[i] >= 0:
-			steps[i] = -steps[i]
-		arg[axis] = (starts[i], ends[i], steps[i])
-
-	def unwrap(x):
-		if isinstance(x, np.ndarray) and prod(x.shape) == 1:
-			return x.reshape((1,))[0]
-		return x
-
-	return slicing_tensor[
-		tuple([slice(unwrap(s), unwrap(e), unwrap(st)) for s, e, st in arg])
-	]
-
-
 def _op_slice(
 	builder: Builder, onnx_model_version, opt: dict, inp: list[Tensor]
 ) -> Tensor:
@@ -156,18 +144,19 @@ def _op_slice(
 		else:
 			steps = builder.add_decl(f'np.ones({slicing_tensor}.ndim, dtype=np.int32)')
 
-	func = builder.add_const(_do_slicing)
-
 	return builder.add_decl(
-		f'{func}({slicing_tensor}, {axes}, {ends}, {starts}, {steps})'
+		f'_do_slicing({slicing_tensor}, {axes}, {ends}, {starts}, {steps})'
 	)
 
 
 def get_run_onnx(
 	onnx_model: ModelProto,
 	user_inputs: dict[str, Tensor],
-):
-	builder = Builder(onnx_model.graph.name)
+	rename_outputs: dict[str, str],
+	*,
+	extra_builder_args: dict = {},
+) -> tuple[Builder, list[str]]:
+	builder = Builder(onnx_model.graph.name, **extra_builder_args)
 
 	def type_parse(type_proto: TypeProto) -> tuple[int, ...]:
 		ret = []
@@ -308,11 +297,14 @@ def get_run_onnx(
 			intermediate_tensors[n.output[i]] = ret[i]
 
 	# Generate return statement
-	return_vars = [
-		intermediate_tensors[output_name] for output_name in output_tensor_names
-	]
-	builder._data.append(f'return {", ".join(return_vars)}\n')
+	builder._data.append('ret = {}\n')
+	for output_name in output_tensor_names:
+		res_name = rename_outputs.get(output_name, output_name)
+		builder._data.append(
+			f'ret[{repr(res_name)}] = {intermediate_tensors[output_name]}\n'
+		)
+	builder._data.append('return ret\n')
 
 	# Compile the function with input parameters
 	input_params = list(user_inputs.keys())
-	return builder.finish(parameters=input_params)
+	return builder, input_params

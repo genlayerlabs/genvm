@@ -14,12 +14,10 @@
 		nixpkgs.url = "github:NixOS/nixpkgs/2b4230bf03deb33103947e2528cac2ed516c5c89";
 		systems = {
 			url = "github:nix-systems/default";
-			inputs.nixpkgs.follows = "nixpkgs";
 		};
 		flake-utils = {
 			url = "github:numtide/flake-utils";
 			inputs.systems.follows = "systems";
-			inputs.nixpkgs.follows = "nixpkgs";
 		};
 	};
 
@@ -87,9 +85,44 @@
 								pkgs = import nixpkgs {
 									inherit system;
 								};
-								packages-0 = with pkgs; [ bash xz zlib glibc git python312 coreutils which ];
+
+								custom-rust = import ./support/rust.nix { inherit pkgs system; withLinters = true; withZig = false; };
+								custom-rust-builder = import ./support/compile-rust.nix {
+									inherit pkgs system;
+									zig = import ./support/zig.nix { inherit pkgs system; };
+								};
+
+								custom-cargo-afl = custom-rust-builder rec {
+									name = "cargo-afl";
+									version = "0.15.18";
+									src = pkgs.fetchzip {
+										url = "https://crates.io/api/v1/crates/cargo-afl/0.15.18/download";
+										hash = "sha256-6ti50bwE4bLwIyR76bMt/Vn6Nwqu9n0IKdVuDdYkiHg=";
+										extension = ".tar.gz";
+										name = "cargo-afl-0.15.18.tar.gz";
+									};
+
+									target = system;
+
+									cargoLock.lockFile = "${src}/Cargo.lock";
+
+									nativeBuildInputs = [ pkgs.gnumake pkgs.makeWrapper ];
+
+									postBuild = ''
+										XDG_DATA_HOME="$out/data" ./target/*/release/cargo-afl afl config --build --verbose
+									'';
+
+									installPhase = ''
+										mkdir -p $out/bin
+										cp target/__out $out/bin/cargo-afl
+										wrapProgram $out/bin/cargo-afl \
+											--set XDG_DATA_HOME "$out/data"
+									'';
+								};
+
+								packages-0 = with pkgs; [ bash xz zlib glibc git python312 coreutils which jq ];
 								packages-lint = with pkgs; [ pre-commit ];
-								packages-rust = [ (import ./support/rust.nix { inherit pkgs system; withLinters = true; withZig = false; }) ];
+								packages-rust = [ custom-rust ];
 								packages-debug-test = with pkgs; [
 									(pkgs.ninja.overrideAttrs (old: {
 										postPatch = old.postPatch + ''
@@ -100,11 +133,13 @@
 									ruby
 									gcc
 
-									aflplusplus
+									custom-cargo-afl
+
 									python312Packages.jsonnet
 									wabt
 								];
 								packages-py-test = with pkgs; [
+									# aflplusplus # currently we don't run fuzzing on CI
 									python312
 									poetry
 								];

@@ -115,7 +115,7 @@ lib.log{
 
 if lib.get_first_from_table(M.providers_with_json_support) == nil then
 	lib.log{
-		level = "warning",
+		level = "error",
 		message = "no provider with json support detected"
 	}
 end
@@ -129,7 +129,7 @@ end
 
 if lib.get_first_from_table(M.providers_with_image_and_json_support) == nil then
 	lib.log{
-		level = "error",
+		level = "warning",
 		message = "no provider with image AND json support detected"
 	}
 end

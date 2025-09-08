@@ -264,7 +264,7 @@ def run_impl(jsonnet_rel_path):
 						cmd,
 						env=_env,
 						exit_timeout=2,
-						deadline=config['deadline'],
+						deadline=10,
 					)
 				)
 			except Exception as e:

@@ -50,10 +50,19 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - run: |
+          echo core | sudo tee /proc/sys/kernel/core_pattern
+          echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+          echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
           docker build --progress=plain modules/webdriver/
           TAG=$(docker build -q  modules/webdriver/)
           docker run --rm -d $TAG && \
           ./support/ci/pipelines/test-rust.sh && ./support/ci/cargo-clippy.sh
+        env:
+          OPENAIKEY: ${{ secrets.OPENAIKEY }}
+          HEURISTKEY: ${{ secrets.HEURISTKEY }}
+          ANTHROPICKEY: ${{ secrets.ANTHROPICKEY }}
+          XAIKEY: ${{ secrets.XAIKEY }}
+          GEMINIKEY: ${{ secrets.GEMINIKEY }}
 
   validate-end:
     runs-on: ubuntu-latest

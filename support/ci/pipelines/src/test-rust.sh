@@ -10,4 +10,4 @@ ninja -v -C build all/bin
 
 LOGLEVEL=DEBUG python3 ./build/out/executor/vTEST/bin/post-install.py
 
-bash ./tests/rust.sh
+bash -x ./tests/rust.sh
