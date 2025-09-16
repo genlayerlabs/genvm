@@ -313,6 +313,43 @@ end
 $rust_target_dir = $build_dir.join('ya-build', 'rust-target').expand_path
 $rust_target_dir.mkpath
 
+generator.rule(:codegen) do
+	command RbConfig.ruby, Ninja::VAR_IN, Ninja::VAR_OUT
+end
+
+generator.build(:codegen, $source_dir.join('executor', 'src', 'public_abi.rs')) do
+	add_dependency($source_dir.join('executor', 'codegen', 'templates', 'rs.rb'))
+	add_dependency($source_dir.join('executor', 'codegen', 'data', 'public-abi.json'))
+end
+
+generator.build(:codegen, $source_dir.join('runners', 'genlayer-py-std', 'src', 'genlayer', 'py', 'public_abi.py')) do
+	add_dependency($source_dir.join('executor', 'codegen', 'templates', 'py.rb'))
+	add_dependency($source_dir.join('executor', 'codegen', 'data', 'public-abi.json'))
+end
+
+generator.build(:codegen, $source_dir.join('tests', 'runner', 'host_fns.py')) do
+	add_dependency($source_dir.join('executor', 'codegen', 'templates', 'py.rb'))
+	add_dependency($source_dir.join('executor', 'codegen', 'data', 'host-fns.json'))
+end
+
+generator.build(:codegen, $source_dir.join('executor', 'src', 'host', 'host_fns.rs')) do
+	add_dependency($source_dir.join('executor', 'codegen', 'templates', 'rs.rb'))
+	add_dependency($source_dir.join('executor', 'codegen', 'data', 'host-fns.json'))
+end
+
+generator.build(:codegen, $source_dir.join('doc', 'website', 'src', 'spec', 'appendix', 'constants.rst')) do
+	add_dependency($source_dir.join('executor', 'codegen', 'templates', 'rst.rb'))
+	add_dependency($source_dir.join('executor', 'codegen', 'data', 'public-abi.json'))
+end
+
+generator.build(:phony, 'codegen') do
+	add_dependency $source_dir.join('executor', 'src', 'public_abi.rs')
+	add_dependency $source_dir.join('runners', 'genlayer-py-std', 'src', 'genlayer', 'py', 'public_abi.py')
+	add_dependency $source_dir.join('tests', 'runner', 'host_fns.py')
+	add_dependency $source_dir.join('executor', 'src', 'host', 'host_fns.rs')
+	add_dependency $source_dir.join('doc', 'website', 'src', 'spec', 'appendix', 'constants.rst')
+end
+
 generator.rule(:cargo) do
 	command \
 		'cd', Ninja::RawStr.new('$wd'),
