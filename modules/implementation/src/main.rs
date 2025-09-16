@@ -1,8 +1,8 @@
-pub(crate) mod common;
-pub(crate) mod scripting;
-
 mod llm;
 mod web;
+
+pub mod common;
+pub mod scripting;
 
 use anyhow::Result;
 use clap::Parser;

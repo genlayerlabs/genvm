@@ -3,6 +3,10 @@ name = "genvm-modules"
 version = "0.1.0"
 edition = "2021"
 
+[[example]]
+name = "fuzz-genvm-modules-normalize-whitespace"
+path = "fuzz/genvm-modules-normalize-whitespace.rs"
+
 [features]
 default = []
 vendored-lua = ["mlua/vendored"]
@@ -34,3 +38,7 @@ chrono = "0.4.41"
 ring = { version = "0.17.14", features = ["std"] }
 url = { version = "2.5.4", features = ["serde"] }
 hex = "0.4.3"
+unicode-normalization = "0.1.20"
+
+[dev-dependencies]
+afl = { version = "0.15.18", features = ["no_cfg_fuzzing"] }

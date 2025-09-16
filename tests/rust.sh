@@ -6,6 +6,7 @@ FILTER='.*'
 SHOW_HELP=false
 
 FUZZ_TIMEOUT=30
+UPDATE_CORPUS=false
 
 PRECOMPILE=false
 
@@ -60,7 +61,11 @@ while [[ $# -gt 0 ]]; do
         --precompile)
             PRECOMPILE=true
             shift
-        ;;
+            ;;
+        --update-corpus)
+            UPDATE_CORPUS=true
+            shift
+            ;;
         *)
             echo "Error: Unknown option $1" >&2
             show_help
@@ -76,7 +81,9 @@ fi
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-cd "$SCRIPT_DIR/.."
+ROOT_DIR="$SCRIPT_DIR/.."
+
+cd "$ROOT_DIR"
 
 if [ ! -f "build/info.json" ]
 then
@@ -157,9 +164,19 @@ do
 
                 echo "=== fuzzing $dir/fuzz/$name ==="
 
+                if [[ -f "fuzz/features.txt" ]]
+                then
+                    FEATURES=$(cat "fuzz/features.txt" | tr '\n' ',' | sed 's/,$//')
+                    echo "Using features: $FEATURES"
+                    FEATURES="--features $FEATURES"
+                else
+                    FEATURES=""
+                fi
+
                 cargo afl build \
                     --target-dir "$TARGET_DIR" \
-                    --example "fuzz-$name"
+                    --example "fuzz-$name" \
+                    $FEATURES
 
                 mkdir -p "$BUILD_DIR/genvm-testdata-out/fuzz/" || true
 
@@ -169,6 +186,23 @@ do
                     -o "$BUILD_DIR/genvm-testdata-out/fuzz/$name" \
                     -V "$FUZZ_TIMEOUT" \
                     "$TARGET_DIR/debug/examples/fuzz-$name"
+
+                if [[ "$UPDATE_CORPUS" == true ]]
+                then
+                    rm -rf "$BUILD_DIR/genvm-testdata-out/fuzz/$name-opt" || true
+                    mkdir -p "$BUILD_DIR/genvm-testdata-out/fuzz/$name-opt"
+
+                    echo_and_run cargo afl cmin \
+                        -T all \
+                        -o "$BUILD_DIR/genvm-testdata-out/fuzz/$name-opt" \
+                        -i "$BUILD_DIR/genvm-testdata-out/fuzz/$name" -- "$TARGET_DIR/debug/examples/fuzz-$name"
+
+                    rm -rf "./fuzz/inputs-$name" || true
+                    mkdir -p "./fuzz/inputs-$name"
+                    echo_and_run python3 \
+                        "$ROOT_DIR/runners/genlayer-py-std/fuzz/resave.py" \
+                        "$BUILD_DIR/genvm-testdata-out/fuzz/$name-opt" "./fuzz/inputs-$name"
+                fi
 
                 PROFILE_FILES="$PROFILE_FILES --object $TARGET_DIR/debug/examples/fuzz-$name"
             fi
