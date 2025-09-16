@@ -4,6 +4,7 @@ use crate::{caching, public_abi, rt, runners};
 
 use anyhow::Context;
 use genvm_common::*;
+use symbol_table::GlobalSymbol;
 
 pub struct Ctx<'a, 'b> {
     pub env: BTreeMap<String, String>,
@@ -11,17 +12,6 @@ pub struct Ctx<'a, 'b> {
     pub contract_id: symbol_table::GlobalSymbol,
     pub supervisor: &'a rt::supervisor::Supervisor,
     pub vm: &'b mut rt::vm::VMBase,
-}
-
-fn try_get_latest(runner_id: &str, registry_path: &std::path::Path) -> Option<String> {
-    let mut path = std::path::PathBuf::from(registry_path);
-    path.push("latest.json");
-
-    let latest_registry = std::fs::read_to_string(&path).ok()?;
-    let mut latest_registry: BTreeMap<String, String> =
-        serde_json::from_str(&latest_registry).ok()?;
-
-    latest_registry.remove(runner_id)
 }
 
 impl Ctx<'_, '_> {
@@ -32,7 +22,7 @@ impl Ctx<'_, '_> {
         symbol_table::GlobalSymbol,
         sync::DArc<runners::ArchiveCache>,
     )> {
-        let uid = self.unfold_test_id_if_any(uid, self.supervisor.runner_cache.registry_path());
+        let uid = self.full_check_runner_uid(uid)?;
 
         let Some((runner_id, runner_hash)) = runners::verify_runner(uid.as_str()) else {
             anyhow::bail!("invalid runner id: {}", uid);
@@ -65,36 +55,45 @@ impl Ctx<'_, '_> {
         Ok((uid, new_arch))
     }
 
-    fn unfold_test_id_if_any(
+    fn full_check_runner_uid(
         &mut self,
         id: symbol_table::GlobalSymbol,
-        registry_path: &std::path::Path,
-    ) -> symbol_table::GlobalSymbol {
+    ) -> anyhow::Result<symbol_table::GlobalSymbol> {
         if id.as_str() == "<contract>" {
-            return self.contract_id;
+            return Ok(self.contract_id);
         }
         let Some((runner_id, runner_hash)) = runners::verify_runner(id.as_str()) else {
-            return id;
+            anyhow::bail!("invalid runner id: {}", id);
         };
 
-        if runner_hash != "test" && runner_hash != "latest" {
-            return id;
-        }
+        let runner_id = GlobalSymbol::new(runner_id);
 
-        if !self.supervisor.shared_data.debug_mode {
-            log_warn!(":test/ :latest runner used in non-debug mode, this is not allowed");
-
-            return id;
-        }
-
-        let Some(borrowed) = try_get_latest(runner_id, registry_path) else {
-            return id;
+        let runner_hash = if runner_hash == "test" || runner_hash == "latest" {
+            if !self.supervisor.shared_data.debug_mode {
+                log_warn!(":test/ :latest runner used in non-debug mode, this is not allowed");
+            }
+            self.supervisor.runner_cache.get_latest(runner_id)
+        } else {
+            Some(GlobalSymbol::new(runner_hash))
         };
-        let mut new_id = runner_id.to_owned();
+
+        let Some(runner_hash) = runner_hash else {
+            anyhow::bail!("invalid runner id: {}", id);
+        };
+
+        if !self
+            .supervisor
+            .runner_cache
+            .has_in_all(runner_id, runner_hash)
+        {
+            anyhow::bail!("runner {}:{} not found", runner_id, runner_hash);
+        }
+
+        let mut new_id = runner_id.as_str().to_owned();
         new_id.push(':');
-        new_id.push_str(&borrowed);
+        new_id.push_str(runner_hash.as_str());
 
-        symbol_table::GlobalSymbol::new(new_id)
+        Ok(symbol_table::GlobalSymbol::new(new_id))
     }
 
     fn load_modules(
@@ -380,8 +379,7 @@ impl Ctx<'_, '_> {
                     .with_context(|| format!("With {uid}"))
             }
             InitAction::Depends(uid) => {
-                let uid =
-                    self.unfold_test_id_if_any(*uid, self.supervisor.runner_cache.registry_path());
+                let uid = self.full_check_runner_uid(*uid)?;
 
                 if !self.visited.insert(uid) {
                     return Ok(None);

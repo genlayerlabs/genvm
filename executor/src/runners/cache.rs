@@ -1,32 +1,64 @@
+use std::collections::BTreeMap;
+
 use super::*;
 use genvm_common::*;
 
 pub struct Reader {
     cache: sync::CacheMap<ArchiveCache>,
     runners_data_path: std::path::PathBuf,
-    registry_path: std::path::PathBuf,
+
+    all: BTreeMap<symbol_table::GlobalSymbol, Vec<symbol_table::GlobalSymbol>>,
+    latest: BTreeMap<symbol_table::GlobalSymbol, symbol_table::GlobalSymbol>,
 }
 
 impl Reader {
-    pub fn new(path: &std::path::Path, registry_path: &std::path::Path) -> anyhow::Result<Self> {
+    pub fn new(
+        path: &std::path::Path,
+        registry_path: &std::path::Path,
+        debug_mode: bool,
+    ) -> anyhow::Result<Self> {
         let runners_path = std::path::PathBuf::from(path);
         if !runners_path.exists() {
             anyhow::bail!("path {:#?} doesn't exist", &runners_path);
         }
 
+        let mut all: BTreeMap<_, Vec<_>> =
+            serde_json::from_reader(std::fs::File::open(registry_path.join("all.json"))?)?;
+        for b in all.values_mut() {
+            b.sort();
+        }
+
+        let latest = if debug_mode {
+            serde_json::from_reader(std::fs::File::open(registry_path.join("latest.json"))?)?
+        } else {
+            BTreeMap::new()
+        };
+
         Ok(Self {
             cache: sync::CacheMap::new(),
             runners_data_path: runners_path.clone(),
-            registry_path: registry_path.to_owned(),
+            all,
+            latest,
         })
+    }
+
+    pub fn get_latest(&self, id: symbol_table::GlobalSymbol) -> Option<symbol_table::GlobalSymbol> {
+        self.latest.get(&id).cloned()
+    }
+
+    pub fn has_in_all(
+        &self,
+        id: symbol_table::GlobalSymbol,
+        hash: symbol_table::GlobalSymbol,
+    ) -> bool {
+        match self.all.get(&id) {
+            Some(hashes) => hashes.binary_search(&hash).is_ok(),
+            None => false,
+        }
     }
 
     pub fn runners_path(&self) -> &std::path::Path {
         &self.runners_data_path
-    }
-
-    pub fn registry_path(&self) -> &std::path::Path {
-        &self.registry_path
     }
 
     pub async fn get_or_create<F>(

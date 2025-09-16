@@ -2008,6 +2008,7 @@ dependencies = [
  "crossbeam-utils",
  "foldhash",
  "hashbrown 0.15.2",
+ "serde",
 ]
 
 [[package]]

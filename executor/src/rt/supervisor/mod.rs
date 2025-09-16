@@ -188,6 +188,8 @@ impl Supervisor {
 
         let (sender, receiver) = tokio::sync::mpsc::channel(100);
 
+        let debug_mode = ctor.shared_data.debug_mode;
+
         let zelf = Arc::new(Self {
             shared_data: ctor.shared_data,
             modules: ctor.modules,
@@ -205,6 +207,7 @@ impl Supervisor {
             runner_cache: runners::cache::Reader::new(
                 std::path::Path::new(&config.runners_dir),
                 std::path::Path::new(&config.registry_dir),
+                debug_mode,
             )?,
             wasm_mod_cache: WasmModuleCache {
                 cache_dir: my_cache_dir,

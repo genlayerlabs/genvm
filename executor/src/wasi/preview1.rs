@@ -1307,18 +1307,6 @@ impl ContextVFS<'_> {
     }
 }
 
-fn write_bytes(
-    memory: &mut GuestMemory<'_>,
-    ptr: GuestPtr<u8>,
-    buf: &[u8],
-) -> Result<GuestPtr<u8>, generated::types::Error> {
-    let len = u32::try_from(buf.len())?;
-
-    memory.copy_from_slice(buf, ptr.as_array(len))?;
-    let next = ptr.add(len)?;
-    Ok(next)
-}
-
 fn write_bytes_capacity(
     memory: &mut GuestMemory<'_>,
     ptr: GuestPtr<u8>,

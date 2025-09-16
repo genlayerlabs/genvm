@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{calldata, rt};
 
 pub mod base;
