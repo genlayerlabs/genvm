@@ -44,8 +44,13 @@ let
 	] ++ (if !withLinters then [] else [
 		(simpleComponent manifest.pkg.clippy-preview.target.${systemAsRust})
 		(simpleComponent manifest.pkg.rustfmt-preview.target.${systemAsRust})
+		(simpleComponent manifest.pkg.llvm-tools-preview.target.${systemAsRust})
 		(simpleComponent manifest.pkg.rust-src.target."*")
 	]);
+
+	rust-objcopy = pkgs.writeShellScript "rust-objcopy" ''
+		exec zig objcopy "$@"
+	'';
 in pkgs.stdenvNoCC.mkDerivation rec {
 	name = "genvm-rust";
 
@@ -101,6 +106,8 @@ in pkgs.stdenvNoCC.mkDerivation rec {
 		done
 
 		ls -l "$out"
+
+		cp ${rust-objcopy} $out/bin/rust-objcopy
 	'' + (if withZig then ''
 		wrapProgram $out/bin/cargo \
 			--set CC_x86_64_unknown_linux_musl zig-cc-amd64-linux \
@@ -110,7 +117,8 @@ in pkgs.stdenvNoCC.mkDerivation rec {
 			--set CC_aarch64_apple_darwin zig-cc-arm64-macos \
 			--set CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER zig-cc-amd64-linux \
 			--set CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER zig-cc-arm64-linux \
-			--set CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER zig-cc-arm64-macos
+			--set CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER zig-cc-arm64-macos \
+			--prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath buildInputs}"
 
 			#--set CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER zig-cc-arm64-linux-gnu \
 			#--set CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER zig-cc-amd64-linux-gnu \

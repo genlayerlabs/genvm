@@ -162,16 +162,19 @@ stdenv.mkDerivation (
 
 			cp "$bins" target/__out
 
-			patchelf --set-rpath '$ORIGIN/../lib:$ORIGIN/../../../lib:' target/__out
+			if [[ "${target}" != arm64-macos ]]
+			then
+				patchelf --set-rpath '$ORIGIN/../lib:$ORIGIN/../../../lib:' target/__out
 
-			for i in $(patchelf --print-needed target/__out)
-			do
-				if [[ "$i" == /build/libs/* ]]
-				then
-					echo "Replacing $i with $(basename $i)"
-					patchelf --replace-needed "$i" "$(basename $i)" target/__out
-				fi
-			done
+				for i in $(patchelf --print-needed target/__out)
+				do
+					if [[ "$i" == /build/libs/* ]]
+					then
+						echo "Replacing $i with $(basename $i)"
+						patchelf --replace-needed "$i" "$(basename $i)" target/__out
+					fi
+				done
+			fi
 		'';
 
 		installPhase = if installPhase != null then installPhase else ''

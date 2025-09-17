@@ -25,8 +25,21 @@ let
 		fi
 		args=()
 		for arg in "$@"; do
-			if [[ "$arg" != --target=* ]]; then
+			if [[ "$skip_next" == true ]]; then
+				skip_next=false
+				continue
+			fi
+			if [[ "$arg" != --target=* ]] && \
+				[[ "$arg" != -framework ]] && \
+				[[ "$arg" != CoreFoundation ]] && \
+				[[ "$arg" != Foundation ]] && \
+				[[ "$arg" != *CoreFoundation* ]] && \
+				[[ "$arg" != *Foundation* ]] && \
+				[[ "$arg" != -F ]] && \
+				[[ "$arg" != -F* ]]; then
 				args+=("$arg")
+			elif [[ "$arg" == -framework ]] || [[ "$arg" == -F ]]; then
+				skip_next=true
 			fi
 		done
 
