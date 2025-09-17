@@ -21,6 +21,10 @@ proc = subprocess.run(
 
 commit2tag = {}
 
+import re
+
+bad_id = re.compile(r'[^0-9a-z._\-A-Z]')
+
 for line in proc.stdout.splitlines():
 	line = line.strip()
 	comm_rev = line.split()
@@ -30,9 +34,7 @@ for line in proc.stdout.splitlines():
 
 	rev = rev.removeprefix('refs/tags/')
 
-	commit2tag[commit] = rev
-
-print(commit2tag)
+	commit2tag[commit] = bad_id.sub('_', rev)
 
 import os
 
@@ -45,7 +47,18 @@ current_commit = subprocess.run(
 	text=True,
 )
 
+current_commit = current_commit.stdout.strip()
+
 eval_file = Path(__file__).parent.parent.joinpath('docs.nix')
+
+build_config = json.loads(
+	Path(__file__).parent.parent.parent.joinpath('flake-config.json').read_text()
+)
+build_config['head-revision'] = current_commit
+commit2tag[current_commit] = build_config['executor-version']
+
+print(commit2tag)
+print(build_config)
 
 proc = subprocess.run(
 	[
@@ -59,10 +72,10 @@ proc = subprocess.run(
 		'--file',
 		str(eval_file.relative_to(cwd)),
 		'--apply',
-		'f: f { currentCommit = "'
-		+ current_commit.stdout.strip()
-		+ '"; commitToTagStr = "'
+		'f: f { commitToTagStr = "'
 		+ json.dumps(commit2tag).replace('"', '\\"')
+		+ '"; build-config-str = "'
+		+ json.dumps(build_config).replace('"', '\\"')
 		+ '"; }',
 	],
 	check=True,

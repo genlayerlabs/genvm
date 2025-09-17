@@ -151,7 +151,7 @@
 							in
 							{
 								devShells.py-test = pkgs.mkShell {
-									packages = packages-py-test;
+									packages = packages-py-test ++ [ pkgs.ruby ];
 									shellHook = shell-hook-base;
 								};
 								devShells.initial-check = pkgs.mkShell {

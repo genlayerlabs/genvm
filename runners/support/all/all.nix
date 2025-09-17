@@ -1,5 +1,4 @@
 { build-config
-, pkgs
 , ...
 }@args:
 let

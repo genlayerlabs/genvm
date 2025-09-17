@@ -1,11 +1,10 @@
-{ currentCommit, commitToTagStr }:
+{ commitToTagStr, build-config-str }:
 
 let
+	build-config = builtins.fromJSON build-config-str;
 	commitToTag = builtins.fromJSON commitToTagStr;
-	registryRunnersList = (import ./support/registry/default.nix).allRunnersList;
-	currentRunnersList = builtins.map (x: x // { rev = currentCommit; }) (import ./default.nix);
 	# list[{id, hash, derivation}]
-	allRunnersList = registryRunnersList ++ currentRunnersList;
+	allRunnersList = import ./support/all/all.nix { inherit build-config; };
 	res = builtins.foldl' (l: r:
 		let
 			rev_id = if builtins.hasAttr r.rev commitToTag then commitToTag.${r.rev} else r.rev;
