@@ -46,57 +46,6 @@ impl CtxPart {
     }
 }
 
-pub fn normalize_whitespace(input: &str) -> String {
-    let mut result = String::new();
-    let mut consecutive_spaces = 0;
-    let mut consecutive_newlines = 0;
-    let mut chars_iter = input.chars().peekable();
-
-    while let Some(ch) = chars_iter.next() {
-        match ch {
-            '\n' => {
-                if result.is_empty() {
-                    continue;
-                }
-
-                while result.ends_with(' ') {
-                    result.pop();
-                }
-
-                consecutive_newlines += 1;
-                consecutive_spaces = 0;
-
-                if consecutive_newlines <= 2 {
-                    result.push('\n');
-                }
-            }
-            c if c.is_whitespace() => {
-                // Convert other whitespace to space (same logic as space)
-                if !result.is_empty() && !result.ends_with('\n') {
-                    consecutive_spaces += 1;
-                    consecutive_newlines = 0;
-
-                    if consecutive_spaces == 1 {
-                        result.push(' ');
-                    }
-                }
-            }
-            _ => {
-                // Regular character
-                consecutive_spaces = 0;
-                consecutive_newlines = 0;
-                result.push(ch);
-            }
-        }
-    }
-
-    while result.ends_with(' ') {
-        result.pop();
-    }
-
-    result
-}
-
 pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
     let dflt = vm.create_table()?;
 
@@ -221,20 +170,11 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
     )?;
 
     dflt.set(
-        "normalize_unicode_nfc",
-        vm.create_function(|vm: &mlua::Lua, data: mlua::String| {
-            use unicode_normalization::UnicodeNormalization;
-            let data: &str = &data.to_str()?;
-            let normalized = UnicodeNormalization::nfc(data).collect::<String>();
-            vm.create_string(normalized)
-        })?,
-    )?;
-
-    dflt.set(
-        "normalize_whitespace",
-        vm.create_function(|vm: &mlua::Lua, data: mlua::String| {
-            let normalized = normalize_whitespace(&data.to_str()?);
-            vm.create_string(normalized)
+        "filter_text",
+        vm.create_function(|vm: &mlua::Lua, data: (mlua::String, mlua::Value)| {
+            let vals: Vec<super::filters::TextFilter> = vm.from_value(data.1)?;
+            let res = super::filters::apply_filters(&data.0.to_str()?, &vals);
+            vm.create_string(res)
         })?,
     )?;
 

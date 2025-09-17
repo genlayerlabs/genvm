@@ -1,5 +1,3 @@
-use genvm_modules::test_normalize_whitespace;
-
 fn check_normalized_invariants(s: &str) {
     // Invariant 1: Only space and newline are allowed as whitespace characters
     for ch in s.chars() {
@@ -88,7 +86,10 @@ fn main() {
             return;
         };
 
-        let res = test_normalize_whitespace(&s);
+        let res = genvm_modules::filters::apply_filters(
+            &s,
+            &[genvm_modules::filters::TextFilter::NormalizeWS],
+        );
 
         if res.len() == 0 {
             return;

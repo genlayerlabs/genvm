@@ -5,10 +5,9 @@ use crate::common::ModuleError;
 use genvm_common::*;
 
 pub mod dflt;
+pub mod filters;
 pub mod req;
 mod signing;
-
-pub use dflt::normalize_whitespace as test_normalize_whitespace;
 
 fn arc_to_ref<T>(x: &Arc<T>) -> &T
 where

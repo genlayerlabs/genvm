@@ -11,10 +11,9 @@ use std::{collections::BTreeMap, future::Future, sync::Arc};
 
 use crate::common::{self, MapUserError, ModuleError};
 
+pub use ctx::filters;
 pub use ctx::CtxPart;
 pub use ctx::Metrics;
-
-pub use ctx::test_normalize_whitespace;
 
 pub type CtxCreator<R> = dyn Fn(&mlua::Lua, &mlua::Table, &Arc<genvm_modules_interfaces::GenVMHello>) -> anyhow::Result<R>
     + Send
