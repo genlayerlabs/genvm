@@ -179,6 +179,16 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
     )?;
 
     dflt.set(
+        "filter_image",
+        vm.create_function(|vm: &mlua::Lua, data: (mlua::String, mlua::Value)| {
+            let vals: Vec<super::filters::ImageFilter> = vm.from_value(data.1)?;
+            let res = super::filters::apply_image_filters(&data.0.as_bytes(), &vals)
+                .map_err(scripting::anyhow_to_lua_error)?;
+            vm.create_string(res)
+        })?,
+    )?;
+
+    dflt.set(
         "as_user_error",
         vm.create_function(|vm: &mlua::Lua, args: mlua::Value| {
             log_trace!(name = args.type_name(); "casting to user error (1)");

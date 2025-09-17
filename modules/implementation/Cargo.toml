@@ -40,6 +40,7 @@ url = { version = "2.5.4", features = ["serde"] }
 hex = "0.4.3"
 unicode-normalization = "0.1.20"
 unicode-width = "0.2.1"
+image = { version = "0.25.8", features = ["png", "jpeg", "webp"]}
 
 [dev-dependencies]
 afl = { version = "0.15.18", features = ["no_cfg_fuzzing"] }
