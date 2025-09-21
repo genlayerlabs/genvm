@@ -125,6 +125,10 @@ async function initBrowser() {
 	}
 }
 
+function statusIsGood(status: number): boolean {
+	return status >= 200 && status < 300 || status === 304;
+}
+
 async function renderPage(targetUrl: string, mode: 'text' | 'html' | 'screenshot', loadTimeout: number = 30000, waitAfterLoaded: number = 0) {
 	const browser = await initBrowser();
 	const page = await browser.newPage();
@@ -142,8 +146,8 @@ async function renderPage(targetUrl: string, mode: 'text' | 'html' | 'screenshot
 		const statusCode = navigationResult.status;
 
 		// Wait after loaded if status is 200
-		if (statusCode === 200 && waitAfterLoaded > 0) {
-			await new Promise(resolve => setTimeout(resolve, waitAfterLoaded));
+		if (statusIsGood(statusCode) && waitAfterLoaded > 0) {
+			await new Promise(resolve => setTimeout(resolve, Math.floor(waitAfterLoaded * 1000)));
 		}
 
 		let data;
@@ -173,7 +177,7 @@ async function handleRenderRequest(parsedUrl: url.UrlWithParsedQuery, req: http.
 	try {
 		const targetUrl = query.url as string;
 		const mode = query.mode as 'text' | 'html' | 'screenshot';
-		const waitAfterLoaded = parseInt(query.waitAfterLoaded as string || '0');
+		const waitAfterLoaded = parseFloat(query.waitAfterLoaded as string || '0');
 		const loadTimeout = parseInt(query.loadTimeout as string || '30000');
 
 		if (!targetUrl) {

@@ -7,7 +7,7 @@ class Contract(gl.Contract):
 	def main(self, wait4: str):
 		def run():
 			return gl.nondet.web.render(
-				'https://test-server.genlayer.com/static/genvm/js-generated.html',
+				'https://test-server.genlayer.com/static/genvm/js-generated.html?wait=10000',
 				mode='text',
 				wait_after_loaded=wait4,
 			)

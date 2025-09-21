@@ -4,9 +4,10 @@ local simple = import 'templates/simple.jsonnet';
         "calldata": |||
             {
                 "method": "main",
-                "args": ["5s"]
+                "args": ["15s"]
             }
-        |||
+        |||,
+        deadline: 60,
     },
     simple.run('${jsonnetDir}/get_webpage_wait_js.py') {
         "calldata": |||
@@ -14,6 +15,7 @@ local simple = import 'templates/simple.jsonnet';
                 "method": "main",
                 "args": ["0ms"]
             }
-        |||
+        |||,
+        deadline: 60,
     }
 ]

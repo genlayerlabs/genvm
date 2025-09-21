@@ -9,6 +9,7 @@ FUZZ_TIMEOUT=30
 UPDATE_CORPUS=false
 
 PRECOMPILE=false
+COVERAGE=true
 
 show_help() {
     cat << EOF
@@ -21,6 +22,8 @@ OPTIONS:
     --filter REGEX      Set filter regex
     --fuzz-timeout SECS Seconds for which to run fuzzing
     --precompile        Run precompile for genvm
+    --update-corpus     Update corpus after fuzzing
+    --no-coverage       Do not collect coverage
 
 Examples:
     $0 --filter '.*'
@@ -64,6 +67,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --update-corpus)
             UPDATE_CORPUS=true
+            shift
+            ;;
+        --no-coverage)
+            COVERAGE=false
             shift
             ;;
         *)
@@ -251,15 +258,25 @@ else
     wait $WEB_JOB_ID
 fi
 
-find "$COVERAGE_DIR" -name '*.profraw' > "$COVERAGE_DIR/files-list"
+if [ "$COVERAGE" == "true" ]
+then
+    find "$COVERAGE_DIR" -name '*.profraw' > "$COVERAGE_DIR/files-list"
 
-echo_and_run "$LLVM_TOOLS_BIN/llvm-profdata" merge \
-    -sparse \
-    -f "$COVERAGE_DIR/files-list" \
-    -o "$COVERAGE_DIR/merged.profdata"
+    if [ -f "$LLVM_TOOLS_BIN/llvm-profdata" ]
+    then
+        LLVM_PROFDATA="$LLVM_TOOLS_BIN/llvm-profdata"
+    else
+        LLVM_PROFDATA="llvm-profdata"
+    fi
 
-echo_and_run "$LLVM_TOOLS_BIN/llvm-cov" report \
-    -format=text \
-    -instr-profile="$COVERAGE_DIR/merged.profdata" \
-    --ignore-filename-regex='(^|/)(\.cargo|\.rustup|third-party)/|cranelift|target-lexicon' \
-    $PROFILE_FILES | tee "$COVERAGE_DIR/report.txt"
+    echo_and_run "$LLVM_PROFDATA" merge \
+        -sparse \
+        -f "$COVERAGE_DIR/files-list" \
+        -o "$COVERAGE_DIR/merged.profdata"
+
+    echo_and_run "$LLVM_TOOLS_BIN/llvm-cov" report \
+        -format=text \
+        -instr-profile="$COVERAGE_DIR/merged.profdata" \
+        --ignore-filename-regex='(^|/)(\.cargo|\.rustup|third-party)/|cranelift|target-lexicon' \
+        $PROFILE_FILES | tee "$COVERAGE_DIR/report.txt"
+fi

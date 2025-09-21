@@ -134,6 +134,7 @@
 									gcc
 
 									custom-cargo-afl
+									llvmPackages.libllvm
 
 									python312Packages.jsonnet
 									wabt
