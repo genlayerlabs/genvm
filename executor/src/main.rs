@@ -10,6 +10,7 @@ mod exe;
 enum Commands {
     Run(exe::run::Args),
     Precompile(exe::precompile::Args),
+    ParseVersion(exe::parse_version::Args),
 }
 
 #[derive(clap::Parser)]
@@ -47,5 +48,6 @@ fn main() -> Result<()> {
     match args.command {
         Commands::Run(args) => exe::run::handle(args, config),
         Commands::Precompile(args) => exe::precompile::handle(args, config),
+        Commands::ParseVersion(args) => exe::parse_version::handle(args, config),
     }
 }
