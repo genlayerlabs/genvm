@@ -7,7 +7,9 @@ use std::{io::Write, str::FromStr};
 
 use crate::calldata;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, clap::ValueEnum, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[clap(rename_all = "kebab_case")]
+#[repr(u32)]
 pub enum Level {
     Trace,
     Debug,
@@ -61,15 +63,27 @@ impl<'d> serde::Deserialize<'d> for Level {
 }
 
 pub struct Logger {
-    filter: Level,
+    filter: std::sync::atomic::AtomicU32,
     default_writer: Box<std::sync::Mutex<dyn std::io::Write + Send + Sync>>,
     disabled_buffer: String,
     disabled: Vec<(usize, usize)>,
 }
 
 impl Logger {
+    #[inline(always)]
+    pub fn set_filter(&self, level: Level) {
+        self.filter
+            .store(level as u32, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    #[inline(always)]
+    pub fn get_filter(&self) -> Level {
+        let loaded = self.filter.load(std::sync::atomic::Ordering::Relaxed);
+        unsafe { std::mem::transmute::<u32, Level>(loaded) }
+    }
+
     pub fn enabled(&self, callsite: Callsite) -> bool {
-        if !self.filter.filter_enables(callsite.level) {
+        if !self.get_filter().filter_enables(callsite.level) {
             return false;
         }
 
@@ -165,6 +179,10 @@ macro_rules! __make_capture {
     };
 
     (? = $value:expr) => {
+        $crate::logger::Capture::Debug(&$value)
+    };
+
+    (bytes = $value:expr) => {
         $crate::logger::Capture::Debug(&$value)
     };
 
@@ -1094,7 +1112,7 @@ where
     }
 
     let logger = Logger {
-        filter,
+        filter: std::sync::atomic::AtomicU32::new(filter as u32),
         default_writer,
         disabled: new_disabled,
         disabled_buffer: all_buffer,

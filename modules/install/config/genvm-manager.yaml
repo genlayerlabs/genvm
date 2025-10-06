@@ -1,0 +1,6 @@
+threads: 4
+blocking_threads: 16
+log_disable: tracing*,polling*,tungstenite*,tokio_tungstenite*
+log_level: info
+
+manifest_path: ${exeDir}/../data/manifest.yaml

@@ -137,6 +137,7 @@
 									llvmPackages.libllvm
 
 									python312Packages.jsonnet
+									pkgs.python312Packages.aiohttp
 									wabt
 								];
 								packages-py-test = with pkgs; [
@@ -167,6 +168,7 @@
 									packages = packages-0 ++ [
 										pkgs.python312
 										pkgs.python312Packages.jsonnet
+										pkgs.python312Packages.aiohttp
 										pkgs.wabt
 									];
 									shellHook = shell-hook-base;

@@ -19,7 +19,7 @@ anyhow = { version = "1.0.98", features = [] }
 serde = { version = "1.0.219", features = ["rc"]}
 serde_derive = "1.0.219"
 serde_json = "1.0.140"
-tokio = { version = "1.44.1", features = ["rt", "rt-multi-thread", "net", "time", "macros", "sync"], default-features = false}
+tokio = { version = "1.44.1", features = ["rt", "rt-multi-thread", "net", "time", "macros", "sync", "process"], default-features = false}
 reqwest = { version = "0.12.15", features = ["cookies", "gzip", "rustls-tls", "charset", "http2", "json"], default-features = false}
 serde_yaml = "0.9.34"
 clap = { version = "4.5.35", features = ["derive"] }
@@ -34,13 +34,18 @@ futures-util = "0.3.31"
 base64 = "0.22.1"
 serde_bytes = "0.11.17"
 rand = "0.9.1"
-chrono = { version = "0.4.41", default-features = false, features = ["clock", "std"] }
+chrono = { version = "0.4.41", default-features = false, features = ["clock", "std", "serde"] }
 ring = { version = "0.17.14", features = ["std"] }
 url = { version = "2.5.4", features = ["serde"] }
 hex = "0.4.3"
 unicode-normalization = "0.1.20"
 unicode-width = "0.2.1"
 image = { version = "0.25.8", features = ["png", "jpeg", "webp"]}
+warp = "0.3.7"
+bytes = "1.10.1"
+sysinfo = { version = "0.36", default-features = false, features = ["system"] }
+libc = "0.2"
+dashmap = "6.1.0"
 
 [dev-dependencies]
 afl = { version = "0.15.18", features = ["no_cfg_fuzzing"] }

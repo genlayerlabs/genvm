@@ -24,22 +24,17 @@ pub struct CliArgs {
     die_with_parent: bool,
 }
 
-pub fn entrypoint(args: CliArgs) -> Result<()> {
-    let config = genvm_common::load_config(HashMap::new(), &args.config)
-        .with_context(|| "loading config")?;
-    let config: sync::DArc<config::Config> = sync::DArc::new(serde_yaml::from_value(config)?);
-
-    config.base.setup_logging(std::io::stdout())?;
-
-    let runtime = config.base.create_rt()?;
-
-    let token = common::setup_cancels(&runtime, args.die_with_parent)?;
-
+pub async fn run_web_module(
+    cancel: Arc<cancellation::Token>,
+    config: config::Config,
+) -> Result<()> {
     let _webdriver_host = config.webdriver_host.clone();
+
+    let config = sync::DArc::new(config);
 
     let moved_config = config.clone();
 
-    let vm_pool = runtime.block_on(scripting::pool::new(config.mod_base.vm_count, move || {
+    let vm_pool = scripting::pool::new(config.mod_base.vm_count, move || {
         let moved_config_1 = moved_config.clone();
         let moved_config_2 = moved_config.clone();
         let moved_config = moved_config.clone();
@@ -47,7 +42,7 @@ pub fn entrypoint(args: CliArgs) -> Result<()> {
             let user_vm = crate::scripting::UserVM::create(
                 &moved_config_1.mod_base,
                 move |vm: mlua::Lua| async move {
-                    // set llm-related globals
+                    // set web-related globals
                     vm.globals()
                         .set("__web", ctx::create_global(&vm, &moved_config)?)?;
 
@@ -82,15 +77,29 @@ pub fn entrypoint(args: CliArgs) -> Result<()> {
 
             Ok(user_vm)
         }
-    }))?;
+    })
+    .await?;
 
-    let loop_future = crate::common::run_loop(
+    crate::common::run_loop(
         config.mod_base.bind_address.clone(),
-        token,
+        cancel,
         Arc::new(handler::HandlerProvider { vm_pool }),
-    );
+    )
+    .await
+}
 
-    runtime.block_on(loop_future)?;
+pub fn entrypoint(args: CliArgs) -> Result<()> {
+    let config = genvm_common::load_config(HashMap::new(), &args.config)
+        .with_context(|| "loading config")?;
+    let config: config::Config = serde_yaml::from_value(config)?;
+
+    config.base.setup_logging(std::io::stdout())?;
+
+    let runtime = config.base.create_rt()?;
+
+    let token = common::setup_cancels(&runtime, args.die_with_parent)?;
+
+    runtime.block_on(run_web_module(token, config))?;
 
     std::mem::drop(runtime);
 

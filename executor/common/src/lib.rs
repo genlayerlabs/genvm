@@ -68,11 +68,9 @@ impl BaseConfig {
     }
 }
 
-pub fn load_config(
-    mut vars: HashMap<String, String>,
-    path: &str,
-) -> anyhow::Result<serde_yaml::Value> {
-    let mut root_path = std::env::current_exe().with_context(|| "getting current exe")?;
+pub fn populate_default_config_vars(vars: &mut HashMap<String, String>) -> anyhow::Result<()> {
+    let mut root_path: std::path::PathBuf =
+        std::env::current_exe().with_context(|| "getting current exe")?;
     root_path.pop();
     let root_path = root_path
         .into_os_string()
@@ -88,6 +86,15 @@ pub fn load_config(
 
         vars.insert(name, value);
     }
+
+    Ok(())
+}
+
+pub fn load_config(
+    mut vars: HashMap<String, String>,
+    path: &str,
+) -> anyhow::Result<serde_yaml::Value> {
+    populate_default_config_vars(&mut vars)?;
 
     let config_path = templater::patch_str(&vars, path, &templater::DOLLAR_UNFOLDER_RE)?;
 

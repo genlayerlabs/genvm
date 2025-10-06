@@ -79,6 +79,7 @@ async function navigateToPage(page: pup.Page, targetUrl: string, options: Naviga
 
 		return { status: response.status(), response };
 	} catch (navigationError: any) {
+		console.log('Navigation Error', navigationError)
 		const statusCode = getNavigationErrorStatus(navigationError);
 		const errorMessage = getNavigationErrorMessage(navigationError);
 		return { status: statusCode, error: errorMessage };

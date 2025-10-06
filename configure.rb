@@ -327,9 +327,14 @@ generator.build(:codegen, $source_dir.join('runners', 'genlayer-py-std', 'src', 
 	add_dependency($source_dir.join('executor', 'codegen', 'data', 'public-abi.json'))
 end
 
-generator.build(:codegen, $source_dir.join('tests', 'runner', 'host_fns.py')) do
+generator.build(:codegen, $source_dir.join('tests', 'runner', 'origin', 'host_fns.py')) do
 	add_dependency($source_dir.join('executor', 'codegen', 'templates', 'py.rb'))
 	add_dependency($source_dir.join('executor', 'codegen', 'data', 'host-fns.json'))
+end
+
+generator.build(:codegen, $source_dir.join('tests', 'runner', 'origin', 'public_abi.py')) do
+	add_dependency($source_dir.join('executor', 'codegen', 'templates', 'py.rb'))
+	add_dependency($source_dir.join('executor', 'codegen', 'data', 'public-abi.json'))
 end
 
 generator.build(:codegen, $source_dir.join('executor', 'src', 'host', 'host_fns.rs')) do
@@ -345,7 +350,8 @@ end
 generator.build(:phony, 'codegen') do
 	add_dependency $source_dir.join('executor', 'src', 'public_abi.rs')
 	add_dependency $source_dir.join('runners', 'genlayer-py-std', 'src', 'genlayer', 'py', 'public_abi.py')
-	add_dependency $source_dir.join('tests', 'runner', 'host_fns.py')
+	add_dependency $source_dir.join('tests', 'runner', 'origin', 'host_fns.py')
+	add_dependency $source_dir.join('tests', 'runner', 'origin', 'public_abi.py')
 	add_dependency $source_dir.join('executor', 'src', 'host', 'host_fns.rs')
 	add_dependency $source_dir.join('doc', 'website', 'src', 'spec', 'appendix', 'constants.rst')
 end

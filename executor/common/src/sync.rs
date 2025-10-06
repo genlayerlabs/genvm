@@ -24,6 +24,112 @@ mod darc {
         _phantom: PhantomData<T>,
     }
 
+    pub struct DArcStruct<T> {
+        control_block: NonNull<DArcControlBlock>,
+        actual_data: T,
+    }
+
+    impl<T> DArcStruct<&T> {
+        pub fn into_arc(self) -> DArc<T> {
+            let zelf = std::mem::ManuallyDrop::new(self);
+            DArc {
+                control_block: zelf.control_block,
+                actual_ptr: unsafe {
+                    std::ptr::NonNull::new_unchecked(zelf.actual_data as *const T as *mut T)
+                },
+                _phantom: PhantomData,
+            }
+        }
+    }
+
+    impl<R, F> DArcStruct<F>
+    where
+        F: std::future::Future<Output = R>,
+    {
+        pub async fn await_inner(self) -> DArcStruct<R> {
+            let mut zelf = std::mem::ManuallyDrop::new(self);
+            // preserve dropping on panic
+            let temp_arc = DArcStruct {
+                control_block: zelf.control_block,
+                actual_data: (),
+            };
+            let my_data_ptr = std::ptr::from_mut(&mut zelf.actual_data);
+            let my_data_fetched = unsafe { my_data_ptr.read() };
+            let new_data = my_data_fetched.await;
+
+            let droppable_arc = std::mem::ManuallyDrop::new(temp_arc);
+
+            DArcStruct {
+                control_block: droppable_arc.control_block,
+                actual_data: new_data,
+            }
+        }
+    }
+
+    impl<T, E> DArcStruct<core::result::Result<T, E>> {
+        pub fn lift_result(self) -> core::result::Result<DArcStruct<T>, E> {
+            let zelf = std::mem::ManuallyDrop::new(self);
+            let zelf_data = unsafe { std::ptr::read(&zelf.actual_data) };
+            match zelf_data {
+                Ok(data) => Ok(DArcStruct {
+                    control_block: zelf.control_block,
+                    actual_data: data,
+                }),
+                Err(e) => Err(e),
+            }
+        }
+    }
+
+    impl<T> DArcStruct<Option<T>> {
+        pub fn lift_option(self) -> Option<DArcStruct<T>> {
+            let zelf = std::mem::ManuallyDrop::new(self);
+            let zelf_data = unsafe { std::ptr::read(&zelf.actual_data) };
+            match zelf_data {
+                Some(data) => Some(DArcStruct {
+                    control_block: zelf.control_block,
+                    actual_data: data,
+                }),
+                None => {
+                    std::mem::drop(DArcStruct {
+                        actual_data: (),
+                        control_block: zelf.control_block,
+                    });
+                    None
+                }
+            }
+        }
+    }
+
+    impl<T> std::ops::Deref for DArcStruct<T> {
+        type Target = T;
+
+        fn deref(&self) -> &Self::Target {
+            &self.actual_data
+        }
+    }
+
+    impl<T> std::ops::Drop for DArcStruct<T> {
+        fn drop(&mut self) {
+            // SAFETY: control_block is valid
+            let prev_count = unsafe {
+                (*self.control_block.as_ptr())
+                    .ref_count
+                    .fetch_sub(1, Ordering::Release)
+            };
+
+            if prev_count == 1 {
+                // This was the last reference
+                std::sync::atomic::fence(Ordering::Acquire);
+
+                // SAFETY: control_block is valid
+                unsafe {
+                    let control = &*self.control_block.as_ptr();
+                    (control.deleter)(control.root_ptr.as_ptr());
+                }
+            }
+        }
+    }
+
     impl<T> serde::Serialize for DArc<T>
     where
         T: serde::Serialize + 'static,
@@ -76,7 +182,42 @@ mod darc {
     where
         T: 'static + ?Sized,
     {
-        pub fn into_gep<'a, R>(self, getter: impl FnOnce(&'a T) -> &'a R) -> DArc<R>
+        pub fn into_get_sub<'a, R>(self, getter: impl FnOnce(&'a T) -> R) -> DArcStruct<R>
+        where
+            R: 'a,
+        {
+            // SAFETY: actual_ptr is valid for the lifetime of self
+            let data_ref = unsafe { self.actual_ptr.as_ref() };
+            let sub = getter(data_ref);
+            let cb = self.control_block;
+            std::mem::forget(self);
+            DArcStruct {
+                control_block: cb,
+                actual_data: sub,
+            }
+        }
+
+        /// this function is unsound because forall 'a should be in function, but it's nearly impossible to type
+        pub async fn into_get_sub_async<'a, R, F>(
+            self,
+            getter: impl FnOnce(&'a T) -> F,
+        ) -> DArcStruct<R>
+        where
+            F: std::future::Future<Output = R>,
+            R: 'a,
+        {
+            // SAFETY: actual_ptr is valid for the lifetime of self
+            let data_ref = unsafe { self.actual_ptr.as_ref() };
+            let sub = getter(data_ref).await;
+            let cb = self.control_block;
+            std::mem::forget(self);
+            DArcStruct {
+                control_block: cb,
+                actual_data: sub,
+            }
+        }
+
+        pub fn into_gep<R>(self, getter: impl for<'a> FnOnce(&'a T) -> &'a R) -> DArc<R>
         where
             R: 'static + ?Sized,
         {
@@ -98,6 +239,7 @@ mod darc {
             }
         }
 
+        /// forall 'a is placed incorrectly, but it's impossible to fix it here
         pub async fn into_gep_async<'a, R, F>(self, getter: impl FnOnce(&'a T) -> F) -> DArc<R>
         where
             R: 'static + ?Sized,
@@ -122,49 +264,11 @@ mod darc {
         }
 
         /// Get a derived pointer to a field or subobject
-        pub fn gep<'a, R>(&self, getter: impl FnOnce(&'a T) -> &'a R) -> DArc<R>
+        pub fn gep<R>(&self, getter: impl for<'a> FnOnce(&'a T) -> &'a R) -> DArc<R>
         where
             R: 'static + ?Sized,
         {
             self.clone().into_gep(getter)
-        }
-
-        pub async fn gep_async<'a, R, F>(&self, getter: impl FnOnce(&'a T) -> F) -> DArc<R>
-        where
-            R: 'static + ?Sized,
-            F: std::future::Future<Output = &'a R>,
-        {
-            self.clone().into_gep_async(getter).await
-        }
-
-        pub async fn gep_async_err<'a, R, F, Err>(
-            &self,
-            getter: impl FnOnce(&'a T) -> F,
-        ) -> core::result::Result<DArc<R>, Err>
-        where
-            R: 'static,
-            F: std::future::Future<Output = core::result::Result<&'a R, Err>>,
-        {
-            // SAFETY: actual_ptr is valid for the lifetime of self
-            let data_ref = unsafe { self.actual_ptr.as_ref() };
-            let derived_ref = getter(data_ref).await?;
-
-            // SAFETY: derived_ref is a reference to a subobject of T
-            let derived_ptr = unsafe { NonNull::new_unchecked(derived_ref as *const R as *mut R) };
-
-            // Increment reference count
-            // SAFETY: control_block is valid
-            unsafe {
-                (*self.control_block.as_ptr())
-                    .ref_count
-                    .fetch_add(1, Ordering::Relaxed);
-            }
-
-            Ok(DArc {
-                control_block: self.control_block,
-                actual_ptr: derived_ptr,
-                _phantom: PhantomData,
-            })
         }
 
         /// Get the current reference count
@@ -243,9 +347,12 @@ mod darc {
     // SAFETY: DArc can be sent between threads if T can be
     unsafe impl<T: Send + Sync + 'static + ?Sized> Send for DArc<T> {}
     unsafe impl<T: Send + Sync + 'static + ?Sized> Sync for DArc<T> {}
+
+    unsafe impl<T: Send + Sync> Send for DArcStruct<T> {}
+    unsafe impl<T: Send + Sync> Sync for DArcStruct<T> {}
 }
 
-pub use darc::DArc;
+pub use darc::{DArc, DArcStruct};
 
 struct WaiterInner {
     counter: std::sync::atomic::AtomicUsize,
@@ -326,9 +433,10 @@ impl<T> CacheMap<T> {
         };
 
         let res = entry
-            .gep_async_err(|zelf| zelf.get_or_try_init(creator))
-            .await?;
-
+            .into_get_sub_async(|cell| cell.get_or_try_init(creator))
+            .await
+            .lift_result()?
+            .into_arc();
         Ok(res)
     }
 }

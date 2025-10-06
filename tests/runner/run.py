@@ -28,9 +28,10 @@ sys.path.append(str(script_dir))
 
 from genlayer.py import calldata
 from genlayer.py.types import Address
-from mock_host import MockHost, MockStorage, run_host_and_program
-import base_host
+from mock_host import MockHost, MockStorage
+import origin.base_host as base_host
 
+import aiohttp
 
 dir = script_dir.parent.joinpath('cases')
 root_tmp_dir = root_dir.joinpath('build', 'genvm-testdata-out')
@@ -39,25 +40,52 @@ import shutil
 
 arg_parser = argparse.ArgumentParser('genvm-test-runner')
 arg_parser.add_argument(
-	'--gen-vm',
-	metavar='EXE',
+	'--manager',
+	metavar='URI',
 	required=True,
 )
 arg_parser.add_argument('--filter', metavar='REGEX', default='.*')
 arg_parser.add_argument('--show-steps', default=False, action='store_true')
 arg_parser.add_argument('--ci', default=False, action='store_true')
 arg_parser.add_argument('--rss-file', metavar='PATH', default='')
+arg_parser.add_argument('--log-level', metavar='LEVEL', default='info')
 arg_parser.add_argument('--no-sequential', default=False, action='store_true')
+arg_parser.add_argument('--start-modules', default=False, action='store_true')
 args_parsed = arg_parser.parse_args()
-GENVM = Path(args_parsed.gen_vm)
+MANAGER = args_parsed.manager
 FILE_RE = re.compile(args_parsed.filter)
-
-if not GENVM.exists():
-	print(f'genvm executable {GENVM} does not exist')
-	exit(1)
 
 import typing
 import threading
+
+if args_parsed.start_modules:
+
+	async def _start_module(name):
+		async with aiohttp.request(
+			'POST', f'{MANAGER}/module/start', json={'module_type': name, 'config': None}
+		) as resp:
+			body = await resp.text()
+			if resp.status != 200 and body != '{"error":"module_already_running"}':
+				raise Exception(f'starting module {name} failed: {resp.status} {body}')
+			return await resp.json()
+
+	async def _do_run():
+		await asyncio.gather(_start_module('Llm'), _start_module('Web'))
+
+	asyncio.run(_do_run())
+
+INTERRUPTED = False
+
+import signal
+
+
+def stop_handler(_, frame):
+	global INTERRUPTED
+	INTERRUPTED = True
+	print('interrupted, stopping..', file=sys.stderr)
+
+
+signal.signal(signal.SIGINT, stop_handler)
 
 MAX_WORKERS = max(1, (os.cpu_count() or 1) - 2)
 print(f'concurrency is set to {MAX_WORKERS}')
@@ -81,6 +109,45 @@ def run(jsonnet_rel_path):
 	except Exception as e:
 		e.add_note(f'running {jsonnet_rel_path}')
 		raise e
+
+
+prnt_mutex = Lock()
+
+_level_to_num = {
+	'trace': 10,
+	'debug': 20,
+	'info': 30,
+	'warning': 40,
+	'error': 50,
+}
+
+
+def _log_dflt(o):
+	if isinstance(o, Exception):
+		return str(o)
+	return o
+
+
+class LoggerWithLock(base_host.Logger):
+	def __init__(self, min_level: str = args_parsed.log_level):
+		self.min_level = _level_to_num[min_level]
+		self.prnt_mutex = Lock()
+
+	def log(self, level: str, msg: str, **kwargs) -> None:
+		if _level_to_num[level] < self.min_level:
+			return
+		with self.prnt_mutex:
+			json.dump(
+				{
+					'message': msg,
+					'level': level,
+					**kwargs,
+				},
+				sys.stderr,
+				default=_log_dflt,
+			)
+			sys.stderr.write('\n')
+			sys.stderr.flush()
 
 
 def run_impl(jsonnet_rel_path):
@@ -224,33 +291,11 @@ def run_impl(jsonnet_rel_path):
 	]
 	base = {}
 	for config in run_configs:
+		if INTERRUPTED:
+			return
 		tmp_dir = config['tmp_dir']
 		test_name = config['test_name']
-		cmd = []
-		cmd.extend(
-			[
-				GENVM,
-				'run',
-				'--host',
-				'unix://' + config['host'].path,
-				'--message',
-				json.dumps(config['message']),
-				'--print=result',
-				'--debug-mode',
-				'--host-data',
-				'{"node_address": "0x", "tx_id": "0x"}',
-			]
-		)
-		if config['sync']:
-			cmd.append('--sync')
-		steps = [
-			[
-				sys.executable,
-				Path(__file__).absolute().parent.joinpath('mock_host.py'),
-				config['mock_host_path'],
-			],
-			cmd,
-		]
+		steps = []
 		with config['host'] as mock_host:
 			_env = dict(os.environ)
 
@@ -259,12 +304,17 @@ def run_impl(jsonnet_rel_path):
 			time_start = time.monotonic()
 			try:
 				res = asyncio.run(
-					run_host_and_program(
+					base_host.run_genvm(
 						mock_host,
-						cmd,
-						env=_env,
-						exit_timeout=2,
-						deadline=config['deadline'],
+						manager_uri=MANAGER,
+						message=config['message'],
+						timeout=config['deadline'],
+						capture_output=True,
+						is_sync=config['sync'],
+						host_data='{"node_address": "0x", "tx_id": "0x"}',
+						logger=LoggerWithLock(),
+						host='unix://' + config['host'].path,
+						extra_args=['--debug-mode', '--print=result'],
 					)
 				)
 			except Exception as e:
@@ -364,9 +414,6 @@ class COLORS:
 	ENDC = '\033[0m'
 	BOLD = '\033[1m'
 	UNDERLINE = '\033[4m'
-
-
-prnt_mutex = Lock()
 
 
 def prnt(path, res):

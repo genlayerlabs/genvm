@@ -22,7 +22,9 @@ import typing
 import pickle
 import io
 
-from base_host import *
+from origin.base_host import *
+import origin.host_fns
+import origin.public_abi
 
 
 class MockStorage:
@@ -122,6 +124,7 @@ class MockHost(IHost):
 		)
 		if canc in done:
 			raise Exception('Program failed')
+		cancellation.set()
 		canc.cancel()
 
 		self.sock, _addr = interesting.result()
@@ -134,7 +137,7 @@ class MockHost(IHost):
 		return self.calldata
 
 	async def storage_read(
-		self, mode: StorageType, account: bytes, slot: bytes, index: int, le: int
+		self, mode: public_abi.StorageType, account: bytes, slot: bytes, index: int, le: int
 	) -> bytes:
 		assert self.storage is not None
 		return self.storage.read(Address(account), slot, index, le)
@@ -152,7 +155,7 @@ class MockHost(IHost):
 		self.storage.write(self.running_address, slot, index, got)
 
 	async def consume_result(
-		self, type: ResultCode, data: collections.abc.Buffer
+		self, type: public_abi.ResultCode, data: collections.abc.Buffer
 	) -> None:
 		self._has_result = True
 
@@ -161,16 +164,16 @@ class MockHost(IHost):
 
 	async def get_leader_nondet_result(self, call_no: int, /) -> collections.abc.Buffer:
 		if self.leader_nondet is None:
-			raise HostException(Errors.I_AM_LEADER)
+			raise HostException(host_fns.Errors.I_AM_LEADER)
 		if call_no >= len(self.leader_nondet):
-			raise HostException(Errors.ABSENT)
+			raise HostException(host_fns.Errors.ABSENT)
 		res = self.leader_nondet[call_no]
 		if res['kind'] == 'return':
-			return bytes([ResultCode.RETURN]) + _calldata.encode(res['value'])
+			return bytes([public_abi.ResultCode.RETURN]) + _calldata.encode(res['value'])
 		if res['kind'] == 'rollback':
-			return bytes([ResultCode.USER_ERROR]) + res['value'].encode('utf-8')
+			return bytes([public_abi.ResultCode.USER_ERROR]) + res['value'].encode('utf-8')
 		if res['kind'] == 'contract_error':
-			return bytes([ResultCode.VM_ERROR]) + res['value'].encode('utf-8')
+			return bytes([public_abi.ResultCode.VM_ERROR]) + res['value'].encode('utf-8')
 		assert False
 
 	async def post_nondet_result(self, call_no: int, data: collections.abc.Buffer):

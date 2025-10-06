@@ -11,6 +11,17 @@ impl Token {
     }
 }
 
+pub struct CancellationDrop<F: Fn()>(pub F);
+
+impl<F> std::ops::Drop for CancellationDrop<F>
+where
+    F: Fn(),
+{
+    fn drop(&mut self) {
+        (self.0)();
+    }
+}
+
 pub fn make() -> (Arc<Token>, impl Clone + Fn()) {
     let (sender, receiver) = tokio::sync::mpsc::channel(1);
 

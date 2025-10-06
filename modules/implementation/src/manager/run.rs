@@ -1,0 +1,510 @@
+use std::{
+    os::fd::{AsRawFd, FromRawFd, IntoRawFd},
+    sync::Arc,
+};
+
+use genvm_common::*;
+use tokio::io::AsyncBufReadExt;
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Copy)]
+pub struct GenVMId(pub u64);
+
+impl std::fmt::Display for GenVMId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug)]
+pub struct SingleGenVMContextDone {
+    pub finished_at: std::time::Instant,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+impl serde::Serialize for SingleGenVMContextDone {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        let mut state = serializer.serialize_struct("SingleGenVMContextDone", 3)?;
+        state.serialize_field("finished_at", &self.finished_at.elapsed().as_millis())?;
+        state.serialize_field("stdout", &self.stdout)?;
+        state.serialize_field("stderr", &self.stderr)?;
+        state.end()
+    }
+}
+
+struct SingleGenVMContext {
+    id: GenVMId,
+    result: tokio::sync::OnceCell<SingleGenVMContextDone>,
+
+    stdout_stderr_sem: Arc<tokio::sync::Semaphore>,
+    stdout: tokio::sync::OnceCell<String>,
+    stderr: tokio::sync::OnceCell<String>,
+
+    process_handle: tokio::sync::Mutex<tokio::process::Child>,
+    all_permits: crossbeam::atomic::AtomicCell<Option<Box<dyn std::any::Any + Send + Sync>>>,
+}
+
+pub struct Ctx {
+    known_executions: dashmap::DashMap<GenVMId, sync::DArc<SingleGenVMContext>>,
+    next_genvm_id: std::sync::atomic::AtomicU64,
+    pub permits: Arc<tokio::sync::Semaphore>,
+    pub max_permits: tokio::sync::Mutex<usize>,
+
+    executors_path: std::path::PathBuf,
+}
+
+impl Ctx {
+    pub async fn get_permits(&self) -> usize {
+        let max_permits = self.max_permits.lock().await;
+        *max_permits
+    }
+
+    pub async fn set_permits(&self, permits: usize) -> usize {
+        let mut permits_lock = self.max_permits.lock().await;
+
+        if permits < 2 {
+            log_warn!(permits = permits; "cannot set permits below 2");
+            return *permits_lock;
+        }
+
+        if *permits_lock > permits {
+            let delta = *permits_lock - permits;
+            let p = self.permits.acquire_many(delta as u32).await.unwrap();
+            std::mem::forget(p);
+        } else {
+            let delta = permits - *permits_lock;
+            self.permits.add_permits(delta);
+        }
+        *permits_lock = permits;
+
+        return *permits_lock;
+    }
+
+    pub async fn graceful_shutdown(
+        &self,
+        genvm_id: GenVMId,
+        wait_timeout_ms: u64,
+    ) -> anyhow::Result<()> {
+        let Some(exec_ctx) = self.known_executions.get(&genvm_id) else {
+            anyhow::bail!("GenVM with id {} not found", genvm_id);
+        };
+
+        if exec_ctx.result.get().is_some() {
+            return Ok(());
+        }
+
+        let mut child = exec_ctx.process_handle.lock().await;
+
+        log_info!(genvm_id = genvm_id; "sending SIGTERM to GenVM process");
+
+        if let Some(pid) = child.id() {
+            unsafe {
+                libc::kill(pid as libc::c_int, libc::SIGTERM);
+            }
+        }
+
+        let wait_duration = std::time::Duration::from_millis(wait_timeout_ms);
+        let wait_start = std::time::Instant::now();
+
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => {
+                    log_info!(genvm_id = genvm_id; "GenVM process terminated gracefully");
+                    return Ok(());
+                }
+                Ok(None) => {
+                    if wait_start.elapsed() >= wait_duration {
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                }
+                Err(e) => {
+                    log_error!(genvm_id = genvm_id, error:err = e; "error checking process status");
+                    anyhow::bail!("failed to check process status: {}", e);
+                }
+            }
+        }
+
+        log_warn!(genvm_id = genvm_id; "GenVM process did not terminate gracefully, sending SIGKILL");
+
+        let _ = child.start_kill();
+        child.wait().await?;
+
+        Ok(())
+    }
+
+    pub async fn get_genvm_status<'a>(
+        &'a self,
+        genvm_id: GenVMId,
+    ) -> Option<sync::DArc<SingleGenVMContextDone>> {
+        let Some(exec_ctx) = self.known_executions.get(&genvm_id) else {
+            log_trace!(genvm_id = genvm_id; "genvm status requested for unknown id");
+            return None;
+        };
+
+        let proc_check = self.check_proc(&exec_ctx).await;
+        log_debug!(genvm_id = genvm_id, proc_exited = proc_check; "genvm status checked");
+
+        exec_ctx
+            .clone()
+            .into_get_sub(|data| data.result.get())
+            .lift_option()
+            .map(sync::DArcStruct::into_arc)
+    }
+
+    pub fn new() -> anyhow::Result<Self> {
+        let mut sys = sysinfo::System::new_all();
+        sys.refresh_memory();
+        sys.refresh_all();
+
+        let free_memory = sys.free_memory();
+        let free_swap = sys.free_swap();
+
+        log_info!(
+            free_memory = free_memory,
+            free_swap = free_swap,
+            free_memory_gb = free_memory as f64 / (1024.0 * 1024.0 * 1024.0),
+            free_swap_gb = free_swap as f64 / (1024.0 * 1024.0 * 1024.0);
+            "memory status"
+        );
+
+        let total_mem_kb = free_memory / 1024 + free_swap / 1024;
+        let total_mem_gb = total_mem_kb / 1024 / 1024;
+
+        let permits = (total_mem_gb / 4).max(2) as usize;
+
+        log_info!(permits = permits; "estimated concurrent GenVM permits");
+
+        let mut exe_path = std::env::current_exe()?;
+        exe_path.pop();
+        exe_path.pop();
+        exe_path.push("executor");
+
+        Ok(Self {
+            known_executions: dashmap::DashMap::new(),
+            next_genvm_id: std::sync::atomic::AtomicU64::new(1),
+            permits: Arc::new(tokio::sync::Semaphore::new(permits)),
+            max_permits: tokio::sync::Mutex::new(permits),
+
+            executors_path: exe_path,
+        })
+    }
+}
+
+async fn gc_step(ctx: &sync::DArc<Ctx>) {
+    let now = std::time::Instant::now();
+
+    for kv in ctx.known_executions.iter() {
+        let _ = ctx.check_proc(kv.value()).await;
+    }
+
+    // Remove old finished executions
+    ctx.known_executions.retain(|k, v| {
+        let Some(result) = v.result.get() else {
+            return true;
+        };
+        let passed = now.duration_since(result.finished_at);
+        if passed > std::time::Duration::from_secs(60) {
+            log_warn!(genvm_id = *k; "removing zombie genvm execution context");
+            return false;
+        }
+        true
+    });
+}
+
+pub async fn start_service(
+    ctx: sync::DArc<Ctx>,
+    cancel: Arc<cancellation::Token>,
+) -> anyhow::Result<()> {
+    tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = cancel.chan.closed() => {
+                    log_info!("shutting down run service waiter");
+                    break;
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
+                    gc_step(&ctx).await;
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct Request {
+    pub major: u32,
+    pub message: serde_json::Value,
+    pub is_sync: bool,
+    pub capture_output: bool,
+    #[serde(default = "default_max_execution_minutes")]
+    pub max_execution_minutes: u64,
+    pub host_data: String,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub host: String,
+    #[serde(default)]
+    pub extra_args: Vec<String>,
+}
+
+fn default_max_execution_minutes() -> u64 {
+    50
+}
+
+async fn read_log_pipe(reader_fd: std::os::unix::io::OwnedFd, cookie: u64) -> std::io::Result<()> {
+    let cookie = format!("{:x}", cookie);
+
+    let file = unsafe { tokio::fs::File::from_raw_fd(reader_fd.into_raw_fd()) };
+
+    let reader = tokio::io::BufReader::new(file);
+
+    let mut lines = reader.lines();
+
+    while let Some(line) = lines.next_line().await? {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        match serde_json::from_str(line) {
+            Ok::<serde_json::Map<String, serde_json::Value>, _>(log_record) => {
+                let level = log_record
+                    .get("level")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("info");
+                match level {
+                    "error" => {
+                        log_error!(log:serde = log_record, cookie = cookie; "genvm log");
+                    }
+                    "warn" => {
+                        log_warn!(log:serde = log_record, cookie = cookie; "genvm log");
+                    }
+                    "info" => {
+                        log_info!(log:serde = log_record, cookie = cookie; "genvm log");
+                    }
+                    "debug" => {
+                        log_debug!(log:serde = log_record, cookie = cookie; "genvm log");
+                    }
+                    "trace" => {
+                        log_trace!(log:serde = log_record, cookie = cookie; "genvm log");
+                    }
+                    _ => {
+                        log_info!(log:serde = log_record, cookie = cookie; "genvm log");
+                    }
+                }
+            }
+            Err(e) => {
+                log_info!(error:err = e, line = line; "genvm log raw");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn pipe_read<P: tokio::io::AsyncReadExt + Unpin>(
+    mut reader: P,
+    to: sync::DArc<tokio::sync::OnceCell<std::string::String>>,
+    permit: tokio::sync::OwnedSemaphorePermit,
+) {
+    let mut result = String::new();
+    let mut buf = vec![0u8; 8192];
+
+    loop {
+        let n = reader.read(&mut buf).await;
+
+        log_trace!(n:? = n; "read from genvm stdout/stderr");
+
+        let n = match n {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(_) => break,
+        };
+
+        match std::str::from_utf8(&buf[..n]) {
+            Ok(s) => {
+                log_trace!(data = s; "read from genvm stdout/stderr");
+                result.push_str(s)
+            }
+            Err(_) => {
+                let s = String::from_utf8_lossy(&buf[..n]);
+                log_trace!(data = s; "read from genvm stdout/stderr");
+                result.push_str(&s);
+            }
+        }
+    }
+
+    if let Err(e) = to.set(result) {
+        log_error!(error:err = e; "failed to set stdout/stderr content");
+    }
+
+    std::mem::drop(permit);
+}
+
+impl Ctx {
+    async fn check_proc(&self, exec: &SingleGenVMContext) -> bool {
+        let mut proc = exec.process_handle.lock().await;
+
+        match proc.try_wait() {
+            Ok(Some(status)) => {
+                log_debug!(id = exec.id, status = status; "genvm exited");
+                exec.all_permits.store(None); // drop all resources it owns
+                let _ = exec.stdout_stderr_sem.acquire_many(2).await; // wait for stderr/stdout to be fully read
+                log_debug!(id = exec.id, status = status; "stdout/stderr sem acquired");
+                let stdout = exec.stdout.get().map(|x| x.as_str()).unwrap_or("");
+                let stderr = exec.stderr.get().map(|x| x.as_str()).unwrap_or("");
+                if let Err(e) = exec.result.set(SingleGenVMContextDone {
+                    finished_at: std::time::Instant::now(),
+                    stdout: stdout.to_owned(),
+                    stderr: stderr.to_owned(),
+                }) {
+                    log_error!(error:err = e; "error setting genvm result");
+                }
+                true
+            }
+            Ok(None) => false,
+            Err(e) => {
+                log_error!(error:err = e; "error checking process status");
+                true
+            }
+        }
+    }
+}
+
+pub async fn start_genvm(
+    full_ctx: sync::DArc<crate::manager::AppContext>,
+    req: Request,
+    _modules_lock: Box<dyn std::any::Any + Send + Sync>,
+) -> anyhow::Result<(GenVMId, tokio::sync::oneshot::Receiver<()>)> {
+    #[cfg(debug_assertions)]
+    let reroute_to_test = full_ctx.config.reroute_to_test;
+
+    let version = full_ctx
+        .ver_ctx
+        .get_version(req.major, req.timestamp)
+        .await
+        .ok_or_else(|| anyhow::anyhow!("no compatible version found for major {}", req.major))?;
+
+    let ctx = full_ctx.into_gep(|x| &x.run_ctx);
+
+    let genvm_id = GenVMId(
+        ctx.next_genvm_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+    );
+
+    let permits = if req.is_sync {
+        ctx.permits.clone().acquire_owned().await?
+    } else {
+        ctx.permits.clone().acquire_many_owned(2).await?
+    };
+
+    let mut command_path = ctx.executors_path.clone();
+
+    command_path.push(format!(
+        "v{}.{}.{}",
+        version.major, version.minor, version.patch
+    ));
+
+    #[cfg(debug_assertions)]
+    if reroute_to_test {
+        command_path.pop();
+        command_path.push("vTEST");
+    }
+
+    command_path.push("bin");
+    command_path.push("genvm");
+
+    log_debug!(genvm_id = genvm_id, exe:? = command_path, version:? = version; "genvm path");
+
+    let mut proc = tokio::process::Command::new(command_path);
+
+    let mut read_right_fd = [0; 2];
+    let result_code = unsafe { libc::pipe(std::ptr::from_mut(&mut read_right_fd).cast()) };
+    if result_code != 0 {
+        anyhow::bail!("failed to create pipe for genvm logging: {result_code}");
+    }
+
+    let read_fd = read_right_fd[0];
+    let write_fd = read_right_fd[1];
+
+    let _ = unsafe { libc::fcntl(read_fd, libc::F_SETFL, libc::O_CLOEXEC) };
+
+    let read_fd = unsafe { std::os::unix::io::OwnedFd::from_raw_fd(read_fd) };
+    let write_fd = unsafe { std::os::unix::io::OwnedFd::from_raw_fd(write_fd) };
+
+    proc.stdin(std::process::Stdio::null());
+    proc.arg(format!("--log-fd={}", write_fd.as_raw_fd()));
+
+    proc.arg("run");
+
+    proc.args(&req.extra_args);
+
+    if req.is_sync {
+        proc.arg("--sync");
+    }
+
+    proc.arg("--host-data");
+    proc.arg(&req.host_data);
+
+    proc.arg("--host");
+    proc.arg(&req.host);
+
+    proc.arg("--message");
+    proc.arg(serde_json::to_string(&req.message)?);
+
+    let cookie = ctx
+        .next_genvm_id
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    proc.arg(format!("--cookie={:x}", cookie));
+
+    tokio::spawn(read_log_pipe(read_fd, cookie));
+
+    if req.capture_output {
+        proc.stdout(std::process::Stdio::piped());
+        proc.stderr(std::process::Stdio::piped());
+    } else {
+        proc.stdout(std::process::Stdio::null());
+        proc.stderr(std::process::Stdio::null());
+    }
+
+    let mut child = proc.spawn()?;
+
+    let stdout_stderr_sem = Arc::new(tokio::sync::Semaphore::new(2));
+
+    let stdout_perm = stdout_stderr_sem.clone().acquire_owned().await?;
+    let stderr_perm = stdout_stderr_sem.clone().acquire_owned().await?;
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    let all_resources = (permits, tx);
+
+    let exec_ctx = sync::DArc::new(SingleGenVMContext {
+        result: tokio::sync::OnceCell::new(),
+        id: genvm_id,
+        process_handle: tokio::sync::Mutex::new(child),
+
+        stdout_stderr_sem,
+        stdout: tokio::sync::OnceCell::new(),
+        stderr: tokio::sync::OnceCell::new(),
+
+        all_permits: crossbeam::atomic::AtomicCell::new(Some(Box::new(all_resources))),
+    });
+
+    if let Some(stdout) = stdout {
+        tokio::spawn(pipe_read(stdout, exec_ctx.gep(|x| &x.stdout), stdout_perm));
+    }
+    if let Some(stderr) = stderr {
+        tokio::spawn(pipe_read(stderr, exec_ctx.gep(|x| &x.stderr), stderr_perm));
+    }
+
+    ctx.known_executions.insert(genvm_id, exec_ctx.clone());
+
+    Ok((genvm_id, rx))
+}

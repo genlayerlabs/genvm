@@ -24,6 +24,8 @@ High-Level Architecture
          LO ~~~ Messages["Emitted messages, ..."]
       end
       subgraph GenVM
+         Manager --- Modules
+         Manager --- Executor
          subgraph Runners
                Libs@{ shape: docs, label: "Other: libs, model weights" }
                CPython["CPython (wasm build)"]
@@ -50,6 +52,9 @@ High-Level Architecture
       Host <---> WASI
       Program <---> wasmtime
       Runners -.-> Program
+      Host --> Manager
+
+.. _gvm-executor::
 
 :term:`GenVM` Executor
 ----------------------
@@ -98,25 +103,6 @@ validators
 primitives - Storage access, message passing, contract deployment -
 Non-deterministic operation triggers and validation
 
-:term:`Module`\s
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-:term:`Module`\s provide non-deterministic capabilities through isolated
-services:
-
-**LLM :term:`Module`** - Large Language Model inference capabilities - Supports
-multiple AI providers and models - Configurable prompts and response
-processing - Support for :term:`greyboxing`
-
-**Web :term:`Module`** - Web scraping and HTTP request capabilities - Webpage
-rendering and content extraction - Domain filtering and security
-controls
-
-They are separated from executor for following reasons:
-
-- replace-ability
-- privileges containment
-
 Runners (libraries)
 ~~~~~~~~~~~~~~~~~~~
 
@@ -139,3 +125,27 @@ The :term:`Host` Interface manages communication between :term:`GenVM` and the
 blockchain node.
 
 Host is responsible for providing blockchain state to :term:`GenVM` and updating it.
+
+:term:`Module`\s
+----------------
+
+:term:`Module`\s provide non-deterministic capabilities through isolated
+services:
+
+**LLM :term:`Module`** - Large Language Model inference capabilities - Supports
+multiple AI providers and models - Configurable prompts and response
+processing - Support for :term:`greyboxing`
+
+**Web :term:`Module`** - Web scraping and HTTP request capabilities - Webpage
+rendering and content extraction - Domain filtering and security
+controls
+
+They are separated from executor for following reasons:
+
+- replace-ability
+- privileges containment
+
+:term:`Manager`
+---------------
+
+The :term:`Manager` oversees :term:`Module`\s and is responsible for correct :def:`gvm-executor` version selection

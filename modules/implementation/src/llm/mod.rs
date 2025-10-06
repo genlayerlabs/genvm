@@ -103,7 +103,11 @@ async fn create_vm(
     Ok(user_vm)
 }
 
-fn handle_run(mut config: config::Config, args: CliArgsRun) -> Result<()> {
+pub async fn run_llm_module(
+    cancel: Arc<cancellation::Token>,
+    mut config: config::Config,
+    allow_empty_backends: bool,
+) -> Result<()> {
     for (k, v) in config.backends.iter_mut() {
         if !v.enabled {
             continue;
@@ -126,17 +130,13 @@ fn handle_run(mut config: config::Config, args: CliArgsRun) -> Result<()> {
         log_error!("no valid backend detected")
     }
 
-    if !args.allow_empty_backends && config.backends.is_empty() {
+    if !allow_empty_backends && config.backends.is_empty() {
         anyhow::bail!("no valid backend detected");
     }
 
-    log_info!(backends:serde = config.backends.keys().collect::<Vec<_>>(); "backends left after filter");
-
-    let runtime = config.base.create_rt()?;
-
-    let token = common::setup_cancels(&runtime, args.die_with_parent)?;
-
     let config = sync::DArc::new(config);
+
+    log_info!(backends:serde = config.backends.keys().collect::<Vec<_>>(); "backends left after filter");
 
     let backends: BTreeMap<_, _> = config
         .backends
@@ -148,7 +148,7 @@ fn handle_run(mut config: config::Config, args: CliArgsRun) -> Result<()> {
 
     let moved_config = config.clone();
 
-    let vm_pool = runtime.block_on(scripting::pool::new(config.mod_base.vm_count, move || {
+    let vm_pool = scripting::pool::new(config.mod_base.vm_count, move || {
         let moved_config = moved_config.clone();
         let backends = backends.clone();
         async move {
@@ -156,15 +156,23 @@ fn handle_run(mut config: config::Config, args: CliArgsRun) -> Result<()> {
                 .await
                 .with_context(|| "creating user VM")
         }
-    }))?;
+    })
+    .await?;
 
-    let loop_future = crate::common::run_loop(
+    crate::common::run_loop(
         config.mod_base.bind_address.clone(),
-        token,
+        cancel,
         Arc::new(handler::Provider { vm_pool }),
-    );
+    )
+    .await
+}
 
-    runtime.block_on(loop_future)?;
+fn handle_run(config: config::Config, args: CliArgsRun) -> Result<()> {
+    let runtime = config.base.create_rt()?;
+
+    let token = common::setup_cancels(&runtime, args.die_with_parent)?;
+
+    runtime.block_on(run_llm_module(token, config, args.allow_empty_backends))?;
 
     std::mem::drop(runtime);
 
