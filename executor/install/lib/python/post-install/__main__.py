@@ -50,6 +50,7 @@ def runner_check_bytes(data: bytes, hash: str) -> bool:
 	my_hash = digest_to_hash_id(digest)
 	return my_hash == hash
 
+
 executor_root_dir = Path(__file__).parent.parent.parent.parent
 logger.info(f'Executor root directory: {executor_root_dir}')
 
@@ -98,7 +99,9 @@ def patch_executable(path: Path):
 		logger.info(f'Current interpreter: {binary.interpreter}')
 
 		# Log current needed libraries
-		needed_libs = [lib if isinstance(lib, str) else lib.name for lib in binary.libraries]
+		needed_libs = [
+			lib if isinstance(lib, str) else lib.name for lib in binary.libraries
+		]
 		logger.info(f'Current needed libraries: {needed_libs}')
 
 		# Log current RPATH/RUNPATH
@@ -109,15 +112,21 @@ def patch_executable(path: Path):
 		if binary.has(lief.ELF.DynamicEntry.TAG.RUNPATH):
 			runpath_entry = binary.get(lief.ELF.DynamicEntry.TAG.RUNPATH)
 			rpath_entries.append(f'RUNPATH: {runpath_entry.value}')
-		logger.info(f'Current RPATH/RUNPATH entries: {rpath_entries if rpath_entries else "None"}')
+		logger.info(
+			f'Current RPATH/RUNPATH entries: {rpath_entries if rpath_entries else "None"}'
+		)
 
 		# Patch interpreter only for ELF
 		if Path(binary.interpreter).exists():
-			logger.info(f'Interpreter {binary.interpreter} exists, skipping interpreter patching')
+			logger.info(
+				f'Interpreter {binary.interpreter} exists, skipping interpreter patching'
+			)
 		else:
 			new_interpreter = str(get_interpreter_path())
 			binary.interpreter = new_interpreter
-			logger.info(f'Updated interpreter from {binary.interpreter} to: {new_interpreter}')
+			logger.info(
+				f'Updated interpreter from {binary.interpreter} to: {new_interpreter}'
+			)
 
 		# Update RPATH for ELF
 		logger.info(f'Updating RPATH for ELF binary')
@@ -145,20 +154,26 @@ def patch_executable(path: Path):
 		for cmd in binary.commands:
 			if cmd.command == lief.MachO.LoadCommand.TYPE.RPATH:
 				existing_rpaths.append(cmd.path)
-		logger.info(f'Current RPATH entries: {existing_rpaths if existing_rpaths else "None"}')
+		logger.info(
+			f'Current RPATH entries: {existing_rpaths if existing_rpaths else "None"}'
+		)
 
 		# Log current needed libraries
 		needed_libs = []
 		for cmd in binary.commands:
-			if cmd.command in [lief.MachO.LoadCommand.TYPE.LOAD_DYLIB,
-							   lief.MachO.LoadCommand.TYPE.LOAD_WEAK_DYLIB]:
+			if cmd.command in [
+				lief.MachO.LoadCommand.TYPE.LOAD_DYLIB,
+				lief.MachO.LoadCommand.TYPE.LOAD_WEAK_DYLIB,
+			]:
 				needed_libs.append(cmd.name)
 		logger.info(f'Current needed libraries: {needed_libs}')
 
 		# Replace specific library references
 		for cmd in binary.commands:
-			if cmd.command in [lief.MachO.LoadCommand.TYPE.LOAD_DYLIB,
-							   lief.MachO.LoadCommand.TYPE.LOAD_WEAK_DYLIB]:
+			if cmd.command in [
+				lief.MachO.LoadCommand.TYPE.LOAD_DYLIB,
+				lief.MachO.LoadCommand.TYPE.LOAD_WEAK_DYLIB,
+			]:
 				if cmd.name == '/usr/local/lib/libiconv.2.dylib':
 					old_name = cmd.name
 					cmd.name = '@rpath/libiconv.dylib'

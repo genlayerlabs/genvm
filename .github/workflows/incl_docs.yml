@@ -54,7 +54,7 @@ jobs:
 
       - name: Deploy version to target repository
         run: |
-          SRC=$(readlink -f build/docs/html/)
+          SRC=$(readlink -f build/doc/html/)
           cd target-repo
 
           # Create version directory

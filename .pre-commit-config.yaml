@@ -66,4 +66,5 @@ repos:
         name: check flake-config files are identical
         entry: diff -q flake-config.json flake-config.orig.json
         language: system
+        pass_filenames: false
         files: ^flake-config\.(orig\.)?json$

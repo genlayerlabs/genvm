@@ -225,37 +225,12 @@ then
 else
     PROFILE_FILES="$PROFILE_FILES --object $BUILD_DIR/out/bin/genvm --object $BUILD_DIR/out/bin/genvm-modules"
 
-    ./build/out/bin/genvm-modules llm --die-with-parent &
-    LLM_JOB_ID=$!
-
-    ./build/out/bin/genvm-modules web --die-with-parent &
-    WEB_JOB_ID=$!
-
     if [ "$PRECOMPILE" == "true" ]
     then
         ./build/out/bin/genvm precompile
     fi
 
-    sleep 5
-
-    if !(kill -0 $LLM_JOB_ID)
-    then
-        echo "err: llm module died"
-        exit 1
-    fi
-
-    if !(kill -0 $WEB_JOB_ID)
-    then
-        echo "err: web module died"
-        exit 1
-    fi
-
-    python3 ./tests/runner/run.py --ci --gen-vm $(readlink -f ./build/out/executor/vTEST/bin/genvm)
-
-    kill -TERM $LLM_JOB_ID $WEB_JOB_ID
-
-    wait $LLM_JOB_ID
-    wait $WEB_JOB_ID
+    python3 ./tests/runner/run.py --ci --start-manager --start-modules
 fi
 
 if [ "$COVERAGE" == "true" ]

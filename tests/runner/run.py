@@ -35,7 +35,6 @@ class Config:
 
 	def __init__(self):
 		self.script_dir = Path(__file__).parent.absolute()
-		self.http_dir = str(self.script_dir.parent.joinpath('http').absolute())
 
 		# Find monorepo root
 		self.root_dir = self.script_dir
@@ -52,6 +51,7 @@ class Config:
 
 		self.cases_dir = self.script_dir.parent.joinpath('cases')
 		self.root_tmp_dir = self.root_dir.joinpath('build', 'genvm-testdata-out')
+		self.root_tmp_dir.mkdir(exist_ok=True, parents=True)
 
 		# Parse arguments
 		self.args = self._parse_args()
@@ -76,14 +76,18 @@ class Config:
 
 	def _parse_args(self):
 		parser = argparse.ArgumentParser('genvm-test-runner')
-		parser.add_argument('--manager', metavar='URI', required=True)
+		parser.add_argument('--manager', metavar='URI')
 		parser.add_argument('--filter', metavar='REGEX', default='.*')
 		parser.add_argument('--show-steps', default=False, action='store_true')
 		parser.add_argument('--ci', default=False, action='store_true')
 		parser.add_argument('--log-level', metavar='LEVEL', default='info')
 		parser.add_argument('--no-sequential', default=False, action='store_true')
+		parser.add_argument('--start-manager', default=False, action='store_true')
 		parser.add_argument('--start-modules', default=False, action='store_true')
-		return parser.parse_args()
+		res = parser.parse_args()
+		if res.manager is None and not res.start_manager:
+			parser.error('--manager is required if --start-manager is not given')
+		return res
 
 
 # Initialize configuration
@@ -129,6 +133,25 @@ def setup_signal_handler():
 
 # Set up signal handling
 setup_signal_handler()
+
+if config.args.start_manager:
+	log_to = config.root_tmp_dir.joinpath('manager.log').open('w')
+	manager_process = subprocess.Popen(
+		[
+			config.root_dir.joinpath('build', 'out', 'bin', 'genvm-modules'),
+			'manager',
+			'--port',
+			'3999',
+			'--reroute-to-test',
+			'--die-with-parent',
+		],
+		stdin=subprocess.DEVNULL,
+		stdout=log_to,
+		stderr=log_to,
+	)
+	config.args.manager = 'http://localhost:3999'
+	config.manager = 'http://localhost:3999'
+	time.sleep(2)  # Wait a bit for the manager to start
 
 # Start modules if requested
 if config.args.start_modules:

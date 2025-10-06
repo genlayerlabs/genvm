@@ -32,7 +32,8 @@ impl Drop for LimiterInner {
 impl LimiterInner {
     fn release_no_consumed(&self, delta: u32) {
         #[allow(dead_code)]
-        let previous = self.data
+        let previous = self
+            .data
             .remaining_memory
             .fetch_add(delta, std::sync::atomic::Ordering::SeqCst);
         assert!(previous.checked_add(delta).is_some());

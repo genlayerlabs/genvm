@@ -150,7 +150,7 @@ jobs:
           ./build/out/executor/*/bin/post-install.py
       - name: Run stable tests
         run: |
-          nix develop .#mock-tests --command python3 ./tests/runner/run.py --gen-vm ./build/out/executor/*/bin/genvm --filter '^stable/'
+          nix develop .#mock-tests --command python3 ./tests/runner/run.py --start-manager --filter '^stable/'
 
   test-macos-arm64:
     needs:
@@ -191,7 +191,7 @@ jobs:
           python3 -m venv .venv
           source .venv/bin/activate
           pip install -r ./tests/runner/requirements.txt
-          python3 ./tests/runner/run.py --gen-vm ./build/out/executor/*/bin/genvm --filter '^stable/'
+          python3 ./tests/runner/run.py --start-manager --filter '^stable/'
 
   release-publish:
     needs:
