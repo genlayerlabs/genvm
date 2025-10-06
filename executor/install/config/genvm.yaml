@@ -8,7 +8,7 @@ modules:
 
 threads: 2
 blocking_threads: 4
-log_disable: wasmtime*,cranelift*,tracing*,polling*,tungstenite*,tokio_tungstenite*,genvm::memlimiter*
+log_disable: genvm::rt::memlimiter
 
 cache_dir: ${exeDir}/../.cache/
 runners_dir: ${exeDir}/../../../runners/

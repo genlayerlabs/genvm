@@ -58,7 +58,7 @@ backends:
     provider: google
     key: ${ENV[GEMINIKEY]}
     models:
-      gemini-1.5-flash:
+      gemini-2.0-flash:
         supports_json: true
         supports_image: true # works
 

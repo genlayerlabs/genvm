@@ -22,10 +22,34 @@ class Logger(metaclass=abc.ABCMeta):
 	def error(self, msg: str, **kwargs) -> None:
 		self.log('error', msg, **kwargs)
 
+	def with_keys(self, keys: dict) -> 'Logger':
+		return _WithKeysLogger(self, keys)
+
+
+class _WithKeysLogger(Logger):
+	keys: dict
+
+	def __init__(self, parent: Logger, keys: dict):
+		if isinstance(parent, _WithKeysLogger):
+			self.keys = {**parent.keys, **keys}
+			self.parent = parent.parent
+		else:
+			self.keys = keys
+			self.parent = parent
+
+	def log(self, level: str, msg: str, **kwargs) -> None:
+		self.parent.log(level, msg, **self.keys, **kwargs)
+
+	def with_keys(self, keys: dict) -> Logger:
+		return _WithKeysLogger(self.parent, {**self.keys, **keys})
+
 
 class NoLogger(Logger):
 	def log(self, level: str, msg: str, **kwargs) -> None:
 		pass
+
+	def with_keys(self, keys: dict) -> 'Logger':
+		return self
 
 
 _level_to_num = {

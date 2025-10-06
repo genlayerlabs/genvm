@@ -136,7 +136,7 @@ async def host_loop(handler: IHost, cancellation: asyncio.Event, *, logger: Logg
 
 	logger.trace('entering loop')
 	sock = await handler.loop_enter(cancellation)
-	logger.trace('leaving loop')
+	logger.trace('entered loop')
 
 	async def send_all(data: collections.abc.Buffer):
 		await async_loop.sock_sendall(sock, data)
@@ -343,7 +343,7 @@ async def _send_timeout(manager_uri: str, genvm_id: str, logger: Logger):
 	) as resp:
 		logger.debug('delete /genvm', genvm_id=genvm_id, status=resp.status)
 		if resp.status != 200:
-			logger.debug('delete /genvm failed', genvm_id=genvm_id, body=await resp.text())
+			logger.warning('delete /genvm failed', genvm_id=genvm_id, body=await resp.text())
 
 
 async def run_genvm(
@@ -401,6 +401,7 @@ async def run_genvm(
 					genvm_id = data['id']
 					logger.debug('genvm manager /genvm', genvm_id=genvm_id, status=resp.status)
 					genvm_id_cell[0] = genvm_id
+					asyncio.ensure_future(wrap_timeout(genvm_id))
 		finally:
 			logger.debug('proc started', genvm_id=genvm_id_cell[0])
 
@@ -408,15 +409,11 @@ async def run_genvm(
 		await host_loop(handler, cancellation_event, logger=logger)
 		logger.debug('host loop finished')
 
-	async def wrap_timeout():
+	async def wrap_timeout(genvm_id: str):
 		if timeout is None:
 			return
 		await asyncio.sleep(timeout)
-		genvm_id = genvm_id_cell[0]
-		if genvm_id is None:
-			return
-
-		logger.warning('timeout reached, deleting genvm', genvm_id=genvm_id)
+		logger.debug('timeout reached', genvm_id=genvm_id)
 		await _send_timeout(manager_uri, genvm_id, logger)
 
 	poll_status_mutex = asyncio.Lock()
@@ -458,9 +455,7 @@ async def run_genvm(
 
 	fut_host = asyncio.ensure_future(wrap_host())
 	fut_proc = asyncio.ensure_future(wrap_proc())
-	fut_timeout = asyncio.ensure_future(wrap_timeout())
 	await asyncio.wait([fut_host, fut_proc, asyncio.ensure_future(prob_died())])
-	fut_timeout.cancel()
 
 	exceptions: list[Exception] = []
 	try:
@@ -492,178 +487,3 @@ async def run_genvm(
 		)
 
 	raise Exception('Execution failed')
-
-
-async def run_host_and_program(
-	handler: IHost,
-	program: list[Path | str],
-	*,
-	env=None,
-	cwd: Path | None = None,
-	exit_timeout=0.05,
-	deadline: float | None = None,
-) -> RunHostAndProgramRes:
-	loop = asyncio.get_running_loop()
-
-	async def connect_reader(fd):
-		reader = asyncio.StreamReader(loop=loop)
-		reader_proto = asyncio.StreamReaderProtocol(reader)
-		transport, _ = await loop.connect_read_pipe(
-			lambda: reader_proto, os.fdopen(fd, 'rb')
-		)
-		return reader, transport
-
-	stdout_rfd, stdout_wfd = os.pipe()
-	stderr_rfd, stderr_wfd = os.pipe()
-	genvm_log_rfd, genvm_log_wfd = os.pipe()
-	stdout_reader, stdout_transport = await connect_reader(stdout_rfd)
-	stderr_reader, stderr_transport = await connect_reader(stderr_rfd)
-	genvm_log_reader, genvm_log_transport = await connect_reader(genvm_log_rfd)
-
-	run_idx = program.index('run')
-	program.insert(run_idx, '--log-fd')
-	program.insert(run_idx + 1, str(genvm_log_wfd))
-
-	process = await asyncio.create_subprocess_exec(
-		*program,
-		stdin=asyncio.subprocess.DEVNULL,
-		stdout=stdout_wfd,
-		stderr=stderr_wfd,
-		cwd=cwd,
-		env=env,
-		pass_fds=(genvm_log_wfd,),
-	)
-	os.close(stdout_wfd)
-	os.close(stderr_wfd)
-	os.close(genvm_log_wfd)
-	if process.stdin is not None:
-		process.stdin.close()
-
-	async def read_whole(reader, transport, put_to: list[bytes]):
-		try:
-			while True:
-				read = await reader.read(4096)
-				if read is None or len(read) == 0:
-					break
-				put_to.append(read)
-
-				# print(program, read)
-		finally:
-			try:
-				transport.close()
-			except OSError:
-				pass
-			await asyncio.sleep(0)
-
-	stdout, stderr, genvm_log = [], [], []
-
-	cancellation_event = asyncio.Event()
-
-	async def wrap_proc():
-		try:
-			await asyncio.gather(
-				read_whole(stdout_reader, stdout_transport, stdout),
-				read_whole(stderr_reader, stderr_transport, stderr),
-				read_whole(genvm_log_reader, genvm_log_transport, genvm_log),
-				process.wait(),
-			)
-		finally:
-			cancellation_event.set()
-
-	coro_proc = asyncio.ensure_future(wrap_proc())
-
-	async def wrap_host():
-		await host_loop(handler, cancellation_event)
-
-	coro_loop = asyncio.ensure_future(wrap_host())
-
-	all_proc = [coro_loop, coro_proc]
-	deadline_future: None | asyncio.Task[None] = None
-	if deadline is not None:
-		deadline_future = asyncio.ensure_future(asyncio.sleep(deadline))
-		all_proc.append(deadline_future)
-
-	done, _pending = await asyncio.wait(
-		all_proc,
-		return_when=asyncio.FIRST_COMPLETED,
-	)
-
-	errors = []
-
-	for x in done:
-		try:
-			x.result()
-		except ConnectionResetError:
-			pass
-		except Exception as e:
-			errors.append(e)
-
-	# coro_loop must finish first if everything succeeded
-	if not coro_loop.done() and not handler.has_result() and deadline is None:
-		print('WARNING: genvm finished first')
-		coro_loop.cancel()
-
-	async def wait_all_timeout():
-		timeout = asyncio.ensure_future(asyncio.sleep(exit_timeout))
-		all_futs = [timeout, coro_proc]
-		if not coro_loop.done():
-			all_futs.append(coro_loop)
-		done, _pending = await asyncio.wait(
-			all_futs,
-			return_when=asyncio.FIRST_COMPLETED,
-		)
-		if coro_loop in done:
-			await wait_all_timeout()
-
-	if handler.has_result():
-		await wait_all_timeout()
-
-	if not coro_proc.done():
-		try:
-			process.terminate()
-		except:
-			pass
-		await wait_all_timeout()
-		if not coro_proc.done():
-			# genvm exit takes to long, forcefully quit it
-			try:
-				process.kill()
-			except:
-				pass
-
-	try:
-		await coro_loop
-	except ConnectionResetError:
-		pass
-	except (Exception, asyncio.CancelledError) as e:
-		errors.append(e)
-
-	exit_code = await process.wait()
-
-	if not handler.has_result():
-		if (
-			deadline_future is None
-			or deadline_future is not None
-			and deadline_future not in done
-		):
-			errors.append(Exception('no result provided'))
-		else:
-			await handler.consume_result(public_abi.ResultCode.VM_ERROR, b'timeout')
-
-	result = RunHostAndProgramRes(
-		b''.join(stdout).decode(),
-		b''.join(stderr).decode(),
-		b''.join(genvm_log).decode(),
-	)
-
-	if len(errors) > 0:
-		raise Exception(
-			*errors,
-			{
-				'stdout': result.stdout,
-				'stderr': result.stderr,
-				'genvm_log': result.genvm_log,
-			},
-		) from errors[0]
-
-	return result

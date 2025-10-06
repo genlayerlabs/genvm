@@ -237,7 +237,7 @@ pub async fn handle_genvm_status(
     ctx: sync::DArc<AppContext>,
     genvm_id: run::GenVMId,
 ) -> Result<impl warp::Reply> {
-    let status = ctx.run_ctx.get_genvm_status(genvm_id).await;
+    let status = ctx.run_ctx.fetch_genvm_status(genvm_id).await;
 
     Ok(warp::reply::json(&serde_json::json!({
         "genvm_id": genvm_id,

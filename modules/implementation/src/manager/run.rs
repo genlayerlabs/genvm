@@ -100,7 +100,12 @@ impl Ctx {
 
         let mut child = exec_ctx.process_handle.lock().await;
 
-        log_info!(genvm_id = genvm_id; "sending SIGTERM to GenVM process");
+        if let Ok(Some(_)) = child.try_wait() {
+            log_trace!(genvm_id = genvm_id; "GenVM process already exited");
+            return Ok(());
+        }
+
+        log_debug!(genvm_id = genvm_id; "sending SIGTERM to GenVM process");
 
         if let Some(pid) = child.id() {
             unsafe {
@@ -155,6 +160,18 @@ impl Ctx {
             .into_get_sub(|data| data.result.get())
             .lift_option()
             .map(sync::DArcStruct::into_arc)
+    }
+
+    pub async fn fetch_genvm_status<'a>(
+        &'a self,
+        genvm_id: GenVMId,
+    ) -> Option<sync::DArc<SingleGenVMContextDone>> {
+        let res = self.get_genvm_status(genvm_id).await;
+        if res.is_some() {
+            self.known_executions.remove(&genvm_id);
+        }
+
+        res
     }
 
     pub fn new() -> anyhow::Result<Self> {
@@ -348,6 +365,10 @@ async fn pipe_read<P: tokio::io::AsyncReadExt + Unpin>(
 
 impl Ctx {
     async fn check_proc(&self, exec: &SingleGenVMContext) -> bool {
+        if exec.result.initialized() {
+            return true;
+        }
+
         let mut proc = exec.process_handle.lock().await;
 
         match proc.try_wait() {
@@ -363,7 +384,7 @@ impl Ctx {
                     stdout: stdout.to_owned(),
                     stderr: stderr.to_owned(),
                 }) {
-                    log_error!(error:err = e; "error setting genvm result");
+                    log_warn!(error:err = e; "error setting genvm result; it can happen rarely due to concurrency");
                 }
                 true
             }
@@ -473,6 +494,8 @@ pub async fn start_genvm(
     }
 
     let mut child = proc.spawn()?;
+
+    log_debug!(genvm_id = genvm_id, pid:? = child.id(); "genvm process started");
 
     let stdout_stderr_sem = Arc::new(tokio::sync::Semaphore::new(2));
 
