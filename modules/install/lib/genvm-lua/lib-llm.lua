@@ -170,7 +170,8 @@ M.exec_prompt_template_transform = function(args)
 
 	local as_user_text = my_template.user
 	for key, val in pairs(vars) do
-		as_user_text = string.gsub(as_user_text, "#{" .. key .. "}", val)
+		local val_escaped = string.gsub(val, "%%", "%%%%")
+		as_user_text = string.gsub(as_user_text, "#{" .. key .. "}", val_escaped)
 	end
 
 	local format = my_data.format
