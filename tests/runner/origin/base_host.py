@@ -441,8 +441,10 @@ async def run_genvm(
 				logger.debug('get /genvm', genvm_id=genvm_id, status=resp.status)
 				body = await resp.json()
 				logger.trace('get /genvm', genvm_id=genvm_id, body=body)
-				if resp.status != 200 and body['status'] is not None:
+				if resp.status != 200:
 					new_res = Exception(f'genvm manager /genvm failed: {resp.status} {body}')
+				elif body['status'] is None:
+					return None
 				else:
 					new_res = typing.cast(dict, body['status'])
 			status_cell[0] = new_res
@@ -486,7 +488,9 @@ async def run_genvm(
 		await _send_timeout(manager_uri, genvm_id, logger)
 
 		status = await poll_status(genvm_id)
-		if isinstance(status, Exception):
+		if status is None:
+			exceptions.append(Exception('execution failed: no status'))
+		elif isinstance(status, Exception):
 			exceptions.append(status)
 		if len(exceptions) > 0:
 			final_exception = Exception('execution failed', exceptions[1:])

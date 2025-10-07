@@ -122,11 +122,10 @@ def patch_executable(path: Path):
 				f'Interpreter {binary.interpreter} exists, skipping interpreter patching'
 			)
 		else:
+			old_interpreter = binary.interpreter
 			new_interpreter = str(get_interpreter_path())
 			binary.interpreter = new_interpreter
-			logger.info(
-				f'Updated interpreter from {binary.interpreter} to: {new_interpreter}'
-			)
+			logger.info(f'Updated interpreter from {old_interpreter} to: {new_interpreter}')
 
 		# Update RPATH for ELF
 		logger.info(f'Updating RPATH for ELF binary')

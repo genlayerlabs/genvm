@@ -33,17 +33,4 @@ in {
 			inherit pkgs zig;
 		};
 	};
-
-	universal = {
-		tools = stdenv.mkDerivation {
-			name = "genvm-tools";
-			src = ./install;
-			dontConfigure = true;
-			dontBuild = true;
-			installPhase = ''
-				mkdir -p $out
-				cp -r ./. $out/.
-			'';
-		};
-	};
 }

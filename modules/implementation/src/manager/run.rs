@@ -49,11 +49,17 @@ struct SingleGenVMContext {
     all_permits: crossbeam::atomic::AtomicCell<Option<Box<dyn std::any::Any + Send + Sync>>>,
 }
 
+struct PermitsData {
+    max: usize,
+    num_throttled: usize,
+    throttled: Option<tokio::sync::OwnedSemaphorePermit>,
+}
+
 pub struct Ctx {
     known_executions: dashmap::DashMap<GenVMId, sync::DArc<SingleGenVMContext>>,
     next_genvm_id: std::sync::atomic::AtomicU64,
     pub permits: Arc<tokio::sync::Semaphore>,
-    pub max_permits: tokio::sync::Mutex<usize>,
+    max_permits: tokio::sync::Mutex<PermitsData>,
 
     executors_path: std::path::PathBuf,
 }
@@ -65,28 +71,40 @@ impl Ctx {
 
     pub async fn get_permits(&self) -> usize {
         let max_permits = self.max_permits.lock().await;
-        *max_permits
+        max_permits.max
     }
 
     pub async fn set_permits(&self, permits: usize) -> usize {
         let mut permits_lock = self.max_permits.lock().await;
 
+        permits_lock.max += permits_lock.num_throttled;
+        permits_lock.num_throttled = 0;
+        permits_lock.throttled = None;
+        // actually this causes drop of previous one, so we can enter more genvms than we have permits, but it's ok for now
+        // especially since this method is expected to be called before starting any genvms at all
+
         if permits < 2 {
             log_warn!(permits = permits; "cannot set permits below 2");
-            return *permits_lock;
+            return permits_lock.max;
         }
 
-        if *permits_lock > permits {
-            let delta = *permits_lock - permits;
-            let p = self.permits.acquire_many(delta as u32).await.unwrap();
-            std::mem::forget(p);
+        if permits_lock.max > permits {
+            let delta = permits_lock.max - permits;
+            let p = self
+                .permits
+                .clone()
+                .acquire_many_owned(delta as u32)
+                .await
+                .unwrap();
+            permits_lock.max = permits;
+            permits_lock.num_throttled = delta;
+            permits_lock.throttled = Some(p);
         } else {
-            let delta = permits - *permits_lock;
+            let delta = permits - permits_lock.max;
             self.permits.add_permits(delta);
         }
-        *permits_lock = permits;
 
-        *permits_lock
+        permits_lock.max
     }
 
     pub async fn graceful_shutdown(
@@ -147,8 +165,8 @@ impl Ctx {
         Ok(())
     }
 
-    pub async fn get_genvm_status<'a>(
-        &'a self,
+    pub async fn get_genvm_status(
+        &self,
         genvm_id: GenVMId,
     ) -> Option<sync::DArc<SingleGenVMContextDone>> {
         let Some(exec_ctx) = self.known_executions.get(&genvm_id) else {
@@ -166,8 +184,8 @@ impl Ctx {
             .map(sync::DArcStruct::into_arc)
     }
 
-    pub async fn fetch_genvm_status<'a>(
-        &'a self,
+    pub async fn fetch_genvm_status(
+        &self,
         genvm_id: GenVMId,
     ) -> Option<sync::DArc<SingleGenVMContextDone>> {
         let res = self.get_genvm_status(genvm_id).await;
@@ -210,7 +228,11 @@ impl Ctx {
             known_executions: dashmap::DashMap::new(),
             next_genvm_id: std::sync::atomic::AtomicU64::new(1),
             permits: Arc::new(tokio::sync::Semaphore::new(permits)),
-            max_permits: tokio::sync::Mutex::new(permits),
+            max_permits: tokio::sync::Mutex::new(PermitsData {
+                max: permits,
+                num_throttled: 0,
+                throttled: None,
+            }),
 
             executors_path: exe_path,
         })

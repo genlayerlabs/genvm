@@ -26,7 +26,7 @@ mod darc {
 
     pub struct DArcStruct<T> {
         control_block: NonNull<DArcControlBlock>,
-        actual_data: T,
+        actual_data: std::mem::ManuallyDrop<T>,
     }
 
     impl<T> DArcStruct<&T> {
@@ -35,7 +35,7 @@ mod darc {
             DArc {
                 control_block: zelf.control_block,
                 actual_ptr: unsafe {
-                    std::ptr::NonNull::new_unchecked(zelf.actual_data as *const T as *mut T)
+                    std::ptr::NonNull::new_unchecked(*zelf.actual_data as *const T as *mut T)
                 },
                 _phantom: PhantomData,
             }
@@ -51,34 +51,33 @@ mod darc {
             // preserve dropping on panic
             let temp_arc = DArcStruct {
                 control_block: zelf.control_block,
-                actual_data: (),
+                actual_data: std::mem::ManuallyDrop::new(()),
             };
-            let my_data_ptr = std::ptr::from_mut(&mut zelf.actual_data);
-            let my_data_fetched = unsafe { my_data_ptr.read() };
-            let new_data = my_data_fetched.await;
+            let my_data = unsafe { std::mem::ManuallyDrop::take(&mut zelf.actual_data) };
+            let new_data = my_data.await;
 
             let droppable_arc = std::mem::ManuallyDrop::new(temp_arc);
 
             DArcStruct {
                 control_block: droppable_arc.control_block,
-                actual_data: new_data,
+                actual_data: std::mem::ManuallyDrop::new(new_data),
             }
         }
     }
 
     impl<T, E> DArcStruct<core::result::Result<T, E>> {
         pub fn lift_result(self) -> core::result::Result<DArcStruct<T>, E> {
-            let zelf = std::mem::ManuallyDrop::new(self);
-            let zelf_data = unsafe { std::ptr::read(&zelf.actual_data) };
+            let mut zelf = std::mem::ManuallyDrop::new(self);
+            let zelf_data = unsafe { std::mem::ManuallyDrop::take(&mut zelf.actual_data) };
             match zelf_data {
                 Ok(data) => Ok(DArcStruct {
                     control_block: zelf.control_block,
-                    actual_data: data,
+                    actual_data: std::mem::ManuallyDrop::new(data),
                 }),
                 Err(e) => {
                     std::mem::drop(DArcStruct {
                         control_block: zelf.control_block,
-                        actual_data: (),
+                        actual_data: std::mem::ManuallyDrop::new(()),
                     });
                     Err(e)
                 }
@@ -88,16 +87,16 @@ mod darc {
 
     impl<T> DArcStruct<Option<T>> {
         pub fn lift_option(self) -> Option<DArcStruct<T>> {
-            let zelf = std::mem::ManuallyDrop::new(self);
-            let zelf_data = unsafe { std::ptr::read(&zelf.actual_data) };
+            let mut zelf = std::mem::ManuallyDrop::new(self);
+            let zelf_data = unsafe { std::mem::ManuallyDrop::take(&mut zelf.actual_data) };
             match zelf_data {
                 Some(data) => Some(DArcStruct {
                     control_block: zelf.control_block,
-                    actual_data: data,
+                    actual_data: std::mem::ManuallyDrop::new(data),
                 }),
                 None => {
                     std::mem::drop(DArcStruct {
-                        actual_data: (),
+                        actual_data: std::mem::ManuallyDrop::new(()),
                         control_block: zelf.control_block,
                     });
                     None
@@ -116,6 +115,8 @@ mod darc {
 
     impl<T> std::ops::Drop for DArcStruct<T> {
         fn drop(&mut self) {
+            std::mem::drop(unsafe { std::mem::ManuallyDrop::take(&mut self.actual_data) });
+
             // SAFETY: control_block is valid
             let prev_count = unsafe {
                 (*self.control_block.as_ptr())
@@ -199,7 +200,7 @@ mod darc {
             std::mem::forget(self);
             DArcStruct {
                 control_block: cb,
-                actual_data: sub,
+                actual_data: std::mem::ManuallyDrop::new(sub),
             }
         }
 
@@ -219,7 +220,7 @@ mod darc {
             std::mem::forget(self);
             DArcStruct {
                 control_block: cb,
-                actual_data: sub,
+                actual_data: std::mem::ManuallyDrop::new(sub),
             }
         }
 

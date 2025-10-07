@@ -75,6 +75,10 @@ pub async fn handle_genvm_run_readonly(
     contract_code: bytes::Bytes,
     timestamp: String,
 ) -> Result<impl warp::Reply> {
+    if true {
+        return Err(anyhow::anyhow!("readonly execution is not implemented yet"));
+    }
+
     let timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp)?.with_timezone(&chrono::Utc);
 
     let major = versioning::detect_major_spec(&ctx, &contract_code, timestamp).await?;

@@ -111,7 +111,7 @@ impl Ctx {
         loop {
             let mut next = ver;
             next.patch += 1;
-            if lock.executor_versions.get(&next).is_some() {
+            if lock.executor_versions.contains_key(&next) {
                 ver = next;
             } else {
                 break;

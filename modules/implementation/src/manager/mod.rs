@@ -326,7 +326,7 @@ async fn run_http_server(
 
     let serv = warp::serve(routes);
     let (addr, fut) = serv.bind_with_graceful_shutdown(
-        (args.host.parse::<std::net::IpAddr>().unwrap(), args.port),
+        (args.host.parse::<std::net::IpAddr>()?, args.port),
         async move { cancellation.chan.closed().await },
     );
 
