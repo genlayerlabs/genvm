@@ -1,9 +1,8 @@
 use anyhow::Result;
 use genvm_common::*;
-use std::{collections::HashMap, str::FromStr};
+use std::str::FromStr;
 
 use crate::manager::{
-    anyhow_to_rejection,
     modules::{self, Ctx},
     run, versioning,
 };
@@ -78,10 +77,7 @@ pub async fn handle_genvm_run_readonly(
 ) -> Result<impl warp::Reply> {
     let timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp)?.with_timezone(&chrono::Utc);
 
-    let major = ctx
-        .ver_ctx
-        .detect_major_spec(&contract_code, timestamp)
-        .await?;
+    let major = versioning::detect_major_spec(&ctx, &contract_code, timestamp).await?;
 
     let message = serde_json::json!({
         "contract_address": "AAAAAAAAAAAAAAAAAAAAAAAAAAA=",
@@ -93,8 +89,8 @@ pub async fn handle_genvm_run_readonly(
     });
 
     let req = run::Request {
-        major: major,
-        message: message,
+        major,
+        message,
         is_sync: false,
         capture_output: false,
         max_execution_minutes: 1,
@@ -121,10 +117,7 @@ pub async fn handle_contract_detect_version(
 ) -> Result<impl warp::Reply> {
     let deployment_timestamp =
         chrono::DateTime::parse_from_rfc3339(&deployment_timestamp)?.with_timezone(&chrono::Utc);
-    let major = ctx
-        .ver_ctx
-        .detect_major_spec(&contract_code, deployment_timestamp)
-        .await?;
+    let major = versioning::detect_major_spec(&ctx, &contract_code, deployment_timestamp).await?;
     Ok(warp::reply::json(&serde_json::json!({
         "specified_major": major,
     })))
@@ -242,5 +235,57 @@ pub async fn handle_genvm_status(
     Ok(warp::reply::json(&serde_json::json!({
         "genvm_id": genvm_id,
         "status": status
+    })))
+}
+
+#[derive(serde::Serialize)]
+struct SingleWrite(
+    #[serde(with = "serde_bytes")] [u8; 36],
+    #[serde(with = "serde_bytes")] Vec<u8>,
+);
+
+pub async fn handle_make_deployment_storage_writes(
+    ctx: sync::DArc<AppContext>,
+    deployment_timestamp: String,
+    code: bytes::Bytes,
+) -> Result<impl warp::Reply> {
+    let deployment_timestamp =
+        chrono::DateTime::parse_from_rfc3339(&deployment_timestamp)?.with_timezone(&chrono::Utc);
+
+    let major = versioning::detect_major_spec(&ctx, &code, deployment_timestamp).await?;
+
+    use sha3::{Digest, Sha3_256};
+
+    let mut code_digest = Sha3_256::new();
+    code_digest.update([0u8; 32]);
+    const CODE_OFFSET: u32 = 1;
+    code_digest.update(CODE_OFFSET.to_le_bytes());
+
+    // Get the digest as code_slot
+    let code_slot: [u8; 32] = code_digest.finalize().into();
+
+    // Create storage writes
+    let mut writes_seq = Vec::new();
+
+    // r1: code_slot + offset 0, value = code length as little-endian bytes
+    let mut key1 = [0u8; 36];
+    key1[..32].copy_from_slice(&code_slot);
+    key1[32..36].copy_from_slice(&0u32.to_le_bytes());
+    let value1 = (code.len() as u32).to_le_bytes().to_vec();
+    writes_seq.push(SingleWrite(key1, value1));
+
+    // r2: code_slot + offset 4, value = code
+    let mut key2 = [0u8; 36];
+    key2[..32].copy_from_slice(&code_slot);
+    key2[32..36].copy_from_slice(&4u32.to_le_bytes());
+    let value2 = code.to_vec();
+    writes_seq.push(SingleWrite(key2, value2));
+
+    if major != 0 {
+        anyhow::bail!("only major version 0 is supported for now");
+    }
+
+    Ok(warp::reply::json(&serde_json::json!({
+        "writes": writes_seq,
     })))
 }

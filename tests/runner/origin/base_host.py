@@ -109,26 +109,32 @@ class IHost(metaclass=abc.ABCMeta):
 	async def notify_nondet_disagreement(self, call_no: int, /) -> None: ...
 
 
-def save_code_callback[T](
-	code: bytes, cb: typing.Callable[[bytes, int, bytes], T]
-) -> tuple[T, T]:
-	import hashlib
-
-	code_digest = hashlib.sha3_256(b'\x00' * 32)
-	CODE_OFFSET = 1
-	code_digest.update(CODE_OFFSET.to_bytes(4, byteorder='little'))
-	code_slot = code_digest.digest()
-	r1 = cb(code_slot, 0, len(code).to_bytes(4, byteorder='little', signed=False))
-
-	r2 = cb(code_slot, 4, code)
-
-	return (r1, r2)
+import datetime
+import base64
 
 
-async def save_code_to_host(host: IHost, code: bytes):
-	r1, r2 = save_code_callback(code, host.storage_write)
-	await r1
-	await r2
+async def get_pre_deployment_writes(
+	code: bytes, timestamp: datetime.datetime, manager_uri: str
+) -> list[tuple[bytes, int, bytes]]:
+	async with aiohttp.request(
+		'POST',
+		headers={
+			'Deployment-Timestamp': timestamp.astimezone(datetime.UTC).isoformat(
+				timespec='milliseconds'
+			),
+		},
+		url=f'{manager_uri}/contract/pre-deploy-writes',
+		data=code,
+	) as resp:
+		if resp.status != 200:
+			raise Exception(f'pre-deploy-writes failed: {resp.status} {await resp.text()}')
+		body = await resp.json()
+		ret = []
+		for k, v in body['writes']:
+			k = bytes(k)
+			v = bytes(v)
+			ret.append((k[:32], int.from_bytes(k[32:], byteorder='little'), v))
+		return ret
 
 
 async def host_loop(handler: IHost, cancellation: asyncio.Event, *, logger: Logger):
@@ -337,13 +343,18 @@ class RunHostAndProgramRes:
 
 
 async def _send_timeout(manager_uri: str, genvm_id: str, logger: Logger):
-	async with aiohttp.request(
-		'DELETE',
-		f'{manager_uri}/genvm/{genvm_id}?wait_timeout_ms=20',
-	) as resp:
-		logger.debug('delete /genvm', genvm_id=genvm_id, status=resp.status)
-		if resp.status != 200:
-			logger.warning('delete /genvm failed', genvm_id=genvm_id, body=await resp.text())
+	try:
+		async with aiohttp.request(
+			'DELETE',
+			f'{manager_uri}/genvm/{genvm_id}?wait_timeout_ms=20',
+		) as resp:
+			logger.debug('delete /genvm', genvm_id=genvm_id, status=resp.status)
+			if resp.status != 200:
+				logger.warning(
+					'delete /genvm failed', genvm_id=genvm_id, body=await resp.text()
+				)
+	except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+		logger.warning('delete /genvm request failed', genvm_id=genvm_id, error=str(exc))
 
 
 async def run_genvm(

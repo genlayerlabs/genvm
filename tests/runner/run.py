@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import base64
 import concurrent.futures as cfutures
+from datetime import datetime
 import json
 import os
 import pickle
@@ -112,10 +113,10 @@ class ModuleManager:
 			f'{self.manager_uri}/module/start',
 			json={'module_type': name, 'config': None},
 		) as resp:
-			body = await resp.text()
-			if resp.status != 200 and body != '{"error":"module_already_running"}':
+			body = await resp.json()
+			if resp.status != 200 and body != {'error': 'module_already_running'}:
 				raise Exception(f'starting module {name} failed: {resp.status} {body}')
-			return await resp.json()
+			return body
 
 	async def start_default_modules(self):
 		await asyncio.gather(self.start_module('Llm'), self.start_module('Web'))
@@ -408,9 +409,13 @@ class TestRunner:
 			addr = base64.b64decode(addr)
 			code_path = self._process_code_file(code, seq_tmp_dir)
 			code_bytes = Path(code_path).read_bytes()
-			base_host.save_code_callback(
-				code_bytes, lambda b, c, d: base_mock_storage.write(Address(addr), b, c, d)
+			timestamp = first_conf['message'].get('datetime', '2024-11-26T06:42:42.424242Z')
+			timestamp = datetime.fromisoformat(timestamp)
+			writes = asyncio.run(
+				base_host.get_pre_deployment_writes(code_bytes, timestamp, self.config.manager)
 			)
+			for slot, off, data in writes:
+				base_mock_storage.write(Address(addr), slot, off, data)
 
 		empty_storage = seq_tmp_dir.joinpath('empty-storage.pickle')
 		with open(empty_storage, 'wb') as f:

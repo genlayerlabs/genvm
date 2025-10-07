@@ -2,7 +2,6 @@ use genvm_common::*;
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{Context, Result};
-use tokio::io::AsyncWriteExt;
 use warp::Filter;
 
 use crate::common;
@@ -16,14 +15,6 @@ mod versioning;
 struct AnyhowRejection(anyhow::Error);
 
 impl warp::reject::Reject for AnyhowRejection {}
-
-fn anyhow_to_rejection<E>(err: E) -> warp::Rejection
-where
-    E: Into<anyhow::Error>,
-{
-    let err: anyhow::Error = err.into();
-    warp::reject::custom(AnyhowRejection(err))
-}
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Config {
@@ -119,6 +110,7 @@ fn unwrap_all_anyhow<R: warp::Reply + 'static>(
             let Some(AnyhowRejection(inner)) = err.find::<AnyhowRejection>() else {
                 return Err(err);
             };
+            log_error!(err:ah = inner; "internal server error");
             Ok(warp::reply::with_status(
                 warp::reply::json(&serde_json::json!({"error": format!("{:#}", inner)})),
                 warp::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -285,6 +277,21 @@ async fn run_http_server(
         },
     ));
 
+    let ctx = app_ctx.clone();
+    let make_deployment_storage_writes_route = unwrap_all_anyhow(
+        warp::path!("contract" / "pre-deploy-writes")
+            .and(warp::post())
+            .and(warp::body::bytes())
+            .and(warp::header::<String>("Deployment-Timestamp"))
+            .then(move |code, deployment_timestamp: String| {
+                let ctx = ctx.clone();
+                async move {
+                    handlers::handle_make_deployment_storage_writes(ctx, deployment_timestamp, code)
+                        .await
+                }
+            }),
+    );
+
     let routes = status_route
         .or(start_route)
         .or(stop_route)
@@ -297,7 +304,23 @@ async fn run_http_server(
         .or(get_permits_route)
         .or(set_permits_route)
         .or(genvm_shutdown_route)
-        .or(genvm_status_route);
+        .or(genvm_status_route)
+        .or(make_deployment_storage_writes_route);
+
+    let routes = routes.recover(|err: warp::reject::Rejection| async move {
+        if err.is_not_found() {
+            Ok::<_, std::convert::Infallible>(warp::reply::with_status(
+                warp::reply::json(&serde_json::json!({"error": "Not Found"})),
+                warp::http::StatusCode::NOT_FOUND,
+            ))
+        } else {
+            let err_format = format!("{:?}", err);
+            Ok(warp::reply::with_status(
+                warp::reply::json(&serde_json::json!({"error": err_format})),
+                warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+            ))
+        }
+    });
 
     let cancellation = cancel.clone();
 

@@ -148,4 +148,4 @@ They are separated from executor for following reasons:
 :term:`Manager`
 ---------------
 
-The :term:`Manager` oversees :term:`Module`\s and is responsible for correct :def:`gvm-executor` version selection
+The :term:`Manager` oversees :term:`Module`\s and is responsible for correct :ref:`gvm-executor` version selection

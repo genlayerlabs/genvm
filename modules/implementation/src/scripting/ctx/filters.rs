@@ -18,9 +18,9 @@ fn normalize_whitespace(input: &str) -> String {
     let mut result = String::new();
     let mut consecutive_spaces = 0;
     let mut consecutive_newlines = 0;
-    let mut chars_iter = input.chars().peekable();
+    let chars_iter = input.chars().peekable();
 
-    while let Some(ch) = chars_iter.next() {
+    for ch in chars_iter {
         match ch {
             '\n' => {
                 if result.is_empty() {
@@ -82,12 +82,10 @@ pub fn apply_filters(s: &str, filters: &[TextFilter]) -> String {
                     use unicode_width::UnicodeWidthChar;
                     if c == ' ' || c == '\n' {
                         true
+                    } else if let Some(w) = c.width() {
+                        w > 0
                     } else {
-                        if let Some(w) = c.width() {
-                            w > 0
-                        } else {
-                            false
-                        }
+                        false
                     }
                 });
             }

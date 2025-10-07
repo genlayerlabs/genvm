@@ -75,7 +75,13 @@ mod darc {
                     control_block: zelf.control_block,
                     actual_data: data,
                 }),
-                Err(e) => Err(e),
+                Err(e) => {
+                    std::mem::drop(DArcStruct {
+                        control_block: zelf.control_block,
+                        actual_data: (),
+                    });
+                    Err(e)
+                }
             }
         }
     }

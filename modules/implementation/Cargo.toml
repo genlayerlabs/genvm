@@ -46,6 +46,7 @@ bytes = "1.10.1"
 sysinfo = { version = "0.36", default-features = false, features = ["system"] }
 libc = "0.2"
 dashmap = "6.1.0"
+sha3 = "0.10"
 
 [dev-dependencies]
 afl = { version = "0.15.18", features = ["no_cfg_fuzzing"] }

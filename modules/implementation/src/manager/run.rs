@@ -59,6 +59,10 @@ pub struct Ctx {
 }
 
 impl Ctx {
+    pub fn executors_path(&self) -> &std::path::Path {
+        &self.executors_path
+    }
+
     pub async fn get_permits(&self) -> usize {
         let max_permits = self.max_permits.lock().await;
         *max_permits
@@ -82,7 +86,7 @@ impl Ctx {
         }
         *permits_lock = permits;
 
-        return *permits_lock;
+        *permits_lock
     }
 
     pub async fn graceful_shutdown(
@@ -453,7 +457,7 @@ pub async fn start_genvm(
     let read_fd = read_right_fd[0];
     let write_fd = read_right_fd[1];
 
-    let _ = unsafe { libc::fcntl(read_fd, libc::F_SETFL, libc::O_CLOEXEC) };
+    let _ = unsafe { libc::fcntl(read_fd, libc::F_SETFD, libc::O_CLOEXEC) };
 
     let read_fd = unsafe { std::os::unix::io::OwnedFd::from_raw_fd(read_fd) };
     let write_fd = unsafe { std::os::unix::io::OwnedFd::from_raw_fd(write_fd) };

@@ -56,9 +56,9 @@ local function just_in_backend(ctx, mapped_prompt, remaining_gen)
 			lib.log{level = "warning", message = "service is overloaded, looking for next", error = as_user_error}
 		else
 			lib.log{level = "error", message = "provider failed", error = as_user_error, request = request}
-
-			as_user_error.fatal = true
-			lib.rs.user_error(as_user_error)
+			-- lets fall back to retry
+			-- as_user_error.fatal = true
+			-- lib.rs.user_error(as_user_error)
 		end
 
 		::continue::

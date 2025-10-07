@@ -82,70 +82,8 @@ impl Ctx {
         Ok(())
     }
 
-    pub async fn detect_major_spec(
-        &self,
-        data: &[u8],
-        deployment_timestamp: chrono::DateTime<chrono::Utc>,
-    ) -> anyhow::Result<u32> {
-        let Some(possible_major) = self.get_latest_major(deployment_timestamp) else {
-            anyhow::bail!("no_executor_version_available");
-        };
-
-        let execute_in = self
-            .get_version(possible_major, deployment_timestamp)
-            .await
-            .with_context(|| "failed_to_get_executor_version")?;
-
-        let mut genvm_path = std::path::PathBuf::new();
-        genvm_path.push("executor");
-        genvm_path.push(format!(
-            "v{}.{}.{}",
-            execute_in.major, execute_in.minor, execute_in.patch
-        ));
-        genvm_path.push("bin");
-        genvm_path.push("genvm");
-
-        let mut proc = tokio::process::Command::new("foo")
-            .arg("parse-version-pattern")
-            .stdin(std::process::Stdio::piped())
-            .spawn()?;
-
-        let stdin = proc.stdin.take();
-        let stdout = proc.stdout.take();
-
-        let task = async move {
-            let mut stdin = stdin.with_context(|| "failed_to_open_stdin")?;
-            stdin
-                .write_all(data)
-                .await
-                .with_context(|| "failed_to_write_to_stdin")?;
-            std::mem::drop(stdin);
-            let mut res = String::new();
-            stdout
-                .with_context(|| "failed_to_open_stdout")?
-                .read_to_string(&mut res)
-                .await?;
-
-            let res = res.trim();
-            let res = res.strip_prefix("v").unwrap_or(res);
-            let res = &res[..res.find('.').unwrap_or(res.len())];
-
-            let res = res.parse::<u32>().unwrap_or(possible_major);
-
-            Ok(res)
-        };
-
-        let detected_version = task.await;
-
-        let _ = proc.start_kill();
-        let wait_err = proc.wait().await;
-        let _ = wait_err?;
-
-        detected_version
-    }
-
-    pub fn get_latest_major(&self, timestamp: chrono::DateTime<chrono::Utc>) -> Option<u32> {
-        let lock = self.manifest.blocking_read();
+    pub async fn get_latest_major(&self, timestamp: chrono::DateTime<chrono::Utc>) -> Option<u32> {
+        let lock = self.manifest.read().await;
         lock.executor_versions
             .iter()
             .filter(|(_, ev)| ev.available_after <= timestamp)
@@ -182,4 +120,75 @@ impl Ctx {
 
         Some(ver)
     }
+}
+
+pub async fn detect_major_spec(
+    full_ctx: &crate::manager::AppContext,
+    data: &[u8],
+    deployment_timestamp: chrono::DateTime<chrono::Utc>,
+) -> anyhow::Result<u32> {
+    let zelf = &full_ctx.ver_ctx;
+
+    let Some(possible_major) = zelf.get_latest_major(deployment_timestamp).await else {
+        anyhow::bail!("no_executor_version_available");
+    };
+
+    let execute_in = zelf
+        .get_version(possible_major, deployment_timestamp)
+        .await
+        .with_context(|| "failed_to_get_executor_version")?;
+
+    let mut genvm_path = std::path::PathBuf::from(full_ctx.run_ctx.executors_path());
+
+    genvm_path.push(format!(
+        "v{}.{}.{}",
+        execute_in.major, execute_in.minor, execute_in.patch
+    ));
+
+    #[cfg(debug_assertions)]
+    if zelf.config.reroute_to_test {
+        genvm_path.pop();
+        genvm_path.push("vTEST");
+    }
+    genvm_path.push("bin");
+    genvm_path.push("genvm");
+
+    let mut proc = tokio::process::Command::new(&genvm_path)
+        .arg("parse-version-pattern")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .with_context(|| format!("running genvm command {:?}", genvm_path))?;
+
+    let stdin = proc.stdin.take();
+    let stdout = proc.stdout.take();
+
+    let task = async move {
+        let mut stdin = stdin.with_context(|| "failed_to_open_stdin")?;
+        stdin
+            .write_all(data)
+            .await
+            .with_context(|| "failed_to_write_to_stdin")?;
+        std::mem::drop(stdin);
+        let mut res = String::new();
+        stdout
+            .with_context(|| "failed_to_open_stdout")?
+            .read_to_string(&mut res)
+            .await?;
+
+        let res = res.trim();
+        let res = res.strip_prefix("v").unwrap_or(res);
+        let res = &res[..res.find('.').unwrap_or(res.len())];
+
+        let res = res.parse::<u32>().unwrap_or(possible_major);
+
+        Ok(res)
+    };
+
+    let detected_version = task.await;
+
+    let _ = proc.wait().await;
+
+    detected_version.map(|v| v.min(possible_major))
 }

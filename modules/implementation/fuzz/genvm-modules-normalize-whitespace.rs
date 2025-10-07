@@ -87,11 +87,11 @@ fn main() {
         };
 
         let res = genvm_modules::filters::apply_filters(
-            &s,
+            s,
             &[genvm_modules::filters::TextFilter::NormalizeWS],
         );
 
-        if res.len() == 0 {
+        if res.is_empty() {
             return;
         }
         assert!(!res.starts_with(' '));

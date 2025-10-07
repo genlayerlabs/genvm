@@ -637,7 +637,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                 for iov in iovs.iter() {
                     let iov = iov?;
                     let iov = memory.read(iov)?;
-                    let remaining_len = contents.len().checked_sub(offset).unwrap_or(0);
+                    let remaining_len = contents.len().saturating_sub(offset);
                     let mut buf_len: usize = iov.buf_len.try_into()?;
                     buf_len = buf_len.min(remaining_len);
                     let cont_slice: &[u8] = &contents.as_ref()[offset..(offset + buf_len)];
