@@ -107,6 +107,7 @@ printf "BUILD_DIR: %s\nTARGET_DIR: %s\nCOVERAGE_DIR: %s\n" "$BUILD_DIR" "$TARGET
 export RUSTFLAGS='-C instrument-coverage'
 export LLVM_PROFILE_FILE="$COVERAGE_DIR/cov-%p-%16m.profraw"
 export AFL_FUZZER_LOOPCOUNT=20 # without it no coverage will be written!
+export AFL_NO_CFG_FUZZING=1
 
 LLVM_TOOLS_BIN="$(rustc --print target-libdir)/../bin"
 
@@ -180,7 +181,7 @@ do
                     FEATURES=""
                 fi
 
-                cargo afl build \
+                echo_and_run cargo afl build \
                     --target-dir "$TARGET_DIR" \
                     --example "fuzz-$name" \
                     $FEATURES

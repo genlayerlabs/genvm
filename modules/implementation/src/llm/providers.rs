@@ -737,7 +737,7 @@ mod tests {
         pub const google: &str = r#"{
             "host": "https://generativelanguage.googleapis.com",
             "provider": "google",
-            "models": { "gemini-1.5-flash": { "supports_json": true } },
+            "models": { "gemini-2.5-flash": { "supports_json": true } },
             "key": "${ENV[GEMINIKEY]}"
         }"#;
 
@@ -791,7 +791,7 @@ mod tests {
                     temperature: 0.7,
                     user_message: "Respond with a single word \"yes\" (without quotes) and only this word, lowercase".to_owned(),
                     images: Vec::new(),
-                    max_tokens: 100,
+                    max_tokens: 500,
                     use_max_completion_tokens: true,
                 },
                 backend.script_config.models.first_key_value().unwrap().0,
@@ -869,7 +869,7 @@ mod tests {
                     temperature: 0.7,
                     user_message: PROMPT.to_owned(),
                     images: Vec::new(),
-                    max_tokens: 100,
+                    max_tokens: 500,
                     use_max_completion_tokens: true,
                 },
                 backend.script_config.models.first_key_value().unwrap().0,

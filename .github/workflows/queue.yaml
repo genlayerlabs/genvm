@@ -35,6 +35,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
+      - uses:  insightsengineering/disk-space-reclaimer@v1
+        with:
+          tools-cache: false
+          swap-storage: false
+          docker-images: false
       - name: Get source
         uses: ./.github/actions/get-src
         with:
@@ -55,7 +60,7 @@ jobs:
           echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
           docker build --progress=plain modules/webdriver/
           TAG=$(docker build -q  modules/webdriver/)
-          docker run --rm -d $TAG && \
+          docker run -p 4444:4444 --rm -d $TAG && \
           ./support/ci/pipelines/test-rust.sh && ./support/ci/cargo-clippy.sh
         env:
           OPENAIKEY: ${{ secrets.OPENAIKEY }}
