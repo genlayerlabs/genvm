@@ -1,5 +1,6 @@
 import logging
 import os
+import shlex
 
 log_level_str = os.environ.get('LOGLEVEL', 'INFO').upper()
 log_levels = {
@@ -136,9 +137,9 @@ def patch_executable(path: Path, *, rpath_dir: list[Path]):
 			logger.info(f'Updated RPATH from "{old_rpath}" to: "{rpath_entry.value}"')
 		else:
 			# Add new RPATH entry
-			rpath_entry = lief.ELF.DynamicEntryRpath([rpath_str])
+			rpath_entry = lief.ELF.DynamicEntryRpath([str(rpath) for rpath in rpath_dir])
 			binary.add(rpath_entry)
-			logger.info(f'Added new RPATH entry: "{rpath_str}"')
+			logger.info(f'Added new RPATH entry: "{rpath_dir}"')
 
 	# Handle Mach-O binaries
 	elif binary.format == lief.Binary.FORMATS.MACHO:
@@ -195,9 +196,6 @@ def patch_executable(path: Path, *, rpath_dir: list[Path]):
 	logger.info(f'Successfully patched binary: {path}')
 
 
-import shlex, os
-
-
 def run_check_command(command: list[str | Path]):
 	env = os.environ.copy()
 	env['LLVM_PROFILE_FILE'] = '/dev/null'
@@ -239,14 +237,21 @@ def _load_registry(file: str | Path) -> dict[str, list[str]]:
 	return ret
 
 
-def _object_gcs_path(name: str, hash: str) -> str:
-	return f'genvm_runners/{name}/{hash}.tar'
-
-
 def _download_single(name: str, hash: str) -> bytes:
-	url = f'https://storage.googleapis.com/gh-af/{_object_gcs_path(name, hash)}'
-	with urllib.request.urlopen(url) as f:
-		return f.read()
+	format_vars = {
+		'name': name,
+		'hash': hash,
+		'hash_0_2': hash[:2],
+		'hash_2_': hash[2:],
+	}
+	for url_template in manifest.get('runners_download_urls', []):
+		url = url_template.format(**format_vars)
+		try:
+			with urllib.request.urlopen(url) as f:
+				return f.read()
+		except Exception as e:
+			pass
+	raise RuntimeError(f'failed to download {name}:{hash} from all sources')
 
 
 for executor_version in manifest.get('executor_versions', {}).keys():

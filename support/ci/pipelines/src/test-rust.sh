@@ -8,6 +8,6 @@ ruby ./configure.rb
 
 ninja -v -C build all/bin
 
-LOGLEVEL=DEBUG python3 ./build/out/executor/vTEST/bin/post-install.py
+LOGLEVEL=DEBUG python3 ./build/out/bin/post-install.py
 
 bash -x ./tests/rust.sh

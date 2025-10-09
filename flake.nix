@@ -120,7 +120,7 @@
 									'';
 								};
 
-								packages-0 = with pkgs; [ bash xz zlib git python312 coreutils which jq stdenv.cc ];
+								packages-0 = with pkgs; [ bash xz zlib git python312 coreutils which jq stdenv.cc glibc ];
 								packages-lint = with pkgs; [ pre-commit ];
 								packages-rust = [ custom-rust ];
 								packages-debug-test = with pkgs; [
@@ -147,7 +147,7 @@
 								];
 								shell-hook-base = ''
 									export PATH="$(pwd)/tools/git-third-party:$PATH"
-									export LD_LIBRARY_PATH="${toString pkgs.xz.out}/lib:${toString pkgs.zlib.out}/lib:${toString pkgs.stdenv.cc.cc.lib}/lib:${toString pkgs.glibc}/lib:$LD_LIBRARY_PATH"
+									export LD_LIBRARY_PATH="${toString pkgs.xz.out}/lib:${toString pkgs.zlib.out}/lib:${pkgs.stdenv.cc.cc.lib}/lib:${toString pkgs.glibc}/lib:$LD_LIBRARY_PATH"
 									export LLVM_PROFILE_FILE=/dev/null
 								'';
 							in
