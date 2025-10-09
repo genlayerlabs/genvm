@@ -11,3 +11,6 @@ Glossary
 
    Module
       External service providing non-deterministic capabilities.
+
+   Manager
+      The GenVM component responsible for managing modules and GenVM versions.

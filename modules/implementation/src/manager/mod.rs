@@ -292,6 +292,17 @@ async fn run_http_server(
             }),
     );
 
+    let ctx = app_ctx.clone();
+    let llm_check_route = unwrap_all_anyhow(
+        warp::path!("llm" / "check")
+            .and(warp::post())
+            .and(warp::body::json())
+            .then(move |data| {
+                let ctx = ctx.clone();
+                async move { handlers::handle_llm_check(ctx, data).await }
+            }),
+    );
+
     let routes = status_route
         .or(start_route)
         .or(stop_route)
@@ -305,7 +316,8 @@ async fn run_http_server(
         .or(set_permits_route)
         .or(genvm_shutdown_route)
         .or(genvm_status_route)
-        .or(make_deployment_storage_writes_route);
+        .or(make_deployment_storage_writes_route)
+        .or(llm_check_route);
 
     let routes = routes.recover(|err: warp::reject::Rejection| async move {
         if err.is_not_found() {

@@ -13,7 +13,6 @@ use genvm_common::log_error;
 enum Commands {
     Web(web::CliArgs),
     Llm(llm::CliArgsRun),
-    LlmCheck(llm::CliArgsCheck),
     Manager(manager::CliArgs),
 }
 
@@ -31,7 +30,6 @@ fn main() -> Result<()> {
     match args.command {
         Commands::Web(a) => web::entrypoint(a),
         Commands::Llm(a) => llm::entrypoint_run(a),
-        Commands::LlmCheck(a) => llm::entrypoint_check(a),
         Commands::Manager(a) => manager::entrypoint(a),
     }
     .inspect_err(|e| {

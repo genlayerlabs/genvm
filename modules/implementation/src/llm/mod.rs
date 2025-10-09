@@ -7,9 +7,9 @@ use std::{
 
 use crate::{common, scripting};
 
-mod config;
+pub(crate) mod config;
 mod handler;
-mod prompt;
+pub(crate) mod prompt;
 mod providers;
 
 type UserVM = scripting::UserVM<ctx::VMData, Arc<ctx::CtxPart>>;
@@ -29,20 +29,6 @@ pub struct CliArgsRun {
 
     #[arg(long, default_value_t = false)]
     die_with_parent: bool,
-}
-
-#[derive(clap::Args, Debug)]
-pub struct CliArgsCheck {
-    #[arg(long, default_value_t = String::from("${exeDir}/../config/genvm-module-llm.yaml"))]
-    config: String,
-    #[arg(long, help = "url")]
-    host: String,
-    #[arg(long)]
-    model: String,
-    #[arg(long)]
-    provider: config::Provider,
-    #[arg(long, help = "api key, supports `${ENV[...]}` syntax")]
-    key: String,
 }
 
 mod ctx;
@@ -179,83 +165,6 @@ fn handle_run(config: config::Config, args: CliArgsRun) -> Result<()> {
     Ok(())
 }
 
-fn handle_check(config: config::Config, args: CliArgsCheck) -> Result<()> {
-    let _ = config;
-
-    let runtime = tokio::runtime::Runtime::new()?;
-
-    let backend = serde_json::json!({
-        "host": args.host,
-        "provider": args.provider,
-        "models": {
-            args.model: {}
-        },
-        "key": args.key
-    });
-
-    let mut vars = HashMap::new();
-    for (mut name, value) in std::env::vars() {
-        name.insert_str(0, "ENV[");
-        name.push(']');
-
-        vars.insert(name, value);
-    }
-
-    let backend = genvm_common::templater::patch_json(
-        &vars,
-        backend,
-        &genvm_common::templater::DOLLAR_UNFOLDER_RE,
-    )?;
-
-    let backend: config::BackendConfig = serde_json::from_value(backend)?;
-    let provider = backend.to_provider();
-
-    let ctx = scripting::CtxPart {
-        client: common::create_client().unwrap(),
-        metrics: sync::DArc::new(scripting::Metrics::default()),
-        node_address: "test_node".to_owned(),
-        sign_headers: std::sync::Arc::new(BTreeMap::new()),
-        sign_url: std::sync::Arc::from("test_url"),
-        sign_vars: BTreeMap::new(),
-        hello: Arc::new(genvm_modules_interfaces::GenVMHello {
-            cookie: "test_cookie".to_owned(),
-            host_data: genvm_modules_interfaces::HostData {
-                node_address: "test_node".to_owned(),
-                tx_id: "test_tx".to_owned(),
-                rest: serde_json::Map::new(),
-            },
-        }),
-    };
-
-    let res = runtime.block_on(
-        provider.exec_prompt_text(
-            &ctx,
-            &prompt::Internal {
-                system_message: None,
-                temperature: 0.7,
-                user_message:
-                    "Respond with two letters \"ok\" (without quotes) and only this word, lowercase"
-                        .to_owned(),
-                images: Vec::new(),
-                max_tokens: 30,
-                use_max_completion_tokens: true,
-            },
-            backend.script_config.models.first_key_value().unwrap().0,
-        ),
-    )?;
-
-    let res = res.trim().to_lowercase();
-
-    if res != "ok" {
-        anyhow::bail!(
-            "provider is not functional, answer is `{}` instead of `ok`",
-            res
-        );
-    }
-
-    Ok(())
-}
-
 pub fn entrypoint_run(args: CliArgsRun) -> Result<()> {
     let config = genvm_common::load_config(HashMap::new(), &args.config)
         .with_context(|| "loading config")?;
@@ -264,16 +173,6 @@ pub fn entrypoint_run(args: CliArgsRun) -> Result<()> {
     config.base.setup_logging(std::io::stdout())?;
 
     handle_run(config, args)
-}
-
-pub fn entrypoint_check(args: CliArgsCheck) -> Result<()> {
-    let config = genvm_common::load_config(HashMap::new(), &args.config)
-        .with_context(|| "loading config")?;
-    let config: config::Config = serde_yaml::from_value(config)?;
-
-    config.base.setup_logging(std::io::stdout())?;
-
-    handle_check(config, args)
 }
 
 #[cfg(test)]

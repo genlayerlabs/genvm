@@ -9,3 +9,4 @@ Overview of GenVM's core architectural components and design patterns.
    01-components
    02-host-interface
    03-modules
+   04-manager

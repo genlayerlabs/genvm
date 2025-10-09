@@ -1,11 +1,14 @@
 use anyhow::Result;
 use genvm_common::*;
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use crate::manager::{
     modules::{self, Ctx},
     run, versioning,
 };
+use crate::{common, llm, scripting};
 
 use super::AppContext;
 
@@ -172,7 +175,7 @@ pub async fn handle_set_env(
     std::env::set_var(key, value);
 
     Ok(warp::reply::json(
-        &serde_json::json!({"result": "env_var_set", "key": key, "value": value}),
+        &serde_json::json!({"result": "env_var_set", "key": key}),
     ))
 }
 
@@ -292,4 +295,116 @@ pub async fn handle_make_deployment_storage_writes(
     Ok(warp::reply::json(&serde_json::json!({
         "writes": writes_seq,
     })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct LlmCheckRequest {
+    pub configs: Vec<LlmProviderConfig>,
+    pub test_prompts: Vec<llm::prompt::Internal>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct LlmProviderConfig {
+    pub host: String,
+    pub provider: llm::config::Provider,
+    pub model: String,
+    pub key: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct LlmAvailabilityResult {
+    pub config_index: usize,
+    pub prompt_index: usize,
+    pub available: bool,
+    pub error: Option<String>,
+    pub response: Option<String>,
+}
+
+pub async fn handle_llm_check(
+    _ctx: sync::DArc<AppContext>,
+    data: serde_json::Value,
+) -> Result<impl warp::Reply> {
+    let request: LlmCheckRequest = serde_json::from_value(data)?;
+
+    let mut results = Vec::new();
+
+    for (config_idx, config_data) in request.configs.iter().enumerate() {
+        for (prompt_idx, test_prompt) in request.test_prompts.iter().enumerate() {
+            let result = check_llm_availability(config_data, test_prompt).await;
+
+            let availability_result = match result {
+                Ok(response) => LlmAvailabilityResult {
+                    config_index: config_idx,
+                    prompt_index: prompt_idx,
+                    available: true,
+                    error: None,
+                    response: Some(response),
+                },
+                Err(error) => LlmAvailabilityResult {
+                    config_index: config_idx,
+                    prompt_index: prompt_idx,
+                    available: false,
+                    error: Some(error.to_string()),
+                    response: None,
+                },
+            };
+
+            results.push(availability_result);
+        }
+    }
+
+    Ok(warp::reply::json(&results))
+}
+
+async fn check_llm_availability(
+    config_data: &LlmProviderConfig,
+    test_prompt: &llm::prompt::Internal,
+) -> Result<String> {
+    let backend = serde_json::json!({
+        "host": config_data.host,
+        "provider": config_data.provider,
+        "models": {
+            &config_data.model: {}
+        },
+        "key": config_data.key
+    });
+
+    let mut vars = HashMap::new();
+    for (mut name, value) in std::env::vars() {
+        name.insert_str(0, "ENV[");
+        name.push(']');
+        vars.insert(name, value);
+    }
+
+    let backend = genvm_common::templater::patch_json(
+        &vars,
+        backend,
+        &genvm_common::templater::DOLLAR_UNFOLDER_RE,
+    )?;
+
+    let backend: llm::config::BackendConfig = serde_json::from_value(backend)?;
+    let provider = backend.to_provider();
+
+    let ctx = scripting::CtxPart {
+        client: common::create_client()?,
+        metrics: sync::DArc::new(scripting::Metrics::default()),
+        node_address: "test_node".to_owned(),
+        sign_headers: Arc::new(BTreeMap::new()),
+        sign_url: Arc::from("test_url"),
+        sign_vars: BTreeMap::new(),
+        hello: Arc::new(genvm_modules_interfaces::GenVMHello {
+            cookie: "test_cookie".to_owned(),
+            host_data: genvm_modules_interfaces::HostData {
+                node_address: "test_node".to_owned(),
+                tx_id: "test_tx".to_owned(),
+                rest: serde_json::Map::new(),
+            },
+        }),
+    };
+
+    let response = provider
+        .exec_prompt_text(&ctx, test_prompt, &config_data.model)
+        .await?;
+
+    Ok(response)
 }
