@@ -43,10 +43,12 @@ unicode-width = "0.2.1"
 image = { version = "0.25.8", features = ["png", "jpeg", "webp"]}
 warp = "0.3.7"
 bytes = "1.10.1"
-sysinfo = { version = "0.36", default-features = false, features = ["system"] }
 libc = "0.2"
 dashmap = "6.1.0"
 sha3 = "0.10"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+sysinfo = { version = "0.36", default-features = false, features = ["system"] }
 
 [dev-dependencies]
 afl = { version = "0.15.18", features = ["no_cfg_fuzzing"] }

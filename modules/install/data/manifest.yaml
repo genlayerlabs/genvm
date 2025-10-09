@@ -1,3 +1,7 @@
 executor_versions:
+  v0.2.5:
+    available_after: "2024-09-01T00:00:00Z"
+  v0.2.4:
+    available_after: "2024-09-01T00:00:00Z"
   v0.2.3:
     available_after: "2024-09-01T00:00:00Z"

@@ -196,7 +196,15 @@ impl Ctx {
         res
     }
 
-    pub fn new() -> anyhow::Result<Self> {
+    #[cfg(target_os = "macos")]
+    fn get_default_permits() -> usize {
+        log_warn!("automatic permits detection is not supported on macOS, using default value");
+
+        8
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn get_default_permits() -> usize {
         let mut sys = sysinfo::System::new_all();
         sys.refresh_memory();
         sys.refresh_all();
@@ -215,8 +223,11 @@ impl Ctx {
         let total_mem_kb = free_memory / 1024 + free_swap / 1024;
         let total_mem_gb = total_mem_kb / 1024 / 1024;
 
-        let permits = (total_mem_gb / 4).max(2) as usize;
+        (total_mem_gb / 4).max(2) as usize
+    }
 
+    pub fn new() -> anyhow::Result<Self> {
+        let permits = Self::get_default_permits();
         log_info!(permits = permits; "estimated concurrent GenVM permits");
 
         let mut exe_path = std::env::current_exe()?;
