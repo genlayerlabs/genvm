@@ -7,4 +7,4 @@ executor_versions:
     available_after: "2024-09-01T00:00:00Z"
 
 runners_download_urls:
-  - "https://storage.googleapis.com/gh-af/genvm_runners/{id}/{hash}.tar"
+  - "https://storage.googleapis.com/gh-af/genvm_runners/{name}/{hash}.tar"

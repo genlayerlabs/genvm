@@ -105,11 +105,11 @@ prompt_templates:
         Output format:
         Respond with json object containing key "result" and associated boolean value,
         representing the result of evaluating above criteria. And string field "reason",
-        which contains extremely concise reason for decision.
+        which contains extremely concise reason for decision. Reason should precede result.
 
         Examples:
-        {"result": true, "reason": "all rules satisfied"}
-        {"result": false, "reason": "rule 2 violated: ..."}
+        {"reason": "all rules satisfied", "result": true}
+        {"reason": "rule 2 violated: ...", "result": false}
 
         Output must have only these two fields and not be wrapped in other objects.
   eq_non_comparative_leader:
@@ -178,11 +178,11 @@ prompt_templates:
       Output format:
       Respond with json object containing key "result" and associated boolean value,
       representing the result of evaluating above criteria. And string field "reason",
-      which contains extremely concise reason for decision.
+      which contains extremely concise reason for decision. Reason should precede result.
 
       Examples:
-      {"result": true, "reason": "all rules satisfied"}
-      {"result": false, "reason": "rule 1 violated: section input is empty"}
-      {"result": false, "reason": "criteria not met: <explanation>"}
+      {"reason": "all rules satisfied", "result": true}
+      {"reason": "rule 1 violated: section input is empty", "result": false}
+      {"reason": "criteria not met: <explanation>", "result": false}
 
       Output must have only these two fields and not be wrapped in other objects.

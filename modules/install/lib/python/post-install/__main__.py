@@ -247,6 +247,7 @@ def _download_single(name: str, hash: str) -> bytes:
 	for url_template in manifest.get('runners_download_urls', []):
 		url = url_template.format(**format_vars)
 		try:
+			logger.info(f'downloading {url}')
 			with urllib.request.urlopen(url) as f:
 				return f.read()
 		except Exception as e:
