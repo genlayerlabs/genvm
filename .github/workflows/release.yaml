@@ -182,7 +182,7 @@ jobs:
         run: |
           brew install wabt
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Run post-install
@@ -213,7 +213,7 @@ jobs:
         with:
           lfs: true
       - run: sudo apt-get install -y python3-poetry
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: poetry
