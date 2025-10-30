@@ -102,6 +102,7 @@ impl Ctx {
         } else {
             let delta = permits - permits_lock.max;
             self.permits.add_permits(delta);
+            permits_lock.max = permits;
         }
 
         permits_lock.max
