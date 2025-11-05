@@ -191,6 +191,7 @@ do
 
                 echo_and_run cargo afl fuzz \
                     -c - \
+                    -M main \
                     -i "./fuzz/inputs-$name" \
                     -o "$BUILD_DIR/genvm-testdata-out/fuzz/$name" \
                     -V "$FUZZ_TIMEOUT" \
