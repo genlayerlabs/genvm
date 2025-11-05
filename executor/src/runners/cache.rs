@@ -22,14 +22,19 @@ impl Reader {
             anyhow::bail!("path {:#?} doesn't exist", &runners_path);
         }
 
-        let mut all: BTreeMap<_, Vec<_>> =
-            serde_json::from_reader(std::fs::File::open(registry_path.join("all.json"))?)?;
+        let mut all: BTreeMap<_, Vec<_>> = serde_json::from_reader(
+            std::fs::File::open(registry_path.join("all.json"))
+                .with_context(|| format!("opening {registry_path:?}/all.json"))?,
+        )?;
         for b in all.values_mut() {
             b.sort();
         }
 
         let latest = if debug_mode {
-            serde_json::from_reader(std::fs::File::open(registry_path.join("latest.json"))?)?
+            serde_json::from_reader(
+                std::fs::File::open(registry_path.join("latest.json"))
+                    .with_context(|| format!("opening {registry_path:?}/latest.json"))?,
+            )?
         } else {
             BTreeMap::new()
         };

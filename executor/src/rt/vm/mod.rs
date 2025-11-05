@@ -3,7 +3,7 @@ use crate::{public_abi, rt, wasi};
 use genvm_common::*;
 use itertools::Itertools;
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Debug)]
 pub enum RunOk {
     Return(Vec<u8>),
     UserError(String),
@@ -33,7 +33,7 @@ impl RunOk {
     }
 }
 
-impl std::fmt::Debug for RunOk {
+impl std::fmt::Display for RunOk {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Return(r) => {

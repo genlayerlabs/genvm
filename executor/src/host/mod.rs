@@ -1,4 +1,4 @@
-mod host_fns;
+pub mod host_fns;
 pub mod message;
 
 use genvm_common::*;
@@ -17,7 +17,7 @@ use anyhow::{Context, Result};
 use crate::{calldata, rt};
 pub use message::{MessageData, SlotID};
 
-trait Sock: std::io::Read + std::io::Write + Send + Sync {}
+pub trait Sock: std::io::Read + std::io::Write + Send + Sync {}
 
 impl Sock for bufreaderwriter::seq::BufReaderWriterSeq<std::os::unix::net::UnixStream> {}
 
@@ -34,7 +34,10 @@ pub struct Metrics {
 }
 
 impl Host {
-    pub fn new(addr: &str, metrics: sync::DArc<Metrics>) -> Result<Host> {
+    pub fn new(sock: Box<Mutex<dyn Sock>>, metrics: sync::DArc<Metrics>) -> Host {
+        Self { sock, metrics }
+    }
+    pub fn connect(addr: &str, metrics: sync::DArc<Metrics>) -> Result<Host> {
         const UNIX: &str = "unix://";
         let sock: Box<Mutex<dyn Sock>> = if let Some(addr_suff) = addr.strip_prefix(UNIX) {
             Box::new(Mutex::new(

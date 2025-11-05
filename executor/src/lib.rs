@@ -1,6 +1,6 @@
 pub mod caching;
 pub mod config;
-mod host;
+pub mod host;
 pub mod modules;
 pub mod rt;
 pub mod runners;
