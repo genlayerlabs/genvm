@@ -403,6 +403,20 @@ class TestRunner:
 		"""Set up base mock storage for the test."""
 		base_mock_storage = MockStorage()
 
+		if storage_json := first_conf.get('storage_json'):
+			storage_b64 = json.loads(Path(storage_json).read_text())
+			base_mock_storage._storages = {
+				Address(a): {
+					base64.b64decode(k): bytearray(base64.b64decode(v)) for k, v in kv.items()
+				}
+				for a, kv in storage_b64.items()
+			}
+			empty_storage = seq_tmp_dir.joinpath('empty-storage.pickle')
+			with open(empty_storage, 'wb') as f:
+				pickle.dump(base_mock_storage, f)
+
+			return empty_storage
+
 		for addr, account_info in first_conf['accounts'].items():
 			code = account_info.get('code')
 			if code is None:
