@@ -15,8 +15,17 @@ info:
     url: https://docs.genlayer.com
 
 servers:
-  - url: http://127.0.0.1:3999
-    description: Default local server
+  - url: http://{host}:{port}
+    description: Local development server
+    variables:
+      host:
+        default: '127.0.0.1'
+        description: Server hostname or IP address
+      port:
+        default: '3999'
+        description: Server port number
+  - url: https://api.genlayer.com
+    description: Production server
 
 tags:
   - name: Status
@@ -31,6 +40,10 @@ tags:
     description: Runtime configuration management
   - name: LLM
     description: LLM provider availability testing
+
+security:
+  - ApiKeyAuth: []
+  - {} # Allow unauthenticated access
 
 paths:
   /status:
@@ -79,6 +92,10 @@ paths:
                   result:
                     type: string
                     example: "module_started"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -111,6 +128,10 @@ paths:
                   result:
                     type: string
                     enum: [module_stopped, module_not_running]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -143,6 +164,10 @@ paths:
                     format: int64
                     description: Unique ID of the started GenVM instance
                     example: 42
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -153,6 +178,7 @@ paths:
       summary: Run GenVM in readonly mode
       description: Executes contract code in readonly mode (not yet implemented)
       operationId: runGenVMReadonly
+      x-status: experimental
       parameters:
         - name: Deployment-Timestamp
           in: header
@@ -180,6 +206,10 @@ paths:
                 properties:
                   schema:
                     type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -211,6 +241,8 @@ paths:
                     format: int64
                   status:
                     $ref: '#/components/schemas/GenVMStatus'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -257,6 +289,8 @@ paths:
                       genvm_id:
                         type: integer
                         format: int64
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -296,6 +330,10 @@ paths:
                     type: integer
                     format: uint32
                     description: Detected major version number
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -333,8 +371,13 @@ paths:
                 properties:
                   writes:
                     type: array
+                    maxItems: 1000
+                    description: List of storage key-value pairs
                     items:
                       type: array
+                      maxItems: 2
+                      minItems: 2
+                      description: Key-value pair (tuple of two strings)
                       items:
                         oneOf:
                           - type: string
@@ -343,6 +386,10 @@ paths:
                           - type: string
                             format: base64
                             description: Storage value (base64 encoded)
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -380,6 +427,10 @@ paths:
                   level:
                     type: string
                     example: "debug"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -443,6 +494,10 @@ paths:
                   key:
                     type: string
                     example: "GENVM_DEBUG"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -503,6 +558,10 @@ paths:
                     type: integer
                     format: uint
                     description: Actual number of permits after the operation
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -526,12 +585,25 @@ paths:
             application/json:
               schema:
                 type: array
+                maxItems: 5000
+                description: Results for each config-prompt combination
                 items:
                   $ref: '#/components/schemas/LLMAvailabilityResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Optional API key for authentication
+
   schemas:
     ModuleType:
       type: string
@@ -595,6 +667,7 @@ components:
           description: Host identifier
         extra_args:
           type: array
+          maxItems: 100
           items:
             type: string
           default: []
@@ -629,6 +702,7 @@ components:
       properties:
         configs:
           type: array
+          maxItems: 50
           description: List of LLM provider configurations to test
           items:
             type: object
@@ -653,6 +727,7 @@ components:
                 description: API key for authentication
         test_prompts:
           type: array
+          maxItems: 100
           description: Test prompts to execute against each configuration
           items:
             type: object
@@ -694,6 +769,27 @@ components:
           description: Error message
 
   responses:
+    BadRequest:
+      description: Bad request - invalid input parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    UnprocessableEntity:
+      description: Unprocessable entity - validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
     InternalServerError:
       description: Internal server error
       content:
