@@ -2,6 +2,8 @@ import logging
 import os
 import shlex
 
+INTERACTIVE = True if os.environ.get('INTERACTIVE', 'false') == 'true' else False
+
 log_level_str = os.environ.get('LOGLEVEL', 'INFO').upper()
 log_levels = {
 	'DEBUG': logging.DEBUG,
@@ -194,6 +196,17 @@ def patch_executable(path: Path, *, rpath_dir: list[Path]):
 	# Write the modified binary
 	binary.write(str(path))
 	logger.info(f'Successfully patched binary: {path}')
+
+	if binary.format == lief.Binary.FORMATS.MACHO:
+		logger.info(f'Trying to code sign Mach-O binary: {path}')
+		try:
+			subprocess.run(['codesign', '--force', '--sign', '-', path], check=True)
+		except Exception as e:
+			logger.error(
+				f'Failed to code sign Mach-O binary {path}: {e}. This may be critical. You can rerun with INTERACTIVE=true environment variable to pause on this error.'
+			)
+			if INTERACTIVE:
+				input('Waiting for user to fix the issue. Press Enter to continue...')
 
 
 def run_check_command(command: list[str | Path]):

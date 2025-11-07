@@ -4,3 +4,4 @@ log_disable: tracing*,polling*,tungstenite*,tokio_tungstenite*
 log_level: info
 
 manifest_path: ${exeDir}/../data/manifest.yaml
+permits: null # if null will be auto-discovered; full VM takes 2, sync VM takes 1

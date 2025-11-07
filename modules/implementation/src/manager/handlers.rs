@@ -16,6 +16,11 @@ pub async fn handle_status(ctx: sync::DArc<AppContext>) -> Result<impl warp::Rep
     Ok(warp::reply::json(&serde_json::json!({
         "llm_module": ctx.mod_ctx.get_status(modules::Type::Llm).await,
         "web_module": ctx.mod_ctx.get_status(modules::Type::Web).await,
+        "permits": {
+            "current": ctx.run_ctx.get_current_permits().await,
+            "max": ctx.run_ctx.get_max_permits().await,
+        },
+        "executions": ctx.run_ctx.status_executions(),
     })))
 }
 
@@ -180,7 +185,7 @@ pub async fn handle_set_env(
 }
 
 pub async fn handle_get_permits(ctx: sync::DArc<AppContext>) -> Result<impl warp::Reply> {
-    let permits = ctx.run_ctx.get_permits().await;
+    let permits = ctx.run_ctx.get_max_permits().await;
     Ok(warp::reply::json(&serde_json::json!({"permits": permits})))
 }
 

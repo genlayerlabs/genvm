@@ -23,6 +23,8 @@ pub struct Config {
     pub manifest_path: String,
     #[serde(skip_deserializing)]
     pub reroute_to: Arc<str>,
+
+    pub permits: Option<usize>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -125,7 +127,7 @@ async fn run_http_server(
         cancel: cancel.clone(),
         mod_ctx: modules::Ctx::new(cancel.clone()),
         config: config.clone(),
-        run_ctx: run::Ctx::new()?,
+        run_ctx: run::Ctx::new(&config)?,
         ver_ctx: versioning::Ctx::new(config.clone()).await?,
     });
 

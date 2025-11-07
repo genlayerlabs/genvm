@@ -5,6 +5,7 @@ import asyncio
 import os
 import abc
 import json
+import time
 
 import aiohttp
 
@@ -168,9 +169,22 @@ async def host_loop(handler: IHost, cancellation: asyncio.Event, *, logger: Logg
 		data = await read_exact(le)
 		return memoryview(data)
 
+	total_handling_time = 0.0
+	time_per_method = {}
+	call_counts = {}
+	meth_id: host_fns.Methods | None = None
+
+	handling_start = time.time()
 	while True:
+		cur_delta = time.time() - handling_start
+		if meth_id is not None:
+			total_handling_time += cur_delta
+			time_per_method[meth_id.name] = time_per_method.get(meth_id.name, 0.0) + cur_delta
 		meth_id = host_fns.Methods(await recv_int(1))
-		logger.trace('got method', method=meth_id)
+		logger.trace('got method', method=meth_id, method_name=meth_id.name)
+		call_counts[meth_id.name] = call_counts.get(meth_id.name, 0) + 1
+
+		handling_start = time.time()
 		match meth_id:
 			case host_fns.Methods.GET_CALLDATA:
 				try:
@@ -208,6 +222,12 @@ async def host_loop(handler: IHost, cancellation: asyncio.Event, *, logger: Logg
 				else:
 					await send_all(bytes([host_fns.Errors.OK]))
 			case host_fns.Methods.CONSUME_RESULT:
+				logger.debug(
+					'handling time',
+					total=total_handling_time,
+					by_method=time_per_method,
+					call_counts=call_counts,
+				)
 				res = await read_slice()
 				await handler.consume_result(public_abi.ResultCode(res[0]), res[1:])
 				await send_all(b'\x00')

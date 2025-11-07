@@ -120,7 +120,7 @@
 									'';
 								};
 
-								packages-0 = with pkgs; [ bash xz zlib git python312 coreutils which jq stdenv.cc glibc ];
+								packages-0 = with pkgs; [ bash xz zlib git python312 coreutils which jq stdenv.cc glibc nix ];
 								packages-lint = with pkgs; [ pre-commit ];
 								packages-rust = [ custom-rust ];
 								packages-debug-test = with pkgs; [

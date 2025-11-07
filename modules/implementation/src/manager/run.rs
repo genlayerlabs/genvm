@@ -17,7 +17,7 @@ impl std::fmt::Display for GenVMId {
 
 #[derive(Debug)]
 pub struct SingleGenVMContextDone {
-    pub finished_at: std::time::Instant,
+    pub finished_at: chrono::DateTime<chrono::Utc>,
     pub stdout: String,
     pub stderr: String,
 }
@@ -30,7 +30,7 @@ impl serde::Serialize for SingleGenVMContextDone {
         use serde::ser::SerializeStruct;
 
         let mut state = serializer.serialize_struct("SingleGenVMContextDone", 3)?;
-        state.serialize_field("finished_at", &self.finished_at.elapsed().as_millis())?;
+        state.serialize_field("finished_at", &self.finished_at.timestamp_millis())?;
         state.serialize_field("stdout", &self.stdout)?;
         state.serialize_field("stderr", &self.stderr)?;
         state.end()
@@ -39,7 +39,10 @@ impl serde::Serialize for SingleGenVMContextDone {
 
 struct SingleGenVMContext {
     id: GenVMId,
+    version: String,
     result: tokio::sync::OnceCell<SingleGenVMContextDone>,
+    started_at: chrono::DateTime<chrono::Utc>,
+    strict_deadline: chrono::DateTime<chrono::Utc>,
 
     stdout_stderr_sem: Arc<tokio::sync::Semaphore>,
     stdout: tokio::sync::OnceCell<String>,
@@ -69,9 +72,34 @@ impl Ctx {
         &self.executors_path
     }
 
-    pub async fn get_permits(&self) -> usize {
+    pub async fn get_max_permits(&self) -> usize {
         let max_permits = self.max_permits.lock().await;
         max_permits.max
+    }
+
+    pub fn status_executions(&self) -> serde_json::Value {
+        let mut ret = serde_json::Map::new();
+
+        for kv in self.known_executions.iter() {
+            let genvm_id = kv.key();
+            let exec_ctx = kv.value();
+
+            ret.insert(
+                genvm_id.to_string(),
+                serde_json::json!({
+                    "has_result": exec_ctx.result.initialized(),
+                    "version": exec_ctx.version,
+                    "started_at": exec_ctx.started_at.to_rfc3339(),
+                    "strict_deadline": exec_ctx.strict_deadline.to_rfc3339()
+                }),
+            );
+        }
+
+        ret.into()
+    }
+
+    pub async fn get_current_permits(&self) -> usize {
+        self.permits.available_permits()
     }
 
     pub async fn set_permits(&self, permits: usize) -> usize {
@@ -227,8 +255,12 @@ impl Ctx {
         (total_mem_gb / 4).max(2) as usize
     }
 
-    pub fn new() -> anyhow::Result<Self> {
-        let permits = Self::get_default_permits();
+    pub fn new(config: &crate::manager::Config) -> anyhow::Result<Self> {
+        let permits = if let Some(p) = config.permits {
+            p
+        } else {
+            Self::get_default_permits()
+        };
         log_info!(permits = permits; "estimated concurrent GenVM permits");
 
         let mut exe_path = std::env::current_exe()?;
@@ -252,9 +284,13 @@ impl Ctx {
 }
 
 async fn gc_step(ctx: &sync::DArc<Ctx>) {
-    let now = std::time::Instant::now();
+    let now = chrono::Utc::now();
 
     for kv in ctx.known_executions.iter() {
+        if kv.value().strict_deadline < now {
+            log_warn!(genvm_id = *kv.key(); "genvm execution exceeded strict deadline, terminating");
+            let _ = ctx.graceful_shutdown(*kv.key(), 0).await;
+        }
         let _ = ctx.check_proc(kv.value()).await;
     }
 
@@ -263,8 +299,8 @@ async fn gc_step(ctx: &sync::DArc<Ctx>) {
         let Some(result) = v.result.get() else {
             return true;
         };
-        let passed = now.duration_since(result.finished_at);
-        if passed > std::time::Duration::from_secs(60) {
+        let passed = now.signed_duration_since(result.finished_at);
+        if passed > chrono::Duration::seconds(60) || result.finished_at < now {
             log_warn!(genvm_id = *k; "removing zombie genvm execution context");
             return false;
         }
@@ -309,7 +345,7 @@ pub struct Request {
 }
 
 fn default_max_execution_minutes() -> u64 {
-    50
+    20
 }
 
 async fn read_log_pipe(reader_fd: std::os::unix::io::OwnedFd, cookie: u64) -> std::io::Result<()> {
@@ -418,7 +454,7 @@ impl Ctx {
                 let stdout = exec.stdout.get().map(|x| x.as_str()).unwrap_or("");
                 let stderr = exec.stderr.get().map(|x| x.as_str()).unwrap_or("");
                 if let Err(e) = exec.result.set(SingleGenVMContextDone {
-                    finished_at: std::time::Instant::now(),
+                    finished_at: chrono::Utc::now(),
                     stdout: stdout.to_owned(),
                     stderr: stderr.to_owned(),
                 }) {
@@ -463,15 +499,12 @@ pub async fn start_genvm(
 
     let mut command_path = ctx.executors_path.clone();
 
-    command_path.push(format!(
-        "v{}.{}.{}",
-        version.major, version.minor, version.patch
-    ));
-
+    let version_str_owned = format!("v{}.{}.{}", version.major, version.minor, version.patch);
+    let mut version_str: &str = &version_str_owned;
     if !reroute_to.is_empty() {
-        command_path.pop();
-        command_path.push(&*reroute_to);
+        version_str = &*reroute_to;
     }
+    command_path.push(version_str);
 
     command_path.push("bin");
     command_path.push("genvm");
@@ -546,8 +579,12 @@ pub async fn start_genvm(
 
     let exec_ctx = sync::DArc::new(SingleGenVMContext {
         result: tokio::sync::OnceCell::new(),
+        version: version_str.to_owned(),
         id: genvm_id,
         process_handle: tokio::sync::Mutex::new(child),
+        started_at: chrono::Utc::now(),
+        strict_deadline: chrono::Utc::now()
+            + chrono::Duration::minutes(req.max_execution_minutes as i64),
 
         stdout_stderr_sem,
         stdout: tokio::sync::OnceCell::new(),

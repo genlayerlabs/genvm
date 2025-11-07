@@ -6,8 +6,6 @@ source "$SCRIPT_DIR/_common.sh"
 export ORIGINAL_PATH="$PATH"
 export ORIGINAL_LD_LIBRARY_PATH="$LD_LIBRARY_PATH"
 
-nix develop .#rust-test --command bash -c 'cargo install --verbose cargo-afl@0.15.18 && ls ~/.local/share'
-
 mkdir -p build/out/executor/vTEST/data
 
 nix eval --verbose --impure --read-only --show-trace --json --expr \
