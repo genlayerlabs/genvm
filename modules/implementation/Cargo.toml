@@ -7,6 +7,10 @@ edition = "2021"
 name = "fuzz-genvm-modules-normalize-whitespace"
 path = "fuzz/genvm-modules-normalize-whitespace.rs"
 
+[[example]]
+name = "fuzz-genvm-modules-complete-json"
+path = "fuzz/genvm-modules-complete-json.rs"
+
 [features]
 default = []
 vendored-lua = ["mlua/vendored"]

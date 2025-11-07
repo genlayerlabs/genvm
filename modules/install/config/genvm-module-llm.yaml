@@ -40,7 +40,7 @@ backends:
     provider: anthropic
     key: ${ENV[ANTHROPICKEY]}
     models:
-      claude-3-7-sonnet-20250219:
+      claude-haiku-4-5-20251001:
         supports_json: false # it is quite bad because it wraps result into random "result/value/object/..."
         supports_image: true # works
 

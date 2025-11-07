@@ -1,4 +1,4 @@
-import contract.lib as lib
+from . import lib
 
 from genlayer import *
 

@@ -1,6 +1,7 @@
 use crate::{common::ModuleResult, scripting};
 use anyhow::Context;
 use base64::Engine;
+use genvm_common::*;
 
 use super::{config, prompt};
 
@@ -30,7 +31,7 @@ pub trait Provider {
     ) -> ModuleResult<serde_json::Map<String, serde_json::Value>> {
         let res = self.exec_prompt_json_as_text(ctx, prompt, model).await?;
         let res = sanitize_json_str(&res);
-        let res = serde_json::from_str(res).with_context(|| format!("parsing {res:?}"))?;
+        let res = serde_json::from_str(&res).with_context(|| format!("parsing {res:?}"))?;
 
         Ok(res)
     }
@@ -41,12 +42,16 @@ pub trait Provider {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<bool> {
-        let res = self.exec_prompt_json(ctx, prompt, model).await?;
-        let res = res
-            .get("result")
-            .and_then(|x| x.as_bool())
-            .ok_or_else(|| anyhow::anyhow!("can't get reason from `{:?}`", res))?;
-        Ok(res)
+        let result = self.exec_prompt_json(ctx, prompt, model).await?;
+        let res = result.get("result").and_then(|x| x.as_bool());
+
+        if let Some(res) = res {
+            Ok(res)
+        } else {
+            log_error!(result:? = result; "no result in reason, returning false");
+
+            Ok(false)
+        }
     }
 }
 
@@ -242,7 +247,7 @@ impl Provider for OpenAICompatible {
 
         let response = sanitize_json_str(response);
         let response =
-            serde_json::from_str(response).with_context(|| format!("parsing {response:?}"))?;
+            serde_json::from_str(&response).with_context(|| format!("parsing {response:?}"))?;
 
         Ok(response)
     }
@@ -391,7 +396,7 @@ impl Provider for Gemini {
             .post(&url)
             .header("Content-Type", "application/json")
             .body(request.clone());
-        let res = scripting::send_request_get_lua_compatible_response_json(
+        let res_json = scripting::send_request_get_lua_compatible_response_json(
             &ctx.metrics,
             &url,
             request,
@@ -399,11 +404,23 @@ impl Provider for Gemini {
         )
         .await?;
 
-        let res = res
+        let res = res_json
             .body
             .pointer("/candidates/0/content/parts/0/text")
-            .and_then(|x| x.as_str())
-            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
+            .and_then(|x| x.as_str());
+
+        if res.is_none()
+            && res_json
+                .body
+                .pointer("/candidates/0/finishReason")
+                .and_then(|x| x.as_str())
+                == Some("MAX_TOKENS")
+        {
+            return Ok("".into());
+        }
+
+        let res =
+            res.ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res_json.body))?;
         Ok(res.into())
     }
 
@@ -433,7 +450,7 @@ impl Provider for Gemini {
             .post(&url)
             .header("Content-Type", "application/json")
             .body(request.clone());
-        let res = scripting::send_request_get_lua_compatible_response_json(
+        let res_json = scripting::send_request_get_lua_compatible_response_json(
             &ctx.metrics,
             &url,
             request,
@@ -441,11 +458,23 @@ impl Provider for Gemini {
         )
         .await?;
 
-        let res = res
+        let res = res_json
             .body
             .pointer("/candidates/0/content/parts/0/text")
-            .and_then(|x| x.as_str())
-            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
+            .and_then(|x| x.as_str());
+
+        if res.is_none()
+            && res_json
+                .body
+                .pointer("/candidates/0/finishReason")
+                .and_then(|x| x.as_str())
+                == Some("MAX_TOKENS")
+        {
+            return Ok("{}".to_owned());
+        }
+
+        let res =
+            res.ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res_json.body))?;
 
         Ok(res.to_owned())
     }
@@ -649,14 +678,16 @@ impl Provider for Anthropic {
     }
 }
 
-fn sanitize_json_str(s: &str) -> &str {
+fn sanitize_json_str(s: &str) -> String {
     let s = s.trim();
     let s = s
         .strip_prefix("```json")
         .or(s.strip_prefix("```"))
         .unwrap_or(s);
     let s = s.strip_suffix("```").unwrap_or(s);
-    s.trim()
+    let s = s.trim();
+
+    genvm_modules::complete_json(s)
 }
 
 #[cfg(test)]
@@ -723,7 +754,7 @@ mod tests {
         pub const anthropic: &str = r#"{
             "host": "https://api.anthropic.com",
             "provider": "anthropic",
-            "models": { "claude-3-5-sonnet-20241022" : {} },
+            "models": { "claude-haiku-4-5-20251001" : {} },
             "key": "${ENV[ANTHROPICKEY]}"
         }"#;
 
@@ -812,6 +843,90 @@ mod tests {
         let res = res.trim().to_lowercase();
 
         assert_eq!(res, "yes");
+    }
+
+    const BIG_PROMPT: &str = r#"
+        🌆 Poem Prompt: The Shadow Citizen
+        Task: Write a poem, approximately 16-20 lines, about the urban rat. Your goal is to move beyond the simple idea of "pest" and explore the rat as a complex, parallel inhabitant of the city.
+
+        Core Theme: Focus on the rat as a secret-keeper or a historian of the discarded. It moves through the spaces we ignore—the subway tunnels, the forgotten foundations, the labyrinth of pipes. It thrives on what we throw away.
+
+        Guiding Questions & Imagery:
+
+        Perspective: Is the poem from the rat's point of view, or from an observer who suddenly sees the rat in a new light?
+
+        Sensory Details: What does it hear? The "rumble of the steel train" from below? The "whispers of the lost" in the alley?
+
+        The "Kingdom": Describe its environment. Is it a "concrete maze," a "kingdom of rust and refuse," or a "shadow empire"?
+
+        Contrast: How does its quick, intelligent, and cautious life contrast with the loud, oblivious human world above? Consider its "onyx eye" reflecting the "neon glare."
+
+        Your challenge: Craft a portrait that is both gritty and graceful. Acknowledge its maligned status but give it a sense of agency, intelligence, and undeniable belonging to the city's hidden pulse.
+    "#;
+
+    async fn do_test_text_out_of_tokens(conf: &str) {
+        common::tests::setup();
+
+        let backend: serde_json::Value = serde_json::from_str(conf).unwrap();
+        let mut vars = HashMap::new();
+        for (mut name, value) in std::env::vars() {
+            name.insert_str(0, "ENV[");
+            name.push(']');
+
+            vars.insert(name, value);
+        }
+        let backend =
+            genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)
+                .unwrap();
+        let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
+        let provider = backend.to_provider();
+
+        let ctx = scripting::CtxPart {
+            client: common::create_client().unwrap(),
+            metrics: sync::DArc::new(scripting::Metrics::default()),
+            node_address: "test_node".to_owned(),
+            sign_headers: std::sync::Arc::new(BTreeMap::new()),
+            sign_url: std::sync::Arc::from("test_url"),
+            sign_vars: BTreeMap::new(),
+            hello: std::sync::Arc::new(genvm_modules_interfaces::GenVMHello {
+                cookie: "test_cookie".to_owned(),
+                host_data: genvm_modules_interfaces::HostData {
+                    tx_id: "test_tx".to_owned(),
+                    node_address: "test_node".to_owned(),
+                    rest: serde_json::Map::new(),
+                },
+            }),
+        };
+
+        let res = provider
+            .exec_prompt_text(
+                &ctx,
+                &prompt::Internal {
+                    system_message: None,
+                    temperature: 0.7,
+                    user_message: BIG_PROMPT.to_owned(),
+                    images: Vec::new(),
+                    max_tokens: 50,
+                    use_max_completion_tokens: true,
+                },
+                backend.script_config.models.first_key_value().unwrap().0,
+            )
+            .await;
+
+        let res = match res {
+            Ok(res) => res,
+            Err(e) if is_overloaded(&e) => {
+                eprintln!("Overloaded, skipping test: {e}");
+                return;
+            }
+            Err(e) => {
+                panic!("test failed: {e}");
+            }
+        };
+
+        let res = res.trim().to_lowercase();
+
+        println!("result is {res}");
     }
 
     async fn do_test_json(conf: &str) {
@@ -910,6 +1025,81 @@ mod tests {
         unreachable!("no result found in {as_val:?}");
     }
 
+    async fn do_test_json_out_of_tokens(conf: &str) {
+        common::tests::setup();
+
+        let backend: serde_json::Value = serde_json::from_str(conf).unwrap();
+        let mut vars = HashMap::new();
+        for (mut name, value) in std::env::vars() {
+            name.insert_str(0, "ENV[");
+            name.push(']');
+
+            vars.insert(name, value);
+        }
+        let backend =
+            genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)
+                .unwrap();
+        let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
+
+        if !backend
+            .script_config
+            .models
+            .first_key_value()
+            .unwrap()
+            .1
+            .supports_json
+        {
+            return;
+        }
+
+        let provider = backend.to_provider();
+
+        let ctx = scripting::CtxPart {
+            client: common::create_client().unwrap(),
+            metrics: sync::DArc::new(scripting::Metrics::default()),
+            node_address: "test_node".to_owned(),
+            sign_headers: std::sync::Arc::new(BTreeMap::new()),
+            sign_url: std::sync::Arc::from("test_url"),
+            sign_vars: BTreeMap::new(),
+            hello: std::sync::Arc::new(genvm_modules_interfaces::GenVMHello {
+                cookie: "test_cookie".to_owned(),
+                host_data: genvm_modules_interfaces::HostData {
+                    tx_id: "test_tx".to_owned(),
+                    node_address: "test_node".to_owned(),
+                    rest: serde_json::Map::new(),
+                },
+            }),
+        };
+
+        const PROMPT: &str = r#"respond with json object containing two keys. First key is a poem about rats and second key "result" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes. This object must not be wrapped into other objects. Example: {"poem": "A kingdom built of rust and steam, Beneath the concrete, cold and vast, He navigates the broken dream, A living shadow, built to last. He slips between the pipe and wire, A citizen of drain and seam, Ignoring all the surface fire Of our oblivious, waking stream.", "result": 10}"#;
+        let res = provider
+            .exec_prompt_json(
+                &ctx,
+                &prompt::Internal {
+                    system_message: Some("respond with json".to_owned()),
+                    temperature: 0.7,
+                    user_message: PROMPT.to_owned(),
+                    images: Vec::new(),
+                    max_tokens: 50,
+                    use_max_completion_tokens: true,
+                },
+                backend.script_config.models.first_key_value().unwrap().0,
+            )
+            .await;
+        eprintln!("{res:?}");
+
+        match res {
+            Ok(res) => res,
+            Err(e) if is_overloaded(&e) => {
+                eprintln!("Overloaded, skipping test: {e}");
+                return;
+            }
+            Err(e) => {
+                panic!("test failed: {e}");
+            }
+        };
+    }
+
     macro_rules! make_test {
         ($conf:ident) => {
             mod $conf {
@@ -924,6 +1114,24 @@ mod tests {
                 async fn json() {
                     let conf = super::conf::$conf;
                     common::test_with_cookie(conf, async { super::do_test_json(conf).await }).await;
+                }
+
+                #[tokio::test]
+                async fn text_out_of_tokens() {
+                    let conf = super::conf::$conf;
+                    common::test_with_cookie(conf, async {
+                        super::do_test_text_out_of_tokens(conf).await
+                    })
+                    .await;
+                }
+
+                #[tokio::test]
+                async fn json_out_of_tokens() {
+                    let conf = super::conf::$conf;
+                    common::test_with_cookie(conf, async {
+                        super::do_test_json_out_of_tokens(conf).await
+                    })
+                    .await;
                 }
             }
         };
