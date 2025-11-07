@@ -302,6 +302,8 @@ Requirements
 #. GenVM version 0.1.10 or higher
 #. :term:`GenVM` implementation is allowed ignore this message
 
+.. _tracing-runtime-microsec:
+
 ``Trace.RuntimeMicroSec`` Sub-Message
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

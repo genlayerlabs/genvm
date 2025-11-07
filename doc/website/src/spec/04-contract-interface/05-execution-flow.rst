@@ -1,3 +1,5 @@
+.. _contract-execution-flow:
+
 Contract Execution Flow
 =======================
 
