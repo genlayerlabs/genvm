@@ -809,7 +809,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                         }
                     }
                 };
-                return u64::try_from(*pos).map_err(|_e| generated::types::Errno::Overflow.into());
+                return Ok(u64::from(*pos));
             }
             vfs::FileDescriptor::Dir { .. } => Err(generated::types::Errno::Notsup.into()),
         }

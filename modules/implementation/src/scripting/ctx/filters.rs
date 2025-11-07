@@ -101,7 +101,7 @@ pub fn apply_image_filters(s: &[u8], filters: &[ImageFilter]) -> anyhow::Result<
 
     for filter in filters {
         match filter {
-            ImageFilter::Denoise(strength) => {
+            ImageFilter::Denoise(_strength) => {
                 anyhow::bail!("todo");
             }
             ImageFilter::GuassianNoise(sigma) => {

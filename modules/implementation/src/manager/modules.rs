@@ -72,7 +72,7 @@ impl Ctx {
                 Type::Web => "${exeDir}/../config/genvm-module-web.yaml",
             };
             let base_path = genvm_common::templater::patch_str(
-                &mut config_vars,
+                &config_vars,
                 base_path,
                 &genvm_common::templater::DOLLAR_UNFOLDER_RE,
             )?;
@@ -82,7 +82,7 @@ impl Ctx {
         };
 
         let config = genvm_common::templater::patch_json(
-            &mut config_vars,
+            &config_vars,
             config,
             &genvm_common::templater::DOLLAR_UNFOLDER_RE,
         )?;

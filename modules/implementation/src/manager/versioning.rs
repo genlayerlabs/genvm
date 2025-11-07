@@ -99,15 +99,12 @@ impl Ctx {
     ) -> Option<Version> {
         let lock = self.manifest.read().await;
 
-        let Some(mut ver) = lock
+        let mut ver = lock
             .executor_versions
             .iter()
             .filter(|(ver, ev)| ver.major == major && ev.available_after <= timestamp)
             .map(|(ver, _)| *ver)
-            .max()
-        else {
-            return None;
-        };
+            .max()?;
 
         loop {
             let mut next = ver;
