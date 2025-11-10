@@ -1,0 +1,419 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: kp2pml30 <kp2pml30@gmail.com>
+Date: Tue, 11 Nov 2025 00:09:03 +0900
+Subject: [PATCH] feat: add stack limiting
+
+---
+ Cargo.toml                                  |  2 +-
+ cranelift/frontend/src/frontend.rs          |  5 ++
+ cranelift/wasm/src/code_translator.rs       |  2 +
+ cranelift/wasm/src/func_translator.rs       | 27 ++++++++-
+ cranelift/wasm/src/state.rs                 | 11 ++++
+ crates/cranelift/src/compiler.rs            | 14 +++++
+ crates/cranelift/src/func_environ.rs        | 63 +++++++++++++++++++++
+ crates/environ/src/vmoffsets.rs             | 10 ++++
+ crates/wasmtime/src/runtime/func.rs         |  4 +-
+ crates/wasmtime/src/runtime/vm/vmcontext.rs |  6 ++
+ 10 files changed, 138 insertions(+), 6 deletions(-)
+
+diff --git a/Cargo.toml b/Cargo.toml
+index 9bbe4c21..97e6f572 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -270,7 +270,7 @@ wit-bindgen-rust-macro = { version = "0.32.0", default-features = false }
+ # wasm-tools family:
+ wasmparser = { path = "../wasm-tools/crates/wasmparser", default-features = false }
+ wat = { path = "../wasm-tools/crates/wat" }
+-wast = { path = "../wasm-tools/crates/wat" }
++wast = { path = "../wasm-tools/crates/wast" }
+ wasmprinter = { path = "../wasm-tools/crates/wasmprinter" }
+ wasm-encoder = { path = "../wasm-tools/crates/wasm-encoder" }
+ wasm-smith = { path = "../wasm-tools/crates/wasm-smith" }
+diff --git a/cranelift/frontend/src/frontend.rs b/cranelift/frontend/src/frontend.rs
+index 125be6a7..b39c5b4f 100644
+--- a/cranelift/frontend/src/frontend.rs
++++ b/cranelift/frontend/src/frontend.rs
+@@ -47,6 +47,9 @@ pub struct FunctionBuilder<'a> {
+ 
+     func_ctx: &'a mut FunctionBuilderContext,
+     position: PackedOption<Block>,
++
++    ///
++    pub value_stack_size_inst: Option<Inst>,
+ }
+ 
+ #[derive(Clone, Default, Eq, PartialEq)]
+@@ -316,6 +319,8 @@ impl<'a> FunctionBuilder<'a> {
+             srcloc: Default::default(),
+             func_ctx,
+             position: Default::default(),
++
++            value_stack_size_inst: None,
+         }
+     }
+ 
+diff --git a/cranelift/wasm/src/code_translator.rs b/cranelift/wasm/src/code_translator.rs
+index 35e2b902..05e4e17a 100644
+--- a/cranelift/wasm/src/code_translator.rs
++++ b/cranelift/wasm/src/code_translator.rs
+@@ -277,6 +277,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             state
+                 .stack
+                 .extend_from_slice(builder.block_params(loop_body));
++            state.recalc_stack();
+ 
+             builder.switch_to_block(loop_body);
+             environ.translate_loop_header(builder)?;
+@@ -447,6 +448,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
+             state
+                 .stack
+                 .extend_from_slice(builder.block_params(next_block));
++            state.recalc_stack();
+         }
+         /**************************** Branch instructions *********************************
+          * The branch instructions all have as arguments a target nesting level, which
+diff --git a/cranelift/wasm/src/func_translator.rs b/cranelift/wasm/src/func_translator.rs
+index d55d7fb3..96d9d31a 100644
+--- a/cranelift/wasm/src/func_translator.rs
++++ b/cranelift/wasm/src/func_translator.rs
+@@ -4,6 +4,8 @@
+ //! function to Cranelift IR guided by a `FuncEnvironment` which provides information about the
+ //! WebAssembly module and the runtime environment.
+ 
++use std::borrow::ToOwned;
++
+ use crate::code_translator::{bitcast_wasm_returns, translate_operator};
+ use crate::environ::FuncEnvironment;
+ use crate::state::FuncTranslationState;
+@@ -69,12 +71,17 @@ impl FuncTranslator {
+         debug_assert_eq!(func.dfg.num_insts(), 0, "Function must be empty");
+ 
+         let mut builder = FunctionBuilder::new(func, &mut self.func_ctx);
++
+         builder.set_srcloc(cur_srcloc(&reader));
+         let entry_block = builder.create_block();
+         builder.append_block_params_for_function_params(entry_block);
+         builder.switch_to_block(entry_block);
+         builder.seal_block(entry_block); // Declare all predecessors known.
+ 
++        let (placeholder, _) = builder.ins().UnaryImm(cranelift_codegen::ir::Opcode::Iconst, cranelift_codegen::ir::types::I32, 0.into());
++
++        builder.value_stack_size_inst = Some(placeholder);
++
+         // Make sure the entry block is inserted in the layout before we make any callbacks to
+         // `environ`. The callback functions may need to insert things in the entry block.
+         builder.ensure_inserted_block();
+@@ -87,9 +94,19 @@ impl FuncTranslator {
+         builder.append_block_params_for_function_returns(exit_block);
+         self.state.initialize(&builder.func.signature, exit_block);
+ 
+-        parse_local_decls(&mut reader, &mut builder, num_params, environ, validator)?;
++        let total_locals = parse_local_decls(&mut reader, &mut builder, num_params, environ, validator)?;
+         parse_function_body(validator, reader, &mut builder, &mut self.state, environ)?;
+ 
++        let max_stack = self.state.max_stack;
++
++        let total_subtract = total_locals as u64 + max_stack as u64;
++
++        if total_subtract > 65535 {
++            return Err(wasmtime_types::WasmError::InvalidWebAssembly { message: "too many locals".to_owned(), offset: 0 });
++        }
++
++        builder.func.dfg.replace(placeholder).iconst(cranelift_codegen::ir::types::I32, total_subtract as i64);
++
+         builder.finalize();
+         log::trace!("translated Wasm to CLIF:\n{}", func.display());
+         Ok(())
+@@ -141,10 +158,12 @@ fn parse_local_decls<FE: FuncEnvironment + ?Sized>(
+     num_params: usize,
+     environ: &mut FE,
+     validator: &mut FuncValidator<impl WasmModuleResources>,
+-) -> WasmResult<()> {
++) -> WasmResult<u32> {
+     let mut next_local = num_params;
+     let local_count = reader.read_var_u32()?;
+ 
++    let mut total = 0;
++
+     for _ in 0..local_count {
+         builder.set_srcloc(cur_srcloc(reader));
+         let pos = reader.original_position();
+@@ -152,11 +171,13 @@ fn parse_local_decls<FE: FuncEnvironment + ?Sized>(
+         let ty = reader.read()?;
+         validator.define_locals(pos, count, ty)?;
+         declare_locals(builder, count, ty, &mut next_local, environ)?;
++
++        total += count;
+     }
+ 
+     environ.after_locals(next_local);
+ 
+-    Ok(())
++    Ok(total)
+ }
+ 
+ /// Declare `count` local variables of the same type, starting from `next_local`.
+diff --git a/cranelift/wasm/src/state.rs b/cranelift/wasm/src/state.rs
+index d788157f..403b89f0 100644
+--- a/cranelift/wasm/src/state.rs
++++ b/cranelift/wasm/src/state.rs
+@@ -238,6 +238,8 @@ pub struct FuncTranslationState {
+     // `FuncEnvironment::make_direct_func()`.
+     // Stores both the function reference and the number of WebAssembly arguments
+     functions: HashMap<FuncIndex, (ir::FuncRef, usize)>,
++
++    pub(crate) max_stack: usize,
+ }
+ 
+ // Public methods that are exposed to non-`cranelift_wasm` API consumers.
+@@ -250,6 +252,11 @@ impl FuncTranslationState {
+ }
+ 
+ impl FuncTranslationState {
++    ///
++    pub fn recalc_stack(&mut self) {
++        self.max_stack = self.max_stack.max(self.stack.len());
++    }
++
+     /// Construct a new, empty, `FuncTranslationState`
+     pub(crate) fn new() -> Self {
+         Self {
+@@ -260,6 +267,8 @@ impl FuncTranslationState {
+             memory_to_heap: HashMap::new(),
+             signatures: HashMap::new(),
+             functions: HashMap::new(),
++
++            max_stack: 0,
+         }
+     }
+ 
+@@ -292,11 +301,13 @@ impl FuncTranslationState {
+     /// Push a value.
+     pub(crate) fn push1(&mut self, val: Value) {
+         self.stack.push(val);
++        self.recalc_stack();
+     }
+ 
+     /// Push multiple values.
+     pub(crate) fn pushn(&mut self, vals: &[Value]) {
+         self.stack.extend_from_slice(vals);
++        self.recalc_stack();
+     }
+ 
+     /// Pop one value.
+diff --git a/crates/cranelift/src/compiler.rs b/crates/cranelift/src/compiler.rs
+index 024eb63c..a04c4409 100644
+--- a/crates/cranelift/src/compiler.rs
++++ b/crates/cranelift/src/compiler.rs
+@@ -6,6 +6,7 @@ use crate::{builder::LinkOptions, wasm_call_signature, BuiltinFunctionSignatures
+ use anyhow::{Context as _, Result};
+ use cranelift_codegen::binemit::CodeOffset;
+ use cranelift_codegen::bitset::CompoundBitSet;
++use cranelift_codegen::ir::immediates::Imm64;
+ use cranelift_codegen::ir::{self, InstBuilder, MemFlags, UserExternalName, UserFuncName, Value};
+ use cranelift_codegen::isa::{
+     unwind::{UnwindInfo, UnwindInfoKind},
+@@ -213,6 +214,19 @@ impl wasmtime_environ::Compiler for Compiler {
+         } else {
+             func_env.stack_limit_at_function_entry = Some(stack_limit);
+         }
++
++        func_env.call_stack_depth_reverse = Some(context.func.create_global_value(ir::GlobalValueData::IAddImm {
++            base: interrupts_ptr,
++            offset: Imm64::new(i32::from(func_env.offsets.ptr.vmruntime_limits_call_stack_left()).into()),
++            global_type: isa.pointer_type(),
++        }));
++
++        func_env.value_stack_depth_reverse = Some(context.func.create_global_value(ir::GlobalValueData::IAddImm {
++            base: interrupts_ptr,
++            offset: Imm64::new(i32::from(func_env.offsets.ptr.vmruntime_limits_value_stack_left()).into()),
++            global_type: isa.pointer_type(),
++        }));
++
+         let FunctionBodyData { validator, body } = input;
+         let mut validator =
+             validator.into_validator(mem::take(&mut compiler.cx.validator_allocations));
+diff --git a/crates/cranelift/src/func_environ.rs b/crates/cranelift/src/func_environ.rs
+index 5367e31a..a6826ff8 100644
+--- a/crates/cranelift/src/func_environ.rs
++++ b/crates/cranelift/src/func_environ.rs
+@@ -157,6 +157,9 @@ pub struct FuncEnvironment<'module_environment> {
+     /// always present even if this is a "leaf" function, as we have to call
+     /// into the host to trap when signal handlers are disabled.
+     pub(crate) stack_limit_at_function_entry: Option<ir::GlobalValue>,
++
++    pub call_stack_depth_reverse: Option<ir::GlobalValue>,
++    pub value_stack_depth_reverse: Option<ir::GlobalValue>,
+ }
+ 
+ impl<'module_environment> FuncEnvironment<'module_environment> {
+@@ -206,6 +209,9 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
+             translation,
+ 
+             stack_limit_at_function_entry: None,
++
++            call_stack_depth_reverse: None,
++            value_stack_depth_reverse: None,
+         }
+     }
+ 
+@@ -2390,6 +2396,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
+         callee: ir::FuncRef,
+         call_args: &[ir::Value],
+     ) -> WasmResult<()> {
++        self.before_return(builder);
+         Call::new_tail(builder, self).direct_call(callee_index, callee, call_args)?;
+         Ok(())
+     }
+@@ -2403,6 +2410,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
+         callee: ir::Value,
+         call_args: &[ir::Value],
+     ) -> WasmResult<()> {
++        self.before_return(builder);
+         Call::new_tail(builder, self).indirect_call(
+             table_index,
+             ty_index,
+@@ -2420,6 +2428,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
+         callee: ir::Value,
+         call_args: &[ir::Value],
+     ) -> WasmResult<()> {
++        self.before_return(builder);
+         Call::new_tail(builder, self).call_ref(sig_ref, callee, call_args)?;
+         Ok(())
+     }
+@@ -2864,6 +2873,31 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
+             self.conditionally_trap(builder, overflow, ir::TrapCode::StackOverflow);
+         }
+ 
++        if let Some(gv) = self.call_stack_depth_reverse {
++            let limit_addr = builder.ins().global_value(self.pointer_type(), gv);
++            let one = builder.ins().iconst(I32, 1);
++            let old_val = builder.ins().load(ir::types::I32, ir::MemFlags::trusted(), limit_addr, 0);
++            let (new_val, overflowed) = builder.ins().usub_overflow(old_val, one);
++
++            self.trapnz(builder, overflowed, ir::TrapCode::StackOverflow);
++
++            builder.ins().store(ir::MemFlags::trusted(), new_val, limit_addr, 0);
++        }
++
++        if let Some(gv) = self.value_stack_depth_reverse {
++            if let Some(delta) = builder.value_stack_size_inst {
++                let delta_val = builder.func.dfg.first_result(delta);
++
++                let limit_addr = builder.ins().global_value(self.pointer_type(), gv);
++                let old_val = builder.ins().load(ir::types::I32, ir::MemFlags::trusted(), limit_addr, 0);
++                let (new_val, overflowed) = builder.ins().usub_overflow(old_val, delta_val);
++
++                self.trapnz(builder, overflowed, ir::TrapCode::StackOverflow);
++
++                builder.ins().store(ir::MemFlags::trusted(), new_val, limit_addr, 0);
++            }
++        }
++
+         // If the `vmruntime_limits_ptr` variable will get used then we initialize
+         // it here.
+         if true || self.tunables.consume_fuel || self.tunables.epoch_interruption {
+@@ -2932,6 +2966,10 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
+         self.isa.has_x86_pmaddubsw_lowering()
+     }
+ 
++    fn handle_before_return(&mut self, _retvals: &[ir::Value], builder: &mut FunctionBuilder) {
++        self.before_return(builder);
++    }
++
+     #[cfg(feature = "wmemcheck")]
+     fn handle_before_return(&mut self, retvals: &[ir::Value], builder: &mut FunctionBuilder) {
+         if self.wmemcheck {
+@@ -3191,3 +3229,28 @@ fn index_type_to_ir_type(index_type: IndexType) -> ir::Type {
+         IndexType::I64 => I64,
+     }
+ }
++
++impl FuncEnvironment<'_> {
++    fn before_return(&mut self, builder: &mut FunctionBuilder) {
++        if let Some(gv) = self.call_stack_depth_reverse {
++            let limit_addr = builder.ins().global_value(self.pointer_type(), gv);
++            let one = builder.ins().iconst(I32, 1);
++            let old_val = builder.ins().load(ir::types::I32, ir::MemFlags::trusted(), limit_addr, 0);
++            let (new_val, _) = builder.ins().uadd_overflow(old_val, one);
++
++            builder.ins().store(ir::MemFlags::trusted(), new_val, limit_addr, 0);
++        }
++
++        if let Some(gv) = self.value_stack_depth_reverse {
++            if let Some(delta) = builder.value_stack_size_inst {
++                let delta_val = builder.func.dfg.first_result(delta);
++
++                let limit_addr = builder.ins().global_value(self.pointer_type(), gv);
++                let old_val = builder.ins().load(ir::types::I32, ir::MemFlags::trusted(), limit_addr, 0);
++                let (new_val, _) = builder.ins().uadd_overflow(old_val, delta_val);
++
++                builder.ins().store(ir::MemFlags::trusted(), new_val, limit_addr, 0);
++            }
++        }
++    }
++}
+diff --git a/crates/environ/src/vmoffsets.rs b/crates/environ/src/vmoffsets.rs
+index 4fd9e126..757107be 100644
+--- a/crates/environ/src/vmoffsets.rs
++++ b/crates/environ/src/vmoffsets.rs
+@@ -183,6 +183,16 @@ pub trait PtrSize {
+         self.vmruntime_limits_last_wasm_entry_sp() + self.size()
+     }
+ 
++    ///
++    fn vmruntime_limits_call_stack_left(&self) -> u8 {
++        self.vmruntime_limits_should_quit_bool() + self.size()
++    }
++
++    ///
++    fn vmruntime_limits_value_stack_left(&self) -> u8 {
++        self.vmruntime_limits_call_stack_left() + 4
++    }
++
+     // Offsets within `VMMemoryDefinition`
+ 
+     /// The offset of the `base` field.
+diff --git a/crates/wasmtime/src/runtime/func.rs b/crates/wasmtime/src/runtime/func.rs
+index a03bb1d3..7f96b932 100644
+--- a/crates/wasmtime/src/runtime/func.rs
++++ b/crates/wasmtime/src/runtime/func.rs
+@@ -1587,12 +1587,12 @@ impl Func {
+     }
+ }
+ 
+-#[derive(Debug, Clone, serde::Serialize)]
++#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+ /// A fingerprint of a module's memory state.
+ pub struct MemoryFingerprint(#[serde(with = "serde_bytes")] pub [u8; 32]);
+ 
+ 
+-#[derive(Debug, Clone, serde::Serialize)]
++#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+ /// A fingerprint of a module's memory state.
+ pub struct ModuleFingerprint {
+     /// memory fingerprints
+diff --git a/crates/wasmtime/src/runtime/vm/vmcontext.rs b/crates/wasmtime/src/runtime/vm/vmcontext.rs
+index 6dc83c38..93b29b38 100644
+--- a/crates/wasmtime/src/runtime/vm/vmcontext.rs
++++ b/crates/wasmtime/src/runtime/vm/vmcontext.rs
+@@ -815,6 +815,9 @@ pub struct VMRuntimeLimits {
+     pub last_wasm_entry_sp: UnsafeCell<usize>,
+ 
+     pub should_quit_bool: UnsafeCell<usize>,
++
++    pub call_stack_limit_reverse: UnsafeCell<u32>,
++    pub value_stack_limit_reverse: UnsafeCell<u32>,
+ }
+ 
+ // The `VMRuntimeLimits` type is a pod-type with no destructor, and we don't
+@@ -834,6 +837,9 @@ impl Default for VMRuntimeLimits {
+             last_wasm_exit_pc: UnsafeCell::new(0),
+             last_wasm_entry_sp: UnsafeCell::new(0),
+             should_quit_bool: UnsafeCell::new(0),
++
++            call_stack_limit_reverse: UnsafeCell::new(1024),
++            value_stack_limit_reverse: UnsafeCell::new(65535),
+         }
+     }
+ }
