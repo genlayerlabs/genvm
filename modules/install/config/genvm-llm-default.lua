@@ -79,6 +79,12 @@ function ExecPrompt(ctx, args, remaining_gen)
 	---@cast args LLMExecPromptPayload
 	---@cast remaining_gen number
 
+	args.prompt = lib.rs.filter_text(args.prompt, {
+		'NFKC',
+		'RmZeroWidth',
+		'NormalizeWS'
+	})
+
 	local mapped = llm.exec_prompt_transform(args)
 
 	return just_in_backend(ctx, mapped, remaining_gen)

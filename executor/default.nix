@@ -34,7 +34,7 @@ let
 				GENVM_PROFILE = build-config.executor-version;
 			};
 		in pkgs.stdenvNoCC.mkDerivation rec {
-			name = "genvm-modules-${target}";
+			name = "genvm-executor-${target}";
 
 			srcs = [
 				exe

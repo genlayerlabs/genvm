@@ -167,7 +167,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
                 }
             }
             Ok((res, _, nondet)) => {
-                println!("executed with `{res:?}`");
+                println!("executed with `{res:}`");
                 if let Some(disag) = nondet {
                     println!("nondet disagreement: {disag}");
                 }
