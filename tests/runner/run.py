@@ -444,7 +444,15 @@ class TestRunner:
 		if code.endswith('.wat'):
 			out_path = tmp_dir.joinpath(Path(code).with_suffix('.wasm').name)
 			subprocess.run(
-				['wat2wasm', '--enable-annotations', '-o', out_path, code], check=True
+				[
+					'wat2wasm',
+					'--enable-tail-call',
+					'--enable-annotations',
+					'-o',
+					out_path,
+					code,
+				],
+				check=True,
 			)
 			return str(out_path)
 		return code
