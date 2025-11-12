@@ -846,7 +846,6 @@ struct FuzzingInput {
     wasm_b_data: Vec<u8>,
     msg: genvm::MessageData,
     can_write: bool, // wscn
-    can_read: bool,
     can_send: bool,
     can_nondet: bool,
 }
@@ -857,9 +856,6 @@ impl FuzzingInput {
 
         if self.can_write {
             perms.push('w');
-        }
-        if self.can_read {
-            perms.push('r');
         }
         if self.can_send {
             perms.push('s');

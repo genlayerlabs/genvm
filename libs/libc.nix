@@ -9,8 +9,8 @@ let
 		shallow = true;
 	};
 	aarch64-compiler-rt = builtins.fetchTarball {
-		url = "http://mirror.archlinuxarm.org/aarch64/extra/compiler-rt-20.1.8-1-aarch64.pkg.tar.xz";
-		sha256 = "14zn7ksalcmc180b79wc6chkyv2979y3raac1rq97fxqdvay29gg";
+		url = "http://mirror.archlinuxarm.org/aarch64/extra/compiler-rt-21.1.5-1-aarch64.pkg.tar.xz";
+		sha256 = "1z3p3r8bbbhnh8sda5xp6n15n0593lbghrcn5p34mfifcriyr435";
 	};
 in pkgs.stdenvNoCC.mkDerivation {
 	name = "libc-${name-target}";
@@ -26,7 +26,7 @@ in pkgs.stdenvNoCC.mkDerivation {
 	''
 		CC="clang --target=${conf-target}-linux-musl" \
 			CFLAGS="-O2" \
-			LDFLAGS="-fuse-ld=lld ${if name-target == "arm64" then "./compiler-rt/usr/lib/clang/20/lib/linux/libclang_rt.builtins-aarch64.a" else ""}" \
+			LDFLAGS="-fuse-ld=lld ${if name-target == "arm64" then "./compiler-rt/usr/lib/clang/21/lib/linux/libclang_rt.builtins-aarch64.a" else ""}" \
 			./configure --target=${conf-target}
 	'';
 

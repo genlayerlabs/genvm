@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: kp2pml30 <kp2pml30@gmail.com>
+Date: Wed, 12 Nov 2025 21:49:08 +0900
+Subject: [PATCH] fix: expose method for fuzzing
+
+---
+ crates/wasm-smith/src/core.rs        | 2 +-
+ crates/wasm-smith/src/core/encode.rs | 3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/crates/wasm-smith/src/core.rs b/crates/wasm-smith/src/core.rs
+index bdde0db..ab9f3c2 100644
+--- a/crates/wasm-smith/src/core.rs
++++ b/crates/wasm-smith/src/core.rs
+@@ -2034,7 +2034,7 @@ impl Module {
+                 // allow encoding any other type in that form.
+                 let can_use_function_list = ty == RefType::FUNCREF;
+                 if !self.config.reference_types_enabled {
+-                    assert!(can_use_function_list);
++                    assert!(can_use_function_list, "{ty:?}");
+                 }
+ 
+                 // If a function list is possible then build up a list of
+diff --git a/crates/wasm-smith/src/core/encode.rs b/crates/wasm-smith/src/core/encode.rs
+index dd91372..6d3a323 100644
+--- a/crates/wasm-smith/src/core/encode.rs
++++ b/crates/wasm-smith/src/core/encode.rs
+@@ -6,7 +6,8 @@ impl Module {
+         self.encoded().finish()
+     }
+ 
+-    fn encoded(&self) -> wasm_encoder::Module {
++    /// no doc
++    pub fn encoded(&self) -> wasm_encoder::Module {
+         let mut module = wasm_encoder::Module::new();
+ 
+         self.encode_types(&mut module);

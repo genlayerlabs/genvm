@@ -98,7 +98,7 @@ impl Ctx {
         ret.into()
     }
 
-    pub async fn get_current_permits(&self) -> usize {
+    pub fn get_current_permits(&self) -> usize {
         self.permits.available_permits()
     }
 

@@ -9,7 +9,7 @@
 		"executor/third-party/wasm-tools": {
 			"url": "https://github.com/bytecodealliance/wasm-tools.git",
 			"commit": "5a83828b7ff0e59db322de2a6466abca656de9a5",
-			"patches": 0
+			"patches": 1
 		}
 	}
 }
