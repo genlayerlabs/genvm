@@ -144,6 +144,7 @@ impl Ctx {
         let Some(exec_ctx) = self.known_executions.get(&genvm_id) else {
             anyhow::bail!("GenVM with id {} not found", genvm_id);
         };
+        let exec_ctx = exec_ctx.value().clone();
 
         if exec_ctx.result.get().is_some() {
             return Ok(());
@@ -202,6 +203,7 @@ impl Ctx {
             log_trace!(genvm_id = genvm_id; "genvm status requested for unknown id");
             return None;
         };
+        let exec_ctx = exec_ctx.value().clone();
 
         let proc_check = self.check_proc(&exec_ctx).await;
         log_debug!(genvm_id = genvm_id, proc_exited = proc_check; "genvm status checked");
@@ -269,7 +271,7 @@ impl Ctx {
         exe_path.push("executor");
 
         Ok(Self {
-            known_executions: dashmap::DashMap::new(),
+            known_executions: Default::default(),
             next_genvm_id: std::sync::atomic::AtomicU64::new(1),
             permits: Arc::new(tokio::sync::Semaphore::new(permits)),
             max_permits: tokio::sync::Mutex::new(PermitsData {
@@ -286,12 +288,24 @@ impl Ctx {
 async fn gc_step(ctx: &sync::DArc<Ctx>) {
     let now = chrono::Utc::now();
 
-    for kv in ctx.known_executions.iter() {
-        if kv.value().strict_deadline < now {
-            log_warn!(genvm_id = *kv.key(); "genvm execution exceeded strict deadline, terminating");
-            let _ = ctx.graceful_shutdown(*kv.key(), 0).await;
+    // copy-out so that we don't hold the lock while doing async operations
+    let keys = ctx
+        .known_executions
+        .iter()
+        .map(|kv| *kv.key())
+        .collect::<Vec<_>>();
+
+    for key in keys {
+        let Some(val) = ctx.known_executions.get(&key) else {
+            continue;
+        };
+        let val = val.clone();
+
+        if val.strict_deadline < now {
+            log_warn!(genvm_id = key; "genvm execution exceeded strict deadline, terminating");
+            let _ = ctx.graceful_shutdown(key, 0).await;
         }
-        let _ = ctx.check_proc(kv.value()).await;
+        let _ = ctx.check_proc(&val).await;
     }
 
     // Remove old finished executions
