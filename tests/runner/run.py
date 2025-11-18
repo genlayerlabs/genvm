@@ -606,7 +606,9 @@ class TestRunner:
 		got_stdout_path.parent.mkdir(parents=True, exist_ok=True)
 		got_stdout_path.write_text(res.stdout)
 		tmp_dir.joinpath('stderr.txt').write_text(res.stderr)
-		tmp_dir.joinpath('genvm.log').write_text(res.genvm_log)
+		tmp_dir.joinpath('genvm.log').write_text(
+			'\n'.join(json.dumps(x) for x in res.genvm_log)
+		)
 
 	def _validate_stdout(
 		self, config: dict, actual_stdout: str, base_result: dict, test_name: str

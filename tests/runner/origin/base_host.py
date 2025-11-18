@@ -359,7 +359,7 @@ async def host_loop(handler: IHost, cancellation: asyncio.Event, *, logger: Logg
 class RunHostAndProgramRes:
 	stdout: str
 	stderr: str
-	genvm_log: str
+	genvm_log: list[dict[str, typing.Any]]
 
 
 async def _send_timeout(manager_uri: str, genvm_id: str, logger: Logger):
@@ -518,7 +518,7 @@ async def run_genvm(
 		return RunHostAndProgramRes(
 			stdout=status['stdout'],
 			stderr=status['stderr'],
-			genvm_log='# currently absent',
+			genvm_log=status.get('genvm_log') or [],
 		)
 
 	raise Exception('Execution failed')
