@@ -1,5 +1,5 @@
 threads: 4
-blocking_threads: 16
+blocking_threads: 48
 log_disable: tracing*,polling*,tungstenite*,tokio_tungstenite*
 log_level: info
 
