@@ -1,3 +1,4 @@
+use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
 use genvm_common::*;
 use genvm_modules_interfaces::GenericValue;
@@ -219,7 +220,7 @@ where
                             }
                         }
                         Err(err) => {
-                            log_error!(error:ah = &err, genvm_id = genvm_id; "handler fatal error");
+                            log_error_into!(&LoggerWithId, error:ah = &err, genvm_id:id = genvm_id.0; "handler fatal error");
                             genvm_modules_interfaces::Result::FatalError(format!("{err:#}"))
                         }
                     },
@@ -278,12 +279,12 @@ where
     let res = loop_one_inner(&mut handler, stream, genvm_id).await;
 
     if let Err(close) = handler.cleanup().await {
-        log_error!(error:ah = &close, genvm_id = genvm_id; "cleanup error");
+        log_error_into!(&LoggerWithId, error:ah = &close, genvm_id:id = genvm_id.0; "cleanup error");
     }
 
     if res.is_err() {
         if let Err(close) = stream.close(None).await {
-            log_error!(error:err = close, genvm_id = genvm_id; "stream closing error")
+            log_error_into!(&LoggerWithId, error:err = close, genvm_id:id = genvm_id.0; "stream closing error")
         }
     }
 
@@ -322,11 +323,11 @@ async fn loop_one<T, R>(
     let genvm_id = hello.genvm_id;
     GENVM_ID
         .scope(genvm_id, async {
-            log_debug!(genvm_id = genvm_id; "peer accepted");
+            log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "peer accepted");
             if let Err(e) = loop_one_impl(handler_provider, &mut stream, hello).await {
-                log_error!(error:ah = &e, genvm_id = genvm_id; "internal loop error");
+                log_error_into!(&LoggerWithId, error:ah = &e, genvm_id:id = genvm_id.0; "internal loop error");
             }
-            log_debug!(genvm_id = genvm_id; "peer done");
+            log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "peer done");
         })
         .await;
 }
@@ -455,6 +456,95 @@ pub fn setup_cancels(
     }
 
     Ok(token)
+}
+
+pub enum LogSinkElement {
+    Map(serde_json::Map<String, serde_json::Value>),
+    Line(String),
+    Raw(Vec<u8>),
+}
+
+impl LogSinkElement {
+    pub fn into_json(self) -> serde_json::Map<String, serde_json::Value> {
+        match self {
+            LogSinkElement::Map(v) => v,
+            LogSinkElement::Line(text) => serde_json::Map::from_iter([
+                ("level".into(), serde_json::Value::String("info".into())),
+                (
+                    "message".into(),
+                    serde_json::Value::String("genvm log".into()),
+                ),
+                ("line".into(), text.into()),
+            ]),
+            LogSinkElement::Raw(s) => {
+                if let Ok(v) = serde_json::from_slice(&s) {
+                    v
+                } else {
+                    let mut as_encoded = String::new();
+                    base64::prelude::BASE64_STANDARD.encode_string(s, &mut as_encoded);
+                    serde_json::Map::from_iter([
+                        ("level".into(), serde_json::Value::String("error".into())),
+                        (
+                            "message".into(),
+                            serde_json::Value::String("genvm log".into()),
+                        ),
+                        ("line".into(), as_encoded.into()),
+                    ])
+                }
+            }
+        }
+    }
+}
+
+pub type LogSink = Arc<crossbeam::queue::SegQueue<LogSinkElement>>;
+
+pub static GENVM_BY_ID_LOGGER: std::sync::LazyLock<
+    dashmap::DashMap<genvm_modules_interfaces::GenVMId, LogSink>,
+> = std::sync::LazyLock::new(|| dashmap::DashMap::new());
+
+pub struct LoggerWithId;
+
+fn get_logger_sink(record: &genvm_common::logger::Record<'_>) -> Option<LogSink> {
+    let Some((_, genvm_common::logger::Capture::Id(genvm_id))) =
+        record.kv.iter().filter(|x| x.0 == "genvm_id").next()
+    else {
+        return None;
+    };
+    let genvm_id = *genvm_id;
+
+    GENVM_BY_ID_LOGGER
+        .get(&genvm_modules_interfaces::GenVMId(genvm_id))
+        .map(|x| x.clone())
+}
+
+impl genvm_common::logger::ILogger for LoggerWithId {
+    fn try_log(
+        &self,
+        record: genvm_common::logger::Record<'_>,
+    ) -> std::result::Result<(), genvm_common::logger::Error> {
+        let Some(sink) = get_logger_sink(&record) else {
+            if let Some(l) = genvm_common::logger::__LOGGER.get() {
+                return l.try_log(record);
+            } else {
+                return Ok(());
+            }
+        };
+
+        let mut buf = Vec::new();
+        genvm_common::logger::log_into_buffer(&mut buf, record)?;
+
+        sink.push(LogSinkElement::Raw(buf));
+
+        Ok(())
+    }
+
+    fn enabled(&self, callsite: genvm_common::logger::Callsite) -> bool {
+        if let Some(l) = genvm_common::logger::__LOGGER.get() {
+            l.enabled(callsite)
+        } else {
+            false
+        }
+    }
 }
 
 #[cfg(test)]

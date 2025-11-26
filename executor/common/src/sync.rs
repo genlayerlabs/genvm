@@ -488,3 +488,27 @@ impl<T, Token> std::ops::DerefMut for Lock<T, Token> {
         &mut self.0
     }
 }
+
+pub struct DropGuard<F: FnOnce()>(Option<F>);
+
+impl<F: FnOnce()> DropGuard<F> {
+    pub fn new(func: F) -> Self {
+        Self(Some(func))
+    }
+
+    pub fn reset(&mut self) {
+        std::mem::drop(self.0.take());
+    }
+
+    pub fn forget(mut self) {
+        std::mem::drop(self.0.take());
+    }
+}
+
+impl<F: FnOnce()> Drop for DropGuard<F> {
+    fn drop(&mut self) {
+        if let Some(func) = self.0.take() {
+            func();
+        }
+    }
+}

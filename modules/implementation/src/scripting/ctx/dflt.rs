@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
-    common::{ErrorKind, MapUserError, ModuleError},
+    common::{ErrorKind, LoggerWithId, MapUserError, ModuleError},
     scripting::{self, DEFAULT_LUA_SER_OPTIONS},
 };
 use anyhow::Context;
@@ -57,7 +57,7 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
 
         let script_message = as_serde.remove("message").and_then(|x| x.as_str().map(|x| x.to_owned())).unwrap_or_else(|| "<none>".to_owned());
 
-        log_with_level!(level, log:serde = as_serde, genvm_id = crate::common::get_genvm_id(); "script_log: {script_message}");
+        log_with_level_into!(level, &LoggerWithId, log:serde = as_serde, genvm_id:id = crate::common::get_genvm_id().0; "script_log: {script_message}");
         Ok(())
     })?)?;
 

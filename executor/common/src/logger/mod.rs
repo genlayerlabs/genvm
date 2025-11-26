@@ -1,6 +1,6 @@
 mod error;
 
-use error::Error;
+pub use error::Error;
 use serde::Serialize;
 
 use std::{io::Write, str::FromStr};
@@ -63,8 +63,12 @@ impl<'d> serde::Deserialize<'d> for Level {
 }
 
 pub struct Logger {
-    filter: std::sync::atomic::AtomicU32,
+    filter: DefaultFilterer,
     default_writer: Box<std::sync::Mutex<dyn std::io::Write + Send + Sync>>,
+}
+
+pub struct DefaultFilterer {
+    filter: std::sync::atomic::AtomicU32,
     disabled_buffer: String,
     disabled: Vec<(usize, usize)>,
 }
@@ -72,17 +76,27 @@ pub struct Logger {
 impl Logger {
     #[inline(always)]
     pub fn set_filter(&self, level: Level) {
-        self.filter
-            .store(level as u32, std::sync::atomic::Ordering::Relaxed);
+        self.filter.set_filter(level);
     }
 
     #[inline(always)]
     pub fn get_filter(&self) -> Level {
+        self.filter.get_filter()
+    }
+}
+
+impl DefaultFilterer {
+    fn set_filter(&self, level: Level) {
+        self.filter
+            .store(level as u32, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn get_filter(&self) -> Level {
         let loaded = self.filter.load(std::sync::atomic::Ordering::Relaxed);
         unsafe { std::mem::transmute::<u32, Level>(loaded) }
     }
 
-    pub fn enabled(&self, callsite: Callsite) -> bool {
+    fn enabled(&self, callsite: Callsite) -> bool {
         if !self.get_filter().filter_enables(callsite.level) {
             return false;
         }
@@ -126,6 +140,7 @@ pub enum Capture<'a> {
     Anyhow(&'a anyhow::Error),
     #[allow(clippy::type_complexity)]
     Serde(&'a (dyn Fn(&mut std::io::Cursor<&mut Vec<u8>>) -> Result<(), error::Error> + 'a)),
+    Id(u64),
 }
 
 impl<'a> From<&'a (dyn std::error::Error + 'static)> for Capture<'a> {
@@ -182,6 +197,10 @@ macro_rules! __make_capture {
         $crate::logger::Capture::Debug(&$value)
     };
 
+    (id = $value:expr) => {
+        $crate::logger::Capture::Id($value)
+    };
+
     (bytes = $value:expr) => {
         $crate::logger::Capture::Debug(&$value)
     };
@@ -197,7 +216,7 @@ macro_rules! __make_capture {
 macro_rules! __do_log {
     ($callsite:tt, $log:tt, $($key:tt $(:$capture:tt)? $(= $value:expr)?),+; $($arg:tt)+) => ({
         #[allow(unused_variables)]
-        let res = $log.__try_log($crate::logger::Record {
+        let res = <_ as $crate::logger::ILogger>::try_log($log, $crate::logger::Record {
             callsite: $callsite,
             args: format_args!($($arg)+),
             kv: &[$((stringify!($key), $crate::__make_capture!($($capture)* = $($value)*))),+] as &[_],
@@ -211,7 +230,7 @@ macro_rules! __do_log {
     });
 
     ($callsite:tt, $log:tt, $($arg:tt)+) => ({
-        let res = $log.__try_log($crate::logger::Record {
+        let res = <_ as $crate::logger::ILogger>::try_log($log, $crate::logger::Record {
             callsite: $callsite,
             args: format_args!($($arg)+),
             kv: &[],
@@ -234,9 +253,24 @@ macro_rules! log_static {
         };
         if const { $crate::logger::statically_enabled(CALLSITE) } {
             if let Some(cur_logger) = $crate::logger::__LOGGER.get() {
-                if cur_logger.enabled(CALLSITE) {
+                if <_ as $crate::logger::ILogger>::enabled(cur_logger, CALLSITE) {
                     $crate::__do_log!(CALLSITE, cur_logger, $($arg)+)
                 }
+            }
+        }
+    }}
+}
+
+#[macro_export]
+macro_rules! log_static_into {
+    ($level:expr, $logger:expr, $($arg:tt)+) => {{
+        const CALLSITE: $crate::logger::Callsite = $crate::logger::Callsite {
+            level: $level,
+            target: module_path!(),
+        };
+        if const { $crate::logger::statically_enabled(CALLSITE) } {
+            if <_ as $crate::logger::ILogger>::enabled($logger, CALLSITE) {
+                $crate::__do_log!(CALLSITE, $logger, $($arg)+)
             }
         }
     }}
@@ -253,6 +287,19 @@ macro_rules! log_with_level {
             if cur_logger.enabled(callsite) {
                 $crate::__do_log!(callsite, cur_logger, $($arg)+)
             }
+        }
+    }}
+}
+
+#[macro_export]
+macro_rules! log_with_level_into {
+    ($level:expr, $logger:expr, $($arg:tt)+) => {{
+        let callsite: $crate::logger::Callsite = $crate::logger::Callsite {
+            level: $level,
+            target: module_path!(),
+        };
+        if <_ as $crate::logger::ILogger>::enabled($logger, callsite) {
+            $crate::__do_log!(callsite, $logger, $($arg)+)
         }
     }}
 }
@@ -294,6 +341,31 @@ macro_rules! log_debug {
 #[macro_export]
 macro_rules! log_trace {
     ($($arg:tt)+) => ($crate::log_static!($crate::logger::Level::Trace, $($arg)+))
+}
+
+#[macro_export]
+macro_rules! log_error_into {
+    ($($arg:tt)+) => ($crate::log_static_into!($crate::logger::Level::Error, $($arg)+))
+}
+
+#[macro_export]
+macro_rules! log_warn_into {
+    ($($arg:tt)+) => ($crate::log_static_into!($crate::logger::Level::Warn, $($arg)+))
+}
+
+#[macro_export]
+macro_rules! log_info_into {
+    ($($arg:tt)+) => ($crate::log_static_into!($crate::logger::Level::Info, $($arg)+))
+}
+
+#[macro_export]
+macro_rules! log_debug_into {
+    ($($arg:tt)+) => ($crate::log_static_into!($crate::logger::Level::Debug, $($arg)+))
+}
+
+#[macro_export]
+macro_rules! log_trace_into {
+    ($($arg:tt)+) => ($crate::log_static_into!($crate::logger::Level::Trace, $($arg)+))
 }
 
 static LOG_CACHED_BUFFERS: std::sync::LazyLock<crossbeam::queue::ArrayQueue<Vec<u8>>> =
@@ -989,74 +1061,77 @@ impl<'a> Visitor<'a, '_> {
     }
 }
 
-impl Logger {
-    fn log_inner(&self, buf: &mut Vec<u8>, record: Record<'_>) -> std::result::Result<(), Error> {
-        buf.clear();
-        let mut writer = std::io::Cursor::new(buf);
-        writer.write_all(b"{")?;
+pub fn log_into_buffer(buf: &mut Vec<u8>, record: Record<'_>) -> std::result::Result<(), Error> {
+    buf.clear();
+    let mut writer = std::io::Cursor::new(buf);
+    writer.write_all(b"{")?;
 
-        writer.write_all(format!("\"level\":\"{}\",", record.callsite.level).as_bytes())?;
-        write_k_v_str_fast(&mut writer, "target", record.callsite.target)?;
+    writer.write_all(format!("\"level\":\"{}\",", record.callsite.level).as_bytes())?;
+    write_k_v_str_fast(&mut writer, "target", record.callsite.target)?;
 
-        write_comma(&mut writer)?;
+    write_comma(&mut writer)?;
 
-        if let Some(msg) = record.args.as_str() {
-            write_k_v_str_fast(&mut writer, "message", msg)?;
-        } else {
-            write_k_v_str_fast(&mut writer, "message", &record.args.to_string())?;
-        }
-
-        let mut visitor = Visitor(&mut writer);
-        for (k, v) in record.kv {
-            write_comma(visitor.0)?;
-            write_quoted_str_escaping(visitor.0, k)?;
-            visitor.0.write_all(b":")?;
-
-            match v {
-                Capture::Error(e) => visitor.dump_error(*e)?,
-                Capture::Anyhow(e) => visitor.dump_anyhow(e)?,
-                Capture::Str(s) => write_quoted_str_escaping(visitor.0, s)?,
-                Capture::Display(d) => write_quoted_str_escaping(visitor.0, &d.to_string())?,
-                Capture::Debug(d) => {
-                    write_quoted_str_escaping(visitor.0, &format!("{d:?}"))?;
-                }
-                Capture::Serde(serde_fn) => {
-                    serde_fn(visitor.0)?;
-                }
-            }
-        }
-
-        write_comma(&mut writer)?;
-
-        writer.write_all(b"\"file\":\"")?;
-        write_str_escaping(&mut writer, record.file)?;
-        writer.write_all(b":")?;
-        writer.write_all(record.line.to_string().as_bytes())?;
-        writer.write_all(b"\"")?;
-
-        write_comma(&mut writer)?;
-        write_k_v_str_fast(
-            &mut writer,
-            "ts",
-            &std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis()
-                .to_string(),
-        )?;
-
-        writer.write_all(b"}")?;
-        writer.flush()?;
-
-        Ok(())
+    if let Some(msg) = record.args.as_str() {
+        write_k_v_str_fast(&mut writer, "message", msg)?;
+    } else {
+        write_k_v_str_fast(&mut writer, "message", &record.args.to_string())?;
     }
 
-    pub fn __try_log(&self, record: Record<'_>) -> std::result::Result<(), Error> {
+    let mut visitor = Visitor(&mut writer);
+    for (k, v) in record.kv {
+        write_comma(visitor.0)?;
+        write_quoted_str_escaping(visitor.0, k)?;
+        visitor.0.write_all(b":")?;
+
+        match v {
+            Capture::Error(e) => visitor.dump_error(*e)?,
+            Capture::Anyhow(e) => visitor.dump_anyhow(e)?,
+            Capture::Str(s) => write_quoted_str_escaping(visitor.0, s)?,
+            Capture::Display(d) => write_quoted_str_escaping(visitor.0, &d.to_string())?,
+            Capture::Debug(d) => {
+                write_quoted_str_escaping(visitor.0, &format!("{d:?}"))?;
+            }
+            Capture::Serde(serde_fn) => {
+                serde_fn(visitor.0)?;
+            }
+            Capture::Id(id) => {
+                write!(visitor.0, "{}", id)?;
+            }
+        }
+    }
+
+    write_comma(&mut writer)?;
+
+    writer.write_all(b"\"file\":\"")?;
+    write_str_escaping(&mut writer, record.file)?;
+    writer.write_all(b":")?;
+    writer.write_all(record.line.to_string().as_bytes())?;
+    writer.write_all(b"\"")?;
+
+    write_comma(&mut writer)?;
+    write_k_v_str_fast(
+        &mut writer,
+        "ts",
+        &std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            .to_string(),
+    )?;
+
+    writer.write_all(b"}")?;
+    writer.flush()?;
+
+    Ok(())
+}
+
+impl ILogger for Logger {
+    fn try_log(&self, record: Record<'_>) -> std::result::Result<(), Error> {
         let mut buf = LOG_CACHED_BUFFERS.pop().unwrap_or_default();
 
         buf.clear();
 
-        let res = self.log_inner(&mut buf, record);
+        let res = log_into_buffer(&mut buf, record);
 
         let mut writer = self.default_writer.lock().unwrap();
 
@@ -1073,6 +1148,16 @@ impl Logger {
 
         res
     }
+
+    fn enabled(&self, callsite: Callsite) -> bool {
+        self.filter.enabled(callsite)
+    }
+}
+
+pub trait ILogger {
+    fn try_log(&self, record: Record<'_>) -> std::result::Result<(), Error>;
+
+    fn enabled(&self, callsite: Callsite) -> bool;
 }
 
 pub fn initialize<W>(filter: Level, disabled: &str, writer: W)
@@ -1112,10 +1197,12 @@ where
     }
 
     let logger = Logger {
-        filter: std::sync::atomic::AtomicU32::new(filter as u32),
+        filter: DefaultFilterer {
+            filter: std::sync::atomic::AtomicU32::new(filter as u32),
+            disabled: new_disabled,
+            disabled_buffer: all_buffer,
+        },
         default_writer,
-        disabled: new_disabled,
-        disabled_buffer: all_buffer,
     };
 
     if let Err(logger) = __LOGGER.set(logger) {
@@ -1146,7 +1233,7 @@ fn log_panic(info: &std::panic::PanicHookInfo<'_>) {
     let key_values = key_values.as_slice();
 
     if let Some(logger) = __LOGGER.get() {
-        let _ = logger.__try_log(Record {
+        let _ = logger.try_log(Record {
             callsite: Callsite {
                 level: Level::Error,
                 target: "panic",

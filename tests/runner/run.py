@@ -281,7 +281,10 @@ class TestReporter:
 			if res['category'] == 'fail':
 
 				def print_lines(st):
-					lines = st.splitlines()
+					if isinstance(st, list):
+						lines = st
+					else:
+						lines = st.splitlines()
 					if self.config.args.ci:
 						for line in lines:
 							print(f'\t\t{line}')
