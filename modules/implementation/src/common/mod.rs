@@ -177,7 +177,7 @@ where
 async fn loop_one_inner<T, R>(
     handler: &mut impl MessageHandler<T, R>,
     stream: &mut WSStream,
-    cookie: &str,
+    genvm_id: genvm_modules_interfaces::GenVMId,
 ) -> anyhow::Result<()>
 where
     T: serde::de::DeserializeOwned + 'static,
@@ -219,7 +219,7 @@ where
                             }
                         }
                         Err(err) => {
-                            log_error!(error:ah = &err, cookie = cookie; "handler fatal error");
+                            log_error!(error:ah = &err, genvm_id = genvm_id; "handler fatal error");
                             genvm_modules_interfaces::Result::FatalError(format!("{err:#}"))
                         }
                     },
@@ -271,19 +271,19 @@ where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
 {
-    let cookie = hello.cookie.clone();
+    let genvm_id = hello.genvm_id;
 
     let mut handler = handler_provider.new_handler(hello).await?;
 
-    let res = loop_one_inner(&mut handler, stream, &cookie).await;
+    let res = loop_one_inner(&mut handler, stream, genvm_id).await;
 
     if let Err(close) = handler.cleanup().await {
-        log_error!(error:ah = &close, cookie = cookie; "cleanup error");
+        log_error!(error:ah = &close, genvm_id = genvm_id; "cleanup error");
     }
 
     if res.is_err() {
         if let Err(close) = stream.close(None).await {
-            log_error!(error:err = close, cookie = cookie; "stream closing error")
+            log_error!(error:err = close, genvm_id = genvm_id; "stream closing error")
         }
     }
 
@@ -319,15 +319,14 @@ async fn loop_one<T, R>(
 
     log_trace!(hello:serde = hello; "read hello");
 
-    let cookie = hello.cookie.clone();
-    let cookie: &str = &cookie;
-    COOKIE
-        .scope(Arc::from(cookie), async {
-            log_debug!(cookie = cookie; "peer accepted");
+    let genvm_id = hello.genvm_id;
+    GENVM_ID
+        .scope(genvm_id, async {
+            log_debug!(genvm_id = genvm_id; "peer accepted");
             if let Err(e) = loop_one_impl(handler_provider, &mut stream, hello).await {
-                log_error!(error:ah = &e, cookie = cookie; "internal loop error");
+                log_error!(error:ah = &e, genvm_id = genvm_id; "internal loop error");
             }
-            log_debug!(cookie = cookie; "peer done");
+            log_debug!(genvm_id = genvm_id; "peer done");
         })
         .await;
 }
@@ -366,22 +365,43 @@ where
 }
 
 tokio::task_local! {
-    static COOKIE: Arc<str>;
+    static GENVM_ID: genvm_modules_interfaces::GenVMId;
 }
 
-pub fn get_cookie() -> Arc<str> {
-    match COOKIE.try_with(|f| f.clone()) {
+pub fn get_genvm_id() -> genvm_modules_interfaces::GenVMId {
+    match GENVM_ID.try_with(|f| *f) {
         Ok(v) => v,
-        Err(_) => Arc::from("<absent>"),
+        Err(_) => genvm_modules_interfaces::GenVMId(0), // Use 0 as absent/default value
     }
 }
 
+// Keep for backward compatibility
+pub fn get_cookie() -> Arc<str> {
+    Arc::from(get_genvm_id().to_string())
+}
+
 #[allow(dead_code)]
-pub fn test_with_cookie<F>(value: &str, f: F) -> tokio::task::futures::TaskLocalFuture<Arc<str>, F>
+pub fn test_with_cookie<F>(
+    value: &str,
+    f: F,
+) -> tokio::task::futures::TaskLocalFuture<genvm_modules_interfaces::GenVMId, F>
 where
     F: std::future::Future,
 {
-    COOKIE.scope(Arc::from(value), f)
+    // Parse the string as a u64 for the genvm_id, fallback to 0 if parsing fails
+    let genvm_id = value.parse::<u64>().unwrap_or(0);
+    GENVM_ID.scope(genvm_modules_interfaces::GenVMId(genvm_id), f)
+}
+
+#[allow(dead_code)]
+pub fn test_with_genvm_id<F>(
+    genvm_id: genvm_modules_interfaces::GenVMId,
+    f: F,
+) -> tokio::task::futures::TaskLocalFuture<genvm_modules_interfaces::GenVMId, F>
+where
+    F: std::future::Future,
+{
+    GENVM_ID.scope(genvm_id, f)
 }
 
 pub fn create_client() -> anyhow::Result<reqwest::Client> {
@@ -459,7 +479,7 @@ pub mod tests {
 
     pub fn get_hello() -> Arc<genvm_modules_interfaces::GenVMHello> {
         Arc::new(genvm_modules_interfaces::GenVMHello {
-            cookie: "test_cookie".to_owned(),
+            genvm_id: genvm_modules_interfaces::GenVMId(999),
             host_data: genvm_modules_interfaces::HostData {
                 node_address: "test_node_address".to_owned(),
                 tx_id: "test_tx_id".to_owned(),

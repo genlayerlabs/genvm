@@ -679,7 +679,7 @@ async fn run_with(
     let shared_data = sync::DArc::new(genvm::rt::SharedData {
         cancellation: token,
         is_sync: eq_outputs.is_some(),
-        cookie: "a".to_owned(),
+        genvm_id: genvm_modules_interfaces::GenVMId(1),
         debug_mode: false,
         metrics: genvm::Metrics::default(),
     });

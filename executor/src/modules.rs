@@ -19,7 +19,7 @@ pub struct Module {
     name: String,
     cancellation: Arc<genvm_common::cancellation::Token>,
     imp: tokio::sync::Mutex<ModuleImpl>,
-    cookie: String,
+    genvm_id: genvm_modules_interfaces::GenVMId,
     host_data: genvm_modules_interfaces::HostData,
     metrics: sync::DArc<Metrics>,
 }
@@ -58,14 +58,14 @@ impl Module {
         name: String,
         url: String,
         cancellation: Arc<genvm_common::cancellation::Token>,
-        cookie: String,
+        genvm_id: genvm_modules_interfaces::GenVMId,
         host_data: genvm_modules_interfaces::HostData,
         metrics: sync::DArc<Metrics>,
     ) -> Self {
         Self {
             imp: tokio::sync::Mutex::new(ModuleImpl { url, stream: None }),
             cancellation,
-            cookie,
+            genvm_id,
             name,
             host_data,
             metrics,
@@ -106,7 +106,7 @@ impl Module {
                 .with_context(|| format!("connecting to {}", zelf.url))?;
 
             let msg = calldata::to_value(&genvm_modules_interfaces::GenVMHello {
-                cookie: self.cookie.clone(),
+                genvm_id: self.genvm_id,
                 host_data: self.host_data.clone(),
             })?;
 

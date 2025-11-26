@@ -805,7 +805,7 @@ mod tests {
             sign_url: std::sync::Arc::from("test_url"),
             sign_vars: BTreeMap::new(),
             hello: std::sync::Arc::new(genvm_modules_interfaces::GenVMHello {
-                cookie: "test_cookie".to_owned(),
+                genvm_id: genvm_modules_interfaces::GenVMId(999),
                 host_data: genvm_modules_interfaces::HostData {
                     tx_id: "test_tx".to_owned(),
                     node_address: "test_node".to_owned(),
@@ -889,7 +889,7 @@ mod tests {
             sign_url: std::sync::Arc::from("test_url"),
             sign_vars: BTreeMap::new(),
             hello: std::sync::Arc::new(genvm_modules_interfaces::GenVMHello {
-                cookie: "test_cookie".to_owned(),
+                genvm_id: genvm_modules_interfaces::GenVMId(999),
                 host_data: genvm_modules_interfaces::HostData {
                     tx_id: "test_tx".to_owned(),
                     node_address: "test_node".to_owned(),
@@ -966,7 +966,7 @@ mod tests {
             sign_url: std::sync::Arc::from("test_url"),
             sign_vars: BTreeMap::new(),
             hello: std::sync::Arc::new(genvm_modules_interfaces::GenVMHello {
-                cookie: "test_cookie".to_owned(),
+                genvm_id: genvm_modules_interfaces::GenVMId(999),
                 host_data: genvm_modules_interfaces::HostData {
                     tx_id: "test_tx".to_owned(),
                     node_address: "test_node".to_owned(),
@@ -1062,7 +1062,7 @@ mod tests {
             sign_url: std::sync::Arc::from("test_url"),
             sign_vars: BTreeMap::new(),
             hello: std::sync::Arc::new(genvm_modules_interfaces::GenVMHello {
-                cookie: "test_cookie".to_owned(),
+                genvm_id: genvm_modules_interfaces::GenVMId(999),
                 host_data: genvm_modules_interfaces::HostData {
                     tx_id: "test_tx".to_owned(),
                     node_address: "test_node".to_owned(),
@@ -1108,18 +1108,24 @@ mod tests {
                 #[tokio::test]
                 async fn text() {
                     let conf = super::conf::$conf;
-                    common::test_with_cookie(conf, async { super::do_test_text(conf).await }).await;
+                    common::test_with_genvm_id(genvm_modules_interfaces::GenVMId(999), async {
+                        super::do_test_text(conf).await
+                    })
+                    .await;
                 }
                 #[tokio::test]
                 async fn json() {
                     let conf = super::conf::$conf;
-                    common::test_with_cookie(conf, async { super::do_test_json(conf).await }).await;
+                    common::test_with_genvm_id(genvm_modules_interfaces::GenVMId(999), async {
+                        super::do_test_json(conf).await
+                    })
+                    .await;
                 }
 
                 #[tokio::test]
                 async fn text_out_of_tokens() {
                     let conf = super::conf::$conf;
-                    common::test_with_cookie(conf, async {
+                    common::test_with_genvm_id(genvm_modules_interfaces::GenVMId(999), async {
                         super::do_test_text_out_of_tokens(conf).await
                     })
                     .await;
@@ -1128,7 +1134,7 @@ mod tests {
                 #[tokio::test]
                 async fn json_out_of_tokens() {
                     let conf = super::conf::$conf;
-                    common::test_with_cookie(conf, async {
+                    common::test_with_genvm_id(genvm_modules_interfaces::GenVMId(999), async {
                         super::do_test_json_out_of_tokens(conf).await
                     })
                     .await;

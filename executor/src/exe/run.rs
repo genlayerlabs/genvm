@@ -61,7 +61,7 @@ pub struct Args {
     #[arg(long, help = "host uri, preferably unix://")]
     host: String,
     #[arg(long, help = "id to pass to modules, useful for aggregating logs")]
-    cookie: Option<String>,
+    genvm_id: Option<u64>,
     #[clap(long, help = "what to output to stdout/stderr")]
     print: Vec<PrintOption>,
     #[clap(long, default_value_t = false)]
@@ -93,24 +93,19 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         signal_hook::low_level::register(signal_hook::consts::SIGINT, handle_sigterm)?;
     }
 
-    let cookie = match &args.cookie {
+    let genvm_id = match &args.genvm_id {
         None => {
-            let mut cookie = [0; 8];
-            let _ = getrandom::fill(&mut cookie);
-
-            let mut cookie_str = String::new();
-            for c in cookie {
-                cookie_str.push_str(&format!("{c:x}"));
-            }
-            cookie_str
+            let mut random_bytes = [0; 8];
+            let _ = getrandom::fill(&mut random_bytes);
+            u64::from_le_bytes(random_bytes)
         }
-        Some(v) => v.clone(),
+        Some(v) => *v,
     };
 
     let shared_data = sync::DArc::new(genvm::rt::SharedData {
         cancellation: token,
         is_sync: args.sync,
-        cookie: cookie.clone(),
+        genvm_id: genvm_modules_interfaces::GenVMId(genvm_id),
         debug_mode: args.debug_mode,
         metrics: genvm::Metrics::default(),
     });
@@ -130,7 +125,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
 
     let host_data = serde_json::from_str(&args.host_data)?;
 
-    log_info!(cookie = cookie; "genvm cookie");
+    log_info!(genvm_id = genvm_id; "genvm id");
 
     let rt = runtime.enter();
 

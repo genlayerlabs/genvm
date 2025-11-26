@@ -39,7 +39,7 @@ impl<T> DetNondet<T> {
 pub struct SharedData {
     pub cancellation: Arc<genvm_common::cancellation::Token>,
     pub is_sync: bool,
-    pub cookie: String,
+    pub genvm_id: genvm_modules_interfaces::GenVMId,
     pub debug_mode: bool,
     pub metrics: crate::Metrics,
 }

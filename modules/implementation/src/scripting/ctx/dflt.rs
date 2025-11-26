@@ -57,7 +57,7 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
 
         let script_message = as_serde.remove("message").and_then(|x| x.as_str().map(|x| x.to_owned())).unwrap_or_else(|| "<none>".to_owned());
 
-        log_with_level!(level, log:serde = as_serde, cookie = crate::common::get_cookie(); "script_log: {script_message}");
+        log_with_level!(level, log:serde = as_serde, genvm_id = crate::common::get_genvm_id(); "script_log: {script_message}");
         Ok(())
     })?)?;
 

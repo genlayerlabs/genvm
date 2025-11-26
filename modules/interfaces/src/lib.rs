@@ -375,8 +375,19 @@ pub struct HostData {
     pub rest: serde_json::Map<String, serde_json::Value>,
 }
 
+#[derive(
+    Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Copy, PartialOrd, Ord,
+)]
+pub struct GenVMId(pub u64);
+
+impl std::fmt::Display for GenVMId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenVMHello {
-    pub cookie: String,
+    pub genvm_id: GenVMId,
     pub host_data: HostData,
 }

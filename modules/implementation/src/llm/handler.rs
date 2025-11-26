@@ -110,7 +110,7 @@ impl Inner {
         payload: llm_iface::PromptPayload,
         remaining_fuel_as_gen: u64,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        log_debug!(payload:serde = payload, remaining_fuel_as_gen = remaining_fuel_as_gen, cookie = self.ctx.dflt.hello.cookie; "exec_prompt start");
+        log_debug!(payload:serde = payload, remaining_fuel_as_gen = remaining_fuel_as_gen, genvm_id = self.ctx.dflt.hello.genvm_id; "exec_prompt start");
 
         let payload = self.user_vm.vm.to_value(&payload)?;
         let fuel = self.user_vm.vm.to_value(&remaining_fuel_as_gen)?;
@@ -124,7 +124,7 @@ impl Inner {
             .await?;
         let res = self.user_vm.vm.from_value(res)?;
 
-        log_debug!(result:serde = res, cookie = self.ctx.dflt.hello.cookie; "exec_prompt returned");
+        log_debug!(result:serde = res, genvm_id = self.ctx.dflt.hello.genvm_id; "exec_prompt returned");
 
         Ok(res)
     }
@@ -135,7 +135,7 @@ impl Inner {
         payload: llm_iface::PromptTemplatePayload,
         remaining_fuel_as_gen: u64,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
-        log_debug!(payload:serde = payload, remaining_fuel_as_gen = remaining_fuel_as_gen, cookie = self.ctx.dflt.hello.cookie; "exec_prompt_template start");
+        log_debug!(payload:serde = payload, remaining_fuel_as_gen = remaining_fuel_as_gen, genvm_id = self.ctx.dflt.hello.genvm_id; "exec_prompt_template start");
 
         let payload = self.user_vm.vm.to_value(&payload)?;
         let fuel = self.user_vm.vm.to_value(&remaining_fuel_as_gen)?;
@@ -149,7 +149,7 @@ impl Inner {
             .await?;
         let res = self.user_vm.vm.from_value(res)?;
 
-        log_debug!(result:serde = res, cookie = self.ctx.dflt.hello.cookie; "exec_prompt_template returned");
+        log_debug!(result:serde = res, genvm_id = self.ctx.dflt.hello.genvm_id; "exec_prompt_template returned");
 
         Ok(res)
     }

@@ -75,7 +75,7 @@ impl CtxPart {
                 mode:? = format,
                 provider_id = provider_id,
                 error:ah = err,
-                cookie = self.dflt.hello.cookie;
+                genvm_id = self.dflt.hello.genvm_id;
                 "prompt execution error"
             );
         })

@@ -426,7 +426,7 @@ mod tests {
                     tx_id: "test_tx_id".to_string(),
                     rest: serde_json::Map::new(),
                 },
-                cookie: "test_cookie".to_string(),
+                genvm_id: genvm_modules_interfaces::GenVMId(999),
             }),
             client: reqwest::Client::new(),
             sign_url: Arc::from("https://test-server.genlayer.com/genvm/sign"),

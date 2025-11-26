@@ -1,6 +1,6 @@
 use std::{
     ops::{Deref, DerefMut},
-    os::fd::{AsRawFd, FromRawFd, IntoRawFd},
+    os::fd::{AsRawFd, FromRawFd},
     pin::Pin,
     str::FromStr,
     sync::Arc,
@@ -9,14 +9,7 @@ use std::{
 use genvm_common::*;
 use tokio::io::AsyncBufReadExt;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Copy)]
-pub struct GenVMId(pub u64);
-
-impl std::fmt::Display for GenVMId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
+pub use genvm_modules_interfaces::GenVMId;
 
 #[derive(Debug)]
 pub struct SingleGenVMContextDone {
@@ -676,7 +669,7 @@ pub async fn start_genvm(
     proc.arg("--message");
     proc.arg(serde_json::to_string(&req.message)?);
 
-    proc.arg(format!("--cookie={}", genvm_id.0));
+    proc.arg(format!("--genvm-id={}", genvm_id.0));
 
     let log_capturer = if req.capture_output {
         proc.stdout(std::process::Stdio::piped());
