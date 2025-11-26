@@ -1,6 +1,7 @@
 use std::{
     ops::{Deref, DerefMut},
     os::fd::{AsRawFd, FromRawFd, IntoRawFd},
+    pin::Pin,
     str::FromStr,
     sync::Arc,
 };
@@ -437,11 +438,44 @@ impl LogAppender for LogAppenderToValue {
     }
 }
 
+pub struct AsyncCustomFD(tokio::io::unix::AsyncFd<std::os::fd::OwnedFd>);
+
+impl tokio::io::AsyncRead for AsyncCustomFD {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        loop {
+            let mut guard = std::task::ready!(self.0.poll_read_ready(cx))?;
+
+            let unfilled = buf.initialize_unfilled();
+            match guard.try_io(|inner| {
+                let fd = inner.get_ref().as_raw_fd();
+                let result =
+                    unsafe { libc::read(fd, unfilled.as_mut_ptr().cast(), unfilled.len()) };
+                if result == -1 {
+                    Err(std::io::Error::last_os_error())
+                } else {
+                    Ok(result as usize)
+                }
+            }) {
+                Ok(Ok(len)) => {
+                    buf.advance(len);
+                    return std::task::Poll::Ready(Ok(()));
+                }
+                Ok(Err(err)) => return std::task::Poll::Ready(Err(err)),
+                Err(_would_block) => continue,
+            }
+        }
+    }
+}
+
 async fn read_log_pipe<LA: LogAppender>(
     reader_fd: std::os::unix::io::OwnedFd,
     mut sink: impl DerefMut<Target = LA>,
 ) -> std::io::Result<()> {
-    let file = unsafe { tokio::fs::File::from_raw_fd(reader_fd.into_raw_fd()) };
+    let file = AsyncCustomFD(tokio::io::unix::AsyncFd::new(reader_fd)?);
 
     let reader = tokio::io::BufReader::new(file);
 
@@ -612,7 +646,12 @@ pub async fn start_genvm(
     let read_fd = read_right_fd[0];
     let write_fd = read_right_fd[1];
 
-    let _ = unsafe { libc::fcntl(read_fd, libc::F_SETFD, libc::O_CLOEXEC) };
+    unsafe {
+        let flags = libc::fcntl(read_fd, libc::F_GETFL, 0);
+        libc::fcntl(read_fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+        let fd_flags = libc::fcntl(read_fd, libc::F_GETFD, 0);
+        libc::fcntl(read_fd, libc::F_SETFD, fd_flags | libc::FD_CLOEXEC);
+    };
 
     let read_fd = unsafe { std::os::unix::io::OwnedFd::from_raw_fd(read_fd) };
     let write_fd = unsafe { std::os::unix::io::OwnedFd::from_raw_fd(write_fd) };
