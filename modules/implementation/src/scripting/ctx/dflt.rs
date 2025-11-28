@@ -245,6 +245,36 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
         )?,
     )?;
 
+    use rand::TryRngCore;
+
+    dflt.set(
+        "random_bytes",
+        vm.create_function(|vm: &mlua::Lua, length: usize| {
+            let mut rng = rand::rngs::OsRng;
+            let mut bytes = vec![0u8; length];
+            rng.try_fill_bytes(&mut bytes)
+                .map_err(|x| scripting::anyhow_to_lua_error(x.into()))?;
+            vm.create_string(bytes)
+        })?,
+    )?;
+
+    dflt.set(
+        "random_float",
+        vm.create_function(|_: &mlua::Lua, _: ()| {
+            let mut rng = rand::rngs::OsRng;
+            let float_size = 64;
+            let precision = 52 + 1;
+            let scale = 1.0 / ((1u64 << precision) as f64);
+
+            let value: u64 = rng
+                .try_next_u64()
+                .map_err(|x| scripting::anyhow_to_lua_error(x.into()))?;
+            let value = value >> (float_size - precision) as u64;
+
+            Ok(scale * value as f64)
+        })?,
+    )?;
+
     Ok(mlua::Value::Table(dflt))
 }
 

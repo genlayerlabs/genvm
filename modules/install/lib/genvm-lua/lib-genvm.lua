@@ -18,6 +18,8 @@ local value2json = require('value2json')
 ---@field json_stringify fun(val: any): string
 ---@field as_user_error fun(val: any): nil | ModuleError
 ---@field url_encode fun(url: string): string
+---@field filter_text fun(text: string, filters: string[]): string
+---@field filter_image fun(image: string, filters: any[]): string
 
 ---@type RS
 M.rs = __dflt;  ---@diagnostic disable-line
@@ -56,6 +58,10 @@ M.reraise_with_fatality = function(e, new_fatality)
 
 	err.fatal = new_fatality
 	M.rs.user_error(err)
+end
+
+M.map_01_to_range = function(value_01, range_min, range_max)
+	return range_min + (range_max - range_min) * value_01
 end
 
 return M
