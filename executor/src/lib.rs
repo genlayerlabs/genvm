@@ -77,6 +77,14 @@ pub fn create_supervisor(
     rt::supervisor::Supervisor::start(config, ctor, host)
 }
 
+fn log_vm_error(e: &anyhow::Error) {
+    if let Some(rt::errors::VMError(msg, Some(err))) = e.downcast_ref() {
+        log_error!(msg = msg, error:ah = err; "vm error");
+    } else {
+        log_error!(error:ah = e; "vm error");
+    }
+}
+
 pub async fn run_with_impl(
     entry_message: MessageData,
     supervisor: Arc<rt::supervisor::Supervisor>,
@@ -125,8 +133,12 @@ pub async fn run_with_impl(
         .get(essential_data.conf.is_deterministic)
         .derived();
 
-    let vm = rt::supervisor::spawn(&supervisor, essential_data, limiter).await?;
-    let vm = rt::supervisor::apply_contract_actions(&supervisor, vm).await?;
+    let vm = rt::supervisor::spawn(&supervisor, essential_data, limiter)
+        .await
+        .inspect_err(log_vm_error)?;
+    let vm = rt::supervisor::apply_contract_actions(&supervisor, vm)
+        .await
+        .inspect_err(log_vm_error)?;
     vm.run().await
 }
 
