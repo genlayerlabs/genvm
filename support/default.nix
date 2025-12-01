@@ -101,5 +101,10 @@ in rec {
 
 	patch-yaml-schema = pkgs.writers.writePython3Bin "patch-yaml-schema" { doCheck = false; } (builtins.readFile ./scripts/remove-schema.py);
 
+	patch-manifest = pkgs.writers.writePython3Bin "patch-manifest" {
+		doCheck = false;
+		libraries = [ pkgs.python312Packages.ruamel-yaml ];
+	} (builtins.readFile ./scripts/patch-and-check-manifest.py);
+
 	merge-components = builtins.foldl' mergeDoubleDepthAttrs {};
 }

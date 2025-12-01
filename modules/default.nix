@@ -5,6 +5,7 @@
 , get-root-subtree
 , build-config
 , patch-yaml-schema
+, patch-manifest
 , ...
 }:
 let
@@ -46,7 +47,7 @@ let
 			dontConfigure = true;
 			dontBuild = true;
 
-			nativeBuildInputs = [ pkgs.makeWrapper patch-yaml-schema ];
+			nativeBuildInputs = [ pkgs.makeWrapper patch-yaml-schema patch-manifest ];
 
 			installPhase = ''
 				mkdir -p $out/bin
@@ -60,6 +61,8 @@ let
 
 				chmod -R u+w "$out"
 				patch-yaml-schema --tag ${build-config.executor-version} "$out"
+
+				patch-manifest --tag ${build-config.executor-version} "$out/data/manifest.yaml"
 			'';
 		};
 in {
