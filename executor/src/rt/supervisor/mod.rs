@@ -274,12 +274,9 @@ pub async fn apply_contract_actions(
     zelf: &std::sync::Arc<Supervisor>,
     mut vm: rt::vm::VM<()>,
 ) -> anyhow::Result<rt::vm::VM<wasmtime::Instance>> {
-    let (contract_address, datetime) = {
+    let contract_address = {
         let lock = vm.vm_base.store.data().genlayer_ctx.lock().unwrap();
-        (
-            lock.genlayer_sdk.data.message_data.contract_address,
-            lock.genlayer_sdk.data.message_data.datetime,
-        )
+        lock.genlayer_sdk.data.message_data.contract_address
     };
 
     let contract_id = runners::get_runner_of_contract(contract_address);
@@ -313,27 +310,6 @@ pub async fn apply_contract_actions(
     let version = arch.get_version().map_err(|e| {
         rt::errors::VMError::wrap(public_abi::VmError::InvalidContract.value().to_owned(), e)
     })?;
-
-    //self.shared_data.
-    let transaction_ts = datetime.timestamp() as u64;
-    let max_version_index =
-        match crate::version_timestamps::DATA.binary_search_by_key(&transaction_ts, |x| x.0) {
-            Ok(index) => index,
-            Err(0) => 0,
-            Err(index) => index - 1,
-        };
-
-    if version > crate::version_timestamps::DATA[max_version_index].1 {
-        log_info!(
-            version = version,
-            max_version = crate::version_timestamps::DATA[max_version_index].1,
-            requested_timestamp = transaction_ts;
-            "version is too big, rejecting"
-        );
-        return Err(
-            rt::errors::VMError(public_abi::VmError::VersionTooBig.value().into(), None).into(),
-        );
-    }
 
     vm.vm_base
         .store

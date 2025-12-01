@@ -8,8 +8,6 @@ pub mod wasi;
 
 pub mod public_abi;
 
-pub mod version_timestamps;
-
 pub use genvm_common::calldata;
 use genvm_common::*;
 
