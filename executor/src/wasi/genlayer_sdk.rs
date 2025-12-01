@@ -1113,7 +1113,7 @@ impl ContextVFS<'_> {
                 conf: base::Config {
                     needs_error_fingerprint: false,
                     is_deterministic: false,
-                    can_read_storage: false,
+                    can_read_storage: self.context.data.conf.can_read_storage,
                     can_write_storage: false,
                     can_spawn_nondet: false,
                     can_call_others: false,
@@ -1126,9 +1126,11 @@ impl ContextVFS<'_> {
                 should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             };
 
+            let task_done = Arc::new(tokio::sync::Notify::new());
             let task = rt::supervisor::NonDetVMTask {
                 task: vm_data,
                 call_no,
+                tasks_done: task_done.clone(),
             };
 
             match leaders_res {
@@ -1147,6 +1149,8 @@ impl ContextVFS<'_> {
                 Some(leaders_res) => {
                     rt::supervisor::submit_nondet_vm_task(&self.context.data.supervisor, task)
                         .await;
+
+                    task_done.notified().await; // NOTE: make sync to allow reads in the storage
 
                     leaders_res
                 }
@@ -1175,7 +1179,7 @@ impl ContextVFS<'_> {
             conf: base::Config {
                 needs_error_fingerprint: false,
                 is_deterministic: zelf_conf.is_deterministic,
-                can_read_storage: false,
+                can_read_storage: zelf_conf.can_read_storage,
                 can_write_storage: zelf_conf.can_write_storage & allow_write_ops,
                 can_spawn_nondet: false,
                 can_call_others: false,

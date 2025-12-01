@@ -22,6 +22,7 @@ struct WasmModuleCache {
 pub struct NonDetVMTask {
     pub task: wasi::genlayer_sdk::SingleVMData,
     pub call_no: u32,
+    pub tasks_done: Arc<tokio::sync::Notify>,
 }
 
 impl NonDetVMTask {
@@ -123,6 +124,9 @@ pub fn create_engines(
 
 pub async fn await_nondet_vms(zelf: &Arc<Supervisor>) -> anyhow::Result<Option<u32>> {
     zelf.queue.vm_countdown.decrement();
+
+    // here we can go into nondet queue as well
+    // but for now we won't
 
     zelf.queue.tasks_loop_done.notified().await;
     if let Some(err) = zelf.queue.encountered_error.take() {
@@ -394,8 +398,16 @@ async fn nondet_vm_processor(
 
             Some(task) = nondet_validator_queue_receiver.recv() => {
                 count += 1;
+
+                let task_done = task.tasks_done.clone();
+
+                let _dropper = sync::DropGuard::new(move || {
+                    task_done.notify_one();
+                });
+
                 if zelf.queue.nondet_call_disagree.load(std::sync::atomic::Ordering::SeqCst) != u32::MAX {
                     log_info!("skipped nondet block due to disagreement in previous one");
+
                     continue;
                 }
 
