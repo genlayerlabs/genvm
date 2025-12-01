@@ -36,7 +36,7 @@ let
 
 	subpath = "executor/${build-config.executor-version}/data/";
 in {
-	universal = {
+	universal-manifest = {
 		runners-latest = pkgs.stdenvNoCC.mkDerivation rec {
 			name = "genvm-runners-latest";
 

@@ -9,7 +9,7 @@ let
 		shallow = true;
 	};
 	aarch64-compiler-rt = builtins.fetchTarball {
-		url = "http://mirror.archlinuxarm.org/aarch64/extra/compiler-rt-21.1.5-1-aarch64.pkg.tar.xz";
+		url = "https://storage.googleapis.com/genvm-artifacts/compiler-rt-21.1.5-1-aarch64.pkg.tar.xz";
 		sha256 = "08j9n9i7hw6y5bs9mmg0h90g4vr3pbqfijch1gzcwmndm7ndc33k";
 	};
 in pkgs.stdenvNoCC.mkDerivation {

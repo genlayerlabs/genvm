@@ -60,13 +60,13 @@ let
 			'';
 		};
 in {
-	amd64-linux = {
+	amd64-linux-executor = {
 		executor = make-for-target "amd64-linux";
 	};
-	arm64-linux = {
+	arm64-linux-executor = {
 		executor = make-for-target "arm64-linux";
 	};
-	arm64-macos = {
+	arm64-macos-executor = {
 		executor = make-for-target "arm64-macos";
 	};
 }

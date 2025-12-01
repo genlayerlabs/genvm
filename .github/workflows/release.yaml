@@ -59,6 +59,15 @@ jobs:
           fi
           echo "new version will be: ${{ steps.determine-version.outputs.new_version }}"
 
+  build-universal-manifest:
+    needs: [gen-tag]
+    uses: ./.github/workflows/incl_build_trg.yaml
+    with:
+      target: universal-manifest
+      executor_version: ${{ needs.gen-tag.outputs.tag }}
+    secrets:
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
   build-universal:
     needs: [gen-tag]
     uses: ./.github/workflows/incl_build_trg.yaml
@@ -69,29 +78,41 @@ jobs:
       GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
 
   build-linux-amd64:
-    needs: [gen-tag]
+    needs:
+      - gen-tag
+      - build-universal-manifest
     uses: ./.github/workflows/incl_build_trg.yaml
     with:
       target: amd64-linux
+      secondary_target: amd64-linux-executor
       executor_version: ${{ needs.gen-tag.outputs.tag }}
+      bundle_extra: ${{ needs.build-universal-manifest.outputs.artifact_url }}
     secrets:
       GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
 
   build-linux-arm64:
-    needs: [gen-tag]
+    needs:
+      - gen-tag
+      - build-universal-manifest
     uses: ./.github/workflows/incl_build_trg.yaml
     with:
       target: arm64-linux
+      secondary_target: arm64-linux-executor
       executor_version: ${{ needs.gen-tag.outputs.tag }}
+      bundle_extra: ${{ needs.build-universal-manifest.outputs.artifact_url }}
     secrets:
       GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
 
   build-macos-arm64:
-    needs: [gen-tag]
+    needs:
+      - gen-tag
+      - build-universal-manifest
     uses: ./.github/workflows/incl_build_trg.yaml
     with:
       target: arm64-macos
+      secondary_target: arm64-macos-executor
       executor_version: ${{ needs.gen-tag.outputs.tag }}
+      bundle_extra: ${{ needs.build-universal-manifest.outputs.artifact_url }}
     secrets:
       GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
 
@@ -114,6 +135,8 @@ jobs:
           pushd build/out && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-arm64.tar.xz ${{ needs.build-linux-arm64.outputs.artifact_url }} && \
           tar -xf genvm-linux-arm64.tar.xz --no-same-owner && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-arm64-executor.tar.xz ${{ needs.build-linux-arm64.outputs.secondary_artifact_url }} && \
+          tar -xf genvm-linux-arm64-executor.tar.xz --no-same-owner && \
           popd && \
           true
       - name: Run post-install
@@ -142,8 +165,10 @@ jobs:
           pushd build/out && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-amd64.tar.xz ${{ needs.build-linux-amd64.outputs.artifact_url }} && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-universal.tar.xz ${{ needs.build-universal.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-amd64-executor.tar.xz ${{ needs.build-linux-amd64.outputs.secondary_artifact_url }} && \
           tar -xf genvm-linux-amd64.tar.xz --no-same-owner && \
           tar -xf genvm-universal.tar.xz --no-same-owner && \
+          tar -xf genvm-linux-amd64-executor.tar.xz --no-same-owner && \
           popd && \
           true
       - name: Run post-install
@@ -174,8 +199,10 @@ jobs:
           pushd build/out && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-macos-arm64.tar.xz ${{ needs.build-macos-arm64.outputs.artifact_url }} && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-universal.tar.xz ${{ needs.build-universal.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-macos-arm64-executor.tar.xz ${{ needs.build-macos-arm64.outputs.secondary_artifact_url }} && \
           tar -xf genvm-macos-arm64.tar.xz --no-same-owner && \
           tar -xf genvm-universal.tar.xz --no-same-owner && \
+          tar -xf genvm-macos-arm64-executor.tar.xz --no-same-owner && \
           popd && \
           true
       - name: Get wabt
@@ -234,6 +261,9 @@ jobs:
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-amd64.tar.xz ${{ needs.build-linux-amd64.outputs.artifact_url }} && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-arm64.tar.xz ${{ needs.build-linux-arm64.outputs.artifact_url }} && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-macos-arm64.tar.xz ${{ needs.build-macos-arm64.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-amd64-executor.tar.xz ${{ needs.build-linux-amd64.outputs.secondary_artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-arm64-executor.tar.xz ${{ needs.build-linux-arm64.outputs.secondary_artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-macos-arm64-executor.tar.xz ${{ needs.build-macos-arm64.outputs.secondary_artifact_url }} && \
           true
 
       - run: |
@@ -249,6 +279,9 @@ jobs:
             genvm-linux-amd64.tar.xz
             genvm-linux-arm64.tar.xz
             genvm-macos-arm64.tar.xz
+            genvm-linux-amd64-executor.tar.xz
+            genvm-linux-arm64-executor.tar.xz
+            genvm-macos-arm64-executor.tar.xz
           name: Release ${{ needs.gen-tag.outputs.tag }}
           tag_name: ${{ needs.gen-tag.outputs.tag }}
           draft: false

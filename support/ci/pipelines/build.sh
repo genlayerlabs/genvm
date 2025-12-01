@@ -2,6 +2,7 @@
 
 TARGET=""
 EXECUTOR_VERSION=""
+EXTRA_BUNDLE=""
 
 while [[ $# -gt 0 ]]; do
 	case $1 in
@@ -19,6 +20,16 @@ while [[ $# -gt 0 ]]; do
 			;;
 		--executor-version=*)
 			EXECUTOR_VERSION="${1#*=}"
+			shift
+			;;
+		--extra-bundle)
+			EXTRA_BUNDLE="$2"
+			EXTRA_BUNDLE="$(readlink -f "$EXTRA_BUNDLE")"
+			shift 2
+			;;
+		--extra-bundle=*)
+			EXTRA_BUNDLE="${1#*=}"
+			EXTRA_BUNDLE="$(readlink -f "$EXTRA_BUNDLE")"
 			shift
 			;;
 		-h|--help)
@@ -67,5 +78,8 @@ nix build -o build/out-$TARGET -v -L .#all-for-platform.$TARGET --show-trace
 
 PREV=$(readlink -f .)
 pushd build/out-$TARGET
-find . -type f -print0 | sort -z | xargs -0 tar --transform 's,^\./,,' --mode=ug+w -cf - | xz -9 > "$PREV/build/genvm-$TARGET.tar.xz"
+find . -type f -print0 | sort -z | \
+	xargs -0 tar --transform 's,^\./,,' --mode=ug+w -cf - | \
+	cat - $(if [ "$EXTRA_BUNDLE" != "" ]; then echo "$EXTRA_BUNDLE"; fi) | \
+	xz -9 > "$PREV/build/genvm-$TARGET.tar.xz"
 popd
