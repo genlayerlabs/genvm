@@ -98,5 +98,8 @@ in rec {
 		};
 
 	compile-rust = import ./compile-rust.nix { inherit pkgs zig; withZig = true; };
+
+	patch-yaml-schema = pkgs.writers.writePython3Bin "patch-yaml-schema" { doCheck = false; } (builtins.readFile ./scripts/remove-schema.py);
+
 	merge-components = builtins.foldl' mergeDoubleDepthAttrs {};
 }

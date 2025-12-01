@@ -4,6 +4,7 @@
 , components
 , get-root-subtree
 , build-config
+, patch-yaml-schema
 , ...
 }:
 let
@@ -45,7 +46,7 @@ let
 			dontConfigure = true;
 			dontBuild = true;
 
-			nativeBuildInputs = [ pkgs.makeWrapper ];
+			nativeBuildInputs = [ pkgs.makeWrapper patch-yaml-schema ];
 
 			installPhase = ''
 				mkdir -p $out/bin
@@ -53,9 +54,12 @@ let
 				for src in $srcs; do
 					if [[ "$src" != "${exe}" ]]
 					then
-						cp -r "$src/." "$out/."
+						cp --no-preserve=ownership -r "$src/." "$out/."
 					fi
 				done
+
+				chmod -R u+w "$out"
+				patch-yaml-schema --tag ${build-config.executor-version} "$out"
 			'';
 		};
 in {
