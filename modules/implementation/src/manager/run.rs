@@ -86,10 +86,18 @@ impl Ctx {
             let genvm_id = kv.key();
             let exec_ctx = kv.value();
 
+            let result = if let Some(result) = exec_ctx.result.get() {
+                serde_json::json!({
+                    "finished_at": result.finished_at.to_rfc3339(),
+                })
+            } else {
+                serde_json::Value::Null
+            };
+
             ret.insert(
                 genvm_id.to_string(),
                 serde_json::json!({
-                    "has_result": exec_ctx.result.initialized(),
+                    "result": result,
                     "version": exec_ctx.version,
                     "started_at": exec_ctx.started_at.to_rfc3339(),
                     "strict_deadline": exec_ctx.strict_deadline.to_rfc3339()
@@ -316,7 +324,7 @@ async fn gc_step(ctx: &sync::DArc<Ctx>) {
             return true;
         };
         let passed = now.signed_duration_since(result.finished_at);
-        if passed > chrono::Duration::seconds(60) || result.finished_at < now {
+        if passed > chrono::Duration::seconds(60) {
             log_warn_into!(&LoggerWithId, genvm_id:id = k.0; "removing zombie genvm execution context");
             return false;
         }
