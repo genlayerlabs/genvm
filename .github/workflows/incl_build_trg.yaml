@@ -31,7 +31,7 @@ on:
         value: ${{ jobs.build.outputs.artifact_url }}
       secondary_artifact_url:
         description: "URL to download the secondary built artifact"
-        value: ${{ jobs.build_secondary.outputs.artifact_url }}
+        value: ${{ jobs.build.outputs.secondary_artifact_url }}
 
 env:
   GCS_BUCKET: "gh-af"
