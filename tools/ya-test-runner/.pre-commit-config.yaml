@@ -1,0 +1,31 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^\.git-third-party|/fuzz/
+      - id: end-of-file-fixer
+        exclude: ^\.git-third-party|/fuzz/
+      - id: check-added-large-files
+      - id: check-json
+        exclude: (^\.git-third-party)|(/tsconfig.json$)
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff-format
+
+  - repo: https://github.com/sirosen/check-jsonschema
+    rev: 0.28.2
+    hooks:
+      - id: check-github-actions
+      - id: check-github-workflows
+
+  - repo: https://github.com/editorconfig-checker/editorconfig-checker.python
+    rev: 3.0.3
+    hooks:
+      - id: editorconfig-checker
+        exclude: (.git-third-party|runners/py-libs|runners/genlayer-py-std/src-emb/onnx|/fuzz/)

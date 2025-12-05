@@ -1,0 +1,16 @@
+{
+  "cargo_test_flags": [
+    "--features", "vendored-lua"
+  ],
+  "cargo_afl_build_flags": [
+    "--features", "vendored-lua"
+  ],
+  "keep_env": [
+    "OPENAIKEY",
+    "HEURISTKEY",
+    "ANTHROPICKEY",
+    "XAIKEY",
+    "GEMINIKEY",
+    "ATOMAKEY"
+  ]
+}

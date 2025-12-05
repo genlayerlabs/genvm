@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "ya-test-runner"
+version = "0.1.0"
+description = "A Python test runner utility"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "ya_test_runner"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+
+[tool.poetry.group.dev.dependencies]
+
+[tool.poetry.scripts]
+ya-test-runner = "ya_test_runner.__main__:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

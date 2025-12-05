@@ -1,0 +1,11 @@
+__pycache__
+.vscode
+.idea
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+.envrc
+.direnv
+.vscode
