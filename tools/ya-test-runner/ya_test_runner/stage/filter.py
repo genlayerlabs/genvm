@@ -62,7 +62,7 @@ def _parse_tags_expr(
 			return lambda tags: not inner(tags)
 		tag = toks.pop()
 		if not tag[0].isalpha():
-			raise ValueError(f'Unexpected token in tags expression: {toks[-1]}')
+			raise ValueError(f'Unexpected token in tags expression: {tag}')
 		if tag == 'true':
 			return lambda tags: True
 		if tag == 'false':

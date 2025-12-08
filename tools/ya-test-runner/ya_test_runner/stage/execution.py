@@ -81,11 +81,21 @@ async def _run_case(
 		latch.decrement()
 
 
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn_background_task(coro: typing.Coroutine) -> None:
+	task = asyncio.create_task(coro)
+	_background_tasks.add(task)
+
+	task.add_done_callback(_background_tasks.discard)
+
+
 async def _run_cases(
 	ctx: _ExecutionContext, cases: list[ya_test_runner.test.Case], latch: _CountDownLatch
 ):
 	for case in cases:
-		asyncio.create_task(_run_case(ctx, case, latch))
+		_spawn_background_task(_run_case(ctx, case, latch))
 
 
 async def run(shared: SharedContext, collection_env: SchedulingEnv) -> Env:
@@ -99,7 +109,7 @@ async def run(shared: SharedContext, collection_env: SchedulingEnv) -> Env:
 	for action in collection_env.actions:
 		if isinstance(action, StartCases):
 			awaiters[action.id] = _CountDownLatch(len(action.cases))
-			asyncio.create_task(_run_cases(ctx, action.cases, awaiters[action.id]))
+			_spawn_background_task(_run_cases(ctx, action.cases, awaiters[action.id]))
 		elif isinstance(action, AwaitAllCases):
 			shared.logger.debug(
 				'Awaiting completion of test cases',

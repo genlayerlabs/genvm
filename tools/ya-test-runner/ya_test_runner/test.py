@@ -16,11 +16,7 @@ class Description(typing.NamedTuple):
 	console_pool: bool = False
 
 	def with_tags(self, new_tags: typing.Iterable[str]) -> 'Description':
-		return Description(
-			name=self.name,
-			needed_services=self.needed_services,
-			tags=self.tags.union(new_tags),
-		)
+		return self._replace(tags=self.tags.union(new_tags))
 
 
 @dataclass
