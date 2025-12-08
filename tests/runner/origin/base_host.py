@@ -440,11 +440,14 @@ async def run_genvm(
 		await host_loop(handler, cancellation_event, logger=logger)
 		logger.debug('host loop finished')
 
+	timeout_fired = asyncio.Event()
+
 	async def wrap_timeout(genvm_id: str):
 		if timeout is None:
 			return
 		await asyncio.sleep(timeout)
 		logger.debug('timeout reached', genvm_id=genvm_id)
+		timeout_fired.set()
 		await _send_timeout(manager_uri, genvm_id, logger)
 
 	poll_status_mutex = asyncio.Lock()
@@ -494,7 +497,10 @@ async def run_genvm(
 	try:
 		fut_host.result()
 	except Exception as e:
-		exceptions.append(e)
+		if not timeout_fired.is_set():
+			exceptions.append(e)
+		else:
+			logger.warning('host handler failed after timeout', error=e)
 	try:
 		fut_proc.result()
 	except Exception as e:
