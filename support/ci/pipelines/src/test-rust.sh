@@ -8,6 +8,6 @@ ruby ./configure.rb
 
 ninja -v -C build all/bin
 
-LOGLEVEL=DEBUG python3 ./build/out/bin/post-install.py
+LOGLEVEL=DEBUG python3 ./build/out/bin/post-install.py --error-on-missing-executor
 
 bash -x ./tests/rust.sh
