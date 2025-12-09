@@ -44,6 +44,16 @@ class Python(metaclass=abc.ABCMeta):
 		return f'# <python step>'
 
 
+class PythonFunction(Python):
+	def __init__(
+		self, func: typing.Callable[[list[typing.Any]], typing.Awaitable[typing.Any]]
+	):
+		self.func = func
+
+	async def run(self, previous_results: list[typing.Any]) -> typing.Any:
+		return await self.func(previous_results)
+
+
 type Step = SetCwd | SetEnv | Run | Python
 
 
@@ -88,11 +98,9 @@ async def run_steps(ctx: SharedContext, steps: list[Step]) -> list[typing.Any]:
 		elif isinstance(s, SetEnv):
 			env[s.key] = str(s.value)
 		elif isinstance(s, Run):
+			cmd = command.Command(s.args, cwd, env)
 			results.append(
-				await command.run(
-					cwd=cwd,
-					env=env,
-					args=s.args,
+				await cmd.run(
 					ctx=ctx,
 					mode=s.mode,
 				)

@@ -1,8 +1,11 @@
 import json
 import os
+import shutil
 from pathlib import Path
+import sys
 
 import ya_test_runner
+from ya_test_runner.test import CONST_PASSED
 
 local_ctx = ya_test_runner.stage.configuration.current_context()
 
@@ -79,6 +82,8 @@ def cargo_fuzz(
 		console_pool=True,
 	)
 
+	test_env = default_env.copy()
+
 	extra_flags = []
 
 	extra_config = rust_root_dir.joinpath('.ya-test-config.json')
@@ -86,12 +91,12 @@ def cargo_fuzz(
 		extra_conf = json.loads(extra_config.read_text())
 		extra_flags.extend(extra_conf.get('cargo_test_flags', []))
 
-	case = ya_test_runner.test.StepsCase(
-		description=desc,
-		steps=[
+	steps: list[ya_test_runner.exec.step.Step] = []
+	steps.extend(
+		[
 			ya_test_runner.exec.step.SetCwd(path=rust_root_dir),
 		]
-		+ [ya_test_runner.exec.step.SetEnv(key=k, value=v) for k, v in default_env.items()]
+		+ [ya_test_runner.exec.step.SetEnv(key=k, value=v) for k, v in test_env.items()]
 		+ [
 			ya_test_runner.exec.step.Run(
 				args=[
@@ -131,7 +136,67 @@ def cargo_fuzz(
 				mode=ya_test_runner.exec.command.RunMode.INTERACTIVE_TTY,
 			),
 			ya_test_runner.test.CommandToResultStep(),
-		],
+			ya_test_runner.test.ResultStopIfErrorStep(),
+		]
+	)
+
+	if ctx.configuration.args.fuzz_update_corpus:
+
+		async def remove_opt_dir(_):
+			opt_dir = BUILD_DIR.joinpath('genvm-testdata-out', 'fuzz/', f'{name}-opt')
+			if opt_dir.exists():
+				shutil.rmtree(opt_dir, ignore_errors=True)
+			opt_dir.mkdir(parents=True, exist_ok=True)
+
+		inputs_dir = rust_root_dir.joinpath('fuzz', f'inputs-{name}')
+
+		async def remove_inputs_dir(_):
+			if inputs_dir.exists():
+				shutil.rmtree(inputs_dir, ignore_errors=True)
+			inputs_dir.mkdir(parents=True, exist_ok=True)
+
+		steps.append(ya_test_runner.exec.step.PythonFunction(remove_opt_dir))
+		steps.append(
+			ya_test_runner.exec.step.Run(
+				args=[
+					'cargo',
+					'afl',
+					'cmin',
+					'-T',
+					'all',
+					'-o',
+					f'{BUILD_DIR}/genvm-testdata-out/fuzz/{name}-opt',
+					'-i',
+					f'{BUILD_DIR}/genvm-testdata-out/fuzz/{name}',
+					'--',
+					f'{TARGET_DIR}/debug/examples/fuzz-{name}',
+				],
+				mode=ya_test_runner.exec.command.RunMode.INTERACTIVE,
+			)
+		)
+		steps.extend(
+			[
+				ya_test_runner.test.CommandToResultStep(),
+				ya_test_runner.test.ResultStopIfErrorStep(),
+				ya_test_runner.exec.step.PythonFunction(remove_inputs_dir),
+			]
+		)
+		steps.append(
+			ya_test_runner.exec.step.Run(
+				args=[
+					sys.executable,
+					f'{local_ctx.shared.root_dir}/runners/genlayer-py-std/fuzz/resave.py',
+					f'{BUILD_DIR}/genvm-testdata-out/fuzz/{name}-opt',
+					inputs_dir,
+				],
+				mode=ya_test_runner.exec.command.RunMode.INTERACTIVE,
+			)
+		)
+		steps.append(CONST_PASSED)
+
+	case = ya_test_runner.test.StepsCase(
+		description=desc,
+		steps=steps,
 	)
 
 	ctx.add_case(case)

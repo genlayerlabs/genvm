@@ -24,7 +24,9 @@ impl AccountAddress {
 }
 
 #[serde_as]
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash, Copy, PartialOrd, Ord)]
+#[derive(
+    Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Hash, Copy, PartialOrd, Ord, Arbitrary,
+)]
 #[repr(C)]
 pub struct SlotID(#[serde_as(as = "Base64")] pub [u8; 32]);
 
@@ -59,6 +61,18 @@ impl SlotID {
         let mut ret = Self::ZERO;
         ret.0.copy_from_slice(digest.finalize().as_slice());
         ret
+    }
+}
+
+impl From<[u8; 32]> for SlotID {
+    fn from(value: [u8; 32]) -> Self {
+        SlotID(value)
+    }
+}
+
+impl From<&[u8; 32]> for SlotID {
+    fn from(value: &[u8; 32]) -> Self {
+        SlotID(*value)
     }
 }
 

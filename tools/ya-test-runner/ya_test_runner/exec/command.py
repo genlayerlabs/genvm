@@ -2,10 +2,12 @@ import asyncio
 import enum
 import io
 import os
+import shlex
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 from ya_test_runner import SharedContext
 
@@ -52,88 +54,106 @@ class RunMode(enum.Enum):
 	INTERACTIVE_TTY = 'interactive-tty'
 
 
-async def run(
-	*,
-	args: list[str | Path],
-	cwd: Path,
-	env: dict[str, str],
-	ctx: SharedContext,
-	mode: RunMode,
-) -> Result:
-	ctx.logger.debug(
-		'running command',
-		env=env,
-		args=args,
-		cwd=cwd,
-	)
-	start = time.monotonic()
+@dataclass
+class Command:
+	args: list[str | Path]
+	cwd: Path
+	env: dict[str, str]
 
-	if mode == RunMode.INTERACTIVE_TTY:
-		stdout_writer = sys.stdout.fileno()
-		stderr_writer = sys.stderr.fileno()
-		stdin = None
-		stdout_fut = asyncio.get_event_loop().create_future()
-		stderr_fut = asyncio.get_event_loop().create_future()
-		stdout_fut.set_result(b'')
-		stderr_fut.set_result(b'')
-	else:
-		stdout_rfd, stdout_writer = os.pipe()
-		stderr_rfd, stderr_writer = os.pipe()
+	def to_script(self) -> list[str]:
+		ret: list[str] = []
 
-		if mode == RunMode.INTERACTIVE:
+		ret.append('#!/bin/sh')
+
+		ret.append('cd ' + shlex.quote(str(self.cwd)))
+		for k, v in self.env.items():
+			ret.append(f'export {k}={shlex.quote(v)}')
+		ret.append(' '.join(map(lambda x: shlex.quote(str(x)), self.args)))
+
+		return ret
+
+	async def run(self, ctx: SharedContext, *, mode: RunMode) -> Result:
+		ctx.logger.debug(
+			'running command',
+			env=self.env,
+			args=self.args,
+			cwd=self.cwd,
+		)
+
+		if mode != RunMode.SILENT:
+			ctx.printer.put(
+				'running command',
+				script=self.to_script(),
+			)
+
+		start = time.monotonic()
+
+		if mode == RunMode.INTERACTIVE_TTY:
+			stdout_writer = sys.stdout.fileno()
+			stderr_writer = sys.stderr.fileno()
 			stdin = None
-			stdout_dup = os.fdopen(sys.stdout.fileno(), 'wb', closefd=False)
-			stderr_dup = os.fdopen(sys.stderr.fileno(), 'wb', closefd=False)
-		elif mode == RunMode.SILENT:
-			stdin = asyncio.subprocess.DEVNULL
-			stdout_dup = None
-			stderr_dup = None
+			stdout_fut = asyncio.get_event_loop().create_future()
+			stderr_fut = asyncio.get_event_loop().create_future()
+			stdout_fut.set_result(b'')
+			stderr_fut.set_result(b'')
 		else:
-			raise ValueError(f'Unknown run mode: {mode!r}')
+			stdout_rfd, stdout_writer = os.pipe()
+			stderr_rfd, stderr_writer = os.pipe()
 
-		stdout_reader, stdout_transport = await _connect_reader(stdout_rfd)
-		stderr_reader, stderr_transport = await _connect_reader(stderr_rfd)
+			if mode == RunMode.INTERACTIVE:
+				stdin = None
+				stdout_dup = os.fdopen(sys.stdout.fileno(), 'wb', closefd=False)
+				stderr_dup = os.fdopen(sys.stderr.fileno(), 'wb', closefd=False)
+			elif mode == RunMode.SILENT:
+				stdin = asyncio.subprocess.DEVNULL
+				stdout_dup = None
+				stderr_dup = None
+			else:
+				raise ValueError(f'Unknown run mode: {mode!r}')
 
-		stdout_fut = asyncio.ensure_future(
-			_read_whole(stdout_reader, stdout_transport, duplicate_to=stdout_dup)
+			stdout_reader, stdout_transport = await _connect_reader(stdout_rfd)
+			stderr_reader, stderr_transport = await _connect_reader(stderr_rfd)
+
+			stdout_fut = asyncio.ensure_future(
+				_read_whole(stdout_reader, stdout_transport, duplicate_to=stdout_dup)
+			)
+			stderr_fut = asyncio.ensure_future(
+				_read_whole(stderr_reader, stderr_transport, duplicate_to=stderr_dup)
+			)
+
+		process = await asyncio.subprocess.create_subprocess_exec(
+			*self.args,
+			cwd=self.cwd,
+			env=self.env,
+			stdout=stdout_writer,
+			stderr=stderr_writer,
+			stdin=stdin,
 		)
-		stderr_fut = asyncio.ensure_future(
-			_read_whole(stderr_reader, stderr_transport, duplicate_to=stderr_dup)
+
+		if stdout_writer != sys.stdout.fileno():
+			os.close(stdout_writer)
+		if stderr_writer != sys.stderr.fileno():
+			os.close(stderr_writer)
+
+		ctx.logger.debug('process started', pid=process.pid)
+		res = await process.wait()
+		end = time.monotonic()
+		ctx.logger.debug('process ended', pid=process.pid, exit_code=res)
+
+		stdout_text = (await stdout_fut).decode('utf-8')
+		stderr_text = (await stderr_fut).decode('utf-8')
+
+		ctx.logger.trace(
+			'process output',
+			pid=process.pid,
+			exit_code=res,
+			stdout=stdout_text,
+			stderr=stderr_text,
 		)
 
-	process = await asyncio.subprocess.create_subprocess_exec(
-		*args,
-		cwd=cwd,
-		env=env,
-		stdout=stdout_writer,
-		stderr=stderr_writer,
-		stdin=stdin,
-	)
-
-	if stdout_writer != sys.stdout.fileno():
-		os.close(stdout_writer)
-	if stderr_writer != sys.stderr.fileno():
-		os.close(stderr_writer)
-
-	ctx.logger.debug('process started', pid=process.pid)
-	res = await process.wait()
-	end = time.monotonic()
-	ctx.logger.debug('process ended', pid=process.pid, exit_code=res)
-
-	stdout_text = (await stdout_fut).decode('utf-8')
-	stderr_text = (await stderr_fut).decode('utf-8')
-
-	ctx.logger.trace(
-		'process output',
-		pid=process.pid,
-		exit_code=res,
-		stdout=stdout_text,
-		stderr=stderr_text,
-	)
-
-	return Result(
-		exit_code=res,
-		stdout=stdout_text,
-		stderr=stderr_text,
-		elapsed_seconds=end - start,
-	)
+		return Result(
+			exit_code=res,
+			stdout=stdout_text,
+			stderr=stderr_text,
+			elapsed_seconds=end - start,
+		)

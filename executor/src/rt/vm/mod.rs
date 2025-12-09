@@ -3,6 +3,8 @@ use crate::{public_abi, rt, wasi};
 use genvm_common::*;
 use itertools::Itertools;
 
+pub mod storage;
+
 #[derive(serde::Serialize, Debug)]
 pub enum RunOk {
     Return(Vec<u8>),

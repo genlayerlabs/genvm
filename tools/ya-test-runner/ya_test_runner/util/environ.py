@@ -41,5 +41,5 @@ class FilterKey:
 
 DEFAULT_FILTER: FilterAny = FilterAny(
 	FilterKeyRe(r'^(PATH|HOME|USER|SHELL|LOGNAME|PWD|TERM|LD_LIBRARY_PATH)$'),
-	FilterKeyRe(r'^(PYTHON|VIRTUAL_ENV|CARGO|NIX_)'),
+	FilterKeyRe(r'^(PYTHON|VIRTUAL_ENV|CARGO|RUST)'),
 )

@@ -103,3 +103,10 @@ class SimpleCommandCase(Case):
 
 		steps.append(CommandToResultStep())
 		return steps
+
+
+async def _OkResult(_):
+	return Result(passed=True, context={}, elapsed_seconds=0, retries=None)
+
+
+CONST_PASSED = exec.step.PythonFunction(_OkResult)

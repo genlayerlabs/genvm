@@ -94,13 +94,13 @@ def workflow_list(
 	)
 	shared_context.logger.debug('stage completed', stage='filter')
 
-	shared_context.printer.info(
+	shared_context.printer.put(
 		'util stats',
 		plugins_count=len(vars(conf_env.plugins)),
 		collectors_count=len(conf_env.collectors),
 	)
 
-	shared_context.printer.info(
+	shared_context.printer.put(
 		'available test cases',
 		total=len(collection_env.cases),
 		cases=[
@@ -142,7 +142,6 @@ def main() -> None:
 			raise RuntimeError(f'unknown log format: {base_args.log_format}')
 
 	logger.min_level = formatter.Level.from_str(base_args.log_level)
-	printer.min_level = logger.min_level
 
 	if base_args.chdir:
 		new_cwd = Path(base_args.chdir).absolute()

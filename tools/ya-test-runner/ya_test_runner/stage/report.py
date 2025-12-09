@@ -8,7 +8,7 @@ from .execution import Env as ExecutionEnv
 
 def run(shared: SharedContext, exec_env: ExecutionEnv) -> bool:
 	passed = len(exec_env.failed) == 0
-	shared.printer.info(
+	shared.printer.put(
 		'Test execution summary',
 		success_count=exec_env.success_count,
 		failed_count=len(exec_env.failed),

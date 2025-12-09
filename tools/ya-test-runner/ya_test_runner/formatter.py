@@ -35,6 +35,11 @@ class Level(enum.Enum):
 FORMATTING_MUTEX = threading.Lock()
 
 
+class Sink(abc.ABC):
+	@abc.abstractmethod
+	def put(self, main_topic: str, **kv) -> None: ...
+
+
 class Formatter(abc.ABC):
 	@abc.abstractmethod
 	def accepts(self, level: Level) -> bool: ...
@@ -77,22 +82,35 @@ class _WithKeysFormatter(Formatter):
 			self.keys = keys
 			self.parent = parent
 
-	def log(self, level: str, msg: str, **kwargs) -> None:
-		self.parent.log(level, msg, **self.keys, **kwargs)
+	def log(self, level: Level, message: str, **kwargs) -> None:
+		self.parent.log(level, message, **self.keys, **kwargs)
 
 	def with_keys(self, keys: dict) -> Formatter:
 		return _WithKeysFormatter(self.parent, {**self.keys, **keys})
 
 
 class NoFormatter(Formatter):
-	def log(self, level: str, msg: str, **kwargs) -> None:
+	def log(self, level: Level, message: str, **kwargs) -> None:
 		pass
 
 	def with_keys(self, keys: dict) -> Formatter:
 		return self
 
 
-class TextFormatter(Formatter):
+def _is_small(x) -> bool:
+	if x is None:
+		return False
+	if isinstance(x, (int, bool)):
+		return True
+	if isinstance(x, str):
+		return '\n' not in x
+	if isinstance(x, collections.abc.Sized):
+		return len(x) == 0
+	as_str = str(x)
+	return len(as_str) < 128 and '\n' not in as_str
+
+
+class TextFormatter(Formatter, Sink):
 	def __init__(self, file: io.TextIOBase, min_level: Level = Level.INFO):
 		self.file = file
 		self.min_level = min_level
@@ -100,10 +118,46 @@ class TextFormatter(Formatter):
 	def accepts(self, level: Level) -> bool:
 		return level.value >= self.min_level.value
 
+	def _do_dump(self, ind, data):
+		if isinstance(data, collections.abc.Mapping):
+			for k, v in data.items():
+				self.file.write('  ' * ind)
+				if _is_small(v):
+					self.file.write(k)
+					self.file.write(': ')
+					self.file.write(str(v))
+					self.file.write('\n')
+				else:
+					self.file.write(f'=== {k} === \n')
+					self._do_dump(ind + 1, v)
+		elif isinstance(data, str):
+			self.file.write('  ' * ind)
+			self.file.write(repr(data))
+			self.file.write('\n')
+		elif isinstance(data, collections.abc.Iterable):
+			for item in data:
+				if _is_small(item):
+					self.file.write('  ' * ind)
+					self.file.write(str(item))
+					self.file.write('\n')
+				else:
+					self.file.write('  ' * ind)
+					self.file.write('-\n')
+					self._do_dump(ind + 1, item)
+		else:
+			self.file.write('  ' * ind)
+			self.file.write(str(data))
+			self.file.write('\n')
+
+	def put(self, main_topic: str, **kv):
+		self.file.write(main_topic)
+		self.file.write('\n')
+		self._do_dump(1, kv)
+		self.file.flush()
+		pass
+
 	def dump(self, level: Level, message: str, **kw) -> None:
-		print(f'[{level.name.upper()}] {message}', file=self.file)
-		for k, v in kw.items():
-			print(f'  {k}: {v}', file=self.file)
+		self.put(f'[{level.name.upper()}] {message}', **kw)
 
 
 def _log_unwrap(x, seen: set[int] | None = None):
@@ -159,7 +213,7 @@ def _log_unwrap(x, seen: set[int] | None = None):
 		seen.remove(x_id)
 
 
-class JsonFormatter(Formatter):
+class JsonFormatter(Formatter, Sink):
 	def __init__(self, file: io.TextIOBase, min_level: Level = Level.INFO):
 		self.file = file
 		self.min_level = min_level
@@ -167,15 +221,19 @@ class JsonFormatter(Formatter):
 	def accepts(self, level: Level) -> bool:
 		return level.value >= self.min_level.value
 
-	def dump(self, level: Level, message: str, **kw) -> None:
+	def put(self, main_topic: str, **kv):
+		dct = {}
+		if level := kv.get('level'):
+			dct['level'] = level
+		dct['message'] = main_topic
+		dct.update(_log_unwrap(kv))
 		json.dump(
-			{
-				'level': level.name,
-				'message': message,
-				**_log_unwrap(kw),
-			},
+			dct,
 			self.file,
 		)
 
 		self.file.write('\n')
 		self.file.flush()
+
+	def dump(self, level: Level, message: str, **kw) -> None:
+		self.put(message, level=level, **kw)

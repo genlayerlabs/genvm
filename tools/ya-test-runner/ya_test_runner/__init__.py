@@ -14,14 +14,14 @@ __all__ = (
 from dataclasses import dataclass
 from pathlib import Path
 import subprocess
-from ya_test_runner.formatter import Formatter
+from ya_test_runner.formatter import Formatter, Sink
 
 
 @dataclass
 class SharedContext:
 	root_dir: Path
 	logger: Formatter
-	printer: Formatter
+	printer: Sink
 
 	_git_files: list[Path] | None = None
 

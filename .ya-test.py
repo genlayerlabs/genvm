@@ -10,6 +10,14 @@ local_ctx.parser.add_argument(
 	help='Timeout for each fuzzing run in seconds',
 )
 
+
+local_ctx.parser.add_argument(
+	'--fuzz-update-corpus',
+	default=False,
+	action='store_true',
+	help='Whether to update the fuzzing corpus',
+)
+
 local_ctx.add_dir('tests')
 
 
