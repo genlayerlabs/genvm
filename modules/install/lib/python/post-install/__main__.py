@@ -3,9 +3,10 @@ import os
 import shlex
 import argparse
 import platform
-import zlib
 import tarfile
 import io
+import traceback
+import hashlib
 
 target_os = platform.system().lower()
 if target_os == 'darwin':
@@ -30,6 +31,12 @@ def str_to_bool(value):
 		return False
 	else:
 		raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def str_to_bool_or_none(value):
+	if value is None or value.lower() in ('none', 'default', 'null', 'nil', ''):
+		return None
+	return str_to_bool(value)
 
 
 parser = argparse.ArgumentParser()
@@ -80,37 +87,55 @@ step_names = [
 ]
 
 parser.add_argument(
-	'--no-executor-download',
-	dest='executor_download',
-	action='store_false',
-	help='Disable executor download step',
+	'--default-steps',
+	type=str_to_bool,
+	default=True,
+	help='Default value for steps when not explicitly set',
 )
 parser.add_argument(
-	'--no-runners-download',
-	dest='runners_download',
-	action='store_false',
-	help='Disable runners download step',
+	'--executor-download',
+	type=str_to_bool_or_none,
+	default=None,
+	help='Enable/disable executor download step (default: use --default-steps)',
 )
 parser.add_argument(
-	'--no-bin-patch',
-	dest='bin_patch',
-	action='store_false',
-	help='Disable bin patch step',
+	'--runners-download',
+	type=str_to_bool_or_none,
+	default=None,
+	help='Enable/disable runners download step (default: use --default-steps)',
 )
 parser.add_argument(
-	'--no-bin-check',
-	dest='bin_check',
-	action='store_false',
-	help='Disable bin check step',
+	'--bin-patch',
+	type=str_to_bool_or_none,
+	default=None,
+	help='Enable/disable bin patch step (default: use --default-steps)',
 )
 parser.add_argument(
-	'--no-precompile',
-	dest='precompile',
-	action='store_false',
-	help='Disable precompile step',
+	'--bin-check',
+	type=str_to_bool_or_none,
+	default=None,
+	help='Enable/disable bin check step (default: use --default-steps)',
+)
+parser.add_argument(
+	'--precompile',
+	type=str_to_bool_or_none,
+	default=None,
+	help='Enable/disable precompile step (default: use --default-steps)',
 )
 
 args = parser.parse_args()
+
+# Apply default to None values
+if args.executor_download is None:
+	args.executor_download = args.default_steps
+if args.runners_download is None:
+	args.runners_download = args.default_steps
+if args.bin_patch is None:
+	args.bin_patch = args.default_steps
+if args.bin_check is None:
+	args.bin_check = args.default_steps
+if args.precompile is None:
+	args.precompile = args.default_steps
 
 INTERACTIVE = args.interactive
 
@@ -133,15 +158,8 @@ import json
 
 logging.info('Starting actual post-install script')
 
-import hashlib
-import urllib.request
-
 if args.bin_patch:
 	import lief
-
-import hashlib
-import traceback
-import urllib.request
 
 HASH_VALID_CHARS = '0123456789abcdfghijklmnpqrsvwxyz'
 
@@ -369,6 +387,8 @@ def _load_registry(file: str | Path) -> dict[str, list[str]]:
 
 
 def _download_url(url: str) -> bytes:
+	import urllib.request
+
 	logger.info(f'downloading {url}')
 	for attempt in range(5):
 		try:
@@ -449,14 +469,15 @@ def process_executor_version(executor_version: str):
 
 	if args.executor_download or args.bin_patch or args.bin_check:
 		if not executor_executable.exists() and args.executor_download:
+			import lzma
+
 			tar_xz_data = _download_url(
 				f'https://github.com/genlayerlabs/genvm/releases/download/{executor_version}/genvm-{target_os}-{target_arch}-executor.tar.xz'
 			)
-			tar_data = zlib.decompress(tar_xz_data)
+			tar_data = lzma.decompress(tar_xz_data)
 			tarfile.TarFile.open(fileobj=io.BytesIO(tar_data)).extractall(
 				path=executor_root_dir
 			)
-			pass
 		if not executor_executable.exists():
 			if args.error_on_missing_executor:
 				logger.error(f'Executor path {executor_executable} does not exist')
