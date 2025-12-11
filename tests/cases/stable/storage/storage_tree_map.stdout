@@ -1,2 +1,2 @@
 False 13
-executed with `Return("\x00")`
+executed with `Return(null)`

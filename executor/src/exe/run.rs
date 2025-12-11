@@ -4,7 +4,10 @@ use genvm_common::*;
 
 use anyhow::{Context, Result};
 use clap::ValueEnum;
-use genvm::{config, rt::vm::RunOk};
+use genvm::{
+    config,
+    rt::{self, vm::RunOk},
+};
 
 #[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
 #[clap(rename_all = "kebab_case")]
@@ -152,17 +155,19 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
 
     if args.print.contains(&PrintOption::Result) {
         match &res {
-            Ok((RunOk::VMError(e, cause), _, nondet)) => {
-                println!("executed with `VMError(\"{e}\")`");
-                if let Some(disag) = nondet {
-                    println!("nondet disagreement: {disag}");
+            Ok((res, nondet)) => {
+                match res.kind {
+                    genvm::public_abi::ResultCode::VmError => {
+                        println!("executed with `VMError({})`", res.data);
+                    }
+                    genvm::public_abi::ResultCode::UserError => {
+                        println!("executed with `UserError({})`", res.data);
+                    }
+                    genvm::public_abi::ResultCode::Return => {
+                        println!("executed with `Return({})`", res.data);
+                    }
+                    _ => {}
                 }
-                if let Some(cause) = cause {
-                    eprintln!("{cause:?}");
-                }
-            }
-            Ok((res, _, nondet)) => {
-                println!("executed with `{res:}`");
                 if let Some(disag) = nondet {
                     println!("nondet disagreement: {disag}");
                 }
@@ -175,8 +180,8 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
     }
 
     if args.print.contains(&PrintOption::Fingerprint) {
-        if let Ok((_, fp, _)) = &res {
-            println!("Fingerprint: {fp:?}");
+        if let Ok((rt::vm::FullResult { fingerprint, .. }, _)) = &res {
+            println!("Fingerprint: {fingerprint:?}");
         }
     }
 

@@ -1,2 +1,2 @@
 5 [0...9)
-executed with `Return("\x00")`
+executed with `Return(null)`

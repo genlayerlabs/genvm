@@ -1,2 +1,2 @@
 I am in foo!
-executed with `Return("\x00")`
+executed with `Return(null)`

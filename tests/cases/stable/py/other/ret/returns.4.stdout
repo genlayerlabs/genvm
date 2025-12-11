@@ -1,2 +1,2 @@
 4 [0...9)
-executed with `Return("\x10")`
+executed with `Return(true)`

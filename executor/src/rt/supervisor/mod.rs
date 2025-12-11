@@ -70,7 +70,7 @@ pub struct Supervisor {
     wasm_mod_cache: WasmModuleCache,
 
     pub(crate) engines: rt::DetNondet<wasmtime::Engine>,
-    pub(crate) host: tokio::sync::Mutex<host::Host>,
+    pub(crate) host: Arc<tokio::sync::Mutex<host::Host>>,
 }
 
 pub fn create_engines(
@@ -217,7 +217,7 @@ impl Supervisor {
                 cache_dir: my_cache_dir,
                 wasm_modules_cache: sync::CacheMap::new(),
             },
-            host: tokio::sync::Mutex::new(host),
+            host: Arc::new(tokio::sync::Mutex::new(host)),
             engines,
         });
 
@@ -242,9 +242,7 @@ pub async fn spawn(
         engine,
         rt::vm::WasmtimeStoreData {
             limits: limiter.clone(),
-            genlayer_ctx: std::sync::Arc::new(std::sync::Mutex::new(wasi::Context::new(
-                vm, limiter,
-            )?)),
+            genlayer_ctx: wasi::Context::new(vm, limiter)?,
             supervisor: zelf.clone(),
         },
         wasmtime::GenVMCtx {
@@ -278,10 +276,15 @@ pub async fn apply_contract_actions(
     zelf: &std::sync::Arc<Supervisor>,
     mut vm: rt::vm::VM<()>,
 ) -> anyhow::Result<rt::vm::VM<wasmtime::Instance>> {
-    let contract_address = {
-        let lock = vm.vm_base.store.data().genlayer_ctx.lock().unwrap();
-        lock.genlayer_sdk.data.message_data.contract_address
-    };
+    let contract_address = vm
+        .vm_base
+        .store
+        .data()
+        .genlayer_ctx
+        .genlayer_sdk
+        .data
+        .message_data
+        .contract_address;
 
     let contract_id = runners::get_runner_of_contract(contract_address);
 
@@ -292,15 +295,11 @@ pub async fn apply_contract_actions(
         .get_or_create(
             contract_id,
             || async {
-                let mut host = zelf.host.lock().await;
-
-                let code = host.get_code(
+                let code = zelf.host.lock().await.get_code(
                     vm.vm_base.config_copy.state_mode,
                     contract_address,
                     &limiter,
                 )?;
-
-                std::mem::drop(host);
 
                 runners::parse(util::SharedBytes::new(code))
             },
@@ -374,7 +373,7 @@ async fn run_single_nondet_inner(
     let limiter = zelf.limiter.get(false).derived();
     let vm = spawn(zelf, task.task, limiter).await?;
     let vm = apply_contract_actions(zelf, vm).await?;
-    vm.run().await.map(|x| x.0)
+    vm.run().await.map(|x| x.run_ok)
 }
 
 async fn nondet_vm_processor(

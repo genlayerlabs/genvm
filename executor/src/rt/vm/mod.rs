@@ -12,7 +12,19 @@ pub enum RunOk {
     VMError(String, #[serde(skip_serializing)] Option<anyhow::Error>),
 }
 
-pub type FullRunOk = (RunOk, Option<rt::errors::Fingerprint>);
+pub struct RunResult {
+    pub run_ok: RunOk,
+    pub fingerprint: Option<rt::errors::Fingerprint>,
+    pub vm_data: wasi::genlayer_sdk::SingleVMData,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FullResult {
+    pub kind: public_abi::ResultCode,
+    pub data: calldata::Value,
+    pub fingerprint: Option<rt::errors::Fingerprint>,
+    pub storage_changes: Vec<storage::Delta>,
+}
 
 impl RunOk {
     pub fn empty_return() -> Self {
@@ -62,19 +74,15 @@ impl std::fmt::Display for RunOk {
         }
     }
 }
-#[derive(Clone)]
 pub struct WasmtimeStoreData {
-    pub(super) genlayer_ctx: std::sync::Arc<std::sync::Mutex<wasi::Context>>,
+    pub(super) genlayer_ctx: wasi::Context,
     pub(super) limits: rt::memlimiter::Limiter,
     pub(super) supervisor: std::sync::Arc<rt::supervisor::Supervisor>,
 }
 
 impl WasmtimeStoreData {
     pub fn genlayer_ctx_mut(&mut self) -> &mut wasi::Context {
-        std::sync::Arc::get_mut(&mut self.genlayer_ctx)
-            .expect("wasmtime_wasi is not compatible with threads")
-            .get_mut()
-            .unwrap()
+        &mut self.genlayer_ctx
     }
 }
 
@@ -84,10 +92,8 @@ pub struct VM<T> {
 }
 
 impl VM<wasmtime::Instance> {
-    pub async fn run(mut self) -> anyhow::Result<rt::vm::FullRunOk> {
-        if let Ok(lck) = self.vm_base.store.data().genlayer_ctx.lock() {
-            log_debug!(wasi_preview1: serde = lck.preview1.log(), genlayer_sdk: serde = lck.genlayer_sdk.log(); "run");
-        }
+    pub async fn run(mut self) -> anyhow::Result<RunResult> {
+        log_debug!(wasi_preview1: serde = self.vm_base.store.data().genlayer_ctx.preview1.log(), genlayer_sdk: serde = self.vm_base.store.data().genlayer_ctx.genlayer_sdk.log(); "run");
 
         let func = self
             .data
@@ -100,27 +106,32 @@ impl VM<wasmtime::Instance> {
         let func = match func {
             Ok(func) => func,
             Err(e) => {
-                return Ok((
-                    RunOk::VMError(
+                return Ok(RunResult {
+                    run_ok: RunOk::VMError(
                         public_abi::VmError::InvalidContract.value().to_owned(),
                         Some(e),
                     ),
-                    None,
-                ));
+                    fingerprint: None,
+                    vm_data: self
+                        .vm_base
+                        .store
+                        .into_data()
+                        .genlayer_ctx
+                        .genlayer_sdk
+                        .data,
+                });
             }
         };
 
         log_debug!("execution start");
         let time_start = std::time::Instant::now();
         let res = func.call_async(&mut self.vm_base.store, ()).await;
-        if let Ok(lck) = self.vm_base.store.data().genlayer_ctx.lock() {
-            log_debug!(
-                elapsed:? = lck.genlayer_sdk.start_time.elapsed(),
-                wasm_start_elapsed:? = time_start.elapsed();
-                "vm execution finished"
-            );
-        }
-        let res: anyhow::Result<rt::vm::FullRunOk> = match res {
+        log_debug!(
+            elapsed:? = self.vm_base.store.data().genlayer_ctx.genlayer_sdk.start_time.elapsed(),
+            wasm_start_elapsed:? = time_start.elapsed();
+            "vm execution finished"
+        );
+        let res: anyhow::Result<(rt::vm::RunOk, Option<rt::errors::Fingerprint>)> = match res {
             Ok(()) => Ok((rt::vm::RunOk::empty_return(), None)),
             Err(e) => {
                 if self.vm_base.config_copy.needs_error_fingerprint {
@@ -170,7 +181,19 @@ impl VM<wasmtime::Instance> {
                 log_debug!(result = "Error", error:ah = e; "execution result unwrapped")
             }
         };
-        res
+
+        let res = res?;
+        Ok(RunResult {
+            run_ok: res.0,
+            fingerprint: res.1,
+            vm_data: self
+                .vm_base
+                .store
+                .into_data()
+                .genlayer_ctx
+                .genlayer_sdk
+                .data,
+        })
     }
 }
 

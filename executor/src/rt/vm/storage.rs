@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::ops::DerefMut;
 
 use genvm_common::calldata;
 
@@ -17,23 +17,43 @@ impl PageID {
     }
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Delta(
+    #[serde(with = "serde_bytes")] [u8; 36],
+    #[serde(with = "serde_bytes")] Vec<u8>,
+);
+
 pub trait HostStorage {
     fn storage_read(&mut self, slot_id: SlotID, index: u32, buf: &mut [u8]) -> anyhow::Result<()>;
 }
 
-#[derive(Clone)]
-pub struct Storage<HS: HostStorage> {
-    pub address: calldata::Address,
-    host: Arc<tokio::sync::Mutex<HS>>,
-    pages: rpds::RedBlackTreeMap<PageID, [u8; 32]>,
+impl<HS: HostStorage, T: DerefMut<Target = HS>> HostStorage for T {
+    fn storage_read(&mut self, slot_id: SlotID, index: u32, buf: &mut [u8]) -> anyhow::Result<()> {
+        self.deref_mut().storage_read(slot_id, index, buf)
+    }
 }
 
-impl<HS: HostStorage> Storage<HS> {
-    pub fn new(address: calldata::Address, host: Arc<tokio::sync::Mutex<HS>>) -> Self {
+pub trait HostStorageLocking {
+    type ReturnType<'a>: HostStorage
+    where
+        Self: 'a;
+
+    fn lock<'a>(&'a self) -> impl std::future::Future<Output = Self::ReturnType<'a>> + Send;
+}
+
+#[derive(Clone)]
+pub struct Storage<HS: Send + Sync> {
+    pub address: calldata::Address,
+    host: HS,
+    pages: rpds::RedBlackTreeMap<PageID, [u8; 32], archery::ArcTK>,
+}
+
+impl<HS: Send + Sync> Storage<HS> {
+    pub fn new(address: calldata::Address, host: HS) -> Self {
         Self {
             address,
             host,
-            pages: rpds::RedBlackTreeMap::new(),
+            pages: Default::default(),
         }
     }
 
@@ -45,6 +65,25 @@ impl<HS: HostStorage> Storage<HS> {
         self.pages = self.pages.insert(key, value);
     }
 
+    pub fn make_delta(&self) -> Vec<Delta> {
+        let mut res = Vec::<Delta>::new();
+
+        for (k, v) in &self.pages {
+            if k.1 != 0 {
+                let prev_page_id = PageID(k.0, k.1 - 1);
+                if self.pages.get(&prev_page_id).is_some() {
+                    res.last_mut().unwrap().deref_mut().1.extend_from_slice(v);
+                    continue;
+                }
+            }
+            res.push(Delta(k.to_bytes(), v.to_vec()));
+        }
+
+        res
+    }
+}
+
+impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
     pub async fn read(&self, slot_id: SlotID, index: u32, buf: &mut [u8]) -> anyhow::Result<()> {
         if buf.len() == 0 {
             return Ok(());
@@ -85,8 +124,7 @@ impl<HS: HostStorage> Storage<HS> {
         if need_host_read_start < need_host_read_end {
             let host_read_len = need_host_read_end - need_host_read_start;
             let host_buf_offset = need_host_read_start - start_index;
-            let mut host_lock = self.host.lock().await;
-            host_lock.storage_read(
+            self.host.lock().await.storage_read(
                 slot_id,
                 need_host_read_start as u32,
                 &mut buf[host_buf_offset..host_buf_offset + host_read_len],
@@ -137,9 +175,10 @@ impl<HS: HostStorage> Storage<HS> {
             } else {
                 // Read from host
                 let page_start = ((page_id.1 as usize) * 32) as u32;
-                let mut host_lock = self.host.lock().await;
-                host_lock.storage_read(page_id.0, page_start, &mut page_data)?;
-                std::mem::drop(host_lock);
+                self.host
+                    .lock()
+                    .await
+                    .storage_read(page_id.0, page_start, &mut page_data)?;
             }
 
             // Apply the write data
@@ -171,7 +210,6 @@ impl<HS: HostStorage> Storage<HS> {
 
         // Multi-page case
 
-        // Handle first page if partial
         let first_page_start = start_page * 32;
         let last_page_start = end_page * 32;
 
@@ -181,7 +219,7 @@ impl<HS: HostStorage> Storage<HS> {
         if partial_first || partial_last {
             let mut host_lock = self.host.lock().await;
 
-            if start_index > first_page_start {
+            if partial_first {
                 let page_id = PageID(slot_id, start_page as u32);
                 let mut page_data = [0u8; 32];
 
@@ -198,7 +236,7 @@ impl<HS: HostStorage> Storage<HS> {
                 self.pages = self.pages.insert(page_id, page_data);
             }
 
-            if end_index < last_page_start + 32 {
+            if partial_last {
                 let page_id = PageID(slot_id, end_page as u32);
                 let mut page_data = [0u8; 32];
 

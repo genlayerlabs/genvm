@@ -67,6 +67,8 @@ rand_core = "0.9.3"
 crossbeam = "0.8.4"
 arbitrary = { version = "1.0.3", features = [ "derive" ] }
 rpds = "1.2.0"
+archery = "1.2.2"
+bytes = "1.11.0"
 
 [dev-dependencies]
 afl = { version = "0.15.18", features = ["no_cfg_fuzzing"] }

@@ -1,4 +1,4 @@
 1
 Return(calldata=None)
 loads
-executed with `Return("\x00")`
+executed with `Return(null)`

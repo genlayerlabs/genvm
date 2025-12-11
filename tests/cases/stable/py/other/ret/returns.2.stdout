@@ -1,2 +1,2 @@
 2 [0...9)
-executed with `Return("\d9\x07")`
+executed with `Return(123)`

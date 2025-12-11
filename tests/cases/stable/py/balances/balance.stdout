@@ -6,4 +6,4 @@ main At(self) 10
 === call .view() ===
 nested self 10
 nested At(self) 10
-executed with `Return("\x00")`
+executed with `Return(null)`

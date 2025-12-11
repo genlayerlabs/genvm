@@ -8,4 +8,4 @@ oqKioqKioqKioqKioqKioqKioqI=
 Address("0xa2A2a2A2A2A2A2a2a2a2a2A2A2A2A2a2A2A2a2a2")
 ['1','2','3']
 {'1':None,'4':None}
-executed with `Return("\x00")`
+executed with `Return(null)`

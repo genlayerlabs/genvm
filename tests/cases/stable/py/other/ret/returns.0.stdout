@@ -1,2 +1,2 @@
 0 [0...9)
-executed with `Return("\x18\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01")`
+executed with `Return(addr#0101010101010101010101010101010101010101)`

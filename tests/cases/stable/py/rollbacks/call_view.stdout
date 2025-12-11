@@ -1,4 +1,4 @@
 contract from.main
 contract to.foo
 handled nah, I won't execute 3
-executed with `Return("\x00")`
+executed with `Return(null)`

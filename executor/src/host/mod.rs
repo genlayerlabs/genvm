@@ -10,7 +10,6 @@ use message::root_offsets;
 
 use core::str;
 use std::collections::BTreeMap;
-use std::sync::Mutex;
 
 use anyhow::{Context, Result};
 
@@ -24,7 +23,7 @@ impl Sock for bufreaderwriter::seq::BufReaderWriterSeq<std::os::unix::net::UnixS
 impl Sock for bufreaderwriter::seq::BufReaderWriterSeq<std::net::TcpStream> {}
 
 pub struct Host {
-    sock: Box<Mutex<dyn Sock>>,
+    sock: Box<dyn Sock>,
     metrics: sync::DArc<Metrics>,
 }
 
@@ -34,24 +33,20 @@ pub struct Metrics {
 }
 
 impl Host {
-    pub fn new(sock: Box<Mutex<dyn Sock>>, metrics: sync::DArc<Metrics>) -> Host {
+    pub fn new(sock: Box<dyn Sock>, metrics: sync::DArc<Metrics>) -> Host {
         Self { sock, metrics }
     }
     pub fn connect(addr: &str, metrics: sync::DArc<Metrics>) -> Result<Host> {
         const UNIX: &str = "unix://";
-        let sock: Box<Mutex<dyn Sock>> = if let Some(addr_suff) = addr.strip_prefix(UNIX) {
-            Box::new(Mutex::new(
-                bufreaderwriter::seq::BufReaderWriterSeq::new_writer(
-                    std::os::unix::net::UnixStream::connect(std::path::Path::new(addr_suff))
-                        .with_context(|| format!("connecting to {addr}"))?,
-                ),
+        let sock: Box<dyn Sock> = if let Some(addr_suff) = addr.strip_prefix(UNIX) {
+            Box::new(bufreaderwriter::seq::BufReaderWriterSeq::new_writer(
+                std::os::unix::net::UnixStream::connect(std::path::Path::new(addr_suff))
+                    .with_context(|| format!("connecting to {addr}"))?,
             ))
         } else {
-            Box::new(Mutex::new(
-                bufreaderwriter::seq::BufReaderWriterSeq::new_writer(
-                    std::net::TcpStream::connect(addr)
-                        .with_context(|| format!("connecting to {addr}"))?,
-                ),
+            Box::new(bufreaderwriter::seq::BufReaderWriterSeq::new_writer(
+                std::net::TcpStream::connect(addr)
+                    .with_context(|| format!("connecting to {addr}"))?,
             ))
         };
         Ok(Host { sock, metrics })
@@ -109,20 +104,15 @@ impl LockedSlotsSet {
 }
 
 impl Host {
-    fn lock_sock<'a, 'b>(
-        &'a mut self,
-    ) -> Result<sync::Lock<&'a mut (dyn Sock + 'b), stats::tracker::Time>> {
-        match self.sock.get_mut() {
-            Ok(locked_sock) => Ok(sync::Lock::new(
-                locked_sock,
-                stats::tracker::Time::new(self.metrics.gep(|x| &x.time)),
-            )),
-            Err(e) => Err(anyhow::anyhow!("can't take lock: {e}")),
-        }
+    fn lock_sock<'a>(&'a mut self) -> sync::Lock<&'a mut dyn Sock, stats::tracker::Time> {
+        sync::Lock::new(
+            &mut *self.sock,
+            stats::tracker::Time::new(self.metrics.gep(|x| &x.time)),
+        )
     }
 
     pub fn get_calldata(&mut self, calldata: &mut Vec<u8>) -> Result<()> {
-        let mut sock = self.lock_sock()?;
+        let mut sock = self.lock_sock();
         sock.write_all(&[host_fns::Methods::GetCalldata as u8])?;
 
         handle_host_error(&mut **sock)?;
@@ -249,7 +239,7 @@ impl Host {
         index: u32,
         buf: &mut [u8],
     ) -> Result<()> {
-        let mut sock = self.lock_sock()?;
+        let mut sock = self.lock_sock();
 
         sock.write_all(&[host_fns::Methods::StorageRead as u8])?;
         sock.write_all(&[mode as u8; 1])?;
@@ -258,7 +248,7 @@ impl Host {
         sock.write_all(&index.to_le_bytes())?;
         sock.write_all(&(buf.len() as u32).to_le_bytes())?;
 
-        handle_host_error(*sock)?;
+        handle_host_error(&mut **sock)?;
 
         sock.read_exact(buf)?;
 
@@ -267,68 +257,29 @@ impl Host {
         Ok(())
     }
 
-    pub fn storage_write(&mut self, slot: SlotID, index: u32, buf: &[u8]) -> Result<()> {
-        let mut sock = self.lock_sock()?;
-
-        sock.write_all(&[host_fns::Methods::StorageWrite as u8])?;
-        sock.write_all(&slot.raw())?;
-        sock.write_all(&index.to_le_bytes())?;
-        write_slice(*sock, buf)?;
-
-        sock.flush()?;
-
-        handle_host_error(*sock)?;
-
-        Ok(())
-    }
-
-    pub fn consume_result(&mut self, res: &Result<rt::vm::FullRunOk>) -> Result<()> {
+    pub fn consume_result(&mut self, res: &Result<rt::vm::FullResult>) -> Result<()> {
         log_trace!("consume_result");
 
-        let mut sock = self.lock_sock()?;
+        let mut sock = self.lock_sock();
 
         let data = match res {
-            Ok((rt::vm::RunOk::Return(data), _)) => {
-                let mut encoded = Vec::from([ResultCode::Return as u8]);
-                encoded.extend_from_slice(data);
-
-                encoded
-            }
-            Ok((rt::vm::RunOk::UserError(data), fp)) => {
-                let fp = calldata::to_value(fp)?;
-                let val = calldata::Value::Map(BTreeMap::from([
-                    ("message".to_owned(), data.as_str().into()),
-                    ("fingerprint".to_owned(), fp),
-                ]));
-
-                let mut encoded = Vec::from([ResultCode::UserError as u8]);
-                calldata::encode_to(&mut encoded, &val);
-
-                encoded
-            }
-            Ok((rt::vm::RunOk::VMError(data, _), fp)) => {
-                let mut encoded = Vec::from([ResultCode::VmError as u8]);
-
-                let fp = calldata::to_value(fp)?;
-                let val = calldata::Value::Map(BTreeMap::from([
-                    ("message".to_owned(), data.as_str().into()),
-                    ("fingerprint".to_owned(), fp),
-                ]));
-
-                calldata::encode_to(&mut encoded, &val);
+            Ok(d) => {
+                let mut encoded = Vec::from([d.kind as u8]);
+                let as_value = calldata::to_value(d)?;
+                calldata::encode_to(&mut encoded, &as_value);
 
                 encoded
             }
             Err(e) => {
-                let mut encoded = Vec::from([ResultCode::VmError as u8]);
-                encoded.extend_from_slice(format!("{e:?}").as_bytes());
+                let mut encoded = Vec::from([ResultCode::InternalError as u8]);
+                calldata::encode_to(&mut encoded, &calldata::Value::Str(format!("{e:?}")));
 
                 encoded
             }
         };
 
         sock.write_all(&[host_fns::Methods::ConsumeResult as u8])?;
-        write_slice(*sock, &data)?;
+        write_slice(&mut **sock, &data)?;
 
         log_debug!("wrote consumed result to host");
 
@@ -343,14 +294,11 @@ impl Host {
     pub fn get_leader_result(&mut self, call_no: u32) -> Result<Option<rt::vm::RunOk>> {
         log_trace!("get_leader_result");
 
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
+        let mut sock = self.lock_sock();
         sock.write_all(&[host_fns::Methods::GetLeaderNondetResult as u8])?;
         sock.write_all(&call_no.to_le_bytes())?;
 
-        match read_host_error(sock)? {
+        match read_host_error(&mut **sock)? {
             host_fns::Errors::Ok => {}
             host_fns::Errors::IAmLeader => {
                 return Ok(None);
@@ -358,7 +306,7 @@ impl Host {
             e => return Err(rt::errors::VMError(e.str_snake_case().to_owned(), None).into()),
         }
 
-        let leaders_result = read_bytes(sock)?;
+        let leaders_result = read_bytes(&mut **sock)?;
 
         let rest = &leaders_result[1..];
 
@@ -378,18 +326,15 @@ impl Host {
     pub fn post_nondet_result(&mut self, call_no: u32, res: &rt::vm::RunOk) -> Result<()> {
         log_trace!(call_no = call_no; "post_nondet_result");
 
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
+        let mut sock = self.lock_sock();
         sock.write_all(&[host_fns::Methods::PostNondetResult as u8])?;
         sock.write_all(&call_no.to_le_bytes())?;
 
-        write_slice(sock, &Vec::from_iter(res.as_bytes_iter()))?;
+        write_slice(&mut **sock, &Vec::from_iter(res.as_bytes_iter()))?;
 
         sock.flush()?;
 
-        handle_host_error(sock)?;
+        handle_host_error(&mut **sock)?;
 
         Ok(())
     }
@@ -402,19 +347,16 @@ impl Host {
     ) -> Result<()> {
         log_trace!("post_message");
 
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
+        let mut sock = self.lock_sock();
         sock.write_all(&[host_fns::Methods::PostMessage as u8])?;
         sock.write_all(&account.raw())?;
 
-        write_slice(sock, calldata)?;
-        write_slice(sock, data.as_bytes())?;
+        write_slice(&mut **sock, calldata)?;
+        write_slice(&mut **sock, data.as_bytes())?;
 
         sock.flush()?;
 
-        handle_host_error(sock)?;
+        handle_host_error(&mut **sock)?;
 
         Ok(())
     }
@@ -422,19 +364,16 @@ impl Host {
     pub fn deploy_contract(&mut self, calldata: &[u8], code: &[u8], data: &str) -> Result<()> {
         log_trace!("deploy_contract");
 
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
+        let mut sock = self.lock_sock();
         sock.write_all(&[host_fns::Methods::DeployContract as u8])?;
 
-        write_slice(sock, calldata)?;
-        write_slice(sock, code)?;
-        write_slice(sock, data.as_bytes())?;
+        write_slice(&mut **sock, calldata)?;
+        write_slice(&mut **sock, code)?;
+        write_slice(&mut **sock, data.as_bytes())?;
 
         sock.flush()?;
 
-        handle_host_error(sock)?;
+        handle_host_error(&mut **sock)?;
 
         Ok(())
     }
@@ -442,10 +381,7 @@ impl Host {
     pub fn consume_fuel(&mut self, gas: u64) -> Result<()> {
         log_trace!("consume_fuel");
 
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
+        let mut sock = self.lock_sock();
         sock.write_all(&[host_fns::Methods::ConsumeFuel as u8])?;
         sock.write_all(&gas.to_le_bytes())?;
 
@@ -456,10 +392,7 @@ impl Host {
     pub fn eth_call(&mut self, address: calldata::Address, calldata: &[u8]) -> Result<Box<[u8]>> {
         log_trace!("eth_call");
 
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
+        let mut sock = self.lock_sock();
         sock.write_all(&[host_fns::Methods::EthCall as u8])?;
 
         sock.write_all(&address.raw())?;
@@ -467,9 +400,9 @@ impl Host {
         sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
         sock.write_all(calldata)?;
 
-        handle_host_error(sock)?;
+        handle_host_error(&mut **sock)?;
 
-        read_bytes(sock)
+        read_bytes(&mut **sock)
     }
 
     pub fn eth_send(
@@ -480,10 +413,7 @@ impl Host {
     ) -> Result<()> {
         log_trace!("eth_send");
 
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
+        let mut sock = self.lock_sock();
         sock.write_all(&[host_fns::Methods::EthSend as u8])?;
 
         sock.write_all(&address.raw())?;
@@ -496,7 +426,7 @@ impl Host {
 
         sock.flush()?;
 
-        handle_host_error(sock)?;
+        handle_host_error(&mut **sock)?;
 
         Ok(())
     }
@@ -504,15 +434,12 @@ impl Host {
     pub fn get_balance(&mut self, address: calldata::Address) -> Result<primitive_types::U256> {
         log_trace!("get_balance");
 
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
+        let mut sock = self.lock_sock();
         sock.write_all(&[host_fns::Methods::GetBalance as u8])?;
 
         sock.write_all(&address.raw())?;
 
-        handle_host_error(sock)?;
+        handle_host_error(&mut **sock)?;
 
         let mut buf: [u8; 32] = [0; 32];
         sock.read_exact(&mut buf)?;
@@ -522,13 +449,10 @@ impl Host {
     pub fn remaining_fuel_as_gen(&mut self) -> Result<u64> {
         log_trace!("remaining_fuel_as_gen");
 
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
+        let mut sock = self.lock_sock();
         sock.write_all(&[host_fns::Methods::RemainingFuelAsGen as u8])?;
 
-        handle_host_error(sock)?;
+        handle_host_error(&mut **sock)?;
 
         let mut buf: [u8; 8] = [0; 8];
         sock.read_exact(&mut buf)?;
@@ -538,10 +462,7 @@ impl Host {
     pub fn post_event(&mut self, topics: &[[u8; 32]], blob: &[u8]) -> Result<()> {
         log_trace!("post_event");
 
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
+        let mut sock = self.lock_sock();
         sock.write_all(&[host_fns::Methods::PostEvent as u8])?;
         sock.write_all(&[topics.len() as u8])?;
 
@@ -549,11 +470,11 @@ impl Host {
             sock.write_all(topic.as_ref())?;
         }
 
-        write_slice(sock, blob)?;
+        write_slice(&mut **sock, blob)?;
 
         sock.flush()?;
 
-        handle_host_error(sock)?;
+        handle_host_error(&mut **sock)?;
 
         Ok(())
     }
@@ -561,10 +482,7 @@ impl Host {
     pub fn notify_nondet_disagreement(&mut self, call_no: u32) -> Result<()> {
         log_trace!(call_no = call_no; "notify_nondet_disagreement");
 
-        let Ok(mut sock) = (*self.sock).lock() else {
-            anyhow::bail!("can't take lock")
-        };
-        let sock: &mut dyn Sock = &mut *sock;
+        let mut sock = self.lock_sock();
         sock.write_all(&[host_fns::Methods::NotifyNondetDisagreement as u8])?;
         sock.write_all(&call_no.to_le_bytes())?;
 

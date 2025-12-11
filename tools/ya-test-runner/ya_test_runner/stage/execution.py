@@ -16,6 +16,7 @@ class Env(typing.NamedTuple):
 class _ExecutionContext:
 	shared: SharedContext
 	failed: list[str]
+	should_stop: asyncio.Event
 	success_count: int = 0
 	skipped: int = 0
 
@@ -39,6 +40,15 @@ class _CountDownLatch:
 async def _run_case(
 	ctx: _ExecutionContext, case: ya_test_runner.test.Case, latch: _CountDownLatch
 ):
+	try:
+		if ctx.should_stop.is_set():
+			return
+		await _run_case_locked(ctx, case)
+	finally:
+		latch.decrement()
+
+
+async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Case):
 	success = False
 	context = {}
 	try:
@@ -78,7 +88,6 @@ async def _run_case(
 	finally:
 		if not success:
 			ctx.failed.append(case.description.name)
-		latch.decrement()
 
 
 _background_tasks: set[asyncio.Task] = set()
@@ -101,9 +110,12 @@ async def _run_cases(
 async def run(shared: SharedContext, collection_env: SchedulingEnv) -> Env:
 	awaiters: dict[int, _CountDownLatch] = {}
 
+	should_stop = asyncio.Event()
+
 	ctx = _ExecutionContext(
 		shared=shared,
 		failed=[],
+		should_stop=should_stop,
 	)
 
 	for action in collection_env.actions:

@@ -61,7 +61,7 @@ struct PermitsData {
 }
 
 pub struct Ctx {
-    known_executions: dashmap::DashMap<GenVMId, sync::DArc<SingleGenVMContext>>,
+    known_executions: papaya::HashMap<GenVMId, sync::DArc<SingleGenVMContext>>,
     next_genvm_id: std::sync::atomic::AtomicU64,
     pub permits: Arc<tokio::sync::Semaphore>,
     max_permits: tokio::sync::Mutex<PermitsData>,
@@ -82,10 +82,7 @@ impl Ctx {
     pub fn status_executions(&self) -> serde_json::Value {
         let mut ret = serde_json::Map::new();
 
-        for kv in self.known_executions.iter() {
-            let genvm_id = kv.key();
-            let exec_ctx = kv.value();
-
+        for (genvm_id, exec_ctx) in self.known_executions.pin().iter() {
             let result = if let Some(result) = exec_ctx.result.get() {
                 serde_json::json!({
                     "finished_at": result.finished_at.to_rfc3339(),
@@ -151,10 +148,9 @@ impl Ctx {
         genvm_id: GenVMId,
         wait_timeout_ms: u64,
     ) -> anyhow::Result<()> {
-        let Some(exec_ctx) = self.known_executions.get(&genvm_id) else {
+        let Some(exec_ctx) = self.known_executions.pin().get(&genvm_id).cloned() else {
             anyhow::bail!("GenVM with id {} not found", genvm_id);
         };
-        let exec_ctx = exec_ctx.value().clone();
 
         if exec_ctx.result.get().is_some() {
             return Ok(());
@@ -209,11 +205,10 @@ impl Ctx {
         &self,
         genvm_id: GenVMId,
     ) -> Option<sync::DArc<SingleGenVMContextDone>> {
-        let Some(exec_ctx) = self.known_executions.get(&genvm_id) else {
+        let Some(exec_ctx) = self.known_executions.pin().get(&genvm_id).cloned() else {
             log_trace_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "genvm status requested for unknown id");
             return None;
         };
-        let exec_ctx = exec_ctx.value().clone();
 
         let proc_check = self.check_proc(&exec_ctx).await;
         log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0, proc_exited = proc_check; "genvm status checked");
@@ -231,7 +226,7 @@ impl Ctx {
     ) -> Option<sync::DArc<SingleGenVMContextDone>> {
         let res = self.get_genvm_status(genvm_id).await;
         if res.is_some() {
-            self.known_executions.remove(&genvm_id);
+            self.known_executions.pin().remove(&genvm_id);
         }
 
         res
@@ -301,15 +296,15 @@ async fn gc_step(ctx: &sync::DArc<Ctx>) {
     // copy-out so that we don't hold the lock while doing async operations
     let keys = ctx
         .known_executions
+        .pin()
         .iter()
-        .map(|kv| *kv.key())
+        .map(|kv| *kv.0)
         .collect::<Vec<_>>();
 
     for key in keys {
-        let Some(val) = ctx.known_executions.get(&key) else {
+        let Some(val) = ctx.known_executions.pin().get(&key).cloned() else {
             continue;
         };
-        let val = val.clone();
 
         if val.strict_deadline < now {
             log_warn_into!(&LoggerWithId, genvm_id:id = key.0; "genvm execution exceeded strict deadline, terminating");
@@ -319,7 +314,7 @@ async fn gc_step(ctx: &sync::DArc<Ctx>) {
     }
 
     // Remove old finished executions
-    ctx.known_executions.retain(|k, v| {
+    ctx.known_executions.pin().retain(|k, v| {
         let Some(result) = v.result.get() else {
             return true;
         };
@@ -558,7 +553,7 @@ impl Ctx {
                 log_debug!(id = exec.id, status = status; "genvm exited");
 
                 let _ = sync::DropGuard::new(|| {
-                    GENVM_BY_ID_LOGGER.remove(&exec.id);
+                    GENVM_BY_ID_LOGGER.pin().remove(&exec.id);
                 });
 
                 exec.all_permits.store(None); // drop all resources it owns
@@ -621,9 +616,9 @@ pub async fn start_genvm(
     };
 
     let log_sink: LogSink = Arc::new(Default::default());
-    GENVM_BY_ID_LOGGER.insert(genvm_id, log_sink.clone());
+    GENVM_BY_ID_LOGGER.pin().insert(genvm_id, log_sink.clone());
     let log_sink_guard = sync::DropGuard::new(|| {
-        GENVM_BY_ID_LOGGER.remove(&genvm_id);
+        GENVM_BY_ID_LOGGER.pin().remove(&genvm_id);
     });
 
     let mut command_path = ctx.executors_path.clone();
@@ -739,7 +734,9 @@ pub async fn start_genvm(
         tokio::spawn(pipe_read(stderr, exec_ctx.gep(|x| &x.stderr), stderr_perm));
     }
 
-    ctx.known_executions.insert(genvm_id, exec_ctx.clone());
+    ctx.known_executions
+        .pin()
+        .insert(genvm_id, exec_ctx.clone());
     log_sink_guard.forget();
 
     Ok((genvm_id, rx))

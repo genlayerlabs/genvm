@@ -56,7 +56,6 @@ class MockHost(IHost):
 	sock: socket.socket | None
 	storage: MockStorage | None
 	messages_file: io.TextIOWrapper | None
-	_has_result: bool = False
 
 	def __init__(
 		self,
@@ -144,23 +143,6 @@ class MockHost(IHost):
 
 	async def remaining_fuel_as_gen(self) -> int:
 		return 2**32
-
-	async def storage_write(
-		self,
-		slot: bytes,
-		index: int,
-		got: collections.abc.Buffer,
-	) -> None:
-		assert self.storage is not None
-		self.storage.write(self.running_address, slot, index, got)
-
-	async def consume_result(
-		self, type: public_abi.ResultCode, data: collections.abc.Buffer
-	) -> None:
-		self._has_result = True
-
-	def has_result(self) -> bool:
-		return self._has_result
 
 	async def get_leader_nondet_result(self, call_no: int, /) -> collections.abc.Buffer:
 		if self.leader_nondet is None:

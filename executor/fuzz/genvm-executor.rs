@@ -717,10 +717,7 @@ async fn run_with(
         rest: Default::default(),
     };
 
-    let host = genvm::Host::new(
-        Box::new(std::sync::Mutex::new(duplex_b)),
-        shared_data.gep(|x| &x.metrics.host),
-    );
+    let host = genvm::Host::new(Box::new(duplex_b), shared_data.gep(|x| &x.metrics.host));
 
     let mut actual_host = mock_host::MockHost {
         eq_outputs,

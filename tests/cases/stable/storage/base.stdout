@@ -14,4 +14,4 @@ a860ee32d1b785e6f3bad050b3865d3c0427497a6195beebdd3726b6795449f4
 d8034a25a19c5007f762ff255d504fabebdc712450823e4fbdd9242f910ccb3b
 	bytearray(b'321')
 321 321
-executed with `Return("\x00")`
+executed with `Return(null)`

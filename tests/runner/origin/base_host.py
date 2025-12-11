@@ -2,7 +2,7 @@ import socket
 import typing
 import collections.abc
 import asyncio
-import os
+import sys
 import abc
 import json
 import time
@@ -12,6 +12,18 @@ import aiohttp
 from dataclasses import dataclass
 
 from pathlib import Path
+
+if True:
+	root = Path(__file__).parent
+	while root.parent != root:
+		mr_root = root.joinpath('.genvm-monorepo-root')
+		if mr_root.exists():
+			dir_to_add = json.loads(mr_root.read_bytes())['py-std']
+			sys.path.insert(0, str(root.joinpath(*dir_to_add)))
+			break
+		root = root.parent
+	import genlayer.py.calldata as gvm_calldata
+
 
 from . import host_fns
 from . import public_abi
@@ -60,21 +72,6 @@ class IHost(metaclass=abc.ABCMeta):
 		le: int,
 		/,
 	) -> bytes: ...
-	@abc.abstractmethod
-	async def storage_write(
-		self,
-		slot: bytes,
-		index: int,
-		got: collections.abc.Buffer,
-		/,
-	) -> None: ...
-
-	@abc.abstractmethod
-	async def consume_result(
-		self, type: public_abi.ResultCode, data: collections.abc.Buffer, /
-	) -> None: ...
-	@abc.abstractmethod
-	def has_result(self) -> bool: ...
 
 	@abc.abstractmethod
 	async def get_leader_nondet_result(
@@ -138,7 +135,9 @@ async def get_pre_deployment_writes(
 		return ret
 
 
-async def host_loop(handler: IHost, cancellation: asyncio.Event, *, logger: Logger):
+async def host_loop(
+	handler: IHost, cancellation: asyncio.Event, *, logger: Logger
+) -> tuple[public_abi.ResultCode, bytes]:
 	async_loop = asyncio.get_event_loop()
 
 	logger.trace('entering loop')
@@ -210,17 +209,6 @@ async def host_loop(handler: IHost, cancellation: asyncio.Event, *, logger: Logg
 				else:
 					await send_all(bytes([host_fns.Errors.OK]))
 					await send_all(res)
-			case host_fns.Methods.STORAGE_WRITE:
-				slot = await read_exact(SLOT_ID_SIZE)
-				index = await recv_int()
-				le = await recv_int()
-				got = await read_exact(le)
-				try:
-					await handler.storage_write(slot, index, got)
-				except HostException as e:
-					await send_all(bytes([e.error_code]))
-				else:
-					await send_all(bytes([host_fns.Errors.OK]))
 			case host_fns.Methods.CONSUME_RESULT:
 				logger.debug(
 					'handling time',
@@ -229,9 +217,10 @@ async def host_loop(handler: IHost, cancellation: asyncio.Event, *, logger: Logg
 					call_counts=call_counts,
 				)
 				res = await read_slice()
-				await handler.consume_result(public_abi.ResultCode(res[0]), res[1:])
-				await send_all(b'\x00')
-				return
+
+				await send_all(bytes([0]))
+
+				return public_abi.ResultCode(res[0]), res[1:]
 			case host_fns.Methods.GET_LEADER_NONDET_RESULT:
 				call_no = await recv_int()
 				try:
@@ -361,6 +350,11 @@ class RunHostAndProgramRes:
 	stderr: str
 	genvm_log: list[dict[str, typing.Any]]
 
+	result_kind: public_abi.ResultCode
+	result_data: typing.Any
+	result_fingerprint: typing.Any
+	result_storage_changes: list[tuple[bytes, bytes]]
+
 
 async def _send_timeout(manager_uri: str, genvm_id: str, logger: Logger):
 	try:
@@ -437,8 +431,9 @@ async def run_genvm(
 			logger.debug('proc started', genvm_id=genvm_id_cell[0])
 
 	async def wrap_host():
-		await host_loop(handler, cancellation_event, logger=logger)
+		r = await host_loop(handler, cancellation_event, logger=logger)
 		logger.debug('host loop finished')
+		return r
 
 	timeout_fired = asyncio.Event()
 
@@ -494,8 +489,9 @@ async def run_genvm(
 	await asyncio.wait([fut_host, fut_proc, asyncio.ensure_future(prob_died())])
 
 	exceptions: list[Exception] = []
+	result_host: tuple[public_abi.ResultCode, bytes] | None = None
 	try:
-		fut_host.result()
+		result_host = fut_host.result()
 	except Exception as e:
 		if not timeout_fired.is_set():
 			exceptions.append(e)
@@ -521,10 +517,27 @@ async def run_genvm(
 		if len(exceptions) > 0:
 			final_exception = Exception('execution failed', exceptions[1:])
 			raise final_exception from exceptions[0]
+
+		if result_host is None:
+			result_kind = public_abi.ResultCode.INTERNAL_ERROR
+			result_data = 'no_result'
+			result_fingerprint = None
+			result_storage_changes = []
+		else:
+			result_kind = result_host[0]
+			decoded = gvm_calldata.decode(result_host[1])
+			result_data = decoded.get('data')
+			result_fingerprint = decoded.get('fingerprint')
+			result_storage_changes = decoded.get('storage_changes', [])
+
 		return RunHostAndProgramRes(
 			stdout=status['stdout'],
 			stderr=status['stderr'],
 			genvm_log=status.get('genvm_log') or [],
+			result_kind=result_kind,
+			result_data=result_data,
+			result_fingerprint=result_fingerprint,
+			result_storage_changes=result_storage_changes,
 		)
 
 	raise Exception('Execution failed')

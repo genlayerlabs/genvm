@@ -1142,4 +1142,4 @@ new x
 		-0.00000 <built-in function add> -0.00000 -0.00000 8000000000000000
 		-0.00000 <built-in function sub> -0.00000 0.00000 0000000000000000
 		-0.00000 <built-in function mul> -0.00000 0.00000 0000000000000000
-executed with `Return("\x00")`
+executed with `Return(null)`

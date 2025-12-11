@@ -568,6 +568,13 @@ class TestRunner:
 						extra_args=['--debug-mode', '--print=result'],
 					)
 				)
+				for k, v in res.result_storage_changes:
+					mock_host.storage.write(
+						config['host'].running_address,
+						k[:32],
+						int.from_bytes(k[32:], byteorder='little'),
+						v,
+					)
 			except Exception as e:
 				time_elapsed = time.monotonic() - time_start
 				self.reporter.report_single(
@@ -605,9 +612,8 @@ class TestRunner:
 
 	def _save_test_outputs(self, tmp_dir: Path, res) -> None:
 		"""Save test outputs to files."""
-		got_stdout_path = tmp_dir.joinpath('stdout.txt')
-		got_stdout_path.parent.mkdir(parents=True, exist_ok=True)
-		got_stdout_path.write_text(res.stdout)
+		tmp_dir.mkdir(parents=True, exist_ok=True)
+		tmp_dir.joinpath('stdout.txt').write_text(res.stdout)
 		tmp_dir.joinpath('stderr.txt').write_text(res.stderr)
 		tmp_dir.joinpath('genvm.log').write_text(
 			'\n'.join(json.dumps(x) for x in res.genvm_log)

@@ -107,16 +107,16 @@ impl std::fmt::Display for UserError {
     }
 }
 
-#[derive(Debug, serde::Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 pub struct Frame {
     pub module_name: String,
     pub func: u32,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct SingleMemoryFP(#[serde(with = "serde_bytes")] pub [u8; 32]);
 
-#[derive(Debug, serde::Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 pub struct Fingerprint {
     pub frames: Vec<Frame>,
 

@@ -1,2 +1,2 @@
 User(name='', birthday=datetime.datetime(1970, 1, 1, 0, 0))
-executed with `Return("\x00")`
+executed with `Return(null)`

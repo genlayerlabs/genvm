@@ -1,4 +1,4 @@
 Error!
 {'causes': ['WEBPAGE_LOAD_FAILED'], 'ctx': {'body': '404 page not found\n', 'status': 404, 'url': 'https://test-server.genlayer.com/static/genvm/not-exists'}}
 None
-executed with `Return("\x00")`
+executed with `Return(null)`
