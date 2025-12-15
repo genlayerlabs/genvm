@@ -500,13 +500,13 @@ pub type LogSink = Arc<crossbeam::queue::SegQueue<LogSinkElement>>;
 
 pub static GENVM_BY_ID_LOGGER: std::sync::LazyLock<
     papaya::HashMap<genvm_modules_interfaces::GenVMId, LogSink>,
-> = std::sync::LazyLock::new(|| Default::default());
+> = std::sync::LazyLock::new(Default::default);
 
 pub struct LoggerWithId;
 
 fn get_logger_sink(record: &genvm_common::logger::Record<'_>) -> Option<LogSink> {
     let Some((_, genvm_common::logger::Capture::Id(genvm_id))) =
-        record.kv.iter().filter(|x| x.0 == "genvm_id").next()
+        record.kv.iter().find(|x| x.0 == "genvm_id")
     else {
         return None;
     };
@@ -515,7 +515,7 @@ fn get_logger_sink(record: &genvm_common::logger::Record<'_>) -> Option<LogSink>
     GENVM_BY_ID_LOGGER
         .pin()
         .get(&genvm_modules_interfaces::GenVMId(genvm_id))
-        .map(|x| x.clone())
+        .cloned()
 }
 
 impl genvm_common::logger::ILogger for LoggerWithId {

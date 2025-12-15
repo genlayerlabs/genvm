@@ -7,7 +7,7 @@ use genvm_common::*;
 
 use crate::{
     config, host, public_abi,
-    rt::{self, DetNondet},
+    rt::{self, memlimiter, DetNondet},
     runners, wasi,
 };
 
@@ -27,7 +27,7 @@ pub struct NonDetVMTask {
 
 impl NonDetVMTask {
     pub async fn run_now(self, sup: &Arc<Supervisor>) -> anyhow::Result<rt::vm::RunOk> {
-        run_single_nondet(sup, self).await
+        run_single_nondet(sup, self, sup.limiter.get(false).derived()).await
     }
 }
 
@@ -40,10 +40,11 @@ impl std::ops::Drop for VMCountDecrementer {
 }
 
 struct NondetQueue {
-    sender: tokio::sync::mpsc::Sender<sync::Lock<NonDetVMTask, VMCountDecrementer>>,
+    sender: tokio_mpmc::Sender<sync::Lock<NonDetVMTask, VMCountDecrementer>>,
+    receiver: tokio_mpmc::Receiver<sync::Lock<NonDetVMTask, VMCountDecrementer>>,
     nondet_call_disagree: std::sync::atomic::AtomicU32,
     vm_countdown: genvm_common::sync::Waiter,
-    tasks_loop_done: tokio::sync::Notify,
+    tasks_loop_done: Arc<tokio::sync::RwLock<()>>,
     encountered_error: crossbeam::atomic::AtomicCell<Option<anyhow::Error>>,
 }
 
@@ -123,12 +124,20 @@ pub fn create_engines(
 }
 
 pub async fn await_nondet_vms(zelf: &Arc<Supervisor>) -> anyhow::Result<Option<u32>> {
+    zelf.queue.sender.close(); // no more tasks can be submitted after this point
+
     zelf.queue.vm_countdown.decrement();
 
-    // here we can go into nondet queue as well
-    // but for now we won't
+    if !zelf.queue.receiver.is_empty() {
+        let read_permit = zelf.queue.tasks_loop_done.clone().try_read_owned().unwrap();
+        let limiter = memlimiter::Limiter::new("nondet-secondary");
+        nondet_vm_processor(zelf.clone(), read_permit, limiter).await;
+    }
 
-    zelf.queue.tasks_loop_done.notified().await;
+    let _ = zelf.queue.tasks_loop_done.write().await;
+
+    log_debug!("all nondet workers done");
+
     if let Some(err) = zelf.queue.encountered_error.take() {
         return Err(err);
     }
@@ -149,8 +158,14 @@ pub async fn submit_nondet_vm_task(zelf: &Arc<Supervisor>, task: NonDetVMTask) {
 
     zelf.queue.vm_countdown.increment();
     let tok = VMCountDecrementer(zelf.clone());
-    let permit = zelf.queue.sender.reserve().await.unwrap();
-    permit.send(sync::Lock::new(task, tok));
+    let _ = zelf
+        .queue
+        .sender
+        .send(sync::Lock::new(task, tok))
+        .await
+        .inspect_err(|e| {
+            log_error!(error:err = e; "failed to submit nondet vm task");
+        });
 
     log_debug!(call_no = call_no; "nondet vm task submitted");
 }
@@ -190,7 +205,7 @@ impl Supervisor {
             Ok(())
         })?;
 
-        let (sender, receiver) = tokio::sync::mpsc::channel(100);
+        let (sender, receiver) = tokio_mpmc::channel(100);
 
         let debug_mode = ctor.shared_data.debug_mode;
 
@@ -203,10 +218,11 @@ impl Supervisor {
             balances: dashmap::DashMap::new(),
             queue: NondetQueue {
                 sender,
+                receiver,
                 encountered_error: crossbeam::atomic::AtomicCell::new(None),
                 nondet_call_disagree: std::sync::atomic::AtomicU32::new(u32::MAX),
                 vm_countdown: genvm_common::sync::Waiter::new(),
-                tasks_loop_done: tokio::sync::Notify::new(),
+                tasks_loop_done: Arc::new(tokio::sync::RwLock::new(())),
             },
             runner_cache: runners::cache::Reader::new(
                 std::path::Path::new(&config.runners_dir),
@@ -221,7 +237,13 @@ impl Supervisor {
             engines,
         });
 
-        tokio::spawn(nondet_vm_processor(zelf.clone(), receiver));
+        let read_permit = zelf.queue.tasks_loop_done.clone().try_read_owned().unwrap();
+        let main_nondet_limiter = zelf.limiter.get(false).derived();
+        tokio::spawn(nondet_vm_processor(
+            zelf.clone(),
+            read_permit,
+            main_nondet_limiter,
+        ));
 
         Ok(zelf)
     }
@@ -359,8 +381,9 @@ pub async fn apply_contract_actions(
 async fn run_single_nondet(
     zelf: &std::sync::Arc<Supervisor>,
     task: NonDetVMTask,
+    limiter: memlimiter::Limiter,
 ) -> anyhow::Result<rt::vm::RunOk> {
-    match run_single_nondet_inner(zelf, task).await {
+    match run_single_nondet_inner(zelf, task, limiter).await {
         Ok(v) => Ok(v),
         Err(e) => rt::errors::unwrap_vm_errors(e),
     }
@@ -369,8 +392,8 @@ async fn run_single_nondet(
 async fn run_single_nondet_inner(
     zelf: &std::sync::Arc<Supervisor>,
     task: NonDetVMTask,
+    limiter: memlimiter::Limiter,
 ) -> anyhow::Result<rt::vm::RunOk> {
-    let limiter = zelf.limiter.get(false).derived();
     let vm = spawn(zelf, task.task, limiter).await?;
     let vm = apply_contract_actions(zelf, vm).await?;
     vm.run().await.map(|x| x.run_ok)
@@ -378,9 +401,8 @@ async fn run_single_nondet_inner(
 
 async fn nondet_vm_processor(
     zelf: std::sync::Arc<Supervisor>,
-    mut nondet_validator_queue_receiver: tokio::sync::mpsc::Receiver<
-        sync::Lock<NonDetVMTask, VMCountDecrementer>,
-    >,
+    read_permit: tokio::sync::OwnedRwLockReadGuard<()>,
+    limiter: memlimiter::Limiter,
 ) {
     let mut count = 0;
     loop {
@@ -395,7 +417,11 @@ async fn nondet_vm_processor(
                 break;
             }
 
-            Some(task) = nondet_validator_queue_receiver.recv() => {
+            Ok(val) = zelf.queue.receiver.recv() => {
+                let Some(task) = val else {
+                    log_debug!("nondet vm processor: all senders closed, exiting");
+                    break;
+                };
                 count += 1;
 
                 let task_done = task.tasks_done.clone();
@@ -413,7 +439,7 @@ async fn nondet_vm_processor(
                 let call_no = task.call_no;
 
                 let (task, tok) = task.deconstruct();
-                let res = run_single_nondet(&zelf, task).await;
+                let res = run_single_nondet(&zelf, task, limiter.derived()).await;
 
                 let do_disagree = match res {
                     Ok(rt::vm::RunOk::Return(v)) if v == [16] => false,
@@ -442,7 +468,6 @@ async fn nondet_vm_processor(
         }
     }
 
-    log_debug!(count = count; "all nondet vms done");
-
-    zelf.queue.tasks_loop_done.notify_one();
+    std::mem::drop(read_permit);
+    log_debug!(count = count; "nondet worker done");
 }

@@ -49,7 +49,7 @@ pub fn complete_json(partial: &str) -> String {
         let mut had_u = false;
         for _i in 0..4 {
             if let Some(ch) = s_rev.next() {
-                if ch.is_digit(16) {
+                if ch.is_ascii_hexdigit() {
                     hex_count += 1;
                 } else {
                     if ch == 'u' || ch == 'U' {
@@ -88,9 +88,9 @@ pub fn complete_json(partial: &str) -> String {
     } else if result.ends_with('-') || result.ends_with('.') || result.ends_with('+') {
         result.push('0');
     } else if (result.ends_with('e') || result.ends_with('E'))
-        && result.chars().rev().nth(1).unwrap_or('a').is_digit(10)
+        && result.chars().rev().nth(1).unwrap_or('a').is_ascii_digit()
     {
-        result.push_str("0");
+        result.push('0');
     } else if result.ends_with(',') {
         result.pop();
     } else if stack.last() == Some(&'}') && !has_colon && !result.ends_with('{') {

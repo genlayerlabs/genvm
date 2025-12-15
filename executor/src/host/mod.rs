@@ -3,13 +3,13 @@ pub mod message;
 
 use genvm_common::*;
 
+use crate::public_abi;
 use crate::public_abi::{ResultCode, StorageType};
 use genvm_common::calldata::Address;
 use genvm_common::calldata::ADDRESS_SIZE;
 use message::root_offsets;
 
 use core::str;
-use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
 
@@ -104,7 +104,7 @@ impl LockedSlotsSet {
 }
 
 impl Host {
-    fn lock_sock<'a>(&'a mut self) -> sync::Lock<&'a mut dyn Sock, stats::tracker::Time> {
+    fn lock_sock(&mut self) -> sync::Lock<&mut dyn Sock, stats::tracker::Time> {
         sync::Lock::new(
             &mut *self.sock,
             stats::tracker::Time::new(self.metrics.gep(|x| &x.time)),
@@ -272,7 +272,14 @@ impl Host {
             }
             Err(e) => {
                 let mut encoded = Vec::from([ResultCode::InternalError as u8]);
-                calldata::encode_to(&mut encoded, &calldata::Value::Str(format!("{e:?}")));
+                let fake_res = rt::vm::FullResult {
+                    kind: public_abi::ResultCode::InternalError,
+                    data: calldata::Value::Str(format!("{e:?}")),
+                    fingerprint: None,
+                    storage_changes: Vec::new(),
+                };
+                let as_value = calldata::to_value(&fake_res)?;
+                calldata::encode_to(&mut encoded, &as_value);
 
                 encoded
             }

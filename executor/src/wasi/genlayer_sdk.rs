@@ -972,7 +972,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         self.context
             .data
             .storage
-            .write(slot, index, &*ptr)
+            .write(slot, index, &ptr)
             .await
             .map_err(generated::types::Error::trap)
     }
@@ -1242,8 +1242,6 @@ impl ContextVFS<'_> {
                 Some(leaders_res) => {
                     rt::supervisor::submit_nondet_vm_task(&self.context.data.supervisor, task)
                         .await;
-
-                    task_done.notified().await; // NOTE: make sync to allow reads in the storage
 
                     leaders_res
                 }

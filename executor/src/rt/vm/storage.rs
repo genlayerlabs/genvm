@@ -38,7 +38,7 @@ pub trait HostStorageLocking {
     where
         Self: 'a;
 
-    fn lock<'a>(&'a self) -> impl std::future::Future<Output = Self::ReturnType<'a>> + Send;
+    fn lock(&self) -> impl std::future::Future<Output = Self::ReturnType<'_>> + Send;
 }
 
 #[derive(Clone)]
@@ -85,7 +85,7 @@ impl<HS: Send + Sync> Storage<HS> {
 
 impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
     pub async fn read(&self, slot_id: SlotID, index: u32, buf: &mut [u8]) -> anyhow::Result<()> {
-        if buf.len() == 0 {
+        if buf.is_empty() {
             return Ok(());
         }
 
@@ -190,7 +190,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
     }
 
     pub async fn write(&mut self, slot_id: SlotID, index: u32, buf: &[u8]) -> anyhow::Result<()> {
-        if buf.len() == 0 {
+        if buf.is_empty() {
             return Ok(());
         }
 

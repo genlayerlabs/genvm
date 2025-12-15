@@ -416,6 +416,8 @@ impl LogAppender for LogAppenderToValue {
         level: logger::Level,
         mut data: serde_json::Map<String, serde_json::Value>,
     ) {
+        log_trace!(log:serde = data; "genvm log");
+
         data.insert("level".to_owned(), level.to_string().into());
 
         self.0.push(LogSinkElement::Map(data));

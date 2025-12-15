@@ -165,8 +165,8 @@ async fn run_storage_fuzz(input: FuzzInput) -> anyhow::Result<()> {
                 let data = &data[..new_len];
 
                 // Apply to storage
-                reference_host.write_storage_slice(slot_id, index, &data)?;
-                storage.write(slot_id, index, &data).await?;
+                reference_host.write_storage_slice(slot_id, index, data)?;
+                storage.write(slot_id, index, data).await?;
             }
             StorageOp::Read {
                 slot_id,

@@ -111,7 +111,7 @@ impl<'a> Arbitrary<'a> for MessageData {
             chain_id: Arc::from(chain_id.to_string()),
             value: Option::<u64>::arbitrary(u)?,
             is_init: bool::arbitrary(u)?,
-            datetime: datetime,
+            datetime,
         })
     }
 }

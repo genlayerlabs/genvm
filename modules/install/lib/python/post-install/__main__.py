@@ -427,7 +427,7 @@ def _download_single(name: str, hash: str) -> bytes:
 
 
 def download_runners_from_json(file: str | Path):
-	logger.info(f'checking that all runners are present for {executor_version}')
+	logger.info(f'checking that all runners are present for {file}')
 	all_runners = _load_registry(file)
 	runners_dir = genvm_root_dir.joinpath('runners')
 

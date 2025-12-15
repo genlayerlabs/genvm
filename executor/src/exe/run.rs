@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use clap::ValueEnum;
 use genvm::{
     config,
-    rt::{self, vm::RunOk},
+    rt::{self},
 };
 
 #[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]

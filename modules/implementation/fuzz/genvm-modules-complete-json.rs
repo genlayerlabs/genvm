@@ -4,7 +4,7 @@ fn main() {
             return;
         };
 
-        if let Err(_) = serde_json::from_str::<serde_json::Value>(data_as_str) {
+        if serde_json::from_str::<serde_json::Value>(data_as_str).is_err() {
             return;
         };
 

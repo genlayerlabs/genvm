@@ -6,8 +6,6 @@ edition = "2021"
 opt-level = 2
 [profile.dev.package.wasmparser]
 opt-level = 2
-[profile.dev.package.blake3]
-opt-level = 2
 
 [profile.release]
 debug = true
@@ -69,6 +67,7 @@ arbitrary = { version = "1.0.3", features = [ "derive" ] }
 rpds = "1.2.0"
 archery = "1.2.2"
 bytes = "1.11.0"
+tokio-mpmc = "0.2.4"
 
 [dev-dependencies]
 afl = { version = "0.15.18", features = ["no_cfg_fuzzing"] }
