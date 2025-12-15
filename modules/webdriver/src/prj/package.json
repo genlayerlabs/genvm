@@ -10,7 +10,7 @@
     "build": "tsc"
   },
   "dependencies": {
-    "puppeteer": "24.16.0",
+    "puppeteer-core": "24.16.0",
     "commander": "^11.0.0"
   },
   "devDependencies": {

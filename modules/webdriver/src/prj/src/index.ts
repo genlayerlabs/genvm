@@ -1,4 +1,4 @@
-import puppeteer, * as pup from 'puppeteer';
+import puppeteer, * as pup from 'puppeteer-core';
 import http from 'http';
 import url from 'url';
 import { Command } from 'commander';

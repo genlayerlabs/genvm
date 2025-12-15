@@ -62,17 +62,15 @@ ENTRYPOINT ["/tini", "--"]
 
 COPY ./src /src
 
+RUN useradd -m appuser && chown -R appuser /wd && chown -R appuser /src
+USER appuser
+
 RUN \
     set -ex && \
     which chromium ; \
     cd /src/prj && npm ci ; \
     npm run build ; \
     true
-
-# python3 /src/test-install.py ; \
-
-RUN useradd -m appuser && chown -R appuser /wd
-USER appuser
 
 WORKDIR /wd
 

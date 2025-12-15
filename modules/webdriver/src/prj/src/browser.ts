@@ -1,4 +1,4 @@
-import puppeteer, * as pup from 'puppeteer';
+import puppeteer, * as pup from 'puppeteer-core';
 import * as logger from './logging.js'
 
 export interface BrowserHandle {
@@ -44,7 +44,8 @@ async function newBrowser(): Promise<BrowserHolder> {
 			'--single-process',
 			'--no-zygote',
 			'--disable-gpu'
-		]
+		],
+		executablePath: '/usr/bin/chromium',
 	});
 
 	logger.log('info', 'created new raw browser', {'pid': realBrowser.process()?.pid});
