@@ -141,7 +141,9 @@ jobs:
           true
       - name: Run post-install
         run: |
-          ./build/out/bin/post-install.py || true
+          ./build/out/bin/post-install.py \
+            --error-on-missing-executor=false \
+            --default-download=false || true
           nix develop .#check-qemu --command bash -c 'qemu-aarch64 ./build/out/bin/genvm-modules --version'
 
   test-linux-amd64:
@@ -173,7 +175,9 @@ jobs:
           true
       - name: Run post-install
         run: |
-          ./build/out/bin/post-install.py
+          ./build/out/bin/post-install.py \
+            --error-on-missing-executor=false \
+            --default-download=false
       - name: Run stable tests
         run: |
           nix develop .#mock-tests --command python3 ./tests/runner/run.py --executor-version ${{ needs.gen-tag.outputs.tag }} --start-manager --filter '^stable/'
@@ -214,7 +218,9 @@ jobs:
           python-version: '3.12'
       - name: Run post-install
         run: |
-          ./build/out/bin/post-install.py
+          ./build/out/bin/post-install.py \
+            --error-on-missing-executor=false \
+            --default-download=false
       - name: Run stable tests
         run: |
           python3 -m venv .venv

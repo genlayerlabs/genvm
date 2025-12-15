@@ -93,16 +93,22 @@ parser.add_argument(
 	help='Default value for steps when not explicitly set',
 )
 parser.add_argument(
+	'--default-download',
+	type=str_to_bool_or_none,
+	default=None,
+	help='Default value for download steps (default: use --default-steps)',
+)
+parser.add_argument(
 	'--executor-download',
 	type=str_to_bool_or_none,
 	default=None,
-	help='Enable/disable executor download step (default: use --default-steps)',
+	help='Enable/disable executor download step (default: use --default-download)',
 )
 parser.add_argument(
 	'--runners-download',
 	type=str_to_bool_or_none,
 	default=None,
-	help='Enable/disable runners download step (default: use --default-steps)',
+	help='Enable/disable runners download step (default: use --default-download)',
 )
 parser.add_argument(
 	'--bin-patch',
@@ -126,10 +132,13 @@ parser.add_argument(
 args = parser.parse_args()
 
 # Apply default to None values
+if args.default_download is None:
+	args.default_download = args.default_steps
+
 if args.executor_download is None:
-	args.executor_download = args.default_steps
+	args.executor_download = args.default_download
 if args.runners_download is None:
-	args.runners_download = args.default_steps
+	args.runners_download = args.default_download
 if args.bin_patch is None:
 	args.bin_patch = args.default_steps
 if args.bin_check is None:
