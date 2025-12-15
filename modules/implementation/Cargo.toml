@@ -56,3 +56,9 @@ sysinfo = { version = "0.36", default-features = false, features = ["system"] }
 
 [dev-dependencies]
 afl = { version = "0.15.18", features = ["no_cfg_fuzzing"] }
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+split-debuginfo = "packed"
+strip = "none"

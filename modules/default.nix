@@ -17,6 +17,8 @@ let
 				pname = "genvm-modules-bin";
 				version = "0.1.0";
 
+				profile = "release-with-debug";
+
 				cargoLock.lockFile = ./implementation/Cargo.lock;
 
 				src = get-root-subtree [

@@ -19,6 +19,12 @@ impl VMError {
         VMError(public_abi::VmError::Oom.value().into(), cause)
     }
 
+    pub fn oos(cause: Option<anyhow::Error>) -> Self {
+        let mut str = public_abi::VmError::Oom.value().to_owned();
+        str.push_str(" storage");
+        VMError(str, cause)
+    }
+
     pub fn wrap(message: String, cause: anyhow::Error) -> Self {
         match cause.downcast::<VMError>() {
             Err(cause) => Self(message, Some(cause)),

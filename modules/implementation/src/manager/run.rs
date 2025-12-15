@@ -356,6 +356,7 @@ pub struct Request {
     pub capture_output: bool,
     #[serde(default = "default_max_execution_minutes")]
     pub max_execution_minutes: u64,
+    pub storage_pages: u64,
     pub host_data: String,
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub host: String,
@@ -671,6 +672,9 @@ pub async fn start_genvm(
 
     proc.arg("--host-data");
     proc.arg(&req.host_data);
+
+    proc.arg("--storage-pages");
+    proc.arg(&req.storage_pages.to_string());
 
     proc.arg("--host");
     proc.arg(&req.host);

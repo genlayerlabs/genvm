@@ -383,6 +383,7 @@ async def run_genvm(
 	host_data: str = '',
 	host: str,
 	extra_args: list[str] = [],
+	storage_pages: int = 10_000_000,
 ) -> RunHostAndProgramRes:
 	if logger is None:
 		logger = NoLogger()
@@ -412,6 +413,7 @@ async def run_genvm(
 					'timestamp': timestamp,
 					'host': host,
 					'extra_args': extra_args,
+					'storage_pages': storage_pages,
 				},
 			) as resp:
 				logger.debug('post /genvm/run', status=resp.status)

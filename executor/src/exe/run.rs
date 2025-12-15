@@ -65,6 +65,8 @@ pub struct Args {
     host: String,
     #[arg(long, help = "id to pass to modules, useful for aggregating logs")]
     genvm_id: Option<u64>,
+    #[arg(long, help = "max amount of storage pages to be written")]
+    storage_pages: u64,
     #[clap(long, help = "what to output to stdout/stderr")]
     print: Vec<PrintOption>,
     #[clap(long, default_value_t = false)]
@@ -111,6 +113,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
         genvm_id: genvm_modules_interfaces::GenVMId(genvm_id),
         debug_mode: args.debug_mode,
         metrics: genvm::Metrics::default(),
+        storage_pages_limit: std::sync::atomic::AtomicU64::new(args.storage_pages),
     });
 
     let host = genvm::Host::connect(&args.host, shared_data.gep(|x| &x.metrics.host))?;

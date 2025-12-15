@@ -1,8 +1,8 @@
-use std::ops::DerefMut;
+use std::{ops::DerefMut, sync::Arc};
 
-use genvm_common::calldata;
+use genvm_common::{calldata, sync};
 
-use crate::SlotID;
+use crate::{rt, SlotID};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(C)]
@@ -41,37 +41,92 @@ pub trait HostStorageLocking {
     fn lock(&self) -> impl std::future::Future<Output = Self::ReturnType<'_>> + Send;
 }
 
+#[derive(Clone, Debug)]
+pub struct Limiter(sync::DArc<std::sync::atomic::AtomicU64>);
+
+impl Limiter {
+    pub fn new(storage_pages_limit: sync::DArc<std::sync::atomic::AtomicU64>) -> Self {
+        Self(storage_pages_limit)
+    }
+
+    pub fn consume(&self, amount: u64) -> anyhow::Result<()> {
+        let prev = match self.0.fetch_update(
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+            |current| Some(current.saturating_sub(amount)),
+        ) {
+            Ok(prev) => prev,
+            Err(prev) => prev,
+        };
+        if prev == 0 {
+            return Err(rt::errors::VMError::oos(None).into());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+struct StoragePagesOverride(
+    rpds::RedBlackTreeMap<PageID, [u8; 32], archery::ArcTK>,
+    Limiter,
+);
+
+impl StoragePagesOverride {
+    fn new(storage_pages_limit: rt::vm::storage::Limiter) -> Self {
+        Self(Default::default(), storage_pages_limit)
+    }
+
+    fn read_page_override(&self, key: PageID) -> Option<[u8; 32]> {
+        self.0.get(&key).cloned()
+    }
+
+    fn get(&self, key: PageID) -> Option<[u8; 32]> {
+        self.0.get(&key).cloned()
+    }
+
+    fn write_page(&mut self, key: PageID, value: [u8; 32]) -> anyhow::Result<()> {
+        if !self.0.contains_key(&key) {
+            self.1.consume(1)?;
+        }
+        self.0 = self.0.insert(key, value);
+
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 pub struct Storage<HS: Send + Sync> {
     pub address: calldata::Address,
     host: HS,
-    pages: rpds::RedBlackTreeMap<PageID, [u8; 32], archery::ArcTK>,
+    pages: StoragePagesOverride,
 }
 
 impl<HS: Send + Sync> Storage<HS> {
-    pub fn new(address: calldata::Address, host: HS) -> Self {
+    pub fn new(address: calldata::Address, storage_pages_limit: Limiter, host: HS) -> Self {
         Self {
             address,
             host,
-            pages: Default::default(),
+            pages: StoragePagesOverride::new(storage_pages_limit),
         }
     }
 
+    #[inline(always)]
     pub fn read_page_override(&self, key: PageID) -> Option<[u8; 32]> {
-        self.pages.get(&key).cloned()
+        self.pages.read_page_override(key)
     }
 
-    pub fn write_page(&mut self, key: PageID, value: [u8; 32]) {
-        self.pages = self.pages.insert(key, value);
+    #[inline(always)]
+    pub fn write_page(&mut self, key: PageID, value: [u8; 32]) -> anyhow::Result<()> {
+        self.pages.write_page(key, value)
     }
 
     pub fn make_delta(&self) -> Vec<Delta> {
         let mut res = Vec::<Delta>::new();
 
-        for (k, v) in &self.pages {
+        for (k, v) in &self.pages.0 {
             if k.1 != 0 {
                 let prev_page_id = PageID(k.0, k.1 - 1);
-                if self.pages.get(&prev_page_id).is_some() {
+                if self.pages.0.get(&prev_page_id).is_some() {
                     res.last_mut().unwrap().deref_mut().1.extend_from_slice(v);
                     continue;
                 }
@@ -103,7 +158,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         // Cut known prefix
         for page_idx in start_page..=end_page {
             let page_id = PageID(slot_id, page_idx as u32);
-            if self.pages.get(&page_id).is_some() {
+            if self.pages.get(page_id).is_some() {
                 need_host_read_start = (page_idx + 1) * 32;
             } else {
                 break;
@@ -113,7 +168,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         // Cut known suffix
         for page_idx in (start_page..=end_page).rev() {
             let page_id = PageID(slot_id, page_idx as u32);
-            if self.pages.get(&page_id).is_some() {
+            if self.pages.get(page_id).is_some() {
                 need_host_read_end = page_idx * 32;
             } else {
                 break;
@@ -134,7 +189,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         // Apply overrides to the buffer
         for page_idx in start_page..=end_page {
             let page_id = PageID(slot_id, page_idx as u32);
-            if let Some(page_data) = self.pages.get(&page_id) {
+            if let Some(page_data) = self.pages.get(page_id) {
                 let page_start_byte = page_idx * 32;
                 let page_end_byte = page_start_byte + 32;
 
@@ -170,8 +225,8 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
             page_data.copy_from_slice(buf);
         } else {
             // Partial page write - need existing data first
-            if let Some(existing_page) = self.pages.get(&page_id) {
-                page_data.copy_from_slice(existing_page);
+            if let Some(existing_page) = self.pages.get(page_id) {
+                page_data.copy_from_slice(&existing_page);
             } else {
                 // Read from host
                 let page_start = ((page_id.1 as usize) * 32) as u32;
@@ -185,7 +240,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
             page_data[offset_in_page..offset_in_page + buf.len()].copy_from_slice(buf);
         }
 
-        self.write_page(page_id, page_data);
+        self.write_page(page_id, page_data)?;
         Ok(())
     }
 
@@ -223,8 +278,8 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
                 let page_id = PageID(slot_id, start_page as u32);
                 let mut page_data = [0u8; 32];
 
-                if let Some(existing_page) = self.pages.get(&page_id) {
-                    page_data.copy_from_slice(existing_page);
+                if let Some(existing_page) = self.pages.get(page_id) {
+                    page_data.copy_from_slice(&existing_page);
                 } else {
                     host_lock.storage_read(slot_id, first_page_start as u32, &mut page_data)?;
                 }
@@ -233,15 +288,15 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
                 let copy_len = 32 - offset_in_page;
                 page_data[offset_in_page..].copy_from_slice(&buf[..copy_len]);
 
-                self.pages = self.pages.insert(page_id, page_data);
+                self.pages.write_page(page_id, page_data)?;
             }
 
             if partial_last {
                 let page_id = PageID(slot_id, end_page as u32);
                 let mut page_data = [0u8; 32];
 
-                if let Some(existing_page) = self.pages.get(&page_id) {
-                    page_data.copy_from_slice(existing_page);
+                if let Some(existing_page) = self.pages.get(page_id) {
+                    page_data.copy_from_slice(&existing_page);
                 } else {
                     host_lock.storage_read(slot_id, last_page_start as u32, &mut page_data)?;
                 }
@@ -250,7 +305,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
                 let src_offset = buf.len() - end_offset_in_page;
                 page_data[..end_offset_in_page].copy_from_slice(&buf[src_offset..]);
 
-                self.pages = self.pages.insert(page_id, page_data);
+                self.pages.write_page(page_id, page_data)?;
             }
         }
 
@@ -270,7 +325,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
             let src_offset = page_start - start_index;
             let mut page_data = [0u8; 32];
             page_data.copy_from_slice(&buf[src_offset..src_offset + 32]);
-            self.write_page(page_id, page_data);
+            self.write_page(page_id, page_data)?;
         }
 
         Ok(())

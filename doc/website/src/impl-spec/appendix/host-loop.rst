@@ -52,17 +52,6 @@ The :term:`host` processes requests in a loop until ``consume_result``:
            write_byte json/errors/ok
            write_bytes data # must be exactly len in size
 
-       json/methods/storage_write:
-         slot := read_bytes(SLOT_ID_SIZE)
-         index := read_u32_le
-         len := read_u32_le
-         data := read_bytes(len)
-         err := host_storage_write(slot, index, data)
-         if err != json/errors/ok:
-           write_byte err
-         else:
-           write_byte json/errors/ok
-
        json/methods/consume_result:
          host_result := read_slice()
          # this is needed to ensure that genvm doesn't close socket before all data is read

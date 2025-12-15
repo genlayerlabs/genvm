@@ -522,6 +522,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     },
                     storage: rt::vm::storage::Storage::new(
                         address,
+                        supervisor.get_storage_limiter(),
                         StorageHostHolder(
                             supervisor.host.clone(),
                             ReadToken {
@@ -572,6 +573,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let blob_data = calldata::encode(&calldata::Value::Map(blob));
 
                 let supervisor = self.context.data.supervisor.clone();
+
+                let size = topics.len() + (blob_data.len() + 31) / 32;
+                let size = size as u64;
+                supervisor
+                    .get_storage_limiter()
+                    .consume(size)
+                    .map_err(generated::types::Error::trap)?;
 
                 supervisor
                     .host
@@ -969,6 +977,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         }
 
         let ptr = mem.as_cow(buf)?;
+
         self.context
             .data
             .storage

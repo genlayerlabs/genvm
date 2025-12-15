@@ -94,8 +94,11 @@ pub async fn run_with_impl(
         entrypoint
     };
 
+    let storage_pages_limit = supervisor.get_storage_limiter();
+
     let topmost_storage = rt::vm::storage::Storage::new(
         calldata::Address::from(entry_message.contract_address.raw()),
+        storage_pages_limit,
         wasi::genlayer_sdk::StorageHostHolder(
             supervisor.host.clone(),
             wasi::genlayer_sdk::ReadToken {

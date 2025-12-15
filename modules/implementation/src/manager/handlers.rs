@@ -110,6 +110,7 @@ pub async fn handle_genvm_run_readonly(
         timestamp,
         host: "TODO".to_owned(),
         extra_args: Vec::new(),
+        storage_pages: 0,
     };
     let (genvm_id, recv) = run::start_genvm(ctx.clone(), req, Box::new(())).await?;
 

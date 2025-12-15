@@ -463,7 +463,7 @@ impl Provider for Gemini {
             .pointer("/candidates/0/content/parts/0/text")
             .and_then(|x| x.as_str());
 
-        if res.is_none()
+        if !res.map(|x| x.starts_with("{")).unwrap_or(false)
             && res_json
                 .body
                 .pointer("/candidates/0/finishReason")
@@ -761,7 +761,7 @@ mod tests {
         pub const xai: &str = r#"{
             "host": "https://api.x.ai",
             "provider": "openai-compatible",
-            "models": { "grok-2-1212" : { "supports_json": true } },
+            "models": { "grok-3" : { "supports_json": true } },
             "key": "${ENV[XAIKEY]}"
         }"#;
 

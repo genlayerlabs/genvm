@@ -36,7 +36,7 @@ in {
 	nativeBuildInputs ? [ ],
 	cargoUpdateHook ? "",
 	cargoDepsHook ? "",
-	buildType ? "release",
+	profile ? "release",
 	meta ? { },
 	cargoLock,
 	buildNoDefaultFeatures ? false,
@@ -79,11 +79,6 @@ stdenv.mkDerivation (
 		"cargoDeps"
 		"cargoLock"
 	])
-	// lib.optionalAttrs (stdenv.isDarwin && buildType == "debug") {
-		RUSTFLAGS =
-			"-C split-debuginfo=packed "
-			+ (args.RUSTFLAGS or "");
-	}
 	// {
 		cargoDeps = importCargoLock cargoLock;
 		inherit buildAndTestSubdir;
@@ -93,8 +88,6 @@ stdenv.mkDerivation (
 			+ (args.RUSTFLAGS or "");
 
 		hardeningDisable = ["all"];
-
-		cargoBuildType = buildType;
 
 		cargoBuildNoDefaultFeatures = buildNoDefaultFeatures;
 
@@ -150,11 +143,11 @@ stdenv.mkDerivation (
 
 			echo "PATH=$PATH"
 			echo "RUSTFLAGS=$RUSTFLAGS"
-			echo cargo build --target ${targetAsRust} -j $NIX_BUILD_CORES --offline --${buildType}
-			cargo build --target ${targetAsRust} -j $NIX_BUILD_CORES --offline --${buildType}
+			echo cargo build --target ${targetAsRust} -j $NIX_BUILD_CORES --offline --profile=${profile}
+			cargo build --target ${targetAsRust} -j $NIX_BUILD_CORES --offline --profile=${profile}
 			runHook postBuild
 
-			bins=$(find target/${targetAsRust}/${buildType}/ \
+			bins=$(find target/${targetAsRust}/${profile}/ \
 					-maxdepth 1 \
 					-type f \
 					-executable -not -regex ".*\.\(so.[0-9.]+\|so\|a\|dylib\)" )

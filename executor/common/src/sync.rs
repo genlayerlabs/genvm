@@ -24,6 +24,16 @@ mod darc {
         _phantom: PhantomData<T>,
     }
 
+    impl<T: std::fmt::Debug> std::fmt::Debug for DArc<T>
+    where
+        T: 'static + ?Sized,
+    {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let s: &T = &**self;
+            write!(f, "{:?}", s)
+        }
+    }
+
     pub struct DArcStruct<T> {
         control_block: NonNull<DArcControlBlock>,
         actual_data: std::mem::ManuallyDrop<T>,

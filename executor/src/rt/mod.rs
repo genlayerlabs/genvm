@@ -5,6 +5,10 @@ pub mod vm;
 
 use std::sync::Arc;
 
+use genvm_common::sync;
+
+use crate::rt;
+
 #[derive(Default, Debug, serde::Serialize)]
 pub struct Metrics {
     precompile_hits: genvm_common::stats::metric::Count,
@@ -42,4 +46,5 @@ pub struct SharedData {
     pub genvm_id: genvm_modules_interfaces::GenVMId,
     pub debug_mode: bool,
     pub metrics: crate::Metrics,
+    pub storage_pages_limit: std::sync::atomic::AtomicU64,
 }

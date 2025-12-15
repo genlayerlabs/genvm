@@ -171,6 +171,10 @@ pub async fn submit_nondet_vm_task(zelf: &Arc<Supervisor>, task: NonDetVMTask) {
 }
 
 impl Supervisor {
+    pub fn get_storage_limiter(&self) -> rt::vm::storage::Limiter {
+        rt::vm::storage::Limiter::new(self.shared_data.gep(|x| &x.storage_pages_limit))
+    }
+
     pub fn start(
         config: &config::Config,
         ctor: Ctor,
