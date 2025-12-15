@@ -1,4 +1,4 @@
-use std::{ops::DerefMut, sync::Arc};
+use std::ops::DerefMut;
 
 use genvm_common::{calldata, sync};
 
@@ -50,17 +50,20 @@ impl Limiter {
     }
 
     pub fn consume(&self, amount: u64) -> anyhow::Result<()> {
-        let prev = match self.0.fetch_update(
-            std::sync::atomic::Ordering::SeqCst,
-            std::sync::atomic::Ordering::SeqCst,
-            |current| Some(current.saturating_sub(amount)),
-        ) {
-            Ok(prev) => prev,
-            Err(prev) => prev,
-        };
-        if prev == 0 {
-            return Err(rt::errors::VMError::oos(None).into());
-        }
+        self.0
+            .fetch_update(
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+                |current| {
+                    if amount > current {
+                        None
+                    } else {
+                        Some(current - amount)
+                    }
+                },
+            )
+            .map_err(|_| rt::errors::VMError::oos(None))?;
+
         Ok(())
     }
 }

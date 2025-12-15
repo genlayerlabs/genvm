@@ -465,13 +465,14 @@ def parse_executor_version(executor_version: str) -> tuple[int, int, int]:
 def process_executor_version(executor_version: str):
 	logger.info(f'Examining executor version {executor_version}')
 
-	major, minor, patch = parse_executor_version(executor_version)
-	next_version = f'v{major}.{minor}.{patch + 1}'
-	if next_version in all_executor_versions:
-		logger.info(
-			f'Skipping executor version {executor_version} because a newer version {next_version} exists'
-		)
-		return
+	if executor_version != 'vTEST':
+		major, minor, patch = parse_executor_version(executor_version)
+		next_version = f'v{major}.{minor}.{patch + 1}'
+		if next_version in all_executor_versions:
+			logger.info(
+				f'Skipping executor version {executor_version} because a newer version {next_version} exists'
+			)
+			return
 
 	executor_root_dir = genvm_root_dir.joinpath('executor', executor_version)
 	executor_executable = executor_root_dir.joinpath('bin', 'genvm')
@@ -512,3 +513,5 @@ def process_executor_version(executor_version: str):
 
 for executor_version in all_executor_versions:
 	process_executor_version(executor_version)
+
+process_executor_version('vTEST')

@@ -5,10 +5,6 @@ pub mod vm;
 
 use std::sync::Arc;
 
-use genvm_common::sync;
-
-use crate::rt;
-
 #[derive(Default, Debug, serde::Serialize)]
 pub struct Metrics {
     precompile_hits: genvm_common::stats::metric::Count,

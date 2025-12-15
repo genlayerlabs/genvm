@@ -674,7 +674,7 @@ pub async fn start_genvm(
     proc.arg(&req.host_data);
 
     proc.arg("--storage-pages");
-    proc.arg(&req.storage_pages.to_string());
+    proc.arg(req.storage_pages.to_string());
 
     proc.arg("--host");
     proc.arg(&req.host);

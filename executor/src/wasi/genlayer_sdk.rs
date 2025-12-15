@@ -101,7 +101,7 @@ pub struct StorageHostHolder(pub Arc<tokio::sync::Mutex<host::Host>>, pub ReadTo
 impl rt::vm::storage::HostStorageLocking for StorageHostHolder {
     type ReturnType<'a> = StorageHostLock<'a>;
 
-    async fn lock<'a>(&'a self) -> Self::ReturnType<'a> {
+    async fn lock(&self) -> Self::ReturnType<'_> {
         StorageHostLock(self.0.lock().await, self.1.clone())
     }
 }

@@ -29,7 +29,7 @@ mod darc {
         T: 'static + ?Sized,
     {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let s: &T = &**self;
+            let s: &T = self;
             write!(f, "{:?}", s)
         }
     }

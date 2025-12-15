@@ -1,8 +1,7 @@
 use std::{
-    any,
     collections::HashMap,
     io::Write,
-    os::fd::{AsRawFd, FromRawFd},
+    os::fd::FromRawFd,
     sync::{atomic::AtomicBool, Arc},
 };
 
@@ -165,9 +164,9 @@ struct HostAccumulatedData {
 mod mock_host {
     use anyhow::Result;
     use genvm::host::host_fns;
-    use genvm::public_abi::{ResultCode, StorageType};
+    use genvm::public_abi::StorageType;
     use genvm_common::log_debug;
-    use std::collections::{BTreeMap, HashMap};
+    use std::collections::HashMap;
     use std::io::{Read, Write};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
