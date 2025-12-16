@@ -514,4 +514,5 @@ def process_executor_version(executor_version: str):
 for executor_version in all_executor_versions:
 	process_executor_version(executor_version)
 
-process_executor_version('vTEST')
+if genvm_root_dir.joinpath('executor', 'vTEST').exists():
+	process_executor_version('vTEST')

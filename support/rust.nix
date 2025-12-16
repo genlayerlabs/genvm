@@ -74,7 +74,20 @@ in pkgs.stdenvNoCC.mkDerivation rec {
 	dontAutoPatchelf = true;
 
 	fixupPhase = ''
-		find $out/bin -type f -executable | while read binary; do
+		SEARCH_DIRS="$out/bin"
+		if [[ "${system}" == "x86_64-linux" ]]
+		then
+			SEARCH_DIRS="$SEARCH_DIRS $out/lib/rustlib/x86_64-unknown-linux-gnu/bin"
+		fi
+		if [[ "${system}" == "aarch64-linux" ]]
+		then
+			SEARCH_DIRS="$SEARCH_DIRS $out/lib/rustlib/aarch64-unknown-linux-gnu/bin"
+		fi
+		if [[ "${system}" == "aarch64-darwin" ]]
+		then
+			SEARCH_DIRS="$SEARCH_DIRS $out/lib/rustlib/aarch64-apple-darwin/bin"
+		fi
+		find $SEARCH_DIRS -type f -executable | while read binary; do
 			if file "$binary" | grep -q "ELF"
 			then
 				echo "Patching $binary"
