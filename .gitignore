@@ -1,5 +1,8 @@
 # editors
-.vscode
+**/.vscode/*
+!**/.vscode/extensions.json
+!**/.vscode/settings.example.json
+
 .idea
 .envrc
 

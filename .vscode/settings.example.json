@@ -1,0 +1,11 @@
+{
+  "python.analysis.typeCheckingMode": "standard",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/runners/genlayer-py-std/src/",
+    "${workspaceFolder}/runners/genlayer-py-std/src-emb/",
+    "${workspaceFolder}/runners/py-libs/pure-py",
+    "${workspaceFolder}/tools/ya-test-runner"
+  ],
+  "python.analysis.stubPath": "${workspaceFolder}/runners/genlayer-py-std/src/",
+  "rust-analyzer.cargo.targetDir": "${workspaceFolder}/build/ya-build/rust-target"
+}

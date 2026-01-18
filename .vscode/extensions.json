@@ -1,0 +1,20 @@
+{
+  "recommendations": [
+    "tamasfe.even-better-toml",
+    "bbenoist.nix",
+    "editorconfig.editorconfig",
+    "vadimcn.vscode-lldb",
+    "github.copilot",
+    "streetsidesoftware.code-spell-checker-cspell-bundled-dictionaries",
+    "github.copilot-chat",
+    "redhat.vscode-yaml",
+    "ms-python.vscode-python-envs",
+    "ms-python.vscode-pylance",
+    "streetsidesoftware.code-spell-checker",
+    "sumneko.lua",
+    "eamodio.gitlens",
+    "ms-python.debugpy",
+    "ms-python.python",
+    "rust-lang.rust-analyzer"
+  ]
+}
