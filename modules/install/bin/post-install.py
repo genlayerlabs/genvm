@@ -33,12 +33,14 @@ parser.add_argument(
 
 args, rest_args = parser.parse_known_args()
 
-if '-h' in rest_args or '--help' in rest_args:
+has_help_arg = '-h' in rest_args or '--help' in rest_args
+
+if has_help_arg:
 	parser.print_help()
 
 genvm_root_dir = Path(__file__).parent.parent
 
-if args.create_venv:
+if not has_help_arg and args.create_venv:
 	venvs_path = genvm_root_dir.joinpath('data', 'venvs')
 	logger.info(f'venvs path: {venvs_path}')
 

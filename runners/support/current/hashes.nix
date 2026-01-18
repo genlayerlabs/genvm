@@ -92,6 +92,27 @@ let
 
 	fakeHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
+	checkHashes =  (pref: name: val:
+		if builtins.hasAttr "__prefix" val then
+			builtins.foldl'
+				(acc: item: acc + item)
+				""
+				(builtins.map
+					(name: checkHashes (pref + val.__prefix) name val.${name})
+					(builtins.filter
+						(name: name != "__prefix")
+						(builtins.attrNames val)))
+		else
+			if val.hash == null || val.hash == "test" then
+				""
+			else if hashHasSpecialDeps null val then
+				"set ${pref+name} hash to null\n"
+			else if hashHasSpecialDeps "test" val then
+				"set ${pref+name} hash to 'test'\n"
+			else
+				""
+	);
+
 	transform = (pref: name: val:
 		if builtins.hasAttr "__prefix" val then
 			builtins.listToAttrs
@@ -123,4 +144,7 @@ let
 			}
 	);
 in
-	transform "" "" src
+	builtins.seq (
+		let errs = checkHashes "" "" src; in
+		if errs != "" then builtins.throw errs else null
+	) (transform "" "" src)

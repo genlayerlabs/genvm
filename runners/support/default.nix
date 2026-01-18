@@ -3,7 +3,7 @@
 , ...
 }@args:
 let
-	dev-mode = import ./nix/dev-mode.nix;
+	dev-mode = import ./current/dev-mode.nix;
 in rec {
 	hashes = import ./current/hashes.nix;
 

@@ -75,7 +75,6 @@ def tokenize(
 	line_idx = 0
 	indent_stack = [0]
 	while line_idx < len(lines):
-		print(f'Processing line {line_idx}: {lines[line_idx]!r}')
 		line = lines[line_idx]
 		rest = line.lstrip()
 		indent = len(line) - len(rest)
@@ -192,7 +191,6 @@ class _Poller:
 
 	def fetch(self) -> _MappingKey | _Tok | _Value | None:
 		r = self._fetch()
-		print(f'Fetched token: {r}')
 		return r
 
 	def _fetch(self) -> _MappingKey | _Tok | _Value | None:

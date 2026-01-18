@@ -479,6 +479,11 @@ generator.build(:nix_eval, 'out/executor/vTEST/data/all.json') do
 	var 'wd', $source_dir
 end
 
+generator.build(:phony, 'all/data') do
+	add_dependency 'out/executor/vTEST/data/latest.json'
+	add_dependency 'out/executor/vTEST/data/all.json'
+end
+
 generator.build(:CUSTOM_COMMAND, 'target/runners') do
 	var :command, [
 		'nix', 'build', '-v', '-L', '-o', $build_dir.join('runners-nix'), '--file', $source_dir.join('runners', 'build-here.nix'),
@@ -531,9 +536,7 @@ end
 
 generator.build(:phony, 'all') do
 	add_dependency 'all/bin'
-
-	add_dependency 'out/executor/vTEST/data/latest.json'
-	add_dependency 'out/executor/vTEST/data/all.json'
+	add_dependency 'all/data'
 
 	add_dependency 'target/runners'
 end
