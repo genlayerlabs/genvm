@@ -340,5 +340,5 @@ async fn check_llm_availability(
         .exec_prompt_text(&ctx, test_prompt, &config_data.model)
         .await?;
 
-    Ok(response)
+    Ok(response.result)
 }

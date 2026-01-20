@@ -48,23 +48,23 @@ impl CtxPart {
             prompt::ExtendedOutputFormat::Text => provider
                 .exec_prompt_text(&self.dflt, prompt, model)
                 .await
-                .map(|text| llm_iface::PromptAnswer {
-                    data: llm_iface::PromptAnswerData::Text(text),
-                    consumed_gen: 0,
+                .map(|resp| llm_iface::PromptAnswer {
+                    data: llm_iface::PromptAnswerData::Text(resp.result),
+                    consumed_gen: resp.consumed_tokens.map(|t| t as u64).unwrap_or(0),
                 }),
             prompt::ExtendedOutputFormat::JSON => provider
                 .exec_prompt_json(&self.dflt, prompt, model)
                 .await
-                .map(|obj| llm_iface::PromptAnswer {
-                    data: llm_iface::PromptAnswerData::Object(obj),
-                    consumed_gen: 0,
+                .map(|resp| llm_iface::PromptAnswer {
+                    data: llm_iface::PromptAnswerData::Object(resp.result),
+                    consumed_gen: resp.consumed_tokens.map(|t| t as u64).unwrap_or(0),
                 }),
             prompt::ExtendedOutputFormat::Bool => provider
                 .exec_prompt_bool_reason(&self.dflt, prompt, model)
                 .await
-                .map(|b| llm_iface::PromptAnswer {
-                    data: llm_iface::PromptAnswerData::Bool(b),
-                    consumed_gen: 0,
+                .map(|resp| llm_iface::PromptAnswer {
+                    data: llm_iface::PromptAnswerData::Bool(resp.result),
+                    consumed_gen: resp.consumed_tokens.map(|t| t as u64).unwrap_or(0),
                 }),
         };
 
