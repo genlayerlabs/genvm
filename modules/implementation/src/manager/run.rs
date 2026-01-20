@@ -716,7 +716,6 @@ pub async fn start_genvm(
 
     if let Some(mut stdin) = child.stdin.take() {
         tokio::task::spawn(async move {
-            use std::io::Write;
             use tokio::io::AsyncWriteExt;
             let _ = stdin.write_all(&execution_data_bytes).await;
             std::mem::drop(stdin);

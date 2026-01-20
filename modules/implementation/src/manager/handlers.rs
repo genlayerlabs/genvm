@@ -207,30 +207,6 @@ pub async fn handle_genvm_status(
     })))
 }
 
-#[derive(serde::Serialize)]
-struct SingleWrite(
-    #[serde(serialize_with = "serialize_bytes_as_base64")] [u8; 36],
-    #[serde(serialize_with = "serialize_vec_as_base64")] Vec<u8>,
-);
-
-fn serialize_bytes_as_base64<S>(bytes: &[u8; 36], serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    use base64::Engine;
-    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
-    serializer.serialize_str(&encoded)
-}
-
-fn serialize_vec_as_base64<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    use base64::Engine;
-    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
-    serializer.serialize_str(&encoded)
-}
-
 #[derive(serde::Deserialize)]
 pub struct LlmCheckRequest {
     pub configs: Vec<LlmProviderConfig>,

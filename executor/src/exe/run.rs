@@ -26,31 +26,6 @@ impl std::fmt::Display for PrintOption {
     }
 }
 
-macro_rules! combine {
-    ($A:expr, $B:expr) => {{
-        const LEN: usize = $A.len() + $B.len();
-        const fn combine(a: &'static str, b: &'static str) -> [u8; LEN] {
-            let mut out = [0u8; LEN];
-            out = copy_slice(a.as_bytes(), out, 0);
-            out = copy_slice(b.as_bytes(), out, a.len());
-            out
-        }
-        const fn copy_slice(input: &[u8], mut output: [u8; LEN], offset: usize) -> [u8; LEN] {
-            let mut index = 0;
-            loop {
-                output[offset + index] = input[index];
-                index += 1;
-                if index == input.len() {
-                    break;
-                }
-            }
-            output
-        }
-        const COMBINED_TO_ARRAY: [u8; LEN] = combine($A, $B);
-        unsafe { std::str::from_utf8_unchecked(&COMBINED_TO_ARRAY as &[u8]) }
-    }};
-}
-
 const EXECUTION_DATA_HELP: &str = "path to file containing encoded execution data (use '-' for stdin, 'fd://N' for file descriptor N)";
 
 #[derive(clap::Args, Debug)]

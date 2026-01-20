@@ -30,7 +30,7 @@ symbol_table = { version = "0.4.0", features = ["global"] }
 dashmap = "6.1.0"
 clap = { version = "4.5.35", features = ["derive"] }
 arbitrary = "1.4.2"
-chrono = "0.4.42"
+chrono = { version = "0.4.42", features = ["serde"] }
 
 [dev-dependencies]
 afl = { version = "0.15.18", features = ["no_cfg_fuzzing"] }

@@ -168,7 +168,7 @@ async fn run_http_server(
             .and(warp::body::bytes())
             .then(move |data: bytes::Bytes| {
                 let ctx = ctx.clone();
-                async move { handlers::handle_genvm_run(ctx, &*data).await }
+                async move { handlers::handle_genvm_run(ctx, &data).await }
             }),
     );
 

@@ -1,3 +1,5 @@
+#![allow(unused, clippy::all)]
+
 use std::{
     collections::HashMap,
     io::Write,
@@ -736,12 +738,23 @@ async fn run_with(
 
     let actual_host_future = tokio::spawn(actual_host.run());
 
+    let host_data_str = serde_json::to_string(&host_data)?;
+
     let supervisor = genvm::create_supervisor(&config, host, host_data, shared_data, &data.msg)
         .with_context(|| "creating supervisor")?;
 
-    let (full_res, _) = genvm::run_with(data.msg.clone(), supervisor, &data.get_perms())
-        .await
-        .with_context(|| "running")?;
+    let (full_res, _) = genvm::run_with(
+        domain::ExecutionData {
+            calldata: Vec::new(),
+            message: data.msg.clone(),
+            host_data: host_data_str,
+            code: Some(contract_code.to_vec()),
+        },
+        supervisor,
+        &data.get_perms(),
+    )
+    .await
+    .with_context(|| "running")?;
 
     let host_data = actual_host_future.await??;
 
@@ -829,7 +842,7 @@ fn run(data: FuzzingInput) -> anyhow::Result<()> {
 struct FuzzingInput {
     wasm_a_data: Vec<u8>,
     wasm_b_data: Vec<u8>,
-    msg: genvm::MessageData,
+    msg: genvm_common::domain::MessageData,
     can_write: bool, // wscn
     can_send: bool,
     can_nondet: bool,
