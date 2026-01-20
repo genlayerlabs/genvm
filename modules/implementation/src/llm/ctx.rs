@@ -30,7 +30,7 @@ impl CtxPart {
         model: &str,
         provider_id: &str,
         format: prompt::ExtendedOutputFormat,
-    ) -> ModuleResult<llm_iface::PromptAnswer> {
+    ) -> ModuleResult<providers::ProviderResponse<llm_iface::PromptAnswerData>> {
         log_debug!(
             prompt:serde = prompt,
             provider_id = provider_id,
@@ -48,24 +48,15 @@ impl CtxPart {
             prompt::ExtendedOutputFormat::Text => provider
                 .exec_prompt_text(&self.dflt, prompt, model)
                 .await
-                .map(|resp| llm_iface::PromptAnswer {
-                    data: llm_iface::PromptAnswerData::Text(resp.result),
-                    consumed_gen: resp.consumed_tokens.map(|t| t as u64).unwrap_or(0),
-                }),
+                .map(|resp| resp.map(llm_iface::PromptAnswerData::Text)),
             prompt::ExtendedOutputFormat::JSON => provider
                 .exec_prompt_json(&self.dflt, prompt, model)
                 .await
-                .map(|resp| llm_iface::PromptAnswer {
-                    data: llm_iface::PromptAnswerData::Object(resp.result),
-                    consumed_gen: resp.consumed_tokens.map(|t| t as u64).unwrap_or(0),
-                }),
+                .map(|resp| resp.map(llm_iface::PromptAnswerData::Object)),
             prompt::ExtendedOutputFormat::Bool => provider
                 .exec_prompt_bool_reason(&self.dflt, prompt, model)
                 .await
-                .map(|resp| llm_iface::PromptAnswer {
-                    data: llm_iface::PromptAnswerData::Bool(resp.result),
-                    consumed_gen: resp.consumed_tokens.map(|t| t as u64).unwrap_or(0),
-                }),
+                .map(|resp| resp.map(llm_iface::PromptAnswerData::Bool)),
         };
 
         res.inspect_err(|err| {
@@ -108,7 +99,22 @@ async fn exec_prompt_in_provider(
         .with_context(|| "running in provider")
         .map_err(scripting::anyhow_to_lua_error)?;
 
-    vm.to_value_with(&res, scripting::DEFAULT_LUA_SER_OPTIONS)
+    let answer = llm_iface::PromptAnswer {
+        data: res.result,
+        consumed_gen: 0,
+    };
+
+    let mlua::Value::Table(answer) =
+        vm.to_value_with(&answer, scripting::DEFAULT_LUA_SER_OPTIONS)?
+    else {
+        std::unreachable!("to_value_with returned non-table for struct");
+    };
+
+    answer.set("input_tokens", res.tokens.input)?;
+    answer.set("output_tokens", res.tokens.output)?;
+    answer.set("total_tokens", res.tokens.total)?;
+
+    Ok(mlua::Value::Table(answer))
 }
 
 pub fn create_global(vm: &mlua::Lua, config: &Config) -> anyhow::Result<mlua::Value> {

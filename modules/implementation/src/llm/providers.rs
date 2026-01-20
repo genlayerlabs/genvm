@@ -5,24 +5,94 @@ use genvm_common::*;
 
 use super::{config, prompt};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TokensSanityError {
+    ZeroTotal,
+    TotalLessThanParts { total: u32, input: u32, output: u32 },
+}
+
+impl std::fmt::Display for TokensSanityError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TokensSanityError::ZeroTotal => write!(f, "total tokens is zero"),
+            TokensSanityError::TotalLessThanParts {
+                total,
+                input,
+                output,
+            } => {
+                write!(f, "total ({total}) < input ({input}) + output ({output})")
+            }
+        }
+    }
+}
+
+impl std::error::Error for TokensSanityError {}
+
+#[derive(Debug, Clone, Default)]
+pub struct TokenUsage {
+    pub input: Option<u32>,
+    pub output: Option<u32>,
+    pub total: Option<u32>,
+}
+
+impl TokenUsage {
+    pub fn new(input: Option<u32>, output: Option<u32>, total: Option<u32>) -> Self {
+        Self {
+            input,
+            output,
+            total,
+        }
+    }
+
+    pub fn from_input_output(input: u32, output: u32) -> Self {
+        Self {
+            input: Some(input),
+            output: Some(output),
+            total: Some(input + output),
+        }
+    }
+
+    pub fn from_total(total: u32) -> Self {
+        Self {
+            input: None,
+            output: None,
+            total: Some(total),
+        }
+    }
+
+    pub fn sanity_check(&self) -> Result<(), TokensSanityError> {
+        let total = self.total.unwrap_or_default();
+        if total == 0 {
+            return Err(TokensSanityError::ZeroTotal);
+        }
+        let input = self.input.unwrap_or_default();
+        let output = self.output.unwrap_or_default();
+        if total < input + output {
+            return Err(TokensSanityError::TotalLessThanParts {
+                total,
+                input,
+                output,
+            });
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ProviderResponse<T> {
     pub result: T,
-    pub consumed_tokens: Option<u32>,
+    pub tokens: TokenUsage,
 }
 
 impl<T> ProviderResponse<T> {
-    pub fn new(result: T, consumed_tokens: Option<u32>) -> Self {
-        Self {
-            result,
-            consumed_tokens,
-        }
+    pub fn new(result: T, tokens: TokenUsage) -> Self {
+        Self { result, tokens }
     }
 
     pub fn map<U>(self, f: impl FnOnce(T) -> U) -> ProviderResponse<U> {
         ProviderResponse {
             result: f(self.result),
-            consumed_tokens: self.consumed_tokens,
+            tokens: self.tokens,
         }
     }
 }
@@ -56,7 +126,7 @@ pub trait Provider {
         let parsed =
             serde_json::from_str(&json_str).with_context(|| format!("parsing {json_str:?}"))?;
 
-        Ok(ProviderResponse::new(parsed, res.consumed_tokens))
+        Ok(ProviderResponse::new(parsed, res.tokens))
     }
 
     async fn exec_prompt_bool_reason(
@@ -69,11 +139,11 @@ pub trait Provider {
         let result_val = res.result.get("result").and_then(|x| x.as_bool());
 
         if let Some(val) = result_val {
-            Ok(ProviderResponse::new(val, res.consumed_tokens))
+            Ok(ProviderResponse::new(val, res.tokens))
         } else {
             log_error!(result:? = res.result; "no result in reason, returning false");
 
-            Ok(ProviderResponse::new(false, res.consumed_tokens))
+            Ok(ProviderResponse::new(false, res.tokens))
         }
     }
 }
@@ -168,10 +238,20 @@ impl prompt::Internal {
     }
 }
 
-fn extract_openai_tokens(body: &serde_json::Value) -> Option<u32> {
-    body.pointer("/usage/total_tokens")
+fn extract_openai_tokens(body: &serde_json::Value) -> TokenUsage {
+    let input = body
+        .pointer("/usage/prompt_tokens")
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32)
+        .map(|v| v as u32);
+    let output = body
+        .pointer("/usage/completion_tokens")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+    let total = body
+        .pointer("/usage/total_tokens")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+    TokenUsage::new(input, output, total)
 }
 
 #[async_trait::async_trait]
@@ -224,7 +304,7 @@ impl Provider for OpenAICompatible {
         )
         .await?;
 
-        let consumed_tokens = extract_openai_tokens(&res.body);
+        let tokens = extract_openai_tokens(&res.body);
 
         let response = res
             .body
@@ -232,7 +312,7 @@ impl Provider for OpenAICompatible {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
 
-        Ok(ProviderResponse::new(response.to_owned(), consumed_tokens))
+        Ok(ProviderResponse::new(response.to_owned(), tokens))
     }
 
     async fn exec_prompt_json(
@@ -284,7 +364,7 @@ impl Provider for OpenAICompatible {
         )
         .await?;
 
-        let consumed_tokens = extract_openai_tokens(&res.body);
+        let tokens = extract_openai_tokens(&res.body);
 
         let response = res
             .body
@@ -296,7 +376,7 @@ impl Provider for OpenAICompatible {
         let parsed =
             serde_json::from_str(&response).with_context(|| format!("parsing {response:?}"))?;
 
-        Ok(ProviderResponse::new(parsed, consumed_tokens))
+        Ok(ProviderResponse::new(parsed, tokens))
     }
 }
 
@@ -341,10 +421,20 @@ impl prompt::Internal {
     }
 }
 
-fn extract_ollama_tokens(body: &serde_json::Value) -> Option<u32> {
-    let prompt_tokens = body.get("prompt_eval_count").and_then(|v| v.as_u64())?;
-    let completion_tokens = body.get("eval_count").and_then(|v| v.as_u64())?;
-    Some((prompt_tokens + completion_tokens) as u32)
+fn extract_ollama_tokens(body: &serde_json::Value) -> TokenUsage {
+    let input = body
+        .get("prompt_eval_count")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+    let output = body
+        .get("eval_count")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+    let total = match (input, output) {
+        (Some(i), Some(o)) => Some(i + o),
+        _ => None,
+    };
+    TokenUsage::new(input, output, total)
 }
 
 #[async_trait::async_trait]
@@ -368,7 +458,7 @@ impl Provider for OLlama {
         )
         .await?;
 
-        let consumed_tokens = extract_ollama_tokens(&res.body);
+        let tokens = extract_ollama_tokens(&res.body);
 
         let response = res
             .body
@@ -376,7 +466,7 @@ impl Provider for OLlama {
             .and_then(|v| v.get("response"))
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
-        Ok(ProviderResponse::new(response.to_owned(), consumed_tokens))
+        Ok(ProviderResponse::new(response.to_owned(), tokens))
     }
 
     async fn exec_prompt_json_as_text(
@@ -422,7 +512,7 @@ impl Provider for OLlama {
         )
         .await?;
 
-        let consumed_tokens = extract_ollama_tokens(&res.body);
+        let tokens = extract_ollama_tokens(&res.body);
 
         let response = res
             .body
@@ -430,14 +520,24 @@ impl Provider for OLlama {
             .and_then(|v| v.get("response"))
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
-        Ok(ProviderResponse::new(response.to_owned(), consumed_tokens))
+        Ok(ProviderResponse::new(response.to_owned(), tokens))
     }
 }
 
-fn extract_gemini_tokens(body: &serde_json::Value) -> Option<u32> {
-    body.pointer("/usageMetadata/totalTokenCount")
+fn extract_gemini_tokens(body: &serde_json::Value) -> TokenUsage {
+    let input = body
+        .pointer("/usageMetadata/promptTokenCount")
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32)
+        .map(|v| v as u32);
+    let output = body
+        .pointer("/usageMetadata/candidatesTokenCount")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+    let total = body
+        .pointer("/usageMetadata/totalTokenCount")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+    TokenUsage::new(input, output, total)
 }
 
 #[async_trait::async_trait]
@@ -476,7 +576,7 @@ impl Provider for Gemini {
         )
         .await?;
 
-        let consumed_tokens = extract_gemini_tokens(&res_json.body);
+        let tokens = extract_gemini_tokens(&res_json.body);
 
         let res = res_json
             .body
@@ -490,12 +590,12 @@ impl Provider for Gemini {
                 .and_then(|x| x.as_str())
                 == Some("MAX_TOKENS")
         {
-            return Ok(ProviderResponse::new("".into(), consumed_tokens));
+            return Ok(ProviderResponse::new("".into(), tokens));
         }
 
         let res =
             res.ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res_json.body))?;
-        Ok(ProviderResponse::new(res.into(), consumed_tokens))
+        Ok(ProviderResponse::new(res.into(), tokens))
     }
 
     async fn exec_prompt_json_as_text(
@@ -532,7 +632,7 @@ impl Provider for Gemini {
         )
         .await?;
 
-        let consumed_tokens = extract_gemini_tokens(&res_json.body);
+        let tokens = extract_gemini_tokens(&res_json.body);
 
         let res = res_json
             .body
@@ -546,13 +646,13 @@ impl Provider for Gemini {
                 .and_then(|x| x.as_str())
                 == Some("MAX_TOKENS")
         {
-            return Ok(ProviderResponse::new("{}".to_owned(), consumed_tokens));
+            return Ok(ProviderResponse::new("{}".to_owned(), tokens));
         }
 
         let res =
             res.ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res_json.body))?;
 
-        Ok(ProviderResponse::new(res.to_owned(), consumed_tokens))
+        Ok(ProviderResponse::new(res.to_owned(), tokens))
     }
 }
 
@@ -590,14 +690,20 @@ impl prompt::Internal {
     }
 }
 
-fn extract_anthropic_tokens(body: &serde_json::Value) -> Option<u32> {
-    let input_tokens = body
+fn extract_anthropic_tokens(body: &serde_json::Value) -> TokenUsage {
+    let input = body
         .pointer("/usage/input_tokens")
-        .and_then(|v| v.as_u64())?;
-    let output_tokens = body
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+    let output = body
         .pointer("/usage/output_tokens")
-        .and_then(|v| v.as_u64())?;
-    Some((input_tokens + output_tokens) as u32)
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+    let total = match (input, output) {
+        (Some(i), Some(o)) => Some(i + o),
+        _ => None,
+    };
+    TokenUsage::new(input, output, total)
 }
 
 #[async_trait::async_trait]
@@ -627,7 +733,7 @@ impl Provider for Anthropic {
         )
         .await?;
 
-        let consumed_tokens = extract_anthropic_tokens(&res.body);
+        let tokens = extract_anthropic_tokens(&res.body);
 
         let text = res
             .body
@@ -635,7 +741,7 @@ impl Provider for Anthropic {
             .and_then(|x| x.as_str())
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
 
-        Ok(ProviderResponse::new(String::from(text), consumed_tokens))
+        Ok(ProviderResponse::new(String::from(text), tokens))
     }
 
     async fn exec_prompt_json(
@@ -695,7 +801,7 @@ impl Provider for Anthropic {
         )
         .await?;
 
-        let consumed_tokens = extract_anthropic_tokens(&res.body);
+        let tokens = extract_anthropic_tokens(&res.body);
 
         let val = res
             .body
@@ -703,7 +809,7 @@ impl Provider for Anthropic {
             .and_then(|x| x.as_object())
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
 
-        Ok(ProviderResponse::new(val.clone(), consumed_tokens))
+        Ok(ProviderResponse::new(val.clone(), tokens))
     }
 
     async fn exec_prompt_bool_reason(
@@ -760,7 +866,7 @@ impl Provider for Anthropic {
         )
         .await?;
 
-        let consumed_tokens = extract_anthropic_tokens(&res.body);
+        let tokens = extract_anthropic_tokens(&res.body);
 
         let val = res
             .body
@@ -768,7 +874,7 @@ impl Provider for Anthropic {
             .and_then(|x| x.as_bool())
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
 
-        Ok(ProviderResponse::new(val, consumed_tokens))
+        Ok(ProviderResponse::new(val, tokens))
     }
 }
 
@@ -935,16 +1041,9 @@ mod tests {
             }
         };
 
-        // Verify consumed_tokens is present and not zero
-        assert!(
-            res.consumed_tokens.is_some(),
-            "consumed_tokens should be present"
-        );
-        assert!(
-            res.consumed_tokens.unwrap() > 0,
-            "consumed_tokens should be greater than 0, got {:?}",
-            res.consumed_tokens
-        );
+        res.tokens
+            .sanity_check()
+            .expect("tokens sanity check failed");
 
         let text = res.result.trim().to_lowercase();
 
@@ -1031,16 +1130,9 @@ mod tests {
             }
         };
 
-        // Verify consumed_tokens is present and not zero
-        assert!(
-            res.consumed_tokens.is_some(),
-            "consumed_tokens should be present"
-        );
-        assert!(
-            res.consumed_tokens.unwrap() > 0,
-            "consumed_tokens should be greater than 0, got {:?}",
-            res.consumed_tokens
-        );
+        res.tokens
+            .sanity_check()
+            .expect("tokens sanity check failed");
 
         let text = res.result.trim().to_lowercase();
 
@@ -1122,16 +1214,9 @@ mod tests {
             }
         };
 
-        // Verify consumed_tokens is present and not zero
-        assert!(
-            res.consumed_tokens.is_some(),
-            "consumed_tokens should be present"
-        );
-        assert!(
-            res.consumed_tokens.unwrap() > 0,
-            "consumed_tokens should be greater than 0, got {:?}",
-            res.consumed_tokens
-        );
+        res.tokens
+            .sanity_check()
+            .expect("tokens sanity check failed");
 
         let as_val = serde_json::Value::Object(res.result);
 
@@ -1230,15 +1315,9 @@ mod tests {
             }
         };
 
-        assert!(
-            res.consumed_tokens.is_some(),
-            "consumed_tokens should be present"
-        );
-        assert!(
-            res.consumed_tokens.unwrap() > 0,
-            "consumed_tokens should be greater than 0, got {:?}",
-            res.consumed_tokens
-        );
+        res.tokens
+            .sanity_check()
+            .expect("tokens sanity check failed");
     }
 
     macro_rules! make_test {
