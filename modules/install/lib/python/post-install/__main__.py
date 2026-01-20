@@ -170,6 +170,8 @@ logging.info('Starting actual post-install script')
 if args.bin_patch:
 	import lief
 
+	lief.logging.set_level(lief.logging.LEVEL.ERROR)
+
 HASH_VALID_CHARS = '0123456789abcdfghijklmnpqrsvwxyz'
 
 
