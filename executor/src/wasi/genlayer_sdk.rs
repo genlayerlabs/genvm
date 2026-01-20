@@ -884,9 +884,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
     ) -> Result<(), generated::types::Error> {
         let buf = buf.as_array(buf_len);
 
-        if !self.context.data.conf.is_deterministic {
-            return Err(generated::types::Errno::Forbidden.into());
-        }
         if !self.context.data.conf.can_read_storage {
             return Err(generated::types::Errno::Forbidden.into());
         }
