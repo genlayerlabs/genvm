@@ -163,37 +163,39 @@ impl Ctx {
             return Ok(());
         }
 
-        log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "sending SIGTERM to GenVM process");
+        if wait_timeout_ms == 0 {
+            log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "sending SIGTERM to GenVM process");
 
-        if let Some(pid) = child.id() {
-            unsafe {
-                libc::kill(pid as libc::c_int, libc::SIGTERM);
-            }
-        }
-
-        let wait_duration = std::time::Duration::from_millis(wait_timeout_ms);
-        let wait_start = std::time::Instant::now();
-
-        loop {
-            match child.try_wait() {
-                Ok(Some(_)) => {
-                    log_info_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "GenVM process terminated gracefully");
-                    return Ok(());
+            if let Some(pid) = child.id() {
+                unsafe {
+                    libc::kill(pid as libc::c_int, libc::SIGTERM);
                 }
-                Ok(None) => {
-                    if wait_start.elapsed() >= wait_duration {
-                        break;
+            }
+
+            let wait_duration = std::time::Duration::from_millis(wait_timeout_ms);
+            let wait_start = std::time::Instant::now();
+
+            loop {
+                match child.try_wait() {
+                    Ok(Some(_)) => {
+                        log_info_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "GenVM process terminated gracefully");
+                        return Ok(());
                     }
-                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                }
-                Err(e) => {
-                    log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "error checking process status");
-                    anyhow::bail!("failed to check process status: {}", e);
+                    Ok(None) => {
+                        if wait_start.elapsed() >= wait_duration {
+                            break;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    }
+                    Err(e) => {
+                        log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "error checking process status");
+                        anyhow::bail!("failed to check process status: {}", e);
+                    }
                 }
             }
-        }
 
-        log_warn_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "GenVM process did not terminate gracefully, sending SIGKILL");
+            log_warn_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "GenVM process did not terminate gracefully, sending SIGKILL");
+        }
 
         let _ = child.start_kill();
         child.wait().await?;
