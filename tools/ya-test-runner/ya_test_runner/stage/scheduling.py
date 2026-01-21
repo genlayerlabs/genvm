@@ -2,8 +2,7 @@ from types import SimpleNamespace
 import ya_test_runner
 from ya_test_runner import SharedContext
 
-
-from .collection import Env as CollectionEnv, Service, Semaphore
+from .collection import Env as CollectionEnv, Service
 import typing
 
 
@@ -32,99 +31,35 @@ class Env(typing.NamedTuple):
 	args: SimpleNamespace
 
 
-def _get_semaphore_usage(service: Service) -> dict[int, int]:
-	"""Get semaphore ID -> count mapping for a service."""
-	return {id(cs.semaphore): cs.count for cs in service._consumed_semaphores.values()}
-
-
-def _services_conflict(
-	active_services: dict[str, Service],
-	new_service: Service,
-	semaphore_limits: dict[int, int],
-) -> bool:
+def _topo_sort_services(services: set[Service]) -> list[Service]:
 	"""
-	Check if starting a new service would conflict with active services.
-
-	A conflict occurs when the total semaphore usage would exceed the limit.
-	"""
-	# Calculate current usage
-	current_usage: dict[int, int] = {}
-	for svc in active_services.values():
-		for sem_id, count in _get_semaphore_usage(svc).items():
-			current_usage[sem_id] = current_usage.get(sem_id, 0) + count
-
-	# Check if adding new service would exceed limits
-	for sem_id, count in _get_semaphore_usage(new_service).items():
-		total = current_usage.get(sem_id, 0) + count
-		limit = semaphore_limits.get(sem_id, 1)
-		if total > limit:
-			return True
-
-	return False
-
-
-def _find_conflicting_services(
-	active_services: dict[str, Service],
-	new_service: Service,
-	semaphore_limits: dict[int, int],
-) -> list[Service]:
-	"""
-	Find which active services conflict with the new service.
-	"""
-	new_usage = _get_semaphore_usage(new_service)
-	conflicting = []
-
-	for svc in active_services.values():
-		svc_usage = _get_semaphore_usage(svc)
-		# Check if they share any semaphores
-		for sem_id in new_usage:
-			if sem_id in svc_usage:
-				# They share a semaphore - check if combined usage exceeds limit
-				combined = new_usage[sem_id] + svc_usage[sem_id]
-				limit = semaphore_limits.get(sem_id, 1)
-				if combined > limit:
-					conflicting.append(svc)
-					break
-
-	return conflicting
-
-
-def _get_services_with_dependencies(service: Service) -> list[Service]:
-	"""
-	Get a list of services to start, including dependencies, in the correct order.
-	Dependencies come before the services that depend on them.
+	Topological sort of services via DFS.
+	Returns services in dependency order: dependencies come before dependents.
 	"""
 	result: list[Service] = []
 	visited: set[str] = set()
+	in_stack: set[str] = set()
 
 	def visit(svc: Service) -> None:
 		if svc.name in visited:
 			return
-		visited.add(svc.name)
+		if svc.name in in_stack:
+			raise ValueError(f'Circular dependency detected involving {svc.name}')
 
-		# First visit dependencies
+		in_stack.add(svc.name)
+
+		# Visit dependencies first
 		if svc.depends_on:
 			for dep in svc.depends_on:
-				visit(dep)
+				if dep in services:
+					visit(dep)
 
+		in_stack.remove(svc.name)
+		visited.add(svc.name)
 		result.append(svc)
 
-	visit(service)
-	return result
-
-
-def _get_all_services_with_dependencies(services: list[Service]) -> list[Service]:
-	"""
-	Get all services including their dependencies in the correct start order.
-	"""
-	result: list[Service] = []
-	visited: set[str] = set()
-
 	for svc in services:
-		for s in _get_services_with_dependencies(svc):
-			if s.name not in visited:
-				visited.add(s.name)
-				result.append(s)
+		visit(svc)
 
 	return result
 
@@ -136,29 +71,28 @@ def run(shared: SharedContext, collection_env: CollectionEnv) -> Env:
 	# Track running batches: batch_id -> set of service names the batch depends on
 	running_batches: dict[int, set[str]] = {}
 
-	def await_batches_using_service(service_name: str) -> None:
-		"""Await all running batches that depend on a service before stopping it."""
-		nonlocal running_batches
-		to_await = [
-			batch_id
-			for batch_id, services in running_batches.items()
-			if service_name in services
-		]
-		for batch_id in to_await:
-			actions.append(AwaitAllCases(id=batch_id))
-			del running_batches[batch_id]
+	# Collect all services needed by all cases
+	all_needed_services: set[Service] = set()
+	for case in collection_env.cases:
+		for svc in case.description.needed_services:
+			all_needed_services.add(svc)
+			# Also add dependencies
+			if svc.depends_on:
+				for dep in svc.depends_on:
+					all_needed_services.add(dep)
 
-	def await_all_running_batches() -> None:
-		"""Await all currently running batches."""
-		nonlocal running_batches
-		for batch_id in list(running_batches.keys()):
-			actions.append(AwaitAllCases(id=batch_id))
-		running_batches.clear()
+	# Topo sort: dependencies first, dependents last
+	topo_sorted_services = _topo_sort_services(all_needed_services)
 
-	# Build semaphore limits map
-	semaphore_limits: dict[int, int] = {}
-	for sem in collection_env.semaphores:
-		semaphore_limits[id(sem)] = sem.limit
+	# Group cases by required services (as frozenset of names including dependencies)
+	def get_all_service_names(case: ya_test_runner.test.Case) -> frozenset[str]:
+		names: set[str] = set()
+		for svc in case.description.needed_services:
+			names.add(svc.name)
+			if svc.depends_on:
+				for dep in svc.depends_on:
+					names.add(dep.name)
+		return frozenset(names)
 
 	# Separate cases by whether they need services
 	cases_without_services: list[ya_test_runner.test.Case] = []
@@ -170,116 +104,84 @@ def run(shared: SharedContext, collection_env: CollectionEnv) -> Env:
 		else:
 			cases_without_services.append(case)
 
-	# Schedule cases without services first
-	parallel_batch = StartCases(0, [])
+	# Schedule cases without services first (they can run immediately)
+	parallel_batch_no_services: list[ya_test_runner.test.Case] = []
 	for case in cases_without_services:
 		if case.description.console_pool:
-			# Console pool cases must run sequentially
-			await_all_running_batches()
-			actions.append(
-				StartCases(
-					id=next_id,
-					cases=[case],
-				)
-			)
-			actions.append(
-				AwaitAllCases(
-					id=next_id,
-				)
-			)
+			# Console pool: run alone, await immediately
+			actions.append(StartCases(id=next_id, cases=[case]))
+			actions.append(AwaitAllCases(id=next_id))
 			next_id += 1
 		else:
-			parallel_batch.cases.append(case)
+			parallel_batch_no_services.append(case)
 
-	if len(parallel_batch.cases) > 0:
-		actions.append(parallel_batch)
-		running_batches[parallel_batch.id] = set()  # No service dependencies
-
-	# Group cases with services by their needed_services set
-	service_groups: dict[frozenset[str], list[ya_test_runner.test.Case]] = {}
-	for case in cases_with_services:
-		# Use service names as the key for grouping
-		service_key = frozenset(svc.name for svc in case.description.needed_services)
-		if service_key not in service_groups:
-			service_groups[service_key] = []
-		service_groups[service_key].append(case)
-
-	# Sort groups by number of services (fewer first)
-	sorted_groups = sorted(service_groups.items(), key=lambda x: len(x[0]))
-
-	# Track active services
-	active_services: dict[str, Service] = {}
-
-	for service_names, cases in sorted_groups:
-		# Get the actual Service objects from the cases
-		needed_services: dict[str, Service] = {}
-		for case in cases:
-			for svc in case.description.needed_services:
-				needed_services[svc.name] = svc
-
-		# Get all services including dependencies in start order
-		all_needed_services = _get_all_services_with_dependencies(
-			list(needed_services.values())
-		)
-
-		# Check which services need to be started (not already active)
-		services_to_start: list[Service] = []
-		for svc in all_needed_services:
-			if svc.name not in active_services:
-				services_to_start.append(svc)
-
-		# For each service to start, check for conflicts and stop conflicting services
-		for new_svc in services_to_start:
-			conflicting = _find_conflicting_services(
-				active_services, new_svc, semaphore_limits
-			)
-			for conf_svc in conflicting:
-				# Must await batches using this service before stopping it
-				await_batches_using_service(conf_svc.name)
-				actions.append(StopService(service=conf_svc))
-				del active_services[conf_svc.name]
-
-		# Start needed services that aren't already active (in dependency order)
-		for svc in services_to_start:
-			actions.append(StartService(service=svc))
-			active_services[svc.name] = svc
-
-		# Collect service names for this batch (including dependencies)
-		batch_service_names = {svc.name for svc in all_needed_services}
-
-		# Schedule cases in this group
-		group_parallel_batch = StartCases(next_id, [])
+	if parallel_batch_no_services:
+		batch_id = next_id
 		next_id += 1
+		actions.append(StartCases(id=batch_id, cases=parallel_batch_no_services))
+		running_batches[batch_id] = set()  # No service dependencies
 
-		for case in cases:
+	# Now schedule cases with services
+	# Start services in topo order, start tests as soon as their services are ready
+	active_services: set[str] = set()
+	remaining_cases = list(cases_with_services)
+
+	for svc in topo_sorted_services:
+		# Start this service
+		actions.append(StartService(service=svc))
+		active_services.add(svc.name)
+
+		# Find cases that can now run (all their services are active)
+		ready_cases: list[ya_test_runner.test.Case] = []
+		still_waiting: list[ya_test_runner.test.Case] = []
+
+		for case in remaining_cases:
+			required_services = get_all_service_names(case)
+			if required_services.issubset(active_services):
+				ready_cases.append(case)
+			else:
+				still_waiting.append(case)
+
+		remaining_cases = still_waiting
+
+		# Schedule ready cases
+		parallel_batch: list[ya_test_runner.test.Case] = []
+		for case in ready_cases:
 			if case.description.console_pool:
-				# Console pool cases must run sequentially
-				await_all_running_batches()
-				actions.append(
-					StartCases(
-						id=next_id,
-						cases=[case],
-					)
-				)
-				actions.append(
-					AwaitAllCases(
-						id=next_id,
-					)
-				)
+				# Console pool: run alone, await immediately
+				actions.append(StartCases(id=next_id, cases=[case]))
+				actions.append(AwaitAllCases(id=next_id))
 				next_id += 1
 			else:
-				group_parallel_batch.cases.append(case)
+				parallel_batch.append(case)
 
-		if len(group_parallel_batch.cases) > 0:
-			actions.append(group_parallel_batch)
-			running_batches[group_parallel_batch.id] = batch_service_names
+		if parallel_batch:
+			batch_id = next_id
+			next_id += 1
+			# Track which services this batch depends on
+			batch_services: set[str] = set()
+			for case in parallel_batch:
+				batch_services.update(get_all_service_names(case))
+			actions.append(StartCases(id=batch_id, cases=parallel_batch))
+			running_batches[batch_id] = batch_services
 
-	# Await all remaining running batches before stopping services
-	await_all_running_batches()
+	# Ending: stop services in reverse topo order (dependents first, dependencies last)
+	for svc in reversed(topo_sorted_services):
+		# Await all batches that depend on this service
+		batches_to_await = [
+			batch_id for batch_id, services in running_batches.items() if svc.name in services
+		]
+		for batch_id in batches_to_await:
+			actions.append(AwaitAllCases(id=batch_id))
+			del running_batches[batch_id]
 
-	# Stop all remaining services at end
-	for svc in active_services.values():
+		# Stop this service
 		actions.append(StopService(service=svc))
+
+	# Await any remaining batches (e.g., those without service dependencies)
+	for batch_id in list(running_batches.keys()):
+		actions.append(AwaitAllCases(id=batch_id))
+	running_batches.clear()
 
 	return Env(
 		actions=actions,

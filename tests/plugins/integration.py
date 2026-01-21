@@ -217,18 +217,33 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 		with open(empty_storage, 'wb') as f:
 			pickle.dump(base_mock_storage, f)
 
+		if 'unstable' in self._test_case.description.tags:
+			MAX_ATTEMPTS = 3
+		else:
+			MAX_ATTEMPTS = 1
 		# Run each step
 		for i, single_conf in enumerate(jsonnet_conf):
-			result = await self._run_single_step(
-				i,
-				single_conf,
-				len(jsonnet_conf),
-				jsonnet_path,
-				tmp_dir,
-				empty_storage,
-			)
-			if not result['passed']:
-				return result
+			for attempt in range(MAX_ATTEMPTS):
+				result = await self._run_single_step(
+					i,
+					single_conf,
+					len(jsonnet_conf),
+					jsonnet_path,
+					tmp_dir,
+					empty_storage,
+				)
+				if result['passed']:
+					break
+				if attempt + 1 >= MAX_ATTEMPTS:
+					return result
+				local_ctx.shared.logger.warning(
+					f'Unstable test failed',
+					attempt=attempt + 1,
+					max_attempts=MAX_ATTEMPTS,
+					test_name=str(self._test_case.description.name),
+					step=i,
+					context=result.get('context', {}),
+				)
 
 		context = {}
 		if len(jsonnet_conf) > 1:

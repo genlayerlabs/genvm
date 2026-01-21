@@ -99,9 +99,8 @@ def collect_integration(ctx: ya_test_runner.stage.collection.Context):
 	tests_output_root = build_dir.joinpath('genvm-testdata-out')
 	tests_output_root.mkdir(parents=True, exist_ok=True)
 
-	# Create manager service with semaphore
+	# Create manager service
 	manager_port = 3999
-	manager_sem = ctx.new_semaphore(f'manager-port-{manager_port}', limit=1)
 	manager_impl = ManagerService(
 		bin_path=build_dir.joinpath('out', 'bin', 'genvm-modules'),
 		port=manager_port,
@@ -111,33 +110,28 @@ def collect_integration(ctx: ya_test_runner.stage.collection.Context):
 	)
 	manager_service = ctx.new_service(
 		name=f'manager-{manager_port}',
-		sems=[(manager_sem, 1)],
 		manager=manager_impl,
 	)
 
-	# Create modules service (depends on manager)
-	# This starts Llm and Web modules on the manager
-	modules_impl = ModulesService(
-		manager_uri=f'http://localhost:{manager_port}',
-	)
-	modules_service = ctx.new_service(
-		name='modules',
-		sems=[],  # No semaphores - modules don't conflict with anything
-		manager=modules_impl,
-		depends_on=[manager_service],  # Must start after manager
-	)
-
-	# Create webdriver service with semaphore (optional, for web tests)
+	# Create webdriver service
 	webdriver_port = 4444
-	webdriver_sem = ctx.new_semaphore(f'webdriver-port-{webdriver_port}', limit=1)
 	webdriver_impl = WebdriverService(
 		context_dir=ctx.shared.root_dir.joinpath('modules', 'webdriver'),
 		port=webdriver_port,
 	)
 	webdriver_service = ctx.new_service(
 		name=f'webdriver-{webdriver_port}',
-		sems=[(webdriver_sem, 1)],
 		manager=webdriver_impl,
+	)
+
+	# This starts Llm and Web modules on the manager
+	modules_impl = ModulesService(
+		manager_uri=f'http://localhost:{manager_port}',
+	)
+	modules_service = ctx.new_service(
+		name='modules',
+		manager=modules_impl,
+		depends_on=[manager_service, webdriver_service],
 	)
 
 	# Collect integration tests

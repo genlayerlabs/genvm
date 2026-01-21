@@ -107,6 +107,5 @@ def run(shared: SharedContext, collection_env: Env) -> Env:
 
 	return Env(
 		cases=new_cases,
-		semaphores=collection_env.semaphores,
 		args=collection_env.args,
 	)

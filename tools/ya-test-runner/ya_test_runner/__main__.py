@@ -51,6 +51,14 @@ def create_parser() -> ParserResult:
 	show_test_parser = show_subparsers.add_parser('test', help='show available tests')
 	show_test_parser.set_defaults(func=workflow_list)
 
+	show_services_parser = show_subparsers.add_parser(
+		'services', help='show service dependencies'
+	)
+	show_services_parser.set_defaults(func=workflow_services)
+
+	show_tags_parser = show_subparsers.add_parser('tags', help='show available tags')
+	show_tags_parser.set_defaults(func=workflow_tags)
+
 	return ParserResult(parser, run_parser)
 
 
@@ -69,22 +77,43 @@ def _show_execution_plan(
 		StopService,
 	)
 
+	# Find batches that are immediately awaited (start followed by await with nothing in between)
+	actions = scheduling_env.actions
+	immediate_await_batches: set[int] = set()
+	for i, action in enumerate(actions):
+		if isinstance(action, StartCases):
+			if i + 1 < len(actions) and isinstance(actions[i + 1], AwaitAllCases):
+				if actions[i + 1].id == action.id:
+					immediate_await_batches.add(action.id)
+
 	plan_items = []
-	for action in scheduling_env.actions:
+	for action in actions:
 		if isinstance(action, StartService):
 			plan_items.append(f'start service: {action.service.name}')
 		elif isinstance(action, StopService):
 			plan_items.append(f'stop service: {action.service.name}')
 		elif isinstance(action, StartCases):
 			case_names = [c.description.name for c in action.cases]
-			if len(case_names) == 1:
-				plan_items.append(f'batch {action.id} := run: {case_names[0]}')
+			if action.id in immediate_await_batches:
+				# Immediately awaited - use simple "run:" format
+				if len(case_names) == 1:
+					plan_items.append(f'run: {case_names[0]}')
+				else:
+					plan_items.append({f'run parallel ({len(case_names)} tests):': case_names})
 			else:
-				plan_items.append(
-					{f'batch {action.id} := run parallel ({len(case_names)} tests):': case_names}
-				)
+				# Deferred await - use "batch N := start" format
+				if len(case_names) == 1:
+					plan_items.append(f'batch {action.id} := start: {case_names[0]}')
+				else:
+					plan_items.append(
+						{
+							f'batch {action.id} := start parallel ({len(case_names)} tests):': case_names
+						}
+					)
 		elif isinstance(action, AwaitAllCases):
-			plan_items.append(f'await batch {action.id}')
+			# Skip await for immediately awaited batches (already shown as "run")
+			if action.id not in immediate_await_batches:
+				plan_items.append(f'await batch {action.id}')
 
 	shared_context.printer.put(
 		'execution plan',
@@ -220,6 +249,70 @@ def workflow_list(
 			{'name': case.description.name, 'tags': case.description.tags}
 			for case in collection_env.cases
 		],
+	)
+
+
+def workflow_services(
+	shared_context: ya_test_runner.SharedContext,
+	conf_env: ya_test_runner.stage.configuration.Env,
+) -> None:
+	"""Show service dependencies."""
+	collection_env = ya_test_runner.stage.collection.run(
+		shared_context,
+		conf_env,
+	)
+	shared_context.logger.debug('stage completed', stage='collection')
+
+	# Collect all services from cases
+	all_services: set[ya_test_runner.stage.collection.Service] = set()
+	for case in collection_env.cases:
+		for svc in case.description.needed_services:
+			all_services.add(svc)
+			if svc.depends_on:
+				for dep in svc.depends_on:
+					all_services.add(dep)
+
+	# Build service info list
+	services_info = []
+	for svc in sorted(all_services, key=lambda s: s.name):
+		info: dict[str, typing.Any] = {'name': svc.name}
+		if svc.depends_on:
+			info['depends_on'] = [dep.name for dep in svc.depends_on]
+		services_info.append(info)
+
+	shared_context.printer.put(
+		'services',
+		total=len(all_services),
+		services=services_info,
+	)
+
+
+def workflow_tags(
+	shared_context: ya_test_runner.SharedContext,
+	conf_env: ya_test_runner.stage.configuration.Env,
+) -> None:
+	"""Show available tags."""
+	collection_env = ya_test_runner.stage.collection.run(
+		shared_context,
+		conf_env,
+	)
+	shared_context.logger.debug('stage completed', stage='collection')
+
+	# Collect all tags and count usage
+	tag_counts: dict[str, int] = {}
+	for case in collection_env.cases:
+		for tag in case.description.tags:
+			tag_counts[tag] = tag_counts.get(tag, 0) + 1
+
+	# Build tags info sorted by name
+	tags_info = [
+		{'tag': tag, 'count': count} for tag, count in sorted(tag_counts.items())
+	]
+
+	shared_context.printer.put(
+		'tags',
+		total=len(tag_counts),
+		tags=tags_info,
 	)
 
 
