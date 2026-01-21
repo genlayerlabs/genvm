@@ -119,6 +119,13 @@ class TextFormatter(Formatter, Sink):
 		return level.value >= self.min_level.value
 
 	def _do_dump(self, ind, data):
+		if isinstance(data, set):
+			data = list(data)
+			try:
+				data.sort()
+			except Exception:
+				pass
+
 		if isinstance(data, collections.abc.Mapping):
 			for k, v in data.items():
 				self.file.write('  ' * ind)
@@ -127,17 +134,26 @@ class TextFormatter(Formatter, Sink):
 					self.file.write(': ')
 					self.file.write(str(v))
 					self.file.write('\n')
+				elif isinstance(v, collections.abc.Iterable) and _is_small(k):
+					self.file.write(f'{k}:\n')
+					self._do_dump(ind + 1, v)
 				else:
 					self.file.write(f'=== {k} === \n')
 					self._do_dump(ind + 1, v)
 		elif isinstance(data, str):
-			self.file.write('  ' * ind)
-			self.file.write(repr(data))
-			self.file.write('\n')
+			if '\n' in data:
+				for line in data.splitlines():
+					self.file.write('  ' * ind)
+					self.file.write(line)
+					self.file.write('\n')
+			else:
+				self.file.write('  ' * ind)
+				self.file.write(repr(data))
+				self.file.write('\n')
 		elif isinstance(data, collections.abc.Iterable):
 			for item in data:
 				if _is_small(item):
-					self.file.write('  ' * ind)
+					self.file.write('  ' * ind + '- ')
 					self.file.write(str(item))
 					self.file.write('\n')
 				else:

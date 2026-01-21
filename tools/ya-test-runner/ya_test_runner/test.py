@@ -11,12 +11,17 @@ import ya_test_runner
 
 class Description(typing.NamedTuple):
 	name: str
-	needed_services: frozenset['ya_test_runner.stage.collection.Semaphore'] = frozenset()
+	needed_services: frozenset['ya_test_runner.stage.collection.Service'] = frozenset()
 	tags: frozenset[str] = frozenset()
 	console_pool: bool = False
 
 	def with_tags(self, new_tags: typing.Iterable[str]) -> 'Description':
 		return self._replace(tags=self.tags.union(new_tags))
+
+	def with_services(
+		self, services: typing.Iterable['ya_test_runner.stage.collection.Service']
+	) -> 'Description':
+		return self._replace(needed_services=self.needed_services.union(services))
 
 
 @dataclass

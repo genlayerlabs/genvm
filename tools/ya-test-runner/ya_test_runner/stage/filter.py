@@ -99,7 +99,7 @@ def run(shared: SharedContext, collection_env: Env) -> Env:
 	tags_expr = _parse_tags_expr(tags_expr_toks, 2)
 
 	for case in collection_env.cases:
-		if test_name_regex.match(case.description.name) and tags_expr(
+		if test_name_regex.search(case.description.name) and tags_expr(
 			case.description.tags
 		):
 			new_cases.append(case)
@@ -107,5 +107,6 @@ def run(shared: SharedContext, collection_env: Env) -> Env:
 
 	return Env(
 		cases=new_cases,
+		semaphores=collection_env.semaphores,
 		args=collection_env.args,
 	)

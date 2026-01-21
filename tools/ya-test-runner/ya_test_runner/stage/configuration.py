@@ -2,6 +2,7 @@ import argparse
 import contextlib
 from copy import copy
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 import typing
 
@@ -54,10 +55,16 @@ class Context:
 		self._collectors.append(collector)
 
 	def _eval_file(self, file: Path) -> None:
-		this_globals = {'__file__': str(file.absolute())}
+		rel_path = file.relative_to(self.shared.root_dir)
+		as_module = rel_path.with_suffix('').as_posix().replace('/', '.')
+		import types
+
+		module = types.ModuleType(as_module)
+		module.__dict__['__file__'] = str(file.absolute())
 		self.shared.logger.debug('evaluating include dir', include_file=file)
 		compiled = compile(file.read_text(), str(file.absolute()), 'exec')
-		exec(compiled, this_globals)
+		exec(compiled, module.__dict__)
+		sys.modules[as_module] = module
 
 
 _GLOBAL_CTX: Context | None = None

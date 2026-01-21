@@ -104,7 +104,8 @@ def workflow_list(
 		'available test cases',
 		total=len(collection_env.cases),
 		cases=[
-			[case.description.name, case.description.tags] for case in collection_env.cases
+			{'name': case.description.name, 'tags': case.description.tags}
+			for case in collection_env.cases
 		],
 	)
 

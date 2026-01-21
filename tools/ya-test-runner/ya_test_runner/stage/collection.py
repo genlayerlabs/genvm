@@ -7,6 +7,7 @@ from .configuration import Env as ConfigurationEnv
 import ya_test_runner
 
 
+@dataclass
 class Semaphore:
 	name: str
 	limit: int = 1
@@ -18,11 +19,18 @@ class _ConsumedSemaphore:
 	count: int
 
 
-@dataclass
+@dataclass(frozen=False, eq=False)
 class Service:
 	name: str
 	_consumed_semaphores: dict[int, _ConsumedSemaphore]
 	manager: ya_test_runner.exec.service.Service
+	depends_on: list['Service'] | None = None
+
+	def __hash__(self):
+		return id(self)
+
+	def __eq__(self, other):
+		return self is other
 
 
 class Context:
@@ -42,8 +50,11 @@ class Context:
 		name: str,
 		sems: list[(Semaphore, int)],
 		manager: ya_test_runner.exec.service.Service,
+		depends_on: list['Service'] | None = None,
 	) -> Service:
-		svc = Service(name=name, _consumed_semaphores={}, manager=manager)
+		svc = Service(
+			name=name, _consumed_semaphores={}, manager=manager, depends_on=depends_on
+		)
 		for sem, count in sems:
 			svc._consumed_semaphores[id(sem)] = _ConsumedSemaphore(sem, count)
 		return svc
@@ -55,6 +66,7 @@ class Context:
 
 class Env(NamedTuple):
 	cases: list[ya_test_runner.test.Case]
+	semaphores: list[Semaphore]
 	args: SimpleNamespace
 
 
@@ -71,5 +83,6 @@ def run(shared: SharedContext, configuration: ConfigurationEnv) -> Env:
 
 	return Env(
 		cases=ctx._all_cases,
+		semaphores=ctx._all_semaphores,
 		args=configuration.args,
 	)
