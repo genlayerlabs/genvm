@@ -106,6 +106,8 @@ def _is_small(x) -> bool:
 		return '\n' not in x
 	if isinstance(x, collections.abc.Sized):
 		return len(x) == 0
+	if isinstance(x, BaseException):
+		return False
 	as_str = str(x)
 	return len(as_str) < 128 and '\n' not in as_str
 
@@ -119,12 +121,8 @@ class TextFormatter(Formatter, Sink):
 		return level.value >= self.min_level.value
 
 	def _do_dump(self, ind, data):
-		if isinstance(data, set):
-			data = list(data)
-			try:
-				data.sort()
-			except Exception:
-				pass
+		if isinstance(data, (set, frozenset, BaseException)):
+			data = _log_unwrap(data)
 
 		if isinstance(data, collections.abc.Mapping):
 			for k, v in data.items():
@@ -192,6 +190,14 @@ def _log_unwrap(x, seen: set[int] | None = None):
 	if isinstance(x, enum.Enum):
 		return x.name
 
+	if isinstance(x, (set, frozenset)):
+		r = list(x)
+		try:
+			r.sort()
+		except Exception:
+			pass
+		return [_log_unwrap(v, seen) for v in r]
+
 	# Detailed exception handling with traceback
 	if isinstance(x, BaseException):
 		tb = traceback.format_exception(x)
@@ -200,7 +206,7 @@ def _log_unwrap(x, seen: set[int] | None = None):
 				'message': x.args[0] if len(x.args) == 1 else x.args,
 				'type': x.__class__.__name__,
 				'notes': getattr(x, '__notes__', []),
-				'traceback': tb,
+				'traceback': [f.rstrip() for f in tb],
 			},
 			seen,
 		)

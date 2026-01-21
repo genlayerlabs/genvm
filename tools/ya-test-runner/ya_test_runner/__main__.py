@@ -4,7 +4,9 @@
 
 import argparse
 import asyncio
+import signal
 import sys, os
+import typing
 from pathlib import Path
 
 import ya_test_runner
@@ -14,7 +16,14 @@ import copy
 from . import formatter
 
 
-def create_parser() -> argparse.ArgumentParser:
+class ParserResult(typing.NamedTuple):
+	"""Result of create_parser containing main parser and subparsers."""
+
+	parser: argparse.ArgumentParser
+	run_parser: argparse.ArgumentParser
+
+
+def create_parser() -> ParserResult:
 	"""Create the command-line argument parser."""
 	parser = argparse.ArgumentParser(
 		prog='ya-test-runner', description='A test runner utility'
@@ -22,19 +31,123 @@ def create_parser() -> argparse.ArgumentParser:
 
 	subparsers = parser.add_subparsers()
 
-	list_parser = subparsers.add_parser('list', help='list available tests')
-	list_parser.set_defaults(func=workflow_list)
-
 	run_parser = subparsers.add_parser('run', help='run tests')
 	run_parser.set_defaults(func=workflow_run)
 
-	return parser
+	run_parser.add_argument(
+		'--fail-fast',
+		action='store_true',
+		default=False,
+		help='Stop execution after the first test failure',
+	)
+
+	# 'show' subcommand with nested subcommands
+	show_parser = subparsers.add_parser('show', help='show information without running')
+	show_subparsers = show_parser.add_subparsers()
+
+	show_plan_parser = show_subparsers.add_parser('plan', help='show execution plan')
+	show_plan_parser.set_defaults(func=workflow_plan)
+
+	show_test_parser = show_subparsers.add_parser('test', help='show available tests')
+	show_test_parser.set_defaults(func=workflow_list)
+
+	return ParserResult(parser, run_parser)
 
 
 from . import const
 
 
+def _show_execution_plan(
+	shared_context: ya_test_runner.SharedContext,
+	scheduling_env: ya_test_runner.stage.scheduling.Env,
+) -> None:
+	"""Display the execution plan."""
+	from ya_test_runner.stage.scheduling import (
+		StartCases,
+		AwaitAllCases,
+		StartService,
+		StopService,
+	)
+
+	plan_items = []
+	for action in scheduling_env.actions:
+		if isinstance(action, StartService):
+			plan_items.append(f'start service: {action.service.name}')
+		elif isinstance(action, StopService):
+			plan_items.append(f'stop service: {action.service.name}')
+		elif isinstance(action, StartCases):
+			case_names = [c.description.name for c in action.cases]
+			if len(case_names) == 1:
+				plan_items.append(f'batch {action.id} := run: {case_names[0]}')
+			else:
+				plan_items.append(
+					{f'batch {action.id} := run parallel ({len(case_names)} tests):': case_names}
+				)
+		elif isinstance(action, AwaitAllCases):
+			plan_items.append(f'await batch {action.id}')
+
+	shared_context.printer.put(
+		'execution plan',
+		total_actions=len(scheduling_env.actions),
+		plan=plan_items,
+	)
+
+
+def workflow_plan(
+	shared_context: ya_test_runner.SharedContext,
+	conf_env: ya_test_runner.stage.configuration.Env,
+) -> None:
+	"""Show execution plan without running tests."""
+	collection_env = ya_test_runner.stage.collection.run(
+		shared_context,
+		conf_env,
+	)
+	shared_context.logger.debug('stage completed', stage='collection')
+	collection_env = ya_test_runner.stage.filter.run(
+		shared_context,
+		collection_env,
+	)
+	shared_context.logger.debug('stage completed', stage='filter')
+	scheduling_env = ya_test_runner.stage.scheduling.run(
+		shared_context,
+		collection_env,
+	)
+	shared_context.logger.debug('stage completed', stage='scheduling')
+
+	_show_execution_plan(shared_context, scheduling_env)
+
+
 def workflow_run(
+	shared_context: ya_test_runner.SharedContext,
+	conf_env: ya_test_runner.stage.configuration.Env,
+) -> None:
+	# Set up Ctrl+C handling for graceful shutdown
+	interrupted = False
+
+	def signal_handler(signum, frame):
+		nonlocal interrupted
+		if interrupted:
+			# Second Ctrl+C, force exit
+			shared_context.logger.warning('Received second interrupt, forcing exit')
+			sys.exit(130)
+		interrupted = True
+		shared_context.logger.warning(
+			'Received interrupt, stopping gracefully (press Ctrl+C again to force)'
+		)
+		shared_context.interrupt()
+
+	original_handler = signal.signal(signal.SIGINT, signal_handler)
+
+	try:
+		_workflow_run_inner(shared_context, conf_env)
+	except KeyboardInterrupt:
+		shared_context.logger.warning('Interrupted')
+		sys.exit(130)
+	finally:
+		signal.signal(signal.SIGINT, original_handler)
+
+
+def _workflow_run_inner(
 	shared_context: ya_test_runner.SharedContext,
 	conf_env: ya_test_runner.stage.configuration.Env,
 ) -> None:
@@ -167,20 +280,20 @@ def main() -> None:
 		printer=printer,
 	)
 
-	parser = create_parser()
+	parser_result = create_parser()
 
-	ya_test_runner.stage.filter.add_args(parser)
+	ya_test_runner.stage.filter.add_args(parser_result.parser)
 
 	conf_env = ya_test_runner.stage.configuration.run(
 		shared_context,
-		parser,
+		parser_result,
 		remaining_args,
 	)
 	shared_context.logger.debug('stage completed', stage='configuration')
 
 	if 'func' not in conf_env.args:
 		logger.error('subcommand not given')
-		parser.print_help()
+		parser_result.parser.print_help()
 		sys.exit(1)
 
 	conf_env.args.func(shared_context, conf_env)

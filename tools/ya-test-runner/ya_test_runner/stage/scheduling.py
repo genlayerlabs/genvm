@@ -133,6 +133,28 @@ def run(shared: SharedContext, collection_env: CollectionEnv) -> Env:
 	next_id = 1
 	actions: list[Action] = []
 
+	# Track running batches: batch_id -> set of service names the batch depends on
+	running_batches: dict[int, set[str]] = {}
+
+	def await_batches_using_service(service_name: str) -> None:
+		"""Await all running batches that depend on a service before stopping it."""
+		nonlocal running_batches
+		to_await = [
+			batch_id
+			for batch_id, services in running_batches.items()
+			if service_name in services
+		]
+		for batch_id in to_await:
+			actions.append(AwaitAllCases(id=batch_id))
+			del running_batches[batch_id]
+
+	def await_all_running_batches() -> None:
+		"""Await all currently running batches."""
+		nonlocal running_batches
+		for batch_id in list(running_batches.keys()):
+			actions.append(AwaitAllCases(id=batch_id))
+		running_batches.clear()
+
 	# Build semaphore limits map
 	semaphore_limits: dict[int, int] = {}
 	for sem in collection_env.semaphores:
@@ -148,10 +170,12 @@ def run(shared: SharedContext, collection_env: CollectionEnv) -> Env:
 		else:
 			cases_without_services.append(case)
 
-	# Schedule cases without services first (existing logic)
+	# Schedule cases without services first
 	parallel_batch = StartCases(0, [])
 	for case in cases_without_services:
 		if case.description.console_pool:
+			# Console pool cases must run sequentially
+			await_all_running_batches()
 			actions.append(
 				StartCases(
 					id=next_id,
@@ -169,11 +193,7 @@ def run(shared: SharedContext, collection_env: CollectionEnv) -> Env:
 
 	if len(parallel_batch.cases) > 0:
 		actions.append(parallel_batch)
-		actions.append(
-			AwaitAllCases(
-				id=parallel_batch.id,
-			)
-		)
+		running_batches[parallel_batch.id] = set()  # No service dependencies
 
 	# Group cases with services by their needed_services set
 	service_groups: dict[frozenset[str], list[ya_test_runner.test.Case]] = {}
@@ -214,6 +234,8 @@ def run(shared: SharedContext, collection_env: CollectionEnv) -> Env:
 				active_services, new_svc, semaphore_limits
 			)
 			for conf_svc in conflicting:
+				# Must await batches using this service before stopping it
+				await_batches_using_service(conf_svc.name)
 				actions.append(StopService(service=conf_svc))
 				del active_services[conf_svc.name]
 
@@ -222,13 +244,17 @@ def run(shared: SharedContext, collection_env: CollectionEnv) -> Env:
 			actions.append(StartService(service=svc))
 			active_services[svc.name] = svc
 
+		# Collect service names for this batch (including dependencies)
+		batch_service_names = {svc.name for svc in all_needed_services}
+
 		# Schedule cases in this group
-		# Use next_id starting from where we left off
 		group_parallel_batch = StartCases(next_id, [])
 		next_id += 1
 
 		for case in cases:
 			if case.description.console_pool:
+				# Console pool cases must run sequentially
+				await_all_running_batches()
 				actions.append(
 					StartCases(
 						id=next_id,
@@ -246,11 +272,10 @@ def run(shared: SharedContext, collection_env: CollectionEnv) -> Env:
 
 		if len(group_parallel_batch.cases) > 0:
 			actions.append(group_parallel_batch)
-			actions.append(
-				AwaitAllCases(
-					id=group_parallel_batch.id,
-				)
-			)
+			running_batches[group_parallel_batch.id] = batch_service_names
+
+	# Await all remaining running batches before stopping services
+	await_all_running_batches()
 
 	# Stop all remaining services at end
 	for svc in active_services.values():

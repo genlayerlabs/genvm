@@ -1,10 +1,11 @@
 use std::ops::DerefMut;
 
+use const_lru::ConstLru;
 use genvm_common::{calldata, sync};
 
 use crate::{host::message::root_offsets, rt, SlotID};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(C)]
 pub struct PageID(pub SlotID, pub u32);
 
@@ -107,11 +108,14 @@ impl StoragePagesOverride {
     }
 }
 
+const STORAGE_CACHE_SIZE: usize = 128;
+
 #[derive(Clone)]
 pub struct Storage<HS: Send + Sync> {
     pub address: calldata::Address,
     host: HS,
     pages: StoragePagesOverride,
+    cache: ConstLru<PageID, [u8; 32], STORAGE_CACHE_SIZE>,
 }
 
 impl<HS: Send + Sync> Storage<HS> {
@@ -120,6 +124,7 @@ impl<HS: Send + Sync> Storage<HS> {
             address,
             host,
             pages: StoragePagesOverride::new(storage_pages_limit),
+            cache: ConstLru::new(),
         }
     }
 
@@ -152,7 +157,12 @@ impl<HS: Send + Sync> Storage<HS> {
 }
 
 impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
-    pub async fn read(&self, slot_id: SlotID, index: u32, buf: &mut [u8]) -> anyhow::Result<()> {
+    pub async fn read(
+        &mut self,
+        slot_id: SlotID,
+        index: u32,
+        buf: &mut [u8],
+    ) -> anyhow::Result<()> {
         if buf.is_empty() {
             return Ok(());
         }
@@ -164,6 +174,11 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         let start_page = start_index / 32;
         let end_page = (end_index - 1) / 32;
 
+        // Check which pages are known (in override or cache)
+        let page_is_known = |this: &mut Self, page_id: PageID| -> bool {
+            this.pages.get(page_id).is_some() || this.cache.get(&page_id).is_some()
+        };
+
         // Multi-page case: cut known prefix and suffix
         let mut need_host_read_start = start_index;
         let mut need_host_read_end = end_index;
@@ -171,7 +186,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         // Cut known prefix
         for page_idx in start_page..=end_page {
             let page_id = PageID(slot_id, page_idx as u32);
-            if self.pages.get(page_id).is_some() {
+            if page_is_known(self, page_id) {
                 need_host_read_start = (page_idx + 1) * 32;
             } else {
                 break;
@@ -181,7 +196,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         // Cut known suffix
         for page_idx in (start_page..=end_page).rev() {
             let page_id = PageID(slot_id, page_idx as u32);
-            if self.pages.get(page_id).is_some() {
+            if page_is_known(self, page_id) {
                 need_host_read_end = page_idx * 32;
             } else {
                 break;
@@ -199,13 +214,20 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
             )?;
         }
 
-        // Apply overrides to the buffer
+        let mut put_to_cache: [(PageID, [u8; 32]); STORAGE_CACHE_SIZE / 16] =
+            unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+        let mut put_to_cache_count = 0;
+
         for page_idx in start_page..=end_page {
             let page_id = PageID(slot_id, page_idx as u32);
-            if let Some(page_data) = self.pages.get(page_id) {
-                let page_start_byte = page_idx * 32;
-                let page_end_byte = page_start_byte + 32;
 
+            let page_start_byte = page_idx * 32;
+            let page_end_byte = page_start_byte + 32;
+            if let Some(page_data) = self
+                .pages
+                .get(page_id)
+                .or_else(|| self.cache.get(&page_id).cloned())
+            {
                 // Calculate overlap between requested range and this page
                 let overlap_start = start_index.max(page_start_byte);
                 let overlap_end = end_index.min(page_end_byte);
@@ -218,7 +240,21 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
                     buf[dst_offset..dst_offset + copy_len]
                         .copy_from_slice(&page_data[src_offset..src_offset + copy_len]);
                 }
+            } else if page_start_byte >= need_host_read_start && page_end_byte <= need_host_read_end
+            {
+                // This page was read from host, extract it from buf and put to cache
+                let src_offset = page_start_byte - start_index;
+                let mut page_data = [0u8; 32];
+                page_data.copy_from_slice(&buf[src_offset..src_offset + 32]);
+
+                put_to_cache[put_to_cache_count] = (page_id, page_data);
+                put_to_cache_count += 1;
             }
+        }
+
+        for i in 0..put_to_cache_count {
+            let (page_id, page_data) = &put_to_cache[i];
+            self.cache.insert(*page_id, *page_data);
         }
 
         Ok(())
@@ -360,7 +396,10 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         Ok(())
     }
 
-    pub async fn read_code(&self, limiter: &rt::memlimiter::Limiter) -> anyhow::Result<Box<[u8]>> {
+    pub async fn read_code(
+        &mut self,
+        limiter: &rt::memlimiter::Limiter,
+    ) -> anyhow::Result<Box<[u8]>> {
         let code_slot = SlotID::ZERO.indirection(root_offsets::CODE);
 
         let mut len_buf = [0; 4];

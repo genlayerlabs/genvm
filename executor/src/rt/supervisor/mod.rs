@@ -324,7 +324,7 @@ pub async fn apply_contract_actions(
                 let code = vm
                     .vm_base
                     .store
-                    .data()
+                    .data_mut()
                     .genlayer_ctx
                     .genlayer_sdk
                     .data

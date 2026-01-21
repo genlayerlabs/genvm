@@ -212,11 +212,10 @@ impl Ctx {
             return None;
         };
 
-        let proc_check = self.check_proc(&exec_ctx).await;
+        let proc_check = self.check_proc(exec_ctx.clone()).await;
         log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0, proc_exited = proc_check; "genvm status checked");
 
         exec_ctx
-            .clone()
             .into_get_sub(|data| data.result.get())
             .lift_option()
             .map(sync::DArcStruct::into_arc)
@@ -312,7 +311,7 @@ async fn gc_step(ctx: &sync::DArc<Ctx>) {
             log_warn_into!(&LoggerWithId, genvm_id:id = key.0; "genvm execution exceeded strict deadline, terminating");
             let _ = ctx.graceful_shutdown(key, 0).await;
         }
-        let _ = ctx.check_proc(&val).await;
+        let _ = ctx.check_proc(val.clone()).await;
     }
 
     // Remove old finished executions
@@ -553,11 +552,12 @@ async fn pipe_read<P: tokio::io::AsyncReadExt + Unpin>(
 }
 
 impl Ctx {
-    async fn check_proc(&self, exec: &SingleGenVMContext) -> bool {
+    async fn check_proc(&self, exec: sync::DArc<SingleGenVMContext>) -> bool {
         if exec.result.initialized() {
             return true;
         }
 
+        tokio::task::spawn(async move {
         let mut proc = exec.process_handle.lock().await;
 
         match proc.try_wait() {
@@ -598,6 +598,7 @@ impl Ctx {
                 true
             }
         }
+        }).await.unwrap_or(false)
     }
 }
 

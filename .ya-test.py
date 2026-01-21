@@ -3,7 +3,7 @@ import ya_test_runner
 
 local_ctx = ya_test_runner.stage.configuration.current_context()
 
-local_ctx.parser.add_argument(
+local_ctx.run_parser.add_argument(
 	'--fuzz-timeout',
 	type=int,
 	default=30,
@@ -11,7 +11,7 @@ local_ctx.parser.add_argument(
 )
 
 
-local_ctx.parser.add_argument(
+local_ctx.run_parser.add_argument(
 	'--fuzz-update-corpus',
 	default=False,
 	action='store_true',

@@ -24,7 +24,18 @@ impl AccountAddress {
 
 #[serde_as]
 #[derive(
-    Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Hash, Copy, PartialOrd, Ord, Arbitrary,
+    Debug,
+    Default,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    Clone,
+    Hash,
+    Copy,
+    PartialOrd,
+    Ord,
+    Arbitrary,
 )]
 #[repr(C)]
 pub struct SlotID(#[serde_as(as = "Base64")] pub [u8; 32]);

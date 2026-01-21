@@ -35,6 +35,7 @@ class _ExecutionContext:
 	shared: SharedContext
 	failed: list[str]
 	should_stop: asyncio.Event
+	fail_fast: bool = False
 	success_count: int = 0
 	skipped: int = 0
 	running_services: dict[str, Handle] = field(default_factory=dict)
@@ -198,6 +199,8 @@ async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Cas
 	finally:
 		if not success:
 			ctx.failed.append(case.description.name)
+			if ctx.fail_fast:
+				ctx.should_stop.set()
 
 		# Print result immediately
 		_print_test_result(
@@ -231,14 +234,32 @@ async def run(shared: SharedContext, collection_env: SchedulingEnv) -> Env:
 
 	should_stop = asyncio.Event()
 
+	# Get fail_fast from args, default to False if not present
+	fail_fast = getattr(collection_env.args, 'fail_fast', False)
+
 	ctx = _ExecutionContext(
 		shared=shared,
 		failed=[],
 		should_stop=should_stop,
+		fail_fast=fail_fast,
 	)
+
+	# Check for interruption periodically
+	async def check_interruption():
+		while not should_stop.is_set():
+			if shared.is_interrupted:
+				shared.logger.warning('Execution interrupted')
+				should_stop.set()
+				return
+			await asyncio.sleep(0.1)
+
+	interrupt_checker = asyncio.create_task(check_interruption())
 
 	try:
 		for action in collection_env.actions:
+			if should_stop.is_set():
+				shared.logger.warning('Stopping execution early')
+				break
 			if isinstance(action, StartService):
 				await _start_service(ctx, action.service)
 			elif isinstance(action, StopService):
@@ -259,6 +280,12 @@ async def run(shared: SharedContext, collection_env: SchedulingEnv) -> Env:
 			else:
 				raise ValueError(f'Unknown action type: {type(action)}')
 	finally:
+		# Stop the interrupt checker
+		interrupt_checker.cancel()
+		try:
+			await interrupt_checker
+		except asyncio.CancelledError:
+			pass
 		# Always cleanup services on exit
 		await _stop_all_services(ctx)
 

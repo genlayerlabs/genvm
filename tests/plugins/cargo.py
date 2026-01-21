@@ -128,7 +128,7 @@ def cargo_fuzz(
 					'-o',
 					f'{BUILD_DIR}/genvm-testdata-out/fuzz/{name}',
 					'-V',
-					str(ctx.configuration.args.fuzz_timeout),
+					str(getattr(ctx.configuration.args, 'fuzz_timeout', 30)),
 					'-t',
 					'5000',
 					f'{TARGET_DIR}/debug/examples/fuzz-{name}',
@@ -140,7 +140,7 @@ def cargo_fuzz(
 		]
 	)
 
-	if ctx.configuration.args.fuzz_update_corpus:
+	if getattr(ctx.configuration.args, 'fuzz_update_corpus', False):
 
 		async def remove_opt_dir(_):
 			opt_dir = BUILD_DIR.joinpath('genvm-testdata-out', 'fuzz/', f'{name}-opt')

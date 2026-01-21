@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import ya_test_runner
+from ya_test_runner.exec.command import Command, RunMode
 from ya_test_runner.test import CONST_PASSED
 
 # Get the local context
@@ -38,11 +39,18 @@ TEMPLATES_DIR = TESTS_DIR.joinpath('templates')
 
 # Lazy imports - these are only loaded when actually running tests
 _lazy_imports_loaded = False
-gvm_calldata = None
-Address = None
-MockHost = None
-MockStorage = None
-base_host = None
+
+if typing.TYPE_CHECKING:
+	from genlayer.py import calldata as gvm_calldata
+	from genlayer.py.types import Address as Address
+	from tests.runner.mock_host import MockHost as MockHost, MockStorage as MockStorage
+	import tests.runner.origin.base_host as base_host
+else:
+	gvm_calldata = None
+	Address = None
+	MockHost = None
+	MockStorage = None
+	base_host = None
 
 
 def _load_lazy_imports():
@@ -177,13 +185,22 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 
 		# Run preparation if needed
 		if 'prepare' in jsonnet_conf[0]:
-			import subprocess
-
-			subprocess.run(
-				[sys.executable, jsonnet_conf[0]['prepare']],
-				stdin=subprocess.DEVNULL,
-				check=True,
+			cmd = Command(
+				args=[sys.executable, jsonnet_conf[0]['prepare']],
+				cwd=jsonnet_path.parent,
+				env=default_env,
 			)
+			result = await cmd.run(local_ctx.shared, mode=RunMode.SILENT)
+			if result.exit_code != 0:
+				return {
+					'passed': False,
+					'context': {
+						'reason': 'prepare script failed',
+						'exit_code': result.exit_code,
+						'stdout': result.stdout,
+						'stderr': result.stderr,
+					},
+				}
 
 		# Set up base storage
 		base_mock_storage = MockStorage()
@@ -213,7 +230,10 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 			if not result['passed']:
 				return result
 
-		return {'passed': True, 'context': {}}
+		context = {}
+		if len(jsonnet_conf) > 1:
+			context['steps_passed'] = len(jsonnet_conf)
+		return {'passed': True, 'context': context}
 
 	async def _run_single_step(
 		self,
@@ -224,8 +244,6 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 		seq_tmp_dir: Path,
 		empty_storage: Path,
 	) -> dict:
-		import subprocess
-
 		single_conf = pickle.loads(pickle.dumps(single_conf))  # Deep copy
 
 		if total_steps == 1:
@@ -259,17 +277,30 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 		if code_path is not None:
 			if code_path.endswith('.wat'):
 				out_path = my_tmp_dir.joinpath(Path(code_path).with_suffix('.wasm').name)
-				subprocess.run(
-					[
+				cmd = Command(
+					args=[
 						'wat2wasm',
 						'--enable-tail-call',
 						'--enable-annotations',
 						'-o',
-						out_path,
+						str(out_path),
 						code_path,
 					],
-					check=True,
+					cwd=my_tmp_dir,
+					env=default_env,
 				)
+				result = await cmd.run(local_ctx.shared, mode=RunMode.SILENT)
+				if result.exit_code != 0:
+					return {
+						'passed': False,
+						'context': {
+							'reason': 'wat2wasm failed',
+							'step': step_index,
+							'exit_code': result.exit_code,
+							'stdout': result.stdout,
+							'stderr': result.stderr,
+						},
+					}
 				code_path = str(out_path)
 			code = Path(code_path).read_bytes()
 
@@ -405,8 +436,8 @@ def integration_test(
 	ctx: ya_test_runner.stage.collection.Context,
 	*,
 	manager_service: ya_test_runner.stage.collection.Service,
-	modules_service: ya_test_runner.stage.collection.Service | None = None,
-	webdriver_service: ya_test_runner.stage.collection.Service | None = None,
+	modules_service: ya_test_runner.stage.collection.Service,
+	webdriver_service: ya_test_runner.stage.collection.Service,
 ) -> None:
 	"""
 	Collect integration tests from tests/cases/ directory.
@@ -434,21 +465,11 @@ def integration_test(
 			tags.add('stable')
 			stability_tag = 'stable'
 
-		# Determine needed services based on stability
-		# - stable tests: just manager
-		# - unstable/semi-stable tests: manager + modules + (optionally webdriver)
 		needed_services: set[ya_test_runner.stage.collection.Service] = {manager_service}
 
-		needs_modules = stability_tag in ('unstable', 'semi-stable')
-		if needs_modules and modules_service is not None:
+		if 'stable' not in tags:
 			needed_services.add(modules_service)
-
-		if webdriver_service is not None and _test_needs_webdriver(jsonnet_file):
 			needed_services.add(webdriver_service)
-			tags.add('web')
-			# Web tests also need modules
-			if modules_service is not None:
-				needed_services.add(modules_service)
 
 		desc = ya_test_runner.test.Description(
 			name=str(jsonnet_file.relative_to(local_ctx.shared.root_dir)),

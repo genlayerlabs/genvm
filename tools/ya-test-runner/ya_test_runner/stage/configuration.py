@@ -6,6 +6,9 @@ import sys
 from types import SimpleNamespace
 import typing
 
+if typing.TYPE_CHECKING:
+	from ya_test_runner.__main__ import ParserResult
+
 import ya_test_runner
 
 from ya_test_runner import const
@@ -28,6 +31,7 @@ type Collector = typing.Callable[['ya_test_runner.stage.collection.Context'], No
 class Context:
 	shared: SharedContext
 	parser: argparse.ArgumentParser
+	run_parser: argparse.ArgumentParser
 	current_path: Path
 	plugins: dict[str, typing.Any]
 
@@ -94,11 +98,12 @@ class Env(typing.NamedTuple):
 
 
 def run(
-	shared: SharedContext, parser: argparse.ArgumentParser, remaining_args: list[str]
+	shared: SharedContext, parser_result: 'ParserResult', remaining_args: list[str]
 ) -> Env:
 	ctx = Context()
 	ctx.shared = shared
-	ctx.parser = parser
+	ctx.parser = parser_result.parser
+	ctx.run_parser = parser_result.run_parser
 	ctx.plugins = {}
 	ctx._collectors = []
 	ctx.current_path = shared.root_dir
@@ -106,7 +111,7 @@ def run(
 		ctx.eval_file(const.ROOT_FILE_NAME)
 
 	return Env(
-		args=parser.parse_args(remaining_args),
+		args=parser_result.parser.parse_args(remaining_args),
 		plugins=SimpleNamespace(**ctx.plugins),
 		collectors=ctx._collectors,
 	)

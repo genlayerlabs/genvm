@@ -72,7 +72,7 @@ def py_fuzz(
 			'-o',
 			outputs_dir,
 			'-V',
-			str(ctx.configuration.args.fuzz_timeout),
+			str(getattr(ctx.configuration.args, 'fuzz_timeout', 30)),
 			'--',
 			src_file,
 		],

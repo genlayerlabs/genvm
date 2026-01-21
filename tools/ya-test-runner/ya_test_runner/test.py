@@ -62,13 +62,15 @@ class ResultStopIfErrorStep(exec.step.Python):
 	def to_str(self):
 		return '<test result -> raise if error>'
 
-	async def run(self, previous_results: list[typing.Any]) -> None:
+	async def run(self, previous_results: list[typing.Any]):
 		assert len(previous_results) > 0
 		res = previous_results[-1]
 		assert isinstance(res, Result)
 
 		if not res.passed:
 			raise FinishedEarlyException(result=res)
+
+		return res
 
 
 @dataclass
