@@ -163,7 +163,9 @@ impl Ctx {
             return Ok(());
         }
 
-        if wait_timeout_ms == 0 {
+        const WAIT_STEP_MS: u64 = 20;
+
+        if wait_timeout_ms > WAIT_STEP_MS / 2 {
             log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "sending SIGTERM to GenVM process");
 
             if let Some(pid) = child.id() {
@@ -185,7 +187,7 @@ impl Ctx {
                         if wait_start.elapsed() >= wait_duration {
                             break;
                         }
-                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                        tokio::time::sleep(std::time::Duration::from_millis(WAIT_STEP_MS)).await;
                     }
                     Err(e) => {
                         log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "error checking process status");

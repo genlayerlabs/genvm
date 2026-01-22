@@ -276,11 +276,11 @@ async fn run_http_server(
     let ctx = app_ctx.clone();
     let describe_vm_error_route = unwrap_all_anyhow(
         warp::path!("vm-error" / "describe")
-            .and(warp::post())
-            .and(warp::body::json())
-            .then(move |data| {
+            .and(warp::get())
+            .and(warp::query::<handlers::DescribeVmErrorRequest>())
+            .then(move |query| {
                 let ctx = ctx.clone();
-                async move { handlers::handle_describe_vm_error(ctx, data).await }
+                async move { handlers::handle_describe_vm_error(ctx, query).await }
             }),
     );
 

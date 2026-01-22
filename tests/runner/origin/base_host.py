@@ -300,6 +300,7 @@ class RunHostAndProgramRes:
 	result_fingerprint: typing.Any
 	result_storage_changes: list[tuple[bytes, bytes]]
 	result_events: list[list[bytes]]
+	vm_error_description: str | None = None
 
 
 async def _send_timeout(manager_uri: str, genvm_id: str, logger: Logger):
@@ -494,6 +495,20 @@ async def run_genvm(
 			result_storage_changes = decoded.get('storage_changes', [])
 			result_events = decoded.get('events', [])
 
+		vm_error_description: str | None = None
+		if result_kind == public_abi.ResultCode.VM_ERROR and isinstance(result_data, str):
+			try:
+				async with aiohttp.request(
+					'GET',
+					f'{manager_uri}/vm-error/describe',
+					params={'error': result_data},
+				) as resp:
+					if resp.status == 200:
+						body = await resp.json()
+						vm_error_description = body.get('description')
+			except Exception as e:
+				logger.warning('failed to get vm error description', error=str(e))
+
 		return RunHostAndProgramRes(
 			stdout=status['stdout'],
 			stderr=status['stderr'],
@@ -503,6 +518,7 @@ async def run_genvm(
 			result_fingerprint=result_fingerprint,
 			result_storage_changes=result_storage_changes,
 			result_events=result_events,
+			vm_error_description=vm_error_description,
 		)
 
 	raise Exception('Execution failed')

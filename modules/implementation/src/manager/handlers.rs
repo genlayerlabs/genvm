@@ -269,42 +269,48 @@ pub async fn handle_llm_check(
 #[derive(Debug, serde::Deserialize)]
 pub struct DescribeVmErrorRequest {
     pub error: String,
-    pub major: u32,
-    pub minor: u32,
+}
+
+fn is_sub_error(err: &str, sub_err_of: &str) -> bool {
+    if !err.starts_with(sub_err_of) {
+        return false;
+    }
+    return sub_err_of.len() == err.len() || err.as_bytes()[sub_err_of.len()] == b' ';
+}
+
+fn describe_vm_error(error: &str) -> Option<&'static str> {
+    if is_sub_error(error, "wasm_trap") {
+        Some("Web Assembly trap reached")
+    } else if is_sub_error(error, "exit_code") {
+        Some("Non-zero exit code from the contract. Check stderr for contract-provided details")
+    } else if is_sub_error(error, "invalid_contract not_utf8_text") {
+        Some(
+            r##"The contract was detected to be a plain text contract, however it contains non-UTF8 bytes and hence cannot be parsed. Is deployed runner a valid contract?"##,
+        )
+    } else if is_sub_error(error, "invalid_contract absent_runner_comment") {
+        Some(
+            r##"The contract was detected to be a plain text contract, however it does not start with a runner comment (such as `# { "Depends": "py-genlayer:..." }`), hence it is impossible to run. Have you forgotten to add it or is there other content before it?"##,
+        )
+    } else if is_sub_error(error, "invalid_contract") {
+        Some("Execution failed before running the contract, likely due to invalid or malformed contract runner")
+    } else if is_sub_error(error, "OOM storage") {
+        Some("Contract ran out of storage pages it could (re)write")
+    } else if is_sub_error(error, "OOM") {
+        Some("Contract exceeded allowed execution memory (RAM) limit")
+    } else {
+        None
+    }
 }
 
 pub async fn handle_describe_vm_error(
     _ctx: sync::DArc<AppContext>,
-    data: serde_json::Value,
+    request: DescribeVmErrorRequest,
 ) -> Result<impl warp::Reply> {
-    let request: DescribeVmErrorRequest = serde_json::from_value(data)?;
-
-    let description = describe_vm_error(&request.error, request.major, request.minor);
+    let description = describe_vm_error(&request.error);
 
     Ok(warp::reply::json(
         &serde_json::json!({ "description": description }),
     ))
-}
-
-fn describe_vm_error(error: &str, _major: u32, _minor: u32) -> Option<&'static str> {
-    // Try to match known VM error prefixes
-    if error.starts_with("timeout") {
-        Some("The contract execution exceeded the allowed time limit")
-    } else if error.starts_with("exit_code") {
-        Some("The contract terminated with a non-zero exit code")
-    } else if error.starts_with("validator_disagrees") {
-        Some("The validator's execution result did not match the leader's result")
-    } else if error.starts_with("version_too_big") {
-        Some("The requested contract version is not supported by this executor")
-    } else if error == "OOM" || error.starts_with("OOM ") {
-        Some("The contract exceeded its memory allocation limit")
-    } else if error.starts_with("invalid_contract") {
-        Some("The contract code is invalid or malformed")
-    } else if error.starts_with("wasm_trap") {
-        Some("The WebAssembly runtime encountered a trap (e.g., unreachable code, memory access violation)")
-    } else {
-        None
-    }
 }
 
 async fn check_llm_availability(
