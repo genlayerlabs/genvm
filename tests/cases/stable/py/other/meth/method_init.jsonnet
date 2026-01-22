@@ -1,12 +1,2 @@
-local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/methods.py') {
-    "calldata": |||
-        {
-            "method": "__init__",
-            "args": []
-        }
-    |||,
-    "message": super.message + {
-        "is_init": true,
-    }
-}
+local simple_deploy = import 'templates/simple_deploy.jsonnet';
+simple_deploy.run('${jsonnetDir}/methods.py')

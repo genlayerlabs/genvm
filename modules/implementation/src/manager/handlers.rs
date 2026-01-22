@@ -266,6 +266,47 @@ pub async fn handle_llm_check(
     Ok(warp::reply::json(&results))
 }
 
+#[derive(Debug, serde::Deserialize)]
+pub struct DescribeVmErrorRequest {
+    pub error: String,
+    pub major: u32,
+    pub minor: u32,
+}
+
+pub async fn handle_describe_vm_error(
+    _ctx: sync::DArc<AppContext>,
+    data: serde_json::Value,
+) -> Result<impl warp::Reply> {
+    let request: DescribeVmErrorRequest = serde_json::from_value(data)?;
+
+    let description = describe_vm_error(&request.error, request.major, request.minor);
+
+    Ok(warp::reply::json(
+        &serde_json::json!({ "description": description }),
+    ))
+}
+
+fn describe_vm_error(error: &str, _major: u32, _minor: u32) -> Option<&'static str> {
+    // Try to match known VM error prefixes
+    if error.starts_with("timeout") {
+        Some("The contract execution exceeded the allowed time limit")
+    } else if error.starts_with("exit_code") {
+        Some("The contract terminated with a non-zero exit code")
+    } else if error.starts_with("validator_disagrees") {
+        Some("The validator's execution result did not match the leader's result")
+    } else if error.starts_with("version_too_big") {
+        Some("The requested contract version is not supported by this executor")
+    } else if error == "OOM" || error.starts_with("OOM ") {
+        Some("The contract exceeded its memory allocation limit")
+    } else if error.starts_with("invalid_contract") {
+        Some("The contract code is invalid or malformed")
+    } else if error.starts_with("wasm_trap") {
+        Some("The WebAssembly runtime encountered a trap (e.g., unreachable code, memory access violation)")
+    } else {
+        None
+    }
+}
+
 async fn check_llm_availability(
     config_data: &LlmProviderConfig,
     test_prompt: &llm::prompt::Internal,

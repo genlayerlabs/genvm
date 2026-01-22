@@ -3,6 +3,5 @@ from genlayer import *
 
 
 class Contract(gl.Contract):
-	@gl.public.write
-	def main(self):
+	def __init__(self):
 		gl.advanced.user_error_immediate("nah, I won't execute")

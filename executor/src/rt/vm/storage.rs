@@ -248,7 +248,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
                 page_data.copy_from_slice(&buf[src_offset..src_offset + 32]);
 
                 put_to_cache[put_to_cache_count] = (page_id, page_data);
-                put_to_cache_count += 1;
+                put_to_cache_count = (put_to_cache_count + 1) % put_to_cache.len();
             }
         }
 

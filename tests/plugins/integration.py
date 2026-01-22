@@ -45,17 +45,29 @@ if typing.TYPE_CHECKING:
 	from genlayer.py.types import Address as Address
 	from tests.runner.mock_host import MockHost as MockHost, MockStorage as MockStorage
 	import tests.runner.origin.base_host as base_host
+	import tests.runner.origin.logger as origin_logger
+	import tests.runner.origin.public_abi as public_abi
 else:
 	gvm_calldata = None
 	Address = None
 	MockHost = None
 	MockStorage = None
 	base_host = None
+	origin_logger = None
+	public_abi = None
 
 
 def _load_lazy_imports():
 	"""Load test-time dependencies lazily to avoid import errors at configuration time."""
-	global _lazy_imports_loaded, gvm_calldata, Address, MockHost, MockStorage, base_host
+	global \
+		_lazy_imports_loaded, \
+		gvm_calldata, \
+		Address, \
+		MockHost, \
+		MockStorage, \
+		base_host, \
+		origin_logger, \
+		public_abi
 
 	if _lazy_imports_loaded:
 		return
@@ -78,12 +90,16 @@ def _load_lazy_imports():
 	from genlayer.py.types import Address as _Address
 	from mock_host import MockHost as _MockHost, MockStorage as _MockStorage
 	import origin.base_host as _base_host
+	import origin.logger as _origin_logger
+	from origin import public_abi as _public_abi
 
 	gvm_calldata = _gvm_calldata
 	Address = _Address
 	MockHost = _MockHost
 	MockStorage = _MockStorage
 	base_host = _base_host
+	origin_logger = _origin_logger
+	public_abi = _public_abi
 
 	_lazy_imports_loaded = True
 
@@ -94,6 +110,25 @@ default_env = {
 	for k, v in os.environ.items()
 	if ya_test_runner.util.environ.DEFAULT_FILTER(k, v)
 }
+
+
+def _make_log_adapter(formatter: ya_test_runner.Formatter) -> 'origin_logger.Logger':
+	_load_lazy_imports()
+
+	class _FormatterLoggerAdapter(origin_logger.Logger):
+		"""Adapts ya_test_runner.formatter.Formatter to base_host.Logger interface."""
+
+		def __init__(self, formatter: ya_test_runner.Formatter):
+			self._formatter = formatter
+
+		def log(self, level: str, msg: str, **kwargs) -> None:
+			fmt_level = ya_test_runner.Formatter.Level.from_str(level)
+			self._formatter.log(fmt_level, msg, **kwargs)
+
+	global make_adapter
+	make_adapter = _FormatterLoggerAdapter
+
+	return make_adapter(formatter)
 
 
 def _unfold_conf(x: typing.Any, vars: dict[str, str]) -> typing.Any:
@@ -354,6 +389,7 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 		# Run the test
 		with host as mock_host:
 			try:
+				logger = _make_log_adapter(local_ctx.shared.logger)
 				res = await base_host.run_genvm(
 					mock_host,
 					manager_uri=manager_uri,
@@ -362,12 +398,20 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 					capture_output=True,
 					is_sync=single_conf.get('sync', False),
 					host_data='{"node_address": "0x", "tx_id": "0x"}',
-					logger=base_host.NoLogger(),
+					logger=logger,
 					host='unix://' + mock_host.path,
-					extra_args=['--debug-mode', '--print=result'],
+					extra_args=['--debug-mode'],
 					code=code,
 					calldata=calldata_bytes,
 				)
+				if res.result_kind == public_abi.ResultCode.RETURN:
+					res.stdout += (
+						f'executed with `Return({gvm_calldata.to_str(res.result_data)})`\n'
+					)
+				elif res.result_kind == public_abi.ResultCode.VM_ERROR:
+					res.stdout += f'executed with `VMError("{res.result_data}")`\n'
+				elif res.result_kind == public_abi.ResultCode.USER_ERROR:
+					res.stdout += f'executed with `UserError("{res.result_data}")`\n'
 				# Apply events and storage changes
 				for evs in res.result_events:
 					mock_host.post_event(evs[:-1], evs[-1])
@@ -382,7 +426,7 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 				return {
 					'passed': False,
 					'context': {
-						'exception': str(e),
+						'exception': e,
 						'step': step_index,
 					},
 				}

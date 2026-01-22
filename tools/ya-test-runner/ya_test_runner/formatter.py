@@ -41,6 +41,8 @@ class Sink(abc.ABC):
 
 
 class Formatter(abc.ABC):
+	Level = Level
+
 	@abc.abstractmethod
 	def accepts(self, level: Level) -> bool: ...
 
@@ -112,6 +114,22 @@ def _is_small(x) -> bool:
 	return len(as_str) < 128 and '\n' not in as_str
 
 
+def _small_to_str(x) -> str:
+	if x is None:
+		return 'null'
+	if isinstance(x, str):
+		if len(x) == 0:
+			return "''"
+		if "'" in x:
+			return repr(x)
+		return f"'{x}'"
+	if isinstance(x, collections.abc.Iterable) and len(x) == 0:
+		return '[]'
+	if isinstance(x, collections.abc.Mapping) and len(x) == 0:
+		return '{}'
+	return str(x)
+
+
 class TextFormatter(Formatter, Sink):
 	def __init__(self, file: io.TextIOBase, min_level: Level = Level.INFO):
 		self.file = file
@@ -142,7 +160,7 @@ class TextFormatter(Formatter, Sink):
 			if '\n' in data:
 				for line in data.splitlines():
 					self.file.write('  ' * ind)
-					self.file.write(line)
+					self.file.write(line.rstrip())
 					self.file.write('\n')
 			else:
 				self.file.write('  ' * ind)
@@ -152,7 +170,7 @@ class TextFormatter(Formatter, Sink):
 			for item in data:
 				if _is_small(item):
 					self.file.write('  ' * ind + '- ')
-					self.file.write(str(item))
+					self.file.write(_small_to_str(item))
 					self.file.write('\n')
 				else:
 					self.file.write('  ' * ind)
@@ -160,7 +178,7 @@ class TextFormatter(Formatter, Sink):
 					self._do_dump(ind + 1, item)
 		else:
 			self.file.write('  ' * ind)
-			self.file.write(str(data))
+			self.file.write(_small_to_str(data))
 			self.file.write('\n')
 
 	def put(self, main_topic: str, **kv):

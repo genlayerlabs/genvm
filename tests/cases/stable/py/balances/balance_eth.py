@@ -12,8 +12,7 @@ class EthContract:
 
 
 class Contract(gl.Contract):
-	@gl.public.write
-	def main(self):
+	def __init__(self):
 		print('main self', self.balance)
 		print('main At(self)', EthContract(gl.message.contract_address).balance)
 		print('=== transfer ===')

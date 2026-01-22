@@ -3,8 +3,7 @@ from genlayer import *
 
 
 class Contract(gl.Contract):
-	@gl.public.write
-	def main(self):
+	def __init__(self):
 		def run():
 			res = gl.nondet.exec_prompt(
 				'respond with json object containing single key "result" and associated value being a random integer from 0 to 100 (inclusive), it must be number, not wrapped in quotes',

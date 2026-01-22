@@ -446,6 +446,14 @@ async def run_genvm(
 	result_host: tuple[public_abi.ResultCode, bytes] | None = None
 	try:
 		result_host = fut_host.result()
+	except ConnectionResetError as e:
+		if timeout_fired.is_set():
+			result_host = (
+				public_abi.ResultCode.VM_ERROR,
+				gvm_calldata.encode({'data': public_abi.VmError.TIMEOUT.value}),
+			)
+		else:
+			exceptions.append(e)
 	except Exception as e:
 		if not timeout_fired.is_set():
 			exceptions.append(e)

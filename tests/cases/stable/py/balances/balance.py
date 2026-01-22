@@ -3,8 +3,7 @@ from genlayer import *
 
 
 class Contract(gl.Contract):
-	@gl.public.write
-	def main(self):
+	def __init__(self):
 		print('main self', self.balance)
 		print('main At(self)', gl.get_contract_at(gl.message.contract_address).balance)
 		print('=== transfer ===')

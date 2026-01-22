@@ -16,8 +16,7 @@ class User:
 class Contract(gl.Contract):
 	users: DynArray[User]
 
-	@gl.public.write
-	def main(self):
+	def __init__(self):
 		self.users.append(User('Ada', datetime.datetime.now()))
 		user = self.users[-1]
 		self.users[-1] = User('Definitely not Ada', datetime.datetime.now())

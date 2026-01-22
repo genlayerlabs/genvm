@@ -273,6 +273,17 @@ async fn run_http_server(
             }),
     );
 
+    let ctx = app_ctx.clone();
+    let describe_vm_error_route = unwrap_all_anyhow(
+        warp::path!("vm-error" / "describe")
+            .and(warp::post())
+            .and(warp::body::json())
+            .then(move |data| {
+                let ctx = ctx.clone();
+                async move { handlers::handle_describe_vm_error(ctx, data).await }
+            }),
+    );
+
     let routes = status_route
         .or(start_route)
         .or(stop_route)
@@ -285,7 +296,8 @@ async fn run_http_server(
         .or(set_permits_route)
         .or(genvm_shutdown_route)
         .or(genvm_status_route)
-        .or(llm_check_route);
+        .or(llm_check_route)
+        .or(describe_vm_error_route);
 
     let routes = routes.recover(|err: warp::reject::Rejection| async move {
         if err.is_not_found() {
