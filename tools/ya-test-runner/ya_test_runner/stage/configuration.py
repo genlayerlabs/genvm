@@ -26,7 +26,7 @@ def _check_relative_id(relative: str) -> list[str]:
 
 
 type Collector = typing.Callable[['ya_test_runner.stage.collection.Context'], None]
-type PostRunStep = typing.Callable[
+type Reporter = typing.Callable[
 	['ya_test_runner.SharedContext', 'ya_test_runner.stage.execution.Env'], None
 ]
 
@@ -39,14 +39,14 @@ class Context:
 	plugins: dict[str, typing.Any]
 
 	_collectors: list[Collector]
-	_post_run_steps: list[PostRunStep]
+	_reporter: list[Reporter]
 
 	def register_plugin(self):
 		raise NotImplementedError()
 
-	def add_post_run_step(self, step: PostRunStep) -> None:
+	def add_reporter(self, step: Reporter) -> None:
 		"""Register a step to run after test execution completes."""
-		self._post_run_steps.append(step)
+		self._reporter.append(step)
 
 	def eval_file(self, relative: str) -> None:
 		components = _check_relative_id(relative)
@@ -103,7 +103,7 @@ class Env(typing.NamedTuple):
 	plugins: SimpleNamespace
 	args: argparse.Namespace
 	collectors: list[Collector]
-	post_run_steps: list[PostRunStep]
+	post_run_steps: list[Reporter]
 
 
 def run(
@@ -115,7 +115,7 @@ def run(
 	ctx.run_parser = parser_result.run_parser
 	ctx.plugins = {}
 	ctx._collectors = []
-	ctx._post_run_steps = []
+	ctx._reporter = []
 	ctx.current_path = shared.root_dir
 	with with_context(ctx) as ctx:
 		ctx.eval_file(const.ROOT_FILE_NAME)
@@ -124,5 +124,5 @@ def run(
 		args=parser_result.parser.parse_args(remaining_args),
 		plugins=SimpleNamespace(**ctx.plugins),
 		collectors=ctx._collectors,
-		post_run_steps=ctx._post_run_steps,
+		post_run_steps=ctx._reporter,
 	)

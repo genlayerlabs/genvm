@@ -9,6 +9,7 @@ __all__ = (
 	'test',
 	'stage',
 	'util',
+	'formatter',
 )
 
 import json
@@ -17,6 +18,7 @@ from pathlib import Path
 import subprocess
 import threading
 from typing import Any
+from . import formatter
 from ya_test_runner.formatter import Formatter, Sink
 
 

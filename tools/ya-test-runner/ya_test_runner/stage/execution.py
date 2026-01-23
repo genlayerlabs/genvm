@@ -30,11 +30,49 @@ class Env(typing.NamedTuple):
 	failed: list[str]
 
 
+from collections import deque
+
+
+class MultiSemaphore:
+	def __init__(self, value: int):
+		self._value = value
+		self.max_value = value
+		self._waiters: deque[tuple[int, asyncio.Future]] = deque()
+		self._lock = asyncio.Lock()
+
+	async def acquire(self, n: int = 1) -> None:
+		async with self._lock:
+			if self._value >= n and len(self._waiters) == 0:
+				self._value -= n
+				return
+			fut = asyncio.get_event_loop().create_future()
+			self._waiters.append((n, fut))
+		await fut
+
+	def release(self, n: int = 1) -> None:
+		self._value += n
+		self._wake_waiters()
+
+	def _wake_waiters(self) -> None:
+		while True:
+			if len(self._waiters) == 0:
+				return
+			n, fut = self._waiters.popleft()
+			if self._value >= n:
+				if not fut.done():
+					self._value -= n
+					fut.set_result(None)
+				continue
+			self._waiters.appendleft((n, fut))
+			return
+
+
 @dataclass
 class _ExecutionContext:
 	shared: SharedContext
 	failed: list[str]
 	should_stop: asyncio.Event
+	semaphore: MultiSemaphore
 	fail_fast: bool = False
 	success_count: int = 0
 	skipped: int = 0
@@ -146,9 +184,16 @@ async def _run_case(
 	ctx: _ExecutionContext, case: ya_test_runner.test.Case, latch: _CountDownLatch
 ):
 	try:
-		if ctx.should_stop.is_set():
-			return
-		await _run_case_locked(ctx, case)
+		permits = 1
+		if case.description.console_pool:
+			permits = ctx.semaphore.max_value
+		await ctx.semaphore.acquire(permits)
+		try:
+			if ctx.should_stop.is_set():
+				return
+			await _run_case_locked(ctx, case)
+		finally:
+			ctx.semaphore.release(permits)
 	finally:
 		latch.decrement()
 
@@ -242,6 +287,7 @@ async def run(shared: SharedContext, collection_env: SchedulingEnv) -> Env:
 		failed=[],
 		should_stop=should_stop,
 		fail_fast=fail_fast,
+		semaphore=MultiSemaphore(collection_env.args.max_concurrent),
 	)
 
 	# Check for interruption periodically

@@ -41,6 +41,14 @@ def create_parser() -> ParserResult:
 		help='Stop execution after the first test failure',
 	)
 
+	run_parser.add_argument(
+		'--max-concurrent',
+		type=int,
+		default=os.cpu_count() or 1,
+		metavar='N',
+		help='Maximum number of tests to run concurrently (default: number of CPUs)',
+	)
+
 	# 'show' subcommand with nested subcommands
 	show_parser = subparsers.add_parser('show', help='show information without running')
 	show_subparsers = show_parser.add_subparsers()

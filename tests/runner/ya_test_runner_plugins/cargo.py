@@ -183,7 +183,7 @@ def _coverage_post_run(
 
 # Register coverage post-run step if coverage is enabled
 if _is_coverage_enabled():
-	local_ctx.add_post_run_step(_coverage_post_run)
+	local_ctx.add_reporter(_coverage_post_run)
 	# Add genvm binaries to profile objects
 	_profile_objects.append(BUILD_DIR / 'out' / 'bin' / 'genvm')
 	_profile_objects.append(BUILD_DIR / 'out' / 'bin' / 'genvm-modules')

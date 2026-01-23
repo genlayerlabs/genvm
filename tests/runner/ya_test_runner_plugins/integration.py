@@ -81,6 +81,16 @@ def _unfold_conf(x: typing.Any, vars: dict[str, str]) -> typing.Any:
 
 
 @dataclass
+class IntegrationSetupResult:
+	"""Result from IntegrationSetupStep, passed to subsequent steps."""
+
+	tmp_dir: Path
+	empty_storage: Path
+	jsonnet_conf: list[dict]
+	skipped: bool = False
+
+
+@dataclass
 class IntegrationTestCase(ya_test_runner.test.Case):
 	"""Integration test case wrapping a jsonnet test definition."""
 
@@ -90,49 +100,13 @@ class IntegrationTestCase(ya_test_runner.test.Case):
 	webdriver_service: ya_test_runner.stage.collection.Service
 
 	async def into_steps(self) -> list[ya_test_runner.exec.step.Step]:
-		steps = []
-		steps.append(IntegrationTestStep(self))
-		return steps
-
-
-class IntegrationTestStep(ya_test_runner.exec.step.Python):
-	"""Executes all steps of an integration test."""
-
-	def __init__(self, test_case: IntegrationTestCase):
-		self._test_case = test_case
-
-	def to_str(self) -> str:
-		return f'<integration test: {self._test_case.jsonnet_path.name}>'
-
-	async def run(self, previous_results: list[typing.Any]) -> ya_test_runner.test.Result:
-		import time
-
-		start_time = time.monotonic()
-
-		try:
-			result = await self._run_test()
-			elapsed = time.monotonic() - start_time
-			return ya_test_runner.test.Result(
-				passed=result['passed'],
-				context=result.get('context', {}),
-				elapsed_seconds=elapsed,
-			)
-		except Exception as e:
-			elapsed = time.monotonic() - start_time
-			return ya_test_runner.test.Result(
-				passed=False,
-				context={'exception': str(e), 'exception_type': type(e).__name__},
-				elapsed_seconds=elapsed,
-			)
-
-	async def _run_test(self) -> dict:
 		import _jsonnet
 
-		jsonnet_path = self._test_case.jsonnet_path
+		jsonnet_path = self.jsonnet_path
 
-		# Check for skip file
+		# Check for skip file early
 		if jsonnet_path.with_suffix('.skip').exists():
-			return {'passed': True, 'context': {'skipped': True}}
+			return [IntegrationSkipStep(self)]
 
 		# Load jsonnet configuration
 		jsonnet_conf = _jsonnet.evaluate_file(
@@ -147,36 +121,115 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 			{'jsonnetDir': str(jsonnet_path.parent), 'fileBaseName': jsonnet_path.stem},
 		)
 
-		# Set up temp directory
+		# Calculate paths
 		rel_path = jsonnet_path.relative_to(CASES_DIR)
 		tmp_dir = local_ctx.shared.artifacts_dir.joinpath(
 			'integration', rel_path
 		).with_suffix('')
-		shutil.rmtree(tmp_dir, ignore_errors=True)
-		tmp_dir.mkdir(exist_ok=True, parents=True)
+
+		is_unstable = 'unstable' in self.description.tags
+		max_attempts = 3 if is_unstable else 1
+
+		steps: list[ya_test_runner.exec.step.Step] = []
+
+		# Setup step
+		steps.append(
+			IntegrationSetupStep(
+				test_case=self,
+				jsonnet_conf=jsonnet_conf,
+				tmp_dir=tmp_dir,
+			)
+		)
+
+		# One step per jsonnet entry
+		for i, single_conf in enumerate(jsonnet_conf):
+			is_benchmark = single_conf.get('benchmark', False)
+			cur_step = IntegrationSingleStep(
+				test_case=self,
+				step_index=i,
+				single_conf=single_conf,
+				total_steps=len(jsonnet_conf),
+				tmp_dir=tmp_dir,
+				max_attempts=max_attempts,
+			)
+			if is_benchmark:
+				for i in range(5):
+					steps.append(ya_test_runner.test.BenchMeasureStep())
+					steps.append(cur_step)
+				steps.append(ya_test_runner.test.BenchCollectStep(local_ctx.shared.printer))
+			else:
+				steps.append(cur_step)
+
+		return steps
+
+
+class IntegrationSkipStep(ya_test_runner.exec.step.Python):
+	"""Returns a skipped result for tests with .skip file."""
+
+	def __init__(self, test_case: IntegrationTestCase):
+		self._test_case = test_case
+
+	def to_str(self) -> str:
+		return f'<skip: {self._test_case.jsonnet_path.name}>'
+
+	async def run(self, previous_results: list[typing.Any]) -> ya_test_runner.test.Result:
+		local_ctx.shared.logger.warning(
+			'Test skipped',
+			test_name=self._test_case.description.name,
+		)
+		return ya_test_runner.test.Result(
+			passed=True,
+			context={'skipped': True},
+			elapsed_seconds=0,
+		)
+
+
+class IntegrationSetupStep(ya_test_runner.exec.step.Python):
+	"""Sets up the test environment: temp dir, prepare script, base storage."""
+
+	def __init__(
+		self,
+		test_case: IntegrationTestCase,
+		jsonnet_conf: list[dict],
+		tmp_dir: Path,
+	):
+		self._test_case = test_case
+		self._jsonnet_conf = jsonnet_conf
+		self._tmp_dir = tmp_dir
+
+	def to_str(self) -> str:
+		return f'<setup: {self._test_case.jsonnet_path.name}>'
+
+	async def run(self, previous_results: list[typing.Any]) -> IntegrationSetupResult:
+		# Set up temp directory
+		shutil.rmtree(self._tmp_dir, ignore_errors=True)
+		self._tmp_dir.mkdir(exist_ok=True, parents=True)
 
 		# Run preparation if needed
-		if 'prepare' in jsonnet_conf[0]:
+		if 'prepare' in self._jsonnet_conf[0]:
 			cmd = Command(
-				args=[sys.executable, jsonnet_conf[0]['prepare']],
-				cwd=jsonnet_path.parent,
+				args=[sys.executable, self._jsonnet_conf[0]['prepare']],
+				cwd=self._test_case.jsonnet_path.parent,
 				env=default_env,
 			)
 			result = await cmd.run(local_ctx.shared, mode=RunMode.SILENT)
 			if result.exit_code != 0:
-				return {
-					'passed': False,
-					'context': {
-						'reason': 'prepare script failed',
-						'exit_code': result.exit_code,
-						'stdout': result.stdout,
-						'stderr': result.stderr,
-					},
-				}
+				raise ya_test_runner.test.FinishedEarlyException(
+					result=ya_test_runner.test.Result(
+						passed=False,
+						context={
+							'reason': 'prepare script failed',
+							'exit_code': result.exit_code,
+							'stdout': result.stdout,
+							'stderr': result.stderr,
+						},
+						elapsed_seconds=0,
+					)
+				)
 
 		# Set up base storage
 		base_mock_storage = MockStorage()
-		if storage_json := jsonnet_conf[0].get('storage_json'):
+		if storage_json := self._jsonnet_conf[0].get('storage_json'):
 			storage_b64 = json.loads(Path(storage_json).read_text())
 			base_mock_storage._storages = {
 				Address(a): {
@@ -185,71 +238,95 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 				for a, kv in storage_b64.items()
 			}
 
-		empty_storage = tmp_dir.joinpath('empty-storage.pickle')
+		empty_storage = self._tmp_dir.joinpath('empty-storage.pickle')
 		with open(empty_storage, 'wb') as f:
 			pickle.dump(base_mock_storage, f)
 
-		if 'unstable' in self._test_case.description.tags:
-			MAX_ATTEMPTS = 3
-		else:
-			MAX_ATTEMPTS = 1
-		# Run each step
-		result = None
-		for i, single_conf in enumerate(jsonnet_conf):
-			for attempt in range(MAX_ATTEMPTS):
-				result = await self._run_single_step(
-					i,
-					single_conf,
-					len(jsonnet_conf),
-					jsonnet_path,
-					tmp_dir,
-					empty_storage,
-				)
-				if result['passed']:
-					break
-				if attempt + 1 >= MAX_ATTEMPTS:
-					return result
-				local_ctx.shared.logger.warning(
-					f'Unstable test failed',
-					attempt=attempt + 1,
-					max_attempts=MAX_ATTEMPTS,
-					test_name=str(self._test_case.description.name),
-					step=i,
-					context=result.get('context', {}),
-				)
+		return IntegrationSetupResult(
+			tmp_dir=self._tmp_dir,
+			empty_storage=empty_storage,
+			jsonnet_conf=self._jsonnet_conf,
+		)
 
-			local_ctx.shared.logger.log(
-				ya_test_runner.Formatter.Level.INFO
-				if len(jsonnet_conf) > 1
-				else ya_test_runner.Formatter.Level.DEBUG,
-				f'Test step passed',
-				test_name=str(self._test_case.description.name),
-				step=i + 1,
-				total_steps=len(jsonnet_conf),
-				result=result,
-			)
 
-		context = {}
-		if len(jsonnet_conf) > 1:
-			context['steps_passed'] = len(jsonnet_conf)
-		return {'passed': True, 'context': context}
+class IntegrationSingleStep(ya_test_runner.exec.step.Python):
+	"""Executes a single step of an integration test."""
 
-	async def _run_single_step(
+	def __init__(
 		self,
+		test_case: IntegrationTestCase,
 		step_index: int,
 		single_conf: dict,
 		total_steps: int,
-		jsonnet_path: Path,
-		seq_tmp_dir: Path,
-		empty_storage: Path,
-	) -> dict:
-		single_conf = pickle.loads(pickle.dumps(single_conf))  # Deep copy
+		tmp_dir: Path,
+		max_attempts: int,
+	):
+		self._test_case = test_case
+		self._step_index = step_index
+		self._single_conf = single_conf
+		self._total_steps = total_steps
+		self._tmp_dir = tmp_dir
+		self._max_attempts = max_attempts
 
-		if total_steps == 1:
-			my_tmp_dir = seq_tmp_dir
+	def to_str(self) -> str:
+		return f'<step {self._step_index + 1}/{self._total_steps}: {self._test_case.jsonnet_path.name}>'
+
+	async def run(self, previous_results: list[typing.Any]) -> ya_test_runner.test.Result:
+		# Get setup result from first step
+		setup_result: IntegrationSetupResult = previous_results[0]
+
+		for attempt in range(self._max_attempts):
+			result = await self._run_single_step(setup_result.empty_storage)
+			if result['passed']:
+				local_ctx.shared.logger.log(
+					ya_test_runner.Formatter.Level.INFO
+					if self._total_steps > 1
+					else ya_test_runner.Formatter.Level.DEBUG,
+					f'Test step passed',
+					test_name=str(self._test_case.description.name),
+					step=self._step_index + 1,
+					total_steps=self._total_steps,
+				)
+				return ya_test_runner.test.Result(
+					passed=True,
+					context=result.get('context', {}),
+					elapsed_seconds=0,
+				)
+
+			if attempt + 1 >= self._max_attempts:
+				# Raise FinishedEarlyException to stop subsequent steps
+				raise ya_test_runner.test.FinishedEarlyException(
+					result=ya_test_runner.test.Result(
+						passed=False,
+						context=result.get('context', {}),
+						elapsed_seconds=0,
+					)
+				)
+
+			local_ctx.shared.logger.warning(
+				f'Unstable test failed',
+				attempt=attempt + 1,
+				max_attempts=self._max_attempts,
+				test_name=str(self._test_case.description.name),
+				step=self._step_index,
+				context=result.get('context', {}),
+			)
+
+		# Should not reach here
+		raise ya_test_runner.test.FinishedEarlyException(
+			result=ya_test_runner.test.Result(passed=False, context={}, elapsed_seconds=0)
+		)
+
+	async def _run_single_step(self, empty_storage: Path) -> dict:
+		single_conf = pickle.loads(pickle.dumps(self._single_conf))  # Deep copy
+		jsonnet_path = self._test_case.jsonnet_path
+		step_index = self._step_index
+
+		if self._total_steps == 1:
+			my_tmp_dir = self._tmp_dir
 			suff = ''
 		else:
-			my_tmp_dir = seq_tmp_dir.joinpath(str(step_index))
+			my_tmp_dir = self._tmp_dir.joinpath(str(step_index))
 			suff = f'.{step_index}'
 
 		my_tmp_dir.mkdir(exist_ok=True, parents=True)
@@ -258,7 +335,7 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 		if step_index == 0:
 			pre_storage = empty_storage
 		else:
-			pre_storage = seq_tmp_dir.joinpath(str(step_index - 1), 'storage.pickle')
+			pre_storage = self._tmp_dir.joinpath(str(step_index - 1), 'storage.pickle')
 		post_storage = my_tmp_dir.joinpath('storage.pickle')
 
 		# Prepare calldata

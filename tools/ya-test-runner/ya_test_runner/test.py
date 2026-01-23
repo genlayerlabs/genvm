@@ -2,6 +2,7 @@ import abc
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+import time
 import typing
 
 from . import exec
@@ -114,6 +115,51 @@ class SimpleCommandCase(Case):
 
 async def _OkResult(_):
 	return Result(passed=True, context={}, elapsed_seconds=0, retries=None)
+
+
+@dataclass
+class _BenchMeasureData:
+	stamp: float
+
+
+class BenchMeasureStep(exec.step.Python):
+	def to_str(self):
+		return '<benchmark: time point>'
+
+	async def run(self, _previous_results: list[typing.Any]):
+		return _BenchMeasureData(time.perf_counter())
+
+
+class BenchCollectStep(exec.step.Python):
+	def __init__(self, printer: ya_test_runner.formatter.Sink, **kv):
+		self._kv = kv
+		self._printer = printer
+
+	def to_str(self):
+		return '<benchmark: report>'
+
+	async def run(self, previous_results: list[typing.Any]):
+		ended_stamp = time.perf_counter()
+		measurements: list[float] = []
+		last_good = 0
+		for res in previous_results:
+			if isinstance(res, _BenchMeasureData):
+				measurements.append(res.stamp)
+			else:
+				previous_results[last_good] = res
+				last_good += 1
+		previous_results = previous_results[:last_good]
+		measurements.append(ended_stamp)
+
+		bench_res = [x - y for y, x in zip(measurements, measurements[1:])]
+
+		import ya_test_runner.formatter as formatter
+
+		bp = formatter.BoxplotData.from_points(bench_res)
+
+		self._printer.put(
+			'Benchmark results', **self._kv, plot=bp.render(), results=bench_res
+		)
 
 
 CONST_PASSED = exec.step.PythonFunction(_OkResult)

@@ -1,5 +1,5 @@
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import NamedTuple
 import typing
 from ya_test_runner import SharedContext
@@ -13,7 +13,7 @@ class Service:
 	name: str
 	manager: ya_test_runner.exec.service.Service
 	depends_on: list['Service'] | None = None
-	meta: dict[str, typing.Any] | None = None
+	meta: dict[str, typing.Any] = field(default_factory=dict)
 
 	def __hash__(self):
 		return id(self)

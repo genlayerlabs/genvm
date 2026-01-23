@@ -38,7 +38,7 @@ class Run:
 
 class Python(metaclass=abc.ABCMeta):
 	@abc.abstractmethod
-	async def run(self, previous_results: list[typing.Any]) -> typing.Any: ...
+	async def run(self, previous_results: list[typing.Any], /) -> typing.Any: ...
 
 	def to_str(self) -> str:
 		return f'# <python step>'
@@ -92,7 +92,9 @@ async def run_steps(ctx: SharedContext, steps: list[Step]) -> list[typing.Any]:
 	cwd = Path.cwd()
 	for s in steps:
 		if isinstance(s, Python):
-			results.append(await s.run(results))
+			res = await s.run(results)
+			if res is not None:
+				results.append(res)
 		elif isinstance(s, SetCwd):
 			cwd = s.path
 		elif isinstance(s, SetEnv):
