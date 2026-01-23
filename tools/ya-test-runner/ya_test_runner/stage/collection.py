@@ -1,6 +1,7 @@
+import argparse
 from dataclasses import dataclass
-from types import SimpleNamespace
 from typing import NamedTuple
+import typing
 from ya_test_runner import SharedContext
 from .configuration import Env as ConfigurationEnv
 
@@ -12,6 +13,7 @@ class Service:
 	name: str
 	manager: ya_test_runner.exec.service.Service
 	depends_on: list['Service'] | None = None
+	meta: dict[str, typing.Any] | None = None
 
 	def __hash__(self):
 		return id(self)
@@ -42,7 +44,7 @@ class Context:
 
 class Env(NamedTuple):
 	cases: list[ya_test_runner.test.Case]
-	args: SimpleNamespace
+	args: argparse.Namespace
 
 
 def run(shared: SharedContext, configuration: ConfigurationEnv) -> Env:

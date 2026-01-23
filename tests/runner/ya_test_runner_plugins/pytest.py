@@ -38,6 +38,7 @@ def pytest(
 		],
 		cwd=poetry_root_dir,
 		env=default_env,
+		mode=ya_test_runner.exec.command.RunMode.INTERACTIVE,
 	)
 
 	ctx.add_case(case)

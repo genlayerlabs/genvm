@@ -19,6 +19,7 @@ from pathlib import Path
 import ya_test_runner
 from ya_test_runner.exec.command import Command, RunMode
 from ya_test_runner.test import CONST_PASSED
+import ya_test_runner_plugins.genvm as genvm
 
 # Get the local context
 local_ctx = ya_test_runner.stage.configuration.current_context()
@@ -33,76 +34,15 @@ TARGET_DIR = Path(build_info['rust_target_dir'])
 
 # Set up paths for importing plugin modules
 TESTS_DIR = local_ctx.shared.root_dir.joinpath('tests')
-PLUGINS_DIR = TESTS_DIR.joinpath('plugins')
 CASES_DIR = TESTS_DIR.joinpath('cases')
 TEMPLATES_DIR = TESTS_DIR.joinpath('templates')
 
-# Lazy imports - these are only loaded when actually running tests
-_lazy_imports_loaded = False
-
-if typing.TYPE_CHECKING:
-	from genlayer.py import calldata as gvm_calldata
-	from genlayer.py.types import Address as Address
-	from tests.plugins.mock_host import MockHost as MockHost, MockStorage as MockStorage
-	import tests.plugins.origin.base_host as base_host
-	import tests.plugins.origin.logger as origin_logger
-	import tests.plugins.origin.public_abi as public_abi
-else:
-	gvm_calldata = None
-	Address = None
-	MockHost = None
-	MockStorage = None
-	base_host = None
-	origin_logger = None
-	public_abi = None
-
-
-def _load_lazy_imports():
-	"""Load test-time dependencies lazily to avoid import errors at configuration time."""
-	global \
-		_lazy_imports_loaded, \
-		gvm_calldata, \
-		Address, \
-		MockHost, \
-		MockStorage, \
-		base_host, \
-		origin_logger, \
-		public_abi
-
-	if _lazy_imports_loaded:
-		return
-
-	# Add plugins to path so we can import MockHost etc.
-	if str(PLUGINS_DIR) not in sys.path:
-		sys.path.insert(0, str(PLUGINS_DIR))
-
-	# Find py-std location from monorepo config
-	MONO_REPO_ROOT_FILE = '.genvm-monorepo-root'
-	monorepo_conf = json.loads(
-		local_ctx.shared.root_dir.joinpath(MONO_REPO_ROOT_FILE).read_text()
-	)
-	py_std_path = local_ctx.shared.root_dir.joinpath(*monorepo_conf['py-std'])
-	if str(py_std_path) not in sys.path:
-		sys.path.insert(0, str(py_std_path))
-
-	# Now we can import the required modules
-	from genlayer.py import calldata as _gvm_calldata
-	from genlayer.py.types import Address as _Address
-	from mock_host import MockHost as _MockHost, MockStorage as _MockStorage
-	import origin.base_host as _base_host
-	import origin.logger as _origin_logger
-	from origin import public_abi as _public_abi
-
-	gvm_calldata = _gvm_calldata
-	Address = _Address
-	MockHost = _MockHost
-	MockStorage = _MockStorage
-	base_host = _base_host
-	origin_logger = _origin_logger
-	public_abi = _public_abi
-
-	_lazy_imports_loaded = True
-
+import genlayer.py.calldata as gvm_calldata
+from genlayer.py.types import Address
+from gvm_extra.mock_host import MockHost as MockHost, MockStorage as MockStorage
+import origin.base_host as base_host
+import origin.logger as origin_logger
+import origin.public_abi as public_abi
 
 # Default environment for tests
 default_env = {
@@ -113,8 +53,6 @@ default_env = {
 
 
 def _make_log_adapter(formatter: ya_test_runner.Formatter) -> 'origin_logger.Logger':
-	_load_lazy_imports()
-
 	class _FormatterLoggerAdapter(origin_logger.Logger):
 		"""Adapts ya_test_runner.formatter.Formatter to base_host.Logger interface."""
 
@@ -190,9 +128,6 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 	async def _run_test(self) -> dict:
 		import _jsonnet
 
-		# Load lazy imports
-		_load_lazy_imports()
-
 		jsonnet_path = self._test_case.jsonnet_path
 
 		# Check for skip file
@@ -214,7 +149,9 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 
 		# Set up temp directory
 		rel_path = jsonnet_path.relative_to(CASES_DIR)
-		tmp_dir = BUILD_DIR.joinpath('genvm-testdata-out', rel_path).with_suffix('')
+		tmp_dir = local_ctx.shared.artifacts_dir.joinpath(
+			'integration', rel_path
+		).with_suffix('')
 		shutil.rmtree(tmp_dir, ignore_errors=True)
 		tmp_dir.mkdir(exist_ok=True, parents=True)
 
@@ -257,6 +194,7 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 		else:
 			MAX_ATTEMPTS = 1
 		# Run each step
+		result = None
 		for i, single_conf in enumerate(jsonnet_conf):
 			for attempt in range(MAX_ATTEMPTS):
 				result = await self._run_single_step(
@@ -279,6 +217,17 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 					step=i,
 					context=result.get('context', {}),
 				)
+
+			local_ctx.shared.logger.log(
+				ya_test_runner.Formatter.Level.INFO
+				if len(jsonnet_conf) > 1
+				else ya_test_runner.Formatter.Level.DEBUG,
+				f'Test step passed',
+				test_name=str(self._test_case.description.name),
+				step=i + 1,
+				total_steps=len(jsonnet_conf),
+				result=result,
+			)
 
 		context = {}
 		if len(jsonnet_conf) > 1:
@@ -383,8 +332,9 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 		)
 
 		# Get manager URI from the service
-		manager_svc = self._test_case.manager_service.manager
-		manager_uri = f'http://localhost:{manager_svc.port}'
+		manager_svc = self._test_case.manager_service
+		port = manager_svc.meta['port']
+		manager_uri = f'http://localhost:{port}'
 
 		# Run the test
 		with host as mock_host:
@@ -485,7 +435,7 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 					},
 				}
 
-		return {'passed': True, 'context': {}}
+		return {'passed': True, 'context': {'execution_time': res.execution_time}}
 
 
 def _test_needs_webdriver(jsonnet_path: Path) -> bool:

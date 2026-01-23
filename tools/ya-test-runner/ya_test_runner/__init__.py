@@ -38,10 +38,11 @@ class SharedContext:
 
 		config_path = self.root_dir / '.ya-test.json'
 		if config_path.exists():
-			self._config = json.loads(config_path.read_text())
+			conf = json.loads(config_path.read_text())
 		else:
-			self._config = {}
-		return self._config
+			conf = {}
+		self._config = conf
+		return conf
 
 	@property
 	def artifacts_dir(self) -> Path:

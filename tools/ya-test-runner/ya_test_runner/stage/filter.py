@@ -56,7 +56,7 @@ def _tokenize_expr(expr: str) -> list[str]:
 
 def _parse_tags_expr(
 	toks: list[str], priority: int
-) -> typing.Callable[[set[str]], bool]:
+) -> typing.Callable[[frozenset[str]], bool]:
 	if priority == 0:
 		if toks[-1] == '(':
 			toks.pop()

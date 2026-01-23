@@ -297,7 +297,7 @@ def cargo_fuzz(
 					'-i',
 					f'./fuzz/inputs-{name}',
 					'-o',
-					f'{BUILD_DIR}/genvm-testdata-out/fuzz/{name}',
+					f'{local_ctx.shared.artifacts_dir}/fuzz/{name}',
 					'-V',
 					str(getattr(ctx.configuration.args, 'fuzz_timeout', 30)),
 					'-t',
@@ -312,9 +312,9 @@ def cargo_fuzz(
 	)
 
 	if getattr(ctx.configuration.args, 'fuzz_update_corpus', False):
+		opt_dir = local_ctx.shared.artifacts_dir.joinpath('fuzz/', f'{name}-opt')
 
 		async def remove_opt_dir(_):
-			opt_dir = BUILD_DIR.joinpath('genvm-testdata-out', 'fuzz/', f'{name}-opt')
 			if opt_dir.exists():
 				shutil.rmtree(opt_dir, ignore_errors=True)
 			opt_dir.mkdir(parents=True, exist_ok=True)
@@ -336,9 +336,9 @@ def cargo_fuzz(
 					'-T',
 					'all',
 					'-o',
-					f'{BUILD_DIR}/genvm-testdata-out/fuzz/{name}-opt',
+					f'{local_ctx.shared.artifacts_dir}/fuzz/{name}-opt',
 					'-i',
-					f'{BUILD_DIR}/genvm-testdata-out/fuzz/{name}',
+					f'{local_ctx.shared.artifacts_dir}/fuzz/{name}',
 					'--',
 					f'{TARGET_DIR}/debug/examples/fuzz-{name}',
 				],
@@ -357,7 +357,7 @@ def cargo_fuzz(
 				args=[
 					sys.executable,
 					f'{local_ctx.shared.root_dir}/runners/genlayer-py-std/fuzz/resave.py',
-					f'{BUILD_DIR}/genvm-testdata-out/fuzz/{name}-opt',
+					opt_dir,
 					inputs_dir,
 				],
 				mode=ya_test_runner.exec.command.RunMode.INTERACTIVE,

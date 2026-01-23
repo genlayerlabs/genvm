@@ -295,6 +295,8 @@ class RunHostAndProgramRes:
 	stderr: str
 	genvm_log: list[dict[str, typing.Any]]
 
+	execution_time: float
+
 	result_kind: public_abi.ResultCode
 	result_data: typing.Any
 	result_fingerprint: typing.Any
@@ -341,6 +343,8 @@ async def run_genvm(
 	status_cell: list[dict | Exception | None] = [None]
 	cancellation_event = asyncio.Event()
 
+	started_at = [time.time()]
+
 	async def wrap_proc():
 		try:
 			max_exec_mins = 20
@@ -384,6 +388,7 @@ async def run_genvm(
 					asyncio.ensure_future(wrap_timeout(genvm_id))
 		finally:
 			logger.debug('proc started', genvm_id=genvm_id_cell[0])
+			started_at[0] = time.time()
 
 	async def wrap_host():
 		r = await host_loop(handler, cancellation_event, logger=logger)
@@ -519,6 +524,7 @@ async def run_genvm(
 			result_storage_changes=result_storage_changes,
 			result_events=result_events,
 			vm_error_description=vm_error_description,
+			execution_time=time.time() - started_at[0],
 		)
 
 	raise Exception('Execution failed')

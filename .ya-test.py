@@ -18,7 +18,13 @@ local_ctx.run_parser.add_argument(
 	help='Whether to update the fuzzing corpus',
 )
 
-local_ctx.add_dir('tests')
+import sys
+import ya_test_runner_plugins
+
+local_ctx.shared.logger.trace(
+	'import path', path=sys.path, plugins_path=ya_test_runner_plugins.__path__
+)
+from ya_test_runner_plugins import cargo, pytest, integration, genvm
 
 
 def collect_rust(ctx: ya_test_runner.stage.collection.Context):
@@ -87,45 +93,39 @@ local_ctx.add_collector(collect_poetry)
 def collect_integration(ctx: ya_test_runner.stage.collection.Context):
 	import json
 
-	# Import docker module for service classes
-	from tests.plugins.docker import ManagerService, ModulesService, WebdriverService
-
 	# Load build info to find binary paths
 	build_info = json.loads(
 		ctx.shared.root_dir.joinpath('build', 'info.json').read_text()
 	)
 	build_dir = Path(build_info['build_dir'])
 
-	tests_output_root = build_dir.joinpath('genvm-testdata-out')
+	tests_output_root = ctx.shared.artifacts_dir.joinpath('integration')
 	tests_output_root.mkdir(parents=True, exist_ok=True)
 
-	# Create manager service
-	manager_port = 3999
-	manager_impl = ManagerService(
+	manager_impl = genvm.ManagerService(
 		bin_path=build_dir.joinpath('out', 'bin', 'genvm-modules'),
-		port=manager_port,
-		reuse_existing=True,  # Allow reusing pre-started manager during development
 		reroute_to='vTEST',
 		log_path=tests_output_root.joinpath('manager.log'),
+		env=ctx.configuration,
 	)
 	manager_service = ctx.new_service(
-		name=f'manager-{manager_port}',
+		name=f'manager',
 		manager=manager_impl,
 	)
+	manager_port = genvm.get_manager_port(ctx.configuration)
+	manager_service.meta = {'port': manager_port}
 
 	# Create webdriver service
-	webdriver_port = 4444
-	webdriver_impl = WebdriverService(
-		context_dir=ctx.shared.root_dir.joinpath('modules', 'webdriver'),
-		port=webdriver_port,
+	webdriver_impl = ya_test_runner.exec.service.FunctionService(
+		lambda: genvm.start_webdriver_service(ctx.configuration)
 	)
 	webdriver_service = ctx.new_service(
-		name=f'webdriver-{webdriver_port}',
+		name=f'webdriver',
 		manager=webdriver_impl,
 	)
 
 	# This starts Llm and Web modules on the manager
-	modules_impl = ModulesService(
+	modules_impl = genvm.ModulesService(
 		manager_uri=f'http://localhost:{manager_port}',
 	)
 	modules_service = ctx.new_service(

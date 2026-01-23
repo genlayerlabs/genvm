@@ -381,6 +381,15 @@ def main() -> None:
 		printer=printer,
 	)
 
+	for p in shared_context.config.get('extra_python_paths', []):
+		extra_path = Path(p)
+		if not extra_path.is_absolute():
+			extra_path = shared_context.root_dir / extra_path
+		extra_path_str = str(extra_path)
+		if extra_path_str not in sys.path:
+			logger.debug('adding extra python path', path=extra_path)
+			sys.path.append(extra_path_str)
+
 	parser_result = create_parser()
 
 	ya_test_runner.stage.filter.add_args(parser_result.parser)
