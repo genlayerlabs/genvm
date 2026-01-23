@@ -69,7 +69,7 @@ class Contract(gl.Contract):
 	@gl.public.write
 	def bench(self) -> None:
 		sum = 0
-		for i in range(2000):
+		for i in range(5_000):
 			s = ''.join(random.choice(rand_str_chars) for _ in range(10))
 			x = self.trie.get(str_to_keys(s))
 			if x is not None:

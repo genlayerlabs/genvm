@@ -153,7 +153,7 @@ class IntegrationTestCase(ya_test_runner.test.Case):
 				max_attempts=max_attempts,
 			)
 			if is_benchmark:
-				for i in range(5):
+				for i in range(20):
 					steps.append(ya_test_runner.test.BenchMeasureStep())
 					steps.append(cur_step)
 				steps.append(ya_test_runner.test.BenchCollectStep(local_ctx.shared.printer))

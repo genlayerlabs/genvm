@@ -90,6 +90,14 @@ local_ctx.add_collector(collect_rust)
 local_ctx.add_collector(collect_poetry)
 
 
+local_ctx.run_parser.add_argument(
+	'--genvm-reroute-to',
+	type=str,
+	default='vTEST',
+	help='Reroute GenVM Manager to the specified environment',
+)
+
+
 def collect_integration(ctx: ya_test_runner.stage.collection.Context):
 	import json
 
@@ -104,7 +112,7 @@ def collect_integration(ctx: ya_test_runner.stage.collection.Context):
 
 	manager_impl = genvm.ManagerService(
 		bin_path=build_dir.joinpath('out', 'bin', 'genvm-modules'),
-		reroute_to='vTEST',
+		reroute_to=ctx.configuration.args.genvm_reroute_to,
 		log_path=tests_output_root.joinpath('manager.log'),
 		env=ctx.configuration,
 	)
