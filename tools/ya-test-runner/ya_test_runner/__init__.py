@@ -11,10 +11,12 @@ __all__ = (
 	'util',
 )
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 import subprocess
 import threading
+from typing import Any
 from ya_test_runner.formatter import Formatter, Sink
 
 
@@ -26,6 +28,31 @@ class SharedContext:
 
 	_git_files: list[Path] | None = None
 	_interrupted: threading.Event = field(default_factory=threading.Event)
+	_config: dict[str, Any] | None = None
+
+	@property
+	def config(self) -> dict[str, Any]:
+		"""Load config from .ya-test.json if it exists."""
+		if self._config is not None:
+			return self._config
+
+		config_path = self.root_dir / '.ya-test.json'
+		if config_path.exists():
+			self._config = json.loads(config_path.read_text())
+		else:
+			self._config = {}
+		return self._config
+
+	@property
+	def artifacts_dir(self) -> Path:
+		"""Get the artifacts directory from config, or default to root_dir/build/test-artifacts."""
+		artifacts_path = self.config.get('artifacts_dir')
+		if artifacts_path:
+			path = Path(artifacts_path)
+			if not path.is_absolute():
+				path = self.root_dir / path
+			return path
+		return self.root_dir / 'build' / 'test-artifacts'
 
 	@property
 	def git_files(self) -> list[Path]:

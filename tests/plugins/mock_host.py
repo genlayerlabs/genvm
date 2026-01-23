@@ -79,6 +79,7 @@ class MockHost(IHost):
 		self.messages_file = None
 		self.messages_path = messages_path
 		self.balances = balances
+		self.nondet_disagreement_call_no = None
 
 	def __enter__(self):
 		self.created = False
@@ -107,6 +108,7 @@ class MockHost(IHost):
 		Path(self.path).unlink(missing_ok=True)
 
 	async def notify_nondet_disagreement(self, call_no: int) -> None:
+		self.nondet_disagreement_call_no = call_no
 		pass
 
 	async def loop_enter(self, cancellation: asyncio.Event):

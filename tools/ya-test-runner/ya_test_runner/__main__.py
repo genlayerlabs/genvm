@@ -214,6 +214,14 @@ def _workflow_run_inner(
 		success=success,
 	)
 
+	# Run plugin-registered post-run steps
+	for step in conf_env.post_run_steps:
+		try:
+			step(shared_context, execution_env)
+		except Exception as e:
+			shared_context.logger.error('Post-run step failed', error=str(e))
+	shared_context.logger.debug('stage completed', stage='post-run')
+
 	if success:
 		sys.exit(0)
 	else:

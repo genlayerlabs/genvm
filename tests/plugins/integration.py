@@ -31,9 +31,9 @@ build_info = json.loads(
 BUILD_DIR = Path(build_info['build_dir'])
 TARGET_DIR = Path(build_info['rust_target_dir'])
 
-# Set up paths for importing runner modules
+# Set up paths for importing plugin modules
 TESTS_DIR = local_ctx.shared.root_dir.joinpath('tests')
-RUNNER_DIR = TESTS_DIR.joinpath('runner')
+PLUGINS_DIR = TESTS_DIR.joinpath('plugins')
 CASES_DIR = TESTS_DIR.joinpath('cases')
 TEMPLATES_DIR = TESTS_DIR.joinpath('templates')
 
@@ -43,10 +43,10 @@ _lazy_imports_loaded = False
 if typing.TYPE_CHECKING:
 	from genlayer.py import calldata as gvm_calldata
 	from genlayer.py.types import Address as Address
-	from tests.runner.mock_host import MockHost as MockHost, MockStorage as MockStorage
-	import tests.runner.origin.base_host as base_host
-	import tests.runner.origin.logger as origin_logger
-	import tests.runner.origin.public_abi as public_abi
+	from tests.plugins.mock_host import MockHost as MockHost, MockStorage as MockStorage
+	import tests.plugins.origin.base_host as base_host
+	import tests.plugins.origin.logger as origin_logger
+	import tests.plugins.origin.public_abi as public_abi
 else:
 	gvm_calldata = None
 	Address = None
@@ -72,9 +72,9 @@ def _load_lazy_imports():
 	if _lazy_imports_loaded:
 		return
 
-	# Add runner to path so we can import MockHost etc.
-	if str(RUNNER_DIR) not in sys.path:
-		sys.path.insert(0, str(RUNNER_DIR))
+	# Add plugins to path so we can import MockHost etc.
+	if str(PLUGINS_DIR) not in sys.path:
+		sys.path.insert(0, str(PLUGINS_DIR))
 
 	# Find py-std location from monorepo config
 	MONO_REPO_ROOT_FILE = '.genvm-monorepo-root'
@@ -412,6 +412,10 @@ class IntegrationTestStep(ya_test_runner.exec.step.Python):
 					res.stdout += f'executed with `VMError("{res.result_data}")`\n'
 				elif res.result_kind == public_abi.ResultCode.USER_ERROR:
 					res.stdout += f'executed with `UserError("{res.result_data}")`\n'
+				if mock_host.nondet_disagreement_call_no is not None:
+					res.stdout += (
+						f'nondet disagreement: {mock_host.nondet_disagreement_call_no}\n'
+					)
 				# Apply events and storage changes
 				for evs in res.result_events:
 					mock_host.post_event(evs[:-1], evs[-1])
