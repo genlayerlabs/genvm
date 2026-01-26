@@ -249,6 +249,15 @@ class IntegrationSetupStep(ya_test_runner.exec.step.Python):
 		)
 
 
+FAKE_TX_ID = '0x' + '00' * 32
+FAKE_NODE_ADDRESS = '0xE840F4456F4cD28C4f54d0F8AfA2C0DBf43e4d29'
+FAKE_NODE_PRIVATE_KEY = (
+	'81bd0b16ba7f9a06ca3e0e54796018b4792dbc406a93421bb8789af2dd139809'
+)
+FAKE_NODE_PUBLIC_KEY = '6478c39d71a8e469a2dfc5f467ab48e449012308228ab81aa2341107ea7bb3324ab8d4169d49f4705a35b7271475f6d81e210aa2ff35fea4d74d83d25ec6599c'
+SIGNER_URL = 'https://test-server.genlayer.com/genvm/sign'
+
+
 class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 	"""Executes a single step of an integration test."""
 
@@ -417,6 +426,13 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		with host as mock_host:
 			try:
 				logger = _make_log_adapter(local_ctx.shared.logger)
+				host_data = json.dumps(
+					{
+						'node_address': FAKE_NODE_ADDRESS,
+						'tx_id': FAKE_TX_ID,
+						'signerUrl': SIGNER_URL,
+					}
+				)
 				res = await base_host.run_genvm(
 					mock_host,
 					manager_uri=manager_uri,
@@ -424,7 +440,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					timeout=single_conf.get('deadline', 10 * 60),
 					capture_output=True,
 					is_sync=single_conf.get('sync', False),
-					host_data='{"node_address": "0x", "tx_id": "0x"}',
+					host_data=host_data,
 					logger=logger,
 					host='unix://' + mock_host.path,
 					extra_args=['--debug-mode'],
