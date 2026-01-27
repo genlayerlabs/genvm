@@ -6,7 +6,6 @@ pub mod preview1;
 pub mod vfs;
 
 mod common;
-mod gl_call;
 
 pub struct Context {
     vfs: vfs::VFS,

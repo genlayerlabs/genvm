@@ -62,7 +62,7 @@ impl crate::common::MessageHandler<llm_iface::Message, FullResponse> for Handler
                 remaining_fuel_as_gen,
             } => {
                 for img in &payload.images {
-                    if prompt::ImageType::sniff(&img.0).is_none() {
+                    if prompt::ImageType::sniff(img.as_ref()).is_none() {
                         return Err(ModuleError {
                             causes: vec!["INVALID_IMAGE".into()],
                             fatal: false,

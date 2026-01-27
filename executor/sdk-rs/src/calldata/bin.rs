@@ -2,6 +2,75 @@ use std::collections::BTreeMap;
 
 use super::types::*;
 
+#[derive(Debug)]
+pub enum DecodeError {
+    UnterminatedUleb,
+    InvalidUlebEncoding,
+    NumberTooBig,
+    UnexpectedEnd { expected: usize, available: usize },
+    ContainerSizeTooLarge { bits: u64 },
+    InvalidSpecialValue { value: u8 },
+    InvalidMapOrdering { prev: String, current: String },
+    InvalidType { type_tag: u8 },
+    TrailingData { remaining: usize },
+    InvalidUtf8(std::str::Utf8Error),
+}
+
+impl std::fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DecodeError::UnterminatedUleb => write!(f, "unterminated uleb"),
+            DecodeError::InvalidUlebEncoding => {
+                write!(f, "most significant octet cannot be zero")
+            }
+            DecodeError::NumberTooBig => write!(f, "number is too big"),
+            DecodeError::UnexpectedEnd {
+                expected,
+                available,
+            } => {
+                write!(
+                    f,
+                    "unexpected end: expected {expected} bytes, got {available}"
+                )
+            }
+            DecodeError::ContainerSizeTooLarge { bits } => {
+                write!(f, "container size is too large: {bits} > 32 bits")
+            }
+            DecodeError::InvalidSpecialValue { value } => {
+                write!(f, "invalid special value: {value}")
+            }
+            DecodeError::InvalidMapOrdering { prev, current } => {
+                write!(f, "invalid calldata map ordering: `{prev}` >= `{current}`")
+            }
+            DecodeError::InvalidType { type_tag } => {
+                write!(f, "invalid type tag: {type_tag}")
+            }
+            DecodeError::TrailingData { remaining } => {
+                write!(
+                    f,
+                    "input is partially unparsed: {remaining} bytes remaining"
+                )
+            }
+            DecodeError::InvalidUtf8(e) => write!(f, "invalid utf8: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for DecodeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            DecodeError::InvalidUtf8(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<std::str::Utf8Error> for DecodeError {
+    fn from(e: std::str::Utf8Error) -> Self {
+        DecodeError::InvalidUtf8(e)
+    }
+}
+
 #[derive(Clone, Copy)]
 struct Parser<'a>(&'a [u8]);
 
@@ -21,12 +90,12 @@ const SPECIAL_TRUE: u8 = (2 << BITS_IN_TYPE) | TYPE_SPECIAL;
 const SPECIAL_ADDR: u8 = (3 << BITS_IN_TYPE) | TYPE_SPECIAL;
 
 impl Parser<'_> {
-    fn fetch_uleb(&mut self) -> anyhow::Result<num_bigint::BigUint> {
+    fn fetch_uleb(&mut self) -> Result<num_bigint::BigUint, DecodeError> {
         let mut res = num_bigint::BigUint::ZERO;
         let mut off = 0u64;
         loop {
             if self.0.is_empty() {
-                anyhow::bail!("unterminated uleb")
+                return Err(DecodeError::UnterminatedUleb);
             }
 
             let byte = self.0[0];
@@ -36,7 +105,7 @@ impl Parser<'_> {
 
             if byte & 0x80 == 0 {
                 if byte == 0 && off != 0 {
-                    anyhow::bail!("most significant octet can not be zero");
+                    return Err(DecodeError::InvalidUlebEncoding);
                 }
                 return Ok(res);
             }
@@ -44,36 +113,36 @@ impl Parser<'_> {
             off = match off.checked_add(7) {
                 Some(off) => off,
                 None => {
-                    anyhow::bail!("number is too big");
+                    return Err(DecodeError::NumberTooBig);
                 }
             };
         }
     }
 
-    fn fetch_slice(&mut self, le: usize) -> anyhow::Result<&[u8]> {
-        if self.0.len() < le {
-            anyhow::bail!("invalid size")
+    fn fetch_slice(&mut self, expected: usize) -> Result<&[u8], DecodeError> {
+        if self.0.len() < expected {
+            return Err(DecodeError::UnexpectedEnd {
+                expected,
+                available: self.0.len(),
+            });
         }
 
-        let ret = &self.0[..le];
+        let ret = &self.0[..expected];
 
-        self.0 = &self.0[le..];
+        self.0 = &self.0[expected..];
 
         Ok(ret)
     }
 
-    fn map_to_size(size: &num_bigint::BigUint) -> anyhow::Result<usize> {
+    fn map_to_size(size: &num_bigint::BigUint) -> Result<usize, DecodeError> {
         if size.bits() > 32 {
-            Err(anyhow::anyhow!(
-                "container size is too large {}>32",
-                size.bits()
-            ))
+            Err(DecodeError::ContainerSizeTooLarge { bits: size.bits() })
         } else {
             Ok(size.to_u32_digits().first().cloned().unwrap_or(0) as usize)
         }
     }
 
-    fn fetch_val(&mut self) -> anyhow::Result<Value> {
+    fn fetch_val(&mut self) -> Result<Value, DecodeError> {
         let mut val = self.fetch_uleb()?;
 
         let val_least_byte = (val.iter_u32_digits().next().unwrap_or(0) & (u8::MAX as u32)) as u8;
@@ -84,7 +153,9 @@ impl Parser<'_> {
         match typ {
             TYPE_SPECIAL => {
                 if val.bits() > 8 - BITS_IN_TYPE as u64 {
-                    anyhow::bail!("invalid special value {}", val << BITS_IN_TYPE)
+                    return Err(DecodeError::InvalidSpecialValue {
+                        value: val_least_byte,
+                    });
                 }
                 match val_least_byte {
                     SPECIAL_NULL => Ok(Value::Null),
@@ -98,10 +169,7 @@ impl Parser<'_> {
 
                         Ok(Value::Address(Address(addr)))
                     }
-                    x => Err(anyhow::anyhow!(
-                        "invalid special {x}, full={}",
-                        val << BITS_IN_TYPE
-                    )),
+                    x => Err(DecodeError::InvalidSpecialValue { value: x }),
                 }
             }
             TYPE_BYTES => {
@@ -131,7 +199,7 @@ impl Parser<'_> {
             TYPE_MAP => {
                 let full_size = Self::map_to_size(&val)?;
 
-                let mut ret = BTreeMap::new();
+                let mut ret: BTreeMap<String, Value> = BTreeMap::new();
 
                 for _i in 0..full_size {
                     let str_size = self.fetch_uleb()?;
@@ -142,7 +210,10 @@ impl Parser<'_> {
 
                     if let Some((k, _)) = ret.last_key_value() {
                         if k >= &as_str {
-                            anyhow::bail!("invalid calldata map ordering old=`{k}` new=`{as_str}`")
+                            return Err(DecodeError::InvalidMapOrdering {
+                                prev: k.clone(),
+                                current: as_str,
+                            });
                         }
                     }
 
@@ -165,18 +236,20 @@ impl Parser<'_> {
                 num_bigint::Sign::Plus,
                 val,
             ))),
-            v => Err(anyhow::anyhow!("invalid type {v}")),
+            v => Err(DecodeError::InvalidType { type_tag: v }),
         }
     }
 }
 
-pub fn decode(data: &[u8]) -> anyhow::Result<Value> {
+pub fn decode(data: &[u8]) -> Result<Value, DecodeError> {
     let mut parser = Parser(data);
 
     let ret = parser.fetch_val()?;
 
     if !parser.0.is_empty() {
-        anyhow::bail!("input is partially unparsed")
+        return Err(DecodeError::TrailingData {
+            remaining: parser.0.len(),
+        });
     }
 
     Ok(ret)

@@ -1,10 +1,8 @@
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
-
 pub const ADDRESS_SIZE: usize = 20;
 
-#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Address(pub(super) [u8; ADDRESS_SIZE]);
 
 impl std::fmt::Debug for Address {
@@ -13,6 +11,7 @@ impl std::fmt::Debug for Address {
     }
 }
 
+#[cfg(feature = "arbitrary")]
 impl arbitrary::Arbitrary<'_> for Address {
     fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
         let mut raw = [0u8; ADDRESS_SIZE];

@@ -1,4 +1,3 @@
-use serde::ser::Error as _;
 use std::collections::BTreeMap;
 
 use super::error::*;
@@ -120,16 +119,16 @@ impl serde::Serializer for Serializer {
             if as_int as f64 == float {
                 Ok(Value::Number(as_int.into()))
             } else {
-                Err(Error::custom("float has fractional part"))
+                Err(Error::FloatHasFractionalPart)
             }
         } else {
-            Err(Error::custom("float out of range for serialization"))
+            Err(Error::FloatOutOfRange)
         }
     }
 
     #[inline]
     fn serialize_char(self, _value: char) -> Result<Value> {
-        Err(Error::custom("chars are not supported"))
+        Err(Error::CharsNotSupported)
     }
 
     #[inline]
@@ -411,60 +410,60 @@ impl serde::Serializer for MapKeySerializer {
     }
 
     fn serialize_bool(self, _value: bool) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_i8(self, _value: i8) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_i16(self, _value: i16) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_i32(self, _value: i32) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_i64(self, _value: i64) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_i128(self, _value: i128) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_u8(self, _value: u8) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_u16(self, _value: u16) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_u32(self, _value: u32) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_u64(self, _value: u64) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_u128(self, _value: u128) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_f32(self, _value: f32) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_f64(self, _value: f64) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     #[inline]
     fn serialize_char(self, _value: char) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     #[inline]
@@ -473,15 +472,15 @@ impl serde::Serializer for MapKeySerializer {
     }
 
     fn serialize_bytes(self, _value: &[u8]) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_unit(self) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_unit_struct(self, _name: &'static str) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_newtype_variant<T>(
@@ -494,26 +493,26 @@ impl serde::Serializer for MapKeySerializer {
     where
         T: ?Sized + serde::ser::Serialize,
     {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_none(self) -> Result<String> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_some<T>(self, _value: &T) -> Result<String>
     where
         T: ?Sized + serde::ser::Serialize,
     {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_tuple_struct(
@@ -521,7 +520,7 @@ impl serde::Serializer for MapKeySerializer {
         _name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleStruct> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_tuple_variant(
@@ -531,15 +530,15 @@ impl serde::Serializer for MapKeySerializer {
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn serialize_struct_variant(
@@ -549,7 +548,7 @@ impl serde::Serializer for MapKeySerializer {
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant> {
-        Err(Error::custom("key can be only a string"))
+        Err(Error::OnlyStringKeysSupported)
     }
 
     fn collect_str<T>(self, value: &T) -> Result<String>

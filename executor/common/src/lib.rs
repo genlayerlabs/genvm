@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-pub mod calldata;
+pub use genlayer_sdk::calldata;
+
 pub mod cancellation;
 pub mod logger;
 pub mod stats;
@@ -16,7 +17,7 @@ pub mod util;
 pub mod domain {
     use std::sync::Arc;
 
-    use crate::calldata;
+    use genlayer_sdk::calldata;
 
     fn default_datetime() -> chrono::DateTime<chrono::Utc> {
         chrono::DateTime::parse_from_rfc3339("2024-11-26T06:42:42.424242Z")

@@ -9,7 +9,9 @@ use wiggle::GuestError;
 use crate::host::{self, SlotID};
 use crate::{calldata, public_abi, rt};
 
-use super::{base, gl_call, vfs};
+use genlayer_sdk::abi::gl_call;
+
+use super::{base, vfs};
 
 fn entry_kind_as_int<S>(data: &public_abi::EntryKind, d: S) -> Result<S::Ok, S::Error>
 where
@@ -368,7 +370,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let request = match calldata::decode(&request) {
             Err(e) => {
-                log_info!(error:ah = &e; "calldata parse failed");
+                log_info!(error:err = &e; "calldata parse failed");
 
                 return Err(generated::types::Errno::Inval.into());
             }
@@ -780,7 +782,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let expect_bool = !matches!(
                     &prompt_template_payload,
-                    genvm_modules_interfaces::llm::PromptTemplatePayload::EqNonComparativeLeader(_)
+                    gl_call::llm_iface::PromptTemplatePayload::EqNonComparativeLeader(_)
                 );
 
                 // Get remaining fuel from host

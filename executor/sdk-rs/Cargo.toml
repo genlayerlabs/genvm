@@ -1,0 +1,21 @@
+[package]
+name = "genlayer_sdk"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["wasi"]
+wasi = []
+arbitrary = ["dep:arbitrary"]
+
+[dependencies]
+hex = "0.4.3"
+num-bigint = {version = "0.4.6", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+arbitrary = { version = "1.0", optional = true }
+primitive-types = { version = "0.13", features = ["impl-serde"] }
+serde_bytes = { version = "0.11.19"}
+bytes = {version = "1.11.0", features = ["serde"] }
+
+[dev-dependencies]
+primitive-types = { version = "0.13", features = ["impl-serde"] }

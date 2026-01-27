@@ -1,4 +1,3 @@
-use serde::de::Error as _;
 use serde::de::IntoDeserializer;
 use std::collections::BTreeMap;
 
@@ -217,7 +216,7 @@ macro_rules! deserialize_numeric_key {
         where
             V: serde::de::Visitor<'de>,
         {
-            Err(Error::custom("only string keys are supported"))
+            Err(Error::OnlyStringKeysSupported)
         }
     };
 }
@@ -336,12 +335,12 @@ fn try_deserialize_value<V>(value: Value) -> Result<V, Value> {
             }
             _ => Err(value),
         },
-        "genvm_common::calldata::types::Value" => {
+        "genlayer_sdk::calldata::types::Value" => {
             let value = std::mem::ManuallyDrop::new(value);
             let ptr = std::ptr::from_ref(&value) as *const std::mem::ManuallyDrop<V>;
             Ok(std::mem::ManuallyDrop::into_inner(unsafe { ptr.read() }))
         }
-        "genvm_common::calldata::types::Address" => match value {
+        "genlayer_sdk::calldata::types::Address" => match value {
             Value::Address(addr) => {
                 let ptr = std::ptr::from_ref(&addr) as *const V;
                 Ok(unsafe { ptr.read() })
@@ -547,7 +546,7 @@ where
     } else if let Ok(res) = u128::try_from(&num) {
         visitor.visit_u128(res)
     } else {
-        Err(Error::custom("number is too big"))
+        Err(Error::NumberTooBig)
     }
 }
 
@@ -578,10 +577,9 @@ impl<'de> serde::Deserializer<'de> for Value {
             Err(value) => value,
         };
         match value {
-            Value::Address(_a) => Err(Error(anyhow::anyhow!(
-                "unexpected address for {}",
-                std::any::type_name::<V::Value>()
-            ))),
+            Value::Address(_a) => Err(Error::UnexpectedAddress {
+                target_type: std::any::type_name::<V::Value>(),
+            }),
             Value::Null => visitor.visit_unit(),
             Value::Bool(v) => visitor.visit_bool(v),
             Value::Number(n) => visit_bigint(n, visitor),

@@ -86,7 +86,7 @@ buf = String.new
 
 buf << "// This file is auto-generated. Do not edit!\n\n"
 buf << "#![allow(dead_code, clippy::redundant_static_lifetimes)]\n\n";
-buf << "use serde_derive::{Deserialize, Serialize};\n\n"
+buf << "use serde::{Deserialize, Serialize};\n\n"
 
 JSON.load_file(Pathname.new(json_path)).each { |t|
 	t_os = OpenStruct.new(t)

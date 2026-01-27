@@ -31,6 +31,7 @@ wasmparser = { path = "third-party/wasm-tools/crates/wasmparser" }
 
 genvm-common = { path = "common" }
 genvm-modules-interfaces = { path = "../modules/interfaces" }
+genlayer_sdk = { path = "sdk-rs", default-features = false }
 
 anyhow = { version = "1.0.97", default-features = false }
 tracing = "0.1.41"

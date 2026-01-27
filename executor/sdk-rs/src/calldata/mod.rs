@@ -4,7 +4,7 @@ mod error;
 mod se;
 mod types;
 
-pub use bin::{decode, encode, encode_to};
+pub use bin::{DecodeError, decode, encode, encode_to};
 pub use error::*;
 pub use types::*;
 
@@ -27,11 +27,11 @@ where
                 unsafe { std::ptr::NonNull::new_unchecked(as_ptr).as_ref() }.clone(),
             ))
         }
-        "genvm_common::calldata::types::Value" => {
+        "genlayer_sdk::calldata::types::Value" => {
             let as_ptr = std::ptr::from_ref(value) as *mut Value; // should be const but non-null...
             Ok(unsafe { std::ptr::NonNull::new_unchecked(as_ptr).as_ref() }.clone())
         }
-        "genvm_common::calldata::types::Address" => {
+        "genlayer_sdk::calldata::types::Address" => {
             let as_ptr = std::ptr::from_ref(value) as *const Address;
             Ok(Value::Address(unsafe { as_ptr.read() }))
         }

@@ -6,7 +6,7 @@ pub mod rt;
 pub mod runners;
 pub mod wasi;
 
-pub mod public_abi;
+pub use genlayer_sdk::abi::consts as public_abi;
 
 pub use genvm_common::calldata;
 use genvm_common::*;

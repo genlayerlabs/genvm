@@ -2,7 +2,7 @@
 
 #![allow(dead_code, clippy::redundant_static_lifetimes)]
 
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[repr(u8)]
