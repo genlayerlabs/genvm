@@ -9,51 +9,34 @@ use wiggle::GuestError;
 use crate::host::{self, SlotID};
 use crate::{calldata, public_abi, rt};
 
+pub use genlayer_sdk::abi::entry::ExtendedMessage;
 use genlayer_sdk::abi::gl_call;
 
 use super::{base, vfs};
-
-fn entry_kind_as_int<S>(data: &public_abi::EntryKind, d: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    d.serialize_u8(*data as u8)
-}
-
-#[derive(serde::Serialize, Debug)]
-pub struct ExtendedMessage {
-    pub contract_address: calldata::Address,
-    pub sender_address: calldata::Address,
-    pub origin_address: calldata::Address,
-    /// View methods call chain.
-    /// It is empty for entrypoint (refer to [`contract_address`])
-    pub stack: Vec<calldata::Address>,
-
-    pub chain_id: num_bigint::BigInt,
-    pub value: num_bigint::BigInt,
-    pub is_init: bool,
-    /// Transaction timestamp
-    pub datetime: chrono::DateTime<chrono::Utc>,
-
-    #[serde(serialize_with = "entry_kind_as_int")]
-    pub entry_kind: public_abi::EntryKind,
-    #[serde(with = "serde_bytes")]
-    pub entry_data: Vec<u8>,
-
-    pub entry_stage_data: calldata::Value,
-}
 
 fn default_entry_stage_data() -> calldata::Value {
     calldata::Value::Null
 }
 
-impl ExtendedMessage {
-    pub fn fork_leader(
+/// Extension methods for ExtendedMessage specific to the executor
+pub trait ExtendedMessageExt {
+    fn fork_leader(
         &self,
         entry_kind: public_abi::EntryKind,
         entry_data: Vec<u8>,
         entry_leader_data: Option<rt::vm::RunOk>,
-    ) -> Self {
+    ) -> ExtendedMessage;
+
+    fn fork(&self, entry_kind: public_abi::EntryKind, entry_data: Vec<u8>) -> ExtendedMessage;
+}
+
+impl ExtendedMessageExt for ExtendedMessage {
+    fn fork_leader(
+        &self,
+        entry_kind: public_abi::EntryKind,
+        entry_data: Vec<u8>,
+        entry_leader_data: Option<rt::vm::RunOk>,
+    ) -> ExtendedMessage {
         let entry_leader_data = match entry_leader_data {
             None => default_entry_stage_data(),
             Some(entry_leader_data) => calldata::Value::Map(BTreeMap::from([(
@@ -77,7 +60,7 @@ impl ExtendedMessage {
         }
     }
 
-    pub fn fork(&self, entry_kind: public_abi::EntryKind, entry_data: Vec<u8>) -> Self {
+    fn fork(&self, entry_kind: public_abi::EntryKind, entry_data: Vec<u8>) -> ExtendedMessage {
         self.fork_leader(entry_kind, entry_data, None)
     }
 }
