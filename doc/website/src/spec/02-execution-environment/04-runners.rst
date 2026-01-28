@@ -1,3 +1,5 @@
+.. _runners-reference:
+
 :term:`Runners <Runner>`
 ========================
 
