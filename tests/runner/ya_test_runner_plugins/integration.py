@@ -222,6 +222,7 @@ class IntegrationSetupStep(ya_test_runner.exec.step.Python):
 							'exit_code': result.exit_code,
 							'stdout': result.stdout,
 							'stderr': result.stderr,
+							'log': result.stderr,
 						},
 						elapsed_seconds=0,
 					)
@@ -497,6 +498,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 						'got_path': str(my_tmp_dir.joinpath('stdout.txt')),
 						'stdout': res.stdout,
 						'stderr': res.stderr,
+						'genvm_log': res.genvm_log,
 					},
 				}
 		else:

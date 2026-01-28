@@ -17,6 +17,17 @@ pub mod raw {
 
 pub struct WasiError(pub u32);
 
+const ERROR_NAMES: &[&str] = &[
+    "success",
+    "overflow",
+    "inval",
+    "fault",
+    "ilseq",
+    "io",
+    "forbidden",
+    "inbalance",
+];
+
 impl WasiError {
     pub fn from_code(code: u32) -> Result<(), WasiError> {
         if code == 0 {
@@ -25,7 +36,28 @@ impl WasiError {
             Err(WasiError(code))
         }
     }
+
+    pub fn name(&self) -> &'static str {
+        ERROR_NAMES
+            .get(self.0 as usize)
+            .copied()
+            .unwrap_or("unknown")
+    }
 }
+
+impl std::fmt::Display for WasiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} ({})", self.name(), self.0)
+    }
+}
+
+impl std::fmt::Debug for WasiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "WasiError::{} ({})", self.name(), self.0)
+    }
+}
+
+impl std::error::Error for WasiError {}
 
 pub fn storage_read(slot: &[u8; 32], index: u32, buf: &mut [u8]) -> Result<(), WasiError> {
     let ret =

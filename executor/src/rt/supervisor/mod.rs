@@ -310,6 +310,7 @@ pub async fn apply_contract_actions(
         .genlayer_sdk
         .data
         .message_data
+        .message
         .contract_address;
 
     let contract_id = runners::get_runner_of_contract(contract_address);

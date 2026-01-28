@@ -102,7 +102,7 @@
 									});
 								};
 
-								custom-rust = import ./support/rust.nix { inherit pkgs system; withLinters = true; withZig = false; };
+								custom-rust = import ./support/rust.nix { inherit pkgs system; withLinters = true; withZig = false; withWasi = true; };
 								custom-rust-builder = import ./support/compile-rust.nix {
 									inherit pkgs system;
 									zig = import ./support/zig.nix { inherit pkgs system; };

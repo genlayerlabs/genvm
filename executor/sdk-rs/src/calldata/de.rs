@@ -139,12 +139,14 @@ impl<'de> serde::de::Deserialize<'de> for Value {
 
 struct SeqDeserializer {
     iter: std::vec::IntoIter<Value>,
+    index: usize,
 }
 
 impl SeqDeserializer {
     fn new(vec: Vec<Value>) -> Self {
         SeqDeserializer {
             iter: vec.into_iter(),
+            index: 0,
         }
     }
 }
@@ -157,7 +159,13 @@ impl<'de> serde::de::SeqAccess<'de> for SeqDeserializer {
         T: serde::de::DeserializeSeed<'de>,
     {
         match self.iter.next() {
-            Some(value) => deserialize_with_seed(value, seed).map(Some),
+            Some(value) => {
+                let idx = self.index;
+                self.index += 1;
+                deserialize_with_seed(value, seed)
+                    .map(Some)
+                    .map_err(|e| e.at_index(idx))
+            }
             None => Ok(None),
         }
     }
@@ -190,14 +198,14 @@ where
 
 struct MapDeserializer {
     iter: <BTreeMap<String, Value> as IntoIterator>::IntoIter,
-    value: Option<Value>,
+    current: Option<(String, Value)>,
 }
 
 impl MapDeserializer {
     fn new(map: BTreeMap<String, Value>) -> Self {
         MapDeserializer {
             iter: map.into_iter(),
-            value: None,
+            current: None,
         }
     }
 }
@@ -370,8 +378,8 @@ impl<'de> serde::de::MapAccess<'de> for MapDeserializer {
     {
         match self.iter.next() {
             Some((key, value)) => {
-                self.value = Some(value);
-                let key_de = MapKeyDeserializer { key };
+                let key_de = MapKeyDeserializer { key: key.clone() };
+                self.current = Some((key, value));
                 seed.deserialize(key_de).map(Some)
             }
             None => Ok(None),
@@ -382,8 +390,8 @@ impl<'de> serde::de::MapAccess<'de> for MapDeserializer {
     where
         T: serde::de::DeserializeSeed<'de>,
     {
-        match self.value.take() {
-            Some(value) => deserialize_with_seed(value, seed),
+        match self.current.take() {
+            Some((key, value)) => deserialize_with_seed(value, seed).map_err(|e| e.at_field(key)),
             None => Err(serde::de::Error::custom("value is missing")),
         }
     }

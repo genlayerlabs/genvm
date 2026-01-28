@@ -31,6 +31,34 @@ pub enum Error {
         target_type: &'static str,
     },
     Custom(String),
+    /// Error with field path context
+    AtField {
+        field: String,
+        source: Box<Error>,
+    },
+    /// Error with array index context
+    AtIndex {
+        index: usize,
+        source: Box<Error>,
+    },
+}
+
+impl Error {
+    /// Wrap this error with field context
+    pub fn at_field(self, field: impl Into<String>) -> Self {
+        Error::AtField {
+            field: field.into(),
+            source: Box::new(self),
+        }
+    }
+
+    /// Wrap this error with array index context
+    pub fn at_index(self, index: usize) -> Self {
+        Error::AtIndex {
+            index,
+            source: Box::new(self),
+        }
+    }
 }
 
 impl std::fmt::Display for Error {
@@ -71,6 +99,12 @@ impl std::fmt::Display for Error {
                 write!(f, "unexpected address for {target_type}")
             }
             Error::Custom(msg) => write!(f, "{msg}"),
+            Error::AtField { field, source } => {
+                write!(f, "at field `{field}`: {source}")
+            }
+            Error::AtIndex { index, source } => {
+                write!(f, "at index [{index}]: {source}")
+            }
         }
     }
 }

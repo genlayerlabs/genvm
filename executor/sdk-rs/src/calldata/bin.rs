@@ -14,6 +14,7 @@ pub enum DecodeError {
     InvalidType { type_tag: u8 },
     TrailingData { remaining: usize },
     InvalidUtf8(std::str::Utf8Error),
+    Custom(String),
 }
 
 impl std::fmt::Display for DecodeError {
@@ -52,6 +53,7 @@ impl std::fmt::Display for DecodeError {
                 )
             }
             DecodeError::InvalidUtf8(e) => write!(f, "invalid utf8: {e}"),
+            DecodeError::Custom(msg) => write!(f, "{msg}"),
         }
     }
 }

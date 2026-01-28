@@ -3,6 +3,12 @@ name = "genlayer_sdk"
 version = "0.1.0"
 edition = "2024"
 
+# Example contract that fetches a webpage
+# Build with: cargo build --example fetch_webpage --target wasm32-wasip1
+[[example]]
+name = "fetch_webpage"
+path = "examples/fetch_webpage.rs"
+
 [features]
 default = ["wasi"]
 wasi = []
