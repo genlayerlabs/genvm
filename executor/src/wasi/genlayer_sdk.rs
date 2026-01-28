@@ -883,6 +883,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::Inval.into());
         }
 
+        mem.bounds_check(buf)?;
+
         let account = self.context.data.message_data.message.contract_address;
 
         let slot = SlotID::read_from_mem(mem, slot)?;
@@ -938,6 +940,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         if index.checked_add(buf_len).is_none() {
             return Err(generated::types::Errno::Inval.into());
         }
+
+        mem.bounds_check(buf)?;
 
         let slot = SlotID::read_from_mem(mem, slot)?;
 
