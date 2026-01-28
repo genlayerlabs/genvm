@@ -1,4 +1,5 @@
 import asyncio
+import os
 import aiohttp
 import typing
 from pathlib import Path
@@ -30,32 +31,14 @@ async def start_webdriver_service(
 
 	port = get_webdriver_port(env)
 
-	# Start the container
-	process = await asyncio.subprocess.create_subprocess_exec(
-		'docker',
-		'run',
-		'--rm',
-		'-d',
-		'-p',
-		f'{port}:4444',
-		image_sha,
-		stdout=asyncio.subprocess.PIPE,
-		stderr=asyncio.subprocess.PIPE,
+	proc_env = docker.DEFAULT_ENV.copy()
+	for k, v in os.environ.items():
+		if k.lower().endswith('key') or k.lower().endswith('token'):
+			proc_env[k] = v
+
+	return await docker.ContainerHandle.run(
+		['-p', f'{port}:4444', image_sha], cwd=local_ctx.shared.root_dir, env=proc_env
 	)
-
-	stdout, stderr = await process.communicate()
-
-	if process.returncode != 0:
-		local_ctx.shared.logger.warning(
-			'Failed to start webdriver container',
-			image_sha=image_sha,
-			**build_data,
-		)
-		raise RuntimeError(f'Failed to start webdriver container: {stderr.decode("utf-8")}')
-
-	container_id = stdout.decode('utf-8').strip()
-
-	return await docker.ContainerHandle(container_id).await_startup()
 
 
 class ManagerHandle(ya_test_runner.exec.service.Handle):
@@ -136,7 +119,7 @@ class ManagerService(ya_test_runner.exec.service.Service):
 
 		handle = ManagerHandle(port, process, log_file)
 
-		return await handle.await_startup()
+		return handle
 
 
 class ModulesHandle(ya_test_runner.exec.service.Handle):

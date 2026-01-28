@@ -1,8 +1,8 @@
-import asyncio
+import os
 import re
 import sys
-import typing
 from pathlib import Path
+import copy
 
 import ya_test_runner.exec.service
 
@@ -15,6 +15,18 @@ class DockerBuildError(Exception):
 	pass
 
 
+class DockerRunError(Exception):
+	pass
+
+
+DEFAULT_ENV = {
+	k: v
+	for k, v in os.environ.items()
+	if ya_test_runner.util.environ.DEFAULT_FILTER(k, v)
+}
+del DEFAULT_ENV['LD_LIBRARY_PATH']
+
+
 async def build(
 	*,
 	context_dir: Path,
@@ -22,6 +34,7 @@ async def build(
 	tag: str | None = None,
 	build_args: dict[str, str] | None = None,
 	log_context: dict | None = None,
+	env: dict[str, str] | None = None,
 ) -> str:
 	"""
 	Build a Docker image and return its sha256 digest.
@@ -56,32 +69,31 @@ async def build(
 
 	args.append(str(context_dir))
 
-	process = await asyncio.subprocess.create_subprocess_exec(
-		*args,
-		cwd=context_dir,
-		stdout=asyncio.subprocess.PIPE,
-		stderr=asyncio.subprocess.PIPE,
+	if env is None:
+		env = copy.deepcopy(DEFAULT_ENV)
+
+	cmd = ya_test_runner.exec.command.Command(args=args, cwd=context_dir, env=env)
+
+	res = await cmd.run(
+		ctx=local_ctx.shared, mode=ya_test_runner.exec.command.RunMode.SILENT
 	)
 
-	local_ctx.shared.logger.debug(
-		'docker build started', context_dir=str(context_dir), args=args
-	)
-
-	stdout, stderr = await process.communicate()
-	combined_output = stdout.decode('utf-8') + stderr.decode('utf-8')
+	combined_output = res.stdout + res.stderr
 
 	if log_context is not None:
-		log_context['docker_build_output'] = combined_output
+		log_context['docker_build_stdout'] = res.stdout
+		log_context['docker_build_stderr'] = res.stderr
 
-	if process.returncode != 0:
+	if res.exit_code != 0:
 		local_ctx.shared.logger.error(
 			'Docker build failed',
 			context_dir=str(context_dir),
 			args=args,
-			exit_code=process.returncode,
+			env=env,
+			exit_code=res.exit_code,
 			combined_output=combined_output,
 		)
-		raise DockerBuildError(f'Docker build failed with exit code {process.returncode}')
+		raise DockerBuildError(f'Docker build failed with exit code {res.exit_code}')
 
 	sha256_matches = re.findall(
 		r'sha256:([a-f0-9]{64})', combined_output, flags=re.IGNORECASE
@@ -101,21 +113,97 @@ class ContainerHandle(ya_test_runner.exec.service.Handle):
 	def __init__(self, container_id: str):
 		self._container_id = container_id
 
+	async def get_logs(self, tail: int = 100) -> str:
+		"""Get recent logs from the container."""
+		cmd = ya_test_runner.exec.command.Command(
+			args=['docker', 'logs', '--tail', str(tail), self._container_id],
+			cwd=local_ctx.shared.root_dir,
+			env=DEFAULT_ENV,
+		)
+		res = await cmd.run(
+			ctx=local_ctx.shared, mode=ya_test_runner.exec.command.RunMode.SILENT
+		)
+		return res.stdout + res.stderr
+
+	@staticmethod
+	async def run(
+		args: list[str | Path],
+		*,
+		cwd: Path,
+		env: dict[str, str] | None = None,
+		log_context: dict | None = None,
+	) -> 'ContainerHandle':
+		if env is None:
+			env = copy.deepcopy(DEFAULT_ENV)
+		cmd = ya_test_runner.exec.command.Command(
+			args=[
+				'docker',
+				'run',
+				'--rm',
+				'-d',
+				*args,
+			],
+			cwd=cwd,
+			env=env,
+		)
+
+		res = await cmd.run(
+			ctx=local_ctx.shared, mode=ya_test_runner.exec.command.RunMode.SILENT
+		)
+
+		combined_output = res.stdout + res.stderr
+
+		if log_context is not None:
+			log_context['docker_run_stdout'] = res.stdout
+			log_context['docker_run_stderr'] = res.stderr
+
+		if res.exit_code != 0:
+			local_ctx.shared.logger.error(
+				'Docker run failed',
+				cwd=str(cwd),
+				args=args,
+				env=env,
+				exit_code=res.exit_code,
+				combined_output=combined_output,
+			)
+			raise DockerRunError(f'Docker run failed with exit code {res.exit_code}')
+		container_id = res.stdout.strip()
+		return ContainerHandle(container_id=container_id)
+
 	async def healthy(self) -> bool:
 		try:
-			process = await asyncio.subprocess.create_subprocess_exec(
-				'docker',
-				'inspect',
-				'--format',
-				'{{.State.Health.Status}}',
-				self._container_id,
-				stdout=asyncio.subprocess.PIPE,
-				stderr=asyncio.subprocess.DEVNULL,
+			cmd = ya_test_runner.exec.command.Command(
+				args=[
+					'docker',
+					'inspect',
+					'--format',
+					'{{.State.Health.Status}}',
+					self._container_id,
+				],
+				cwd=local_ctx.shared.root_dir,
+				env=DEFAULT_ENV,
 			)
-			stdout, _ = await process.communicate()
-			if process.returncode != 0:
+			res = await cmd.run(
+				ctx=local_ctx.shared, mode=ya_test_runner.exec.command.RunMode.SILENT
+			)
+			if res.exit_code != 0:
+				logs = await self.get_logs()
+				local_ctx.shared.logger.warning(
+					'Docker health check failed',
+					container_id=self._container_id,
+					returncode=res.exit_code,
+					logs=logs,
+				)
 				return False
-			status = stdout.decode('utf-8').strip()
+			status = res.stdout.strip()
+			if status != 'healthy':
+				logs = await self.get_logs()
+				local_ctx.shared.logger.warning(
+					'Container not healthy',
+					container_id=self._container_id,
+					status=status,
+					logs=logs,
+				)
 			return status == 'healthy'
 		except Exception as e:
 			local_ctx.shared.logger.error(
@@ -126,11 +214,9 @@ class ContainerHandle(ya_test_runner.exec.service.Handle):
 			return False
 
 	async def interrupt(self) -> None:
-		process = await asyncio.subprocess.create_subprocess_exec(
-			'docker',
-			'stop',
-			self._container_id,
-			stdout=asyncio.subprocess.DEVNULL,
-			stderr=asyncio.subprocess.DEVNULL,
+		cmd = ya_test_runner.exec.command.Command(
+			args=['docker', 'stop', self._container_id],
+			cwd=local_ctx.shared.root_dir,
+			env=DEFAULT_ENV,
 		)
-		await process.wait()
+		await cmd.run(ctx=local_ctx.shared, mode=ya_test_runner.exec.command.RunMode.SILENT)

@@ -136,6 +136,7 @@ async def _start_service(ctx: _ExecutionContext, service: Service) -> None:
 	ctx.shared.logger.info('Starting service', service_name=service.name)
 	try:
 		handle = await service.manager.start()
+		await handle.await_startup()
 		ctx.running_services[service.name] = handle
 		ctx.shared.logger.info('Service started', service_name=service.name)
 	except Exception as e:

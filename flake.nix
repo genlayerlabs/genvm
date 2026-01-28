@@ -185,7 +185,7 @@
 										pkgs.python312
 										pkgs.wabt
 										ya-test-runner
-									];
+									] ++ packages-rust;
 									shellHook = shell-hook-base;
 								};
 								devShells.full = pkgs.mkShell {

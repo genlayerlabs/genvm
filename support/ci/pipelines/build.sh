@@ -87,6 +87,6 @@ then
 	tar -A -f "$PREV/build/genvm-$TARGET.tar" "$EXTRA_BUNDLE"
 fi
 
-xz -z -9 "$PREV/build/genvm-$TARGET.tar"
+xz -z -9 --force "$PREV/build/genvm-$TARGET.tar"
 
 popd

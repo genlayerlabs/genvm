@@ -12,4 +12,4 @@ python3 ./build/out/bin/post-install.py \
     --error-on-missing-executor=false \
     --default-download=false
 
-bash -x ./tests/rust.sh
+nix develop .#mock-tests --command ya-test-runner --test-tags "$(cat tests/presets/rust.txt)" run
