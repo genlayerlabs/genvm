@@ -285,6 +285,9 @@ def cargo_fuzz(
 			),
 			ya_test_runner.test.CommandToResultStep(),
 			ya_test_runner.test.ResultStopIfErrorStep(),
+			ya_test_runner.exec.step.MkDir(
+				path=local_ctx.shared.artifacts_dir / 'fuzz' / name
+			),
 			ya_test_runner.exec.step.Run(
 				args=[
 					'cargo',
