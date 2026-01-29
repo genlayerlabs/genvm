@@ -35,6 +35,7 @@ pub struct TokenUsage {
     pub total: Option<u32>,
 }
 
+#[allow(dead_code)]
 impl TokenUsage {
     pub fn new(input: Option<u32>, output: Option<u32>, total: Option<u32>) -> Self {
         Self {

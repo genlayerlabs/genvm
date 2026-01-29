@@ -103,6 +103,14 @@ impl LockedSlotsSet {
     }
 }
 
+#[cfg(not(debug_assertions))]
+fn all_useful_work_done() {
+    std::process::exit(0);
+}
+
+#[cfg(debug_assertions)]
+fn all_useful_work_done() {}
+
 impl Host {
     fn lock_sock(&mut self) -> sync::Lock<&mut dyn Sock, stats::tracker::Time> {
         sync::Lock::new(
@@ -271,6 +279,8 @@ impl Host {
         sock.read_exact(&mut int_buf)?;
 
         log_debug!("consume_result: ACK");
+
+        all_useful_work_done();
 
         Ok(())
     }

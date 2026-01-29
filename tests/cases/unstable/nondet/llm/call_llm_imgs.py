@@ -10,8 +10,7 @@ import re
 
 
 class Contract(gl.Contract):
-	@gl.public.view
-	def main(self):
+	def __init__(self):
 		def run():
 			import PIL.Image as Image
 			from PIL import ImageOps

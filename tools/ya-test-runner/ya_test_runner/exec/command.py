@@ -1,4 +1,5 @@
 import asyncio
+import collections.abc
 import enum
 import io
 import os
@@ -56,7 +57,7 @@ class RunMode(enum.Enum):
 
 @dataclass
 class Command:
-	args: list[str | Path]
+	args: collections.abc.Sequence[str | Path]
 	cwd: Path
 	env: dict[str, str]
 

@@ -163,37 +163,41 @@ impl Ctx {
             return Ok(());
         }
 
-        log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "sending SIGTERM to GenVM process");
+        const WAIT_STEP_MS: u64 = 20;
 
-        if let Some(pid) = child.id() {
-            unsafe {
-                libc::kill(pid as libc::c_int, libc::SIGTERM);
-            }
-        }
+        if wait_timeout_ms > WAIT_STEP_MS / 2 {
+            log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "sending SIGTERM to GenVM process");
 
-        let wait_duration = std::time::Duration::from_millis(wait_timeout_ms);
-        let wait_start = std::time::Instant::now();
-
-        loop {
-            match child.try_wait() {
-                Ok(Some(_)) => {
-                    log_info_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "GenVM process terminated gracefully");
-                    return Ok(());
+            if let Some(pid) = child.id() {
+                unsafe {
+                    libc::kill(pid as libc::c_int, libc::SIGTERM);
                 }
-                Ok(None) => {
-                    if wait_start.elapsed() >= wait_duration {
-                        break;
+            }
+
+            let wait_duration = std::time::Duration::from_millis(wait_timeout_ms);
+            let wait_start = std::time::Instant::now();
+
+            loop {
+                match child.try_wait() {
+                    Ok(Some(_)) => {
+                        log_info_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "GenVM process terminated gracefully");
+                        return Ok(());
                     }
-                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                }
-                Err(e) => {
-                    log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "error checking process status");
-                    anyhow::bail!("failed to check process status: {}", e);
+                    Ok(None) => {
+                        if wait_start.elapsed() >= wait_duration {
+                            break;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(WAIT_STEP_MS)).await;
+                    }
+                    Err(e) => {
+                        log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "error checking process status");
+                        anyhow::bail!("failed to check process status: {}", e);
+                    }
                 }
             }
-        }
 
-        log_warn_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "GenVM process did not terminate gracefully, sending SIGKILL");
+            log_warn_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "GenVM process did not terminate gracefully, sending SIGKILL");
+        }
 
         let _ = child.start_kill();
         child.wait().await?;
@@ -210,11 +214,10 @@ impl Ctx {
             return None;
         };
 
-        let proc_check = self.check_proc(&exec_ctx).await;
+        let proc_check = self.check_proc(exec_ctx.clone()).await;
         log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0, proc_exited = proc_check; "genvm status checked");
 
         exec_ctx
-            .clone()
             .into_get_sub(|data| data.result.get())
             .lift_option()
             .map(sync::DArcStruct::into_arc)
@@ -310,7 +313,7 @@ async fn gc_step(ctx: &sync::DArc<Ctx>) {
             log_warn_into!(&LoggerWithId, genvm_id:id = key.0; "genvm execution exceeded strict deadline, terminating");
             let _ = ctx.graceful_shutdown(key, 0).await;
         }
-        let _ = ctx.check_proc(&val).await;
+        let _ = ctx.check_proc(val.clone()).await;
     }
 
     // Remove old finished executions
@@ -551,11 +554,12 @@ async fn pipe_read<P: tokio::io::AsyncReadExt + Unpin>(
 }
 
 impl Ctx {
-    async fn check_proc(&self, exec: &SingleGenVMContext) -> bool {
+    async fn check_proc(&self, exec: sync::DArc<SingleGenVMContext>) -> bool {
         if exec.result.initialized() {
             return true;
         }
 
+        tokio::task::spawn(async move {
         let mut proc = exec.process_handle.lock().await;
 
         match proc.try_wait() {
@@ -596,6 +600,7 @@ impl Ctx {
                 true
             }
         }
+        }).await.unwrap_or(false)
     }
 }
 

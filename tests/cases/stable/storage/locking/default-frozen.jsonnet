@@ -12,6 +12,7 @@ local s = simple.run('${jsonnetDir}/code.py');
         },
     },
     s {
+        code: null,
         "calldata": |||
             {
                 "method": "try_modify",
@@ -19,6 +20,7 @@ local s = simple.run('${jsonnetDir}/code.py');
         |||
     },
     s {
+        code: null,
         "calldata": |||
             {
                 "method": "nop",

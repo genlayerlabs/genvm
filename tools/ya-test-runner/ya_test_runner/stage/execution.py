@@ -1,10 +1,28 @@
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import typing
 import ya_test_runner
 from ya_test_runner import SharedContext
+from ya_test_runner.formatter import FORMATTING_MUTEX
 
-from .scheduling import Env as SchedulingEnv, StartCases, AwaitAllCases
+from .scheduling import (
+	Env as SchedulingEnv,
+	StartCases,
+	AwaitAllCases,
+	StartService,
+	StopService,
+)
+from .collection import Service
+from ya_test_runner.exec.service import Handle
+
+
+class _Colors:
+	"""Terminal color constants."""
+
+	OKGREEN = '\033[92m'
+	FAIL = '\033[91m'
+	WARNING = '\033[93m'
+	ENDC = '\033[0m'
 
 
 class Env(typing.NamedTuple):
@@ -12,13 +30,89 @@ class Env(typing.NamedTuple):
 	failed: list[str]
 
 
+from collections import deque
+
+
+class MultiSemaphore:
+	def __init__(self, value: int):
+		self._value = value
+		self.max_value = value
+		self._waiters: deque[tuple[int, asyncio.Future]] = deque()
+		self._lock = asyncio.Lock()
+
+	async def acquire(self, n: int = 1) -> None:
+		async with self._lock:
+			if self._value >= n and len(self._waiters) == 0:
+				self._value -= n
+				return
+			fut = asyncio.get_event_loop().create_future()
+			self._waiters.append((n, fut))
+		await fut
+
+	def release(self, n: int = 1) -> None:
+		self._value += n
+		self._wake_waiters()
+
+	def _wake_waiters(self) -> None:
+		while True:
+			if len(self._waiters) == 0:
+				return
+			n, fut = self._waiters.popleft()
+			if self._value >= n:
+				if not fut.done():
+					self._value -= n
+					fut.set_result(None)
+				continue
+			self._waiters.appendleft((n, fut))
+			return
+
+
 @dataclass
 class _ExecutionContext:
 	shared: SharedContext
 	failed: list[str]
 	should_stop: asyncio.Event
+	semaphore: MultiSemaphore
+	fail_fast: bool = False
 	success_count: int = 0
 	skipped: int = 0
+	running_services: dict[str, Handle] = field(default_factory=dict)
+
+
+def _print_test_result(
+	ctx: _ExecutionContext,
+	case_name: str,
+	passed: bool,
+	elapsed: float,
+	context: dict[str, typing.Any] | None = None,
+) -> None:
+	"""Print test result immediately with colors using the formatter."""
+	with FORMATTING_MUTEX:
+		if passed:
+			sign = f'{_Colors.OKGREEN}✓{_Colors.ENDC}'
+			category = 'pass'
+		else:
+			sign = f'{_Colors.FAIL}✗{_Colors.ENDC}'
+			category = 'fail'
+
+		elapsed_str = f'{elapsed:.3f}s'
+
+		# Build the output dict for failed tests
+		output_kv = {}
+		if not passed and context:
+			if 'reason' in context:
+				output_kv['reason'] = context['reason']
+			if 'exception' in context:
+				output_kv['exception'] = context['exception']
+			if 'stdout' in context and context['stdout']:
+				output_kv['stdout'] = context['stdout']
+			if 'stderr' in context and context['stderr']:
+				output_kv['stderr'] = context['stderr']
+
+		ctx.shared.printer.put(
+			f'{sign} {case_name} in {elapsed_str}',
+			**output_kv,
+		)
 
 
 class _CountDownLatch:
@@ -37,26 +131,87 @@ class _CountDownLatch:
 		await self._event.wait()
 
 
+async def _start_service(ctx: _ExecutionContext, service: Service) -> None:
+	"""Start a service and track its handle."""
+	ctx.shared.logger.info('Starting service', service_name=service.name)
+	try:
+		handle = await service.manager.start()
+		await handle.await_startup()
+		ctx.running_services[service.name] = handle
+		ctx.shared.logger.info('Service started', service_name=service.name)
+	except Exception as e:
+		ctx.shared.logger.error(
+			'Failed to start service',
+			service_name=service.name,
+			error=e,
+		)
+		raise
+
+
+async def _stop_service(ctx: _ExecutionContext, service: Service) -> None:
+	"""Stop a running service."""
+	handle = ctx.running_services.pop(service.name, None)
+	if handle is not None:
+		ctx.shared.logger.info('Stopping service', service_name=service.name)
+		try:
+			await handle.interrupt()
+			ctx.shared.logger.info('Service stopped', service_name=service.name)
+		except Exception as e:
+			ctx.shared.logger.error(
+				'Failed to stop service cleanly',
+				service_name=service.name,
+				error=e,
+			)
+
+
+async def _stop_all_services(ctx: _ExecutionContext) -> None:
+	"""Stop all running services (cleanup)."""
+	service_names = list(ctx.running_services.keys())
+	for name in service_names:
+		handle = ctx.running_services.pop(name, None)
+		if handle is not None:
+			ctx.shared.logger.info('Stopping service (cleanup)', service_name=name)
+			try:
+				await handle.interrupt()
+			except Exception as e:
+				ctx.shared.logger.error(
+					'Failed to stop service during cleanup',
+					service_name=name,
+					error=e,
+				)
+
+
 async def _run_case(
 	ctx: _ExecutionContext, case: ya_test_runner.test.Case, latch: _CountDownLatch
 ):
 	try:
-		if ctx.should_stop.is_set():
-			return
-		await _run_case_locked(ctx, case)
+		permits = 1
+		if case.description.console_pool:
+			permits = ctx.semaphore.max_value
+		await ctx.semaphore.acquire(permits)
+		try:
+			if ctx.should_stop.is_set():
+				return
+			await _run_case_locked(ctx, case)
+		finally:
+			ctx.semaphore.release(permits)
 	finally:
 		latch.decrement()
 
 
 async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Case):
+	import time
+
 	success = False
-	context = {}
+	context: dict[str, typing.Any] = {}
+	start_time = time.monotonic()
+	elapsed = 0.0
+
 	try:
 		ctx.shared.logger.debug(
 			'Running test case',
 			case_name=case.description.name,
 		)
-		# Simulate test execution with sleep
 		steps = await case.into_steps()
 		context['raw_steps'] = ya_test_runner.exec.step.dump_steps(steps)
 		steps = ya_test_runner.exec.step.optimize_steps(steps)
@@ -71,23 +226,36 @@ async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Cas
 		context['raw_result'] = test_case_result
 		assert isinstance(test_case_result, ya_test_runner.test.Result)
 		success = test_case_result.passed
-		ctx.shared.logger.info(
-			'Completed test case',
-			case_name=case.description.name,
-		)
+		elapsed = time.monotonic() - start_time
+
+		# Merge test result context into our context
+		if test_case_result.context:
+			context.update(test_case_result.context)
+
 		if success:
 			ctx.success_count += 1
 	except Exception as e:
+		elapsed = time.monotonic() - start_time
 		context['exception'] = e
 		ctx.shared.logger.error(
 			'Internal exception',
 			case_name=case.description.name,
 			error=e,
-			**context,
 		)
 	finally:
 		if not success:
 			ctx.failed.append(case.description.name)
+			if ctx.fail_fast:
+				ctx.should_stop.set()
+
+		# Print result immediately
+		_print_test_result(
+			ctx,
+			case.description.name,
+			success,
+			elapsed,
+			context if not success else None,
+		)
 
 
 _background_tasks: set[asyncio.Task] = set()
@@ -112,28 +280,61 @@ async def run(shared: SharedContext, collection_env: SchedulingEnv) -> Env:
 
 	should_stop = asyncio.Event()
 
+	# Get fail_fast from args, default to False if not present
+	fail_fast = getattr(collection_env.args, 'fail_fast', False)
+
 	ctx = _ExecutionContext(
 		shared=shared,
 		failed=[],
 		should_stop=should_stop,
+		fail_fast=fail_fast,
+		semaphore=MultiSemaphore(collection_env.args.max_concurrent),
 	)
 
-	for action in collection_env.actions:
-		if isinstance(action, StartCases):
-			awaiters[action.id] = _CountDownLatch(len(action.cases))
-			_spawn_background_task(_run_cases(ctx, action.cases, awaiters[action.id]))
-		elif isinstance(action, AwaitAllCases):
-			shared.logger.debug(
-				'Awaiting completion of test cases',
-				id=action.id,
-			)
-			await awaiters[action.id].wait()
-			shared.logger.debug(
-				'All test cases completed',
-				id=action.id,
-			)
-		else:
-			raise ValueError(f'Unknown action type: {type(action)}')
+	# Check for interruption periodically
+	async def check_interruption():
+		while not should_stop.is_set():
+			if shared.is_interrupted:
+				shared.logger.warning('Execution interrupted')
+				should_stop.set()
+				return
+			await asyncio.sleep(0.1)
+
+	interrupt_checker = asyncio.create_task(check_interruption())
+
+	try:
+		for action in collection_env.actions:
+			if should_stop.is_set():
+				shared.logger.warning('Stopping execution early')
+				break
+			if isinstance(action, StartService):
+				await _start_service(ctx, action.service)
+			elif isinstance(action, StopService):
+				await _stop_service(ctx, action.service)
+			elif isinstance(action, StartCases):
+				awaiters[action.id] = _CountDownLatch(len(action.cases))
+				_spawn_background_task(_run_cases(ctx, action.cases, awaiters[action.id]))
+			elif isinstance(action, AwaitAllCases):
+				shared.logger.debug(
+					'Awaiting completion of test cases',
+					id=action.id,
+				)
+				await awaiters[action.id].wait()
+				shared.logger.debug(
+					'All test cases completed',
+					id=action.id,
+				)
+			else:
+				raise ValueError(f'Unknown action type: {type(action)}')
+	finally:
+		# Stop the interrupt checker
+		interrupt_checker.cancel()
+		try:
+			await interrupt_checker
+		except asyncio.CancelledError:
+			pass
+		# Always cleanup services on exit
+		await _stop_all_services(ctx)
 
 	return Env(
 		success_count=ctx.success_count,

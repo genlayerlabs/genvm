@@ -1,11 +1,5 @@
-local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/post_event.py') {
-    "calldata": |||
-        {
-            "method": "main",
-            "args": []
-        }
-    |||,
+local simple_deploy = import 'templates/simple_deploy.jsonnet';
+simple_deploy.run('${jsonnetDir}/post_event.py') {
     "message"+: {
         "datetime": "2025-07-11T00:00:00Z"
     }

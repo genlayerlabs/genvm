@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-pub mod calldata;
+pub use genlayer_sdk::calldata;
+
 pub mod cancellation;
 pub mod logger;
 pub mod stats;
@@ -14,52 +15,7 @@ pub mod version;
 pub mod util;
 
 pub mod domain {
-    use std::sync::Arc;
-
-    use crate::calldata;
-
-    fn default_datetime() -> chrono::DateTime<chrono::Utc> {
-        chrono::DateTime::parse_from_rfc3339("2024-11-26T06:42:42.424242Z")
-            .unwrap()
-            .to_utc()
-    }
-
-    #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
-    pub struct MessageData {
-        pub contract_address: calldata::Address,
-        pub sender_address: calldata::Address,
-        pub origin_address: calldata::Address,
-        pub chain_id: Arc<str>,
-        pub value: Option<u64>,
-        pub is_init: bool,
-        #[serde(default = "default_datetime")]
-        pub datetime: chrono::DateTime<chrono::Utc>,
-    }
-
-    impl<'a> arbitrary::Arbitrary<'a> for MessageData {
-        fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-            use arbitrary::Arbitrary;
-
-            let ts = u32::arbitrary(u)?;
-            let Some(datetime) = chrono::DateTime::<chrono::Utc>::from_timestamp_secs(ts as i64)
-            else {
-                return Err(arbitrary::Error::NotEnoughData);
-            };
-
-            let chain_id_bytes: [u8; 32] = Arbitrary::arbitrary(u)?;
-            let chain_id = primitive_types::U256::from_big_endian(&chain_id_bytes);
-
-            Ok(Self {
-                contract_address: Arbitrary::arbitrary(u)?,
-                sender_address: Arbitrary::arbitrary(u)?,
-                origin_address: Arbitrary::arbitrary(u)?,
-                chain_id: Arc::from(chain_id.to_string()),
-                value: Option::<u64>::arbitrary(u)?,
-                is_init: bool::arbitrary(u)?,
-                datetime,
-            })
-        }
-    }
+    pub use genlayer_sdk::abi::entry::MessageData;
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
     pub struct ExecutionData {

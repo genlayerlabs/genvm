@@ -7,8 +7,7 @@ from genlayer import *
 
 
 class Contract(gl.Contract):
-	@gl.public.view
-	def main(self):
+	def __init__(self):
 		def run():
 			return gl.nondet.exec_prompt(
 				'how many colors are in the image? Respond only with amount of colors, without any context',

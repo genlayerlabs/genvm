@@ -47,10 +47,7 @@ impl common::MessageHandler<web_iface::Message, FullResponse> for Handler {
                 let payload_lua = vm.create_table()?;
                 payload_lua.set("mode", vm.to_value(&payload.mode)?)?;
                 payload_lua.set("url", payload.url)?;
-                payload_lua.set(
-                    "wait_after_loaded",
-                    payload.wait_after_loaded.0.as_secs_f64(),
-                )?;
+                payload_lua.set("wait_after_loaded", payload.wait_after_loaded.as_secs_f64())?;
 
                 let res: mlua::Value = self
                     .0

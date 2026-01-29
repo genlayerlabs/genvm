@@ -1,9 +1,8 @@
 {
-  "$schema": "https://raw.githubusercontent.com/genlayerlabs/genvm/refs/heads/main/doc/schemas/message.json",
   "contract_address": "AQAAAAAAAAAAAAAAAAAAAAAAAAA=",
   "sender_address": "AgAAAAAAAAAAAAAAAAAAAAAAAAA=",
   "origin_address": "AgAAAAAAAAAAAAAAAAAAAAAAAAA=",
-  "chain_id": "0",
-  "value": null,
+  "chain_id": 0,
+  "value": 0,
   "is_init": false
 }

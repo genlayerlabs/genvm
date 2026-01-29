@@ -58,9 +58,6 @@ jobs:
           echo core | sudo tee /proc/sys/kernel/core_pattern
           echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
           echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
-          docker build --progress=plain modules/webdriver/
-          TAG=$(docker build -q  modules/webdriver/)
-          docker run -p 4444:4444 --rm -d $TAG && \
           ./support/ci/pipelines/test-rust.sh && ./support/ci/cargo-clippy.sh
         env:
           OPENAIKEY: ${{ secrets.OPENAIKEY }}

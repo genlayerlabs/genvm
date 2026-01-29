@@ -6,7 +6,7 @@ pub mod rt;
 pub mod runners;
 pub mod wasi;
 
-pub mod public_abi;
+pub use genlayer_sdk::abi::consts as public_abi;
 
 pub use genvm_common::calldata;
 use genvm_common::*;
@@ -16,7 +16,7 @@ pub use host::{Host, SlotID};
 use anyhow::Result;
 use wasi::genlayer_sdk::ExtendedMessage;
 
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 
 #[derive(Default, Debug, serde::Serialize)]
 pub struct Metrics {
@@ -122,16 +122,7 @@ pub async fn run_with_impl(
             state_mode: crate::public_abi::StorageType::Default,
         },
         message_data: ExtendedMessage {
-            contract_address: entry_data.message.contract_address,
-            sender_address: entry_data.message.sender_address,
-            origin_address: entry_data.message.origin_address,
-            stack: Vec::new(),
-
-            chain_id: num_bigint::BigInt::from_str(&entry_data.message.chain_id).unwrap(),
-            value: entry_data.message.value.unwrap_or(0).into(),
-            is_init: entry_data.message.is_init,
-            datetime: entry_data.message.datetime,
-
+            message: entry_data.message,
             entry_kind: public_abi::EntryKind::Main,
             entry_data: entry_data.calldata,
             entry_stage_data: calldata::Value::Null,

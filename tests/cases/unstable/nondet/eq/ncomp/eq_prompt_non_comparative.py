@@ -4,8 +4,7 @@ import sys
 
 
 class Contract(gl.Contract):
-	@gl.public.write
-	def main(self):
+	def __init__(self):
 		def get_input():
 			return "As pets, rats are affectionate, playful, and form strong bonds with their human companions. They're curious, enjoy interactive toys, and can learn tricks much like small dogs. Their adaptability, intelligence, and charming personalities make them truly cool animals that deserve much more appreciation than they currently get."
 

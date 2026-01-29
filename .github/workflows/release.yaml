@@ -180,7 +180,7 @@ jobs:
             --default-download=false
       - name: Run stable tests
         run: |
-          nix develop .#mock-tests --command python3 ./tests/runner/run.py --executor-version ${{ needs.gen-tag.outputs.tag }} --start-manager --filter '^stable/'
+          nix develop .#mock-tests --command ya-test-runner --test-tags "$(cat tests/presets/release.txt)" run
 
   test-macos-arm64:
     needs:
@@ -225,8 +225,8 @@ jobs:
         run: |
           python3 -m venv .venv
           source .venv/bin/activate
-          pip install -r ./tests/runner/requirements.txt
-          python3 ./tests/runner/run.py --executor-version ${{ needs.gen-tag.outputs.tag }} --start-manager --filter '^stable/'
+          pip install ./tools/ya-test-runner
+          ya-test-runner --test-tags "$(cat tests/presets/release.txt)" run
 
   release-publish:
     needs:

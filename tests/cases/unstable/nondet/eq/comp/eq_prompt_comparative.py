@@ -3,8 +3,7 @@ from genlayer import *
 
 
 class Contract(gl.Contract):
-	@gl.public.write
-	def main(self):
+	def __init__(self):
 		def run():
 			return (
 				gl.nondet.exec_prompt(

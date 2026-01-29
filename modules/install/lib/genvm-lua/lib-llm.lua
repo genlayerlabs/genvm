@@ -50,11 +50,12 @@ M.exec_prompt_transform = function(args)
 	local mapped_prompt = {
 		system_message = nil,
 		user_message = args.prompt,
-		temperature = 0.7,
 		images = args.images,
 
-		max_tokens = 1000,
+		temperature = 0.7,
+		max_tokens = 8000,
 		use_max_completion_tokens = false,
+		seed = nil,
 	}
 
 	local format = args.response_format

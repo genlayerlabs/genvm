@@ -2,6 +2,7 @@
 , system ? "x86_64-linux"
 , withLinters ? false
 , withZig ? true
+, withWasi ? false
 , ...
 }@args:
 let
@@ -46,6 +47,8 @@ let
 		(simpleComponent manifest.pkg.rustfmt-preview.target.${systemAsRust})
 		(simpleComponent manifest.pkg.llvm-tools-preview.target.${systemAsRust})
 		(simpleComponent manifest.pkg.rust-src.target."*")
+	]) ++ (if !withWasi then [] else [
+		(simpleComponent manifest.pkg.rust-std.target.wasm32-wasip1)
 	]);
 
 	rust-objcopy = pkgs.writeShellScript "rust-objcopy" ''

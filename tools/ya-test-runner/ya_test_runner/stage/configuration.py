@@ -2,8 +2,12 @@ import argparse
 import contextlib
 from copy import copy
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 import typing
+
+if typing.TYPE_CHECKING:
+	from ya_test_runner.__main__ import ParserResult
 
 import ya_test_runner
 
@@ -22,18 +26,27 @@ def _check_relative_id(relative: str) -> list[str]:
 
 
 type Collector = typing.Callable[['ya_test_runner.stage.collection.Context'], None]
+type Reporter = typing.Callable[
+	['ya_test_runner.SharedContext', 'ya_test_runner.stage.execution.Env'], None
+]
 
 
 class Context:
 	shared: SharedContext
 	parser: argparse.ArgumentParser
+	run_parser: argparse.ArgumentParser
 	current_path: Path
 	plugins: dict[str, typing.Any]
 
 	_collectors: list[Collector]
+	_reporter: list[Reporter]
 
 	def register_plugin(self):
 		raise NotImplementedError()
+
+	def add_reporter(self, step: Reporter) -> None:
+		"""Register a step to run after test execution completes."""
+		self._reporter.append(step)
 
 	def eval_file(self, relative: str) -> None:
 		components = _check_relative_id(relative)
@@ -54,10 +67,16 @@ class Context:
 		self._collectors.append(collector)
 
 	def _eval_file(self, file: Path) -> None:
-		this_globals = {'__file__': str(file.absolute())}
+		rel_path = file.relative_to(self.shared.root_dir)
+		as_module = rel_path.with_suffix('').as_posix().replace('/', '.')
+		import types
+
+		module = types.ModuleType(as_module)
+		module.__dict__['__file__'] = str(file.absolute())
 		self.shared.logger.debug('evaluating include dir', include_file=file)
 		compiled = compile(file.read_text(), str(file.absolute()), 'exec')
-		exec(compiled, this_globals)
+		exec(compiled, module.__dict__)
+		sys.modules[as_module] = module
 
 
 _GLOBAL_CTX: Context | None = None
@@ -84,22 +103,26 @@ class Env(typing.NamedTuple):
 	plugins: SimpleNamespace
 	args: argparse.Namespace
 	collectors: list[Collector]
+	post_run_steps: list[Reporter]
 
 
 def run(
-	shared: SharedContext, parser: argparse.ArgumentParser, remaining_args: list[str]
+	shared: SharedContext, parser_result: 'ParserResult', remaining_args: list[str]
 ) -> Env:
 	ctx = Context()
 	ctx.shared = shared
-	ctx.parser = parser
+	ctx.parser = parser_result.parser
+	ctx.run_parser = parser_result.run_parser
 	ctx.plugins = {}
 	ctx._collectors = []
+	ctx._reporter = []
 	ctx.current_path = shared.root_dir
 	with with_context(ctx) as ctx:
 		ctx.eval_file(const.ROOT_FILE_NAME)
 
 	return Env(
-		args=parser.parse_args(remaining_args),
+		args=parser_result.parser.parse_args(remaining_args),
 		plugins=SimpleNamespace(**ctx.plugins),
 		collectors=ctx._collectors,
+		post_run_steps=ctx._reporter,
 	)

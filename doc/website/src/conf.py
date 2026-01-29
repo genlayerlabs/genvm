@@ -19,7 +19,7 @@ extensions = [
 	'sphinx.ext.todo',
 	'sphinx.ext.intersphinx',
 	'sphinxcontrib.mermaid',
-	'sphinxcontrib.httpdomain',
+	'sphinxcontrib.openapi',
 ]
 
 templates_path = ['_templates']

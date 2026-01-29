@@ -19,9 +19,13 @@
 			url = "github:numtide/flake-utils";
 			inputs.systems.follows = "systems";
 		};
+		poetry2nix = {
+			url = "github:nix-community/poetry2nix";
+			inputs.nixpkgs.follows = "nixpkgs";
+		};
 	};
 
-	outputs = { self, nixpkgs, flake-utils, systems }:
+	outputs = { self, nixpkgs, flake-utils, systems, poetry2nix }:
 		let
 			genvm-release =
 				let
@@ -86,7 +90,19 @@
 									inherit system;
 								};
 
-								custom-rust = import ./support/rust.nix { inherit pkgs system; withLinters = true; withZig = false; };
+								p2n = poetry2nix.lib.mkPoetry2Nix { inherit pkgs; };
+
+								ya-test-runner = p2n.mkPoetryApplication {
+									projectDir = ./tools/ya-test-runner;
+									python = pkgs.python312;
+									preferWheels = true;
+									overrides = p2n.overrides.withDefaults (self: super: {
+										aiohttp = pkgs.python312Packages.aiohttp;
+										jsonnet = pkgs.python312Packages.jsonnet;
+									});
+								};
+
+								custom-rust = import ./support/rust.nix { inherit pkgs system; withLinters = true; withZig = false; withWasi = true; };
 								custom-rust-builder = import ./support/compile-rust.nix {
 									inherit pkgs system;
 									zig = import ./support/zig.nix { inherit pkgs system; };
@@ -167,10 +183,9 @@
 								devShells.mock-tests = pkgs.mkShell {
 									packages = packages-0 ++ [
 										pkgs.python312
-										pkgs.python312Packages.jsonnet
-										pkgs.python312Packages.aiohttp
 										pkgs.wabt
-									];
+										ya-test-runner
+									] ++ packages-rust;
 									shellHook = shell-hook-base;
 								};
 								devShells.full = pkgs.mkShell {
