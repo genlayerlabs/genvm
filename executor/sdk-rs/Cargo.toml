@@ -1,7 +1,17 @@
 [package]
 name = "genlayer_sdk"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
+repository = "https://github.com/genlayerlabs/genvm"
+description = "Genlayer SDK for building smart contracts in rust"
+readme = "README.md"
+license-file = "LICENSE.txt"
+homepage = "https://genlayer.com"
+keywords = ["genlayer", "blockchain", "smart-contracts", "wasm", "wasi"]
+categories = ["api-bindings", "wasm"]
+exclude = [
+    "/tests/**",
+]
 
 # Example contract that fetches a webpage
 # Build with: cargo build --example fetch_webpage --target wasm32-wasip1

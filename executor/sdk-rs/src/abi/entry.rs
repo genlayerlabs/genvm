@@ -1,3 +1,8 @@
+//! Contract entry point handling and message types.
+//!
+//! This module provides the types and traits needed to implement GenLayer contracts,
+//! including message parsing, entry point handling, and the contract trait definitions.
+
 use std::collections::BTreeMap;
 
 use crate::abi::consts::{EntryKind, ResultCode};
@@ -202,6 +207,9 @@ impl<'de> Deserialize<'de> for ExtendedMessage {
     }
 }
 
+/// Contract definition types and traits.
+///
+/// This module contains the core traits and types for implementing GenLayer contracts.
 pub mod contract_def {
     use super::*;
 
@@ -251,6 +259,9 @@ pub mod contract_def {
         }
     }
 
+    /// Core trait for implementing GenLayer contracts.
+    ///
+    /// Implement this trait to define how your contract handles different entry points.
     pub trait Contract {
         /// Handle a Main entry - regular contract method calls.
         fn handle_main(
@@ -359,13 +370,17 @@ pub mod contract_def {
         }
     }
 
+    /// Consensus stage data passed to contracts during consensus operations.
     #[derive(Debug, Clone)]
     pub enum ConsensusStageData {
+        /// This node is the leader - no previous result available.
         Leader,
+        /// This node is a validator - leader's result is provided for verification.
         Validator { leaders_result: LeaderResult },
     }
 
     impl ConsensusStageData {
+        /// Parse consensus stage data from a calldata Value.
         pub fn parse(value: Value) -> Result<Self, ConsensusStageParseError> {
             match value {
                 Value::Null => Ok(ConsensusStageData::Leader),
@@ -388,9 +403,14 @@ pub mod contract_def {
         }
     }
 
+    /// Extended contract trait with separate deploy and method handlers.
+    ///
+    /// This trait provides a more ergonomic API by splitting `handle_main` into
+    /// `handle_deploy` (for initialization) and `handle_method` (for regular calls).
     pub trait ContractExt: Contract {
         type Error: std::string::ToString;
 
+        /// Handle contract deployment/initialization.
         fn handle_deploy(
             &mut self,
             message: MessageData,
@@ -398,6 +418,7 @@ pub mod contract_def {
             kwargs: calldata::Map,
         ) -> Result<calldata::Value, Self::Error>;
 
+        /// Handle a method call on the contract.
         fn handle_method(
             &mut self,
             message: MessageData,
@@ -406,6 +427,7 @@ pub mod contract_def {
             kwargs: calldata::Map,
         ) -> Result<calldata::Value, Self::Error>;
 
+        /// Default implementation that delegates to handle_deploy or handle_method.
         fn handle_main(
             &mut self,
             message: MessageData,
@@ -423,6 +445,7 @@ pub mod contract_def {
         }
     }
 
+    /// Result type for contract execution.
     pub enum ContractResult<T> {
         /// Successful return with value
         Return(T),
@@ -468,10 +491,17 @@ pub mod contract_def {
     impl std::error::Error for ContractMainError {}
 }
 
+/// WASI-specific functions for contract execution.
+///
+/// These functions are only available when the `wasi` feature is enabled.
 #[cfg(feature = "wasi")]
 pub mod wasi_only {
     use super::*;
 
+    /// Immediately return a value and terminate the contract.
+    ///
+    /// This function does not return - it sends the Return message via gl_call
+    /// and the process terminates.
     pub fn return_immediately(value: calldata::Value) -> ! {
         let last_gl_call_data = calldata::Value::Map(std::collections::BTreeMap::from([(
             "Return".to_owned(),
@@ -483,6 +513,10 @@ pub mod wasi_only {
         std::unreachable!();
     }
 
+    /// Immediately trigger a user error and terminate the contract.
+    ///
+    /// This function does not return - it sends a Rollback message via gl_call
+    /// and the process terminates.
     pub fn user_error_immediately(msg: String) -> ! {
         let last_gl_call_data = calldata::Value::Map(std::collections::BTreeMap::from([(
             "Rollback".to_owned(),
@@ -494,6 +528,10 @@ pub mod wasi_only {
         std::unreachable!();
     }
 
+    /// Internal implementation of contract_main that returns a Result.
+    ///
+    /// Reads the extended message from stdin, dispatches to the appropriate
+    /// handler based on entry_kind, and returns the result.
     pub fn contract_main_impl<H>() -> Result<calldata::Value, contract_def::ContractMainError>
     where
         H: contract_def::Contract + Default,
@@ -540,6 +578,10 @@ pub mod wasi_only {
         Ok(result)
     }
 
+    /// Main entry point for contract execution.
+    ///
+    /// Calls `contract_main_impl` and sends the result (or error) via gl_call.
+    /// This function does not return.
     pub fn contract_main<H>() -> ()
     where
         H: contract_def::Contract + Default,
@@ -560,6 +602,17 @@ pub mod wasi_only {
         std::unreachable!();
     }
 
+    /// Macro to generate the main function for a contract.
+    ///
+    /// # Example
+    /// ```ignore
+    /// use genlayer_sdk::contract_main;
+    ///
+    /// struct MyContract;
+    /// impl Contract for MyContract { /* ... */ }
+    ///
+    /// contract_main!(MyContract);
+    /// ```
     #[macro_export]
     macro_rules! contract_main {
         ($handler:ty) => {

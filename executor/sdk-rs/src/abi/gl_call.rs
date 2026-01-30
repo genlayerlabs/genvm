@@ -1,3 +1,8 @@
+//! Message types for gl_call operations.
+//!
+//! This module defines the payload structures for all gl_call operations,
+//! including web requests, LLM prompts, contract calls, and more.
+
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
@@ -6,10 +11,12 @@ use crate::calldata;
 
 use super::consts as public_abi;
 
+/// Web module interface types for WebRender and WebRequest operations.
 pub mod web_iface {
     use serde::{Deserialize, Serialize};
     use std::collections::BTreeMap;
 
+    /// Render mode for WebRender operations.
     #[derive(Serialize, Deserialize)]
     pub enum RenderMode {
         #[serde(rename = "text")]
@@ -20,6 +27,7 @@ pub mod web_iface {
         Screenshot,
     }
 
+    /// Duration to wait after page load before capturing content.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum WaitAfterLoaded {
         Seconds(u64),
@@ -97,6 +105,7 @@ pub mod web_iface {
         }
     }
 
+    /// Payload for WebRender operations.
     #[derive(Serialize, Deserialize)]
     pub struct RenderPayload {
         pub mode: RenderMode,
@@ -104,6 +113,7 @@ pub mod web_iface {
         pub wait_after_loaded: WaitAfterLoaded,
     }
 
+    /// HTTP request method for WebRequest operations.
     #[derive(Debug, Serialize, Deserialize)]
     pub enum RequestMethod {
         GET,
@@ -114,6 +124,7 @@ pub mod web_iface {
         PATCH,
     }
 
+    /// HTTP header value as raw bytes.
     #[derive(Debug, Clone, Serialize, Deserialize)]
     #[serde(transparent)]
     pub struct HeaderData(#[serde(with = "serde_bytes")] pub Vec<u8>);
@@ -130,6 +141,7 @@ pub mod web_iface {
         }
     }
 
+    /// HTTP response from WebRequest or WebRender operations.
     #[derive(Debug, Serialize, Deserialize)]
     pub struct Response {
         pub status: u16,
@@ -147,6 +159,7 @@ pub mod web_iface {
         false
     }
 
+    /// Payload for WebRequest operations.
     #[derive(Serialize, Deserialize)]
     pub struct RequestPayload {
         pub method: RequestMethod,
@@ -160,9 +173,11 @@ pub mod web_iface {
     }
 }
 
+/// LLM module interface types for ExecPrompt and ExecPromptTemplate operations.
 pub mod llm_iface {
     use serde::{Deserialize, Serialize};
 
+    /// Output format for LLM prompt responses.
     #[derive(Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Debug)]
     pub enum OutputFormat {
         #[serde(rename = "text")]
@@ -171,6 +186,7 @@ pub mod llm_iface {
         JSON,
     }
 
+    /// Variables for EqComparative prompt template.
     #[derive(Serialize, Deserialize)]
     pub struct PromptIDVarsComparative {
         pub leader_answer: String,
@@ -178,6 +194,7 @@ pub mod llm_iface {
         pub principle: String,
     }
 
+    /// Variables for EqNonComparativeValidator prompt template.
     #[derive(Serialize, Deserialize)]
     pub struct PromptIDVarsNonComparativeValidator {
         pub task: String,
@@ -186,6 +203,7 @@ pub mod llm_iface {
         pub output: String,
     }
 
+    /// Variables for EqNonComparativeLeader prompt template.
     #[derive(Serialize, Deserialize)]
     pub struct PromptIDVarsNonComparativeLeader {
         pub task: String,
@@ -197,6 +215,7 @@ pub mod llm_iface {
         OutputFormat::Text
     }
 
+    /// Payload for ExecPrompt operations.
     #[derive(Serialize, Deserialize, Debug)]
     pub struct PromptPayload {
         #[serde(default = "default_text")]
@@ -223,6 +242,7 @@ pub mod llm_iface {
         pub vars: PromptIDVarsNonComparativeLeader,
     }
 
+    /// Payload for ExecPromptTemplate operations.
     #[derive(Serialize, Deserialize)]
     #[serde(tag = "template")]
     pub enum PromptTemplatePayload {
@@ -232,6 +252,7 @@ pub mod llm_iface {
     }
 }
 
+/// When to execute a posted message or deploy a contract.
 #[derive(Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Debug)]
 pub enum On {
     #[serde(rename = "finalized")]
@@ -273,12 +294,19 @@ where
     deserializer.deserialize_any(Visitor)
 }
 
+/// Payload for Trace operations.
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub enum TracePayload {
+    /// Log a debug message with timing information.
     Message(String),
+    /// Get elapsed execution time in microseconds.
     RuntimeMicroSec,
 }
 
+/// All available gl_call message types.
+///
+/// Each variant corresponds to a specific blockchain operation that can be
+/// invoked via the [`super::wasi::gl_call`] function.
 #[allow(clippy::enum_variant_names)]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -345,6 +373,7 @@ pub enum Message {
     Trace(TracePayload),
 }
 
+/// Wrapper for raw bytes with serde_bytes serialization.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct Bytes(#[serde(with = "serde_bytes")] pub Vec<u8>);
