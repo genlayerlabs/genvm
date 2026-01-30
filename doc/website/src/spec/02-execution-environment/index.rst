@@ -8,5 +8,5 @@ Runtime environments and language support for GenVM contracts.
 
    01-wasm
    02-wasip1
-   03-wasi_genlayer_sdk
+   03-wasi_genlayer_sdk/index
    04-runners
