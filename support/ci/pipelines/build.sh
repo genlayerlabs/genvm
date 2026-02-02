@@ -3,6 +3,7 @@
 TARGET=""
 EXECUTOR_VERSION=""
 EXTRA_BUNDLE=""
+COMPRESSION_LEVEL=9
 
 while [[ $# -gt 0 ]]; do
 	case $1 in
@@ -32,6 +33,14 @@ while [[ $# -gt 0 ]]; do
 			EXTRA_BUNDLE="$(readlink -f "$EXTRA_BUNDLE")"
 			shift
 			;;
+		--compression-level)
+			COMPRESSION_LEVEL="$2"
+			shift 2
+			;;
+		--compression-level=*)
+			COMPRESSION_LEVEL="${1#*=}"
+			shift
+			;;
 		-h|--help)
 			echo "Usage: $0 [--target TARGET] [--executor-version VERSION]"
 			echo "  --target TARGET              Specify the target platform (default: universal)"
@@ -53,6 +62,13 @@ fi
 
 if [[ -n "$EXECUTOR_VERSION" && -z "$EXECUTOR_VERSION" ]]; then
 	echo "Error: --executor-version cannot be empty" >&2
+	exit 1
+fi
+
+if [[ "$COMPRESSION_LEVEL" == [0-9] ]]; then
+    true
+else
+    echo "Error: --compression-level must be an integer between 0 and 9" >&2
 	exit 1
 fi
 
@@ -87,6 +103,6 @@ then
 	tar -A -f "$PREV/build/genvm-$TARGET.tar" "$EXTRA_BUNDLE"
 fi
 
-xz -z -9 --force "$PREV/build/genvm-$TARGET.tar"
+xz -z "-$COMPRESSION_LEVEL" --force "$PREV/build/genvm-$TARGET.tar"
 
 popd
