@@ -47,6 +47,7 @@ unicode-normalization = "0.1.20"
 unicode-width = "0.2.1"
 image = { version = "0.25.8", features = ["png", "jpeg", "webp"]}
 warp = "0.3.7"
+hyper = { version = "0.14", features = ["server", "http1", "tcp"] }
 bytes = "1.10.1"
 libc = "0.2"
 sha3 = "0.10"

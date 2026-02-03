@@ -147,7 +147,7 @@ impl std::error::Error for ModuleError {}
 
 pub type ModuleResult<T> = anyhow::Result<T>;
 
-type WSStream = tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>;
+type WSStream<S> = tokio_tungstenite::WebSocketStream<S>;
 
 pub trait MessageHandler<T, R>: Sync + Send {
     fn handle(&self, v: T) -> impl std::future::Future<Output = ModuleResult<R>> + Send;
@@ -175,14 +175,15 @@ where
     handler.handle(payload).await.with_context(|| "handling")
 }
 
-async fn loop_one_inner<T, R>(
+async fn loop_one_inner<T, R, S>(
     handler: &mut impl MessageHandler<T, R>,
-    stream: &mut WSStream,
+    stream: &mut WSStream<S>,
     genvm_id: genvm_modules_interfaces::GenVMId,
 ) -> anyhow::Result<()>
 where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     loop {
         use tokio_tungstenite::tungstenite::Message;
@@ -235,9 +236,12 @@ where
     }
 }
 
-async fn read_hello(
-    stream: &mut WSStream,
-) -> anyhow::Result<Option<genvm_modules_interfaces::GenVMHello>> {
+async fn read_hello<S>(
+    stream: &mut WSStream<S>,
+) -> anyhow::Result<Option<genvm_modules_interfaces::GenVMHello>>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
     loop {
         use tokio_tungstenite::tungstenite::Message;
         match stream
@@ -263,14 +267,15 @@ async fn read_hello(
     }
 }
 
-async fn loop_one_impl<T, R>(
+async fn loop_one_impl<T, R, S>(
     handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
-    stream: &mut WSStream,
+    stream: &mut WSStream<S>,
     hello: genvm_modules_interfaces::GenVMHello,
 ) -> anyhow::Result<()>
 where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     let genvm_id = hello.genvm_id;
 
@@ -291,14 +296,16 @@ where
     res
 }
 
-async fn loop_one<T, R>(
+async fn handle_stream<T, R, S>(
     handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
-    stream: tokio::net::TcpStream,
+    stream: S,
+    stream_type: &str,
 ) where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    log_trace!("sock -> ws upgrade");
+    log_trace!(stream_type = stream_type; "sock -> ws upgrade");
     let mut stream = match tokio_tungstenite::accept_async(stream).await {
         Err(e) => {
             let e = e.into();
@@ -332,6 +339,28 @@ async fn loop_one<T, R>(
         .await;
 }
 
+async fn loop_one<T, R>(
+    handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
+    stream: tokio::net::TcpStream,
+) where
+    T: serde::de::DeserializeOwned + 'static,
+    R: serde::Serialize + Send + 'static,
+{
+    handle_stream(handler_provider, stream, "tcp").await;
+}
+
+async fn loop_one_unix<T, R>(
+    handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
+    stream: tokio::net::UnixStream,
+) where
+    T: serde::de::DeserializeOwned + 'static,
+    R: serde::Serialize + Send + 'static,
+{
+    handle_stream(handler_provider, stream, "unix").await;
+}
+
+const UNIX_PREFIX: &str = "unix://";
+
 pub async fn run_loop<T, R>(
     bind_address: String,
     cancel: Arc<genvm_common::cancellation::Token>,
@@ -341,11 +370,27 @@ where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
 {
-    log_info!(address = bind_address; "trying to bind");
+    if let Some(socket_path) = bind_address.strip_prefix(UNIX_PREFIX) {
+        run_loop_unix(socket_path, cancel, handler_provider).await
+    } else {
+        run_loop_tcp(&bind_address, cancel, handler_provider).await
+    }
+}
 
-    let listener = tokio::net::TcpListener::bind(&bind_address).await?;
+async fn run_loop_tcp<T, R>(
+    bind_address: &str,
+    cancel: Arc<genvm_common::cancellation::Token>,
+    handler_provider: Arc<impl MessageHandlerProvider<T, R> + 'static>,
+) -> anyhow::Result<()>
+where
+    T: serde::de::DeserializeOwned + 'static,
+    R: serde::Serialize + Send + 'static,
+{
+    log_info!(address = bind_address; "trying to bind TCP");
 
-    log_info!(address = bind_address, local_address:? = listener.local_addr(); "loop started");
+    let listener = tokio::net::TcpListener::bind(bind_address).await?;
+
+    log_info!(address = bind_address, local_address:? = listener.local_addr(); "TCP loop started");
 
     loop {
         tokio::select! {
@@ -363,6 +408,64 @@ where
             }
         }
     }
+}
+
+async fn run_loop_unix<T, R>(
+    socket_path: &str,
+    cancel: Arc<genvm_common::cancellation::Token>,
+    handler_provider: Arc<impl MessageHandlerProvider<T, R> + 'static>,
+) -> anyhow::Result<()>
+where
+    T: serde::de::DeserializeOwned + 'static,
+    R: serde::Serialize + Send + 'static,
+{
+    let path = std::path::Path::new(socket_path);
+    log_info!(socket_path = socket_path; "trying to bind Unix socket");
+
+    // Clean up stale socket
+    if path.exists() {
+        std::fs::remove_file(path)
+            .with_context(|| format!("removing stale socket {}", socket_path))?;
+    }
+
+    // Ensure parent directory exists
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
+
+    let listener = tokio::net::UnixListener::bind(path)
+        .with_context(|| format!("binding to unix socket {}", socket_path))?;
+
+    log_info!(socket_path = socket_path; "Unix socket loop started");
+
+    // Note: Socket cleanup on cancellation
+    let cleanup_path = path.to_owned();
+
+    let result = async {
+        loop {
+            tokio::select! {
+                _ = cancel.chan.closed() => {
+                    log_info!("loop cancelled");
+                    return Ok(())
+                }
+                accepted = listener.accept() => {
+                    if let Ok((stream, _)) = accepted {
+                        tokio::spawn(loop_one_unix(handler_provider.clone(), stream));
+                    } else {
+                        log_info!("accepted None");
+                        return Ok(())
+                    }
+                }
+            }
+        }
+    }
+    .await;
+
+    // Cleanup socket file
+    let _ = std::fs::remove_file(&cleanup_path);
+    result
 }
 
 tokio::task_local! {
