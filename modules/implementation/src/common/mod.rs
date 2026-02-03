@@ -442,6 +442,11 @@ where
 
     // Note: Socket cleanup on cancellation
     let cleanup_path = path.to_owned();
+    let _dropper = sync::DropGuard::new(move || {
+        if let Err(e) = std::fs::remove_file(&cleanup_path) {
+            log_error!(error:err = &e, socket_path:? = cleanup_path; "cleaning up unix socket failed");
+        }
+    });
 
     let result = async {
         loop {
@@ -463,8 +468,6 @@ where
     }
     .await;
 
-    // Cleanup socket file
-    let _ = std::fs::remove_file(&cleanup_path);
     result
 }
 
