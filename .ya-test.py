@@ -1,7 +1,25 @@
+import json
 from pathlib import Path
 import ya_test_runner
 
 local_ctx = ya_test_runner.stage.configuration.current_context()
+
+_info_path = local_ctx.shared.root_dir / 'build' / 'info.json'
+if not _info_path.exists():
+	local_ctx.shared.logger.warning('build/info.json not found, generating default')
+	_build_dir = local_ctx.shared.root_dir / 'build'
+	_build_dir.mkdir(parents=True, exist_ok=True)
+	_info_path.write_text(
+		json.dumps(
+			{
+				'coverage_dir': str(_build_dir / 'cov'),
+				'build_dir': str(_build_dir),
+				'rust_target_dir': str(_build_dir / 'ya-build' / 'rust-target'),
+			},
+			indent=2,
+		)
+		+ '\n'
+	)
 
 local_ctx.run_parser.add_argument(
 	'--fuzz-timeout',
@@ -99,8 +117,6 @@ local_ctx.run_parser.add_argument(
 
 
 def collect_integration(ctx: ya_test_runner.stage.collection.Context):
-	import json
-
 	# Load build info to find binary paths
 	build_info = json.loads(
 		ctx.shared.root_dir.joinpath('build', 'info.json').read_text()
