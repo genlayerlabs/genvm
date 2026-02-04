@@ -24,7 +24,7 @@ DEFAULT_ENV = {
 	for k, v in os.environ.items()
 	if ya_test_runner.util.environ.DEFAULT_FILTER(k, v)
 }
-del DEFAULT_ENV['LD_LIBRARY_PATH']
+DEFAULT_ENV.pop('LD_LIBRARY_PATH', None)
 
 
 async def build(
