@@ -25,6 +25,7 @@ let
 					"modules/implementation"
 					"modules/interfaces"
 					"executor/common"
+					"executor/sdk-rs"
 				];
 				sourceRoot = "./source/modules/implementation";
 
