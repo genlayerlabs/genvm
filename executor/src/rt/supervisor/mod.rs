@@ -3,6 +3,7 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
+use anyhow::Context;
 use genvm_common::*;
 
 use crate::{
@@ -114,8 +115,10 @@ pub fn create_engines(
     let mut non_det_conf = base_conf.clone();
     non_det_conf.wasm_floats_enabled(true).wasm_backtrace(false);
 
-    let det_engine = wasmtime::Engine::new(&det_conf)?;
-    let non_det_engine = wasmtime::Engine::new(&non_det_conf)?;
+    let det_engine =
+        wasmtime::Engine::new(&det_conf).with_context(|| "creating deterministic wasm engine")?;
+    let non_det_engine = wasmtime::Engine::new(&non_det_conf)
+        .with_context(|| "creating non-deterministic wasm engine")?;
 
     Ok(rt::DetNondet {
         det: det_engine,
@@ -331,9 +334,11 @@ pub async fn apply_contract_actions(
                     .data
                     .storage
                     .read_code(&limiter)
-                    .await?;
+                    .await
+                    .with_context(|| format!("reading contract code for {contract_id}"))?;
 
                 runners::parse(util::SharedBytes::new(code))
+                    .with_context(|| format!("parsing contract runner for {contract_id}"))
             },
             &limiter,
         )
@@ -342,9 +347,13 @@ pub async fn apply_contract_actions(
             rt::errors::VMError::wrap(public_abi::VmError::InvalidContract.value().to_owned(), e)
         })?;
 
-    let actions = arch.get_actions().await.map_err(|e| {
-        rt::errors::VMError::wrap(public_abi::VmError::InvalidContract.value().to_owned(), e)
-    })?;
+    let actions = arch
+        .get_actions()
+        .await
+        .with_context(|| format!("loading init actions for contract {contract_id}"))
+        .map_err(|e| {
+            rt::errors::VMError::wrap(public_abi::VmError::InvalidContract.value().to_owned(), e)
+        })?;
 
     let mut ctx = actions::Ctx {
         env: BTreeMap::new(),

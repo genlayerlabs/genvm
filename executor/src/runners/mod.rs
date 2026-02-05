@@ -61,7 +61,13 @@ impl ArchiveCache {
         let contents = std::str::from_utf8(contents.as_ref())
             .with_context(|| format!("casting version to string {}", self.id))?;
 
-        let version = version::Version::from_str(contents)?;
+        let version = version::Version::from_str(contents).with_context(|| {
+            format!(
+                "parsing version '{}' for runner {}",
+                contents.trim(),
+                self.id
+            )
+        })?;
 
         log_trace!(from = contents, to = version; "version parsed");
 
@@ -73,8 +79,12 @@ impl ArchiveCache {
             .get_or_try_init(|| async {
                 let contents = self.get_file("runner.json")?;
 
-                let as_init: InitAction =
-                    serde_json::from_str(std::str::from_utf8(contents.as_ref())?)?;
+                let contents_str = std::str::from_utf8(contents.as_ref()).with_context(|| {
+                    format!("runner.json is not valid UTF-8 for runner {}", self.id)
+                })?;
+
+                let as_init: InitAction = serde_json::from_str(contents_str)
+                    .with_context(|| format!("parsing runner.json for runner {}", self.id))?;
 
                 Ok(Arc::new(as_init))
             })

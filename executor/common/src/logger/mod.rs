@@ -431,11 +431,11 @@ fn write_bytes_inner(buf: &mut std::io::Cursor<&mut Vec<u8>>, s: &[u8]) -> std::
             let ch = prefix.chars().next().unwrap();
             if ch.is_control() || ch.is_whitespace() && ch != ' ' {
                 buf.write_fmt(format_args!("\\u{:04x}", s[i]))?;
+                i += 1;
             } else {
                 write_str_part_escaping(buf, prefix)?;
+                i += prefix.len();
             }
-
-            i += prefix.len();
         } else {
             buf.write_fmt(format_args!("\\u{:04x}", s[i]))?;
 

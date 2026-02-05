@@ -53,18 +53,20 @@ impl Host {
     }
 }
 
-fn read_u32(sock: &mut dyn Sock) -> Result<u32> {
+fn read_u32(sock: &mut dyn Sock, context: &str) -> Result<u32> {
     let mut int_buf = [0; 4];
-    sock.read_exact(&mut int_buf)?;
+    sock.read_exact(&mut int_buf)
+        .with_context(|| format!("reading u32 from host: {context}"))?;
     Ok(u32::from_le_bytes(int_buf))
 }
 
-fn read_bytes(sock: &mut dyn Sock) -> Result<Box<[u8]>> {
-    let len = read_u32(sock)?;
+fn read_bytes(sock: &mut dyn Sock, context: &str) -> Result<Box<[u8]>> {
+    let len = read_u32(sock, context)?;
 
     let res = Box::new_uninit_slice(len as usize);
     let mut res = unsafe { res.assume_init() };
-    sock.read_exact(&mut res)?;
+    sock.read_exact(&mut res)
+        .with_context(|| format!("reading {} bytes from host: {context}", len))?;
     Ok(res)
 }
 
@@ -77,16 +79,17 @@ fn write_slice(sock: &mut dyn Sock, data: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn read_host_error(sock: &mut dyn Sock) -> Result<host_fns::Errors> {
+fn read_host_error(sock: &mut dyn Sock, context: &str) -> Result<host_fns::Errors> {
     let mut has_some = [0; 1];
-    sock.read_exact(&mut has_some)?;
+    sock.read_exact(&mut has_some)
+        .with_context(|| format!("reading host error code: {context}"))?;
 
     host_fns::Errors::try_from(has_some[0])
-        .map_err(|_| anyhow::anyhow!("invalid error id {}", has_some[0]))
+        .map_err(|_| anyhow::anyhow!("invalid host error code {} for: {}", has_some[0], context))
 }
 
-fn handle_host_error(sock: &mut dyn Sock) -> Result<()> {
-    let e = read_host_error(sock)?;
+fn handle_host_error(sock: &mut dyn Sock, context: &str) -> Result<()> {
+    let e = read_host_error(sock, context)?;
 
     if e == host_fns::Errors::Ok {
         Ok(())
@@ -123,9 +126,9 @@ impl Host {
         let mut sock = self.lock_sock();
         sock.write_all(&[host_fns::Methods::GetCalldata as u8])?;
 
-        handle_host_error(&mut **sock)?;
+        handle_host_error(&mut **sock, "get_calldata")?;
 
-        let len = read_u32(&mut **sock)? as usize;
+        let len = read_u32(&mut **sock, "get_calldata length")? as usize;
         calldata.reserve(len);
         let index = calldata.len();
         unsafe {
@@ -232,9 +235,10 @@ impl Host {
         sock.write_all(&index.to_le_bytes())?;
         sock.write_all(&(buf.len() as u32).to_le_bytes())?;
 
-        handle_host_error(&mut **sock)?;
+        handle_host_error(&mut **sock, "storage_read")?;
 
-        sock.read_exact(buf)?;
+        sock.read_exact(buf)
+            .with_context(|| format!("reading {} bytes from storage slot {:?}", buf.len(), slot))?;
 
         log_trace!(slot:bytes = slot.0, index = index, data:bytes = buf; "read");
 
@@ -292,7 +296,7 @@ impl Host {
         sock.write_all(&[host_fns::Methods::GetLeaderNondetResult as u8])?;
         sock.write_all(&call_no.to_le_bytes())?;
 
-        match read_host_error(&mut **sock)? {
+        match read_host_error(&mut **sock, "get_leader_result")? {
             host_fns::Errors::Ok => {}
             host_fns::Errors::IAmLeader => {
                 return Ok(None);
@@ -300,7 +304,7 @@ impl Host {
             e => return Err(rt::errors::VMError(e.str_snake_case().to_owned(), None).into()),
         }
 
-        let leaders_result = read_bytes(&mut **sock)?;
+        let leaders_result = read_bytes(&mut **sock, "get_leader_result")?;
 
         let rest = &leaders_result[1..];
 
@@ -328,7 +332,7 @@ impl Host {
 
         sock.flush()?;
 
-        handle_host_error(&mut **sock)?;
+        handle_host_error(&mut **sock, "post_nondet_result")?;
 
         Ok(())
     }
@@ -350,7 +354,7 @@ impl Host {
 
         sock.flush()?;
 
-        handle_host_error(&mut **sock)?;
+        handle_host_error(&mut **sock, "post_message")?;
 
         Ok(())
     }
@@ -367,7 +371,7 @@ impl Host {
 
         sock.flush()?;
 
-        handle_host_error(&mut **sock)?;
+        handle_host_error(&mut **sock, "deploy_contract")?;
 
         Ok(())
     }
@@ -394,9 +398,9 @@ impl Host {
         sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
         sock.write_all(calldata)?;
 
-        handle_host_error(&mut **sock)?;
+        handle_host_error(&mut **sock, "eth_call")?;
 
-        read_bytes(&mut **sock)
+        read_bytes(&mut **sock, "eth_call result")
     }
 
     pub fn eth_send(
@@ -420,7 +424,7 @@ impl Host {
 
         sock.flush()?;
 
-        handle_host_error(&mut **sock)?;
+        handle_host_error(&mut **sock, "eth_send")?;
 
         Ok(())
     }
@@ -433,10 +437,11 @@ impl Host {
 
         sock.write_all(&address.raw())?;
 
-        handle_host_error(&mut **sock)?;
+        handle_host_error(&mut **sock, "get_balance")?;
 
         let mut buf: [u8; 32] = [0; 32];
-        sock.read_exact(&mut buf)?;
+        sock.read_exact(&mut buf)
+            .with_context(|| format!("reading balance for address {:?}", address))?;
         Ok(primitive_types::U256::from_little_endian(&buf))
     }
 
@@ -446,10 +451,11 @@ impl Host {
         let mut sock = self.lock_sock();
         sock.write_all(&[host_fns::Methods::RemainingFuelAsGen as u8])?;
 
-        handle_host_error(&mut **sock)?;
+        handle_host_error(&mut **sock, "remaining_fuel_as_gen")?;
 
         let mut buf: [u8; 8] = [0; 8];
-        sock.read_exact(&mut buf)?;
+        sock.read_exact(&mut buf)
+            .with_context(|| "reading remaining fuel")?;
         Ok(u64::from_le_bytes(buf))
     }
 

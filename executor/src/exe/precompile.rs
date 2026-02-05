@@ -62,9 +62,10 @@ fn compile_single_file(
     let mut result_dir_path = precompile_dir.to_owned();
     result_dir_path.push(base_path);
 
-    let data = util::mmap_file(zip_path)?;
+    let data = util::mmap_file(zip_path).with_context(|| format!("memory mapping {zip_path:?}"))?;
 
-    let arch = genvm::runners::Archive::from_ustar(util::SharedBytes::new(data))?;
+    let arch = genvm::runners::Archive::from_ustar(util::SharedBytes::new(data))
+        .with_context(|| format!("parsing ustar archive {zip_path:?}"))?;
 
     for (entry_name, contents) in arch
         .data
@@ -127,7 +128,8 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
     let all_json_path = registry_dir.join("all.json");
     let all_json = std::fs::read_to_string(&all_json_path)
         .with_context(|| format!("reading {all_json_path:?}"))?;
-    let all: BTreeMap<String, Vec<String>> = serde_json::from_str(&all_json)?;
+    let all: BTreeMap<String, Vec<String>> =
+        serde_json::from_str(&all_json).with_context(|| format!("parsing {all_json_path:?}"))?;
 
     let runners_dir = std::path::Path::new(&config.runners_dir);
 

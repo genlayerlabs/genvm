@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import threading
 import traceback
+import unicodedata
 
 
 class Level(enum.Enum):
@@ -161,7 +162,10 @@ class TextFormatter(Formatter, Sink):
 			if '\n' in data:
 				for line in data.splitlines():
 					self.file.write('  ' * ind)
-					self.file.write(line.rstrip())
+					as_arr = [
+						c if unicodedata.category(c) != 'Cc' else repr(c) for c in line.rstrip()
+					]
+					self.file.write(''.join(as_arr))
 					self.file.write('\n')
 			else:
 				self.file.write('  ' * ind)

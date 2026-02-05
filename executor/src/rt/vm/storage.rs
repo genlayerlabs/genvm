@@ -1,5 +1,6 @@
 use std::ops::DerefMut;
 
+use anyhow::Context;
 use const_lru::ConstLru;
 use genvm_common::{calldata, sync};
 
@@ -73,7 +74,11 @@ impl Limiter {
                     }
                 },
             )
-            .map_err(|_| rt::errors::VMError::oos(None))?;
+            .map_err(|current| {
+                anyhow::anyhow!(rt::errors::VMError::oos(None)).context(format!(
+                    "consuming {amount} storage pages (available: {current})"
+                ))
+            })?;
 
         Ok(())
     }
