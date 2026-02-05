@@ -5,6 +5,18 @@ description: Builds the GenVM project. Use after making code changes to compile 
 
 To build the GenVM project:
 
+## Reconfiguring
+
+If ninja fails with `missing and no known rule to make it` (e.g., after adding/removing/renaming source files), regenerate the build file first:
+
+```bash
+./configure.rb
+```
+
+This runs the `configure.rb` Ruby script at the project root, which regenerates `build/build.ninja` with the current file list.
+
+## Building
+
 **Build all Rust binaries:**
 ```bash
 nix develop .#full --command bash .claude/skills/build/run-ninja.sh -C build all/bin

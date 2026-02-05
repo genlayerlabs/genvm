@@ -1,5 +1,6 @@
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 import html
 from html.parser import HTMLParser
@@ -32,7 +33,7 @@ class ScriptRemover(HTMLParser):
 			self.result.append(data)
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	@gl.public.write
 	def main(self, mode: str):
 		def run() -> str:

@@ -1,7 +1,7 @@
 import numpy as np
 
 from genlayer_embeddings import VecDB, EuclideanDistanceSquared
-from genlayer.py.storage._internal.generate import generate_storage
+from genlayer.storage._internal.generate import generate_storage
 import typing
 
 import pytest

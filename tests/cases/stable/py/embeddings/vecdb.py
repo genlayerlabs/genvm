@@ -8,11 +8,12 @@
 
 import numpy as np
 import typing
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 import genlayer_embeddings as gle
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	x: gle.VecDB[np.float32, typing.Literal[5], str, gle.EuclideanDistanceSquared]
 
 	def __init__(self):

@@ -1,12 +1,13 @@
 # { "Depends": "py-genlayer:test" }
 
-from genlayer import *
-from genlayer.py.storage._internal.generate import generate_storage
+import genlayer as gl
+from genlayer.types import *
+from genlayer.storage._internal.generate import generate_storage
 
 
 @generate_storage
 class Pr:
-	x: TreeMap[str, str]
+	x: gl.TreeMap[str, str]
 
 
 a = Pr()

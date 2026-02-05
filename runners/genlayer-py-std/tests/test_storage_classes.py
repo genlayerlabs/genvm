@@ -1,6 +1,6 @@
-from genlayer.py.storage import *
-from genlayer.py.types import *
-from genlayer.py.storage._internal.generate import generate_storage, _known_descs
+from genlayer.storage import *
+from genlayer.types import *
+from genlayer.storage._internal.generate import generate_storage, _known_descs
 
 
 class A:

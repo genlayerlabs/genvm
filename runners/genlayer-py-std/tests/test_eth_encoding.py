@@ -1,7 +1,9 @@
-import genlayer.py.evm as genvm_eth
+import typing
 
-from genlayer.py.types import *
-from genlayer.py.storage import *
+import genlayer.evm as genvm_eth
+
+from genlayer.types import *
+from genlayer.storage import *
 
 
 def test_eth_baz():

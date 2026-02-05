@@ -1,8 +1,9 @@
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	def __init__(self):
 		pass
 
@@ -10,7 +11,7 @@ class Contract(gl.Contract):
 	def main(self, addr: Address):
 		print('contract from.main')
 		try:
-			res = gl.get_contract_at(addr).view().foo(1, 2).get()
+			res = gl.contract.get_at(addr).view().foo(1, 2).get()
 		except gl.vm.UserError as r:
 			print('handled', r.message)
 		else:

@@ -1,13 +1,14 @@
 # v0.1.5
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 
-class TestEvent(gl.Event):
+class TestEvent(gl.vm.Event):
 	def __init__(self, user_id: int, action: str, /, **blob): ...
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	def __init__(self):
 		try:
 			# Test basic event emission

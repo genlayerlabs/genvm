@@ -1,6 +1,7 @@
 # { "Depends": "py-genlayer:test" }
-
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
+from genlayer.storage import allow_storage
 
 from dataclasses import dataclass
 import datetime
@@ -13,8 +14,8 @@ class User:
 	birthday: datetime.datetime
 
 
-class Contract(gl.Contract):
-	users: DynArray[User]
+class Contract(gl.contract.Contract):
+	users: gl.DynArray[User]
 
 	def __init__(self):
 		self.users.append(User('Ada', datetime.datetime.now()))

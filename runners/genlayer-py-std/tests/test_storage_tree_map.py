@@ -1,7 +1,9 @@
 import pytest
 
-from genlayer import *
-from genlayer.py.storage._internal.generate import generate_storage
+import genlayer as gl
+from genlayer.types import *
+from genlayer.storage import TreeMap
+from genlayer.storage._internal.generate import generate_storage
 
 
 def same_iter(li, ri):

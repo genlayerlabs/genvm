@@ -1,10 +1,11 @@
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 import json
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	@gl.public.write
 	def main(self, ev: str):
 		glb = globals()

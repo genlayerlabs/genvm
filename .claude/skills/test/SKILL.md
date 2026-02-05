@@ -97,10 +97,12 @@ Tests for the Python standard library (`genlayer-py-std`):
 nix develop .#mock-tests --command ya-test-runner --filter-tag python run
 ```
 
-Or directly with pytest:
+Or directly with pytest inside nix develop:
 ```bash
-cd runners/genlayer-py-std && poetry install --with dev && poetry run pytest
+nix develop .#mock-tests --command bash -c "cd runners/genlayer-py-std && poetry run pytest tests/"
 ```
+
+**Coverage:** pytest is configured with `--cov` and `--cov-fail-under=75`. Coverage scope includes `genlayer.types`, `genlayer.calldata`, `genlayer.storage`, `genlayer.evm`, `genlayer._internal`, and `genlayer_embeddings`. Must run inside nix develop for numpy-dependent tests and correct coverage resolution.
 
 ## Webdriver Setup
 
@@ -133,6 +135,7 @@ ya-test-runner --filter-continue 20260123-143052-abc123 run
 | All tests | `nix develop .#mock-tests --command ya-test-runner run` |
 | Release tests | `nix develop .#mock-tests --command ya-test-runner --filter-tag "$(cat tests/presets/release.txt)" run` |
 | Rust tests | `nix develop .#rust-test --command ya-test-runner --filter-tag rust run` |
+| Python (poetry) | `nix develop .#mock-tests --command bash -c "cd runners/genlayer-py-std && poetry run pytest tests/"` |
 | Re-run failed | `ya-test-runner --filter-continue <file> run` |
 | With debug logs | `nix develop .#mock-tests --command ya-test-runner run --log-level debug` |
 | Show test list | `nix develop .#mock-tests --command ya-test-runner show test` |

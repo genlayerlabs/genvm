@@ -1,5 +1,6 @@
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 
 @gl.evm.contract_interface
@@ -11,7 +12,7 @@ class EthContract:
 		pass
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	def __init__(self):
 		print('main self', self.balance)
 		print('main At(self)', EthContract(gl.message.contract_address).balance)
@@ -22,7 +23,7 @@ class Contract(gl.Contract):
 		print('main At(self)', EthContract(gl.message.contract_address).balance)
 
 		print('=== call .view() ===')
-		gl.get_contract_at(gl.message.contract_address).view().nested()
+		gl.contract.get_at(gl.message.contract_address).view().nested()
 
 	@gl.public.view
 	def nested(self):

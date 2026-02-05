@@ -1,11 +1,12 @@
 # { "Depends": "py-genlayer:test" }
 
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 import typing
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	@gl.public.write
 	def __handle_undefined_method__(
 		self, method_name: str, args: list[typing.Any], kwargs: dict[str, typing.Any]

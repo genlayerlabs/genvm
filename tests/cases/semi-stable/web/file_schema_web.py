@@ -1,9 +1,10 @@
 # { "Depends": "py-genlayer:test" }
 
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	def __init__(self, path: str):
 		def nondet():
 			print(gl.nondet.web.render(path, mode='text'))

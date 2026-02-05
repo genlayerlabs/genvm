@@ -1,6 +1,6 @@
-import genlayer.py.storage._internal.desc_base_types as base
-from genlayer.py.storage.vec import _DynArrayDesc, DynArray
-from genlayer.py.storage._internal.generate import _Instantiation, _known_descs
+import genlayer.storage._internal.desc_base_types as base
+from genlayer.storage.vec import _DynArrayDesc, DynArray
+from genlayer.storage._internal.generate import _Instantiation, _known_descs
 
 
 def test_all_different():

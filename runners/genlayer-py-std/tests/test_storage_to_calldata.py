@@ -1,10 +1,10 @@
-from genlayer.py.storage import DynArray, Array, TreeMap
-from genlayer.py.types import u32, bigint
-from genlayer.py.storage._internal.generate import generate_storage
+from genlayer.storage import DynArray, Array, TreeMap
+from genlayer.types import u32, bigint
+from genlayer.storage._internal.generate import generate_storage
 from dataclasses import dataclass
 import typing
 
-import genlayer.py.calldata as calldata
+import genlayer.calldata as calldata
 
 from .common import *
 

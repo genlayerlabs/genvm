@@ -6,7 +6,8 @@
 #   ]
 # }
 
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 print('I am ok')
 exit(0)

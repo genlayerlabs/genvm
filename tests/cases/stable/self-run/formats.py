@@ -1,13 +1,14 @@
 # { "Depends": "py-genlayer:test" }
 
-from genlayer.py.storage._internal.generate import generate_storage
-from genlayer import *
+from genlayer.storage._internal.generate import generate_storage
+import genlayer as gl
+from genlayer.types import Address
 
 
 @generate_storage
 class Test:
-	arr: DynArray[str]
-	map: TreeMap[str, None]
+	arr: gl.DynArray[str]
+	map: gl.TreeMap[str, None]
 
 
 addr = Address(b'\xa2' * 20)

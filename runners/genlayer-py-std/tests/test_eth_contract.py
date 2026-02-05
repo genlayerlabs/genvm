@@ -1,10 +1,10 @@
 import typing
 from functools import partial
 
-from genlayer.py.types import Address, u256
+from genlayer.types import Address, u256
 
-from genlayer.py.evm.calldata import MethodEncoder
-import genlayer.py.evm as genvm_eth
+from genlayer.evm.calldata import MethodEncoder
+import genlayer.evm as genvm_eth
 
 
 def generate_test(

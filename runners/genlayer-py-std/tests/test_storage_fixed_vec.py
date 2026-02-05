@@ -1,8 +1,8 @@
 import typing
 
-from genlayer.py.storage import Array
-from genlayer.py.storage._internal.generate import generate_storage, _known_descs
-from genlayer.py.types import u32
+from genlayer.storage import Array
+from genlayer.storage._internal.generate import generate_storage, _known_descs
+from genlayer.types import u32
 
 from .common import *
 

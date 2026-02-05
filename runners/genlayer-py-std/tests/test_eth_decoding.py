@@ -1,9 +1,11 @@
+import typing
+
 import pytest
 
-import genlayer.py.evm as genvm_eth
+import genlayer.evm as genvm_eth
 
-from genlayer.py.types import *
-from genlayer.py.storage import *
+from genlayer.types import *
+from genlayer.storage import *
 
 
 @pytest.mark.parametrize(

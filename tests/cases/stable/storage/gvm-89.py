@@ -1,17 +1,19 @@
 # { "Depends": "py-genlayer:test" }
 
 from dataclasses import dataclass
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
+from genlayer.storage import allow_storage
 
 
 @allow_storage
 @dataclass
 class Foo:
-	x: DynArray[str]
+	x: gl.DynArray[str]
 
 
-class Main(gl.Contract):
-	f: DynArray[Foo]
+class Main(gl.contract.Contract):
+	f: gl.DynArray[Foo]
 
 	@gl.public.write
 	def main(self):

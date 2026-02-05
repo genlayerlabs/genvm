@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
-from genlayer import *
-from genlayer.py.storage import inmem_allocate
+import genlayer as gl
+from genlayer.types import *
+from genlayer.storage import inmem_allocate, TreeMap
 import itertools
 
 import sys

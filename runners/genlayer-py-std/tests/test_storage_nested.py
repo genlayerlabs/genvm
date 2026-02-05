@@ -1,5 +1,5 @@
-from genlayer.py.storage import DynArray, allow_storage
-from genlayer.py.storage._internal.generate import generate_storage
+from genlayer.storage import DynArray, allow_storage
+from genlayer.storage._internal.generate import generate_storage
 
 
 @allow_storage

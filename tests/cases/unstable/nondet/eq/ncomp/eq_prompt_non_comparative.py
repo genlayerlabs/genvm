@@ -1,9 +1,10 @@
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 import sys
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	def __init__(self):
 		def get_input():
 			return "As pets, rats are affectionate, playful, and form strong bonds with their human companions. They're curious, enjoy interactive toys, and can learn tricks much like small dogs. Their adaptability, intelligence, and charming personalities make them truly cool animals that deserve much more appreciation than they currently get."

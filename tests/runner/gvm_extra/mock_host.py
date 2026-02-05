@@ -1,8 +1,8 @@
 from pathlib import Path
 import sys
 
-from genlayer.py.types import Address
-from genlayer.py import calldata as _calldata
+from genlayer.types import Address
+from genlayer import calldata as _calldata
 
 import socket
 import pickle

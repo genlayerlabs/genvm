@@ -1,8 +1,9 @@
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 
-@gl.contract_interface
+@gl.contract.interface
 class ToIface:
 	class View:
 		def foo(self, a, b): ...
@@ -11,7 +12,7 @@ class ToIface:
 		pass
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	@gl.public.write
 	def main(self, addr: Address):
 		print('contract from.main')

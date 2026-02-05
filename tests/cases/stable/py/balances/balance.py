@@ -1,20 +1,21 @@
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	def __init__(self):
 		print('main self', self.balance)
-		print('main At(self)', gl.get_contract_at(gl.message.contract_address).balance)
+		print('main At(self)', gl.contract.get_at(gl.message.contract_address).balance)
 		print('=== transfer ===')
-		gl.get_contract_at(gl.message.sender_address).emit_transfer(value=u256(5))
+		gl.contract.get_at(gl.message.sender_address).emit_transfer(value=u256(5))
 		print('main self', self.balance)
-		print('main At(self)', gl.get_contract_at(gl.message.contract_address).balance)
+		print('main At(self)', gl.contract.get_at(gl.message.contract_address).balance)
 
 		print('=== call .view() ===')
-		gl.get_contract_at(gl.message.contract_address).view().nested()
+		gl.contract.get_at(gl.message.contract_address).view().nested()
 
 	@gl.public.view
 	def nested(self):
 		print('nested self', self.balance)
-		print('nested At(self)', gl.get_contract_at(gl.message.contract_address).balance)
+		print('nested At(self)', gl.contract.get_at(gl.message.contract_address).balance)

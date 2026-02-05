@@ -41,8 +41,8 @@ TESTS_DIR = local_ctx.shared.root_dir.joinpath('tests')
 CASES_DIR = TESTS_DIR.joinpath('cases')
 TEMPLATES_DIR = TESTS_DIR.joinpath('templates')
 
-import genlayer.py.calldata as gvm_calldata
-from genlayer.py.types import Address
+import genlayer.calldata as gvm_calldata
+from genlayer.types import Address
 from gvm_extra.mock_host import MockHost as MockHost, MockStorage as MockStorage
 import origin.base_host as base_host
 import origin.logger as origin_logger

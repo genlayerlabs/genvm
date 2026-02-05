@@ -1,10 +1,11 @@
 # { "Depends": "py-genlayer:test" }
 
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 
-class Contract(gl.Contract):
-	st: TreeMap[Address, TreeMap[Address, u256]]
+class Contract(gl.contract.Contract):
+	st: gl.TreeMap[Address, gl.TreeMap[Address, u256]]
 
 	def __init__(self):
 		first = self.st.get_or_insert_default(Address(b'\x00' * 20))

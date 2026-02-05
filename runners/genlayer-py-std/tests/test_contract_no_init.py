@@ -1,4 +1,4 @@
-from genlayer.py.get_schema import get_schema
+from genlayer._internal.get_schema import get_schema
 
 
 class A:

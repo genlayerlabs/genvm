@@ -11,9 +11,9 @@ sys.path.append('/')
 
 if os.getenv('GENLAYER_ENABLE_PROFILER', 'false') == 'true':
 	import cProfile
-	from genlayer import gl
+	from genlayer.vm import trace_time_micro
 
-	p = cProfile.Profile(timer=gl.trace_time_micro, timeunit=1_000_000)
+	p = cProfile.Profile(timer=trace_time_micro, timeunit=1_000_000)
 	p.enable()
 
 	def exit_hook():
@@ -42,16 +42,17 @@ if os.getenv('GENLAYER_ENABLE_PROFILER', 'false') == 'true':
 
 
 from genlayer._internal.msg import message_raw, MessageRawType
-from genlayer.py.public_abi import EntryKind
+from genlayer._internal.public_abi import EntryKind
 
-import genlayer.py.calldata as calldata
+import genlayer.calldata as calldata
 
 import typing
 import dataclasses
-import genlayer.py._internal.reflect as reflect
+import genlayer._internal.reflect as reflect
 
-import genlayer.gl._internal.gl_call as gl_call
-import genlayer.gl.vm as _vm
+import genlayer._internal.gl_call as gl_call
+import genlayer._internal.storage  # noqa: F401  # initialize Root.MANAGER
+import genlayer.vm as _vm
 
 
 class CalldataSchema(typing.TypedDict, total=False):
@@ -69,14 +70,14 @@ def _give_result(res_fn: typing.Callable[[], typing.Any]) -> typing.NoReturn:
 
 
 def _handle_main() -> typing.NoReturn:
-	from genlayer.gl.genvm_contracts import Contract
+	from genlayer.contract import Contract
 
-	import genlayer.py.get_schema as _get_schema
-	import genlayer.py.public_abi as ABI
+	import genlayer._internal.get_schema as _get_schema
+	import genlayer._internal.public_abi as ABI
 
 	import genlayer as gl_std
 
-	root_slot = gl_std.gl.storage.Root.get()
+	root_slot = gl_std.storage.Root.get()
 
 	@dataclasses.dataclass
 	class MethodResolverInfo:
@@ -148,7 +149,7 @@ def _handle_main() -> typing.NoReturn:
 	# load contract, it should set __known_contact__
 	import contract as _user_contract_module  # type: ignore
 
-	from genlayer.gl.genvm_contracts import __known_contract__
+	from genlayer.contract import __known_contract__
 
 	if __known_contract__ is None:
 		raise Exception('no contract defined')

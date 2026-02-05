@@ -1,7 +1,8 @@
 # { "Depends": "py-genlayer:test" }
 
-from genlayer import *
-from genlayer.py.storage._internal.generate import generate_storage
+import genlayer as gl
+from genlayer.types import *
+from genlayer.storage._internal.generate import generate_storage
 
 
 @generate_storage

@@ -7,8 +7,8 @@ import io
 import os
 import typing
 
-import genlayer.py.calldata as calldata
-from genlayer.py.types import u256, Address
+import genlayer.calldata as calldata
+from genlayer.types import u256, Address
 
 
 class MessageRawType(typing.TypedDict):

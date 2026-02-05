@@ -1,7 +1,7 @@
 import pytest
 
-from genlayer.py.storage import DynArray
-from genlayer.py.storage._internal.generate import generate_storage
+from genlayer.storage import DynArray
+from genlayer.storage._internal.generate import generate_storage
 
 from .common import *
 

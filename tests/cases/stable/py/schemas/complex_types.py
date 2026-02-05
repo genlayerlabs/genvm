@@ -1,5 +1,6 @@
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 import typing
 
 
@@ -8,7 +9,7 @@ class MyTDict(typing.TypedDict):
 	b: str
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	def __init__(self):
 		pass
 

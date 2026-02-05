@@ -23,8 +23,8 @@ if True:
 			sys.path.insert(0, str(root.joinpath(*dir_to_add)))
 			break
 		root = root.parent
-	import genlayer.py.calldata as gvm_calldata
-	from genlayer.py.types import Address
+	import genlayer.calldata as gvm_calldata
+	from genlayer.types import Address
 
 
 from . import host_fns

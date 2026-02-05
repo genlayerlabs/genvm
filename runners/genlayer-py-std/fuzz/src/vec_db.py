@@ -9,9 +9,9 @@ from fuzz_common import do_fuzzing, StopFuzzingException, FuzzerBuilder
 import numpy as np
 import typing
 from genlayer_embeddings import VecDB, EuclideanDistanceSquared
-from genlayer.py.types import u32
+from genlayer.types import u32
 
-from genlayer.py.storage import inmem_allocate
+from genlayer.storage import inmem_allocate
 import itertools
 
 

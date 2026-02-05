@@ -1,0 +1,190 @@
+v0.3.0
+======
+
+Migration Guide
+---------------
+
+This release introduces a cleaner module structure for the GenLayer Python SDK.
+The recommended import pattern is now:
+
+.. code-block:: python
+
+    import genlayer as gl
+    from genlayer.types import *
+
+Contract Declaration
+~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    # v0.1.x
+    from genlayer import *
+
+    class Contract(gl.Contract):
+        @gl.public.write
+        def foo(self): ...
+
+    # v0.3.0
+    import genlayer as gl
+    from genlayer.types import *
+
+    class Contract(gl.contract.Contract):
+        @gl.public.write
+        def foo(self): ...
+
+Contract Deployment
+~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    # v0.1.x
+    gl.deploy_contract(code=b'...', args=[...])
+
+    # v0.3.0
+    gl.contract.deploy(code=b'...', args=[...])
+
+Contract Interaction
+~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    # v0.1.x
+    contract = gl.get_contract_at(address)
+
+    # v0.3.0
+    contract = gl.contract.get_at(address)
+
+Contract Interfaces
+~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    # v0.1.x
+    @gl.contract_interface
+    class MyInterface:
+        class View: ...
+        class Write: ...
+
+    # v0.3.0
+    @gl.contract.interface
+    class MyInterface:
+        class View: ...
+        class Write: ...
+
+Events
+~~~~~~
+
+.. code-block:: python
+
+    # v0.1.x
+    class MyEvent(gl.Event):
+        def __init__(self, x: int, /): ...
+
+    # v0.3.0
+    class MyEvent(gl.vm.Event):
+        def __init__(self, x: int, /): ...
+
+Message Context
+~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    # v0.1.x
+    sender = gl.message.sender_address
+    value = gl.message.value
+
+    # v0.3.0 (unchanged, but now also available as)
+    sender = gl.message.sender_address  # still works
+    value = gl.message.value            # still works
+
+    # Direct field access also available:
+    from genlayer import message
+    sender = message.sender_address
+    value = message.value
+
+Storage Types
+~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    # v0.1.x
+    from genlayer import *
+    # allow_storage was available via star import
+
+    @allow_storage
+    class MyStorage:
+        foo: u64
+
+    # v0.3.0
+    import genlayer as gl
+    from genlayer.types import *
+    from genlayer.storage import allow_storage
+
+    @allow_storage
+    class MyStorage:
+        foo: u64
+
+Breaking Changes
+----------------
+
+#. **Import pattern changed**: ``from genlayer import *`` no longer exports types and storage utilities directly. Use ``from genlayer.types import *`` for types and ``from genlayer.storage import allow_storage`` for storage decorators.
+
+#. **Contract base class moved**: ``gl.Contract`` is now ``gl.contract.Contract``
+
+#. **Contract functions moved**: Contract-related functions moved to ``gl.contract`` module:
+
+   - ``gl.deploy_contract`` → ``gl.contract.deploy``
+   - ``gl.get_contract_at`` → ``gl.contract.get_at``
+   - ``gl.contract_interface`` → ``gl.contract.interface``
+
+#. **Event class moved**: ``gl.Event`` is now ``gl.vm.Event``
+
+#. **MessageType removed**: The ``MessageType`` named tuple wrapper has been removed. Use ``gl.message`` fields directly or ``gl.message.raw`` for the full raw message.
+
+New Features
+------------
+
+#. **Cleaner module structure**: The SDK now follows a more intuitive module layout:
+
+   - ``genlayer.contract`` - Contract declaration and interaction
+   - ``genlayer.message`` - Transaction message context with direct field access
+   - ``genlayer.vm`` - VM operations, sandbox, events, and advanced utilities
+   - ``genlayer.evm`` - EVM contract interaction
+   - ``genlayer.nondet`` - Non-deterministic operations (LLM, web)
+   - ``genlayer.eq_principle`` - Equivalence principles for consensus
+   - ``genlayer.types`` - Type definitions (Address, u256, etc.)
+   - ``genlayer.calldata`` - Calldata encoding/decoding
+   - ``genlayer.storage`` - Persistent storage utilities
+   - ``genlayer.wasi`` - Low-level WASI bindings
+
+#. **Direct message field access**: Message context fields are now available directly:
+
+   .. code-block:: python
+
+       import genlayer as gl
+
+       # These are now directly accessible:
+       gl.message.contract_address
+       gl.message.sender_address
+       gl.message.origin_address
+       gl.message.value
+       gl.message.chain_id
+
+       # Full raw message still available:
+       gl.message.raw  # includes stack, datetime, is_init, entry_kind, etc.
+
+#. **Merged advanced module**: Advanced VM operations are now part of ``gl.vm``:
+
+   - ``gl.vm.emit_raw_event()``
+   - ``gl.vm.user_error_immediate()``
+   - ``gl.vm.Event``
+
+#. **Backward compatibility**: The legacy ``gl`` namespace (``from genlayer import gl``) is preserved for backward compatibility during migration.
+
+API Improvements
+----------------
+
+#. **Lazy loading**: All submodules use lazy loading for faster import times
+#. **Better discoverability**: Related functionality grouped into logical modules
+#. **Cleaner namespace**: Top-level ``genlayer`` module no longer polluted with all types
+#. **Type checking support**: Full type annotations preserved for IDE support

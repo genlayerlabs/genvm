@@ -5,11 +5,12 @@
 #   ]
 # }
 
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 import word_piece_tokenizer
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	@gl.public.write
 	def main(self, det: bool):
 		tokenizer = word_piece_tokenizer.WordPieceTokenizer()

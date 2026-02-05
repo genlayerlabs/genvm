@@ -2,9 +2,10 @@
 
 import numpy as np
 
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
-from genlayer.py.storage._internal.generate import generate_storage
+from genlayer.storage._internal.generate import generate_storage
 
 
 @generate_storage

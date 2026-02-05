@@ -1,6 +1,7 @@
 # { "Depends": "py-genlayer:test" }
 
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 new_code = b"""\
 # { "Depends": "py-genlayer:test" }
@@ -9,7 +10,7 @@ exit(30)
 """
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	def __init__(self, modifiers: list[Address], modify_in_ctor: bool):
 		root = gl.storage.Root.get()
 		root.upgraders.get().extend(modifiers)

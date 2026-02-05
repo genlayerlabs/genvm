@@ -2,19 +2,20 @@
 
 import random
 from typing import Iterable
-from genlayer import *
+import genlayer as gl
+from genlayer import u32, u8
 
 
 @gl.storage.allow_storage
 class TrieNode[K, T]:
-	children: TreeMap[K, u32]
+	children: gl.TreeMap[K, u32]
 	value: T
 	has_value: bool
 
 
 @gl.storage.allow_storage
 class Trie[K, T]:
-	nodes: DynArray[TrieNode[K, T]]
+	nodes: gl.DynArray[TrieNode[K, T]]
 
 	def __init__(self):
 		root = self.nodes.append_new_get()
@@ -57,7 +58,7 @@ def str_to_keys(s: str) -> list[u8]:
 rand_str_chars = 'abcdefghijklmn'
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	trie: Trie[u8, u8]
 
 	def __init__(self):

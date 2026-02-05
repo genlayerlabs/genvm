@@ -1,6 +1,6 @@
 import pytest
 
-from genlayer.py.storage._internal.generate import generate_storage
+from genlayer.storage._internal.generate import generate_storage
 
 import datetime
 
@@ -31,7 +31,7 @@ def test_dt(expr: datetime.datetime):
 	assert expr == st.dt
 
 
-from genlayer.py.storage import TreeMap
+from genlayer.storage import TreeMap
 
 
 @generate_storage

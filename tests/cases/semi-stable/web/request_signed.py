@@ -1,12 +1,12 @@
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
 
-import genlayer.gl._internal.gl_call as gl_call
-from genlayer.gl.nondet.web import Response
-from genlayer.gl.nondet import _decode_nondet
+import genlayer._internal.gl_call as gl_call
+from genlayer.nondet.web import Response
+from genlayer.nondet import _decode_nondet
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	def __init__(self):
 		def run():
 			body = b'\xde\xad\xbe\xef'

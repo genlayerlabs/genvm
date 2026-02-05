@@ -1,5 +1,6 @@
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 
 @gl.evm.contract_interface
@@ -11,6 +12,6 @@ class Ghost:
 		def test(self, x: u256, /) -> None: ...
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	def __init__(self):
 		Ghost(Address(b'\x30' * 20)).emit().test(u256(10))

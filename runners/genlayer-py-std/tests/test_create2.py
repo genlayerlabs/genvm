@@ -1,5 +1,5 @@
-from genlayer.py._internal import create2_address
-from genlayer.py.types import Address, u256
+from genlayer._internal import create2_address
+from genlayer.types import Address, u256
 
 
 def test_create2_bytes():

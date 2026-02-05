@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import genlayer.py.calldata as calldata
+import genlayer.calldata as calldata
 
 import sys
 from pathlib import Path

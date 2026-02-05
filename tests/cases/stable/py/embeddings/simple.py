@@ -5,11 +5,12 @@
 #   ]
 # }
 
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 import genlayer_embeddings as gle
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	@gl.public.write
 	def main(self, det: bool):
 		embeddings_generator = gle.SentenceTransformer('all-MiniLM-L6-v2')

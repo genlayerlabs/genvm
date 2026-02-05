@@ -1,113 +1,109 @@
 """
-Common import for all contracts
+GenLayer Python Standard Library
 
-It exposes most of the types to the top scope and encapsulates other utility under :py:obj:`gl` namespace which is a proxy to :py:mod:`genlayer.gl`
+The recommended import pattern is:
+
+.. code:: python
+
+	import genlayer as gl
+
+This provides access to:
+- Type aliases: ``gl.u8``, ``gl.u16``, ..., ``gl.u256``, ``gl.Address``, etc.
+- Storage types: ``gl.TreeMap``, ``gl.DynArray``, ``gl.Array``
+- Contract declaration via ``gl.contract.Contract``
+- Contract interaction via ``gl.contract.interface``, ``gl.contract.deploy``, ``gl.contract.get_at``
+- Message context via ``gl.message.contract_address``, ``gl.message.sender_address``, etc.
+- VM operations via ``gl.vm``
+- Non-deterministic operations via ``gl.nondet``
+- Equivalence principles via ``gl.eq_principle``
+- EVM interaction via ``gl.evm``
+- Advanced operations via ``gl.advanced`` (alias to ``gl.vm``)
+- Method decorators via ``gl.public`` and ``gl.private``
 """
 
+import os
+import typing
+
+# Pre-load storage to resolve circular dependency: reflect <-> storage
+import genlayer.storage  # noqa: F401
+
+# Re-export types and storage names so they are accessible as gl.X
+from .types import *
+from .storage import DynArray, Array, TreeMap, allow_storage
+
+# Decorators - directly import so gl.public and gl.private work
+from ._internal.annotations import public, private
+
 __all__ = (
-	'gl',
-	'Address',
-	'allow_storage',
-	'Array',
+	# Submodules (accessible via gl.X when using `import genlayer as gl`)
+	'contract',
+	'message',
+	'vm',
+	'advanced',
+	'evm',
+	'nondet',
+	'eq_principle',
+	'types',
+	'calldata',
+	'storage',
+	'wasi',
+	# Decorators (accessible via gl.public, gl.private)
+	'public',
+	'private',
+	# Storage types
 	'DynArray',
-	'Keccak256',
+	'Array',
 	'TreeMap',
-	'bigint',
-	'i104',
-	'i112',
-	'i120',
-	'i128',
-	'i136',
-	'i144',
-	'i152',
-	'i16',
-	'i160',
-	'i168',
-	'i176',
-	'i184',
-	'i192',
-	'i200',
-	'i208',
-	'i216',
-	'i224',
-	'i232',
-	'i24',
-	'i240',
-	'i248',
-	'i256',
-	'i32',
-	'i40',
-	'i48',
-	'i56',
-	'i64',
-	'i72',
-	'i8',
-	'i80',
-	'i88',
-	'i96',
-	'u104',
-	'u112',
-	'u120',
-	'u128',
-	'u136',
-	'u144',
-	'u152',
-	'u16',
-	'u160',
-	'u168',
-	'u176',
-	'u184',
-	'u192',
-	'u200',
-	'u208',
-	'u216',
-	'u224',
-	'u232',
-	'u24',
-	'u240',
-	'u248',
-	'u256',
-	'u32',
-	'u40',
-	'u48',
-	'u56',
-	'u64',
-	'u72',
-	'u8',
-	'u80',
-	'u88',
-	'u96',
+	'allow_storage',
 )
 
-import os
+# Add all type names to __all__
+import genlayer.types as _types_mod
 
-from .py.types import *
-from .py.storage import *
+__all__ = __all__ + _types_mod.__all__
 
 _gen_docs = os.getenv('GENERATING_DOCS', 'false') == 'true'
 
-if not typing.TYPE_CHECKING and not _gen_docs:
+if typing.TYPE_CHECKING or _gen_docs:
+	# For type checking and docs, import modules eagerly
+	from . import contract
+	from . import message
+	from . import vm
+	from . import evm
+	from . import nondet
+	from . import eq_principle
+	from . import types
+	from . import calldata
+	from . import storage
+	import _genlayer_wasi as wasi
 
-	class GL:
-		"""
-		proxy to :py:mod:`genlayer.gl` used for lazy loading
-		"""
-
-		# unfortunately, we have to cache it because with star import it won't be auto-substituted on the first access
-		_cached_gl = None
-
-		def __getattr__(self, attr):
-			if self._cached_gl is None:
-				globals().pop('gl', None)
-				import genlayer.gl as _imp
-
-				# below is needed to trick cloudpickle
-				globals()['gl'] = _imp
-				self._cached_gl = _imp
-
-			return getattr(self._cached_gl, attr)
-
-	gl = GL()
-	del GL
+	advanced = vm
 else:
-	import genlayer.gl as gl
+	# For runtime, use lazy loading to avoid circular imports and improve startup
+	_lazy_modules = {
+		'contract': 'genlayer.contract',
+		'message': 'genlayer.message',
+		'vm': 'genlayer.vm',
+		'evm': 'genlayer.evm',
+		'nondet': 'genlayer.nondet',
+		'eq_principle': 'genlayer.eq_principle',
+		'types': 'genlayer.types',
+		'calldata': 'genlayer.calldata',
+		'storage': 'genlayer.storage',
+		'advanced': 'genlayer.vm',
+	}
+
+	def __getattr__(name: str):
+		if name == 'wasi':
+			import _genlayer_wasi
+
+			globals()['wasi'] = _genlayer_wasi
+			return _genlayer_wasi
+
+		module_path = _lazy_modules.get(name)
+		if module_path is not None:
+			mod = __import__(module_path, fromlist=[name])
+			globals()[name] = mod
+			return mod
+
+		raise AttributeError(f"module 'genlayer' has no attribute '{name}'")

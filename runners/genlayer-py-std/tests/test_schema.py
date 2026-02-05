@@ -1,7 +1,7 @@
-from genlayer.py.get_schema import get_schema
-import genlayer.py.get_schema as _get_schema
+from genlayer._internal.get_schema import get_schema
+import genlayer._internal.get_schema as _get_schema
 
-from genlayer.py.types import u256, Address
+from genlayer.types import u256, Address
 
 import typing
 

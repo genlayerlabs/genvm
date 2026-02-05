@@ -1,10 +1,11 @@
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	def __init__(self):
-		res = gl.deploy_contract(
+		res = gl.contract.deploy(
 			code='not really a contract'.encode('utf-8'), salt_nonce=u256(1)
 		)
 		print(res)

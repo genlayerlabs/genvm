@@ -483,12 +483,12 @@ generator.rule(:nix_eval) do
 end
 
 generator.build(:nix_eval, 'out/executor/vTEST/data/latest.json') do
-	var 'expr', 'let drv = import ./runners ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = builtins.convertHash { hash = x.hash; toHashFormat = "nix32"; }; }) drv)'
+	var 'expr', 'let drv = import ./runners ; conv-hash = hash: if hash == "test" then "test" else builtins.convertHash { inherit hash; toHashFormat = "nix32"; } ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = conv-hash x.hash; }) drv)'
 	var 'wd', $source_dir
 end
 
 generator.build(:nix_eval, 'out/executor/vTEST/data/all.json') do
-	var 'expr', 'let drv = import ./runners ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = [ (builtins.convertHash { hash = x.hash; toHashFormat = "nix32"; }) ]; }) drv)'
+	var 'expr', 'let drv = import ./runners ; conv-hash = hash: if hash == "test" then "test" else builtins.convertHash { inherit hash; toHashFormat = "nix32"; } ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = [ (conv-hash x.hash) ]; }) drv)'
 	var 'wd', $source_dir
 end
 

@@ -1,9 +1,10 @@
 # { "Depends": "py-genlayer:latest" }
 
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 
-class Storage(gl.Contract):
+class Storage(gl.contract.Contract):
 	a: str
 
 	def __init__(self):

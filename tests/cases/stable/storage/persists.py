@@ -1,10 +1,11 @@
 # { "Depends": "py-genlayer:test" }
 
-from genlayer import *
+import genlayer as gl
+from genlayer.types import *
 
 
-class Contract(gl.Contract):
-	m: TreeMap[str, u32]
+class Contract(gl.contract.Contract):
+	m: gl.TreeMap[str, u32]
 
 	def __init__(self):
 		print('first')

@@ -11,7 +11,8 @@ for test in sorted(src_dir.iterdir()):
 	src_py = test.read_text()
 	new_globs = {}  # globals().copy()
 	new_globs['__file__'] = str(test)
-	exec(src_py, new_globs)
+	src_compile = compile(src_py, str(test), 'exec')
+	exec(src_compile, new_globs)
 	fun = new_globs[name]
 
 	for testcase in src_dir.parent.joinpath('inputs', name).iterdir():
