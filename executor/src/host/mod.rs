@@ -236,7 +236,7 @@ impl Host {
 
         sock.read_exact(buf)?;
 
-        log_trace!(slot:? = slot.0, index = index, data:serde = buf; "read");
+        log_trace!(slot:bytes = slot.0, index = index, data:bytes = buf; "read");
 
         Ok(())
     }

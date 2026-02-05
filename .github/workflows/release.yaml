@@ -180,7 +180,7 @@ jobs:
             --default-download=false
       - name: Run stable tests
         run: |
-          nix develop .#mock-tests --command ya-test-runner --test-tags "$(cat tests/presets/release.txt)" run
+          nix develop .#mock-tests --command ya-test-runner --test-tags "$(cat tests/presets/release.txt)" run --genvm-reroute-to ${{ needs.gen-tag.outputs.tag }}
 
   test-macos-arm64:
     needs:
@@ -226,7 +226,7 @@ jobs:
           python3 -m venv .venv
           source .venv/bin/activate
           pip install ./tools/ya-test-runner
-          ya-test-runner --test-tags "$(cat tests/presets/release.txt)" run
+          ya-test-runner --test-tags "$(cat tests/presets/release.txt)" run --genvm-reroute-to ${{ needs.gen-tag.outputs.tag }}
 
   release-publish:
     needs:

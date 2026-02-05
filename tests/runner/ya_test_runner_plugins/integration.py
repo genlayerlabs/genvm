@@ -579,12 +579,17 @@ def integration_test(
 			needed_services.add(modules_service)
 			needed_services.add(webdriver_service)
 
+		test_name = str(jsonnet_file.relative_to(local_ctx.shared.root_dir))
+
 		desc = ya_test_runner.test.Description(
-			name=str(jsonnet_file.relative_to(local_ctx.shared.root_dir)),
+			name=test_name,
 			needed_services=frozenset(needed_services),
 			tags=frozenset(tags),
 			console_pool=False,  # Integration tests can run in parallel
 		)
+
+		if '/bench/' in test_name:
+			desc = desc.with_tags(['bench'])
 
 		case = IntegrationTestCase(
 			description=desc,

@@ -126,9 +126,12 @@ def collect_integration(ctx: ya_test_runner.stage.collection.Context):
 	tests_output_root = ctx.shared.artifacts_dir.joinpath('integration')
 	tests_output_root.mkdir(parents=True, exist_ok=True)
 
+	# for non-run
+	reroute_to = getattr(ctx.configuration.args, 'genvm_reroute_to', 'vTEST')
+
 	manager_impl = genvm.ManagerService(
 		bin_path=build_dir.joinpath('out', 'bin', 'genvm-modules'),
-		reroute_to=ctx.configuration.args.genvm_reroute_to,
+		reroute_to=reroute_to,
 		log_path=tests_output_root.joinpath('manager.log'),
 		env=ctx.configuration,
 	)
