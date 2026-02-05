@@ -916,6 +916,7 @@ dependencies = [
  "dashmap",
  "genlayer_sdk",
  "hex",
+ "libc",
  "num-bigint",
  "primitive-types",
  "regex",

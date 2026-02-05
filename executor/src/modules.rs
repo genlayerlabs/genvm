@@ -1,18 +1,18 @@
+use genvm_common::io::Stream;
 use genvm_common::*;
 use std::sync::Arc;
 
 use anyhow::Context;
-use futures_util::{stream::FusedStream, SinkExt, StreamExt};
 use genvm_common::calldata;
 use genvm_modules_interfaces::GenericValue;
-use tokio_tungstenite::tungstenite::{Bytes, Message};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-type WSStream =
-    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+/// Boxed stream type for module connections
+type BoxedStream = Box<dyn Stream>;
 
 struct ModuleImpl {
     url: String,
-    stream: Option<WSStream>,
+    stream: Option<BoxedStream>,
 }
 
 pub struct Module {
@@ -30,26 +30,67 @@ pub struct Metrics {
     pub time: stats::metric::Time,
 }
 
-async fn read_handling_pings(stream: &mut WSStream) -> anyhow::Result<Bytes> {
-    loop {
-        match stream
-            .next()
+/// Write a length-prefixed message to a stream
+/// Format: 4 bytes big-endian length + body
+async fn write_message(stream: &mut BoxedStream, data: &[u8]) -> anyhow::Result<()> {
+    let len = data.len() as u32;
+    stream.write_all(&len.to_be_bytes()).await?;
+    stream.write_all(data).await?;
+    stream.flush().await?;
+    Ok(())
+}
+
+/// Read a length-prefixed message from a stream
+/// Format: 4 bytes big-endian length + body
+async fn read_message(stream: &mut BoxedStream) -> anyhow::Result<Vec<u8>> {
+    let mut len_buf = [0u8; 4];
+    stream.read_exact(&mut len_buf).await?;
+    let len = u32::from_be_bytes(len_buf) as usize;
+
+    let mut data = vec![0u8; len];
+    stream.read_exact(&mut data).await?;
+    Ok(data)
+}
+
+const UNIX_PREFIX: &str = "unix://";
+const FD_PREFIX: &str = "fd://";
+
+/// Connect to a module endpoint
+/// Supports:
+/// - TCP: "host:port" or "ws://host:port" or "wss://host:port"
+/// - Unix socket: "unix:///path/to/socket"
+/// - File descriptors: "fd://source_fd,sink_fd" (for read_fd,write_fd pair)
+async fn connect(url: &str) -> anyhow::Result<BoxedStream> {
+    if let Some(socket_path) = url.strip_prefix(UNIX_PREFIX) {
+        let stream = tokio::net::UnixStream::connect(socket_path)
             .await
-            .ok_or_else(|| anyhow::anyhow!("service closed connection"))??
-        {
-            Message::Ping(v) => {
-                stream.send(Message::Pong(v)).await?;
-            }
-            Message::Pong(_) => {}
-            Message::Close(_) => anyhow::bail!("stream closed"),
-            Message::Text(text) => return Ok(text.into()),
-            Message::Binary(text) => return Ok(text),
-            x => {
-                log_info!(payload:? = x; "received unexpected");
-                let text = x.into_data();
-                return Ok(text);
-            }
+            .with_context(|| format!("connecting to unix socket {socket_path}"))?;
+        Ok(Box::new(stream))
+    } else if let Some(fd_str) = url.strip_prefix(FD_PREFIX) {
+        let parts: Vec<&str> = fd_str.split(',').collect();
+        if parts.len() != 2 {
+            anyhow::bail!("fd:// URL must have format fd://source_fd,sink_fd");
         }
+        let source_fd: i32 = parts[0]
+            .parse()
+            .with_context(|| format!("parsing source fd from '{}'", parts[0]))?;
+        let sink_fd: i32 = parts[1]
+            .parse()
+            .with_context(|| format!("parsing sink fd from '{}'", parts[1]))?;
+
+        let stream = unsafe { genvm_common::io::FdPairStream::from_raw_fds(source_fd, sink_fd)? };
+        Ok(Box::new(stream))
+    } else {
+        // Strip ws:// or wss:// prefix if present for TCP connection
+        let addr = url
+            .strip_prefix("ws://")
+            .or_else(|| url.strip_prefix("wss://"))
+            .unwrap_or(url);
+
+        let stream = tokio::net::TcpStream::connect(addr)
+            .await
+            .with_context(|| format!("connecting to TCP {addr}"))?;
+        Ok(Box::new(stream))
     }
 }
 
@@ -75,13 +116,11 @@ impl Module {
     pub async fn close(&self) {
         let mut lock = self.imp.lock().await;
         if let Some(stream) = &mut lock.stream {
-            if stream.is_terminated() {
-                return;
-            }
-            if let Err(e) = stream.close(None).await {
+            if let Err(e) = stream.shutdown().await {
                 log_error!(error:err = e; "closing stream");
             }
         }
+        lock.stream = None;
     }
 
     async fn send_impl<R, V>(&self, val: V) -> anyhow::Result<std::result::Result<R, GenericValue>>
@@ -101,7 +140,7 @@ impl Module {
         if zelf.stream.is_none() {
             log_debug!(url = zelf.url, name = self.name; "initializing connection to module");
 
-            let (mut ws_stream, _) = tokio_tungstenite::connect_async(&zelf.url)
+            let mut stream = connect(&zelf.url)
                 .await
                 .with_context(|| format!("connecting to {}", zelf.url))?;
 
@@ -110,13 +149,11 @@ impl Module {
                 host_data: self.host_data.clone(),
             })?;
 
-            ws_stream
-                .send(Message::Binary(calldata::encode(&msg).into()))
-                .await?;
+            write_message(&mut stream, &calldata::encode(&msg)).await?;
 
             log_debug!(name = self.name; "connection to module initialized");
 
-            zelf.stream = Some(ws_stream);
+            zelf.stream = Some(stream);
         }
 
         match &mut zelf.stream {
@@ -124,8 +161,8 @@ impl Module {
             Some(stream) => {
                 let val = calldata::to_value(&val)?;
                 let payload = calldata::encode(&val);
-                stream.send(Message::Binary(payload.into())).await?;
-                let response = read_handling_pings(stream).await?;
+                write_message(stream, &payload).await?;
+                let response = read_message(stream).await?;
 
                 let response = calldata::decode(&response)?;
 
@@ -158,8 +195,8 @@ impl Module {
             Some(stream) => {
                 let val = calldata::to_value(&val)?;
                 let payload = calldata::encode(&val);
-                stream.send(Message::Binary(payload.into())).await?;
-                let response = read_handling_pings(stream).await?;
+                write_message(stream, &payload).await?;
+                let response = read_message(stream).await?;
 
                 let response = calldata::decode(&response)?;
 

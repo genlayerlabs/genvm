@@ -54,9 +54,21 @@ pub struct Args {
         help = "r?w?s?c?n?, read/write/send messages/call contracts/spawn nondet"
     )]
     permissions: String,
+    #[clap(long, help = "override LLM module address from config")]
+    module_llm: Option<String>,
+    #[clap(long, help = "override web module address from config")]
+    module_web: Option<String>,
 }
 
-pub fn handle(args: Args, config: config::Config) -> Result<()> {
+pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
+    // Apply CLI overrides for module addresses
+    if let Some(llm_addr) = &args.module_llm {
+        config.modules.llm.address = llm_addr.clone();
+    }
+    if let Some(web_addr) = &args.module_web {
+        config.modules.web.address = web_addr.clone();
+    }
+
     // Read execution data from file path, stdin, or file descriptor
     let execution_data_bytes = if args.execution_data == "-" {
         let mut buffer = Vec::new();

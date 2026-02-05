@@ -1,11 +1,11 @@
 use std::{
     ops::{Deref, DerefMut},
     os::fd::{AsRawFd, FromRawFd},
-    pin::Pin,
     str::FromStr,
     sync::Arc,
 };
 
+use genvm_common::io::{set_fd_nonblocking, AsyncCustomFD};
 use genvm_common::*;
 use genvm_modules::common::LoggerWithId;
 use tokio::io::AsyncBufReadExt;
@@ -440,44 +440,11 @@ impl LogAppender for LogAppenderToValue {
     }
 }
 
-pub struct AsyncCustomFD(tokio::io::unix::AsyncFd<std::os::fd::OwnedFd>);
-
-impl tokio::io::AsyncRead for AsyncCustomFD {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        loop {
-            let mut guard = std::task::ready!(self.0.poll_read_ready(cx))?;
-
-            let unfilled = buf.initialize_unfilled();
-            match guard.try_io(|inner| {
-                let fd = inner.get_ref().as_raw_fd();
-                let result =
-                    unsafe { libc::read(fd, unfilled.as_mut_ptr().cast(), unfilled.len()) };
-                if result == -1 {
-                    Err(std::io::Error::last_os_error())
-                } else {
-                    Ok(result as usize)
-                }
-            }) {
-                Ok(Ok(len)) => {
-                    buf.advance(len);
-                    return std::task::Poll::Ready(Ok(()));
-                }
-                Ok(Err(err)) => return std::task::Poll::Ready(Err(err)),
-                Err(_would_block) => continue,
-            }
-        }
-    }
-}
-
 async fn read_log_pipe<LA: LogAppender>(
     reader_fd: std::os::unix::io::OwnedFd,
     mut sink: impl DerefMut<Target = LA>,
 ) -> std::io::Result<()> {
-    let file = AsyncCustomFD(tokio::io::unix::AsyncFd::new(reader_fd)?);
+    let file = AsyncCustomFD::new(reader_fd)?;
 
     let reader = tokio::io::BufReader::new(file);
 
@@ -661,9 +628,8 @@ pub async fn start_genvm(
     let read_fd = read_right_fd[0];
     let write_fd = read_right_fd[1];
 
+    set_fd_nonblocking(read_fd);
     unsafe {
-        let flags = libc::fcntl(read_fd, libc::F_GETFL, 0);
-        libc::fcntl(read_fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
         let fd_flags = libc::fcntl(read_fd, libc::F_GETFD, 0);
         libc::fcntl(read_fd, libc::F_SETFD, fd_flags | libc::FD_CLOEXEC);
     };
@@ -719,11 +685,19 @@ pub async fn start_genvm(
     let mut child = proc.spawn()?;
     log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0, pid:? = child.id(); "genvm process started");
 
-    if let Some(mut stdin) = child.stdin.take() {
+    if let Some(stdin) = child.stdin.take() {
         tokio::task::spawn(async move {
             use tokio::io::AsyncWriteExt;
-            let _ = stdin.write_all(&execution_data_bytes).await;
-            std::mem::drop(stdin);
+
+            let Ok(owned_fd) = stdin.into_owned_fd() else {
+                // failed to get owned fd
+                // how to proceed?
+                return;
+            };
+            set_fd_nonblocking(owned_fd.as_raw_fd());
+
+            let mut file = AsyncCustomFD::new(owned_fd).unwrap();
+            let _ = file.write_all(&execution_data_bytes).await;
             log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "message written");
         });
     }
