@@ -189,10 +189,11 @@
       "properties": {
         "address": {
           "type": "string",
-          "format": "uri",
           "description": "module address that accepts connection",
           "examples": [
-            "ws://127.0.0.1:3031"
+            "127.0.0.1:3031",
+            "unix:///tmp/module.sock",
+            "fd://3"
           ]
         }
       },
@@ -202,11 +203,12 @@
       "type": "object",
       "properties": {
         "bind_address": {
-            "type": "string",
-            "description": "address to listen on",
-            "format": "uri",
+            "type": ["string", "null"],
+            "description": "address to listen on (null if module shouldn't bind)",
             "examples": [
-              "127.0.0.1:3032"
+              "127.0.0.1:3032",
+              "unix:///tmp/module.sock",
+              null
             ]
         },
         "lua_script_path": {

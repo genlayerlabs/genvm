@@ -89,11 +89,16 @@ async fn create_vm(
     Ok(user_vm)
 }
 
-pub async fn run_llm_module(
+/// Creates the LLM module and returns the stream handler.
+/// The returned future runs the bind loop if bind_address is Some.
+pub async fn create_llm_module(
     cancel: Arc<cancellation::Token>,
     mut config: config::Config,
     allow_empty_backends: bool,
-) -> Result<()> {
+) -> Result<(
+    crate::manager::modules::StreamHandler,
+    impl std::future::Future<Output = Result<()>>,
+)> {
     for (k, v) in config.backends.iter_mut() {
         if !v.enabled {
             continue;
@@ -145,12 +150,35 @@ pub async fn run_llm_module(
     })
     .await?;
 
-    crate::common::run_loop(
+    let handler_provider = Arc::new(handler::Provider { vm_pool });
+
+    // Create the type-erased stream handler
+    let stream_handler: crate::manager::modules::StreamHandler = {
+        let hp = handler_provider.clone();
+        Arc::new(move |stream: Box<dyn genvm_common::io::Stream>| {
+            let hp = hp.clone();
+            Box::pin(async move {
+                crate::common::handle_stream(hp, stream, "relay").await;
+            }) as std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>
+        })
+    };
+
+    let bind_future = crate::common::run_loop(
         config.mod_base.bind_address.clone(),
         cancel,
-        Arc::new(handler::Provider { vm_pool }),
-    )
-    .await
+        handler_provider,
+    );
+
+    Ok((stream_handler, bind_future))
+}
+
+pub async fn run_llm_module(
+    cancel: Arc<cancellation::Token>,
+    config: config::Config,
+    allow_empty_backends: bool,
+) -> Result<()> {
+    let (_handler, bind_future) = create_llm_module(cancel, config, allow_empty_backends).await?;
+    bind_future.await
 }
 
 fn handle_run(config: config::Config, args: CliArgsRun) -> Result<()> {

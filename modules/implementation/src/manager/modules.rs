@@ -1,10 +1,17 @@
+use genvm_common::io::Stream;
 use genvm_common::*;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
 
-struct ModuleCanceller(
-    pub Box<dyn Fn() + Send + Sync>,
-    pub Arc<cancellation::Token>,
-);
+/// Type-erased handler that accepts a client stream and processes it
+pub type StreamHandler =
+    Arc<dyn Fn(Box<dyn Stream>) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
+
+struct ModuleState {
+    canceller: Box<dyn Fn() + Send + Sync>,
+    cancel_token: Arc<cancellation::Token>,
+    handler: StreamHandler,
+    _task: tokio::task::JoinHandle<anyhow::Result<()>>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Copy)]
 pub enum Type {
@@ -14,8 +21,8 @@ pub enum Type {
 
 pub struct Ctx {
     cancel: Arc<cancellation::Token>,
-    llm_module: tokio::sync::RwLock<Option<ModuleCanceller>>,
-    web_module: tokio::sync::RwLock<Option<ModuleCanceller>>,
+    llm_module: tokio::sync::RwLock<Option<ModuleState>>,
+    web_module: tokio::sync::RwLock<Option<ModuleState>>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -87,30 +94,38 @@ impl Ctx {
             &genvm_common::templater::DOLLAR_UNFOLDER_RE,
         )?;
 
-        let module_task = match req.module_type {
+        let (handler, bind_future) = match req.module_type {
             Type::Llm => {
                 let allow_empty_backends = req.allow_empty_backends;
                 let config = serde_json::from_value(config)?;
-                tokio::task::spawn(crate::llm::run_llm_module(
-                    nested_cancel,
-                    config,
-                    allow_empty_backends,
-                ))
+                let (handler, bind_future) =
+                    crate::llm::create_llm_module(nested_cancel, config, allow_empty_backends)
+                        .await?;
+                let bind_future: std::pin::Pin<
+                    Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>,
+                > = Box::pin(bind_future);
+                (handler, bind_future)
             }
             Type::Web => {
                 let config = serde_json::from_value(config)?;
-                tokio::task::spawn(crate::web::run_web_module(nested_cancel, config))
+                let (handler, bind_future) =
+                    crate::web::create_web_module(nested_cancel, config).await?;
+                let bind_future: std::pin::Pin<
+                    Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>,
+                > = Box::pin(bind_future);
+                (handler, bind_future)
             }
         };
 
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        let module_task = tokio::task::spawn(bind_future);
 
-        if module_task.is_finished() {
-            anyhow::bail!("module_failed_to_start");
-        }
-
-        // Store the cancellation token
-        *module_lock = Some(ModuleCanceller(Box::new(canceller), module_cancel));
+        // Store the module state
+        *module_lock = Some(ModuleState {
+            canceller: Box::new(canceller),
+            cancel_token: module_cancel,
+            handler,
+            _task: module_task,
+        });
 
         Ok(())
     }
@@ -121,11 +136,11 @@ impl Ctx {
             Type::Web => self.web_module.write().await,
         };
 
-        let Some(cancel_token) = module_lock.take() else {
+        let Some(state) = module_lock.take() else {
             return Ok(false);
         };
 
-        cancel_token.0();
+        (state.canceller)();
 
         Ok(true)
     }
@@ -138,14 +153,31 @@ impl Ctx {
 
         match &*module_lock {
             None => "stopped",
-            Some(canceller) => {
-                if canceller.1.is_cancelled() {
+            Some(state) => {
+                if state.cancel_token.is_cancelled() {
                     "stopping"
                 } else {
                     "running"
                 }
             }
         }
+    }
+
+    /// Get the handler for a running module (returns None if module not running)
+    pub async fn get_handler(&self, module_type: Type) -> Option<StreamHandler> {
+        let module_lock = match module_type {
+            Type::Llm => self.llm_module.read().await,
+            Type::Web => self.web_module.read().await,
+        };
+
+        module_lock.as_ref().map(|state| state.handler.clone())
+    }
+
+    /// Get both module handlers if both are running
+    pub async fn get_handlers(&self) -> Option<(StreamHandler, StreamHandler)> {
+        let llm = self.get_handler(Type::Llm).await?;
+        let web = self.get_handler(Type::Web).await?;
+        Some((llm, web))
     }
 
     pub async fn get_module_locks(zelf: sync::DArc<Ctx>) -> Option<impl std::any::Any> {

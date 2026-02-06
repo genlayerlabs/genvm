@@ -64,13 +64,19 @@ pub async fn handle_genvm_run(
     data: &[u8],
 ) -> Result<impl warp::Reply> {
     let data = calldata::decode(data)?;
-    let modules_lock = Ctx::get_module_locks(ctx.gep(|x| &x.mod_ctx)).await;
-
-    if modules_lock.is_none() {
-        log_warn!("modules are not running, but are most likely required for genvm_run");
-    }
-
     let res: super::run::Request = calldata::from_value(data)?;
+
+    let modules_lock = if res.needs_modules() {
+        let lock = Ctx::get_module_locks(ctx.gep(|x| &x.mod_ctx)).await;
+        if lock.is_none() {
+            anyhow::bail!(
+                "modules are required but not running (is_sync=false with 'n' permission)"
+            );
+        }
+        lock
+    } else {
+        None
+    };
 
     let (id, _) = super::run::start_genvm(ctx, res, Box::new(modules_lock)).await?;
 

@@ -59,7 +59,7 @@ const FD_PREFIX: &str = "fd://";
 /// Supports:
 /// - TCP: "host:port" or "ws://host:port" or "wss://host:port"
 /// - Unix socket: "unix:///path/to/socket"
-/// - File descriptors: "fd://source_fd,sink_fd" (for read_fd,write_fd pair)
+/// - File descriptor: "fd://fd" (for bidirectional fd like socketpair)
 async fn connect(url: &str) -> anyhow::Result<BoxedStream> {
     if let Some(socket_path) = url.strip_prefix(UNIX_PREFIX) {
         let stream = tokio::net::UnixStream::connect(socket_path)
@@ -67,18 +67,11 @@ async fn connect(url: &str) -> anyhow::Result<BoxedStream> {
             .with_context(|| format!("connecting to unix socket {socket_path}"))?;
         Ok(Box::new(stream))
     } else if let Some(fd_str) = url.strip_prefix(FD_PREFIX) {
-        let parts: Vec<&str> = fd_str.split(',').collect();
-        if parts.len() != 2 {
-            anyhow::bail!("fd:// URL must have format fd://source_fd,sink_fd");
-        }
-        let source_fd: i32 = parts[0]
+        let fd: i32 = fd_str
             .parse()
-            .with_context(|| format!("parsing source fd from '{}'", parts[0]))?;
-        let sink_fd: i32 = parts[1]
-            .parse()
-            .with_context(|| format!("parsing sink fd from '{}'", parts[1]))?;
+            .with_context(|| format!("parsing fd from '{}'", fd_str))?;
 
-        let stream = unsafe { genvm_common::io::FdPairStream::from_raw_fds(source_fd, sink_fd)? };
+        let stream = unsafe { genvm_common::io::AsyncCustomFD::from_raw_fd(fd)? };
         Ok(Box::new(stream))
     } else {
         // Strip ws:// or wss:// prefix if present for TCP connection

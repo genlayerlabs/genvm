@@ -64,7 +64,8 @@ impl ModuleError {
 
 #[derive(Serialize, Deserialize)]
 pub struct ModuleBaseConfig {
-    pub bind_address: String,
+    #[serde(default)]
+    pub bind_address: Option<String>,
 
     pub lua_script_path: String,
     pub vm_count: usize,
@@ -353,7 +354,7 @@ async fn loop_one_unix<T, R>(
 const UNIX_PREFIX: &str = "unix://";
 
 pub async fn run_loop<T, R>(
-    bind_address: String,
+    bind_address: Option<String>,
     cancel: Arc<genvm_common::cancellation::Token>,
     handler_provider: Arc<impl MessageHandlerProvider<T, R> + 'static>,
 ) -> anyhow::Result<()>
@@ -361,6 +362,13 @@ where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
 {
+    let Some(bind_address) = bind_address else {
+        // No bind address - just wait for cancellation
+        log_info!("no bind_address configured, waiting for cancellation");
+        cancel.chan.closed().await;
+        return Ok(());
+    };
+
     if let Some(socket_path) = bind_address.strip_prefix(UNIX_PREFIX) {
         run_loop_unix(socket_path, cancel, handler_provider).await
     } else {

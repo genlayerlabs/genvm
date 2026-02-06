@@ -1,5 +1,5 @@
 use std::{
-    os::fd::{AsRawFd, FromRawFd},
+    os::fd::{AsRawFd, FromRawFd, OwnedFd},
     pin::Pin,
 };
 
@@ -13,6 +13,83 @@ pub fn set_fd_nonblocking(fd: std::os::fd::RawFd) {
     unsafe {
         let flags = libc::fcntl(fd, libc::F_GETFL, 0);
         libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+    }
+}
+
+/// Wrapper around OwnedFd with helper methods for fd flags
+pub struct FdWrapper(OwnedFd);
+
+impl FdWrapper {
+    /// Create a new FdWrapper from an OwnedFd
+    pub fn new(fd: OwnedFd) -> Self {
+        Self(fd)
+    }
+
+    /// Create a new FdWrapper from a raw fd, taking ownership
+    ///
+    /// # Safety
+    /// The caller must ensure the fd is valid and not owned elsewhere
+    pub unsafe fn from_raw_fd(fd: std::os::fd::RawFd) -> Self {
+        Self(OwnedFd::from_raw_fd(fd))
+    }
+
+    /// Create a Unix socketpair (bidirectional)
+    /// Returns (first, second) where both ends can read and write
+    pub fn socketpair() -> std::io::Result<(FdWrapper, FdWrapper)> {
+        let mut fds = [0i32; 2];
+        let result =
+            unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) };
+        if result != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok((unsafe { FdWrapper::from_raw_fd(fds[0]) }, unsafe {
+            FdWrapper::from_raw_fd(fds[1])
+        }))
+    }
+
+    /// Set the close-on-exec flag
+    pub fn set_cloexec(&self, cloexec: bool) -> &Self {
+        unsafe {
+            let fd_flags = libc::fcntl(self.0.as_raw_fd(), libc::F_GETFD, 0);
+            let new_flags = if cloexec {
+                fd_flags | libc::FD_CLOEXEC
+            } else {
+                fd_flags & !libc::FD_CLOEXEC
+            };
+            libc::fcntl(self.0.as_raw_fd(), libc::F_SETFD, new_flags);
+        }
+        self
+    }
+
+    /// Set non-blocking mode
+    pub fn set_nonblocking(&self, nonblocking: bool) -> &Self {
+        unsafe {
+            let flags = libc::fcntl(self.0.as_raw_fd(), libc::F_GETFL, 0);
+            let new_flags = if nonblocking {
+                flags | libc::O_NONBLOCK
+            } else {
+                flags & !libc::O_NONBLOCK
+            };
+            libc::fcntl(self.0.as_raw_fd(), libc::F_SETFL, new_flags);
+        }
+        self
+    }
+
+    /// Convert to AsyncCustomFD, setting non-blocking mode first
+    pub fn into_async_fd(self) -> std::io::Result<AsyncCustomFD> {
+        self.set_nonblocking(true);
+        AsyncCustomFD::new(self.0)
+    }
+
+    /// Consume and return the inner OwnedFd
+    pub fn into_inner(self) -> OwnedFd {
+        self.0
+    }
+}
+
+impl AsRawFd for FdWrapper {
+    fn as_raw_fd(&self) -> std::os::fd::RawFd {
+        self.0.as_raw_fd()
     }
 }
 

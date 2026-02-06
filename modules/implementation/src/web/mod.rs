@@ -24,10 +24,15 @@ pub struct CliArgs {
     die_with_parent: bool,
 }
 
-pub async fn run_web_module(
+/// Creates the Web module and returns the stream handler.
+/// The returned future runs the bind loop if bind_address is Some.
+pub async fn create_web_module(
     cancel: Arc<cancellation::Token>,
     config: config::Config,
-) -> Result<()> {
+) -> Result<(
+    crate::manager::modules::StreamHandler,
+    impl std::future::Future<Output = Result<()>>,
+)> {
     let _webdriver_host = config.webdriver_host.clone();
 
     let config = sync::DArc::new(config);
@@ -80,12 +85,34 @@ pub async fn run_web_module(
     })
     .await?;
 
-    crate::common::run_loop(
+    let handler_provider = Arc::new(handler::HandlerProvider { vm_pool });
+
+    // Create the type-erased stream handler
+    let stream_handler: crate::manager::modules::StreamHandler = {
+        let hp = handler_provider.clone();
+        Arc::new(move |stream: Box<dyn genvm_common::io::Stream>| {
+            let hp = hp.clone();
+            Box::pin(async move {
+                crate::common::handle_stream(hp, stream, "relay").await;
+            }) as std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>
+        })
+    };
+
+    let bind_future = crate::common::run_loop(
         config.mod_base.bind_address.clone(),
         cancel,
-        Arc::new(handler::HandlerProvider { vm_pool }),
-    )
-    .await
+        handler_provider,
+    );
+
+    Ok((stream_handler, bind_future))
+}
+
+pub async fn run_web_module(
+    cancel: Arc<cancellation::Token>,
+    config: config::Config,
+) -> Result<()> {
+    let (_handler, bind_future) = create_web_module(cancel, config).await?;
+    bind_future.await
 }
 
 pub fn entrypoint(args: CliArgs) -> Result<()> {

@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use genvm_common::io::{set_fd_nonblocking, AsyncCustomFD};
+use genvm_common::io::{set_fd_nonblocking, AsyncCustomFD, FdWrapper};
 use genvm_common::*;
 use genvm_modules::common::LoggerWithId;
 use tokio::io::AsyncBufReadExt;
@@ -13,6 +13,27 @@ use tokio::io::AsyncBufReadExt;
 pub use genvm_modules_interfaces::GenVMId;
 
 use crate::common::{LogSink, LogSinkElement, GENVM_BY_ID_LOGGER};
+
+/// Spawn relay that passes the stream to the module handler
+async fn spawn_module_relay(
+    parent_fd: FdWrapper,
+    handler: super::modules::StreamHandler,
+    genvm_id: GenVMId,
+    module_name: &'static str,
+) {
+    log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0, module = module_name; "relay starting");
+
+    match parent_fd.into_async_fd() {
+        Ok(stream) => {
+            handler(Box::new(stream)).await;
+        }
+        Err(e) => {
+            log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, module = module_name, error:err = e; "failed to create async stream");
+        }
+    }
+
+    log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0, module = module_name; "relay finished");
+}
 
 #[derive(Debug)]
 pub struct SingleGenVMContextDone {
@@ -372,6 +393,24 @@ pub struct Request {
     pub calldata: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub code: Option<Vec<u8>>,
+    #[serde(default = "default_permissions")]
+    pub permissions: String,
+    /// If true, don't require modules even if permissions suggest they're needed
+    #[serde(default)]
+    pub no_modules: bool,
+}
+
+fn default_permissions() -> String {
+    "rwscn".to_owned()
+}
+
+impl Request {
+    /// Returns true if this request needs modules to be running.
+    /// Modules are needed when running async (is_sync=false) with nondet permission ('n'),
+    /// unless no_modules flag is set.
+    pub fn needs_modules(&self) -> bool {
+        !self.no_modules && !self.is_sync && self.permissions.contains('n')
+    }
 }
 
 fn default_max_execution_minutes() -> u64 {
@@ -578,6 +617,18 @@ pub async fn start_genvm(
 ) -> anyhow::Result<(GenVMId, tokio::sync::oneshot::Receiver<()>)> {
     let reroute_to = full_ctx.config.reroute_to.clone();
 
+    // Get module handlers early, before consuming full_ctx
+    let module_handlers = if req.needs_modules() {
+        let (llm, web) = full_ctx
+            .mod_ctx
+            .get_handlers()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("modules are required but not all are running"))?;
+        Some((llm, web))
+    } else {
+        None
+    };
+
     let version = full_ctx
         .ver_ctx
         .get_version(req.major, req.timestamp)
@@ -591,10 +642,10 @@ pub async fn start_genvm(
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
     );
 
-    let permits = if req.is_sync {
-        ctx.permits.clone().acquire_owned().await?
-    } else {
+    let permits = if req.needs_modules() {
         ctx.permits.clone().acquire_many_owned(2).await?
+    } else {
+        ctx.permits.clone().acquire_owned().await?
     };
 
     let log_sink: LogSink = Arc::new(Default::default());
@@ -654,6 +705,39 @@ pub async fn start_genvm(
     proc.arg("--host");
     proc.arg(&req.host);
 
+    proc.arg("--permissions");
+    proc.arg(&req.permissions);
+
+    // Create socketpairs and spawn relays for modules if needed
+    let module_child_fds: Option<(FdWrapper, FdWrapper)> =
+        if let Some((llm_handler, web_handler)) = module_handlers {
+            // Create socketpairs
+            let (llm_parent, llm_child) = FdWrapper::socketpair()?;
+            let (web_parent, web_child) = FdWrapper::socketpair()?;
+
+            // Parent end: set cloexec (closed in child after exec)
+            llm_parent.set_cloexec(true);
+            web_parent.set_cloexec(true);
+            // Child end: clear cloexec (survives exec into child process)
+            llm_child.set_cloexec(false);
+            web_child.set_cloexec(false);
+
+            // Add module FD args
+            let llm_fd = llm_child.as_raw_fd();
+            let web_fd = web_child.as_raw_fd();
+            proc.arg(format!("--module-llm=fd://{}", llm_fd));
+            proc.arg(format!("--module-web=fd://{}", web_fd));
+
+            // Spawn relay tasks (they'll start after we spawn the child)
+            tokio::spawn(spawn_module_relay(llm_parent, llm_handler, genvm_id, "llm"));
+            tokio::spawn(spawn_module_relay(web_parent, web_handler, genvm_id, "web"));
+
+            // Keep child FDs alive until after spawn
+            Some((llm_child, web_child))
+        } else {
+            None
+        };
+
     let execution_data = genvm_common::domain::ExecutionData {
         calldata: req.calldata.clone(),
         message: req.message.clone(),
@@ -684,6 +768,8 @@ pub async fn start_genvm(
 
     let mut child = proc.spawn()?;
     log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0, pid:? = child.id(); "genvm process started");
+
+    std::mem::drop(module_child_fds);
 
     if let Some(stdin) = child.stdin.take() {
         tokio::task::spawn(async move {

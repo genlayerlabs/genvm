@@ -447,6 +447,9 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					extra_args=['--debug-mode'],
 					code=code,
 					calldata=calldata_bytes,
+					request_extra={
+						#'no_modules': True,
+					},
 				)
 				if res.result_kind == public_abi.ResultCode.RETURN:
 					res.stdout += (
