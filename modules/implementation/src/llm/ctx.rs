@@ -30,6 +30,7 @@ impl CtxPart {
         model: &str,
         provider_id: &str,
         format: prompt::ExtendedOutputFormat,
+        extra: &serde_json::Map<String, serde_json::Value>,
     ) -> ModuleResult<providers::ProviderResponse<llm_iface::PromptAnswerData>> {
         log_debug!(
             prompt:serde = prompt,
@@ -46,15 +47,15 @@ impl CtxPart {
 
         let res = match format {
             prompt::ExtendedOutputFormat::Text => provider
-                .exec_prompt_text(&self.dflt, prompt, model)
+                .exec_prompt_text(&self.dflt, prompt, model, extra)
                 .await
                 .map(|resp| resp.map(llm_iface::PromptAnswerData::Text)),
             prompt::ExtendedOutputFormat::JSON => provider
-                .exec_prompt_json(&self.dflt, prompt, model)
+                .exec_prompt_json(&self.dflt, prompt, model, extra)
                 .await
                 .map(|resp| resp.map(llm_iface::PromptAnswerData::Object)),
             prompt::ExtendedOutputFormat::Bool => provider
-                .exec_prompt_bool_reason(&self.dflt, prompt, model)
+                .exec_prompt_bool_reason(&self.dflt, prompt, model, extra)
                 .await
                 .map(|resp| resp.map(llm_iface::PromptAnswerData::Bool)),
         };
@@ -79,6 +80,8 @@ struct Args {
     prompt: prompt::Internal,
     format: prompt::ExtendedOutputFormat,
     model: String,
+    #[serde(flatten)]
+    extra: serde_json::Map<String, serde_json::Value>,
 }
 
 async fn exec_prompt_in_provider(
@@ -94,7 +97,7 @@ async fn exec_prompt_in_provider(
         .map_err(scripting::anyhow_to_lua_error)?;
 
     let res = zelf
-        .exec_prompt_in_provider(&args.prompt, &args.model, &args.provider, args.format)
+        .exec_prompt_in_provider(&args.prompt, &args.model, &args.provider, args.format, &args.extra)
         .await
         .with_context(|| "running in provider")
         .map_err(scripting::anyhow_to_lua_error)?;

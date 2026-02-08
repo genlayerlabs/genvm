@@ -98,6 +98,19 @@ impl<T> ProviderResponse<T> {
     }
 }
 
+/// Extra fields from the Lua request table (via `#[serde(flatten)]`).
+/// OpenAI-compatible providers merge these into the HTTP body, enabling
+/// features like OpenRouter's `models` array and `provider` routing options.
+pub type ExtraBody = serde_json::Map<String, serde_json::Value>;
+
+fn merge_extra(request: &mut serde_json::Value, extra: &ExtraBody) {
+    if let Some(obj) = request.as_object_mut() {
+        for (k, v) in extra {
+            obj.insert(k.clone(), v.clone());
+        }
+    }
+}
+
 #[async_trait::async_trait]
 pub trait Provider {
     async fn exec_prompt_text(
@@ -105,6 +118,7 @@ pub trait Provider {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
+        extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>>;
 
     async fn exec_prompt_json_as_text(
@@ -112,8 +126,9 @@ pub trait Provider {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
+        extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>> {
-        self.exec_prompt_text(ctx, prompt, model).await
+        self.exec_prompt_text(ctx, prompt, model, extra).await
     }
 
     async fn exec_prompt_json(
@@ -121,8 +136,9 @@ pub trait Provider {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
+        extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<serde_json::Map<String, serde_json::Value>>> {
-        let res = self.exec_prompt_json_as_text(ctx, prompt, model).await?;
+        let res = self.exec_prompt_json_as_text(ctx, prompt, model, extra).await?;
         let json_str = sanitize_json_str(&res.result);
         let parsed =
             serde_json::from_str(&json_str).with_context(|| format!("parsing {json_str:?}"))?;
@@ -135,8 +151,9 @@ pub trait Provider {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
+        extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<bool>> {
-        let res = self.exec_prompt_json(ctx, prompt, model).await?;
+        let res = self.exec_prompt_json(ctx, prompt, model, extra).await?;
         let result_val = res.result.get("result").and_then(|x| x.as_bool());
 
         if let Some(val) = result_val {
@@ -262,6 +279,7 @@ impl Provider for OpenAICompatible {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
+        extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>> {
         let mut request = serde_json::json!({
             "model": model,
@@ -288,6 +306,8 @@ impl Provider for OpenAICompatible {
                 .unwrap()
                 .insert("max_tokens".to_owned(), prompt.max_tokens.into());
         }
+
+        merge_extra(&mut request, extra);
 
         let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/chat/completions", self.config.host);
@@ -321,6 +341,7 @@ impl Provider for OpenAICompatible {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
+        extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<serde_json::Map<String, serde_json::Value>>> {
         let mut request = serde_json::json!({
             "model": model,
@@ -348,6 +369,8 @@ impl Provider for OpenAICompatible {
                 .unwrap()
                 .insert("max_tokens".to_owned(), prompt.max_tokens.into());
         }
+
+        merge_extra(&mut request, extra);
 
         let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/chat/completions", self.config.host);
@@ -445,6 +468,7 @@ impl Provider for OLlama {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
+        _extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>> {
         let request = prompt.to_ollama_no_format(model);
 
@@ -475,6 +499,7 @@ impl Provider for OLlama {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
+        _extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>> {
         let mut request = prompt.to_ollama_no_format(model);
 
@@ -548,6 +573,7 @@ impl Provider for Gemini {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
+        _extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>> {
         let mut request = serde_json::json!({
             "generationConfig": {
@@ -604,6 +630,7 @@ impl Provider for Gemini {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
+        _extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>> {
         let mut request = serde_json::json!({
             "generationConfig": {
@@ -714,6 +741,7 @@ impl Provider for Anthropic {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
+        _extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>> {
         let request = prompt.to_anthropic_no_format(model)?;
 
@@ -750,6 +778,7 @@ impl Provider for Anthropic {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
+        _extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<serde_json::Map<String, serde_json::Value>>> {
         let mut request = prompt.to_anthropic_no_format(model)?;
 
@@ -818,6 +847,7 @@ impl Provider for Anthropic {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
+        _extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<bool>> {
         let mut request = serde_json::json!({
             "model": model,
@@ -1028,6 +1058,7 @@ mod tests {
                     seed: Some(42),
                 },
                 backend.script_config.models.first_key_value().unwrap().0,
+                &serde_json::Map::new(),
             )
             .await;
 
@@ -1117,6 +1148,7 @@ mod tests {
                     seed: Some(123),
                 },
                 backend.script_config.models.first_key_value().unwrap().0,
+                &serde_json::Map::new(),
             )
             .await;
 
@@ -1200,6 +1232,7 @@ mod tests {
                     seed: Some(456),
                 },
                 backend.script_config.models.first_key_value().unwrap().0,
+                &serde_json::Map::new(),
             )
             .await;
         eprintln!("{res:?}");
@@ -1302,6 +1335,7 @@ mod tests {
                     seed: Some(789),
                 },
                 backend.script_config.models.first_key_value().unwrap().0,
+                &serde_json::Map::new(),
             )
             .await;
         eprintln!("{res:?}");
