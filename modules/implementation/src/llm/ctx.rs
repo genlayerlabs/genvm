@@ -97,7 +97,13 @@ async fn exec_prompt_in_provider(
         .map_err(scripting::anyhow_to_lua_error)?;
 
     let res = zelf
-        .exec_prompt_in_provider(&args.prompt, &args.model, &args.provider, args.format, &args.extra)
+        .exec_prompt_in_provider(
+            &args.prompt,
+            &args.model,
+            &args.provider,
+            args.format,
+            &args.extra,
+        )
         .await
         .with_context(|| "running in provider")
         .map_err(scripting::anyhow_to_lua_error)?;

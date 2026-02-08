@@ -138,7 +138,9 @@ pub trait Provider {
         model: &str,
         extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<serde_json::Map<String, serde_json::Value>>> {
-        let res = self.exec_prompt_json_as_text(ctx, prompt, model, extra).await?;
+        let res = self
+            .exec_prompt_json_as_text(ctx, prompt, model, extra)
+            .await?;
         let json_str = sanitize_json_str(&res.result);
         let parsed =
             serde_json::from_str(&json_str).with_context(|| format!("parsing {json_str:?}"))?;
