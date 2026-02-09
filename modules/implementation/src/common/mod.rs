@@ -447,7 +447,7 @@ where
         }
     });
 
-    let result = async {
+    async {
         loop {
             tokio::select! {
                 _ = cancel.chan.closed() => {
@@ -465,9 +465,7 @@ where
             }
         }
     }
-    .await;
-
-    result
+    .await
 }
 
 tokio::task_local! {

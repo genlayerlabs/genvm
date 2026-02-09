@@ -3,8 +3,6 @@ use std::io::{Read, Write};
 use anyhow::Result;
 use genvm::config;
 
-use genvm_common::*;
-
 #[derive(clap::Args, Debug)]
 pub struct Args {}
 

@@ -300,7 +300,7 @@ mod tests {
             mod_base: common::ModuleBaseConfig {
                 vm_count: 1,
                 lua_script_path: "../install/config/genvm-llm-default.lua".to_string(),
-                bind_address: "".to_owned(),
+                bind_address: None,
                 lua_path: extra_path,
                 signer_url: Arc::from(""),
                 signer_headers: Arc::new(BTreeMap::new()),

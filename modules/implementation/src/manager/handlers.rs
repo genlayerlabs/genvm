@@ -281,7 +281,7 @@ fn is_sub_error(err: &str, sub_err_of: &str) -> bool {
     if !err.starts_with(sub_err_of) {
         return false;
     }
-    return sub_err_of.len() == err.len() || err.as_bytes()[sub_err_of.len()] == b' ';
+    sub_err_of.len() == err.len() || err.as_bytes()[sub_err_of.len()] == b' '
 }
 
 fn describe_vm_error(error: &str) -> Option<&'static str> {

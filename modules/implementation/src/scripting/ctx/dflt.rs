@@ -303,7 +303,7 @@ mod tests {
         extra_path.push_str("/?.lua");
 
         let conf = sync::DArc::new(common::ModuleBaseConfig {
-            bind_address: "".to_owned(),
+            bind_address: None,
             vm_count: 1,
             lua_script_path: "".to_owned(),
             lua_path: extra_path,

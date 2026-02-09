@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
 use crate::{public_abi, rt};
-use genvm_common::*;
 
 pub struct FileContents {
     pub contents: bytes::Bytes,

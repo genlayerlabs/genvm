@@ -1,7 +1,5 @@
 use std::collections::BTreeMap;
 
-use genvm_common::*;
-
 pub struct Archive {
     pub data: BTreeMap<String, bytes::Bytes>,
     pub total_size: u32,

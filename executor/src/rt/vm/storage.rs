@@ -1,6 +1,5 @@
 use std::ops::DerefMut;
 
-use anyhow::Context;
 use const_lru::ConstLru;
 use genvm_common::{calldata, sync};
 
