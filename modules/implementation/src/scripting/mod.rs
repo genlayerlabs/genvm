@@ -4,7 +4,7 @@ mod ctx;
 
 use anyhow::Context;
 use genvm_common::{sync::DArc, *};
-use genvm_modules_interfaces::{web::HeaderData, GenericValue};
+use genvm_modules_interfaces::GenericValue;
 use mlua::LuaSerdeExt;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, future::Future, sync::Arc};
@@ -179,7 +179,7 @@ where
 pub struct Response {
     pub status: u16,
 
-    pub headers: BTreeMap<String, HeaderData>,
+    pub headers: BTreeMap<String, bytes::Bytes>,
 
     #[serde(with = "serde_bytes")]
     pub body: Vec<u8>,
@@ -189,7 +189,7 @@ pub struct Response {
 pub struct ResponseJSON {
     pub status: u16,
 
-    pub headers: BTreeMap<String, HeaderData>,
+    pub headers: BTreeMap<String, bytes::Bytes>,
 
     pub body: serde_json::Value,
 }
@@ -209,9 +209,12 @@ pub async fn send_request_get_lua_compatible_response_bytes(
         .map_user_error(common::ErrorKind::SENDING_REQUEST, true)?;
 
     let status = response.status().as_u16();
-    let mut new_headers = BTreeMap::<String, HeaderData>::new();
+    let mut new_headers = BTreeMap::<String, bytes::Bytes>::new();
     for (k, v) in response.headers() {
-        new_headers.insert(k.as_str().to_owned(), HeaderData(v.as_bytes().to_owned()));
+        new_headers.insert(
+            k.as_str().to_owned(),
+            bytes::Bytes::copy_from_slice(v.as_bytes()),
+        );
     }
 
     let body = response.bytes().await;
@@ -232,7 +235,7 @@ pub async fn send_request_get_lua_compatible_response_bytes(
                         GenericValue::Map(BTreeMap::from_iter(
                             new_headers
                                 .into_iter()
-                                .map(|(k, v)| (k, GenericValue::Bytes(v.0))),
+                                .map(|(k, v)| (k, GenericValue::Bytes(v.to_vec()))),
                         )),
                     ),
                 ]),
@@ -255,7 +258,7 @@ pub async fn send_request_get_lua_compatible_response_bytes(
                     GenericValue::Map(BTreeMap::from_iter(
                         new_headers
                             .into_iter()
-                            .map(|(k, v)| (k, GenericValue::Bytes(v.0))),
+                            .map(|(k, v)| (k, GenericValue::Bytes(v.to_vec()))),
                     )),
                 ),
                 ("body".to_owned(), GenericValue::Bytes(body.into())),
@@ -286,9 +289,12 @@ pub async fn send_request_get_lua_compatible_response_json(
         .map_user_error(common::ErrorKind::SENDING_REQUEST, true)?;
 
     let status = response.status().as_u16();
-    let mut new_headers = BTreeMap::<String, HeaderData>::new();
+    let mut new_headers = BTreeMap::<String, bytes::Bytes>::new();
     for (k, v) in response.headers() {
-        new_headers.insert(k.as_str().to_owned(), HeaderData(v.as_bytes().to_owned()));
+        new_headers.insert(
+            k.as_str().to_owned(),
+            bytes::Bytes::copy_from_slice(v.as_bytes()),
+        );
     }
 
     let body = response.json().await;
@@ -310,7 +316,7 @@ pub async fn send_request_get_lua_compatible_response_json(
                         GenericValue::Map(BTreeMap::from_iter(
                             new_headers
                                 .into_iter()
-                                .map(|(k, v)| (k, GenericValue::Bytes(v.0))),
+                                .map(|(k, v)| (k, GenericValue::Bytes(v.to_vec()))),
                         )),
                     ),
                 ]),
@@ -333,7 +339,7 @@ pub async fn send_request_get_lua_compatible_response_json(
                     GenericValue::Map(BTreeMap::from_iter(
                         new_headers
                             .into_iter()
-                            .map(|(k, v)| (k, GenericValue::Bytes(v.0))),
+                            .map(|(k, v)| (k, GenericValue::Bytes(v.to_vec()))),
                     )),
                 ),
                 ("body".to_owned(), body.into()),

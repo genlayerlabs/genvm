@@ -201,7 +201,7 @@ impl Ctx {
             loop {
                 match child.try_wait() {
                     Ok(Some(_)) => {
-                        log_info_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "GenVM process terminated gracefully");
+                        log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "GenVM process terminated gracefully");
                         return Ok(());
                     }
                     Ok(None) => {

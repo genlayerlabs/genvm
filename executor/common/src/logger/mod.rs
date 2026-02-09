@@ -141,6 +141,7 @@ pub enum Capture<'a> {
     #[allow(clippy::type_complexity)]
     Serde(&'a (dyn Fn(&mut std::io::Cursor<&mut Vec<u8>>) -> Result<(), error::Error> + 'a)),
     Id(u64),
+    Bytes(&'a [u8]),
 }
 
 impl<'a> From<&'a (dyn std::error::Error + 'static)> for Capture<'a> {
@@ -202,7 +203,7 @@ macro_rules! __make_capture {
     };
 
     (bytes = $value:expr) => {
-        $crate::logger::Capture::Debug(&$value)
+        $crate::logger::Capture::Bytes(&$value)
     };
 
     (serde = $value:expr) => {
@@ -429,6 +430,11 @@ fn write_bytes_inner(buf: &mut std::io::Cursor<&mut Vec<u8>>, s: &[u8]) -> std::
     while i < s.len() {
         if let Some(prefix) = get_utf8_char_prefix(&s[i..]) {
             let ch = prefix.chars().next().unwrap();
+            if ch == '\\' {
+                buf.write_all(b"\\\\")?;
+                i += prefix.len();
+                continue;
+            }
             if ch.is_control() || ch.is_whitespace() && ch != ' ' {
                 buf.write_fmt(format_args!("\\u{:04x}", s[i]))?;
                 i += 1;
@@ -1091,6 +1097,9 @@ pub fn log_into_buffer(buf: &mut Vec<u8>, record: Record<'_>) -> std::result::Re
             }
             Capture::Serde(serde_fn) => {
                 serde_fn(visitor.0)?;
+            }
+            Capture::Bytes(b) => {
+                write_bytes(visitor.0, b)?;
             }
             Capture::Id(id) => {
                 write!(visitor.0, "{}", id)?;

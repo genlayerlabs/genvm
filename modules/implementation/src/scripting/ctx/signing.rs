@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use super::req::Request;
 use crate::common::{ErrorKind, ModuleError};
 use base64::Engine;
-use genvm_modules_interfaces::web as web_iface;
 use genvm_modules_interfaces::GenericValue;
 
 const SIGN_ALGORITHM: &str = "ES256K";
@@ -129,7 +128,7 @@ impl Request {
                 // Regular header
                 self.headers
                     .get(component)
-                    .map(|h| String::from_utf8_lossy(&h.0).to_string())
+                    .map(|h| String::from_utf8_lossy(h.as_ref()).to_string())
                     .ok_or_else(|| ModuleError {
                         causes: vec![ErrorKind::ABSENT_HEADER.into()],
                         ctx: BTreeMap::from([
@@ -153,12 +152,12 @@ impl Request {
     ) -> Result<(), ModuleError> {
         self.headers.insert(
             "genlayer-node-address".to_owned(),
-            web_iface::HeaderData(node_address.into()),
+            bytes::Bytes::copy_from_slice(node_address.as_bytes()),
         );
 
         self.headers.insert(
             "genlayer-tx-id".to_owned(),
-            web_iface::HeaderData(tx_id.into()),
+            bytes::Bytes::copy_from_slice(tx_id.as_bytes()),
         );
 
         let mut salt = [0; 32];
@@ -170,7 +169,7 @@ impl Request {
 
         self.headers.insert(
             "genlayer-salt".to_owned(),
-            web_iface::HeaderData(base64::prelude::BASE64_STANDARD.encode(salt).into()),
+            base64::prelude::BASE64_STANDARD.encode(salt).into(),
         );
 
         Ok(())
@@ -187,7 +186,7 @@ impl Request {
 
             self.headers.insert(
                 "content-digest".to_string(),
-                web_iface::HeaderData(digest_value.into_bytes()),
+                digest_value.into_bytes().into(),
             );
         }
 
@@ -263,20 +262,16 @@ impl Request {
     ) -> Result<(), ModuleError> {
         // Add Signature-Input header
         let sig_input = format!("genvm={params}");
-        self.headers.insert(
-            "signature-input".to_string(),
-            web_iface::HeaderData(sig_input.into_bytes()),
-        );
+        self.headers
+            .insert("signature-input".to_string(), sig_input.into_bytes().into());
 
         // Add Signature header
         let sig_value = format!(
             "genvm=:{}:",
             base64::prelude::BASE64_STANDARD.encode(signature)
         );
-        self.headers.insert(
-            "signature".to_string(),
-            web_iface::HeaderData(sig_value.into_bytes()),
-        );
+        self.headers
+            .insert("signature".to_string(), sig_value.into_bytes().into());
 
         Ok(())
     }

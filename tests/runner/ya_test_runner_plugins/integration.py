@@ -434,6 +434,9 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 						'signerUrl': SIGNER_URL,
 					}
 				)
+				request_extra = {}
+				if 'stable' in self._test_case.description.tags:
+					request_extra['no_modules'] = True
 				res = await base_host.run_genvm(
 					mock_host,
 					manager_uri=manager_uri,
@@ -447,9 +450,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					extra_args=['--debug-mode'],
 					code=code,
 					calldata=calldata_bytes,
-					request_extra={
-						#'no_modules': True,
-					},
+					request_extra=request_extra,
 				)
 				if res.result_kind == public_abi.ResultCode.RETURN:
 					res.stdout += (

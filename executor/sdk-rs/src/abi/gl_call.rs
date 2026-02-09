@@ -124,28 +124,11 @@ pub mod web_iface {
         PATCH,
     }
 
-    /// HTTP header value as raw bytes.
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    #[serde(transparent)]
-    pub struct HeaderData(#[serde(with = "serde_bytes")] pub Vec<u8>);
-
-    impl From<Vec<u8>> for HeaderData {
-        fn from(v: Vec<u8>) -> Self {
-            HeaderData(v)
-        }
-    }
-
-    impl From<HeaderData> for bytes::Bytes {
-        fn from(v: HeaderData) -> Self {
-            bytes::Bytes::from(v.0)
-        }
-    }
-
     /// HTTP response from WebRequest or WebRender operations.
     #[derive(Debug, Serialize, Deserialize)]
     pub struct Response {
         pub status: u16,
-        pub headers: BTreeMap<String, HeaderData>,
+        pub headers: BTreeMap<String, bytes::Bytes>,
 
         #[serde(with = "serde_bytes")]
         pub body: Vec<u8>,
@@ -164,7 +147,7 @@ pub mod web_iface {
     pub struct RequestPayload {
         pub method: RequestMethod,
         pub url: String,
-        pub headers: BTreeMap<String, HeaderData>,
+        pub headers: BTreeMap<String, bytes::Bytes>,
 
         #[serde(with = "serde_bytes", default = "default_none")]
         pub body: Option<Vec<u8>>,
