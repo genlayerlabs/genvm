@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use genvm_common::*;
 
 pub struct Archive {
-    pub data: BTreeMap<String, util::SharedBytes>,
+    pub data: BTreeMap<String, bytes::Bytes>,
     pub total_size: u32,
 }
 
@@ -28,7 +28,7 @@ fn trim_zeroes(x: &[u8]) -> &[u8] {
 }
 
 impl Archive {
-    pub fn from_ustar(original_data: util::SharedBytes) -> anyhow::Result<Self> {
+    pub fn from_ustar(original_data: bytes::Bytes) -> anyhow::Result<Self> {
         const BLOCK_SIZE: usize = 512;
         const _RECORD_SIZE: usize = BLOCK_SIZE * 20;
 
@@ -44,19 +44,14 @@ impl Archive {
 
         let mut begin = 0;
         while begin + 2 * BLOCK_SIZE <= original_data.len() {
-            let data = original_data.slice(begin, original_data.len());
-            let header = data.slice(0, BLOCK_SIZE);
+            let data = original_data.slice(begin..original_data.len());
+            let header = data.slice(0..BLOCK_SIZE);
 
-            if data
-                .slice(0, BLOCK_SIZE * 2)
-                .as_ref()
-                .iter()
-                .all(|x| *x == 0)
-            {
+            if data.slice(0..BLOCK_SIZE * 2).iter().all(|x| *x == 0) {
                 break;
             }
 
-            let header_signature = &header.as_ref()[257..265];
+            let header_signature = &header[257..265];
 
             if header_signature != b"ustar\x0000" {
                 anyhow::bail!(
@@ -66,15 +61,15 @@ impl Archive {
                 )
             }
 
-            let file_size_octal = trim_zeroes(&header.as_ref()[124..136]);
+            let file_size_octal = trim_zeroes(&header[124..136]);
 
-            let link_indicator = header.as_ref()[156];
+            let link_indicator = header[156];
             if ![b'0', b'\x00', b'5'].contains(&link_indicator) {
                 anyhow::bail!("links are forbidden")
             }
 
-            let path_and_name = trim_zeroes(&header.as_ref()[0..100]);
-            let path_and_name_prefix = trim_zeroes(&header.as_ref()[345..345 + 155]);
+            let path_and_name = trim_zeroes(&header[0..100]);
+            let path_and_name_prefix = trim_zeroes(&header[345..345 + 155]);
 
             begin += BLOCK_SIZE;
 
@@ -98,7 +93,7 @@ impl Archive {
             begin += file_size;
             begin += (BLOCK_SIZE - (begin % BLOCK_SIZE)) % BLOCK_SIZE;
 
-            let file_contents = data.slice(BLOCK_SIZE, BLOCK_SIZE + file_size);
+            let file_contents = data.slice(BLOCK_SIZE..BLOCK_SIZE + file_size);
 
             map_try_insert(&mut res, name, file_contents)?;
         }
@@ -111,7 +106,7 @@ impl Archive {
 
     pub fn from_zip<R: std::io::Read + std::io::Seek>(
         zip: &mut zip::ZipArchive<R>,
-        bytes: util::SharedBytes,
+        bytes: bytes::Bytes,
     ) -> anyhow::Result<Self> {
         let mut res = BTreeMap::new();
 
@@ -134,13 +129,9 @@ impl Archive {
                     bytes.len()
                 );
             }
-            let buf = bytes.slice(start_index as usize, end_index as usize);
+            let buf = bytes.slice(start_index as usize..end_index as usize);
 
-            map_try_insert(
-                &mut res,
-                String::from(file.name()),
-                util::SharedBytes::from(buf.as_slice()),
-            )?;
+            map_try_insert(&mut res, String::from(file.name()), buf)?;
         }
 
         Ok(Self {
@@ -150,9 +141,9 @@ impl Archive {
     }
 
     pub fn from_file_and_runner(
-        file: util::SharedBytes,
-        version: util::SharedBytes,
-        runner_comment: util::SharedBytes,
+        file: bytes::Bytes,
+        version: bytes::Bytes,
+        runner_comment: bytes::Bytes,
     ) -> Self {
         let total_size = file.len() as u32;
 

@@ -337,7 +337,7 @@ pub async fn apply_contract_actions(
                     .await
                     .with_context(|| format!("reading contract code for {contract_id}"))?;
 
-                runners::parse(util::SharedBytes::new(code))
+                runners::parse(bytes::Bytes::from(code))
                     .with_context(|| format!("parsing contract runner for {contract_id}"))
             },
             &limiter,

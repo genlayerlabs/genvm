@@ -45,7 +45,7 @@ impl Ctx<'_, '_> {
 
                     let data = util::mmap_file(&path)
                         .with_context(|| format!("memory mapping runner archive for {uid}"))?;
-                    let data = util::SharedBytes::new(data);
+                    let data = bytes::Bytes::copy_from_slice(data.as_ref());
                     runners::Archive::from_ustar(data)
                         .with_context(|| format!("parsing ustar archive for {uid}"))
                 },
@@ -150,7 +150,7 @@ impl Ctx<'_, '_> {
 
     async fn link_wasm(
         &mut self,
-        contents: util::SharedBytes,
+        contents: bytes::Bytes,
         current: symbol_table::GlobalSymbol,
         path: &std::sync::Arc<str>,
     ) -> anyhow::Result<sync::DArc<rt::DetNondet<wasmtime::Module>>> {

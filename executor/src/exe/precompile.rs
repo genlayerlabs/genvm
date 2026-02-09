@@ -64,7 +64,7 @@ fn compile_single_file(
 
     let data = util::mmap_file(zip_path).with_context(|| format!("memory mapping {zip_path:?}"))?;
 
-    let arch = genvm::runners::Archive::from_ustar(util::SharedBytes::new(data))
+    let arch = genvm::runners::Archive::from_ustar(bytes::Bytes::copy_from_slice(data.as_ref()))
         .with_context(|| format!("parsing ustar archive {zip_path:?}"))?;
 
     for (entry_name, contents) in arch

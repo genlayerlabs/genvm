@@ -301,7 +301,7 @@ impl ContextVFS<'_> {
             generated::types::Fd::from(
                 self.vfs
                     .place_content(vfs::FileContents {
-                        contents: util::SharedBytes::new(data),
+                        contents: bytes::Bytes::from(data),
                         pos: 0,
                         release_memory: true,
                     })
@@ -433,7 +433,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 Ok(generated::types::Fd::from(
                     self.vfs
                         .place_content(vfs::FileContents {
-                            contents: util::SharedBytes::new(res),
+                            contents: bytes::Bytes::from(res),
                             pos: 0,
                             release_memory: true,
                         })
@@ -674,7 +674,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 Ok(generated::types::Fd::from(
                     self.vfs
                         .place_content(vfs::FileContents {
-                            contents: util::SharedBytes::new(task),
+                            contents: bytes::Bytes::from(task),
                             pos: 0,
                             release_memory: true,
                         })
@@ -699,7 +699,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 Ok(generated::types::Fd::from(
                     self.vfs
                         .place_content(vfs::FileContents {
-                            contents: util::SharedBytes::new(task),
+                            contents: bytes::Bytes::from(task),
                             pos: 0,
                             release_memory: true,
                         })
@@ -757,7 +757,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 Ok(generated::types::Fd::from(
                     self.vfs
                         .place_content(vfs::FileContents {
-                            contents: util::SharedBytes::new(task),
+                            contents: bytes::Bytes::from(task),
                             pos: 0,
                             release_memory: true,
                         })
@@ -832,7 +832,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 Ok(generated::types::Fd::from(
                     self.vfs
                         .place_content(vfs::FileContents {
-                            contents: util::SharedBytes::new(task),
+                            contents: bytes::Bytes::from(task),
                             pos: 0,
                             release_memory: true,
                         })
@@ -1106,7 +1106,7 @@ impl ContextVFS<'_> {
                 Ok(generated::types::Fd::from(
                     self.vfs
                         .place_content(vfs::FileContents {
-                            contents: util::SharedBytes::new(data),
+                            contents: bytes::Bytes::from(data),
                             pos: 0,
                             release_memory: true,
                         })
@@ -1278,7 +1278,7 @@ impl ContextVFS<'_> {
         Ok(generated::types::Fd::from(
             self.vfs
                 .place_content(vfs::FileContents {
-                    contents: util::SharedBytes::new(data),
+                    contents: bytes::Bytes::from(data),
                     pos: 0,
                     release_memory: true,
                 })
