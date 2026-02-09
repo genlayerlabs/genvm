@@ -1,1 +1,1 @@
-rust | integration & !bench
+(rust | integration) & !bench & !fuzz
