@@ -8,12 +8,24 @@ pub trait Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send {}
 
 impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send> Stream for T {}
 
-/// Sets a file descriptor to non-blocking mode
-pub fn set_fd_nonblocking(fd: std::os::fd::RawFd) {
-    unsafe {
-        let flags = libc::fcntl(fd, libc::F_GETFL, 0);
-        libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+fn fcntl_check(
+    fd: std::os::fd::RawFd,
+    cmd: libc::c_int,
+    arg: libc::c_int,
+) -> std::io::Result<libc::c_int> {
+    let ret = unsafe { libc::fcntl(fd, cmd, arg) };
+    if ret == -1 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(ret)
     }
+}
+
+/// Sets a file descriptor to non-blocking mode
+pub fn set_fd_nonblocking(fd: std::os::fd::RawFd) -> std::io::Result<()> {
+    let flags = fcntl_check(fd, libc::F_GETFL, 0)?;
+    fcntl_check(fd, libc::F_SETFL, flags | libc::O_NONBLOCK)?;
+    Ok(())
 }
 
 /// Wrapper around OwnedFd with helper methods for fd flags
@@ -48,36 +60,32 @@ impl FdWrapper {
     }
 
     /// Set the close-on-exec flag
-    pub fn set_cloexec(&self, cloexec: bool) -> &Self {
-        unsafe {
-            let fd_flags = libc::fcntl(self.0.as_raw_fd(), libc::F_GETFD, 0);
-            let new_flags = if cloexec {
-                fd_flags | libc::FD_CLOEXEC
-            } else {
-                fd_flags & !libc::FD_CLOEXEC
-            };
-            libc::fcntl(self.0.as_raw_fd(), libc::F_SETFD, new_flags);
-        }
-        self
+    pub fn set_cloexec(&self, cloexec: bool) -> std::io::Result<&Self> {
+        let fd_flags = fcntl_check(self.0.as_raw_fd(), libc::F_GETFD, 0)?;
+        let new_flags = if cloexec {
+            fd_flags | libc::FD_CLOEXEC
+        } else {
+            fd_flags & !libc::FD_CLOEXEC
+        };
+        fcntl_check(self.0.as_raw_fd(), libc::F_SETFD, new_flags)?;
+        Ok(self)
     }
 
     /// Set non-blocking mode
-    pub fn set_nonblocking(&self, nonblocking: bool) -> &Self {
-        unsafe {
-            let flags = libc::fcntl(self.0.as_raw_fd(), libc::F_GETFL, 0);
-            let new_flags = if nonblocking {
-                flags | libc::O_NONBLOCK
-            } else {
-                flags & !libc::O_NONBLOCK
-            };
-            libc::fcntl(self.0.as_raw_fd(), libc::F_SETFL, new_flags);
-        }
-        self
+    pub fn set_nonblocking(&self, nonblocking: bool) -> std::io::Result<&Self> {
+        let flags = fcntl_check(self.0.as_raw_fd(), libc::F_GETFL, 0)?;
+        let new_flags = if nonblocking {
+            flags | libc::O_NONBLOCK
+        } else {
+            flags & !libc::O_NONBLOCK
+        };
+        fcntl_check(self.0.as_raw_fd(), libc::F_SETFL, new_flags)?;
+        Ok(self)
     }
 
     /// Convert to AsyncCustomFD, setting non-blocking mode first
     pub fn into_async_fd(self) -> std::io::Result<AsyncCustomFD> {
-        self.set_nonblocking(true);
+        self.set_nonblocking(true)?;
         AsyncCustomFD::new(self.0)
     }
 
@@ -106,7 +114,7 @@ impl AsyncCustomFD {
     /// Create a new AsyncCustomFD from a raw fd, taking ownership
     /// Sets the fd to non-blocking mode automatically
     pub unsafe fn from_raw_fd(fd: std::os::fd::RawFd) -> std::io::Result<Self> {
-        set_fd_nonblocking(fd);
+        set_fd_nonblocking(fd)?;
         let owned = std::os::fd::OwnedFd::from_raw_fd(fd);
         Self::new(owned)
     }
@@ -214,8 +222,8 @@ impl FdPairStream {
         source_fd: std::os::fd::RawFd,
         sink_fd: std::os::fd::RawFd,
     ) -> std::io::Result<Self> {
-        set_fd_nonblocking(source_fd);
-        set_fd_nonblocking(sink_fd);
+        set_fd_nonblocking(source_fd)?;
+        set_fd_nonblocking(sink_fd)?;
         let source = std::os::fd::OwnedFd::from_raw_fd(source_fd);
         let sink = std::os::fd::OwnedFd::from_raw_fd(sink_fd);
         Self::new(source, sink)

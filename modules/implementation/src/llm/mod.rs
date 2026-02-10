@@ -18,6 +18,7 @@ type UserVM = scripting::UserVM<ctx::VMData, sync::DArc<ctx::CtxPart>, LlmSubCon
 #[derive(serde::Serialize, Debug, Default)]
 pub(crate) struct Metrics {
     pub scripting: scripting::Metrics,
+    pub tokens: stats::metric::TokenMetricsMap,
 }
 
 #[derive(clap::Args, Debug)]

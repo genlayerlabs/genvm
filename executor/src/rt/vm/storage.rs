@@ -75,9 +75,9 @@ impl Limiter {
                 },
             )
             .map_err(|current| {
-                anyhow::anyhow!(rt::errors::VMError::oos(None)).context(format!(
+                anyhow::anyhow!(rt::errors::VMError::oos(Some(anyhow::anyhow!(
                     "consuming {amount} storage pages (available: {current})"
-                ))
+                ))))
             })?;
 
         Ok(())

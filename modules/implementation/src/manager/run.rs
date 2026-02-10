@@ -42,6 +42,7 @@ pub struct SingleGenVMContextDone {
     pub stdout: String,
     pub stderr: String,
     pub genvm_log: Vec<serde_json::Map<String, serde_json::Value>>,
+    pub metrics: serde_json::Value,
 }
 
 impl serde::Serialize for SingleGenVMContextDone {
@@ -51,11 +52,12 @@ impl serde::Serialize for SingleGenVMContextDone {
     {
         use serde::ser::SerializeStruct;
 
-        let mut state = serializer.serialize_struct("SingleGenVMContextDone", 3)?;
+        let mut state = serializer.serialize_struct("SingleGenVMContextDone", 5)?;
         state.serialize_field("finished_at", &self.finished_at.timestamp_millis())?;
         state.serialize_field("stdout", &self.stdout)?;
         state.serialize_field("stderr", &self.stderr)?;
         state.serialize_field("genvm_log", &self.genvm_log)?;
+        state.serialize_field("metrics", &self.metrics)?;
         state.end()
     }
 }
@@ -578,6 +580,14 @@ impl Ctx {
                     GENVM_BY_ID_LOGGER.pin().remove(&exec.id);
                 });
 
+                let metrics = exec
+                    ._execution_context
+                    .as_ref()
+                    .map(|ctx| ctx.collect_metrics())
+                    .unwrap_or(serde_json::Value::Null);
+
+                log_debug!(id = exec.id, metrics:serde = metrics; "metrics collected");
+
                 exec.all_permits.store(None); // drop all resources it owns
                 let _ = exec.stdout_stderr_sem.acquire_many(2).await; // wait for stderr/stdout to be fully read
                 log_debug!(id = exec.id, status = status; "stdout/stderr sem acquired");
@@ -597,6 +607,7 @@ impl Ctx {
                     stdout: stdout.to_owned(),
                     stderr: stderr.to_owned(),
                     genvm_log,
+                    metrics,
                 }) {
                     log_warn!(error:err = e; "error setting genvm result; it can happen rarely due to concurrency");
                 }
@@ -612,10 +623,162 @@ impl Ctx {
     }
 }
 
+/// Creates a pipe for GenVM logging. Returns `(read_fd, write_fd)` with
+/// the read end set to nonblocking + cloexec.
+fn create_log_pipe() -> anyhow::Result<(std::os::unix::io::OwnedFd, std::os::unix::io::OwnedFd)> {
+    let mut read_write_fd = [0; 2];
+    let result_code = unsafe { libc::pipe(std::ptr::from_mut(&mut read_write_fd).cast()) };
+    if result_code != 0 {
+        anyhow::bail!("failed to create pipe for genvm logging: {result_code}");
+    }
+
+    let read_fd = unsafe { FdWrapper::from_raw_fd(read_write_fd[0]) };
+    let write_fd = unsafe { std::os::unix::io::OwnedFd::from_raw_fd(read_write_fd[1]) };
+
+    read_fd.set_nonblocking(true)?;
+    read_fd.set_cloexec(true)?;
+    Ok((read_fd.into_inner(), write_fd))
+}
+
+/// Builds the `tokio::process::Command` for GenVM with all standard arguments
+/// and stdio configuration.
+fn build_genvm_command(
+    command_path: std::path::PathBuf,
+    req: &Request,
+    genvm_id: GenVMId,
+    log_write_fd: &std::os::unix::io::OwnedFd,
+) -> tokio::process::Command {
+    let mut proc = tokio::process::Command::new(command_path);
+
+    proc.stdin(std::process::Stdio::piped());
+    proc.arg(format!("--log-fd={}", log_write_fd.as_raw_fd()));
+
+    proc.arg("run");
+    proc.args(&req.extra_args);
+
+    if req.is_sync {
+        proc.arg("--sync");
+    }
+
+    proc.arg("--storage-pages");
+    proc.arg(req.storage_pages.to_string());
+
+    proc.arg("--host");
+    proc.arg(&req.host);
+
+    proc.arg("--permissions");
+    proc.arg(&req.permissions);
+
+    proc.arg(format!("--genvm-id={}", genvm_id.0));
+
+    if req.capture_output {
+        proc.stdout(std::process::Stdio::piped());
+        proc.stderr(std::process::Stdio::piped());
+    } else {
+        proc.stdout(std::process::Stdio::null());
+        proc.stderr(std::process::Stdio::null());
+    }
+
+    proc
+}
+
+/// Creates socketpairs for module communication, adds `--module-llm`/`--module-web`
+/// args to the command, and spawns relay tasks. Returns the child-side FDs that must
+/// be kept alive until after the child process is spawned.
+fn setup_module_relays(
+    proc: &mut tokio::process::Command,
+    handlers: (super::modules::StreamHandler, super::modules::StreamHandler),
+    execution_context: &sync::DArc<super::execution_context::ExecutionContext>,
+    genvm_id: GenVMId,
+) -> anyhow::Result<(FdWrapper, FdWrapper)> {
+    let (llm_handler, web_handler) = handlers;
+    let exec_ctx = execution_context.clone();
+
+    let (llm_parent, llm_child) = FdWrapper::socketpair()?;
+    let (web_parent, web_child) = FdWrapper::socketpair()?;
+
+    // Parent end: set cloexec (closed in child after exec)
+    llm_parent.set_cloexec(true)?;
+    web_parent.set_cloexec(true)?;
+    // Child end: clear cloexec (survives exec into child process)
+    llm_child.set_cloexec(false)?;
+    web_child.set_cloexec(false)?;
+
+    proc.arg(format!("--module-llm=fd://{}", llm_child.as_raw_fd()));
+    proc.arg(format!("--module-web=fd://{}", web_child.as_raw_fd()));
+
+    tokio::spawn(spawn_module_relay(
+        llm_parent,
+        llm_handler,
+        genvm_id,
+        "llm",
+        exec_ctx.clone(),
+    ));
+    tokio::spawn(spawn_module_relay(
+        web_parent,
+        web_handler,
+        genvm_id,
+        "web",
+        exec_ctx,
+    ));
+
+    Ok((llm_child, web_child))
+}
+
+/// Spawns an async task that writes execution data to the child's stdin.
+fn spawn_stdin_writer(
+    stdin: tokio::process::ChildStdin,
+    execution_data_bytes: Vec<u8>,
+) -> tokio::task::JoinHandle<std::io::Result<()>> {
+    tokio::task::spawn(async move {
+        use tokio::io::AsyncWriteExt;
+
+        let owned_fd = stdin.into_owned_fd().map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("failed to get owned fd from stdin: {e}"),
+            )
+        })?;
+        set_fd_nonblocking(owned_fd.as_raw_fd())?;
+
+        let mut file = AsyncCustomFD::new(owned_fd)?;
+        file.write_all(&execution_data_bytes).await?;
+        Ok(())
+    })
+}
+
+/// Spawns a task that awaits the stdin writer and kills the process on failure.
+fn spawn_stdin_monitor(
+    stdin_task: tokio::task::JoinHandle<std::io::Result<()>>,
+    exec_ctx: sync::DArc<SingleGenVMContext>,
+    genvm_id: GenVMId,
+) {
+    tokio::task::spawn(async move {
+        let stdin_failed = match stdin_task.await {
+            Ok(Ok(())) => {
+                log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "execution data written");
+                false
+            }
+            Ok(Err(e)) => {
+                log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "failed to write execution data to child stdin, killing process");
+                true
+            }
+            Err(e) => {
+                log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "stdin write task panicked, killing process");
+                true
+            }
+        };
+        if stdin_failed {
+            let mut proc = exec_ctx.process_handle.lock().await;
+            let _ = proc.start_kill();
+        }
+    });
+}
+
 pub async fn start_genvm(
     full_ctx: sync::DArc<crate::manager::AppContext>,
     req: Request,
-    _modules_lock: Box<dyn std::any::Any + Send + Sync>,
+    modules_lock: Box<dyn std::any::Any + Send + Sync>,
 ) -> anyhow::Result<(GenVMId, tokio::sync::oneshot::Receiver<()>)> {
     let reroute_to = full_ctx.config.reroute_to.clone();
 
@@ -670,107 +833,36 @@ pub async fn start_genvm(
         GENVM_BY_ID_LOGGER.pin().remove(&genvm_id);
     });
 
+    // Resolve command path
     let mut command_path = ctx.executors_path.clone();
-
     let version_str_owned = format!("v{}.{}.{}", version.major, version.minor, version.patch);
     let mut version_str: &str = &version_str_owned;
     if !reroute_to.is_empty() {
         version_str = &*reroute_to;
     }
     command_path.push(version_str);
-
     command_path.push("bin");
     command_path.push("genvm");
 
     log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0, exe:? = command_path, version:? = version; "genvm path");
 
-    let mut proc = tokio::process::Command::new(command_path);
+    // Create log pipe and build command
+    let (read_fd, write_fd) = create_log_pipe()?;
+    let mut proc = build_genvm_command(command_path, &req, genvm_id, &write_fd);
 
-    let mut read_right_fd = [0; 2];
-    let result_code = unsafe { libc::pipe(std::ptr::from_mut(&mut read_right_fd).cast()) };
-    if result_code != 0 {
-        anyhow::bail!("failed to create pipe for genvm logging: {result_code}");
-    }
-
-    let read_fd = read_right_fd[0];
-    let write_fd = read_right_fd[1];
-
-    set_fd_nonblocking(read_fd);
-    unsafe {
-        let fd_flags = libc::fcntl(read_fd, libc::F_GETFD, 0);
-        libc::fcntl(read_fd, libc::F_SETFD, fd_flags | libc::FD_CLOEXEC);
+    // Setup module relays if needed
+    let module_child_fds = if let Some(handlers) = module_handlers {
+        let exec_ctx = execution_context
+            .as_ref()
+            .expect("execution context required when modules are running");
+        Some(setup_module_relays(
+            &mut proc, handlers, exec_ctx, genvm_id,
+        )?)
+    } else {
+        None
     };
 
-    let read_fd = unsafe { std::os::unix::io::OwnedFd::from_raw_fd(read_fd) };
-    let write_fd = unsafe { std::os::unix::io::OwnedFd::from_raw_fd(write_fd) };
-
-    proc.stdin(std::process::Stdio::piped());
-    proc.arg(format!("--log-fd={}", write_fd.as_raw_fd()));
-
-    proc.arg("run");
-
-    proc.args(&req.extra_args);
-
-    if req.is_sync {
-        proc.arg("--sync");
-    }
-
-    proc.arg("--storage-pages");
-    proc.arg(req.storage_pages.to_string());
-
-    proc.arg("--host");
-    proc.arg(&req.host);
-
-    proc.arg("--permissions");
-    proc.arg(&req.permissions);
-
-    // Create socketpairs and spawn relays for modules if needed
-    let module_child_fds: Option<(FdWrapper, FdWrapper)> =
-        if let Some((llm_handler, web_handler)) = module_handlers {
-            let exec_ctx = execution_context
-                .as_ref()
-                .expect("execution context required when modules are running")
-                .clone();
-
-            // Create socketpairs
-            let (llm_parent, llm_child) = FdWrapper::socketpair()?;
-            let (web_parent, web_child) = FdWrapper::socketpair()?;
-
-            // Parent end: set cloexec (closed in child after exec)
-            llm_parent.set_cloexec(true);
-            web_parent.set_cloexec(true);
-            // Child end: clear cloexec (survives exec into child process)
-            llm_child.set_cloexec(false);
-            web_child.set_cloexec(false);
-
-            // Add module FD args
-            let llm_fd = llm_child.as_raw_fd();
-            let web_fd = web_child.as_raw_fd();
-            proc.arg(format!("--module-llm=fd://{}", llm_fd));
-            proc.arg(format!("--module-web=fd://{}", web_fd));
-
-            // Spawn relay tasks (they'll start after we spawn the child)
-            tokio::spawn(spawn_module_relay(
-                llm_parent,
-                llm_handler,
-                genvm_id,
-                "llm",
-                exec_ctx.clone(),
-            ));
-            tokio::spawn(spawn_module_relay(
-                web_parent,
-                web_handler,
-                genvm_id,
-                "web",
-                exec_ctx,
-            ));
-
-            // Keep child FDs alive until after spawn
-            Some((llm_child, web_child))
-        } else {
-            None
-        };
-
+    // Encode execution data
     let execution_data = genvm_common::domain::ExecutionData {
         calldata: req.calldata.clone(),
         message: req.message.clone(),
@@ -780,12 +872,8 @@ pub async fn start_genvm(
     let execution_data_bytes =
         genvm_common::calldata::encode(&genvm_common::calldata::to_value(&execution_data)?);
 
-    proc.arg(format!("--genvm-id={}", genvm_id.0));
-
+    // Spawn log reader
     if req.capture_output {
-        proc.stdout(std::process::Stdio::piped());
-        proc.stderr(std::process::Stdio::piped());
-
         let logger = Arc::new(tokio::sync::Mutex::new(LogAppenderToValue(
             log_sink.clone(),
             genvm_id,
@@ -793,36 +881,22 @@ pub async fn start_genvm(
         let l = logger.clone().lock_owned().await;
         tokio::spawn(read_log_pipe(read_fd, l));
     } else {
-        proc.stdout(std::process::Stdio::null());
-        proc.stderr(std::process::Stdio::null());
-
         tokio::spawn(read_log_pipe(read_fd, LogAppenderToLog(genvm_id)));
     };
 
+    // Spawn child process, then drop module child FDs
     let mut child = proc.spawn()?;
     log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0, pid:? = child.id(); "genvm process started");
-
     std::mem::drop(module_child_fds);
 
-    if let Some(stdin) = child.stdin.take() {
-        tokio::task::spawn(async move {
-            use tokio::io::AsyncWriteExt;
+    // Spawn stdin writer
+    let stdin_task = child
+        .stdin
+        .take()
+        .map(|stdin| spawn_stdin_writer(stdin, execution_data_bytes));
 
-            let Ok(owned_fd) = stdin.into_owned_fd() else {
-                // failed to get owned fd
-                // how to proceed?
-                return;
-            };
-            set_fd_nonblocking(owned_fd.as_raw_fd());
-
-            let mut file = AsyncCustomFD::new(owned_fd).unwrap();
-            let _ = file.write_all(&execution_data_bytes).await;
-            log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "message written");
-        });
-    }
-
+    // Create exec context and stdout/stderr permits
     let stdout_stderr_sem = Arc::new(tokio::sync::Semaphore::new(2));
-
     let stdout_perm = stdout_stderr_sem.clone().acquire_owned().await?;
     let stderr_perm = stdout_stderr_sem.clone().acquire_owned().await?;
 
@@ -830,7 +904,7 @@ pub async fn start_genvm(
     let stderr = child.stderr.take();
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-    let all_resources = (permits, tx);
+    let all_resources = (permits, tx, modules_lock);
 
     let exec_ctx = sync::DArc::new(SingleGenVMContext {
         result: tokio::sync::OnceCell::new(),
@@ -849,6 +923,11 @@ pub async fn start_genvm(
         all_permits: crossbeam::atomic::AtomicCell::new(Some(Box::new(all_resources))),
         _execution_context: execution_context,
     });
+
+    // Spawn stdin monitor and pipe readers
+    if let Some(stdin_task) = stdin_task {
+        spawn_stdin_monitor(stdin_task, exec_ctx.clone(), genvm_id);
+    }
 
     if let Some(stdout) = stdout {
         tokio::spawn(pipe_read(stdout, exec_ctx.gep(|x| &x.stdout), stdout_perm));

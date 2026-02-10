@@ -59,6 +59,13 @@ impl CtxPart {
                 .map(|resp| resp.map(llm_iface::PromptAnswerData::Bool)),
         };
 
+        if let Ok(ref res) = res {
+            let key = format!("{provider_id}/{model}");
+            self.metrics
+                .tokens
+                .record(key, res.tokens.input, res.tokens.output, res.tokens.total);
+        }
+
         res.inspect_err(|err| {
             log_error!(
                 prompt:serde = prompt,

@@ -135,7 +135,7 @@ def run(shared: SharedContext, collection_env: Env) -> Env:
 
 	for case in collection_env.cases:
 		# Apply name regex filter
-		if not test_name_regex.match(case.description.name):
+		if not test_name_regex.search(case.description.name):
 			continue
 
 		# Apply tags filter

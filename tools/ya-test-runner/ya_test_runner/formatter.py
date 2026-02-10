@@ -141,8 +141,17 @@ def _is_safe_char(c: str) -> bool:
 	return cat in ['L', 'N', 'P', 'S']
 
 
+def _escape_char(c: str) -> str:
+	cp = ord(c)
+	if cp <= 0xFF:
+		return f'\\x{cp:02x}'
+	if cp <= 0xFFFF:
+		return f'\\u{cp:04x}'
+	return f'\\U{cp:08x}'
+
+
 def _to_safe_str(x: str) -> str:
-	as_arr = [c if _is_safe_char(c) else f'\\x{ord(c):02x}' for c in x.rstrip()]
+	as_arr = [c if _is_safe_char(c) else _escape_char(c) for c in x.rstrip()]
 	return ''.join(as_arr)
 
 
