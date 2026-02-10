@@ -216,7 +216,7 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
                 let (zelf, req) = args;
 
                 let zelf: mlua::AnyUserData = zelf.get("__ctx_dflt")?;
-                let zelf: mlua::UserDataRef<Arc<CtxPart>> = zelf
+                let zelf: mlua::UserDataRef<scripting::LuaDArc<CtxPart>> = zelf
                     .borrow()
                     .with_context(|| "unboxing userdata")
                     .map_err(scripting::anyhow_to_lua_error)?;
@@ -289,7 +289,11 @@ mod tests {
 
     use super::*;
 
-    async fn create_test_vm() -> scripting::UserVM<(), ()> {
+    struct TestCtx {
+        scripting: scripting::CtxPart,
+    }
+
+    async fn create_test_vm() -> scripting::UserVM<(), (), TestCtx> {
         let mut cwd = std::env::current_dir().unwrap();
         cwd.pop();
         cwd.push("install");
@@ -311,19 +315,32 @@ mod tests {
             signer_url: Arc::from(""),
         });
 
-        let metrics = sync::DArc::new(super::super::Metrics::default());
-
         scripting::UserVM::create(
             &conf.clone(),
             |_| async { Ok(()) },
-            Box::new(move |vm, table, hello| {
-                scripting::create_default_ctx(hello, conf.clone(), metrics.clone(), vm, table)?;
-
+            Box::new(move |vm, table, ctx: &sync::DArc<TestCtx>| {
+                let scripting = ctx.gep(|x| &x.scripting);
+                scripting::setup_lua_default_ctx(scripting, vm, table)?;
                 Ok(())
             }),
         )
         .await
         .unwrap()
+    }
+
+    fn create_test_ctx() -> sync::DArc<TestCtx> {
+        let hello = common::tests::get_hello();
+        let metrics = sync::DArc::new(super::super::Metrics::default());
+        let conf = sync::DArc::new(common::ModuleBaseConfig {
+            bind_address: None,
+            vm_count: 1,
+            lua_script_path: "".to_owned(),
+            lua_path: "".to_owned(),
+            signer_headers: Arc::new(BTreeMap::new()),
+            signer_url: Arc::from(""),
+        });
+        let scripting = scripting::create_ctx_part(&hello, &conf, metrics).unwrap();
+        sync::DArc::new(TestCtx { scripting })
     }
 
     async fn test_status(status: u16) {
@@ -342,9 +359,9 @@ mod tests {
 
         let f: mlua::Function = uvm.vm.globals().get("Test").unwrap();
 
-        let hello = common::tests::get_hello();
+        let test_ctx = create_test_ctx();
 
-        let (_, ctx_lua) = uvm.create_ctx(&hello).unwrap();
+        let (_, ctx_lua) = uvm.create_ctx(&test_ctx).unwrap();
 
         let res: mlua::Value = f.call_async((ctx_lua, status.to_string())).await.unwrap();
 
@@ -382,9 +399,9 @@ mod tests {
 
         let expected = b"\xde\xad\xbe\xef";
 
-        let hello = common::tests::get_hello();
+        let test_ctx = create_test_ctx();
 
-        let (_, ctx_lua) = uvm.create_ctx(&hello).unwrap();
+        let (_, ctx_lua) = uvm.create_ctx(&test_ctx).unwrap();
 
         let res: mlua::Value = f.call_async((ctx_lua,)).await.unwrap();
 

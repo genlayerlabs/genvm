@@ -1,16 +1,69 @@
 use genvm_common::io::Stream;
 use genvm_common::*;
-use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
+use std::{collections::BTreeMap, collections::HashMap, future::Future, pin::Pin, sync::Arc};
+
+use super::execution_context::{ExecutionContext, LlmSubContext, WebSubContext};
 
 /// Type-erased handler that accepts a client stream and processes it
-pub type StreamHandler =
-    Arc<dyn Fn(Box<dyn Stream>) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
+pub type StreamHandler = Arc<
+    dyn Fn(
+            Box<dyn Stream>,
+            Option<sync::DArc<ExecutionContext>>,
+        ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+        + Send
+        + Sync,
+>;
 
-struct ModuleState {
+struct ModuleStateBase {
     canceller: Box<dyn Fn() + Send + Sync>,
     cancel_token: Arc<cancellation::Token>,
     handler: StreamHandler,
     _task: tokio::task::JoinHandle<anyhow::Result<()>>,
+}
+
+pub(crate) struct ModuleStateLlm {
+    base: ModuleStateBase,
+    config: sync::DArc<crate::llm::config::Config>,
+    providers: Arc<BTreeMap<String, Box<dyn crate::llm::providers::Provider + Send + Sync>>>,
+}
+
+pub(crate) struct ModuleStateWeb {
+    base: ModuleStateBase,
+    config: sync::DArc<crate::web::config::Config>,
+}
+
+impl ModuleStateLlm {
+    pub fn create_sub_context(
+        &self,
+        hello: &Arc<genvm_modules_interfaces::GenVMHello>,
+    ) -> anyhow::Result<LlmSubContext> {
+        let metrics = sync::DArc::new(crate::llm::Metrics::default());
+        let scripting = crate::scripting::create_ctx_part(
+            hello,
+            &self.config.gep(|x| &x.mod_base),
+            metrics.gep(|x| &x.scripting),
+        )?;
+        let module = crate::llm::ctx::CtxPart {
+            providers: self.providers.clone(),
+            metrics,
+        };
+        Ok(LlmSubContext { scripting, module })
+    }
+}
+
+impl ModuleStateWeb {
+    pub fn create_sub_context(
+        &self,
+        hello: &Arc<genvm_modules_interfaces::GenVMHello>,
+    ) -> anyhow::Result<WebSubContext> {
+        let metrics = sync::DArc::new(crate::web::Metrics::default());
+        let scripting = crate::scripting::create_ctx_part(
+            hello,
+            &self.config.gep(|x| &x.mod_base),
+            metrics.gep(|x| &x.scripting),
+        )?;
+        Ok(WebSubContext { scripting })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Copy)]
@@ -21,8 +74,8 @@ pub enum Type {
 
 pub struct Ctx {
     cancel: Arc<cancellation::Token>,
-    llm_module: tokio::sync::RwLock<Option<ModuleState>>,
-    web_module: tokio::sync::RwLock<Option<ModuleState>>,
+    llm_module: tokio::sync::RwLock<Option<ModuleStateLlm>>,
+    web_module: tokio::sync::RwLock<Option<ModuleStateWeb>>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -42,16 +95,24 @@ impl Ctx {
         }
     }
 
-    pub async fn start(&self, req: StartRequest) -> anyhow::Result<()> {
-        let mut module_lock = match req.module_type {
-            Type::Llm => self.llm_module.write().await,
-            Type::Web => self.web_module.write().await,
+    pub async fn create_execution_context(
+        &self,
+        hello: Arc<genvm_modules_interfaces::GenVMHello>,
+    ) -> anyhow::Result<sync::DArc<ExecutionContext>> {
+        let llm = if let Some(state) = self.llm_module.read().await.as_ref() {
+            Some(state.create_sub_context(&hello)?)
+        } else {
+            None
         };
+        let web = if let Some(state) = self.web_module.read().await.as_ref() {
+            Some(state.create_sub_context(&hello)?)
+        } else {
+            None
+        };
+        Ok(sync::DArc::new(ExecutionContext { hello, llm, web }))
+    }
 
-        if module_lock.is_some() {
-            anyhow::bail!("module_already_running");
-        }
-
+    pub async fn start(&self, req: StartRequest) -> anyhow::Result<()> {
         let (module_cancel, canceller) = genvm_common::cancellation::make();
 
         // Set up cancellation that triggers when either parent cancels or we explicitly cancel
@@ -94,70 +155,111 @@ impl Ctx {
             &genvm_common::templater::DOLLAR_UNFOLDER_RE,
         )?;
 
-        let (handler, bind_future) = match req.module_type {
+        match req.module_type {
             Type::Llm => {
+                let mut module_lock = self.llm_module.write().await;
+                if module_lock.is_some() {
+                    anyhow::bail!("module_already_running");
+                }
+
                 let allow_empty_backends = req.allow_empty_backends;
                 let config = serde_json::from_value(config)?;
-                let (handler, bind_future) =
+                let (handler, bind_future, llm_config, providers) =
                     crate::llm::create_llm_module(nested_cancel, config, allow_empty_backends)
                         .await?;
                 let bind_future: std::pin::Pin<
                     Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>,
                 > = Box::pin(bind_future);
-                (handler, bind_future)
+
+                let module_task = tokio::task::spawn(bind_future);
+
+                *module_lock = Some(ModuleStateLlm {
+                    base: ModuleStateBase {
+                        canceller: Box::new(canceller),
+                        cancel_token: module_cancel,
+                        handler,
+                        _task: module_task,
+                    },
+                    config: llm_config,
+                    providers,
+                });
             }
             Type::Web => {
+                let mut module_lock = self.web_module.write().await;
+                if module_lock.is_some() {
+                    anyhow::bail!("module_already_running");
+                }
+
                 let config = serde_json::from_value(config)?;
-                let (handler, bind_future) =
+                let (handler, bind_future, web_config) =
                     crate::web::create_web_module(nested_cancel, config).await?;
                 let bind_future: std::pin::Pin<
                     Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>,
                 > = Box::pin(bind_future);
-                (handler, bind_future)
+
+                let module_task = tokio::task::spawn(bind_future);
+
+                *module_lock = Some(ModuleStateWeb {
+                    base: ModuleStateBase {
+                        canceller: Box::new(canceller),
+                        cancel_token: module_cancel,
+                        handler,
+                        _task: module_task,
+                    },
+                    config: web_config,
+                });
             }
-        };
-
-        let module_task = tokio::task::spawn(bind_future);
-
-        // Store the module state
-        *module_lock = Some(ModuleState {
-            canceller: Box::new(canceller),
-            cancel_token: module_cancel,
-            handler,
-            _task: module_task,
-        });
+        }
 
         Ok(())
     }
 
     pub async fn stop(&self, module_type: Type) -> anyhow::Result<bool> {
-        let mut module_lock = match module_type {
-            Type::Llm => self.llm_module.write().await,
-            Type::Web => self.web_module.write().await,
-        };
-
-        let Some(state) = module_lock.take() else {
-            return Ok(false);
-        };
-
-        (state.canceller)();
-
+        match module_type {
+            Type::Llm => {
+                let mut module_lock = self.llm_module.write().await;
+                let Some(state) = module_lock.take() else {
+                    return Ok(false);
+                };
+                (state.base.canceller)();
+            }
+            Type::Web => {
+                let mut module_lock = self.web_module.write().await;
+                let Some(state) = module_lock.take() else {
+                    return Ok(false);
+                };
+                (state.base.canceller)();
+            }
+        }
         Ok(true)
     }
 
     pub async fn get_status(&self, module_type: Type) -> &'static str {
-        let module_lock = match module_type {
-            Type::Llm => self.llm_module.read().await,
-            Type::Web => self.web_module.read().await,
-        };
-
-        match &*module_lock {
-            None => "stopped",
-            Some(state) => {
-                if state.cancel_token.is_cancelled() {
-                    "stopping"
-                } else {
-                    "running"
+        match module_type {
+            Type::Llm => {
+                let module_lock = self.llm_module.read().await;
+                match &*module_lock {
+                    None => "stopped",
+                    Some(state) => {
+                        if state.base.cancel_token.is_cancelled() {
+                            "stopping"
+                        } else {
+                            "running"
+                        }
+                    }
+                }
+            }
+            Type::Web => {
+                let module_lock = self.web_module.read().await;
+                match &*module_lock {
+                    None => "stopped",
+                    Some(state) => {
+                        if state.base.cancel_token.is_cancelled() {
+                            "stopping"
+                        } else {
+                            "running"
+                        }
+                    }
                 }
             }
         }
@@ -165,12 +267,16 @@ impl Ctx {
 
     /// Get the handler for a running module (returns None if module not running)
     pub async fn get_handler(&self, module_type: Type) -> Option<StreamHandler> {
-        let module_lock = match module_type {
-            Type::Llm => self.llm_module.read().await,
-            Type::Web => self.web_module.read().await,
-        };
-
-        module_lock.as_ref().map(|state| state.handler.clone())
+        match module_type {
+            Type::Llm => {
+                let module_lock = self.llm_module.read().await;
+                module_lock.as_ref().map(|state| state.base.handler.clone())
+            }
+            Type::Web => {
+                let module_lock = self.web_module.read().await;
+                module_lock.as_ref().map(|state| state.base.handler.clone())
+            }
+        }
     }
 
     /// Get both module handlers if both are running

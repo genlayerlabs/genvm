@@ -110,7 +110,11 @@ class ManagerHandle(ya_test_runner.exec.service.Handle):
 
 	async def interrupt(self) -> None:
 		if self._process is not None:
-			self._process.terminate()
+			try:
+				self._process.terminate()
+			except Exception:
+				pass
+
 			try:
 				await asyncio.wait_for(self._process.wait(), timeout=5)
 			except asyncio.TimeoutError:
@@ -158,6 +162,7 @@ class ManagerService(ya_test_runner.exec.service.Service):
 			stdin=asyncio.subprocess.DEVNULL,
 			stdout=asyncio.subprocess.PIPE if use_pipe else asyncio.subprocess.DEVNULL,
 			stderr=asyncio.subprocess.PIPE if use_pipe else asyncio.subprocess.DEVNULL,
+			start_new_session=True,
 		)
 
 		if use_pipe:

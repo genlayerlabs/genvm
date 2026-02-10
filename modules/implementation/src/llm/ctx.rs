@@ -16,7 +16,6 @@ pub struct VMData {
 }
 
 pub struct CtxPart {
-    pub dflt: Arc<scripting::CtxPart>,
     pub providers: Arc<BTreeMap<String, Box<dyn providers::Provider + Send + Sync>>>,
     pub metrics: sync::DArc<super::Metrics>,
 }
@@ -26,6 +25,7 @@ impl mlua::UserData for CtxPart {}
 impl CtxPart {
     pub async fn exec_prompt_in_provider(
         &self,
+        dflt: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
         provider_id: &str,
@@ -46,15 +46,15 @@ impl CtxPart {
 
         let res = match format {
             prompt::ExtendedOutputFormat::Text => provider
-                .exec_prompt_text(&self.dflt, prompt, model)
+                .exec_prompt_text(dflt, prompt, model)
                 .await
                 .map(|resp| resp.map(llm_iface::PromptAnswerData::Text)),
             prompt::ExtendedOutputFormat::JSON => provider
-                .exec_prompt_json(&self.dflt, prompt, model)
+                .exec_prompt_json(dflt, prompt, model)
                 .await
                 .map(|resp| resp.map(llm_iface::PromptAnswerData::Object)),
             prompt::ExtendedOutputFormat::Bool => provider
-                .exec_prompt_bool_reason(&self.dflt, prompt, model)
+                .exec_prompt_bool_reason(dflt, prompt, model)
                 .await
                 .map(|resp| resp.map(llm_iface::PromptAnswerData::Bool)),
         };
@@ -66,7 +66,7 @@ impl CtxPart {
                 mode:? = format,
                 provider_id = provider_id,
                 error:ah = err,
-                genvm_id = self.dflt.hello.genvm_id;
+                genvm_id = dflt.hello.genvm_id;
                 "prompt execution error"
             );
         })
@@ -85,16 +85,24 @@ async fn exec_prompt_in_provider(
     vm: mlua::Lua,
     args: (mlua::Table, mlua::Value),
 ) -> Result<mlua::Value, mlua::Error> {
-    let (zelf, args) = args;
-    let zelf: mlua::UserDataRef<Arc<CtxPart>> = zelf.get("__ctx_llm")?;
+    let (table, args) = args;
+    let ctx: mlua::UserDataRef<scripting::LuaDArc<CtxPart>> = table.get("__ctx_llm")?;
+    let dflt: mlua::UserDataRef<scripting::LuaDArc<scripting::CtxPart>> =
+        table.get("__ctx_dflt")?;
 
     let args: Args = vm
         .from_value(args)
         .with_context(|| "deserializing arguments")
         .map_err(scripting::anyhow_to_lua_error)?;
 
-    let res = zelf
-        .exec_prompt_in_provider(&args.prompt, &args.model, &args.provider, args.format)
+    let res = ctx
+        .exec_prompt_in_provider(
+            &dflt,
+            &args.prompt,
+            &args.model,
+            &args.provider,
+            args.format,
+        )
         .await
         .with_context(|| "running in provider")
         .map_err(scripting::anyhow_to_lua_error)?;

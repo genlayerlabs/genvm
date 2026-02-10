@@ -148,15 +148,26 @@ impl std::error::Error for ModuleError {}
 
 pub type ModuleResult<T> = anyhow::Result<T>;
 
+pub trait WithGenVMId {
+    fn genvm_id(&self) -> genvm_modules_interfaces::GenVMId;
+}
+
 pub trait MessageHandler<T, R>: Sync + Send {
     fn handle(&self, v: T) -> impl std::future::Future<Output = ModuleResult<R>> + Send;
     fn cleanup(&self) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
 }
 
 pub trait MessageHandlerProvider<T, R>: Sync + Send {
-    fn new_handler(
+    type Ctx: WithGenVMId + Send + Sync + 'static;
+
+    fn create_execution_context(
         &self,
         hello: genvm_modules_interfaces::GenVMHello,
+    ) -> anyhow::Result<genvm_common::sync::DArc<Self::Ctx>>;
+
+    fn new_handler(
+        &self,
+        ctx: genvm_common::sync::DArc<Self::Ctx>,
     ) -> impl std::future::Future<Output = anyhow::Result<impl MessageHandler<T, R>>> + Send;
 }
 
@@ -273,19 +284,19 @@ where
     Ok(Some(genvm_hello))
 }
 
-async fn loop_one_impl<T, R, S>(
-    handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
+async fn loop_one_impl<T, R, S, P: MessageHandlerProvider<T, R>>(
+    handler_provider: Arc<P>,
     stream: &mut S,
-    hello: genvm_modules_interfaces::GenVMHello,
+    exec_ctx: sync::DArc<P::Ctx>,
 ) -> anyhow::Result<()>
 where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    let genvm_id = hello.genvm_id;
+    let genvm_id = exec_ctx.genvm_id();
 
-    let mut handler = handler_provider.new_handler(hello).await?;
+    let mut handler = handler_provider.new_handler(exec_ctx).await?;
 
     let res = loop_one_inner(&mut handler, stream, genvm_id).await;
 
@@ -296,10 +307,11 @@ where
     res
 }
 
-pub async fn handle_stream<T, R, S>(
-    handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
+pub async fn handle_stream<T, R, S, P: MessageHandlerProvider<T, R>>(
+    handler_provider: Arc<P>,
     mut stream: S,
     stream_type: &str,
+    exec_ctx: Option<sync::DArc<P::Ctx>>,
 ) where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
@@ -319,11 +331,23 @@ pub async fn handle_stream<T, R, S>(
 
     log_trace!(hello:serde = hello; "read hello");
 
-    let genvm_id = hello.genvm_id;
+    let exec_ctx = if let Some(ctx) = exec_ctx {
+        ctx
+    } else {
+        match handler_provider.create_execution_context(hello) {
+            Ok(ctx) => ctx,
+            Err(e) => {
+                log_error!(error:ah = &e; "failed to create execution context");
+                return;
+            }
+        }
+    };
+
+    let genvm_id = exec_ctx.genvm_id();
     GENVM_ID
         .scope(genvm_id, async {
             log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "peer accepted");
-            if let Err(e) = loop_one_impl(handler_provider, &mut stream, hello).await {
+            if let Err(e) = loop_one_impl(handler_provider, &mut stream, exec_ctx).await {
                 log_error_into!(&LoggerWithId, error:ah = &e, genvm_id:id = genvm_id.0; "internal loop error");
             }
             log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "peer done");
@@ -331,32 +355,32 @@ pub async fn handle_stream<T, R, S>(
         .await;
 }
 
-async fn loop_one<T, R>(
-    handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
+async fn loop_one<T, R, P: MessageHandlerProvider<T, R>>(
+    handler_provider: Arc<P>,
     stream: tokio::net::TcpStream,
 ) where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
 {
-    handle_stream(handler_provider, stream, "tcp").await;
+    handle_stream(handler_provider, stream, "tcp", None).await;
 }
 
-async fn loop_one_unix<T, R>(
-    handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
+async fn loop_one_unix<T, R, P: MessageHandlerProvider<T, R>>(
+    handler_provider: Arc<P>,
     stream: tokio::net::UnixStream,
 ) where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
 {
-    handle_stream(handler_provider, stream, "unix").await;
+    handle_stream(handler_provider, stream, "unix", None).await;
 }
 
 const UNIX_PREFIX: &str = "unix://";
 
-pub async fn run_loop<T, R>(
+pub async fn run_loop<T, R, P: MessageHandlerProvider<T, R> + 'static>(
     bind_address: Option<String>,
     cancel: Arc<genvm_common::cancellation::Token>,
-    handler_provider: Arc<impl MessageHandlerProvider<T, R> + 'static>,
+    handler_provider: Arc<P>,
 ) -> anyhow::Result<()>
 where
     T: serde::de::DeserializeOwned + 'static,
@@ -376,10 +400,10 @@ where
     }
 }
 
-async fn run_loop_tcp<T, R>(
+async fn run_loop_tcp<T, R, P: MessageHandlerProvider<T, R> + 'static>(
     bind_address: &str,
     cancel: Arc<genvm_common::cancellation::Token>,
-    handler_provider: Arc<impl MessageHandlerProvider<T, R> + 'static>,
+    handler_provider: Arc<P>,
 ) -> anyhow::Result<()>
 where
     T: serde::de::DeserializeOwned + 'static,
@@ -409,10 +433,10 @@ where
     }
 }
 
-async fn run_loop_unix<T, R>(
+async fn run_loop_unix<T, R, P: MessageHandlerProvider<T, R> + 'static>(
     socket_path: &str,
     cancel: Arc<genvm_common::cancellation::Token>,
-    handler_provider: Arc<impl MessageHandlerProvider<T, R> + 'static>,
+    handler_provider: Arc<P>,
 ) -> anyhow::Result<()>
 where
     T: serde::de::DeserializeOwned + 'static,

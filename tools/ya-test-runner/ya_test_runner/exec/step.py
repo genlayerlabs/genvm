@@ -82,9 +82,7 @@ def optimize_steps(steps: list[Step]) -> list[Step]:
 				has_effect[last_cwd_idx] = True
 			for k, (idx, _v) in last_env.items():
 				has_effect[idx] = True
-		elif isinstance(step, MkDir):
-			has_effect[i] = True
-		elif isinstance(step, Python):
+		elif isinstance(step, (MkDir, Python)):
 			has_effect[i] = True
 		else:
 			raise ValueError(f'Unknown step type: {step!r}')

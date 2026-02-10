@@ -53,6 +53,9 @@ M.check_url = function(url)
 	end
 
 	lib.log {
+		level = "debug",
+		message = "checking url",
+		schema = split_url.schema,
 		always_allow_hosts = M.rs.config.always_allow_hosts,
 		host = split_url.host,
 	}
@@ -79,6 +82,8 @@ M.check_url = function(url)
 	local tld = string.sub(split_url.host, from + 1)
 
 	lib.log{
+		level = "debug",
+		message = "detected TLD",
 		detected_tld = tld,
 		host = split_url.host,
 		from = from,

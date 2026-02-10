@@ -153,7 +153,8 @@ class IntegrationTestCase(ya_test_runner.test.Case):
 				max_attempts=max_attempts,
 			)
 			if is_benchmark:
-				for i in range(20):
+				for i in range(10):
+					steps.append(CheckInterruptedStep())
 					steps.append(ya_test_runner.test.BenchMeasureStep())
 					steps.append(cur_step)
 				steps.append(ya_test_runner.test.BenchCollectStep(local_ctx.shared.printer))
@@ -161,6 +162,21 @@ class IntegrationTestCase(ya_test_runner.test.Case):
 				steps.append(cur_step)
 
 		return steps
+
+
+class CheckInterruptedStep(ya_test_runner.exec.step.Python):
+	def to_str(self):
+		return '<check interrupted>'
+
+	async def run(self, previous_results: list[typing.Any]):
+		if local_ctx.shared.is_interrupted:
+			raise ya_test_runner.test.FinishedEarlyException(
+				ya_test_runner.test.Result(
+					passed=False,
+					context={'reason': 'interrupted'},
+					elapsed_seconds=0,
+				)
+			)
 
 
 class IntegrationSkipStep(ya_test_runner.exec.step.Python):
@@ -303,7 +319,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					elapsed_seconds=0,
 				)
 
-			if attempt + 1 >= self._max_attempts:
+			if local_ctx.shared.is_interrupted or attempt + 1 >= self._max_attempts:
 				# Raise FinishedEarlyException to stop subsequent steps
 				raise ya_test_runner.test.FinishedEarlyException(
 					result=ya_test_runner.test.Result(

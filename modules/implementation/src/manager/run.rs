@@ -20,12 +20,13 @@ async fn spawn_module_relay(
     handler: super::modules::StreamHandler,
     genvm_id: GenVMId,
     module_name: &'static str,
+    exec_ctx: sync::DArc<super::execution_context::ExecutionContext>,
 ) {
     log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0, module = module_name; "relay starting");
 
     match parent_fd.into_async_fd() {
         Ok(stream) => {
-            handler(Box::new(stream)).await;
+            handler(Box::new(stream), Some(exec_ctx)).await;
         }
         Err(e) => {
             log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, module = module_name, error:err = e; "failed to create async stream");
@@ -73,6 +74,7 @@ struct SingleGenVMContext {
 
     process_handle: tokio::sync::Mutex<tokio::process::Child>,
     all_permits: crossbeam::atomic::AtomicCell<Option<Box<dyn std::any::Any + Send + Sync>>>,
+    _execution_context: Option<sync::DArc<super::execution_context::ExecutionContext>>,
 }
 
 struct PermitsData {
@@ -217,7 +219,7 @@ impl Ctx {
                 }
             }
 
-            log_warn_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "GenVM process did not terminate gracefully, sending SIGKILL");
+            log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "GenVM process did not terminate gracefully, sending SIGKILL");
         }
 
         let _ = child.start_kill();
@@ -629,6 +631,25 @@ pub async fn start_genvm(
         None
     };
 
+    let genvm_id = GenVMId(
+        full_ctx
+            .run_ctx
+            .next_genvm_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+    );
+
+    // Create execution context if modules are needed
+    let execution_context = if req.needs_modules() {
+        let host_data: genvm_modules_interfaces::HostData = serde_json::from_str(&req.host_data)?;
+        let hello = Arc::new(genvm_modules_interfaces::GenVMHello {
+            genvm_id,
+            host_data,
+        });
+        Some(full_ctx.mod_ctx.create_execution_context(hello).await?)
+    } else {
+        None
+    };
+
     let version = full_ctx
         .ver_ctx
         .get_version(req.major, req.timestamp)
@@ -636,11 +657,6 @@ pub async fn start_genvm(
         .ok_or_else(|| anyhow::anyhow!("no compatible version found for major {}", req.major))?;
 
     let ctx = full_ctx.into_gep(|x| &x.run_ctx);
-
-    let genvm_id = GenVMId(
-        ctx.next_genvm_id
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-    );
 
     let permits = if req.needs_modules() {
         ctx.permits.clone().acquire_many_owned(2).await?
@@ -711,6 +727,11 @@ pub async fn start_genvm(
     // Create socketpairs and spawn relays for modules if needed
     let module_child_fds: Option<(FdWrapper, FdWrapper)> =
         if let Some((llm_handler, web_handler)) = module_handlers {
+            let exec_ctx = execution_context
+                .as_ref()
+                .expect("execution context required when modules are running")
+                .clone();
+
             // Create socketpairs
             let (llm_parent, llm_child) = FdWrapper::socketpair()?;
             let (web_parent, web_child) = FdWrapper::socketpair()?;
@@ -729,8 +750,20 @@ pub async fn start_genvm(
             proc.arg(format!("--module-web=fd://{}", web_fd));
 
             // Spawn relay tasks (they'll start after we spawn the child)
-            tokio::spawn(spawn_module_relay(llm_parent, llm_handler, genvm_id, "llm"));
-            tokio::spawn(spawn_module_relay(web_parent, web_handler, genvm_id, "web"));
+            tokio::spawn(spawn_module_relay(
+                llm_parent,
+                llm_handler,
+                genvm_id,
+                "llm",
+                exec_ctx.clone(),
+            ));
+            tokio::spawn(spawn_module_relay(
+                web_parent,
+                web_handler,
+                genvm_id,
+                "web",
+                exec_ctx,
+            ));
 
             // Keep child FDs alive until after spawn
             Some((llm_child, web_child))
@@ -814,6 +847,7 @@ pub async fn start_genvm(
         log_sink,
 
         all_permits: crossbeam::atomic::AtomicCell::new(Some(Box::new(all_resources))),
+        _execution_context: execution_context,
     });
 
     if let Some(stdout) = stdout {

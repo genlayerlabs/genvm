@@ -15,15 +15,25 @@ pub use ctx::filters;
 pub use ctx::CtxPart;
 pub use ctx::Metrics;
 
-pub type CtxCreator<R> = dyn Fn(&mlua::Lua, &mlua::Table, &Arc<genvm_modules_interfaces::GenVMHello>) -> anyhow::Result<R>
-    + Send
-    + Sync;
+pub struct LuaDArc<T: 'static>(pub DArc<T>);
 
-pub struct UserVM<T, R> {
+impl<T: Send + Sync + 'static> mlua::UserData for LuaDArc<T> {}
+
+impl<T: 'static> std::ops::Deref for LuaDArc<T> {
+    type Target = DArc<T>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+pub type CtxCreator<R, E> =
+    dyn Fn(&mlua::Lua, &mlua::Table, &sync::DArc<E>) -> anyhow::Result<R> + Send + Sync;
+
+pub struct UserVM<T, R, E: 'static> {
     pub vm: mlua::Lua,
     pub data: T,
 
-    ctx_creator: Box<CtxCreator<R>>,
+    ctx_creator: Box<CtxCreator<R, E>>,
 }
 
 pub fn anyhow_to_lua_error(e: anyhow::Error) -> mlua::Error {
@@ -39,13 +49,11 @@ pub fn anyhow_to_lua_error(e: anyhow::Error) -> mlua::Error {
     }
 }
 
-pub fn create_default_ctx(
+pub fn create_ctx_part(
     hello: &Arc<genvm_modules_interfaces::GenVMHello>,
-    base_config: sync::DArc<common::ModuleBaseConfig>,
+    base_config: &sync::DArc<common::ModuleBaseConfig>,
     metrics: sync::DArc<Metrics>,
-    vm: &mlua::Lua,
-    table: &mlua::Table,
-) -> anyhow::Result<std::sync::Arc<ctx::CtxPart>> {
+) -> anyhow::Result<ctx::CtxPart> {
     let mut sign_vars = BTreeMap::new();
 
     sign_vars.insert(
@@ -59,7 +67,7 @@ pub fn create_default_ctx(
         }
     }
 
-    let my_ctx_arc = Arc::new(ctx::CtxPart {
+    Ok(ctx::CtxPart {
         hello: hello.clone(),
         client: common::create_client()?,
         node_address: hello.host_data.node_address.clone(),
@@ -67,13 +75,17 @@ pub fn create_default_ctx(
         sign_headers: base_config.signer_headers.clone(),
         sign_url: base_config.signer_url.clone(),
         metrics,
-    });
+    })
+}
 
-    let my_ctx = vm.create_userdata(my_ctx_arc.clone())?;
-
+pub fn setup_lua_default_ctx(
+    ctx: sync::DArc<ctx::CtxPart>,
+    vm: &mlua::Lua,
+    table: &mlua::Table,
+) -> anyhow::Result<()> {
+    let hello_value = vm.to_value(&ctx.hello)?;
+    let my_ctx = vm.create_userdata(LuaDArc(ctx))?;
     table.set("__ctx_dflt", my_ctx)?;
-
-    let hello_value = vm.to_value(hello)?;
     let hello_value = hello_value
         .as_table()
         .ok_or_else(|| mlua::Error::external("expected hello value to be a table"))?;
@@ -83,25 +95,34 @@ pub fn create_default_ctx(
         table.set(k, v)?;
     }
 
-    Ok(my_ctx_arc)
+    Ok(())
 }
 
-impl<T, R> UserVM<T, R> {
-    pub fn create_ctx(
-        &self,
-        hello: &Arc<genvm_modules_interfaces::GenVMHello>,
-    ) -> anyhow::Result<(R, mlua::Value)> {
-        let ctx = self.vm.create_table()?;
+pub fn create_default_ctx(
+    hello: &Arc<genvm_modules_interfaces::GenVMHello>,
+    base_config: sync::DArc<common::ModuleBaseConfig>,
+    metrics: sync::DArc<Metrics>,
+    vm: &mlua::Lua,
+    table: &mlua::Table,
+) -> anyhow::Result<sync::DArc<ctx::CtxPart>> {
+    let ctx_part = sync::DArc::new(create_ctx_part(hello, &base_config, metrics)?);
+    setup_lua_default_ctx(ctx_part.clone(), vm, table)?;
+    Ok(ctx_part)
+}
 
-        let res = (self.ctx_creator)(&self.vm, &ctx, hello)?;
+impl<T, R, E> UserVM<T, R, E> {
+    pub fn create_ctx(&self, ctx: &sync::DArc<E>) -> anyhow::Result<(R, mlua::Value)> {
+        let table = self.vm.create_table()?;
 
-        Ok((res, mlua::Value::Table(ctx)))
+        let res = (self.ctx_creator)(&self.vm, &table, ctx)?;
+
+        Ok((res, mlua::Value::Table(table)))
     }
 
     pub async fn create<F>(
         mod_config: &common::ModuleBaseConfig,
         data_getter: impl FnOnce(mlua::Lua) -> F,
-        ctx_creator: Box<CtxCreator<R>>,
+        ctx_creator: Box<CtxCreator<R, E>>,
     ) -> anyhow::Result<Self>
     where
         F: Future<Output = anyhow::Result<T>>,
