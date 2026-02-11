@@ -16,7 +16,7 @@ use super::CtxPart;
 
 impl CtxPart {
     async fn request(&self, vm: &mlua::Lua, req: Request) -> anyhow::Result<mlua::Value> {
-        log_trace!(request:? = req; "received request");
+        log_trace!(request:serde = req; "received request");
 
         let is_json = req.json;
         let error_on_status = req.error_on_status;

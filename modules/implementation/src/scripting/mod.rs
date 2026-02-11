@@ -346,7 +346,7 @@ pub async fn send_request_get_lua_compatible_response_json(
         }
     };
 
-    log_trace!(body:? = body; "read body");
+    log_trace!(body:serde = body; "read body");
 
     if error_on_status && status != 200 {
         return Err(ModuleError {
