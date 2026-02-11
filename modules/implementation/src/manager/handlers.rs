@@ -64,13 +64,19 @@ pub async fn handle_genvm_run(
     data: &[u8],
 ) -> Result<impl warp::Reply> {
     let data = calldata::decode(data)?;
-    let modules_lock = Ctx::get_module_locks(ctx.gep(|x| &x.mod_ctx)).await;
-
-    if modules_lock.is_none() {
-        log_warn!("modules are not running, but are most likely required for genvm_run");
-    }
-
     let res: super::run::Request = calldata::from_value(data)?;
+
+    let modules_lock = if res.needs_modules() {
+        let lock = Ctx::get_module_locks(ctx.gep(|x| &x.mod_ctx)).await;
+        if lock.is_none() {
+            anyhow::bail!(
+                "modules are required but not running (is_sync=false with 'n' permission)"
+            );
+        }
+        lock
+    } else {
+        None
+    };
 
     let (id, _) = super::run::start_genvm(ctx, res, Box::new(modules_lock)).await?;
 
@@ -275,7 +281,7 @@ fn is_sub_error(err: &str, sub_err_of: &str) -> bool {
     if !err.starts_with(sub_err_of) {
         return false;
     }
-    return sub_err_of.len() == err.len() || err.as_bytes()[sub_err_of.len()] == b' ';
+    sub_err_of.len() == err.len() || err.as_bytes()[sub_err_of.len()] == b' '
 }
 
 fn describe_vm_error(error: &str) -> Option<&'static str> {

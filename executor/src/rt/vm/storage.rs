@@ -1,3 +1,4 @@
+use std::mem::MaybeUninit;
 use std::ops::DerefMut;
 
 use const_lru::ConstLru;
@@ -73,7 +74,11 @@ impl Limiter {
                     }
                 },
             )
-            .map_err(|_| rt::errors::VMError::oos(None))?;
+            .map_err(|current| {
+                anyhow::anyhow!(rt::errors::VMError::oos(Some(anyhow::anyhow!(
+                    "consuming {amount} storage pages (available: {current})"
+                ))))
+            })?;
 
         Ok(())
     }
@@ -214,8 +219,9 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
             )?;
         }
 
-        let mut put_to_cache: [(PageID, [u8; 32]); STORAGE_CACHE_SIZE / 16] =
-            unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+        let mut put_to_cache: [MaybeUninit<(PageID, [u8; 32])>; STORAGE_CACHE_SIZE / 16] =
+            // SAFETY: MaybeUninit does not require initialization
+            unsafe { MaybeUninit::uninit().assume_init() };
         let mut put_to_cache_count = 0;
 
         for page_idx in start_page..=end_page {
@@ -247,13 +253,14 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
                 let mut page_data = [0u8; 32];
                 page_data.copy_from_slice(&buf[src_offset..src_offset + 32]);
 
-                put_to_cache[put_to_cache_count] = (page_id, page_data);
+                put_to_cache[put_to_cache_count].write((page_id, page_data));
                 put_to_cache_count = (put_to_cache_count + 1) % put_to_cache.len();
             }
         }
 
         for i in 0..put_to_cache_count {
-            let (page_id, page_data) = &put_to_cache[i];
+            // SAFETY: elements 0..put_to_cache_count have been initialized above
+            let (page_id, page_data) = unsafe { put_to_cache[i].assume_init_ref() };
             self.cache.insert(*page_id, *page_data);
         }
 

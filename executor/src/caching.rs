@@ -5,10 +5,16 @@ use std::path::PathBuf;
 pub fn get_cache_dir(base_path: &str) -> Result<PathBuf> {
     let base_path = std::path::Path::new(base_path);
 
-    std::fs::create_dir_all(base_path).with_context(|| "creating cache dir")?;
+    std::fs::create_dir_all(base_path)
+        .with_context(|| format!("creating cache directory at {}", base_path.display()))?;
 
     let test_path = base_path.join(".test");
-    std::fs::write(test_path, "").with_context(|| "creating test file")?;
+    std::fs::write(&test_path, "").with_context(|| {
+        format!(
+            "writing test file to verify cache dir at {}",
+            test_path.display()
+        )
+    })?;
     Ok(base_path.to_owned())
 }
 

@@ -155,7 +155,7 @@ pub mod web {
     use serde_derive::{Deserialize, Serialize};
 
     pub use genlayer_sdk::abi::gl_call::web_iface::{
-        HeaderData, RenderPayload, RequestMethod, RequestPayload, Response,
+        RenderPayload, RequestMethod, RequestPayload, Response,
     };
 
     #[derive(Serialize, Deserialize)]

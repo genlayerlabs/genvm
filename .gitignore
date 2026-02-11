@@ -36,4 +36,4 @@ __pycache__
 
 # perf
 perf.data*
-core.*
+core.[0-9]*

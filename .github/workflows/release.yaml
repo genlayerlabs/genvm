@@ -180,7 +180,7 @@ jobs:
             --default-download=false
       - name: Run stable tests
         run: |
-          nix develop .#mock-tests --command ya-test-runner --test-tags "$(cat tests/presets/release.txt)" run
+          nix develop .#mock-tests --command ya-test-runner --test-tags "$(cat tests/presets/release.txt)" run --genvm-reroute-to ${{ needs.gen-tag.outputs.tag }}
 
   test-macos-arm64:
     needs:
@@ -226,7 +226,7 @@ jobs:
           python3 -m venv .venv
           source .venv/bin/activate
           pip install ./tools/ya-test-runner
-          ya-test-runner --test-tags "$(cat tests/presets/release.txt)" run
+          ya-test-runner --test-tags "$(cat tests/presets/release.txt)" run --genvm-reroute-to ${{ needs.gen-tag.outputs.tag }}
 
   release-publish:
     needs:
@@ -274,6 +274,17 @@ jobs:
           git tag ${{ needs.gen-tag.outputs.tag }} && \
           git push origin ${{ needs.gen-tag.outputs.tag }}
 
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          prev_tag=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || echo "")
+          new_tag="${{ needs.gen-tag.outputs.tag }}"
+          if [ -n "$prev_tag" ]; then
+            python3 support/ci/make-relase-notes.py "${prev_tag}..${new_tag}" > release-notes.md
+          else
+            echo "Initial release" > release-notes.md
+          fi
+
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v2
@@ -288,9 +299,9 @@ jobs:
             genvm-macos-arm64-executor.tar.xz
           name: Release ${{ needs.gen-tag.outputs.tag }}
           tag_name: ${{ needs.gen-tag.outputs.tag }}
+          body_path: release-notes.md
           draft: false
           prerelease: false
-          generate_release_notes: true
 
   deploy-docs:
     needs:

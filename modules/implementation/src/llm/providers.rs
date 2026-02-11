@@ -902,6 +902,7 @@ mod tests {
     use crate::scripting;
 
     use super::super::{config, prompt};
+    use anyhow::Context;
     use genvm_common::sync;
     use genvm_common::templater;
 
@@ -982,10 +983,10 @@ mod tests {
         }"#;
     }
 
-    async fn do_test_text(conf: &str) {
+    async fn do_test_text(conf: &str) -> anyhow::Result<()> {
         common::tests::setup();
 
-        let backend: serde_json::Value = serde_json::from_str(conf).unwrap();
+        let backend: serde_json::Value = serde_json::from_str(conf)?;
         let mut vars = HashMap::new();
         for (mut name, value) in std::env::vars() {
             name.insert_str(0, "ENV[");
@@ -994,13 +995,12 @@ mod tests {
             vars.insert(name, value);
         }
         let backend =
-            genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)
-                .unwrap();
-        let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
+            genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)?;
+        let backend: config::BackendConfig = serde_json::from_value(backend)?;
         let provider = backend.to_provider();
 
         let ctx = scripting::CtxPart {
-            client: common::create_client().unwrap(),
+            client: common::create_client()?,
             metrics: sync::DArc::new(scripting::Metrics::default()),
             node_address: "test_node".to_owned(),
             sign_headers: std::sync::Arc::new(BTreeMap::new()),
@@ -1028,7 +1028,7 @@ mod tests {
                     use_max_completion_tokens: true,
                     seed: Some(42),
                 },
-                backend.script_config.models.first_key_value().unwrap().0,
+                backend.script_config.models.first_key_value().context("no models configured")?.0,
             )
             .await;
 
@@ -1036,20 +1036,17 @@ mod tests {
             Ok(res) => res,
             Err(e) if is_overloaded(&e) => {
                 eprintln!("Overloaded, skipping test: {e}");
-                return;
+                return Ok(());
             }
-            Err(e) => {
-                panic!("test failed: {e}");
-            }
+            Err(e) => return Err(e),
         };
 
-        res.tokens
-            .sanity_check()
-            .expect("tokens sanity check failed");
+        res.tokens.sanity_check()?;
 
         let text = res.result.trim().to_lowercase();
 
-        assert_eq!(text, "yes");
+        anyhow::ensure!(text == "yes", "expected 'yes', got '{text}'");
+        Ok(())
     }
 
     const BIG_PROMPT: &str = r#"
@@ -1071,10 +1068,10 @@ mod tests {
         Your challenge: Craft a portrait that is both gritty and graceful. Acknowledge its maligned status but give it a sense of agency, intelligence, and undeniable belonging to the city's hidden pulse.
     "#;
 
-    async fn do_test_text_out_of_tokens(conf: &str) {
+    async fn do_test_text_out_of_tokens(conf: &str) -> anyhow::Result<()> {
         common::tests::setup();
 
-        let backend: serde_json::Value = serde_json::from_str(conf).unwrap();
+        let backend: serde_json::Value = serde_json::from_str(conf)?;
         let mut vars = HashMap::new();
         for (mut name, value) in std::env::vars() {
             name.insert_str(0, "ENV[");
@@ -1083,13 +1080,12 @@ mod tests {
             vars.insert(name, value);
         }
         let backend =
-            genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)
-                .unwrap();
-        let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
+            genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)?;
+        let backend: config::BackendConfig = serde_json::from_value(backend)?;
         let provider = backend.to_provider();
 
         let ctx = scripting::CtxPart {
-            client: common::create_client().unwrap(),
+            client: common::create_client()?,
             metrics: sync::DArc::new(scripting::Metrics::default()),
             node_address: "test_node".to_owned(),
             sign_headers: std::sync::Arc::new(BTreeMap::new()),
@@ -1117,7 +1113,12 @@ mod tests {
                     use_max_completion_tokens: true,
                     seed: Some(123),
                 },
-                backend.script_config.models.first_key_value().unwrap().0,
+                backend
+                    .script_config
+                    .models
+                    .first_key_value()
+                    .context("no models configured")?
+                    .0,
             )
             .await;
 
@@ -1125,26 +1126,23 @@ mod tests {
             Ok(res) => res,
             Err(e) if is_overloaded(&e) => {
                 eprintln!("Overloaded, skipping test: {e}");
-                return;
+                return Ok(());
             }
-            Err(e) => {
-                panic!("test failed: {e}");
-            }
+            Err(e) => return Err(e),
         };
 
-        res.tokens
-            .sanity_check()
-            .expect("tokens sanity check failed");
+        res.tokens.sanity_check()?;
 
         let text = res.result.trim().to_lowercase();
 
         println!("result is {text}");
+        Ok(())
     }
 
-    async fn do_test_json(conf: &str) {
+    async fn do_test_json(conf: &str) -> anyhow::Result<()> {
         common::tests::setup();
 
-        let backend: serde_json::Value = serde_json::from_str(conf).unwrap();
+        let backend: serde_json::Value = serde_json::from_str(conf)?;
         let mut vars = HashMap::new();
         for (mut name, value) in std::env::vars() {
             name.insert_str(0, "ENV[");
@@ -1153,25 +1151,24 @@ mod tests {
             vars.insert(name, value);
         }
         let backend =
-            genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)
-                .unwrap();
-        let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
+            genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)?;
+        let backend: config::BackendConfig = serde_json::from_value(backend)?;
 
         if !backend
             .script_config
             .models
             .first_key_value()
-            .unwrap()
+            .context("no models configured")?
             .1
             .supports_json
         {
-            return;
+            return Ok(());
         }
 
         let provider = backend.to_provider();
 
         let ctx = scripting::CtxPart {
-            client: common::create_client().unwrap(),
+            client: common::create_client()?,
             metrics: sync::DArc::new(scripting::Metrics::default()),
             node_address: "test_node".to_owned(),
             sign_headers: std::sync::Arc::new(BTreeMap::new()),
@@ -1200,7 +1197,12 @@ mod tests {
                     use_max_completion_tokens: true,
                     seed: Some(456),
                 },
-                backend.script_config.models.first_key_value().unwrap().0,
+                backend
+                    .script_config
+                    .models
+                    .first_key_value()
+                    .context("no models configured")?
+                    .0,
             )
             .await;
         eprintln!("{res:?}");
@@ -1209,16 +1211,12 @@ mod tests {
             Ok(res) => res,
             Err(e) if is_overloaded(&e) => {
                 eprintln!("Overloaded, skipping test: {e}");
-                return;
+                return Ok(());
             }
-            Err(e) => {
-                panic!("test failed: {e}");
-            }
+            Err(e) => return Err(e),
         };
 
-        res.tokens
-            .sanity_check()
-            .expect("tokens sanity check failed");
+        res.tokens.sanity_check()?;
 
         let as_val = serde_json::Value::Object(res.result);
 
@@ -1237,16 +1235,19 @@ mod tests {
         .into_iter()
         .flatten()
         {
-            assert!((0..=100).contains(&potential));
-            return;
+            anyhow::ensure!(
+                (0..=100).contains(&potential),
+                "result {potential} not in 0..=100"
+            );
+            return Ok(());
         }
-        unreachable!("no result found in {as_val:?}");
+        anyhow::bail!("no result found in {as_val:?}");
     }
 
-    async fn do_test_json_out_of_tokens(conf: &str) {
+    async fn do_test_json_out_of_tokens(conf: &str) -> anyhow::Result<()> {
         common::tests::setup();
 
-        let backend: serde_json::Value = serde_json::from_str(conf).unwrap();
+        let backend: serde_json::Value = serde_json::from_str(conf)?;
         let mut vars = HashMap::new();
         for (mut name, value) in std::env::vars() {
             name.insert_str(0, "ENV[");
@@ -1255,25 +1256,24 @@ mod tests {
             vars.insert(name, value);
         }
         let backend =
-            genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)
-                .unwrap();
-        let backend: config::BackendConfig = serde_json::from_value(backend).unwrap();
+            genvm_common::templater::patch_json(&vars, backend, &templater::DOLLAR_UNFOLDER_RE)?;
+        let backend: config::BackendConfig = serde_json::from_value(backend)?;
 
         if !backend
             .script_config
             .models
             .first_key_value()
-            .unwrap()
+            .context("no models configured")?
             .1
             .supports_json
         {
-            return;
+            return Ok(());
         }
 
         let provider = backend.to_provider();
 
         let ctx = scripting::CtxPart {
-            client: common::create_client().unwrap(),
+            client: common::create_client()?,
             metrics: sync::DArc::new(scripting::Metrics::default()),
             node_address: "test_node".to_owned(),
             sign_headers: std::sync::Arc::new(BTreeMap::new()),
@@ -1302,7 +1302,12 @@ mod tests {
                     use_max_completion_tokens: true,
                     seed: Some(789),
                 },
-                backend.script_config.models.first_key_value().unwrap().0,
+                backend
+                    .script_config
+                    .models
+                    .first_key_value()
+                    .context("no models configured")?
+                    .0,
             )
             .await;
         eprintln!("{res:?}");
@@ -1311,16 +1316,32 @@ mod tests {
             Ok(res) => res,
             Err(e) if is_overloaded(&e) => {
                 eprintln!("Overloaded, skipping test: {e}");
-                return;
+                return Ok(());
             }
-            Err(e) => {
-                panic!("test failed: {e}");
-            }
+            Err(e) => return Err(e),
         };
 
-        res.tokens
-            .sanity_check()
-            .expect("tokens sanity check failed");
+        res.tokens.sanity_check()?;
+        Ok(())
+    }
+
+    async fn with_retries<F, Fut>(f: F) -> anyhow::Result<()>
+    where
+        F: Fn() -> Fut,
+        Fut: std::future::Future<Output = anyhow::Result<()>>,
+    {
+        const RETRIES: u32 = 3;
+        for attempt in 1..=RETRIES {
+            match f().await {
+                Ok(()) => return Ok(()),
+                Err(e) if attempt < RETRIES => {
+                    eprintln!("attempt {attempt}/{RETRIES} failed: {e:#}, retrying in 5s");
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
     }
 
     macro_rules! make_test {
@@ -1329,38 +1350,46 @@ mod tests {
                 use crate::common;
 
                 #[tokio::test]
-                async fn text() {
+                async fn text() -> anyhow::Result<()> {
                     let conf = super::conf::$conf;
-                    common::test_with_genvm_id(genvm_modules_interfaces::GenVMId(999), async {
-                        super::do_test_text(conf).await
+                    super::with_retries(|| {
+                        common::test_with_genvm_id(genvm_modules_interfaces::GenVMId(999), async {
+                            super::do_test_text(conf).await
+                        })
                     })
-                    .await;
+                    .await
                 }
                 #[tokio::test]
-                async fn json() {
+                async fn json() -> anyhow::Result<()> {
                     let conf = super::conf::$conf;
-                    common::test_with_genvm_id(genvm_modules_interfaces::GenVMId(999), async {
-                        super::do_test_json(conf).await
+                    super::with_retries(|| {
+                        common::test_with_genvm_id(genvm_modules_interfaces::GenVMId(999), async {
+                            super::do_test_json(conf).await
+                        })
                     })
-                    .await;
-                }
-
-                #[tokio::test]
-                async fn text_out_of_tokens() {
-                    let conf = super::conf::$conf;
-                    common::test_with_genvm_id(genvm_modules_interfaces::GenVMId(999), async {
-                        super::do_test_text_out_of_tokens(conf).await
-                    })
-                    .await;
+                    .await
                 }
 
                 #[tokio::test]
-                async fn json_out_of_tokens() {
+                async fn text_out_of_tokens() -> anyhow::Result<()> {
                     let conf = super::conf::$conf;
-                    common::test_with_genvm_id(genvm_modules_interfaces::GenVMId(999), async {
-                        super::do_test_json_out_of_tokens(conf).await
+                    super::with_retries(|| {
+                        common::test_with_genvm_id(genvm_modules_interfaces::GenVMId(999), async {
+                            super::do_test_text_out_of_tokens(conf).await
+                        })
                     })
-                    .await;
+                    .await
+                }
+
+                #[tokio::test]
+                async fn json_out_of_tokens() -> anyhow::Result<()> {
+                    let conf = super::conf::$conf;
+                    super::with_retries(|| {
+                        common::test_with_genvm_id(genvm_modules_interfaces::GenVMId(999), async {
+                            super::do_test_json_out_of_tokens(conf).await
+                        })
+                    })
+                    .await
                 }
             }
         };

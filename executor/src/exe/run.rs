@@ -54,31 +54,54 @@ pub struct Args {
         help = "r?w?s?c?n?, read/write/send messages/call contracts/spawn nondet"
     )]
     permissions: String,
+    #[clap(long, help = "override LLM module address from config")]
+    module_llm: Option<String>,
+    #[clap(long, help = "override web module address from config")]
+    module_web: Option<String>,
 }
 
-pub fn handle(args: Args, config: config::Config) -> Result<()> {
+pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
+    // Apply CLI overrides for module addresses
+    if let Some(llm_addr) = &args.module_llm {
+        config.modules.llm.address = llm_addr.clone();
+    }
+    if let Some(web_addr) = &args.module_web {
+        config.modules.web.address = web_addr.clone();
+    }
+
     // Read execution data from file path, stdin, or file descriptor
     let execution_data_bytes = if args.execution_data == "-" {
         let mut buffer = Vec::new();
-        std::io::stdin().read_to_end(&mut buffer)?;
+        std::io::stdin()
+            .read_to_end(&mut buffer)
+            .with_context(|| "reading execution data from stdin")?;
         buffer
     } else if let Some(fd_str) = args.execution_data.strip_prefix("fd://") {
-        let fd: i32 = fd_str.parse().context("invalid file descriptor number")?;
+        let fd: i32 = fd_str
+            .parse()
+            .with_context(|| format!("parsing file descriptor number from '{fd_str}'"))?;
         let mut file = unsafe { std::fs::File::from_raw_fd(fd) };
         let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
+        file.read_to_end(&mut buffer)
+            .with_context(|| format!("reading execution data from fd {fd}"))?;
         std::mem::drop(file);
         buffer
     } else {
-        std::fs::read(&args.execution_data)?
+        std::fs::read(&args.execution_data)
+            .with_context(|| format!("reading execution data from {}", args.execution_data))?
     };
 
-    let execution_data = calldata::decode(&execution_data_bytes)?;
-    let execution_data = calldata::from_value::<domain::ExecutionData>(execution_data)?;
+    let execution_data =
+        calldata::decode(&execution_data_bytes).with_context(|| "decoding execution data")?;
+    let execution_data = calldata::from_value::<domain::ExecutionData>(execution_data)
+        .with_context(|| "deserializing execution data")?;
     let message = &execution_data.message;
     let host_data = rt::parse_host_data(&execution_data)?;
 
-    let runtime = config.base.create_rt()?;
+    let runtime = config
+        .base
+        .create_rt()
+        .with_context(|| "creating tokio runtime")?;
 
     let (token, canceller) = genvm_common::cancellation::make();
 
@@ -127,7 +150,7 @@ pub fn handle(args: Args, config: config::Config) -> Result<()> {
     let rt = runtime.enter();
 
     let supervisor = genvm::create_supervisor(&config, host, host_data, shared_data, message)
-        .with_context(|| "creating supervisor")?;
+        .with_context(|| format!("creating supervisor for genvm_id {genvm_id}"))?;
 
     std::mem::drop(rt);
 

@@ -108,6 +108,9 @@ name = "anyhow"
 version = "1.0.98"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
+dependencies = [
+ "backtrace",
+]
 
 [[package]]
 name = "arbitrary"
@@ -413,7 +416,7 @@ checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
 name = "genlayer_sdk"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "arbitrary",
  "bytes",
@@ -438,6 +441,7 @@ dependencies = [
  "dashmap",
  "genlayer_sdk",
  "hex",
+ "libc",
  "num-bigint",
  "primitive-types",
  "regex",

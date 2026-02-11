@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import threading
 import traceback
+import unicodedata
 
 
 class Level(enum.Enum):
@@ -122,13 +123,36 @@ def _small_to_str(x) -> str:
 		if len(x) == 0:
 			return "''"
 		if "'" in x:
-			return repr(x)
-		return f"'{x}'"
+			return _to_safe_str(repr(x))
+		return f"'{_to_safe_str(x)}'"
+	if isinstance(x, bytes):
+		return _to_safe_str(repr(x))
 	if isinstance(x, collections.abc.Iterable) and len(x) == 0:
 		return '[]'
 	if isinstance(x, collections.abc.Mapping) and len(x) == 0:
 		return '{}'
 	return str(x)
+
+
+def _is_safe_char(c: str) -> bool:
+	if c in [' ', '\t']:
+		return True
+	cat = unicodedata.category(c)[0]
+	return cat in ['L', 'N', 'P', 'S']
+
+
+def _escape_char(c: str) -> str:
+	cp = ord(c)
+	if cp <= 0xFF:
+		return f'\\x{cp:02x}'
+	if cp <= 0xFFFF:
+		return f'\\u{cp:04x}'
+	return f'\\U{cp:08x}'
+
+
+def _to_safe_str(x: str) -> str:
+	as_arr = [c if _is_safe_char(c) else _escape_char(c) for c in x.rstrip()]
+	return ''.join(as_arr)
 
 
 class TextFormatter(Formatter, Sink):
@@ -149,7 +173,7 @@ class TextFormatter(Formatter, Sink):
 				if _is_small(v):
 					self.file.write(k)
 					self.file.write(': ')
-					self.file.write(str(v))
+					self.file.write(_small_to_str(v))
 					self.file.write('\n')
 				elif isinstance(v, collections.abc.Iterable) and _is_small(k):
 					self.file.write(f'{k}:\n')
@@ -161,11 +185,11 @@ class TextFormatter(Formatter, Sink):
 			if '\n' in data:
 				for line in data.splitlines():
 					self.file.write('  ' * ind)
-					self.file.write(line.rstrip())
+					self.file.write(_to_safe_str(line.rstrip()))
 					self.file.write('\n')
 			else:
 				self.file.write('  ' * ind)
-				self.file.write(repr(data))
+				self.file.write(_to_safe_str(repr(data)))
 				self.file.write('\n')
 		elif isinstance(data, collections.abc.Iterable):
 			for item in data:

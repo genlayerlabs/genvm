@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import aiohttp
 import typing
@@ -41,16 +42,52 @@ async def start_webdriver_service(
 	)
 
 
+_LOG_LEVEL_PRIORITY = {
+	'trace': 0,
+	'debug': 1,
+	'info': 2,
+	'warn': 3,
+	'warning': 3,
+	'error': 4,
+}
+
+
+async def _read_log_pipe(
+	stream: asyncio.StreamReader,
+	log_file: typing.IO[str],
+	logger: ya_test_runner.Formatter,
+) -> None:
+	while True:
+		line_bytes = await stream.readline()
+		if not line_bytes:
+			break
+		line = line_bytes.decode('utf-8', errors='replace').rstrip('\n')
+		log_file.write(line + '\n')
+		log_file.flush()
+		try:
+			parsed = json.loads(line)
+			level = parsed.get('level', '')
+			if _LOG_LEVEL_PRIORITY.get(level, -1) >= _LOG_LEVEL_PRIORITY['info']:
+				message = parsed.get('message', line)
+				extra = {k: v for k, v in parsed.items() if k not in ('level', 'message')}
+				fmt_level = ya_test_runner.Formatter.Level.from_str(level)
+				logger.log(fmt_level, f'[manager] {message}', **extra)
+		except (json.JSONDecodeError, ValueError):
+			logger.warning(f'[manager] {line}')
+
+
 class ManagerHandle(ya_test_runner.exec.service.Handle):
 	def __init__(
 		self,
 		port: int,
 		process: asyncio.subprocess.Process | None,
 		log_file: typing.IO[str] | None,
+		log_tasks: list[asyncio.Task] | None,
 	):
 		self._port = port
 		self._process = process
 		self._log_file = log_file
+		self._log_tasks = log_tasks
 
 	@property
 	def port(self) -> int:
@@ -73,12 +110,19 @@ class ManagerHandle(ya_test_runner.exec.service.Handle):
 
 	async def interrupt(self) -> None:
 		if self._process is not None:
-			self._process.terminate()
+			try:
+				self._process.terminate()
+			except Exception:
+				pass
+
 			try:
 				await asyncio.wait_for(self._process.wait(), timeout=5)
 			except asyncio.TimeoutError:
 				self._process.kill()
 				await self._process.wait()
+		if self._log_tasks is not None:
+			for task in self._log_tasks:
+				await task
 		if self._log_file is not None:
 			self._log_file.close()
 
@@ -99,7 +143,10 @@ class ManagerService(ya_test_runner.exec.service.Service):
 
 	async def start(self) -> ManagerHandle:
 		log_file = None
-		if self._log_path is not None:
+		log_tasks = None
+		use_pipe = self._log_path is not None
+
+		if use_pipe:
 			log_file = open(self._log_path, 'w')
 
 		port = get_manager_port(self._env)
@@ -113,11 +160,19 @@ class ManagerService(ya_test_runner.exec.service.Service):
 			self._reroute_to,
 			'--die-with-parent',
 			stdin=asyncio.subprocess.DEVNULL,
-			stdout=log_file if log_file else asyncio.subprocess.DEVNULL,
-			stderr=log_file if log_file else asyncio.subprocess.DEVNULL,
+			stdout=asyncio.subprocess.PIPE if use_pipe else asyncio.subprocess.DEVNULL,
+			stderr=asyncio.subprocess.PIPE if use_pipe else asyncio.subprocess.DEVNULL,
+			start_new_session=True,
 		)
 
-		handle = ManagerHandle(port, process, log_file)
+		if use_pipe:
+			logger = local_ctx.shared.logger
+			log_tasks = [
+				asyncio.create_task(_read_log_pipe(process.stdout, log_file, logger)),
+				asyncio.create_task(_read_log_pipe(process.stderr, log_file, logger)),
+			]
+
+		handle = ManagerHandle(port, process, log_file, log_tasks)
 
 		return handle
 

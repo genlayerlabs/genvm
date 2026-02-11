@@ -5,10 +5,8 @@ use wiggle::{GuestError, GuestMemory, GuestPtr};
 
 use genvm_common::*;
 
-use crate::wasi::{base, common::align_slice};
-use genvm_common::util::SharedBytes;
-
 use super::vfs;
+use crate::wasi::{base, common::align_slice};
 use std::collections::BTreeMap;
 
 pub struct Context {
@@ -137,7 +135,7 @@ enum FilesTrie {
         children: BTreeMap<String, Box<FilesTrie>>,
     },
     File {
-        data: SharedBytes,
+        data: bytes::Bytes,
     },
 }
 
@@ -182,7 +180,7 @@ impl Context {
         Ok(())
     }
 
-    pub fn map_file(&mut self, location: &str, contents: SharedBytes) -> anyhow::Result<()> {
+    pub fn map_file(&mut self, location: &str, contents: bytes::Bytes) -> anyhow::Result<()> {
         let mut location_patched = String::new();
         location_patched.reserve(location.len());
 
@@ -602,7 +600,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                 for iov in iovs.iter() {
                     let iov = iov?;
                     let iov = memory.read(iov)?;
-                    let remaining_len = contents.len_u32() - *pos;
+                    let remaining_len = contents.len() as u32 - *pos;
                     let len = iov.buf_len.min(remaining_len);
                     let cont_slice: &[u8] =
                         &contents.as_ref()[*pos as usize..(*pos + len) as usize];
@@ -789,9 +787,9 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                             }
                         } else {
                             let offset = offset as u64;
-                            let rem = contents.len_u32() - *pos;
+                            let rem = contents.len() as u32 - *pos;
                             if offset > rem as u64 {
-                                *pos = contents.len_u32();
+                                *pos = contents.len() as u32;
                             } else {
                                 *pos += offset as u32;
                             }
@@ -802,8 +800,8 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
                     }
                     generated::types::Whence::Set => {
                         let offset = if offset < 0 { 0 } else { offset as u64 };
-                        if offset > contents.len_u32() as u64 {
-                            *pos = contents.len_u32();
+                        if offset > contents.len() as u32 as u64 {
+                            *pos = contents.len() as u32;
                         } else {
                             *pos = offset as u32;
                         }

@@ -328,13 +328,14 @@ async def run_genvm(
 	logger: Logger | None = None,
 	is_sync: bool,
 	capture_output: bool = True,
-	message: typing.Any,
+	message: gvm_calldata.Encodable,
 	host_data: str = '',
 	host: str,
 	extra_args: list[str] = [],
 	storage_pages: int = 10_000_000,
 	code: bytes | None = None,
 	calldata: bytes,
+	request_extra: dict[str, gvm_calldata.Encodable] = {},
 ) -> RunHostAndProgramRes:
 	if logger is None:
 		logger = NoLogger()
@@ -370,6 +371,7 @@ async def run_genvm(
 						'storage_pages': storage_pages,
 						'code': code,
 						'calldata': calldata,
+						**request_extra,
 					}
 				),
 			) as resp:

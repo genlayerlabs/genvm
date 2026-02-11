@@ -117,6 +117,10 @@ async def _OkResult(_):
 	return Result(passed=True, context={}, elapsed_seconds=0, retries=None)
 
 
+async def _FailResult(_):
+	return Result(passed=False, context={}, elapsed_seconds=0, retries=None)
+
+
 @dataclass
 class _BenchMeasureData:
 	stamp: float
@@ -163,3 +167,4 @@ class BenchCollectStep(exec.step.Python):
 
 
 CONST_PASSED = exec.step.PythonFunction(_OkResult)
+CONST_FAILED = exec.step.PythonFunction(_FailResult)

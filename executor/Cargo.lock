@@ -131,6 +131,9 @@ name = "anyhow"
 version = "1.0.97"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
+dependencies = [
+ "backtrace",
+]
 
 [[package]]
 name = "arbitrary"
@@ -1028,6 +1031,7 @@ dependencies = [
  "dashmap",
  "genlayer_sdk",
  "hex",
+ "libc",
  "num-bigint",
  "primitive-types",
  "regex",

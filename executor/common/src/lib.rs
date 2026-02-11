@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub use genlayer_sdk::calldata;
 
 pub mod cancellation;
+pub mod io;
 pub mod logger;
 pub mod stats;
 pub mod sync;

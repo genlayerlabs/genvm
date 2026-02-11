@@ -21,6 +21,8 @@ function Render(ctx, payload)
 	})
 
 	lib.log({
+		level = "debug",
+		message = "web render result",
 		result = result,
 	})
 

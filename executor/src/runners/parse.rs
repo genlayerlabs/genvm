@@ -21,7 +21,7 @@ fn detect_version_from_wasm(code: &[u8]) -> anyhow::Result<String> {
     Err(anyhow::anyhow!("version section not found"))
 }
 
-pub fn parse(code: util::SharedBytes) -> anyhow::Result<super::Archive> {
+pub fn parse(code: bytes::Bytes) -> anyhow::Result<super::Archive> {
     if let Ok(mut as_zip) = zip::ZipArchive::new(std::io::Cursor::new(code.clone())) {
         return super::Archive::from_zip(&mut as_zip, code);
     }
@@ -36,15 +36,15 @@ pub fn parse(code: util::SharedBytes) -> anyhow::Result<super::Archive> {
         };
         return Ok(super::Archive::from_file_and_runner(
             code,
-            util::SharedBytes::from(version.as_bytes()),
-            util::SharedBytes::from(b"{ \"StartWasm\": \"file\" }".as_ref()),
+            bytes::Bytes::copy_from_slice(version.as_bytes()),
+            bytes::Bytes::from_static(b"{ \"StartWasm\": \"file\" }"),
         ));
     }
 
     code_to_archive_from_text(code)
 }
 
-fn code_to_archive_from_text(code: util::SharedBytes) -> anyhow::Result<super::Archive> {
+fn code_to_archive_from_text(code: bytes::Bytes) -> anyhow::Result<super::Archive> {
     let code_str = std::str::from_utf8(code.as_ref()).map_err(|e| {
         rt::errors::VMError(
             format!(
@@ -97,7 +97,7 @@ fn code_to_archive_from_text(code: util::SharedBytes) -> anyhow::Result<super::A
 
     Ok(super::Archive::from_file_and_runner(
         code,
-        util::SharedBytes::from(version_string.as_bytes()),
-        util::SharedBytes::from(code_comment.as_bytes()),
+        bytes::Bytes::copy_from_slice(version_string.as_bytes()),
+        bytes::Bytes::copy_from_slice(code_comment.as_bytes()),
     ))
 }

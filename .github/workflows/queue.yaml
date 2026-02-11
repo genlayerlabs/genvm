@@ -28,6 +28,36 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
       - run: ./support/ci/pipelines/test-python.sh
 
+  module-test-rust-fuzz:
+    needs: [initial]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses:  insightsengineering/disk-space-reclaimer@v1
+        with:
+          tools-cache: false
+          swap-storage: false
+          docker-images: false
+      - name: Get source
+        uses: ./.github/actions/get-src
+        with:
+          load_submodules: "true"
+          with_nix: "true"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          echo core | sudo tee /proc/sys/kernel/core_pattern
+          echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+          echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
+          ./support/ci/pipelines/test-rust-fuzz.sh && ./support/ci/cargo-clippy.sh
+        env:
+          OPENAIKEY: ${{ secrets.OPENAIKEY }}
+          HEURISTKEY: ${{ secrets.HEURISTKEY }}
+          ANTHROPICKEY: ${{ secrets.ANTHROPICKEY }}
+          XAIKEY: ${{ secrets.XAIKEY }}
+          GEMINIKEY: ${{ secrets.GEMINIKEY }}
+
   module-test-rust:
     needs: [initial]
     runs-on: ubuntu-latest
@@ -55,10 +85,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - run: |
-          echo core | sudo tee /proc/sys/kernel/core_pattern
-          echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
-          echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
-          ./support/ci/pipelines/test-rust.sh && ./support/ci/cargo-clippy.sh
+          ./support/ci/pipelines/test-rust.sh
         env:
           OPENAIKEY: ${{ secrets.OPENAIKEY }}
           HEURISTKEY: ${{ secrets.HEURISTKEY }}
@@ -73,6 +100,7 @@ jobs:
       - initial
       - module-test-python
       - module-test-rust
+      - module-test-rust-fuzz
     steps:
       - name: check
         run: |

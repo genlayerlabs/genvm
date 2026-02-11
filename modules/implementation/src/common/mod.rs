@@ -1,9 +1,9 @@
 use base64::Engine;
-use futures_util::{SinkExt, StreamExt};
 use genvm_common::*;
 use genvm_modules_interfaces::GenericValue;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, sync::Arc};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use anyhow::{Context, Result};
 
@@ -64,7 +64,8 @@ impl ModuleError {
 
 #[derive(Serialize, Deserialize)]
 pub struct ModuleBaseConfig {
-    pub bind_address: String,
+    #[serde(default)]
+    pub bind_address: Option<String>,
 
     pub lua_script_path: String,
     pub vm_count: usize,
@@ -147,7 +148,9 @@ impl std::error::Error for ModuleError {}
 
 pub type ModuleResult<T> = anyhow::Result<T>;
 
-type WSStream<S> = tokio_tungstenite::WebSocketStream<S>;
+pub trait WithGenVMId {
+    fn genvm_id(&self) -> genvm_modules_interfaces::GenVMId;
+}
 
 pub trait MessageHandler<T, R>: Sync + Send {
     fn handle(&self, v: T) -> impl std::future::Future<Output = ModuleResult<R>> + Send;
@@ -155,10 +158,49 @@ pub trait MessageHandler<T, R>: Sync + Send {
 }
 
 pub trait MessageHandlerProvider<T, R>: Sync + Send {
-    fn new_handler(
+    type Ctx: WithGenVMId + Send + Sync + 'static;
+
+    fn create_execution_context(
         &self,
         hello: genvm_modules_interfaces::GenVMHello,
+    ) -> anyhow::Result<genvm_common::sync::DArc<Self::Ctx>>;
+
+    fn new_handler(
+        &self,
+        ctx: genvm_common::sync::DArc<Self::Ctx>,
     ) -> impl std::future::Future<Output = anyhow::Result<impl MessageHandler<T, R>>> + Send;
+}
+
+/// Write a length-prefixed message to a stream
+/// Format: 4 bytes big-endian length + body
+async fn write_message<S: tokio::io::AsyncWrite + Unpin>(
+    stream: &mut S,
+    data: &[u8],
+) -> anyhow::Result<()> {
+    let len = data.len() as u32;
+    stream.write_all(&len.to_be_bytes()).await?;
+    stream.write_all(data).await?;
+    stream.flush().await?;
+    Ok(())
+}
+
+/// Read a length-prefixed message from a stream
+/// Format: 4 bytes big-endian length + body
+/// Returns None if the stream is closed (EOF on length read)
+async fn read_message<S: tokio::io::AsyncRead + Unpin>(
+    stream: &mut S,
+) -> anyhow::Result<Option<Vec<u8>>> {
+    let mut len_buf = [0u8; 4];
+    match stream.read_exact(&mut len_buf).await {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
+        Err(e) => return Err(e.into()),
+    }
+    let len = u32::from_be_bytes(len_buf) as usize;
+
+    let mut data = vec![0u8; len];
+    stream.read_exact(&mut data).await?;
+    Ok(Some(data))
 }
 
 async fn loop_one_inner_handle<T, R>(
@@ -177,7 +219,7 @@ where
 
 async fn loop_one_inner<T, R, S>(
     handler: &mut impl MessageHandler<T, R>,
-    stream: &mut WSStream<S>,
+    stream: &mut S,
     genvm_id: genvm_modules_interfaces::GenVMId,
 ) -> anyhow::Result<()>
 where
@@ -186,100 +228,75 @@ where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     loop {
-        use tokio_tungstenite::tungstenite::Message;
+        let Some(data) = read_message(stream).await? else {
+            // Stream closed
+            return Ok(());
+        };
 
-        match stream
-            .next()
-            .await
-            .ok_or_else(|| anyhow::anyhow!("service closed connection"))??
-        {
-            Message::Ping(v) => {
-                stream.send(Message::Pong(v)).await?;
-            }
-            Message::Pong(_) => {}
-            Message::Close(_) => return Ok(()),
-            x => {
-                let text = x.into_data();
-                let res = loop_one_inner_handle(handler, &text).await;
-                let res = match res {
-                    Ok(res) => genvm_modules_interfaces::Result::Ok(res),
-                    Err(err) => match scripting::try_unwrap_any_err(err) {
-                        Ok(err) => {
-                            if err.fatal {
-                                genvm_modules_interfaces::Result::FatalError(format!("{err:#}"))
-                            } else {
-                                let res = GenericValue::Map(BTreeMap::from([
-                                    (
-                                        "causes".to_owned(),
-                                        GenericValue::Array(
-                                            err.causes.into_iter().map(Into::into).collect(),
-                                        ),
-                                    ),
-                                    ("ctx".to_owned(), GenericValue::Map(err.ctx)),
-                                ]));
-                                genvm_modules_interfaces::Result::UserError(res)
-                            }
-                        }
-                        Err(err) => {
-                            log_error_into!(&LoggerWithId, error:ah = &err, genvm_id:id = genvm_id.0; "handler fatal error");
-                            genvm_modules_interfaces::Result::FatalError(format!("{err:#}"))
-                        }
-                    },
-                };
+        let res = loop_one_inner_handle(handler, &data).await;
+        let res = match res {
+            Ok(res) => genvm_modules_interfaces::Result::Ok(res),
+            Err(err) => match scripting::try_unwrap_any_err(err) {
+                Ok(err) => {
+                    if err.fatal {
+                        genvm_modules_interfaces::Result::FatalError(format!("{err:#}"))
+                    } else {
+                        let res = GenericValue::Map(BTreeMap::from([
+                            (
+                                "causes".to_owned(),
+                                GenericValue::Array(
+                                    err.causes.into_iter().map(Into::into).collect(),
+                                ),
+                            ),
+                            ("ctx".to_owned(), GenericValue::Map(err.ctx)),
+                        ]));
+                        genvm_modules_interfaces::Result::UserError(res)
+                    }
+                }
+                Err(err) => {
+                    log_error_into!(&LoggerWithId, error:ah = &err, genvm_id:id = genvm_id.0; "handler fatal error");
+                    genvm_modules_interfaces::Result::FatalError(format!("{err:#}"))
+                }
+            },
+        };
 
-                let answer = genvm_common::calldata::to_value(&res)?;
-                let message = Message::Binary(genvm_common::calldata::encode(&answer).into());
+        let answer = genvm_common::calldata::to_value(&res)?;
+        let message = genvm_common::calldata::encode(&answer);
 
-                stream.send(message).await?;
-            }
-        }
+        write_message(stream, &message).await?;
     }
 }
 
 async fn read_hello<S>(
-    stream: &mut WSStream<S>,
+    stream: &mut S,
 ) -> anyhow::Result<Option<genvm_modules_interfaces::GenVMHello>>
 where
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    S: tokio::io::AsyncRead + Unpin,
 {
-    loop {
-        use tokio_tungstenite::tungstenite::Message;
-        match stream
-            .next()
-            .await
-            .ok_or_else(|| anyhow::anyhow!("connection closed"))??
-        {
-            Message::Ping(v) => {
-                stream.send(Message::Pong(v)).await?;
-            }
-            Message::Pong(_) => {}
-            Message::Close(_) => return Ok(None),
-            x => {
-                let text = x.into_data();
+    let Some(data) = read_message(stream).await? else {
+        return Ok(None);
+    };
 
-                let genvm_hello = genvm_common::calldata::decode(&text)?;
-                let genvm_hello: genvm_modules_interfaces::GenVMHello =
-                    genvm_common::calldata::from_value(genvm_hello)?;
+    let genvm_hello = genvm_common::calldata::decode(&data)?;
+    let genvm_hello: genvm_modules_interfaces::GenVMHello =
+        genvm_common::calldata::from_value(genvm_hello)?;
 
-                return Ok(Some(genvm_hello));
-            }
-        }
-    }
+    Ok(Some(genvm_hello))
 }
 
-async fn loop_one_impl<T, R, S>(
-    handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
-    stream: &mut WSStream<S>,
-    hello: genvm_modules_interfaces::GenVMHello,
+async fn loop_one_impl<T, R, S, P: MessageHandlerProvider<T, R>>(
+    handler_provider: Arc<P>,
+    stream: &mut S,
+    exec_ctx: sync::DArc<P::Ctx>,
 ) -> anyhow::Result<()>
 where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    let genvm_id = hello.genvm_id;
+    let genvm_id = exec_ctx.genvm_id();
 
-    let mut handler = handler_provider.new_handler(hello).await?;
+    let mut handler = handler_provider.new_handler(exec_ctx).await?;
 
     let res = loop_one_inner(&mut handler, stream, genvm_id).await;
 
@@ -287,33 +304,20 @@ where
         log_error_into!(&LoggerWithId, error:ah = &close, genvm_id:id = genvm_id.0; "cleanup error");
     }
 
-    if res.is_err() {
-        if let Err(close) = stream.close(None).await {
-            log_error_into!(&LoggerWithId, error:err = close, genvm_id:id = genvm_id.0; "stream closing error")
-        }
-    }
-
     res
 }
 
-async fn handle_stream<T, R, S>(
-    handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
-    stream: S,
+pub async fn handle_stream<T, R, S, P: MessageHandlerProvider<T, R>>(
+    handler_provider: Arc<P>,
+    mut stream: S,
     stream_type: &str,
+    exec_ctx: Option<sync::DArc<P::Ctx>>,
 ) where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    log_trace!(stream_type = stream_type; "sock -> ws upgrade");
-    let mut stream = match tokio_tungstenite::accept_async(stream).await {
-        Err(e) => {
-            let e = e.into();
-            log_error!(error:ah = &e; "accept failed");
-            return;
-        }
-        Ok(stream) => stream,
-    };
+    log_trace!(stream_type = stream_type; "new connection");
 
     log_trace!("reading hello");
     let hello = match read_hello(&mut stream).await {
@@ -327,11 +331,23 @@ async fn handle_stream<T, R, S>(
 
     log_trace!(hello:serde = hello; "read hello");
 
-    let genvm_id = hello.genvm_id;
+    let exec_ctx = if let Some(ctx) = exec_ctx {
+        ctx
+    } else {
+        match handler_provider.create_execution_context(hello) {
+            Ok(ctx) => ctx,
+            Err(e) => {
+                log_error!(error:ah = &e; "failed to create execution context");
+                return;
+            }
+        }
+    };
+
+    let genvm_id = exec_ctx.genvm_id();
     GENVM_ID
         .scope(genvm_id, async {
             log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "peer accepted");
-            if let Err(e) = loop_one_impl(handler_provider, &mut stream, hello).await {
+            if let Err(e) = loop_one_impl(handler_provider, &mut stream, exec_ctx).await {
                 log_error_into!(&LoggerWithId, error:ah = &e, genvm_id:id = genvm_id.0; "internal loop error");
             }
             log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "peer done");
@@ -339,37 +355,44 @@ async fn handle_stream<T, R, S>(
         .await;
 }
 
-async fn loop_one<T, R>(
-    handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
+async fn loop_one<T, R, P: MessageHandlerProvider<T, R>>(
+    handler_provider: Arc<P>,
     stream: tokio::net::TcpStream,
 ) where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
 {
-    handle_stream(handler_provider, stream, "tcp").await;
+    handle_stream(handler_provider, stream, "tcp", None).await;
 }
 
-async fn loop_one_unix<T, R>(
-    handler_provider: Arc<impl MessageHandlerProvider<T, R>>,
+async fn loop_one_unix<T, R, P: MessageHandlerProvider<T, R>>(
+    handler_provider: Arc<P>,
     stream: tokio::net::UnixStream,
 ) where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
 {
-    handle_stream(handler_provider, stream, "unix").await;
+    handle_stream(handler_provider, stream, "unix", None).await;
 }
 
 const UNIX_PREFIX: &str = "unix://";
 
-pub async fn run_loop<T, R>(
-    bind_address: String,
+pub async fn run_loop<T, R, P: MessageHandlerProvider<T, R> + 'static>(
+    bind_address: Option<String>,
     cancel: Arc<genvm_common::cancellation::Token>,
-    handler_provider: Arc<impl MessageHandlerProvider<T, R> + 'static>,
+    handler_provider: Arc<P>,
 ) -> anyhow::Result<()>
 where
     T: serde::de::DeserializeOwned + 'static,
     R: serde::Serialize + Send + 'static,
 {
+    let Some(bind_address) = bind_address else {
+        // No bind address - just wait for cancellation
+        log_info!("no bind_address configured, waiting for cancellation");
+        cancel.chan.closed().await;
+        return Ok(());
+    };
+
     if let Some(socket_path) = bind_address.strip_prefix(UNIX_PREFIX) {
         run_loop_unix(socket_path, cancel, handler_provider).await
     } else {
@@ -377,10 +400,10 @@ where
     }
 }
 
-async fn run_loop_tcp<T, R>(
+async fn run_loop_tcp<T, R, P: MessageHandlerProvider<T, R> + 'static>(
     bind_address: &str,
     cancel: Arc<genvm_common::cancellation::Token>,
-    handler_provider: Arc<impl MessageHandlerProvider<T, R> + 'static>,
+    handler_provider: Arc<P>,
 ) -> anyhow::Result<()>
 where
     T: serde::de::DeserializeOwned + 'static,
@@ -410,10 +433,10 @@ where
     }
 }
 
-async fn run_loop_unix<T, R>(
+async fn run_loop_unix<T, R, P: MessageHandlerProvider<T, R> + 'static>(
     socket_path: &str,
     cancel: Arc<genvm_common::cancellation::Token>,
-    handler_provider: Arc<impl MessageHandlerProvider<T, R> + 'static>,
+    handler_provider: Arc<P>,
 ) -> anyhow::Result<()>
 where
     T: serde::de::DeserializeOwned + 'static,
@@ -448,7 +471,7 @@ where
         }
     });
 
-    let result = async {
+    async {
         loop {
             tokio::select! {
                 _ = cancel.chan.closed() => {
@@ -466,9 +489,7 @@ where
             }
         }
     }
-    .await;
-
-    result
+    .await
 }
 
 tokio::task_local! {

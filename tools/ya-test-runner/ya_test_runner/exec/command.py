@@ -129,6 +129,7 @@ class Command:
 			stdout=stdout_writer,
 			stderr=stderr_writer,
 			stdin=stdin,
+			start_new_session=True,
 		)
 
 		if stdout_writer != sys.stdout.fileno():

@@ -5,13 +5,15 @@ use genvm_common::*;
 
 use crate::{common, scripting};
 
-mod config;
+type WebSubContext = crate::manager::execution_context::WebSubContext;
+
+pub(crate) mod config;
 mod ctx;
 mod domains;
 mod handler;
 
 #[derive(serde::Serialize, Debug, Default)]
-struct Metrics {
+pub(crate) struct Metrics {
     pub scripting: scripting::Metrics,
 }
 
@@ -24,10 +26,16 @@ pub struct CliArgs {
     die_with_parent: bool,
 }
 
-pub async fn run_web_module(
+/// Creates the Web module and returns the stream handler.
+/// The returned future runs the bind loop if bind_address is Some.
+pub async fn create_web_module(
     cancel: Arc<cancellation::Token>,
     config: config::Config,
-) -> Result<()> {
+) -> Result<(
+    crate::manager::modules::StreamHandler,
+    impl std::future::Future<Output = Result<()>>,
+    sync::DArc<config::Config>,
+)> {
     let _webdriver_host = config.webdriver_host.clone();
 
     let config = sync::DArc::new(config);
@@ -35,19 +43,19 @@ pub async fn run_web_module(
     let moved_config = config.clone();
 
     let vm_pool = scripting::pool::new(config.mod_base.vm_count, move || {
-        let moved_config_1 = moved_config.clone();
-        let moved_config_2 = moved_config.clone();
         let moved_config = moved_config.clone();
         async move {
+            let moved_config_for_data = moved_config.clone();
             let user_vm = crate::scripting::UserVM::create(
-                &moved_config_1.mod_base,
+                &moved_config.mod_base,
                 move |vm: mlua::Lua| async move {
                     // set web-related globals
                     vm.globals()
-                        .set("__web", ctx::create_global(&vm, &moved_config)?)?;
+                        .set("__web", ctx::create_global(&vm, &moved_config_for_data)?)?;
 
                     // load script
-                    scripting::load_script(&vm, &moved_config.mod_base.lua_script_path).await?;
+                    scripting::load_script(&vm, &moved_config_for_data.mod_base.lua_script_path)
+                        .await?;
 
                     // get functions populated by script
                     let render: mlua::Function = vm.globals().get("Render")?;
@@ -55,23 +63,20 @@ pub async fn run_web_module(
 
                     Ok(ctx::VMData { render, request })
                 },
-                Box::new(move |vm: &mlua::Lua, table: &mlua::Table, hello| {
-                    let metrics = sync::DArc::new(Metrics::default());
+                Box::new(
+                    move |vm: &mlua::Lua,
+                          table: &mlua::Table,
+                          sub_ctx: &sync::DArc<WebSubContext>| {
+                        let scripting = sub_ctx.gep(|x| &x.scripting);
+                        scripting::setup_lua_default_ctx(scripting, vm, table)?;
 
-                    let _dflt_ctx = scripting::create_default_ctx(
-                        hello,
-                        moved_config_2.gep(|x| &x.mod_base),
-                        metrics.gep(|x| &x.scripting),
-                        vm,
-                        table,
-                    )?;
+                        let ctx = Arc::new(ctx::CtxPart {});
 
-                    let ctx = Arc::new(ctx::CtxPart {});
+                        table.set("__ctx_web", vm.create_userdata(ctx.clone())?)?;
 
-                    table.set("__ctx_web", vm.create_userdata(ctx.clone())?)?;
-
-                    Ok(ctx)
-                }),
+                        Ok(ctx)
+                    },
+                ),
             )
             .await?;
 
@@ -80,12 +85,38 @@ pub async fn run_web_module(
     })
     .await?;
 
-    crate::common::run_loop(
+    let handler_provider = Arc::new(handler::HandlerProvider {
+        vm_pool,
+        config: config.clone(),
+    });
+
+    // Create the type-erased stream handler
+    let stream_handler: crate::manager::modules::StreamHandler = {
+        let hp = handler_provider.clone();
+        Arc::new(move |stream: Box<dyn genvm_common::io::Stream>, exec_ctx| {
+            let hp = hp.clone();
+            Box::pin(async move {
+                let sub_ctx = exec_ctx.map(|ctx| ctx.gep(|x| x.web.as_ref().unwrap()));
+                crate::common::handle_stream(hp, stream, "relay", sub_ctx).await;
+            }) as std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>
+        })
+    };
+
+    let bind_future = crate::common::run_loop(
         config.mod_base.bind_address.clone(),
         cancel,
-        Arc::new(handler::HandlerProvider { vm_pool }),
-    )
-    .await
+        handler_provider,
+    );
+
+    Ok((stream_handler, bind_future, config))
+}
+
+pub async fn run_web_module(
+    cancel: Arc<cancellation::Token>,
+    config: config::Config,
+) -> Result<()> {
+    let (_handler, bind_future, _config) = create_web_module(cancel, config).await?;
+    bind_future.await
 }
 
 pub fn entrypoint(args: CliArgs) -> Result<()> {

@@ -153,7 +153,8 @@ class IntegrationTestCase(ya_test_runner.test.Case):
 				max_attempts=max_attempts,
 			)
 			if is_benchmark:
-				for i in range(20):
+				for i in range(10):
+					steps.append(CheckInterruptedStep())
 					steps.append(ya_test_runner.test.BenchMeasureStep())
 					steps.append(cur_step)
 				steps.append(ya_test_runner.test.BenchCollectStep(local_ctx.shared.printer))
@@ -161,6 +162,21 @@ class IntegrationTestCase(ya_test_runner.test.Case):
 				steps.append(cur_step)
 
 		return steps
+
+
+class CheckInterruptedStep(ya_test_runner.exec.step.Python):
+	def to_str(self):
+		return '<check interrupted>'
+
+	async def run(self, previous_results: list[typing.Any]):
+		if local_ctx.shared.is_interrupted:
+			raise ya_test_runner.test.FinishedEarlyException(
+				ya_test_runner.test.Result(
+					passed=False,
+					context={'reason': 'interrupted'},
+					elapsed_seconds=0,
+				)
+			)
 
 
 class IntegrationSkipStep(ya_test_runner.exec.step.Python):
@@ -303,7 +319,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					elapsed_seconds=0,
 				)
 
-			if attempt + 1 >= self._max_attempts:
+			if local_ctx.shared.is_interrupted or attempt + 1 >= self._max_attempts:
 				# Raise FinishedEarlyException to stop subsequent steps
 				raise ya_test_runner.test.FinishedEarlyException(
 					result=ya_test_runner.test.Result(
@@ -434,6 +450,9 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 						'signerUrl': SIGNER_URL,
 					}
 				)
+				request_extra = {}
+				if 'stable' in self._test_case.description.tags:
+					request_extra['no_modules'] = True
 				res = await base_host.run_genvm(
 					mock_host,
 					manager_uri=manager_uri,
@@ -447,6 +466,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					extra_args=['--debug-mode'],
 					code=code,
 					calldata=calldata_bytes,
+					request_extra=request_extra,
 				)
 				if res.result_kind == public_abi.ResultCode.RETURN:
 					res.stdout += (
@@ -579,12 +599,17 @@ def integration_test(
 			needed_services.add(modules_service)
 			needed_services.add(webdriver_service)
 
+		test_name = str(jsonnet_file.relative_to(local_ctx.shared.root_dir))
+
 		desc = ya_test_runner.test.Description(
-			name=str(jsonnet_file.relative_to(local_ctx.shared.root_dir)),
+			name=test_name,
 			needed_services=frozenset(needed_services),
 			tags=frozenset(tags),
 			console_pool=False,  # Integration tests can run in parallel
 		)
+
+		if '/bench/' in test_name:
+			desc = desc.with_tags(['bench'])
 
 		case = IntegrationTestCase(
 			description=desc,

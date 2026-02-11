@@ -305,7 +305,10 @@ async def run(shared: SharedContext, collection_env: SchedulingEnv) -> Env:
 	try:
 		for action in collection_env.actions:
 			if should_stop.is_set():
-				shared.logger.warning('Stopping execution early')
+				shared.logger.warning('Stopping execution early: awaiting test cases')
+
+				for aw in awaiters.values():
+					await aw.wait()
 				break
 			if isinstance(action, StartService):
 				await _start_service(ctx, action.service)
