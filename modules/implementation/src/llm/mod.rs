@@ -10,13 +10,15 @@ use crate::{common, scripting};
 pub(crate) mod config;
 mod handler;
 pub(crate) mod prompt;
-mod providers;
+pub(crate) mod providers;
 
-type UserVM = scripting::UserVM<ctx::VMData, Arc<ctx::CtxPart>>;
+type LlmSubContext = crate::manager::execution_context::LlmSubContext;
+type UserVM = scripting::UserVM<ctx::VMData, sync::DArc<ctx::CtxPart>, LlmSubContext>;
 
 #[derive(serde::Serialize, Debug, Default)]
-struct Metrics {
+pub(crate) struct Metrics {
     pub scripting: scripting::Metrics,
+    pub tokens: stats::metric::TokenMetricsMap,
 }
 
 #[derive(clap::Args, Debug)]
@@ -31,13 +33,9 @@ pub struct CliArgsRun {
     die_with_parent: bool,
 }
 
-mod ctx;
+pub(crate) mod ctx;
 
-async fn create_vm(
-    config: &sync::DArc<config::Config>,
-    providers: Arc<BTreeMap<String, Box<dyn providers::Provider + Send + Sync>>>,
-) -> anyhow::Result<UserVM> {
-    let moved_config = config.clone();
+async fn create_vm(config: &sync::DArc<config::Config>) -> anyhow::Result<UserVM> {
     let user_vm = crate::scripting::UserVM::create(
         &config.mod_base,
         move |vm: mlua::Lua| async move {
@@ -60,28 +58,15 @@ async fn create_vm(
                 exec_prompt_template,
             })
         },
-        Box::new(move |vm, table, hello| {
-            let metrics = sync::DArc::new(Metrics::default());
-
-            let dflt_ctx = scripting::create_default_ctx(
-                hello,
-                moved_config.gep(|x| &x.mod_base),
-                metrics.gep(|x| &x.scripting),
-                vm,
-                table,
+        Box::new(move |vm, table, sub_ctx: &sync::DArc<LlmSubContext>| {
+            let scripting = sub_ctx.gep(|x| &x.scripting);
+            let module = sub_ctx.gep(|x| &x.module);
+            scripting::setup_lua_default_ctx(scripting, vm, table)?;
+            table.set(
+                "__ctx_llm",
+                vm.create_userdata(scripting::LuaDArc(module.clone()))?,
             )?;
-
-            //for
-
-            let ctx = Arc::new(ctx::CtxPart {
-                dflt: dflt_ctx.clone(),
-                providers: providers.clone(),
-                metrics: metrics.clone(),
-            });
-
-            table.set("__ctx_llm", vm.create_userdata(ctx.clone())?)?;
-
-            Ok(ctx)
+            Ok(module)
         }),
     )
     .await?;
@@ -89,11 +74,18 @@ async fn create_vm(
     Ok(user_vm)
 }
 
-pub async fn run_llm_module(
+/// Creates the LLM module and returns the stream handler.
+/// The returned future runs the bind loop if bind_address is Some.
+pub async fn create_llm_module(
     cancel: Arc<cancellation::Token>,
     mut config: config::Config,
     allow_empty_backends: bool,
-) -> Result<()> {
+) -> Result<(
+    crate::manager::modules::StreamHandler,
+    impl std::future::Future<Output = Result<()>>,
+    sync::DArc<config::Config>,
+    Arc<BTreeMap<String, Box<dyn providers::Provider + Send + Sync>>>,
+)> {
     for (k, v) in config.backends.iter_mut() {
         if !v.enabled {
             continue;
@@ -136,21 +128,49 @@ pub async fn run_llm_module(
 
     let vm_pool = scripting::pool::new(config.mod_base.vm_count, move || {
         let moved_config = moved_config.clone();
-        let backends = backends.clone();
         async move {
-            create_vm(&moved_config, backends)
+            create_vm(&moved_config)
                 .await
                 .with_context(|| "creating user VM")
         }
     })
     .await?;
 
-    crate::common::run_loop(
+    let handler_provider = Arc::new(handler::Provider {
+        vm_pool,
+        config: config.clone(),
+        providers: backends.clone(),
+    });
+
+    // Create the type-erased stream handler
+    let stream_handler: crate::manager::modules::StreamHandler = {
+        let hp = handler_provider.clone();
+        Arc::new(move |stream: Box<dyn genvm_common::io::Stream>, exec_ctx| {
+            let hp = hp.clone();
+            Box::pin(async move {
+                let sub_ctx = exec_ctx.map(|ctx| ctx.gep(|x| x.llm.as_ref().unwrap()));
+                crate::common::handle_stream(hp, stream, "relay", sub_ctx).await;
+            }) as std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>
+        })
+    };
+
+    let bind_future = crate::common::run_loop(
         config.mod_base.bind_address.clone(),
         cancel,
-        Arc::new(handler::Provider { vm_pool }),
-    )
-    .await
+        handler_provider,
+    );
+
+    Ok((stream_handler, bind_future, config, backends))
+}
+
+pub async fn run_llm_module(
+    cancel: Arc<cancellation::Token>,
+    config: config::Config,
+    allow_empty_backends: bool,
+) -> Result<()> {
+    let (_handler, bind_future, _config, _providers) =
+        create_llm_module(cancel, config, allow_empty_backends).await?;
+    bind_future.await
 }
 
 fn handle_run(config: config::Config, args: CliArgsRun) -> Result<()> {
@@ -272,7 +292,7 @@ mod tests {
             mod_base: common::ModuleBaseConfig {
                 vm_count: 1,
                 lua_script_path: "../install/config/genvm-llm-default.lua".to_string(),
-                bind_address: "".to_owned(),
+                bind_address: None,
                 lua_path: extra_path,
                 signer_url: Arc::from(""),
                 signer_headers: Arc::new(BTreeMap::new()),
@@ -293,7 +313,7 @@ mod tests {
             ("2".to_owned(), provider_real),
         ]));
 
-        let user_vm = create_vm(&config, providers).await.unwrap();
+        let user_vm = create_vm(&config).await.unwrap();
 
         // this ensures order
         user_vm
@@ -327,7 +347,23 @@ mod tests {
 
         let hello = common::tests::get_hello();
 
-        let (_ctx, ctx_lua) = user_vm.create_ctx(&hello).unwrap();
+        let metrics = sync::DArc::new(Metrics::default());
+        let scripting_ctx = scripting::create_ctx_part(
+            &hello,
+            &config.gep(|x| &x.mod_base),
+            metrics.gep(|x| &x.scripting),
+        )
+        .unwrap();
+        let llm_ctx = ctx::CtxPart {
+            providers: providers.clone(),
+            metrics,
+        };
+        let sub_ctx = sync::DArc::new(crate::manager::execution_context::LlmSubContext {
+            scripting: scripting_ctx,
+            module: llm_ctx,
+        });
+
+        let (_ctx, ctx_lua) = user_vm.create_ctx(&sub_ctx).unwrap();
 
         let payload = llm_iface::PromptPayload {
             images: Vec::new(),

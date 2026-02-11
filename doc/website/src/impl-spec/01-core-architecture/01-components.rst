@@ -54,7 +54,7 @@ High-Level Architecture
       Runners -.-> Program
       Host --> Manager
 
-.. _gvm-executor::
+.. _gvm-executor:
 
 :term:`GenVM` Executor
 ----------------------

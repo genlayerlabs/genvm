@@ -6,8 +6,7 @@ from genlayer import *
 class Contract(gl.Contract):
 	m: TreeMap[str, u32]
 
-	@gl.public.write
-	def first(self):
+	def __init__(self):
 		print('first')
 		self.m['1'] = u32(12)
 		self.m['abc'] = u32(30)

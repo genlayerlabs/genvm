@@ -3,8 +3,7 @@ from genlayer import *
 
 
 class Contract(gl.Contract):
-	@gl.public.write
-	def main(self):
+	def __init__(self):
 		def run():
 			return gl.nondet.web.request(
 				f'https://test-server.genlayer.com/body/echo',

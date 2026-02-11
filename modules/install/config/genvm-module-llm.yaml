@@ -49,7 +49,7 @@ backends:
     provider: openai-compatible
     key: ${ENV[XAIKEY]}
     models:
-      grok-2-1212:
+      grok-3:
         supports_json: true
         supports_image: false # hallucinates
 

@@ -18,7 +18,7 @@ fn default_false() -> bool {
 pub struct Request {
     pub method: web_iface::RequestMethod,
     pub url: url::Url,
-    pub headers: BTreeMap<String, web_iface::HeaderData>,
+    pub headers: BTreeMap<String, bytes::Bytes>,
 
     #[serde(with = "serde_bytes", default = "default_none")]
     pub body: Option<Vec<u8>>,
@@ -78,7 +78,7 @@ impl Request {
                 .as_bytes()
                 .try_into()
                 .map_user_error_module(ErrorKind::DESERIALIZING.to_string(), true)?;
-            let data: &[u8] = &v.0;
+            let data: &[u8] = v.as_ref();
             headers.insert(
                 name,
                 data.try_into()

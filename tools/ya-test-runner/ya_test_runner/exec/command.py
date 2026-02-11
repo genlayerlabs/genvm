@@ -1,4 +1,5 @@
 import asyncio
+import collections.abc
 import enum
 import io
 import os
@@ -56,7 +57,7 @@ class RunMode(enum.Enum):
 
 @dataclass
 class Command:
-	args: list[str | Path]
+	args: collections.abc.Sequence[str | Path]
 	cwd: Path
 	env: dict[str, str]
 
@@ -128,6 +129,7 @@ class Command:
 			stdout=stdout_writer,
 			stderr=stderr_writer,
 			stdin=stdin,
+			start_new_session=True,
 		)
 
 		if stdout_writer != sys.stdout.fileno():

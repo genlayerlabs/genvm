@@ -1,0 +1,7 @@
+{
+  "artifacts_dir": "build/test-artifacts",
+  "extra_python_paths": [
+    "tests/runner",
+    "runners/genlayer-py-std/src"
+  ]
+}

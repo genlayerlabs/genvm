@@ -1,8 +1,2 @@
-local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/get_webpage_404.py') {
-    "calldata": |||
-        {
-            "method": "main"
-        }
-    |||
-}
+local simple_deploy = import 'templates/simple_deploy.jsonnet';
+simple_deploy.run('${jsonnetDir}/get_webpage_404.py')

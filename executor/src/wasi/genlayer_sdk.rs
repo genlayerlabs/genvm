@@ -9,49 +9,36 @@ use wiggle::GuestError;
 use crate::host::{self, SlotID};
 use crate::{calldata, public_abi, rt};
 
-use super::{base, gl_call, vfs};
+pub use genlayer_sdk::abi::entry::ExtendedMessage;
+use genlayer_sdk::abi::gl_call;
 
-fn entry_kind_as_int<S>(data: &public_abi::EntryKind, d: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    d.serialize_u8(*data as u8)
-}
-
-#[derive(serde::Serialize, Debug)]
-pub struct ExtendedMessage {
-    pub contract_address: calldata::Address,
-    pub sender_address: calldata::Address,
-    pub origin_address: calldata::Address,
-    /// View methods call chain.
-    /// It is empty for entrypoint (refer to [`contract_address`])
-    pub stack: Vec<calldata::Address>,
-
-    pub chain_id: num_bigint::BigInt,
-    pub value: num_bigint::BigInt,
-    pub is_init: bool,
-    /// Transaction timestamp
-    pub datetime: chrono::DateTime<chrono::Utc>,
-
-    #[serde(serialize_with = "entry_kind_as_int")]
-    pub entry_kind: public_abi::EntryKind,
-    #[serde(with = "serde_bytes")]
-    pub entry_data: Vec<u8>,
-
-    pub entry_stage_data: calldata::Value,
-}
+use super::{base, vfs};
 
 fn default_entry_stage_data() -> calldata::Value {
     calldata::Value::Null
 }
 
-impl ExtendedMessage {
-    pub fn fork_leader(
+/// Extension methods for ExtendedMessage specific to the executor
+pub trait ExtendedMessageExt {
+    fn fork_leader(
         &self,
         entry_kind: public_abi::EntryKind,
         entry_data: Vec<u8>,
         entry_leader_data: Option<rt::vm::RunOk>,
-    ) -> Self {
+    ) -> ExtendedMessage;
+
+    fn fork(&self, entry_kind: public_abi::EntryKind, entry_data: Vec<u8>) -> ExtendedMessage;
+}
+
+impl ExtendedMessageExt for ExtendedMessage {
+    fn fork_leader(
+        &self,
+        entry_kind: public_abi::EntryKind,
+        entry_data: Vec<u8>,
+        entry_leader_data: Option<rt::vm::RunOk>,
+    ) -> ExtendedMessage {
+        use genlayer_sdk::abi::entry::MessageData;
+
         let entry_leader_data = match entry_leader_data {
             None => default_entry_stage_data(),
             Some(entry_leader_data) => calldata::Value::Map(BTreeMap::from([(
@@ -61,21 +48,23 @@ impl ExtendedMessage {
         };
 
         ExtendedMessage {
-            contract_address: self.contract_address,
-            sender_address: self.sender_address,
-            origin_address: self.origin_address,
-            stack: self.stack.clone(),
-            chain_id: self.chain_id.clone(),
-            value: self.value.clone(),
-            is_init: false,
-            datetime: self.datetime,
+            message: MessageData {
+                contract_address: self.message.contract_address,
+                sender_address: self.message.sender_address,
+                origin_address: self.message.origin_address,
+                stack: self.message.stack.clone(),
+                chain_id: self.message.chain_id.clone(),
+                value: self.message.value.clone(),
+                is_init: false,
+                datetime: self.message.datetime,
+            },
             entry_kind,
             entry_data,
             entry_stage_data: entry_leader_data,
         }
     }
 
-    pub fn fork(&self, entry_kind: public_abi::EntryKind, entry_data: Vec<u8>) -> Self {
+    fn fork(&self, entry_kind: public_abi::EntryKind, entry_data: Vec<u8>) -> ExtendedMessage {
         self.fork_leader(entry_kind, entry_data, None)
     }
 }
@@ -312,7 +301,7 @@ impl ContextVFS<'_> {
             generated::types::Fd::from(
                 self.vfs
                     .place_content(vfs::FileContents {
-                        contents: util::SharedBytes::new(data),
+                        contents: bytes::Bytes::from(data),
                         pos: 0,
                         release_memory: true,
                     })
@@ -368,7 +357,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let request = match calldata::decode(&request) {
             Err(e) => {
-                log_info!(error:ah = &e; "calldata parse failed");
+                log_info!(error:err = &e; "calldata parse failed");
 
                 return Err(generated::types::Errno::Inval.into());
             }
@@ -402,7 +391,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 if !value.is_zero() {
                     let my_balance = self
                         .context
-                        .get_balance_impl(self.context.data.message_data.contract_address)
+                        .get_balance_impl(self.context.data.message_data.message.contract_address)
                         .await?;
 
                     if value + self.context.messages_decremented > my_balance {
@@ -444,7 +433,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 Ok(generated::types::Fd::from(
                     self.vfs
                         .place_content(vfs::FileContents {
-                            contents: util::SharedBytes::new(res),
+                            contents: bytes::Bytes::from(res),
                             pos: 0,
                             release_memory: true,
                         })
@@ -478,7 +467,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .data
                     .message_data
                     .fork(public_abi::EntryKind::Main, calldata_encoded);
-                my_data.stack.push(my_data.contract_address);
+                my_data.message.stack.push(my_data.message.contract_address);
 
                 let calldata_encoded = calldata::encode(&calldata);
 
@@ -494,17 +483,19 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         state_mode: state,
                     },
                     message_data: ExtendedMessage {
-                        contract_address: address,
-                        sender_address: my_data.sender_address,
-                        origin_address: my_data.origin_address,
-                        value: num_bigint::BigInt::ZERO,
-                        is_init: false,
-                        datetime: my_data.datetime,
-                        chain_id: my_data.chain_id,
+                        message: genlayer_sdk::abi::entry::MessageData {
+                            contract_address: address,
+                            sender_address: my_data.message.sender_address,
+                            origin_address: my_data.message.origin_address,
+                            value: num_bigint::BigInt::ZERO,
+                            is_init: false,
+                            datetime: my_data.message.datetime,
+                            chain_id: my_data.message.chain_id,
+                            stack: my_data.message.stack,
+                        },
                         entry_kind: my_data.entry_kind,
                         entry_data: my_data.entry_data,
                         entry_stage_data: default_entry_stage_data(),
-                        stack: my_data.stack,
                     },
                     storage: rt::vm::storage::Storage::new(
                         address,
@@ -587,7 +578,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 if !value.is_zero() {
                     let my_balance = self
                         .context
-                        .get_balance_impl(self.context.data.message_data.contract_address)
+                        .get_balance_impl(self.context.data.message_data.message.contract_address)
                         .await?;
 
                     if value + self.context.messages_decremented > my_balance {
@@ -634,7 +625,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 if !value.is_zero() {
                     let my_balance = self
                         .context
-                        .get_balance_impl(self.context.data.message_data.contract_address)
+                        .get_balance_impl(self.context.data.message_data.message.contract_address)
                         .await?;
 
                     if value + self.context.messages_decremented > my_balance {
@@ -683,7 +674,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 Ok(generated::types::Fd::from(
                     self.vfs
                         .place_content(vfs::FileContents {
-                            contents: util::SharedBytes::new(task),
+                            contents: bytes::Bytes::from(task),
                             pos: 0,
                             release_memory: true,
                         })
@@ -708,7 +699,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 Ok(generated::types::Fd::from(
                     self.vfs
                         .place_content(vfs::FileContents {
-                            contents: util::SharedBytes::new(task),
+                            contents: bytes::Bytes::from(task),
                             pos: 0,
                             release_memory: true,
                         })
@@ -766,7 +757,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 Ok(generated::types::Fd::from(
                     self.vfs
                         .place_content(vfs::FileContents {
-                            contents: util::SharedBytes::new(task),
+                            contents: bytes::Bytes::from(task),
                             pos: 0,
                             release_memory: true,
                         })
@@ -780,7 +771,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let expect_bool = !matches!(
                     &prompt_template_payload,
-                    genvm_modules_interfaces::llm::PromptTemplatePayload::EqNonComparativeLeader(_)
+                    gl_call::llm_iface::PromptTemplatePayload::EqNonComparativeLeader(_)
                 );
 
                 // Get remaining fuel from host
@@ -841,7 +832,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 Ok(generated::types::Fd::from(
                     self.vfs
                         .place_content(vfs::FileContents {
-                            contents: util::SharedBytes::new(task),
+                            contents: bytes::Bytes::from(task),
                             pos: 0,
                             release_memory: true,
                         })
@@ -892,7 +883,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::Inval.into());
         }
 
-        let account = self.context.data.message_data.contract_address;
+        mem.bounds_check(buf)?;
+
+        let account = self.context.data.message_data.message.contract_address;
 
         let slot = SlotID::read_from_mem(mem, slot)?;
         let mem_size = buf_len as usize;
@@ -948,6 +941,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             return Err(generated::types::Errno::Inval.into());
         }
 
+        mem.bounds_check(buf)?;
+
         let slot = SlotID::read_from_mem(mem, slot)?;
 
         if self.context.data.supervisor.locked_slots.contains(slot) {
@@ -989,7 +984,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         self.context
             .get_balance_impl_wasi(
                 mem,
-                self.context.data.message_data.contract_address,
+                self.context.data.message_data.message.contract_address,
                 result,
                 true,
             )
@@ -1111,7 +1106,7 @@ impl ContextVFS<'_> {
                 Ok(generated::types::Fd::from(
                     self.vfs
                         .place_content(vfs::FileContents {
-                            contents: util::SharedBytes::new(data),
+                            contents: bytes::Bytes::from(data),
                             pos: 0,
                             release_memory: true,
                         })
@@ -1283,7 +1278,7 @@ impl ContextVFS<'_> {
         Ok(generated::types::Fd::from(
             self.vfs
                 .place_content(vfs::FileContents {
-                    contents: util::SharedBytes::new(data),
+                    contents: bytes::Bytes::from(data),
                     pos: 0,
                     release_memory: true,
                 })

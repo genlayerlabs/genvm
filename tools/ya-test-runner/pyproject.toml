@@ -4,10 +4,15 @@ version = "0.1.0"
 description = "A Python test runner utility"
 authors = ["Your Name <your.email@example.com>"]
 readme = "README.md"
-packages = [{include = "ya_test_runner"}]
+packages = [
+    {include = "ya_test_runner"},
+    {include = "ya_test_runner_plugins"}
+]
 
 [tool.poetry.dependencies]
 python = "^3.12"
+jsonnet = ">=0.20.0"
+aiohttp = ">=3.10.0"
 
 [tool.poetry.group.dev.dependencies]
 

@@ -1,4 +1,5 @@
 import argparse, re, operator
+from pathlib import Path
 from ya_test_runner import SharedContext
 
 
@@ -21,6 +22,14 @@ def add_args(parser: argparse.ArgumentParser) -> None:
 		help='Only run tests matching this tags, `(a|b)&!c`',
 		default='true',
 		metavar='EXPR',
+	)
+
+	parser.add_argument(
+		'--continue-from',
+		type=str,
+		help='Only run tests listed in the specified continue file (from a previous failed run)',
+		default=None,
+		metavar='FILE',
 	)
 
 
@@ -47,7 +56,7 @@ def _tokenize_expr(expr: str) -> list[str]:
 
 def _parse_tags_expr(
 	toks: list[str], priority: int
-) -> typing.Callable[[set[str]], bool]:
+) -> typing.Callable[[frozenset[str]], bool]:
 	if priority == 0:
 		if toks[-1] == '(':
 			toks.pop()
@@ -89,6 +98,27 @@ def _parse_tags_expr(
 	return left
 
 
+def _load_continue_file(shared: SharedContext, filepath: str) -> set[str]:
+	"""Load test names from a continue file."""
+	path = Path(filepath)
+	if not path.is_absolute():
+		# Try relative to artifacts_dir/continue first
+		continue_path = shared.artifacts_dir / 'continue' / filepath
+		if continue_path.exists():
+			path = continue_path
+		else:
+			# Then try relative to root_dir
+			path = shared.root_dir / filepath
+
+	if not path.exists():
+		raise ValueError(f'Continue file not found: {filepath}')
+
+	content = path.read_text()
+	tests = {line.strip() for line in content.splitlines() if line.strip()}
+	shared.logger.info('Loaded continue file', path=str(path), test_count=len(tests))
+	return tests
+
+
 def run(shared: SharedContext, collection_env: Env) -> Env:
 	new_cases = []
 	test_name_filter = collection_env.args.test_name
@@ -98,11 +128,26 @@ def run(shared: SharedContext, collection_env: Env) -> Env:
 	tags_expr_toks.reverse()
 	tags_expr = _parse_tags_expr(tags_expr_toks, 2)
 
+	# Load continue file if specified
+	continue_tests: set[str] | None = None
+	if collection_env.args.continue_from:
+		continue_tests = _load_continue_file(shared, collection_env.args.continue_from)
+
 	for case in collection_env.cases:
-		if test_name_regex.match(case.description.name) and tags_expr(
-			case.description.tags
-		):
-			new_cases.append(case)
+		# Apply name regex filter
+		if not test_name_regex.search(case.description.name):
+			continue
+
+		# Apply tags filter
+		if not tags_expr(case.description.tags):
+			continue
+
+		# Apply continue file filter
+		if continue_tests is not None and case.description.name not in continue_tests:
+			continue
+
+		new_cases.append(case)
+
 	new_cases.sort(key=lambda c: c.description.name)
 
 	return Env(

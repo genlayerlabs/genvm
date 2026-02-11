@@ -86,7 +86,17 @@
 									inherit system;
 								};
 
-								custom-rust = import ./support/rust.nix { inherit pkgs system; withLinters = true; withZig = false; };
+								ya-test-runner = pkgs.python312Packages.buildPythonApplication {
+									pname = "ya-test-runner";
+									version = "0.1.0";
+									pyproject = true;
+									src = ./tools/ya-test-runner;
+									build-system = [ pkgs.python312Packages.poetry-core ];
+									dependencies = with pkgs.python312Packages; [ aiohttp jsonnet ];
+									doCheck = false;
+								};
+
+								custom-rust = import ./support/rust.nix { inherit pkgs system; withLinters = true; withZig = false; withWasi = true; };
 								custom-rust-builder = import ./support/compile-rust.nix {
 									inherit pkgs system;
 									zig = import ./support/zig.nix { inherit pkgs system; };
@@ -139,6 +149,7 @@
 									python312Packages.jsonnet
 									pkgs.python312Packages.aiohttp
 									wabt
+									ya-test-runner
 								];
 								packages-py-test = with pkgs; [
 									# aflplusplus # currently we don't run fuzzing on CI
@@ -165,12 +176,7 @@
 									shellHook = shell-hook-base;
 								};
 								devShells.mock-tests = pkgs.mkShell {
-									packages = packages-0 ++ [
-										pkgs.python312
-										pkgs.python312Packages.jsonnet
-										pkgs.python312Packages.aiohttp
-										pkgs.wabt
-									];
+									packages = packages-0 ++ packages-rust ++ packages-debug-test;
 									shellHook = shell-hook-base;
 								};
 								devShells.full = pkgs.mkShell {

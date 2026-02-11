@@ -36,9 +36,17 @@ class Run:
 		return cmd
 
 
+@dataclass
+class MkDir:
+	path: Path
+
+	def to_str(self) -> str:
+		return f'mkdir -p {shlex.quote(str(self.path))}'
+
+
 class Python(metaclass=abc.ABCMeta):
 	@abc.abstractmethod
-	async def run(self, previous_results: list[typing.Any]) -> typing.Any: ...
+	async def run(self, previous_results: list[typing.Any], /) -> typing.Any: ...
 
 	def to_str(self) -> str:
 		return f'# <python step>'
@@ -54,7 +62,7 @@ class PythonFunction(Python):
 		return await self.func(previous_results)
 
 
-type Step = SetCwd | SetEnv | Run | Python
+type Step = SetCwd | SetEnv | Run | MkDir | Python
 
 
 def optimize_steps(steps: list[Step]) -> list[Step]:
@@ -74,8 +82,7 @@ def optimize_steps(steps: list[Step]) -> list[Step]:
 				has_effect[last_cwd_idx] = True
 			for k, (idx, _v) in last_env.items():
 				has_effect[idx] = True
-		elif isinstance(step, Python):
-			# we assume python steps don't have side effects
+		elif isinstance(step, (MkDir, Python)):
 			has_effect[i] = True
 		else:
 			raise ValueError(f'Unknown step type: {step!r}')
@@ -92,7 +99,9 @@ async def run_steps(ctx: SharedContext, steps: list[Step]) -> list[typing.Any]:
 	cwd = Path.cwd()
 	for s in steps:
 		if isinstance(s, Python):
-			results.append(await s.run(results))
+			res = await s.run(results)
+			if res is not None:
+				results.append(res)
 		elif isinstance(s, SetCwd):
 			cwd = s.path
 		elif isinstance(s, SetEnv):
@@ -105,6 +114,8 @@ async def run_steps(ctx: SharedContext, steps: list[Step]) -> list[typing.Any]:
 					mode=s.mode,
 				)
 			)
+		elif isinstance(s, MkDir):
+			s.path.mkdir(parents=True, exist_ok=True)
 		else:
 			raise ValueError(f'Unknown step type: {s!r}')
 	return results

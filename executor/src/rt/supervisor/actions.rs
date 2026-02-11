@@ -44,9 +44,10 @@ impl Ctx<'_, '_> {
                     }
 
                     let data = util::mmap_file(&path)
-                        .with_context(|| format!("creating new archive for {uid}"))?;
-                    let data = util::SharedBytes::new(data);
+                        .with_context(|| format!("memory mapping runner archive for {uid}"))?;
+                    let data = bytes::Bytes::copy_from_slice(data.as_ref());
                     runners::Archive::from_ustar(data)
+                        .with_context(|| format!("parsing ustar archive for {uid}"))
                 },
                 limiter,
             )
@@ -138,16 +139,18 @@ impl Ctx<'_, '_> {
         Ok(Some(rt::DetNondet {
             det: unsafe {
                 wasmtime::Module::deserialize_file(&self.supervisor.engines.det, &det_mod)
-            }?,
+            }
+            .with_context(|| format!("deserializing det module {path:?} of {current}"))?,
             non_det: unsafe {
                 wasmtime::Module::deserialize_file(&self.supervisor.engines.non_det, &non_det_mod)
-            }?,
+            }
+            .with_context(|| format!("deserializing non-det module {path:?} of {current}"))?,
         }))
     }
 
     async fn link_wasm(
         &mut self,
-        contents: util::SharedBytes,
+        contents: bytes::Bytes,
         current: symbol_table::GlobalSymbol,
         path: &std::sync::Arc<str>,
     ) -> anyhow::Result<sync::DArc<rt::DetNondet<wasmtime::Module>>> {
@@ -162,14 +165,18 @@ impl Ctx<'_, '_> {
             .wasm_mod_cache
             .wasm_modules_cache
             .get_or_create(wasm_key, || async {
-                if let Some(loaded) = self.load_modules(current, path)? {
-                    return Ok(loaded);
+                match self.load_modules(current, path) {
+                    Ok(Some(loaded)) => return Ok(loaded),
+                    Ok(None) => {}
+                    Err(e) => {
+                        log_error!(path:? = path, error:ah = e; "failed to load precompiled wasm module, recompiling");
+                    }
                 }
 
                 self.supervisor
                     .compile_wasm(contents.as_ref(), wasm_key.as_str())
                     .await
-                    .with_context(|| format!("compiling wasm for {}", self.contract_id))
+                    .with_context(|| format!("compiling wasm {path:?} of {}", self.contract_id))
             })
             .await?;
 
@@ -286,9 +293,14 @@ impl Ctx<'_, '_> {
                 Ok(None)
             }
             InitAction::LinkWasm(path) => {
-                let contents = current_runner_arch.get_file(path)?;
+                let contents = current_runner_arch
+                    .get_file(path)
+                    .with_context(|| format!("getting file {path:?}"))?;
 
-                let module = self.link_wasm(contents, current, path).await?;
+                let module = self
+                    .link_wasm(contents, current, path)
+                    .await
+                    .with_context(|| format!("linking wasm {path:?}"))?;
 
                 let module = module.into_gep(|x| x.get(self.vm.config_copy.is_deterministic));
 
@@ -297,10 +309,12 @@ impl Ctx<'_, '_> {
                         .vm
                         .linker
                         .instantiate_async(&mut self.vm.store, &module)
-                        .await?;
+                        .await
+                        .with_context(|| format!("instantiating {path:?}"))?;
                     let name = module
                         .name()
                         .ok_or_else(|| anyhow::anyhow!("can't link unnamed module {:?}", current))
+                        .with_context(|| format!("getting module name for {path:?} of {current}"))
                         .map_err(|e| {
                             rt::errors::VMError::wrap(
                                 format!("{} wasm", public_abi::VmError::InvalidContract.value()),
@@ -309,7 +323,8 @@ impl Ctx<'_, '_> {
                         })?;
                     self.vm
                         .linker
-                        .instance(&mut self.vm.store, name, instance)?;
+                        .instance(&mut self.vm.store, name, instance)
+                        .with_context(|| format!("linking instance {name} for {path:?}"))?;
                     instance
                 };
                 match instance.get_typed_func::<(), ()>(&mut self.vm.store, "_initialize") {
@@ -333,8 +348,13 @@ impl Ctx<'_, '_> {
                     .genlayer_ctx_mut()
                     .preview1
                     .set_env(&env)?;
-                let contents = current_runner_arch.get_file(path)?;
-                let module = self.link_wasm(contents, current, path).await?;
+                let contents = current_runner_arch
+                    .get_file(path)
+                    .with_context(|| format!("getting file {path:?}"))?;
+                let module = self
+                    .link_wasm(contents, current, path)
+                    .await
+                    .with_context(|| format!("linking wasm {path:?}"))?;
 
                 let module = module.into_gep(|x| x.get(self.vm.config_copy.is_deterministic));
 
@@ -342,7 +362,8 @@ impl Ctx<'_, '_> {
                     self.vm
                         .linker
                         .instantiate_async(&mut self.vm.store, &module)
-                        .await?,
+                        .await
+                        .with_context(|| format!("instantiating {path:?}"))?,
                 ))
             }
             InitAction::When { cond, action } => {

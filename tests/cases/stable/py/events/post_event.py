@@ -8,8 +8,7 @@ class TestEvent(gl.Event):
 
 
 class Contract(gl.Contract):
-	@gl.public.write
-	def main(self):
+	def __init__(self):
 		try:
 			# Test basic event emission
 			TestEvent(42, 'create', timestamp=1234567890, data='test_data').emit()

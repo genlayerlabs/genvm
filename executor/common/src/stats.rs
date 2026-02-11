@@ -53,6 +53,66 @@ pub mod metric {
             Self::new()
         }
     }
+
+    #[derive(Debug, Default, serde::Serialize)]
+    pub struct TokenMetrics {
+        pub input: u32,
+        pub output: u32,
+        pub total: u32,
+    }
+
+    impl TokenMetrics {
+        pub fn add(&mut self, input: Option<u32>, output: Option<u32>, total: Option<u32>) {
+            if let Some(v) = input {
+                self.input += v;
+            }
+            if let Some(v) = output {
+                self.output += v;
+            }
+            if let Some(v) = total {
+                self.total += v;
+            }
+        }
+    }
+
+    pub struct TokenMetricsMap(std::sync::Mutex<std::collections::BTreeMap<String, TokenMetrics>>);
+
+    impl TokenMetricsMap {
+        pub fn new() -> Self {
+            Self(std::sync::Mutex::new(std::collections::BTreeMap::new()))
+        }
+
+        pub fn record(
+            &self,
+            key: String,
+            input: Option<u32>,
+            output: Option<u32>,
+            total: Option<u32>,
+        ) {
+            let mut map = self.0.lock().unwrap();
+            map.entry(key).or_default().add(input, output, total);
+        }
+    }
+
+    impl Default for TokenMetricsMap {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    impl std::fmt::Debug for TokenMetricsMap {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let map = self.0.lock().unwrap();
+            f.debug_tuple("TokenMetricsMap").field(&*map).finish()
+        }
+    }
+
+    impl serde::Serialize for TokenMetricsMap {
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            let map = self.0.lock().unwrap();
+            map.serialize(serializer)
+        }
+    }
 }
 
 pub mod tracker {

@@ -6,8 +6,9 @@ use warp::Filter;
 
 use crate::common;
 
+pub(crate) mod execution_context;
 mod handlers;
-mod modules;
+pub(crate) mod modules;
 mod run;
 mod versioning;
 
@@ -79,6 +80,10 @@ pub struct CliArgs {
     pub port: u16,
     #[arg(long, default_value = "127.0.0.1")]
     pub host: String,
+
+    /// Unix socket path (mutually exclusive with --host/--port)
+    #[arg(long, conflicts_with_all = ["host", "port"])]
+    pub socket: Option<String>,
 
     #[arg(long, default_value = "")]
     pub reroute_to: String,
@@ -273,6 +278,17 @@ async fn run_http_server(
             }),
     );
 
+    let ctx = app_ctx.clone();
+    let describe_vm_error_route = unwrap_all_anyhow(
+        warp::path!("vm-error" / "describe")
+            .and(warp::get())
+            .and(warp::query::<handlers::DescribeVmErrorRequest>())
+            .then(move |query| {
+                let ctx = ctx.clone();
+                async move { handlers::handle_describe_vm_error(ctx, query).await }
+            }),
+    );
+
     let routes = status_route
         .or(start_route)
         .or(stop_route)
@@ -285,7 +301,8 @@ async fn run_http_server(
         .or(set_permits_route)
         .or(genvm_shutdown_route)
         .or(genvm_status_route)
-        .or(llm_check_route);
+        .or(llm_check_route)
+        .or(describe_vm_error_route);
 
     let routes = routes.recover(|err: warp::reject::Rejection| async move {
         if err.is_not_found() {
@@ -304,15 +321,80 @@ async fn run_http_server(
 
     let cancellation = cancel.clone();
 
-    let serv = warp::serve(routes);
-    let (addr, fut) = serv.bind_with_graceful_shutdown(
-        (args.host.parse::<std::net::IpAddr>()?, args.port),
-        async move { cancellation.chan.closed().await },
-    );
+    if let Some(socket_path) = &args.socket {
+        // Unix socket mode
+        use hyper::server::accept::Accept;
+        use std::pin::Pin;
+        use std::task::{Context, Poll};
 
-    log_info!(address:? = addr; "HTTP server started");
-    fut.await;
-    log_info!(address:? = addr; "HTTP server stopped");
+        let path = std::path::Path::new(socket_path);
+
+        // Clean up stale socket file
+        if path.exists() {
+            std::fs::remove_file(path)
+                .with_context(|| format!("removing stale socket {}", path.display()))?;
+        }
+
+        // Ensure parent directory exists
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() && !parent.exists() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+
+        let listener = tokio::net::UnixListener::bind(path)
+            .with_context(|| format!("binding to unix socket {}", path.display()))?;
+
+        log_info!(socket_path:? = path; "HTTP server started on Unix socket");
+
+        // Custom Accept implementation for UnixListener
+        struct UnixAcceptor(tokio::net::UnixListener);
+
+        impl Accept for UnixAcceptor {
+            type Conn = tokio::net::UnixStream;
+            type Error = std::io::Error;
+
+            fn poll_accept(
+                self: Pin<&mut Self>,
+                cx: &mut Context<'_>,
+            ) -> Poll<Option<Result<Self::Conn, Self::Error>>> {
+                match self.get_mut().0.poll_accept(cx) {
+                    Poll::Ready(Ok((stream, _addr))) => Poll::Ready(Some(Ok(stream))),
+                    Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
+                    Poll::Pending => Poll::Pending,
+                }
+            }
+        }
+
+        let warp_svc = warp::service(routes);
+        let make_svc = hyper::service::make_service_fn(move |_| {
+            let svc = warp_svc.clone();
+            async move { Ok::<_, std::convert::Infallible>(svc) }
+        });
+
+        let server = hyper::Server::builder(UnixAcceptor(listener))
+            .serve(make_svc)
+            .with_graceful_shutdown(async move { cancellation.chan.closed().await });
+
+        // Cleanup socket on shutdown
+        let cleanup_path = path.to_owned();
+        let result = server.await;
+        let _ = std::fs::remove_file(&cleanup_path);
+
+        log_info!(socket_path:? = cleanup_path; "HTTP server stopped");
+        result?;
+    } else {
+        // TCP mode (existing behavior)
+        let serv = warp::serve(routes);
+        let (addr, fut) = serv.bind_with_graceful_shutdown(
+            (args.host.parse::<std::net::IpAddr>()?, args.port),
+            async move { cancellation.chan.closed().await },
+        );
+
+        log_info!(address:? = addr; "HTTP server started");
+        fut.await;
+        log_info!(address:? = addr; "HTTP server stopped");
+    }
 
     Ok(())
 }

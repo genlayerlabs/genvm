@@ -1,11 +1,2 @@
-local simple = import 'templates/simple.jsonnet';
-[
-    simple.run('${jsonnetDir}/tree_map_nested.py') {
-        "calldata": |||
-            {
-                "method": "foo",
-                "args": []
-            }
-        |||
-    },
-]
+local simple_deploy = import 'templates/simple_deploy.jsonnet';
+simple_deploy.run('${jsonnetDir}/tree_map_nested.py')

@@ -6,7 +6,6 @@ pub mod preview1;
 pub mod vfs;
 
 mod common;
-mod gl_call;
 
 pub struct Context {
     vfs: vfs::VFS,
@@ -23,7 +22,7 @@ impl Context {
         let as_bytes = calldata::encode(&as_value);
         Ok(Self {
             vfs: vfs::VFS::new(as_bytes, limiter),
-            preview1: preview1::Context::new(data.message_data.datetime, data.conf),
+            preview1: preview1::Context::new(data.message_data.message.datetime, data.conf),
             genlayer_sdk: genlayer_sdk::Context::new(data),
         })
     }

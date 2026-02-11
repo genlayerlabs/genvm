@@ -9,7 +9,6 @@ from genlayer import *
 
 
 class Contract(gl.Contract):
-	@gl.public.write
-	def foo(self):
+	def __init__(self):
 		gl.vm.run_nondet_unsafe(lambda: None, lambda x: True)
 		print('hello world')

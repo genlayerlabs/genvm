@@ -1,11 +1,5 @@
-local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/${fileBaseName}.py') {
-    "calldata": |||
-        {
-            "method": "main",
-            "args": []
-        }
-    |||,
+local simple_deploy = import 'templates/simple_deploy.jsonnet';
+simple_deploy.run('${jsonnetDir}/${fileBaseName}.py') {
     "balances": {
         "AQAAAAAAAAAAAAAAAAAAAAAAAAA=": 10,
     },

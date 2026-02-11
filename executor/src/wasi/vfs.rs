@@ -1,10 +1,9 @@
 use std::collections::BTreeMap;
 
 use crate::{public_abi, rt};
-use genvm_common::*;
 
 pub struct FileContents {
-    pub contents: util::SharedBytes,
+    pub contents: bytes::Bytes,
     pub pos: u32,
 
     pub release_memory: bool,
@@ -31,7 +30,7 @@ pub(crate) struct VFS {
 
 impl VFS {
     pub fn new(stdin: Vec<u8>, limiter: rt::memlimiter::Limiter) -> Self {
-        let stdin_data = util::SharedBytes::new(stdin);
+        let stdin_data = bytes::Bytes::from(stdin);
 
         let fds = BTreeMap::from([
             (

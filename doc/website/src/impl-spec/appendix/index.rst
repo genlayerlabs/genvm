@@ -5,5 +5,5 @@ Appendix
    :maxdepth: 2
 
    host-loop
-   message-schema
    runners-versions
+   manager-api

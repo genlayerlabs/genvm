@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+genlayer_sdk = { path = "../../executor/sdk-rs", default-features = false }
 anyhow = "1.0.97"
 tokio = { version = "1.44.1", features = ["rt", "rt-multi-thread", "net", "time", "macros", "sync"], default-features = false}
 serde = { version = "1.0.219", features = ["rc", "derive"] }

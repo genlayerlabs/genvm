@@ -16,6 +16,5 @@ class User:
 class LlmErc20(gl.Contract):
 	x: User
 
-	@gl.public.write
-	def main(self) -> None:
+	def __init__(self) -> None:
 		print(str(self.x))

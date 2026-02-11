@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
-struct Inner<T, C> {
-    vms: Vec<Arc<super::UserVM<T, C>>>,
+struct Inner<T, C, E: 'static> {
+    vms: Vec<Arc<super::UserVM<T, C, E>>>,
 }
 
 #[derive(Clone)]
-pub struct Pool<T, C>(Arc<Inner<T, C>>);
+pub struct Pool<T, C, E: 'static>(Arc<Inner<T, C, E>>);
 
-impl<T, C> Pool<T, C> {
-    pub fn get(&self) -> Arc<super::UserVM<T, C>> {
+impl<T, C, E: 'static> Pool<T, C, E> {
+    pub fn get(&self) -> Arc<super::UserVM<T, C, E>> {
         let mut key: [u8; 1] = [0; 1];
 
         rand::fill(&mut key);
@@ -17,9 +17,12 @@ impl<T, C> Pool<T, C> {
     }
 }
 
-pub async fn new<T, C, F>(cnt: usize, vm_supplier: impl Fn() -> F) -> anyhow::Result<Pool<T, C>>
+pub async fn new<T, C, E: 'static, F>(
+    cnt: usize,
+    vm_supplier: impl Fn() -> F,
+) -> anyhow::Result<Pool<T, C, E>>
 where
-    F: std::future::Future<Output = anyhow::Result<super::UserVM<T, C>>>,
+    F: std::future::Future<Output = anyhow::Result<super::UserVM<T, C, E>>>,
 {
     let mut vms = Vec::new();
     for _i in 0..cnt {

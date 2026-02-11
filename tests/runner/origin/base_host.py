@@ -295,11 +295,14 @@ class RunHostAndProgramRes:
 	stderr: str
 	genvm_log: list[dict[str, typing.Any]]
 
+	execution_time: float
+
 	result_kind: public_abi.ResultCode
 	result_data: typing.Any
 	result_fingerprint: typing.Any
 	result_storage_changes: list[tuple[bytes, bytes]]
 	result_events: list[list[bytes]]
+	vm_error_description: str | None = None
 
 
 async def _send_timeout(manager_uri: str, genvm_id: str, logger: Logger):
@@ -325,13 +328,14 @@ async def run_genvm(
 	logger: Logger | None = None,
 	is_sync: bool,
 	capture_output: bool = True,
-	message: typing.Any,
+	message: gvm_calldata.Encodable,
 	host_data: str = '',
 	host: str,
 	extra_args: list[str] = [],
 	storage_pages: int = 10_000_000,
 	code: bytes | None = None,
 	calldata: bytes,
+	request_extra: dict[str, gvm_calldata.Encodable] = {},
 ) -> RunHostAndProgramRes:
 	if logger is None:
 		logger = NoLogger()
@@ -339,6 +343,8 @@ async def run_genvm(
 	genvm_id_cell: list[str | None] = [None]
 	status_cell: list[dict | Exception | None] = [None]
 	cancellation_event = asyncio.Event()
+
+	started_at = [time.time()]
 
 	async def wrap_proc():
 		try:
@@ -365,6 +371,7 @@ async def run_genvm(
 						'storage_pages': storage_pages,
 						'code': code,
 						'calldata': calldata,
+						**request_extra,
 					}
 				),
 			) as resp:
@@ -383,6 +390,7 @@ async def run_genvm(
 					asyncio.ensure_future(wrap_timeout(genvm_id))
 		finally:
 			logger.debug('proc started', genvm_id=genvm_id_cell[0])
+			started_at[0] = time.time()
 
 	async def wrap_host():
 		r = await host_loop(handler, cancellation_event, logger=logger)
@@ -446,6 +454,14 @@ async def run_genvm(
 	result_host: tuple[public_abi.ResultCode, bytes] | None = None
 	try:
 		result_host = fut_host.result()
+	except ConnectionResetError as e:
+		if timeout_fired.is_set():
+			result_host = (
+				public_abi.ResultCode.VM_ERROR,
+				gvm_calldata.encode({'data': public_abi.VmError.TIMEOUT.value}),
+			)
+		else:
+			exceptions.append(e)
 	except Exception as e:
 		if not timeout_fired.is_set():
 			exceptions.append(e)
@@ -486,6 +502,20 @@ async def run_genvm(
 			result_storage_changes = decoded.get('storage_changes', [])
 			result_events = decoded.get('events', [])
 
+		vm_error_description: str | None = None
+		if result_kind == public_abi.ResultCode.VM_ERROR and isinstance(result_data, str):
+			try:
+				async with aiohttp.request(
+					'GET',
+					f'{manager_uri}/vm-error/describe',
+					params={'error': result_data},
+				) as resp:
+					if resp.status == 200:
+						body = await resp.json()
+						vm_error_description = body.get('description')
+			except Exception as e:
+				logger.warning('failed to get vm error description', error=str(e))
+
 		return RunHostAndProgramRes(
 			stdout=status['stdout'],
 			stderr=status['stderr'],
@@ -495,6 +525,8 @@ async def run_genvm(
 			result_fingerprint=result_fingerprint,
 			result_storage_changes=result_storage_changes,
 			result_events=result_events,
+			vm_error_description=vm_error_description,
+			execution_time=time.time() - started_at[0],
 		)
 
 	raise Exception('Execution failed')

@@ -1,0 +1,3 @@
+op_value="FetchWebpage"
+I am validator! leaders_result=Return("Hello world!")
+executed with `Return("Hello world!")`

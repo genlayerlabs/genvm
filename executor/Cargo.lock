@@ -131,6 +131,9 @@ name = "anyhow"
 version = "1.0.97"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
+dependencies = [
+ "backtrace",
+]
 
 [[package]]
 name = "arbitrary"
@@ -386,6 +389,15 @@ name = "colorchoice"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
+
+[[package]]
+name = "const-lru"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df6e177825970fee44e66f247adbfd1844480027d21e64ccec91e6e7579c2ad0"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "const_format"
@@ -939,6 +951,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "genlayer_sdk"
+version = "0.0.1"
+dependencies = [
+ "arbitrary",
+ "bytes",
+ "chrono",
+ "hex",
+ "num-bigint",
+ "primitive-types",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "genvm"
 version = "0.1.0"
 dependencies = [
@@ -953,9 +979,11 @@ dependencies = [
  "bytes",
  "chrono",
  "clap",
+ "const-lru",
  "crossbeam",
  "dashmap",
  "futures-util",
+ "genlayer_sdk",
  "genvm-common",
  "genvm-modules-interfaces",
  "getrandom 0.3.2",
@@ -1001,7 +1029,9 @@ dependencies = [
  "clap",
  "crossbeam",
  "dashmap",
+ "genlayer_sdk",
  "hex",
+ "libc",
  "num-bigint",
  "primitive-types",
  "regex",
@@ -1018,6 +1048,7 @@ name = "genvm-modules-interfaces"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "genlayer_sdk",
  "regex",
  "serde",
  "serde_bytes",
@@ -1890,27 +1921,38 @@ checksum = "56e6fa9c48d24d85fb3de5ad847117517440f6beceb7798af16b4a87d616b8d0"
 
 [[package]]
 name = "serde"
-version = "1.0.219"
+version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f0e2c6ed6606019b4e29e69dbaba95b11854410e5347d525002456dbbb786b6"
+checksum = "9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"
 dependencies = [
+ "serde_core",
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_bytes"
-version = "0.11.17"
+version = "0.11.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8437fd221bde2d4ca316d61b90e337e9e702b3820b87d63caa9ba6c02bd06d96"
+checksum = "a5d440709e79d88e51ac01c4b72fc6cb7314017bb7da9eeff678aa94c10e3ea8"
 dependencies = [
  "serde",
+ "serde_core",
+]
+
+[[package]]
+name = "serde_core"
+version = "1.0.228"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41d385c7d4ca58e59fc732af25c3983b67ac852c1a25000afe1175de458b67ad"
+dependencies = [
+ "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.219"
+version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b0276cf7f2c73365f7157c8123c21cd9a50fbbd844757af28ca1f5925fc2a00"
+checksum = "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79"
 dependencies = [
  "proc-macro2",
  "quote",

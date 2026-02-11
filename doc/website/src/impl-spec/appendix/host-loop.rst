@@ -31,14 +31,6 @@ The :term:`host` processes requests in a loop until ``consume_result``:
    loop:
      method_id := read_byte
      match method_id
-       json/methods/get_calldata:
-         calldata, err := host_get_calldata()
-         if err != json/errors/ok:
-           write_byte err
-         else:
-           write_byte json/errors/ok
-           write_byte_slice calldata
-
        json/methods/storage_read:
          read_type := read_byte as json/storage_type
          address := read_bytes(ACCOUNT_ADDR_SIZE)
@@ -121,19 +113,6 @@ The :term:`host` processes requests in a loop until ``consume_result``:
          else:
            write_byte json/errors/ok
 
-        json/methods/post_event:
-          read_byte topics_len
-          topics := []
-          for i in range(topics_len):
-            topic := read_bytes(32) # 32 bytes each
-            topics.append(topic)
-          blob := read_slice
-          err := host_post_event(topics, blob)
-          if err != json/errors/ok:
-            write_byte err
-          else:
-            write_byte json/errors/ok
-
        json/methods/get_balance:
          address := read_bytes(ACCOUNT_ADDR_SIZE)
          balance, err := host_get_balance(address)
@@ -152,5 +131,6 @@ The :term:`host` processes requests in a loop until ``consume_result``:
            write_bytes fuel.to_le_bytes(8) # 64-bit integer, must be safe integer (fits in double)
 
        json/methods/notify_nondet_disagreement:
-          call_no := read_u32_le
-          host_notify_nondet_disagreement(call_no)
+         call_no := read_u32_le
+         host_notify_nondet_disagreement(call_no)
+         # note: this method doesn't send any response

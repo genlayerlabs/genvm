@@ -23,6 +23,7 @@ let
 					"executor/src"
 					"modules/interfaces"
 					"executor/common"
+					"executor/sdk-rs"
 					"executor/third-party"
 					"executor/Cargo.toml"
 					"executor/Cargo.lock"
