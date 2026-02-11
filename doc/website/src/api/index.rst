@@ -11,4 +11,7 @@ Public API
    genlayer
    genlayer_embeddings
 
-   changelog
+   boot_process
+   floating_point
+
+   changelog/index

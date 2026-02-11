@@ -1,33 +1,5 @@
-Change Log
-==========
-
-.. run `git diff <previous tag> <next tag> -- runners/genlayer-py-std/` . Create user-facing changelog in doc/website/src/api/changelog.rst , but before writing analyze style and structure of existing contents to follow. Write small migration guide by looking into diff of `executor/testdata/cases/`. If there are no changes to include, omit this section
-
-v0.1.8
-------
-
-Breaking Changes
-~~~~~~~~~~~~~~~~
-
-#. Calldata encoding behavior changed - dataclasses now encoded automatically without requiring custom ``default`` parameter
-#. ``genlayer.py.public_abi`` file marked as auto-generated - manual edits will be overwritten
-
-New Features
-~~~~~~~~~~~~
-
-#. **Enhanced calldata encoding**: Automatic dataclass encoding support without custom default functions
-#. **Standardized error types**: New ``VmError`` enum for consistent error handling across the platform
-#. **Extended public ABI**: Additional constants for internal VM operations (``CODE_SLOT_OFFSET``)
-
-API Improvements
-~~~~~~~~~~~~~~~~
-
-#. Simplified dataclass serialization - no longer requires explicit ``default`` parameter in ``calldata.encode()``
-#. Better type safety with standardized error enums
-#. Cleaner API for encoding complex data structures
-
-v0.1.3
-------
+Changelog v0.1.3
+================
 
 Migration Guide
 ~~~~~~~~~~~~~~~
@@ -142,8 +114,3 @@ API Improvements
 #. Enhanced error handling with ``UserError`` replacing ``Rollback``
 #. Better lazy loading system for improved import performance
 #. Documentation generation support with ``GENERATING_DOCS`` environment variable
-
-v0.1.0
-------
-
-Initial release

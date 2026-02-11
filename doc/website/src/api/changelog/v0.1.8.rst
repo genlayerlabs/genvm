@@ -1,0 +1,22 @@
+Changelog v0.1.8
+================
+
+Breaking Changes
+~~~~~~~~~~~~~~~~
+
+#. Calldata encoding behavior changed - dataclasses now encoded automatically without requiring custom ``default`` parameter
+#. ``genlayer.py.public_abi`` file marked as auto-generated - manual edits will be overwritten
+
+New Features
+~~~~~~~~~~~~
+
+#. **Enhanced calldata encoding**: Automatic dataclass encoding support without custom default functions
+#. **Standardized error types**: New ``VmError`` enum for consistent error handling across the platform
+#. **Extended public ABI**: Additional constants for internal VM operations (``CODE_SLOT_OFFSET``)
+
+API Improvements
+~~~~~~~~~~~~~~~~
+
+#. Simplified dataclass serialization - no longer requires explicit ``default`` parameter in ``calldata.encode()``
+#. Better type safety with standardized error enums
+#. Cleaner API for encoding complex data structures
