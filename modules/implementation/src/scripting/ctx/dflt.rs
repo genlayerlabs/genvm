@@ -407,7 +407,7 @@ mod tests {
 
         let res: Response = uvm.vm.from_value(res).unwrap();
 
-        log_trace!(response:? = res; "response");
+        log_trace!(response:serde = res; "response");
 
         assert_eq!(res.status, 200);
         assert_eq!(res.body, expected);

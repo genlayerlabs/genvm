@@ -99,18 +99,7 @@ impl<T> ProviderResponse<T> {
     }
 }
 
-/// Extra fields from the Lua request table (via `#[serde(flatten)]`).
-/// OpenAI-compatible providers merge these into the HTTP body, enabling
-/// features like OpenRouter's `models` array and `provider` routing options.
-pub type ExtraBody = serde_json::Map<String, serde_json::Value>;
-
-fn merge_extra(request: &mut serde_json::Value, extra: &ExtraBody) {
-    if let Some(obj) = request.as_object_mut() {
-        for (k, v) in extra {
-            obj.insert(k.clone(), v.clone());
-        }
-    }
-}
+use super::merge;
 
 #[async_trait::async_trait]
 pub trait Provider {
@@ -119,7 +108,6 @@ pub trait Provider {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
-        extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>>;
 
     async fn exec_prompt_json_as_text(
@@ -127,9 +115,8 @@ pub trait Provider {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
-        extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>> {
-        self.exec_prompt_text(ctx, prompt, model, extra).await
+        self.exec_prompt_text(ctx, prompt, model).await
     }
 
     async fn exec_prompt_json(
@@ -137,11 +124,8 @@ pub trait Provider {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
-        extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<serde_json::Map<String, serde_json::Value>>> {
-        let res = self
-            .exec_prompt_json_as_text(ctx, prompt, model, extra)
-            .await?;
+        let res = self.exec_prompt_json_as_text(ctx, prompt, model).await?;
         let json_str = sanitize_json_str(&res.result);
         let parsed =
             serde_json::from_str(&json_str).with_context(|| format!("parsing {json_str:?}"))?;
@@ -154,9 +138,8 @@ pub trait Provider {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
-        extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<bool>> {
-        let res = self.exec_prompt_json(ctx, prompt, model, extra).await?;
+        let res = self.exec_prompt_json(ctx, prompt, model).await?;
         let result_val = res.result.get("result").and_then(|x| x.as_bool());
 
         if let Some(val) = result_val {
@@ -282,7 +265,6 @@ impl Provider for OpenAICompatible {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
-        extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>> {
         let mut request = serde_json::json!({
             "model": model,
@@ -310,7 +292,11 @@ impl Provider for OpenAICompatible {
                 .insert("max_tokens".to_owned(), prompt.max_tokens.into());
         }
 
-        merge_extra(&mut request, extra);
+        merge::merge_extra(
+            &mut request,
+            serde_json::Value::Object(prompt.extra.clone()),
+            prompt.extra_merge_strategy.clone(),
+        )?;
 
         let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/chat/completions", self.config.host);
@@ -344,7 +330,6 @@ impl Provider for OpenAICompatible {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
-        extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<serde_json::Map<String, serde_json::Value>>> {
         let mut request = serde_json::json!({
             "model": model,
@@ -373,7 +358,11 @@ impl Provider for OpenAICompatible {
                 .insert("max_tokens".to_owned(), prompt.max_tokens.into());
         }
 
-        merge_extra(&mut request, extra);
+        merge::merge_extra(
+            &mut request,
+            serde_json::Value::Object(prompt.extra.clone()),
+            prompt.extra_merge_strategy.clone(),
+        )?;
 
         let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/chat/completions", self.config.host);
@@ -471,8 +460,10 @@ impl Provider for OLlama {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
-        _extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>> {
+        if !prompt.extra.is_empty() {
+            log_warn!(extra:serde = prompt.extra; "ollama provider ignores extra body fields");
+        }
         let request = prompt.to_ollama_no_format(model);
 
         let request = serde_json::to_vec(&request)?;
@@ -502,8 +493,10 @@ impl Provider for OLlama {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
-        _extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>> {
+        if !prompt.extra.is_empty() {
+            log_warn!(extra:serde = prompt.extra; "ollama provider ignores extra body fields");
+        }
         let mut request = prompt.to_ollama_no_format(model);
 
         request
@@ -576,8 +569,10 @@ impl Provider for Gemini {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
-        _extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>> {
+        if !prompt.extra.is_empty() {
+            log_warn!(extra:serde = prompt.extra; "gemini provider ignores extra body fields");
+        }
         let mut request = serde_json::json!({
             "generationConfig": {
                 "responseMimeType": "text/plain",
@@ -633,8 +628,10 @@ impl Provider for Gemini {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
-        _extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>> {
+        if !prompt.extra.is_empty() {
+            log_warn!(extra:serde = prompt.extra; "gemini provider ignores extra body fields");
+        }
         let mut request = serde_json::json!({
             "generationConfig": {
                 "responseMimeType": "application/json",
@@ -744,8 +741,10 @@ impl Provider for Anthropic {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
-        _extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<String>> {
+        if !prompt.extra.is_empty() {
+            log_warn!(extra:serde = prompt.extra; "anthropic provider ignores extra body fields");
+        }
         let request = prompt.to_anthropic_no_format(model)?;
 
         let request = serde_json::to_vec(&request)?;
@@ -781,8 +780,10 @@ impl Provider for Anthropic {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
-        _extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<serde_json::Map<String, serde_json::Value>>> {
+        if !prompt.extra.is_empty() {
+            log_warn!(extra:serde = prompt.extra; "anthropic provider ignores extra body fields");
+        }
         let mut request = prompt.to_anthropic_no_format(model)?;
 
         request.as_object_mut().unwrap().insert(
@@ -850,8 +851,10 @@ impl Provider for Anthropic {
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
-        _extra: &ExtraBody,
     ) -> ModuleResult<ProviderResponse<bool>> {
+        if !prompt.extra.is_empty() {
+            log_warn!(extra:serde = prompt.extra; "anthropic provider ignores extra body fields");
+        }
         let mut request = serde_json::json!({
             "model": model,
             "messages": [{"role": "user", "content": prompt.user_message}],
@@ -1059,9 +1062,10 @@ mod tests {
                     max_tokens: 500,
                     use_max_completion_tokens: true,
                     seed: Some(42),
+                    extra: Default::default(),
+                    extra_merge_strategy: Default::default(),
                 },
                 backend.script_config.models.first_key_value().context("no models configured")?.0,
-                &serde_json::Map::new(),
             )
             .await;
 
@@ -1145,6 +1149,8 @@ mod tests {
                     max_tokens: 50,
                     use_max_completion_tokens: true,
                     seed: Some(123),
+                    extra: Default::default(),
+                    extra_merge_strategy: Default::default(),
                 },
                 backend
                     .script_config
@@ -1152,7 +1158,6 @@ mod tests {
                     .first_key_value()
                     .context("no models configured")?
                     .0,
-                &serde_json::Map::new(),
             )
             .await;
 
@@ -1230,6 +1235,8 @@ mod tests {
                     max_tokens: 500,
                     use_max_completion_tokens: true,
                     seed: Some(456),
+                    extra: Default::default(),
+                    extra_merge_strategy: Default::default(),
                 },
                 backend
                     .script_config
@@ -1237,7 +1244,6 @@ mod tests {
                     .first_key_value()
                     .context("no models configured")?
                     .0,
-                &serde_json::Map::new(),
             )
             .await;
         eprintln!("{res:?}");
@@ -1336,6 +1342,8 @@ mod tests {
                     max_tokens: 50,
                     use_max_completion_tokens: true,
                     seed: Some(789),
+                    extra: Default::default(),
+                    extra_merge_strategy: Default::default(),
                 },
                 backend
                     .script_config
@@ -1343,7 +1351,6 @@ mod tests {
                     .first_key_value()
                     .context("no models configured")?
                     .0,
-                &serde_json::Map::new(),
             )
             .await;
         eprintln!("{res:?}");

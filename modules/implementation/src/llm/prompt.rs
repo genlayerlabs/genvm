@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::{ModuleError, ModuleResult};
 
+pub use super::merge::MergeStrategy;
+
 #[derive(Serialize, Deserialize)]
 pub struct Internal {
     pub system_message: Option<String>,
@@ -15,6 +17,11 @@ pub struct Internal {
     pub max_tokens: u32,
     pub use_max_completion_tokens: bool,
     pub seed: Option<u64>,
+
+    #[serde(default)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+    #[serde(default)]
+    pub extra_merge_strategy: MergeStrategy,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]

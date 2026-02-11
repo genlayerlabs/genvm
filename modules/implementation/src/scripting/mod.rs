@@ -265,7 +265,7 @@ pub async fn send_request_get_lua_compatible_response_bytes(
         }
     };
 
-    log_trace!(body:? = body, len = body.len(); "read body");
+    log_trace!(body:bytes = body, len = body.len(); "read body");
 
     if error_on_status && status != 200 {
         return Err(ModuleError {

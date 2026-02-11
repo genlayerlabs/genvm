@@ -30,7 +30,6 @@ impl CtxPart {
         model: &str,
         provider_id: &str,
         format: prompt::ExtendedOutputFormat,
-        extra: &serde_json::Map<String, serde_json::Value>,
     ) -> ModuleResult<providers::ProviderResponse<llm_iface::PromptAnswerData>> {
         log_debug!(
             prompt:serde = prompt,
@@ -47,15 +46,15 @@ impl CtxPart {
 
         let res = match format {
             prompt::ExtendedOutputFormat::Text => provider
-                .exec_prompt_text(dflt, prompt, model, extra)
+                .exec_prompt_text(dflt, prompt, model)
                 .await
                 .map(|resp| resp.map(llm_iface::PromptAnswerData::Text)),
             prompt::ExtendedOutputFormat::JSON => provider
-                .exec_prompt_json(dflt, prompt, model, extra)
+                .exec_prompt_json(dflt, prompt, model)
                 .await
                 .map(|resp| resp.map(llm_iface::PromptAnswerData::Object)),
             prompt::ExtendedOutputFormat::Bool => provider
-                .exec_prompt_bool_reason(dflt, prompt, model, extra)
+                .exec_prompt_bool_reason(dflt, prompt, model)
                 .await
                 .map(|resp| resp.map(llm_iface::PromptAnswerData::Bool)),
         };
@@ -87,8 +86,6 @@ struct Args {
     prompt: prompt::Internal,
     format: prompt::ExtendedOutputFormat,
     model: String,
-    #[serde(flatten)]
-    extra: serde_json::Map<String, serde_json::Value>,
 }
 
 async fn exec_prompt_in_provider(
@@ -112,7 +109,6 @@ async fn exec_prompt_in_provider(
             &args.model,
             &args.provider,
             args.format,
-            &args.extra,
         )
         .await
         .with_context(|| "running in provider")

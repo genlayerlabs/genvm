@@ -366,12 +366,7 @@ async fn check_llm_availability(
     };
 
     let response = provider
-        .exec_prompt_text(
-            &ctx,
-            test_prompt,
-            &config_data.model,
-            &serde_json::Map::new(),
-        )
+        .exec_prompt_text(&ctx, test_prompt, &config_data.model)
         .await?;
 
     Ok(response.result)
