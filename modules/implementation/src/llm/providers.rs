@@ -99,6 +99,8 @@ impl<T> ProviderResponse<T> {
     }
 }
 
+use super::merge;
+
 #[async_trait::async_trait]
 pub trait Provider {
     async fn exec_prompt_text(
@@ -290,6 +292,12 @@ impl Provider for OpenAICompatible {
                 .insert("max_tokens".to_owned(), prompt.max_tokens.into());
         }
 
+        merge::merge_extra(
+            &mut request,
+            serde_json::Value::Object(prompt.extra.clone()),
+            prompt.extra_merge_strategy.clone(),
+        )?;
+
         let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/chat/completions", self.config.host);
         let request = ctx
@@ -349,6 +357,12 @@ impl Provider for OpenAICompatible {
                 .unwrap()
                 .insert("max_tokens".to_owned(), prompt.max_tokens.into());
         }
+
+        merge::merge_extra(
+            &mut request,
+            serde_json::Value::Object(prompt.extra.clone()),
+            prompt.extra_merge_strategy.clone(),
+        )?;
 
         let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/chat/completions", self.config.host);
@@ -447,6 +461,9 @@ impl Provider for OLlama {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<ProviderResponse<String>> {
+        if !prompt.extra.is_empty() {
+            log_warn!(extra:serde = prompt.extra; "ollama provider ignores extra body fields");
+        }
         let request = prompt.to_ollama_no_format(model);
 
         let request = serde_json::to_vec(&request)?;
@@ -477,6 +494,9 @@ impl Provider for OLlama {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<ProviderResponse<String>> {
+        if !prompt.extra.is_empty() {
+            log_warn!(extra:serde = prompt.extra; "ollama provider ignores extra body fields");
+        }
         let mut request = prompt.to_ollama_no_format(model);
 
         request
@@ -550,6 +570,9 @@ impl Provider for Gemini {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<ProviderResponse<String>> {
+        if !prompt.extra.is_empty() {
+            log_warn!(extra:serde = prompt.extra; "gemini provider ignores extra body fields");
+        }
         let mut request = serde_json::json!({
             "generationConfig": {
                 "responseMimeType": "text/plain",
@@ -606,6 +629,9 @@ impl Provider for Gemini {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<ProviderResponse<String>> {
+        if !prompt.extra.is_empty() {
+            log_warn!(extra:serde = prompt.extra; "gemini provider ignores extra body fields");
+        }
         let mut request = serde_json::json!({
             "generationConfig": {
                 "responseMimeType": "application/json",
@@ -716,6 +742,9 @@ impl Provider for Anthropic {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<ProviderResponse<String>> {
+        if !prompt.extra.is_empty() {
+            log_warn!(extra:serde = prompt.extra; "anthropic provider ignores extra body fields");
+        }
         let request = prompt.to_anthropic_no_format(model)?;
 
         let request = serde_json::to_vec(&request)?;
@@ -752,6 +781,9 @@ impl Provider for Anthropic {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<ProviderResponse<serde_json::Map<String, serde_json::Value>>> {
+        if !prompt.extra.is_empty() {
+            log_warn!(extra:serde = prompt.extra; "anthropic provider ignores extra body fields");
+        }
         let mut request = prompt.to_anthropic_no_format(model)?;
 
         request.as_object_mut().unwrap().insert(
@@ -820,6 +852,9 @@ impl Provider for Anthropic {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<ProviderResponse<bool>> {
+        if !prompt.extra.is_empty() {
+            log_warn!(extra:serde = prompt.extra; "anthropic provider ignores extra body fields");
+        }
         let mut request = serde_json::json!({
             "model": model,
             "messages": [{"role": "user", "content": prompt.user_message}],
@@ -1027,6 +1062,8 @@ mod tests {
                     max_tokens: 500,
                     use_max_completion_tokens: true,
                     seed: Some(42),
+                    extra: Default::default(),
+                    extra_merge_strategy: Default::default(),
                 },
                 backend.script_config.models.first_key_value().context("no models configured")?.0,
             )
@@ -1112,6 +1149,8 @@ mod tests {
                     max_tokens: 50,
                     use_max_completion_tokens: true,
                     seed: Some(123),
+                    extra: Default::default(),
+                    extra_merge_strategy: Default::default(),
                 },
                 backend
                     .script_config
@@ -1196,6 +1235,8 @@ mod tests {
                     max_tokens: 500,
                     use_max_completion_tokens: true,
                     seed: Some(456),
+                    extra: Default::default(),
+                    extra_merge_strategy: Default::default(),
                 },
                 backend
                     .script_config
@@ -1301,6 +1342,8 @@ mod tests {
                     max_tokens: 50,
                     use_max_completion_tokens: true,
                     seed: Some(789),
+                    extra: Default::default(),
+                    extra_merge_strategy: Default::default(),
                 },
                 backend
                     .script_config

@@ -9,6 +9,7 @@ use crate::{common, scripting};
 
 pub(crate) mod config;
 mod handler;
+pub(crate) mod merge;
 pub(crate) mod prompt;
 pub(crate) mod providers;
 
@@ -368,7 +369,7 @@ mod tests {
         let payload = llm_iface::PromptPayload {
             images: Vec::new(),
             response_format: llm_iface::OutputFormat::Text,
-            prompt: "respond with two letters \"ok\" (without quotes) and nothing else. Lowercase, no repetition or punctuation".to_owned(),
+            prompt: "I am testing that your API works and you are capable for understanding the simplest request. For it I need you to respond with two letters \"ok\" (without quotes) and nothing else. Lowercase, no repetition or punctuation".to_owned(),
         };
 
         let payload = user_vm.vm.to_value(&payload).unwrap();

@@ -3,12 +3,15 @@ import collections.abc
 import enum
 import io
 import os
+import re
 import shlex
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
+
+_ANSI_ESCAPE_RE = re.compile(rb'\x1b\[[0-9;]*[A-Za-z]')
 
 from ya_test_runner import SharedContext
 
@@ -142,8 +145,8 @@ class Command:
 		end = time.monotonic()
 		ctx.logger.debug('process ended', pid=process.pid, exit_code=res)
 
-		stdout_text = (await stdout_fut).decode('utf-8')
-		stderr_text = (await stderr_fut).decode('utf-8')
+		stdout_text = _ANSI_ESCAPE_RE.sub(b'', await stdout_fut).decode('utf-8')
+		stderr_text = _ANSI_ESCAPE_RE.sub(b'', await stderr_fut).decode('utf-8')
 
 		ctx.logger.trace(
 			'process output',

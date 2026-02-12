@@ -2,6 +2,8 @@ local M = {}
 
 local lib = require('lib-genvm')
 
+---@alias MergeStrategy "none" | "replace" | "merge_left" | "merge_right" | table<string, MergeStrategy>
+
 ---@class Prompt
 ---@field system_message string | nil
 ---@field user_message string
@@ -10,6 +12,8 @@ local lib = require('lib-genvm')
 ---@field max_tokens integer
 ---@field use_max_completion_tokens boolean
 ---@field seed integer | nil
+---@field extra table<string, any> | nil
+---@field extra_merge_strategy MergeStrategy | nil
 
 ---@alias Format "text" | "json" | "bool"
 
@@ -18,7 +22,7 @@ local lib = require('lib-genvm')
 
 
 ---@alias LLMExecPromptPayload { response_format: "text" | "json", prompt: string, images: userdata[] }
----@alias LLMExecPromptTemplatePayload { template: "EqComparative" | "EqNonComparativeValidator" | "EqNonComparativeLeader", vars: table<string, string> }
+---@alias LLMExecPromptTemplatePayload { template: "EqComparative" | "EqNonComparativeValidator" | "EqNonComparativeLeader", [string]: string }
 
 ---@class LLM
 ---@field exec_prompt_in_provider fun(ctx, data: { prompt: Prompt, format: Format, model: string, provider: string }): any
