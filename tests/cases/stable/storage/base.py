@@ -2,11 +2,11 @@
 
 import genlayer as gl
 from genlayer.types import *
-from genlayer.storage import allow_storage
+from genlayer.storage import allow
 from genlayer.storage._internal.generate import generate_storage
 
 
-@allow_storage
+@allow
 class Test:
 	foo: i64
 	bar: i64

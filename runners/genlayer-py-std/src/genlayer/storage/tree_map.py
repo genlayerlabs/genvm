@@ -6,13 +6,14 @@ import collections.abc
 
 from .vec import DynArray
 from genlayer.types import u32, i8
-from .annotations import allow_storage
+
+from ._internal.generate import allow
 
 
 _NO_OBJ = object()
 
 
-@allow_storage
+@allow
 class _Node[K, V]:
 	key: K
 	value: V
@@ -24,9 +25,9 @@ class _Node[K, V]:
 		self.key = k
 		if v is not _NO_OBJ:
 			self.value = v
-		self.left = u32(0)
-		self.right = u32(0)
-		self.balance = i8(0)
+		self.left = 0
+		self.right = 0
+		self.balance = 0
 
 
 class Comparable(typing.Protocol):
@@ -34,7 +35,7 @@ class Comparable(typing.Protocol):
 	def __lt__(self, other: typing.Any, /) -> bool: ...
 
 
-@allow_storage
+@allow
 class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 	"""
 	Represents a mapping from keys to values that can be persisted on the blockchain
@@ -48,7 +49,7 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 	_free_slots: DynArray[u32]
 
 	def clear(self):
-		self._root = u32(0)
+		self._root = 0
 		self._slots.clear()
 		self._free_slots.clear()
 
@@ -75,27 +76,27 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 		par_node = self._slots[par - 1]
 		cur_node = self._slots[cur - 1]
 		cur_l = cur_node.left
-		cur_node.left = u32(par)
+		cur_node.left = par
 		par_node.right = cur_l
 		if cur_node.balance == 0:
-			par_node.balance = i8(+1)
-			cur_node.balance = i8(-1)
+			par_node.balance = +1
+			cur_node.balance = -1
 		else:
-			par_node.balance = i8(0)
-			cur_node.balance = i8(0)
+			par_node.balance = 0
+			cur_node.balance = 0
 
 	def _rot_right(self, par: int, cur: int):
 		par_node = self._slots[par - 1]
 		cur_node = self._slots[cur - 1]
 		cur_r = cur_node.right
-		cur_node.right = u32(par)
+		cur_node.right = par
 		par_node.left = cur_r
 		if cur_node.balance == 0:
-			par_node.balance = i8(-1)
-			cur_node.balance = i8(+1)
+			par_node.balance = -1
+			cur_node.balance = +1
 		else:
-			par_node.balance = i8(0)
-			cur_node.balance = i8(0)
+			par_node.balance = 0
+			cur_node.balance = 0
 
 	def _rot_right_left(self, gpar: int, par: int, cur: int):
 		gpar_node = self._slots[gpar - 1]
@@ -107,19 +108,19 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 		gpar_node.right = cur_l
 		par_node.left = cur_r
 
-		cur_node.left = u32(gpar)
-		cur_node.right = u32(par)
+		cur_node.left = gpar
+		cur_node.right = par
 
 		if cur_node.balance == 0:
-			par_node.balance = i8(0)
-			gpar_node.balance = i8(0)
+			par_node.balance = 0
+			gpar_node.balance = 0
 		elif cur_node.balance > 0:
-			gpar_node.balance = i8(-1)
-			par_node.balance = i8(0)
+			gpar_node.balance = -1
+			par_node.balance = 0
 		else:
-			gpar_node.balance = i8(0)
-			par_node.balance = i8(1)
-		cur_node.balance = i8(0)
+			gpar_node.balance = 0
+			par_node.balance = 1
+		cur_node.balance = 0
 
 	def _rot_left_right(self, gpar: int, par: int, cur: int):
 		gpar_node = self._slots[gpar - 1]
@@ -131,19 +132,19 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 		gpar_node.left = cur_r
 		par_node.right = cur_l
 
-		cur_node.left = u32(par)
-		cur_node.right = u32(gpar)
+		cur_node.left = par
+		cur_node.right = gpar
 
 		if cur_node.balance == 0:
-			par_node.balance = i8(0)
-			gpar_node.balance = i8(0)
+			par_node.balance = 0
+			gpar_node.balance = 0
 		elif cur_node.balance > 0:
-			par_node.balance = i8(-1)
-			gpar_node.balance = i8(0)
+			par_node.balance = -1
+			gpar_node.balance = 0
 		else:
-			par_node.balance = i8(0)
-			gpar_node.balance = i8(1)
-		cur_node.balance = i8(0)
+			par_node.balance = 0
+			gpar_node.balance = 1
+		cur_node.balance = 0
 
 	def _find_seq(self, k):
 		seq = []
@@ -220,7 +221,7 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 		if seq[seq_move_to] != 0:
 			seq_move_to_node = self._slots[seq[seq_move_to] - 1]
 			if special_null:
-				seq_move_to_node.balance = i8(0)
+				seq_move_to_node.balance = 0
 			else:
 				seq_move_to_node.balance = del_balance
 
@@ -255,10 +256,10 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 				if gp != 0:
 					gp = self._slots[gp - 1]
 					if gp.left == par:
-						gp.left = u32(seq[-1])
+						gp.left = seq[-1]
 					else:
 						assert gp.right == par
-						gp.right = u32(seq[-1])
+						gp.right = seq[-1]
 				if sib_bal == 0:
 					break
 			elif new_b == 2:
@@ -279,14 +280,14 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 				if gp != 0:
 					gp = self._slots[gp - 1]
 					if gp.left == par:
-						gp.left = u32(seq[-1])
+						gp.left = seq[-1]
 					else:
 						assert gp.right == par
-						gp.right = u32(seq[-1])
+						gp.right = seq[-1]
 				if sib_bal == 0:
 					break
 			else:
-				par_node.balance = i8(new_b)
+				par_node.balance = new_b
 				if new_b != 0:
 					break
 				seq.pop()
@@ -341,15 +342,15 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 		# patch root
 		if len(seq) == 1:
 			idx, cur_node = self._alloc_slot()
-			self._root = u32(idx + 1)
+			self._root = idx + 1
 			cur_node.__init__(k, does_not_exist())
 			return cur_node.value
 		# alloc new
 		new_idx, new_slot = self._alloc_slot()
 		if is_less:
-			self._slots[seq[-2] - 1].left = u32(new_idx + 1)
+			self._slots[seq[-2] - 1].left = new_idx + 1
 		else:
-			self._slots[seq[-2] - 1].right = u32(new_idx + 1)
+			self._slots[seq[-2] - 1].right = new_idx + 1
 		seq[-1] = new_idx + 1
 		new_slot.__init__(k, does_not_exist())
 		# rebalance
@@ -376,9 +377,9 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 				if gp != 0:
 					gp = self._slots[gp - 1]
 					if gp.left == par:
-						gp.left = u32(seq[-1])
+						gp.left = seq[-1]
 					else:
-						gp.right = u32(seq[-1])
+						gp.right = seq[-1]
 				break
 			elif new_b == 2:
 				gp = 0 if len(seq) == 2 else seq[-3]
@@ -395,12 +396,12 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 				if gp != 0:
 					gp = self._slots[gp - 1]
 					if gp.left == par:
-						gp.left = u32(seq[-1])
+						gp.left = seq[-1]
 					else:
-						gp.right = u32(seq[-1])
+						gp.right = seq[-1]
 				break
 			else:
-				par_node.balance = i8(new_b)
+				par_node.balance = new_b
 				if new_b == 0:
 					break
 				seq.pop()

@@ -2,13 +2,13 @@
 
 import genlayer as gl
 from genlayer.types import *
-from genlayer.storage import allow_storage
+from genlayer.storage import allow
 
 from dataclasses import dataclass
 import datetime
 
 
-@allow_storage
+@allow
 @dataclass
 class User:
 	name: str

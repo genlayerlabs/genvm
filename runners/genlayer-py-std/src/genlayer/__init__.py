@@ -29,7 +29,7 @@ import genlayer.storage  # noqa: F401
 
 # Re-export types and storage names so they are accessible as gl.X
 from .types import *
-from .storage import DynArray, Array, TreeMap, allow_storage
+from .storage import DynArray, Array, TreeMap, allow
 
 # Decorators - directly import so gl.public and gl.private work
 from ._internal.annotations import public, private
@@ -54,7 +54,7 @@ __all__ = (
 	'DynArray',
 	'Array',
 	'TreeMap',
-	'allow_storage',
+	'allow',
 )
 
 # Add all type names to __all__

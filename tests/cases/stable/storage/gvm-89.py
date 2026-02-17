@@ -3,10 +3,10 @@
 from dataclasses import dataclass
 import genlayer as gl
 from genlayer.types import *
-from genlayer.storage import allow_storage
+from genlayer.storage import allow
 
 
-@allow_storage
+@allow
 @dataclass
 class Foo:
 	x: gl.DynArray[str]

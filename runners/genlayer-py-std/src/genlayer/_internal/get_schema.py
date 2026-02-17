@@ -31,6 +31,11 @@ def _is_list(t, permissive: bool) -> bool:
 	if not permissive:
 		return False
 	try:
+		if issubclass(t, (str, bytes)):
+			return False
+	except Exception:
+		pass
+	try:
 		return issubclass(t, collections.abc.Sequence)
 	except Exception:
 		return False
@@ -89,6 +94,8 @@ def _repr_type(t: typing.Any, permissive: bool) -> typing.Any:
 				args[0] is str
 			), f'dictionary can have only string keys, got {type(args[0])}'
 			return {'$dict': _repr_type(args[1], permissive)}
+		if origin is typing.Annotated:
+			return _repr_type(t.__origin__, permissive)
 		if origin is tuple:
 			if len(args) == 2 and args[1] == ...:
 				return [{'$rep': _repr_type(args[0], permissive)}]
@@ -153,9 +160,8 @@ def _get_params(m: types.FunctionType, *, is_ctor: bool) -> dict:
 				ret['payable'] = getattr(m, PAYABLE_ATTR, False)
 		return ret
 	except Exception as e:
-		raise Exception(
-			f"couldn't get schema for method `{m}`", reflect.try_get_lineno(m)
-		) from e
+		e.add_note(f'while processing method `{m}` at {reflect.try_get_lineno(m)}')
+		raise
 
 
 def _get_ctor(contract: type) -> types.FunctionType:

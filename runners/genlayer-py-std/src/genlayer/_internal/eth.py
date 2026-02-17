@@ -55,7 +55,7 @@ def _generate_send(name: str, params: tuple[type], ret: type) -> typing.Any:
 evm_contract_interface = contract_generator(
 	_generate_view,
 	_generate_send,
-	lambda p: u256(wasi.get_balance(p.address.as_bytes)),
+	lambda p: wasi.get_balance(p.address.as_bytes),
 	lambda p, d: gl_call.gl_call_generic(
 		{'EthSend': {'address': p.address, 'calldata': b'', 'value': d.get('value', 0)}},
 		lambda _x: None,

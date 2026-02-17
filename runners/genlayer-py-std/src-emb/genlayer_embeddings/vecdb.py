@@ -5,7 +5,7 @@ __all__ = ('VecDB', 'VecDBElement', 'Distance', 'EuclideanDistanceSquared')
 from genlayer.storage import DynArray, TreeMap
 from genlayer.types import u32
 
-from genlayer.storage.annotations import allow_storage
+from genlayer.storage import allow
 
 import typing
 import numpy as np
@@ -16,7 +16,7 @@ class Distance(typing.Protocol):
 	def __call__(self, l, r) -> typing.Any: ...
 
 
-@allow_storage
+@allow
 class EuclideanDistanceSquared(Distance):
 	def __call__(self, l, r):
 		return np.sum((l - r) ** 2)
@@ -31,7 +31,7 @@ _Id = Id
 NO_PARENT = u32(0xFFFFFFFF)  # Constant for no parent node
 
 
-@allow_storage
+@allow
 class CoverTreeNode:
 	"""A node in the cover tree structure"""
 
@@ -94,7 +94,7 @@ class VecDBElement[T: np.number, S: int, V, Dist]:
 		self._db._free_idx[self._idx] = None
 
 
-@allow_storage
+@allow
 class VecDB[T: np.number, S: int, V, D: Distance]:
 	"""
 	Data structure that supports storing and querying vector data using Cover Trees

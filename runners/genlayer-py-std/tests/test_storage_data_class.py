@@ -1,9 +1,9 @@
-from genlayer.storage import allow_storage
+from genlayer.storage import allow
 from genlayer.storage._internal.generate import generate_storage
 from dataclasses import dataclass
 
 
-@allow_storage
+@allow
 @dataclass
 class A:
 	x: str

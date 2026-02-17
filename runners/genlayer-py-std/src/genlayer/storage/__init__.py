@@ -14,7 +14,7 @@ __all__ = (
 	'DynArray',
 	'Array',
 	'TreeMap',
-	'allow_storage',
+	'allow',
 	'inmem_allocate',
 	'Root',
 	'ROOT_SLOT_ID',
@@ -26,7 +26,6 @@ __all__ = (
 
 from .vec import DynArray, Array
 from .tree_map import TreeMap
-from .annotations import *
 from .root import Root
 
 from ._internal.core import Indirection, VLA
@@ -34,6 +33,8 @@ from ._internal.core import Indirection, VLA
 from ._internal.core import ROOT_SLOT_ID, Slot, Manager, InmemManager
 
 import typing
+
+from ._internal.generate import allow
 
 from ._internal.generate import (
 	ORIGINAL_INIT_ATTR,

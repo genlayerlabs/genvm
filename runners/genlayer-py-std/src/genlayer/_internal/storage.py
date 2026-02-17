@@ -1,6 +1,6 @@
 __all__ = ('STORAGE_MAN', 'ROOT_SLOT_ID')
 
-from ..storage._internal.core import *
+from ..storage._internal.core import Manager, Slot, ROOT_SLOT_ID
 from ..types import u256
 
 import _genlayer_wasi as wasi

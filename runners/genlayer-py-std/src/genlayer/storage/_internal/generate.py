@@ -5,6 +5,7 @@ Module that uses reflections that generates python-friendly views to GenVM stora
 __all__ = ('generate_storage',)
 
 from genlayer.types import *
+from genlayer.types import StaticIntMeta
 
 import typing
 import sys
@@ -31,14 +32,21 @@ ORIGINAL_INIT_ATTR = '__gl_original_init__'
 ALLOW_STORAGE_ATTR = '__gl_allow_storage__'
 
 
-def allow_storage[T: type](cls: T) -> T:
+def allow[T: type](cls: T) -> T:
+	"""
+	Marks class as allowed to be used within storage.
+	Without this annotation, storage builder will raise an exception
+	when trying to generate description for the class.
+	This behavior is required to prevent accidental usage of classes that are not designed to be used in storage,
+	because storage-generated class is modified and starts to behave differently from regular python class)
+	"""
 	setattr(cls, ALLOW_STORAGE_ATTR, True)
 	return cls
 
 
 def generate_storage[T: type](cls: T) -> T:
 	populate_np_descs_if_loaded()
-	cls = allow_storage(cls)
+	cls = allow(cls)
 	_storage_build(cls, {})
 	return cls
 
@@ -90,6 +98,79 @@ class _Instantiation:
 
 
 _none_desc = NoneDesc()
+_bigint_desc = _BigIntDesc()
+
+_all_int_types: list = [
+	u8,
+	u16,
+	u24,
+	u32,
+	u40,
+	u48,
+	u56,
+	u64,
+	u72,
+	u80,
+	u88,
+	u96,
+	u104,
+	u112,
+	u120,
+	u128,
+	u136,
+	u144,
+	u152,
+	u160,
+	u168,
+	u176,
+	u184,
+	u192,
+	u200,
+	u208,
+	u216,
+	u224,
+	u232,
+	u240,
+	u248,
+	u256,
+	i8,
+	i16,
+	i24,
+	i32,
+	i40,
+	i48,
+	i56,
+	i64,
+	i72,
+	i80,
+	i88,
+	i96,
+	i104,
+	i112,
+	i120,
+	i128,
+	i136,
+	i144,
+	i152,
+	i160,
+	i168,
+	i176,
+	i184,
+	i192,
+	i200,
+	i208,
+	i216,
+	i224,
+	i232,
+	i240,
+	i248,
+	i256,
+]
+
+_int_descs: dict[StaticIntMeta, tuple[type, IntDesc]] = {}
+for t in _all_int_types:
+	sim: StaticIntMeta = t.__metadata__[0]
+	_int_descs[sim] = (t, IntDesc(sim.size, signed=sim.signed))
 
 _known_descs: dict[type | _Instantiation, TypeDesc] = {
 	Address: AddrDesc(),
@@ -98,72 +179,11 @@ _known_descs: dict[type | _Instantiation, TypeDesc] = {
 	bool: BoolDesc(),
 	type(None): _none_desc,
 	None: _none_desc,  # type: ignore
-	u8: IntDesc(1, signed=False),
-	u16: IntDesc(2, signed=False),
-	u24: IntDesc(3, signed=False),
-	u32: IntDesc(4, signed=False),
-	u40: IntDesc(5, signed=False),
-	u48: IntDesc(6, signed=False),
-	u56: IntDesc(7, signed=False),
-	u64: IntDesc(8, signed=False),
-	u72: IntDesc(9, signed=False),
-	u80: IntDesc(10, signed=False),
-	u88: IntDesc(11, signed=False),
-	u96: IntDesc(12, signed=False),
-	u104: IntDesc(13, signed=False),
-	u112: IntDesc(14, signed=False),
-	u120: IntDesc(15, signed=False),
-	u128: IntDesc(16, signed=False),
-	u136: IntDesc(17, signed=False),
-	u144: IntDesc(18, signed=False),
-	u152: IntDesc(19, signed=False),
-	u160: IntDesc(20, signed=False),
-	u168: IntDesc(21, signed=False),
-	u176: IntDesc(22, signed=False),
-	u184: IntDesc(23, signed=False),
-	u192: IntDesc(24, signed=False),
-	u200: IntDesc(25, signed=False),
-	u208: IntDesc(26, signed=False),
-	u216: IntDesc(27, signed=False),
-	u224: IntDesc(28, signed=False),
-	u232: IntDesc(29, signed=False),
-	u240: IntDesc(30, signed=False),
-	u248: IntDesc(31, signed=False),
-	u256: IntDesc(32, signed=False),
-	i8: IntDesc(1),
-	i16: IntDesc(2),
-	i24: IntDesc(3),
-	i32: IntDesc(4),
-	i40: IntDesc(5),
-	i48: IntDesc(6),
-	i56: IntDesc(7),
-	i64: IntDesc(8),
-	i72: IntDesc(9),
-	i80: IntDesc(10),
-	i88: IntDesc(11),
-	i96: IntDesc(12),
-	i104: IntDesc(13),
-	i112: IntDesc(14),
-	i120: IntDesc(15),
-	i128: IntDesc(16),
-	i136: IntDesc(17),
-	i144: IntDesc(18),
-	i152: IntDesc(19),
-	i160: IntDesc(20),
-	i168: IntDesc(21),
-	i176: IntDesc(22),
-	i184: IntDesc(23),
-	i192: IntDesc(24),
-	i200: IntDesc(25),
-	i208: IntDesc(26),
-	i216: IntDesc(27),
-	i224: IntDesc(28),
-	i232: IntDesc(29),
-	i240: IntDesc(30),
-	i248: IntDesc(31),
-	i256: IntDesc(32),
-	bigint: _BigIntDesc(),
+	bigint: _bigint_desc,
 }
+
+for v in _int_descs.values():
+	_known_descs[v[0]] = v[1]
 
 
 class _FloatDesc(TypeDesc[float]):
@@ -193,6 +213,21 @@ def _storage_build_handle_special(
 		args = typing.get_args(cls)
 		assert len(args) == 1
 		return True, _storage_build(args[0], generics_map)
+	if origin is typing.Annotated:
+		origin = getattr(cls, '__origin__', None)
+		if origin is None:
+			raise TypeError('typing.Annotated should have __origin__')
+
+		meta: tuple = getattr(cls, '__metadata__', ())
+		if origin is int:
+			for m in meta:
+				if m == 'bigint':
+					return True, _bigint_desc
+				if isinstance(m, StaticIntMeta):
+					return True, _int_descs[m][1]
+
+		with reflect.context_notes('during processing discarded annotated'):
+			return True, _storage_build(origin, generics_map)
 	if origin is typing.Literal:
 		return True, LitPy(typing.get_args(cls))
 	if origin is tuple:
@@ -320,7 +355,7 @@ def _storage_build_struct(
 	was_generic = False
 	generic_info = {}
 
-	for prop_name, prop_value in typing.get_type_hints(cls).items():
+	for prop_name, prop_value in typing.get_type_hints(cls, include_extras=True).items():
 		if typing.get_origin(prop_value) is typing.ClassVar:
 			continue
 
@@ -446,8 +481,8 @@ class _DateTimeDesc(TypeDesc[datetime.datetime]):
 	def set(self, slot: Slot, off: int, val: datetime.datetime) -> None:
 		dt = _dt_desc.get(slot, off)
 		tz = val.tzinfo
-		dt.seconds = u64(int(val.timestamp()))
-		dt.micros = u32(val.microsecond)
+		dt.seconds = int(val.timestamp())
+		dt.micros = val.microsecond
 		if tz is None:
 			dt.has_tz = False
 		else:
@@ -455,9 +490,9 @@ class _DateTimeDesc(TypeDesc[datetime.datetime]):
 			tz_off = tz.utcoffset(None)
 			assert tz_off is not None
 
-			dt.off_days = i32(tz_off.days)
-			dt.off_seconds = i32(tz_off.seconds)
-			dt.off_micros = i32(tz_off.microseconds)
+			dt.off_days = tz_off.days
+			dt.off_seconds = tz_off.seconds
+			dt.off_micros = tz_off.microseconds
 
 
 _known_descs[datetime.datetime] = _DateTimeDesc()

@@ -1,12 +1,5 @@
 """
-Core type definitions for GenLayer contracts.
-
-This module provides:
-- Integer type aliases: u8, u16, ..., u256 (unsigned) and i8, i16, ..., i256 (signed)
-- ``bigint``: Alias for int, used to mark performance-critical big integers
-- ``Lazy[T]``: Base class for lazy evaluation
-- ``Address``: GenLayer address type
-- ``Keccak256``: Keccak256 hashing utility
+Core type definitions for GenLayer contracts
 """
 
 __all__ = (
@@ -91,76 +84,78 @@ import collections.abc
 from .keccak import Keccak256
 
 
-u8 = typing.NewType('u8', int)
-u16 = typing.NewType('u16', int)
-u24 = typing.NewType('u24', int)
-u32 = typing.NewType('u32', int)
-u40 = typing.NewType('u40', int)
-u48 = typing.NewType('u48', int)
-u56 = typing.NewType('u56', int)
-u64 = typing.NewType('u64', int)
-u72 = typing.NewType('u72', int)
-u80 = typing.NewType('u80', int)
-u88 = typing.NewType('u88', int)
-u96 = typing.NewType('u96', int)
-u104 = typing.NewType('u104', int)
-u112 = typing.NewType('u112', int)
-u120 = typing.NewType('u120', int)
-u128 = typing.NewType('u128', int)
-u136 = typing.NewType('u136', int)
-u144 = typing.NewType('u144', int)
-u152 = typing.NewType('u152', int)
-u160 = typing.NewType('u160', int)
-u168 = typing.NewType('u168', int)
-u176 = typing.NewType('u176', int)
-u184 = typing.NewType('u184', int)
-u192 = typing.NewType('u192', int)
-u200 = typing.NewType('u200', int)
-u208 = typing.NewType('u208', int)
-u216 = typing.NewType('u216', int)
-u224 = typing.NewType('u224', int)
-u232 = typing.NewType('u232', int)
-u240 = typing.NewType('u240', int)
-u248 = typing.NewType('u248', int)
-u256 = typing.NewType('u256', int)
-"""
-Alias for int that is used for typing
-"""
+class StaticIntMeta(typing.NamedTuple):
+	size: int
+	signed: bool
 
-i8 = typing.NewType('i8', int)
-i16 = typing.NewType('i16', int)
-i24 = typing.NewType('i24', int)
-i32 = typing.NewType('i32', int)
-i40 = typing.NewType('i40', int)
-i48 = typing.NewType('i48', int)
-i56 = typing.NewType('i56', int)
-i64 = typing.NewType('i64', int)
-i72 = typing.NewType('i72', int)
-i80 = typing.NewType('i80', int)
-i88 = typing.NewType('i88', int)
-i96 = typing.NewType('i96', int)
-i104 = typing.NewType('i104', int)
-i112 = typing.NewType('i112', int)
-i120 = typing.NewType('i120', int)
-i128 = typing.NewType('i128', int)
-i136 = typing.NewType('i136', int)
-i144 = typing.NewType('i144', int)
-i152 = typing.NewType('i152', int)
-i160 = typing.NewType('i160', int)
-i168 = typing.NewType('i168', int)
-i176 = typing.NewType('i176', int)
-i184 = typing.NewType('i184', int)
-i192 = typing.NewType('i192', int)
-i200 = typing.NewType('i200', int)
-i208 = typing.NewType('i208', int)
-i216 = typing.NewType('i216', int)
-i224 = typing.NewType('i224', int)
-i232 = typing.NewType('i232', int)
-i240 = typing.NewType('i240', int)
-i248 = typing.NewType('i248', int)
-i256 = typing.NewType('i256', int)
 
-bigint = typing.NewType('bigint', int)
+u8 = typing.Annotated[int, StaticIntMeta(1, False)]
+u16 = typing.Annotated[int, StaticIntMeta(2, False)]
+u24 = typing.Annotated[int, StaticIntMeta(3, False)]
+u32 = typing.Annotated[int, StaticIntMeta(4, False)]
+u40 = typing.Annotated[int, StaticIntMeta(5, False)]
+u48 = typing.Annotated[int, StaticIntMeta(6, False)]
+u56 = typing.Annotated[int, StaticIntMeta(7, False)]
+u64 = typing.Annotated[int, StaticIntMeta(8, False)]
+u72 = typing.Annotated[int, StaticIntMeta(9, False)]
+u80 = typing.Annotated[int, StaticIntMeta(10, False)]
+u88 = typing.Annotated[int, StaticIntMeta(11, False)]
+u96 = typing.Annotated[int, StaticIntMeta(12, False)]
+u104 = typing.Annotated[int, StaticIntMeta(13, False)]
+u112 = typing.Annotated[int, StaticIntMeta(14, False)]
+u120 = typing.Annotated[int, StaticIntMeta(15, False)]
+u128 = typing.Annotated[int, StaticIntMeta(16, False)]
+u136 = typing.Annotated[int, StaticIntMeta(17, False)]
+u144 = typing.Annotated[int, StaticIntMeta(18, False)]
+u152 = typing.Annotated[int, StaticIntMeta(19, False)]
+u160 = typing.Annotated[int, StaticIntMeta(20, False)]
+u168 = typing.Annotated[int, StaticIntMeta(21, False)]
+u176 = typing.Annotated[int, StaticIntMeta(22, False)]
+u184 = typing.Annotated[int, StaticIntMeta(23, False)]
+u192 = typing.Annotated[int, StaticIntMeta(24, False)]
+u200 = typing.Annotated[int, StaticIntMeta(25, False)]
+u208 = typing.Annotated[int, StaticIntMeta(26, False)]
+u216 = typing.Annotated[int, StaticIntMeta(27, False)]
+u224 = typing.Annotated[int, StaticIntMeta(28, False)]
+u232 = typing.Annotated[int, StaticIntMeta(29, False)]
+u240 = typing.Annotated[int, StaticIntMeta(30, False)]
+u248 = typing.Annotated[int, StaticIntMeta(31, False)]
+u256 = typing.Annotated[int, StaticIntMeta(32, False)]
+
+i8 = typing.Annotated[int, StaticIntMeta(1, True)]
+i16 = typing.Annotated[int, StaticIntMeta(2, True)]
+i24 = typing.Annotated[int, StaticIntMeta(3, True)]
+i32 = typing.Annotated[int, StaticIntMeta(4, True)]
+i40 = typing.Annotated[int, StaticIntMeta(5, True)]
+i48 = typing.Annotated[int, StaticIntMeta(6, True)]
+i56 = typing.Annotated[int, StaticIntMeta(7, True)]
+i64 = typing.Annotated[int, StaticIntMeta(8, True)]
+i72 = typing.Annotated[int, StaticIntMeta(9, True)]
+i80 = typing.Annotated[int, StaticIntMeta(10, True)]
+i88 = typing.Annotated[int, StaticIntMeta(11, True)]
+i96 = typing.Annotated[int, StaticIntMeta(12, True)]
+i104 = typing.Annotated[int, StaticIntMeta(13, True)]
+i112 = typing.Annotated[int, StaticIntMeta(14, True)]
+i120 = typing.Annotated[int, StaticIntMeta(15, True)]
+i128 = typing.Annotated[int, StaticIntMeta(16, True)]
+i136 = typing.Annotated[int, StaticIntMeta(17, True)]
+i144 = typing.Annotated[int, StaticIntMeta(18, True)]
+i152 = typing.Annotated[int, StaticIntMeta(19, True)]
+i160 = typing.Annotated[int, StaticIntMeta(20, True)]
+i168 = typing.Annotated[int, StaticIntMeta(21, True)]
+i176 = typing.Annotated[int, StaticIntMeta(22, True)]
+i184 = typing.Annotated[int, StaticIntMeta(23, True)]
+i192 = typing.Annotated[int, StaticIntMeta(24, True)]
+i200 = typing.Annotated[int, StaticIntMeta(25, True)]
+i208 = typing.Annotated[int, StaticIntMeta(26, True)]
+i216 = typing.Annotated[int, StaticIntMeta(27, True)]
+i224 = typing.Annotated[int, StaticIntMeta(28, True)]
+i232 = typing.Annotated[int, StaticIntMeta(29, True)]
+i240 = typing.Annotated[int, StaticIntMeta(30, True)]
+i248 = typing.Annotated[int, StaticIntMeta(31, True)]
+i256 = typing.Annotated[int, StaticIntMeta(32, True)]
+
+bigint = typing.Annotated[int, 'bigint']
 """
 Just an alias for :py:class:`int`, it is introduced to prevent accidental use of low-performance big integers in the store
 """
@@ -231,6 +226,7 @@ class Address:
 		self._as_hex = None
 		if isinstance(val, Address):
 			self._as_bytes = val.as_bytes
+			self._as_hex = val.as_hex
 			return
 		if isinstance(val, str):
 			if len(val) == 2 + Address.SIZE * 2 and val.startswith('0x'):
@@ -296,7 +292,7 @@ class Address:
 
 		:returns: int representation of an address (unsigned little endian)
 		"""
-		return u160(int.from_bytes(self._as_bytes, 'little', signed=False))
+		return int.from_bytes(self._as_bytes, 'little', signed=False)
 
 	def __hash__(self):
 		return hash(self._as_bytes)

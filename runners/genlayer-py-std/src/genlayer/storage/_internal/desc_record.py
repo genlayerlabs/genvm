@@ -1,6 +1,6 @@
 import typing
 
-from .core import *
+from .core import TypeDesc, Slot, CopyAction, actions_apply_copy
 from .core import _WithStorageSlot
 
 import genlayer._internal.reflect as reflect

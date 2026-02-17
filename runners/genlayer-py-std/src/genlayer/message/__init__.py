@@ -48,5 +48,5 @@ else:
 	contract_address: Address = raw['contract_address']
 	sender_address: Address = raw['sender_address']
 	origin_address: Address = raw['origin_address']
-	value: u256 = u256(raw['value'])
-	chain_id: u256 = u256(raw['chain_id'])
+	value: u256 = raw['value']
+	chain_id: u256 = raw['chain_id']

@@ -2,7 +2,7 @@ from genlayer.types import Address
 import abc
 import collections.abc
 
-from .core import *
+from .core import TypeDesc, Slot, ComplexCopyAction
 
 
 class BoolDesc(TypeDesc):

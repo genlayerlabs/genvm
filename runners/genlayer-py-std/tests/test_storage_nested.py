@@ -1,8 +1,8 @@
-from genlayer.storage import DynArray, allow_storage
+from genlayer.storage import DynArray, allow
 from genlayer.storage._internal.generate import generate_storage
 
 
-@allow_storage
+@allow
 class A:
 	x: str
 
@@ -25,7 +25,7 @@ def test_assignments_depth_1():
 	assert b.x.x == 'x'
 
 
-@allow_storage
+@allow
 class C:
 	v: DynArray[str]
 

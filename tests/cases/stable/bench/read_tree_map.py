@@ -6,14 +6,14 @@ import genlayer as gl
 from genlayer import u32, u8
 
 
-@gl.storage.allow_storage
+@gl.storage.allow
 class TrieNode[K, T]:
 	children: gl.TreeMap[K, u32]
 	value: T
 	has_value: bool
 
 
-@gl.storage.allow_storage
+@gl.storage.allow
 class Trie[K, T]:
 	nodes: gl.DynArray[TrieNode[K, T]]
 

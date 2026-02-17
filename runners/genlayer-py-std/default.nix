@@ -10,7 +10,7 @@ let
 				"py" # interpreter exe name
 				"-u" # unbuffered
 				"-B" # don't write .pyc
-				"/py/libs/_genlayer_runner.py" # runner script
+				"/py/libs/_genlayer_bootloader.py" # runner script
 			];
 		}
 		{ Depends = "${runnersLib.hashes.pyLibs.cloudpickle.uid}"; }

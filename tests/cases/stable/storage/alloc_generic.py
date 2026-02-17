@@ -2,11 +2,11 @@
 
 import genlayer as gl
 from genlayer.types import *
-from genlayer.storage import allow_storage
+from genlayer.storage import allow
 from dataclasses import dataclass
 
 
-@allow_storage
+@allow
 @dataclass
 class Test[T]:
 	foo: T

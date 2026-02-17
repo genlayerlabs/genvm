@@ -139,7 +139,7 @@ class ContractProxy[TView, TSend](BaseContract, typing.Protocol):
 		"""
 		...
 
-	def emit(self, *, value: u256 = u256(0), on: ON = 'finalized') -> TSend:
+	def emit(self, *, value: u256 = 0, on: ON = 'finalized') -> TSend:
 		"""
 		Get a namespace for emitting write transactions.
 
@@ -199,7 +199,7 @@ class _ContractAt(ContractProxy[ErasedMethods, ErasedMethods]):
 	def view(self, *, state: StorageType = StorageType.LATEST_NON_FINAL) -> ErasedMethods:
 		return _ContractAtGetter(_ContractAtViewMethod, self._address, state)
 
-	def emit(self, *, value: u256 = u256(0), on: ON = 'finalized') -> ErasedMethods:
+	def emit(self, *, value: u256 = 0, on: ON = 'finalized') -> ErasedMethods:
 		return _ContractAtGetter(_ContractAtEmitMethod, self._address, value, on)
 
 	def emit_transfer(self, *, value: u256, on: ON = 'finalized') -> None:
@@ -209,7 +209,7 @@ class _ContractAt(ContractProxy[ErasedMethods, ErasedMethods]):
 
 	@property
 	def balance(self) -> u256:
-		return u256(wasi.get_balance(self._address.as_bytes))
+		return wasi.get_balance(self._address.as_bytes)
 
 
 def get_contract_at(address: Address) -> ContractProxy:
@@ -227,7 +227,7 @@ def get_contract_at(address: Address) -> ContractProxy:
 		>>> addr = Address('0x1234567890abcdef...')
 		>>> contract = get_contract_at(addr)
 		>>> result = contract.view().some_view_method(arg1, arg2)
-		>>> contract.emit(value=u256(100)).some_write_method(arg1)
+		>>> contract.emit(value=100).some_write_method(arg1)
 	"""
 	return _ContractAt(address)
 
@@ -338,7 +338,7 @@ def deploy_contract(
 	args: collections.abc.Sequence[calldata.Encodable] = [],
 	kwargs: collections.abc.Mapping[str, calldata.Encodable] = {},
 	salt_nonce: typing.Literal[0] = 0,
-	value: u256 = u256(0),
+	value: u256 = 0,
 	on: ON = 'finalized',
 ) -> None: ...
 
@@ -360,8 +360,8 @@ def deploy_contract(
 	code: bytes,
 	args: collections.abc.Sequence[calldata.Encodable] = [],
 	kwargs: collections.abc.Mapping[str, calldata.Encodable] = {},
-	salt_nonce: u256 | typing.Literal[0] = u256(0),
-	value: u256 = u256(0),
+	salt_nonce: u256 | typing.Literal[0] = 0,
+	value: u256 = 0,
 	on: ON = 'finalized',
 ) -> Address | None:
 	"""
@@ -391,8 +391,8 @@ def deploy_contract(
 		>>> address = deploy_contract(
 		>>>     code=contract_source_zip_as_bytes,
 		>>>     args=[initial_supply],
-		>>>     salt_nonce=u256(12345),
-		>>>     value=u256(1000)  # Send 1000 native tokens
+		>>>     salt_nonce=12345,
+		>>>     value=1000  # Send 1000 native tokens
 		>>> )
 		>>> print(f'Contract deployed at: {address}')
 
@@ -484,7 +484,7 @@ class Contract(BaseContract):
 
 	@property
 	def balance(self) -> u256:
-		return u256(wasi.get_self_balance())
+		return wasi.get_self_balance()
 
 	@property
 	def address(self) -> Address:

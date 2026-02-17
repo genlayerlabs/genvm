@@ -3,8 +3,16 @@ __all__ = ('DynArray', 'Array')
 import typing
 import collections.abc
 
-from ._internal.core import *
-from ._internal.core import _WithStorageSlotAndTD
+from ._internal.core import (
+	_WithStorageSlotAndTD,
+	TypeDesc,
+	Slot,
+	CopyAction,
+	actions_apply_copy,
+	SpecialTypeDesc,
+	ComplexCopyAction,
+	actions_append,
+)
 
 from ._internal.desc_base_types import _u32_desc
 
