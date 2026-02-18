@@ -10,4 +10,4 @@ class Contract(gl.contract.Contract):
 	@gl.public.write
 	def foo(self, a, b):
 		print('contract to.foo')
-		gl.advanced.user_error_immediate(f"nah, I won't execute {a + b}")
+		gl.vm.user_error_immediate(f"nah, I won't execute {a + b}")

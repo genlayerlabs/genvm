@@ -204,17 +204,6 @@ class _FloatDesc(TypeDesc[float]):
 _known_descs[float] = _FloatDesc()
 
 
-class _DeferredGeneric:
-	def __init__(self, ev: typing.Callable[[], TypeDesc | Lit]):
-		self._eval = ev
-		self._cached = None
-
-	def get(self):
-		if self._cached is None:
-			self._cached = self._eval()
-		return self._cached
-
-
 def _storage_build_handle_special(
 	origin: typing.Any,
 	cls: type | _Instantiation,

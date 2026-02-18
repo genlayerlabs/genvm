@@ -31,6 +31,8 @@ class Root:
 	"""
 	upgraders: Indirection[VLA[Address]]
 
+	major: u8
+
 	@staticmethod
 	def get() -> 'Root':
 		slot = Root.MANAGER.get_store_slot(ROOT_SLOT_ID)

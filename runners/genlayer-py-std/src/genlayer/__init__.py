@@ -17,7 +17,6 @@ This provides access to:
 - Non-deterministic operations via ``gl.nondet``
 - Equivalence principles via ``gl.eq_principle``
 - EVM interaction via ``gl.evm``
-- Advanced operations via ``gl.advanced`` (alias to ``gl.vm``)
 - Method decorators via ``gl.public`` and ``gl.private``
 """
 
@@ -39,7 +38,6 @@ __all__ = (
 	'contract',
 	'message',
 	'vm',
-	'advanced',
 	'evm',
 	'nondet',
 	'eq_principle',
@@ -54,7 +52,6 @@ __all__ = (
 	'DynArray',
 	'Array',
 	'TreeMap',
-	'allow',
 )
 
 # Add all type names to __all__
@@ -66,18 +63,18 @@ _gen_docs = os.getenv('GENERATING_DOCS', 'false') == 'true'
 
 if typing.TYPE_CHECKING or _gen_docs:
 	# For type checking and docs, import modules eagerly
-	from . import contract
-	from . import message
-	from . import vm
-	from . import evm
-	from . import nondet
-	from . import eq_principle
-	from . import types
-	from . import calldata
-	from . import storage
+	from . import (
+		contract,
+		message,
+		vm,
+		evm,
+		nondet,
+		eq_principle,
+		types,
+		calldata,
+		storage,
+	)
 	import _genlayer_wasi as wasi
-
-	advanced = vm
 else:
 	# For runtime, use lazy loading to avoid circular imports and improve startup
 	_lazy_modules = {
@@ -90,7 +87,6 @@ else:
 		'types': 'genlayer.types',
 		'calldata': 'genlayer.calldata',
 		'storage': 'genlayer.storage',
-		'advanced': 'genlayer.vm',
 	}
 
 	def __getattr__(name: str):

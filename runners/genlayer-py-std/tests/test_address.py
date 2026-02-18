@@ -16,6 +16,11 @@ def test_addr(as_str: str):
 	assert addr.as_hex == as_str
 
 
+def test_addr_zero():
+	addr = Address.ZERO
+	assert addr.as_hex == '0x0000000000000000000000000000000000000000'
+
+
 def test_addr_constructors():
 	origin = '0x03FB09251eC05ee9Ca36c98644070B89111D4b3F'
 	origin_bytes = bytes.fromhex(origin[2:])

@@ -76,3 +76,17 @@ def copy_to_memory[T](val: T) -> T:
 	td.set(slot, 0, val)
 
 	return td.get(slot, 0)
+
+
+import pickle
+
+
+@allow
+class Pickled[T]:
+	_data: bytes
+
+	def load(self) -> T:
+		return pickle.loads(self._data)
+
+	def store(self, val: T) -> None:
+		self._data = pickle.dumps(val)
