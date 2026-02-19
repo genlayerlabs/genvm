@@ -7,7 +7,7 @@ import typing
 
 from .core import *
 
-_imp: typing.Callable[['_Instantiation'], TypeDesc | None] | None = None
+_imp: typing.Callable[..., TypeDesc | None] | None = None
 
 _populated = False
 
@@ -72,34 +72,51 @@ def _populate_np_descs():
 	]
 	_known_descs.update({k: _NumpyDesc(k) for k in _all_np_types})  # type: ignore
 
-	def make_ndarray(cls: '_Instantiation') -> TypeDesc | None:
-		if cls.origin is not np.ndarray:
+	def make_ndarray(ctx, origin, args) -> TypeDesc | None:
+		if origin is not np.ndarray:
 			return None
 
-		assert len(cls.args) == 2
-		shape = cls.args[0]
-		assert isinstance(shape, LitTuple)
-		assert all(
-			isinstance(a, LitPy) and len(a.alts) == 1 and isinstance(a.alts[0], int)
-			for a in shape.args
+		if len(args) != 2:
+			raise ctx.type_err(
+				f'Expected exactly two arguments for np.ndarray, got {len(args)}'
+			)
+
+		shape_type = _resolve_raw_type(ctx, args[0])
+		dtype_type = _resolve_raw_type(ctx, args[1])
+
+		# parse shape: e.g. tuple[Literal[3], Literal[5]] → (3, 5)
+		shape_origin = typing.get_origin(shape_type)
+		if shape_origin is not tuple:
+			raise ctx.type_err(f'Expected tuple for ndarray shape, got {shape_type}')
+
+		shape_args = typing.get_args(shape_type)
+		shape = []
+		for dim in shape_args:
+			if typing.get_origin(dim) is not typing.Literal:
+				raise ctx.type_err(f'Expected Literal for ndarray dimension, got {dim}')
+			lit_args = typing.get_args(dim)
+			if len(lit_args) != 1 or not isinstance(lit_args[0], int):
+				raise ctx.type_err(
+					f'Expected single int Literal for ndarray dimension, got {lit_args}'
+				)
+			shape.append(lit_args[0])
+
+		typ = _storage_build(
+			ctx.with_trace('during processing ndarray element type'), dtype_type
 		)
-		typ = cls.args[1]
-		assert isinstance(typ, TypeDesc)
-		return _NumpyNDDesc(
-			typ, tuple(a.alts[0] for a in typing.cast(tuple[LitPy], shape.args))
-		)
+		return _NumpyNDDesc(typ, tuple(shape))
 
 	global _imp
 	_imp = make_ndarray
 
 
-def try_handle_np(cls: '_Instantiation') -> TypeDesc | None:
+def try_handle_np(ctx, origin, args) -> TypeDesc | None:
 	if _imp is None:
 		return None
-	return _imp(cls)
+	return _imp(ctx, origin, args)
 
 
-from .generate import _known_descs, _Instantiation, LitTuple, LitPy
+from .generate import _known_descs, _storage_build, _resolve_raw_type
 
 
 def populate_np_descs_if_loaded():

@@ -47,54 +47,11 @@ def allow[T: type](cls: T) -> T:
 def generate_storage[T: type](cls: T) -> T:
 	populate_np_descs_if_loaded()
 	cls = allow(cls)
-	_storage_build(cls, {})
+	ctx = _BuilderCtx({}, ())
+	desc = _storage_build(ctx, cls)
+
+	_known_descs[cls] = desc
 	return cls
-
-
-class Lit:
-	__slots__ = ()
-
-
-class LitPy(Lit):
-	__slots__ = ('alts',)
-
-	def __init__(self, alts: tuple):
-		self.alts = alts
-
-	def __repr__(self):
-		return f'LitPy[{" | ".join(repr(a) for a in self.alts)}]'
-
-
-class LitTuple(Lit):
-	__slots__ = ('args',)
-
-	def __init__(self, args: tuple[Lit]):
-		self.args = args
-
-	def __repr__(self):
-		return f'LitTuple[{" * ".join(repr(a) for a in self.args)}]'
-
-
-class _Instantiation:
-	origin: type
-	args: tuple[TypeDesc | Lit, ...]
-
-	__slots__ = ('origin', 'args')
-
-	def __init__(self, origin: type, args: tuple[TypeDesc | Lit, ...]):
-		self.origin = origin
-		self.args = args
-
-	def __eq__(self, r):
-		if not isinstance(r, _Instantiation):
-			return False
-		return self.origin == r.origin and self.args == r.args
-
-	def __hash__(self):
-		return hash(('_Instantiation', self.origin, self.args))
-
-	def __repr__(self):
-		return f"{reflect.repr_type(self.origin)}[{', '.join(map(repr, self.args))}]"
 
 
 _none_desc = NoneDesc()
@@ -172,7 +129,7 @@ for t in _all_int_types:
 	sim: StaticIntMeta = t.__metadata__[0]
 	_int_descs[sim] = (t, IntDesc(sim.size, signed=sim.signed))
 
-_known_descs: dict[type | _Instantiation, TypeDesc] = {
+_known_descs: dict[typing.Any, TypeDesc] = {
 	Address: AddrDesc(),
 	str: StrDesc(),
 	bytes: BytesDesc(),
@@ -204,185 +161,247 @@ class _FloatDesc(TypeDesc[float]):
 _known_descs[float] = _FloatDesc()
 
 
-class _DeferredGeneric:
-	def __init__(self, ev: typing.Callable[[], TypeDesc | Lit]):
-		self._eval = ev
-		self._cached = None
+class _DeferredBuilder:
+	__slots__ = ('_ctx', '_raw_type', '_cached', '_evaluated_at_ctx')
 
-	def get(self):
+	def __init__(self, ctx: '_BuilderCtx', raw_type):
+		self._ctx = ctx
+		self._raw_type = raw_type
+		self._cached: TypeDesc | None = None
+		self._evaluated_at_ctx: '_BuilderCtx | None' = None
+
+	@property
+	def raw(self):
+		return self._raw_type
+
+	def get(self, instantiated_at_ctx: '_BuilderCtx') -> TypeDesc:
 		if self._cached is None:
-			self._cached = self._eval()
+			self._evaluated_at_ctx = instantiated_at_ctx
+			self._cached = _storage_build(self._ctx, self._raw_type)
 		return self._cached
 
 
-def _storage_build_handle_special(
-	origin: typing.Any,
-	cls: type | _Instantiation,
-	generics_map: dict[str, TypeDesc | Lit],
-) -> tuple[bool, type | _Instantiation | Lit | TypeDesc]:
-	if 'numpy' in sys.modules and origin is sys.modules['numpy'].dtype:
-		args = typing.get_args(cls)
-		assert len(args) == 1
-		return True, _storage_build(args[0], generics_map)
-	if origin is typing.Annotated:
-		origin = getattr(cls, '__origin__', None)
-		if origin is None:
-			raise TypeError('typing.Annotated should have __origin__')
-
-		meta: tuple = getattr(cls, '__metadata__', ())
-		if origin is int:
-			for m in meta:
-				if m == 'bigint':
-					return True, _bigint_desc
-				if isinstance(m, StaticIntMeta):
-					return True, _int_descs[m][1]
-
-		with reflect.context_notes('during processing discarded annotated'):
-			return True, _storage_build(origin, generics_map)
-	if origin is typing.Literal:
-		return True, LitPy(typing.get_args(cls))
-	if origin is tuple:
-		args = tuple(_storage_build(c, generics_map) for c in typing.get_args(cls))
-		if all(isinstance(a, Lit) for a in args):
-			return True, LitTuple(args)  # type: ignore
-	if origin is Array:
-		args = typing.get_args(cls)
-		assert len(args) == 2
-		assert typing.get_origin(args[1]) is typing.Literal
-		lit_args = typing.get_args(args[1])
-		assert len(lit_args) == 1
-		assert isinstance(lit_args[0], int)
-		res = _Instantiation(origin, (_storage_build(args[0], generics_map), lit_args[0]))  # type: ignore
-		return True, res
-	return False, cls
+class GenerationError(TypeError):
+	pass
 
 
-def _storage_build_inner(
-	cls: type | _Instantiation,
-	generics_map: dict[str, TypeDesc | Lit],
-) -> TypeDesc | Lit:
+class _BuilderCtx(typing.NamedTuple):
+	generic_vars: dict[str, _DeferredBuilder]
+	trace: tuple[str, ...]
+
+	def with_trace(self, msg: str) -> '_BuilderCtx':
+		new_val = self._replace(trace=self.trace + (msg,))
+		return new_val
+
+	def type_err(self, msg: str) -> GenerationError:
+		exc = GenerationError(msg)
+		for t in self.trace:
+			exc.add_note(t)
+		return exc
+
+	@staticmethod
+	def empty():
+		return _BuilderCtx({}, ())
+
+
+def _resolve_raw_type(ctx: _BuilderCtx, tp):
+	"""Substitute TypeVars in a type using ctx.generic_vars, returning the raw type"""
+	if isinstance(tp, typing.TypeVar):
+		data = ctx.generic_vars.get(tp.__name__)
+		if data is None:
+			raise ctx.type_err(f'Unbound generic type variable `{tp.__name__}`')
+		return _resolve_raw_type(ctx, data.raw)
+	origin = typing.get_origin(tp)
+	if origin is None:
+		return tp
+	args = typing.get_args(tp)
+	new_args = tuple(_resolve_raw_type(ctx, a) for a in args)
+	if new_args == args:
+		return tp
+	return origin[new_args] if len(new_args) > 1 else origin[new_args[0]]
+
+
+def _storage_build(ctx: _BuilderCtx, cls) -> TypeDesc:
+	if cached := _known_descs.get(cls):
+		return cached
+
+	trace_note = ['during building type `', reflect.repr_type(cls), '`']
+	if len(ln := reflect.try_get_lineno(cls)) != 0:
+		trace_note.append(' (declared at ')
+		trace_note.append(str(ln))
+		trace_note.append(')')
+
+	ctx = ctx.with_trace(''.join(trace_note))
+	return _storage_build_impl(ctx, cls)
+
+
+def _check_forbidden_origin(ctx: _BuilderCtx, cls):
 	if cls is int:
-		raise TypeError(
-			'use `bigint` or one of sized integers please, see https://docs.genlayer.com/developers/intelligent-contracts/storage'
-		)
+		raise ctx.type_err('use `bigint` or one of sized integers')
+	if cls is dict:
+		raise ctx.type_err('use `TreeMap` instead of a dict')
+	if cls is list:
+		raise ctx.type_err('use `DynArray` instead of a list')
+
+
+def _storage_build_impl(ctx: _BuilderCtx, cls) -> TypeDesc:
+	if s := _known_descs.get(cls):
+		return s
 	if isinstance(cls, typing.TypeVar):
-		return generics_map[cls.__name__]
+		data = ctx.generic_vars.get(cls.__name__)
+		if data is None:
+			raise ctx.type_err(
+				f'Unbound generic type variable `{cls.__name__}`, known variables: {",".join(ctx.generic_vars.keys())}'
+			)
+		try:
+			return data.get(ctx)
+		except BaseException as e:
+			e.add_note(f'Instantiated generic variable `{cls.__name__}`')
+			for t in ctx.trace:
+				e.add_note(t)
+			raise
 
 	origin = typing.get_origin(cls)
-	special, new_cls_special = _storage_build_handle_special(origin, cls, generics_map)
-	if special:
-		if isinstance(new_cls_special, TypeDesc):
-			return new_cls_special
-		if isinstance(new_cls_special, Lit):
-			return new_cls_special
-		new_cls = new_cls_special
-	elif origin is not None:
-		args: list[TypeDesc | Lit] = []
-		gen_args = typing.get_args(cls)
-		for c_i, c in enumerate(gen_args):
-			with reflect.context_generic_argument(origin, gen_args, c, c_i):
-				args.append(_storage_build(c, generics_map))
-		new_cls = _Instantiation(origin, tuple(args))
-	else:
-		new_cls = cls
+	if origin is None:
+		_check_forbidden_origin(ctx, cls)
+		return _storage_build_struct(ctx._replace(generic_vars={}), cls)
+	if 'numpy' in sys.modules and origin is sys.modules['numpy'].dtype:
+		args = typing.get_args(cls)
+		if len(args) != 1:
+			raise ctx.type_err(
+				f'Expected exactly one argument for numpy dtype, got {len(args)}'
+			)
+		return _storage_build(ctx, args[0])
 
-	old = _known_descs.get(new_cls, None)
-	if old is not None:
-		return old
-	if isinstance(new_cls, _Instantiation):
-		description = _storage_build_generic(new_cls, generics_map)
-	else:
-		description = _storage_build_struct(new_cls, generics_map)
-	_known_descs[new_cls] = description
-	return description
+	_check_forbidden_origin(ctx, origin)
 
+	args = typing.get_args(cls)
 
-from .numpy import try_handle_np, populate_np_descs_if_loaded
+	if origin is typing.Annotated:
+		return _storage_build_annotated(ctx, cls)
+	if origin is typing.Literal:
+		raise ctx.type_err('Literal types are not supported in storage')
+	if origin is tuple or origin is typing.Tuple:
+		raise ctx.type_err(
+			'Tuple types are not supported in storage, use a custom class instead'
+		)
 
-
-def _storage_build(
-	cls: type | _Instantiation,
-	generics_map: dict[str, TypeDesc | Lit],
-) -> TypeDesc | Lit:
-	with reflect.context_type(cls):
-		return _storage_build_inner(cls, generics_map)
-
-
-def _storage_build_generic(
-	cls: _Instantiation, generics_map: dict[str, TypeDesc | Lit]
-) -> TypeDesc:
-	# here args are resolved but not instantiated
-	generic_params = cls.origin.__type_params__
-
-	assert cls.origin is not list, 'use DynArray'
-	assert cls.origin is not dict, 'use TreeMap'
-
-	if (as_np := try_handle_np(cls)) is not None:
+	if (as_np := try_handle_np(ctx, origin, args)) is not None:
 		return as_np
 
-	if len(generic_params) != len(cls.args):
-		raise Exception(
-			f'incorrect number of generic arguments for {cls.origin} parameters={generic_params}, args={cls.args}'
+	generic_params = origin.__type_params__
+
+	if len(generic_params) != len(args):
+		raise ctx.type_err(
+			f'incorrect number of generic arguments for {origin} parameters={generic_params}, args={args}'
 		)
-	if cls.origin is DynArray:
-		arg0 = cls.args[0]
-		assert not isinstance(arg0, Lit)
-		return _DynArrayDesc(arg0)
-	elif cls.origin is Indirection:
-		arg0 = cls.args[0]
-		assert not isinstance(arg0, Lit)
-		return IndirectionTypeDesc(arg0)
-	elif cls.origin is VLA:
-		arg0 = cls.args[0]
-		assert not isinstance(arg0, Lit)
-		return VLATypeDesc(arg0)
-	elif cls.origin is Array:
-		arg0 = cls.args[0]
-		assert not isinstance(arg0, Lit)
-		return _ArrayDesc(arg0, typing.cast(int, cls.args[1]))
-	else:
-		gen = {k.__name__: v for k, v in zip(generic_params, cls.args)}
-		res = _storage_build_struct(cls.origin, gen)
-		res.alias_to = cls
-		return res
+
+	if origin is Array:
+		return _storage_build_array(ctx, cls)
+	if origin is DynArray:
+		if len(typing.get_args(cls)) != 1:
+			raise ctx.type_err(
+				f'Expected exactly one argument for DynArray, got {len(typing.get_args(cls))}'
+			)
+		elem_type = typing.get_args(cls)[0]
+		elem_desc = _storage_build(
+			ctx.with_trace('during processing DynArray element type'), elem_type
+		)
+		return _DynArrayDesc(elem_desc)
+	if origin is Indirection:
+		if len(typing.get_args(cls)) != 1:
+			raise ctx.type_err(
+				f'Expected exactly one argument for Indirection, got {len(typing.get_args(cls))}'
+			)
+		elem_type = typing.get_args(cls)[0]
+		elem_desc = _storage_build(
+			ctx.with_trace('during processing Indirection element type'), elem_type
+		)
+		return IndirectionTypeDesc(elem_desc)
+	if origin is VLA:
+		if len(typing.get_args(cls)) != 1:
+			raise ctx.type_err(
+				f'Expected exactly one argument for VLA, got {len(typing.get_args(cls))}'
+			)
+		elem_type = typing.get_args(cls)[0]
+		elem_desc = _storage_build(
+			ctx.with_trace('during processing VLA element type'), elem_type
+		)
+		return VLATypeDesc(elem_desc)
+
+	args = typing.get_args(cls)
+
+	new_generics = {}
+	for idx, (k, v) in enumerate(zip(generic_params, args)):
+		trace_line = f'during processing generic argument of `{reflect.repr_generic(origin, args)}`, argument `{reflect.repr_type(v)}`, at index `{idx}`'
+		var_ctx = ctx.with_trace(trace_line)
+		new_generics[k.__name__] = _DeferredBuilder(var_ctx, v)
+	ctx = ctx._replace(generic_vars=new_generics).with_trace(
+		f'declared generic variables: {", ".join(new_generics.keys())}'
+	)
+	return _storage_build_struct(ctx, origin)
 
 
-def _storage_build_struct(
-	cls: type, generics_map: dict[str, TypeDesc | Lit]
-) -> TypeDesc:
-	if cls is DynArray:
-		raise Exception('invalid builder')
+def _storage_build_array(ctx: _BuilderCtx, cls) -> TypeDesc:
+	args = typing.get_args(cls)
+	if len(args) != 2:
+		raise ctx.type_err(f'Expected exactly two arguments for Array, got {len(args)}')
+	type_arg, size_arg = args
+	size_arg = _resolve_raw_type(ctx, size_arg)
+	if typing.get_origin(size_arg) is not typing.Literal:
+		raise ctx.type_err(f'Expected Literal for Array size, got {size_arg}')
+	lit_args = typing.get_args(size_arg)
+	if len(lit_args) != 1 or not isinstance(lit_args[0], int):
+		raise ctx.type_err(f'Expected single int Literal for Array size, got {lit_args}')
+	size = lit_args[0]
+	child_type_desc = _storage_build(
+		ctx.with_trace('during processing Array element type'), type_arg
+	)
+	res = _ArrayDesc(child_type_desc, size)
+	return res
 
+
+def _storage_build_annotated(ctx: _BuilderCtx, cls) -> TypeDesc:
+	origin = getattr(cls, '__origin__', None)
+	if origin is None:
+		raise ctx.type_err('typing.Annotated should have __origin__')
+
+	meta: tuple = getattr(cls, '__metadata__', ())
+	if origin is int:
+		for m in meta:
+			if m == 'bigint':
+				return _bigint_desc
+			if isinstance(m, StaticIntMeta):
+				return _int_descs[m][1]
+
+	return _storage_build(ctx.with_trace('during processing discarded annotated'), origin)
+
+
+def _storage_build_struct(ctx: _BuilderCtx, cls) -> TypeDesc:
 	if not hasattr(cls, ALLOW_STORAGE_ATTR):
-		raise TypeError(
+		raise ctx.type_err(
 			f'class is not marked for usage within storage, please, annotate it with @allow_storage',
-			cls,
 		)
 
 	size: int = 0
 	copy_actions: list[CopyAction] = []
 	props: dict[str, tuple[TypeDesc, int]] = {}
 
-	was_generic = False
-	generic_info = {}
-
 	for prop_name, prop_value in typing.get_type_hints(cls, include_extras=True).items():
 		if typing.get_origin(prop_value) is typing.ClassVar:
 			continue
 
 		cur_offset: int = size
+		note = f'during processing field `{prop_name}: {prop_value}`'
 		try:
-			prop_desc = _storage_build(prop_value, generics_map)
+			prop_desc = _storage_build(ctx.with_trace(note), prop_value)
 			assert isinstance(prop_desc, TypeDesc)
+		except GenerationError:
+			raise
 		except BaseException as e:
-			e.add_note(f'during generating field `{prop_name}: {prop_value}`')
+			e.add_note(note)
 			raise
 		props[prop_name] = (prop_desc, cur_offset)
-
-		if isinstance(prop_value, typing.TypeVar):
-			was_generic = True
-			generic_info['name'] = prop_name
-			generic_info['value'] = prop_value
 
 		if not getattr(cls, STORAGE_PATCHED_ATTR, False):
 
@@ -407,36 +426,46 @@ def _storage_build_struct(
 		old_init, STORAGE_PATCHED_ATTR, False
 	):
 		# here we may want to patch __init__ to allocate in storage
-		def new_init_generic(self, *args, **kwargs):
-			if hasattr(self, '_storage_slot'):
-				old_init(self, *args, **kwargs)
-				return
 
-			exc = TypeError(
-				'generic storage classes can not be instantiated with __init__, please, use gl.storage.inmem_allocate'
-			)
-			exc.add_note(
-				f'due to field `{generic_info['name']}: {reflect.repr_type(generic_info['value'])}`'
-			)
-			exc.add_note(f'in class `{reflect.repr_type(cls)}`')
-			raise exc
+		gen_var_name = None
+		for generic_name, generic_info in ctx.generic_vars.items():
+			if generic_info._evaluated_at_ctx is not None:
+				gen_var_name = (generic_name, generic_info._evaluated_at_ctx)
+				break
 
-		def new_init_no_generic(self, *args, **kwargs):
-			if not hasattr(self, '_storage_slot'):
-				self._storage_slot = InmemManager().get_store_slot(ROOT_SLOT_ID)
-				self._off = 0
-				self.__type_desc__ = description
-			old_init(self, *args, **kwargs)
+		if gen_var_name is not None:
 
-		if was_generic:
+			def new_init_generic(self, *args, **kwargs):
+				if hasattr(self, '_storage_slot'):
+					old_init(self, *args, **kwargs)
+					return
+
+				exc = gen_var_name[1].type_err(
+					'generic storage classes can not be instantiated with __init__, please, use gl.storage.inmem_allocate'
+				)
+				exc.add_note(f'due to usage of `{gen_var_name[0]}`')
+				exc.add_note(f'in class `{reflect.repr_type(cls)}`')
+				raise exc
+
 			new_init = new_init_generic
 		else:
+
+			def new_init_no_generic(self, *args, **kwargs):
+				if not hasattr(self, '_storage_slot'):
+					self._storage_slot = InmemManager().get_store_slot(ROOT_SLOT_ID)
+					self._off = 0
+					self.__type_desc__ = description
+				old_init(self, *args, **kwargs)
+
 			new_init = new_init_no_generic
 
 		setattr(new_init, STORAGE_PATCHED_ATTR, True)
 		setattr(new_init, ORIGINAL_INIT_ATTR, old_init)
 		cls.__init__ = new_init
 	return description
+
+
+from .numpy import try_handle_np, populate_np_descs_if_loaded
 
 
 @generate_storage
@@ -449,7 +478,6 @@ class _DateTime:
 	off_micros: i32
 
 
-from functools import partial
 import datetime, time
 
 _dt_desc: TypeDesc[_DateTime] = _known_descs[_DateTime]
@@ -507,5 +535,3 @@ class _DateTimeDesc(TypeDesc[datetime.datetime]):
 
 
 _known_descs[datetime.datetime] = _DateTimeDesc()
-
-import genlayer.storage._internal.numpy

@@ -1,6 +1,6 @@
 import genlayer.storage._internal.desc_base_types as base
 from genlayer.storage.vec import _DynArrayDesc, DynArray
-from genlayer.storage._internal.generate import _Instantiation, _known_descs
+from genlayer.storage._internal.generate import _known_descs
 
 
 def test_all_different():
@@ -42,16 +42,4 @@ def test_hash_vec():
 	)
 	assert hash(_DynArrayDesc(base.IntDesc(4, False))) != hash(
 		_DynArrayDesc(base.IntDesc(8, False))
-	)
-
-
-def test_inst():
-	assert _Instantiation(DynArray, (base.IntDesc(4, False),)) == _Instantiation(
-		DynArray, (base.IntDesc(4, False),)
-	)
-	assert _Instantiation(DynArray, (base.IntDesc(4, False),)) != _Instantiation(
-		DynArray, (base.IntDesc(4, True),)
-	)
-	assert _Instantiation(DynArray, (base.IntDesc(4, False),)) != _Instantiation(
-		DynArray, (base.IntDesc(8, False),)
 	)

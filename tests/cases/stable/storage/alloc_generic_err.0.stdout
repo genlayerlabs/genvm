@@ -1,4 +1,10 @@
 generic storage classes can not be instantiated with __init__, please, use gl.storage.inmem_allocate
-due to field `foo: T`
+during building type `Bar` (declared at {'file': '/contract.py', 'line': 15})
+during processing field `t: contract.Test[str]`
+during building type `Test[str]`
+declared generic variables: T
+during processing field `foo: T`
+during building type `T`
+due to usage of `T`
 in class `Test`
 executed with `Return(null)`

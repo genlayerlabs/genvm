@@ -178,9 +178,15 @@ pub(crate) async fn write_message<S: tokio::io::AsyncWrite + Unpin>(
     data: &[u8],
 ) -> anyhow::Result<()> {
     let len = data.len() as u32;
-    stream.write_all(&len.to_be_bytes()).await?;
-    stream.write_all(data).await?;
-    stream.flush().await?;
+    stream
+        .write_all(&len.to_be_bytes())
+        .await
+        .context("writing message length")?;
+    stream
+        .write_all(data)
+        .await
+        .context("writing message body")?;
+    stream.flush().await.context("flushing stream")?;
     Ok(())
 }
 
@@ -214,7 +220,10 @@ where
         .with_context(|| format!("parsing calldata format {text:?}"))?;
     let payload =
         genvm_common::calldata::from_value(payload).with_context(|| "parsing calldata value")?;
-    handler.handle(payload).await.with_context(|| "handling")
+    handler
+        .handle(payload)
+        .await
+        .with_context(|| "handling with handler")
 }
 
 async fn loop_one_inner<T, R, S>(
@@ -228,7 +237,10 @@ where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     loop {
-        let Some(data) = read_message(stream).await? else {
+        let Some(data) = read_message(stream)
+            .await
+            .context("reading module message")?
+        else {
             // Stream closed
             return Ok(());
         };
@@ -260,10 +272,13 @@ where
             },
         };
 
-        let answer = genvm_common::calldata::to_value(&res)?;
+        let answer =
+            genvm_common::calldata::to_value(&res).context("encoding response to value")?;
         let message = genvm_common::calldata::encode(&answer);
 
-        write_message(stream, &message).await?;
+        write_message(stream, &message)
+            .await
+            .context("writing message")?;
     }
 }
 
@@ -273,13 +288,16 @@ async fn read_hello<S>(
 where
     S: tokio::io::AsyncRead + Unpin,
 {
-    let Some(data) = read_message(stream).await? else {
+    let Some(data) = read_message(stream)
+        .await
+        .context("reading module message")?
+    else {
         return Ok(None);
     };
 
-    let genvm_hello = genvm_common::calldata::decode(&data)?;
+    let genvm_hello = genvm_common::calldata::decode(&data).context("decoding GenVMHello")?;
     let genvm_hello: genvm_modules_interfaces::GenVMHello =
-        genvm_common::calldata::from_value(genvm_hello)?;
+        genvm_common::calldata::from_value(genvm_hello).context("parsing GenVMHello")?;
 
     Ok(Some(genvm_hello))
 }
@@ -296,9 +314,14 @@ where
 {
     let genvm_id = exec_ctx.genvm_id();
 
-    let mut handler = handler_provider.new_handler(exec_ctx).await?;
+    let mut handler = handler_provider
+        .new_handler(exec_ctx)
+        .await
+        .context("creating handler")?;
 
-    let res = loop_one_inner(&mut handler, stream, genvm_id).await;
+    let res = loop_one_inner(&mut handler, stream, genvm_id)
+        .await
+        .context("handling");
 
     if let Err(close) = handler.cleanup().await {
         log_error_into!(&LoggerWithId, error:ah = &close, genvm_id:id = genvm_id.0; "cleanup error");

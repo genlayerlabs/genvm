@@ -41,13 +41,12 @@ from ._internal.generate import (
 	generate_storage,
 	_known_descs,
 	_storage_build,
-	Lit,
+	_BuilderCtx,
 )
 
 
 def inmem_allocate[T](t: typing.Type[T], *init_args, **init_kwargs) -> T:
-	td = _storage_build(t, {})
-	assert not isinstance(td, Lit)
+	td = _storage_build(_BuilderCtx.empty(), t)
 	man = InmemManager()
 
 	instance = td.get(man.get_store_slot(ROOT_SLOT_ID), 0)
