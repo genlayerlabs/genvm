@@ -277,7 +277,7 @@ jobs:
       - name: Generate release notes
         id: release_notes
         run: |
-          prev_tag=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || echo "")
+          prev_tag=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
           new_tag="${{ needs.gen-tag.outputs.tag }}"
           if [ -n "$prev_tag" ]; then
             python3 support/ci/make-relase-notes.py "${prev_tag}..${new_tag}" > release-notes.md
