@@ -1,6 +1,6 @@
 __all__ = (
 	'MessageRawType',
-	'message_raw',
+	'raw',
 )
 
 import io
@@ -62,9 +62,36 @@ class MessageRawType(typing.TypedDict):
 	entry_stage_data: calldata.Encodable
 
 
+contract_address: Address = ...  # type: ignore
+"""Address of current Intelligent Contract"""
+
+sender_address: Address = ...  # type: ignore
+"""Address of this call initiator"""
+
+origin_address: Address = ...  # type: ignore
+"""Entire transaction initiator"""
+
+stack: list[Address] = ...  # type: ignore
+
+value: u256 = ...  # type: ignore
+"""Value sent with the transaction"""
+
+chain_id: u256 = ...  # type: ignore
+"""Current chain ID"""
+
+is_init: bool = ...  # type: ignore
+
+entry_kind: int = ...  # type: ignore
+
+entry_data: bytes = ...  # type: ignore
+
+entry_stage_data: calldata.Encodable = ...  # type: ignore
+
 if os.getenv('GENERATING_DOCS', 'false') == 'true':
-	message_raw: MessageRawType = ...  # type: ignore
+	raw: MessageRawType = ...  # type: ignore
 else:
-	message_raw = typing.cast(
+	raw = typing.cast(
 		MessageRawType, calldata.decode(io.FileIO(0, closefd=False).readall())
 	)
+
+	globals().update(raw)

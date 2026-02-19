@@ -9,12 +9,12 @@ This module provides functionality for:
 """
 
 __all__ = (
-	'contract_interface',
-	'deploy_contract',
+	'interface',
+	'deploy',
 	'Contract',
-	'get_contract_at',
+	'get_at',
 	'BaseContract',
-	'ContractProxy',
+	'Proxy',
 	'interface',
 	'deploy',
 	'get_at',
@@ -119,7 +119,7 @@ class _ContractAtEmitMethod:
 		)
 
 
-class ContractProxy[TView, TSend](BaseContract, typing.Protocol):
+class Proxy[TView, TSend](BaseContract, typing.Protocol):
 	"""
 	Generic proxy interface for interacting with deployed GenVM contracts.
 
@@ -184,7 +184,7 @@ class ErasedMethods(typing.Protocol):
 		...
 
 
-class _ContractAt(ContractProxy[ErasedMethods, ErasedMethods]):
+class _ContractAt(Proxy[ErasedMethods, ErasedMethods]):
 	__slots__ = ('_address',)
 
 	def __init__(self, addr: Address):
@@ -212,7 +212,7 @@ class _ContractAt(ContractProxy[ErasedMethods, ErasedMethods]):
 		return wasi.get_balance(self._address.as_bytes)
 
 
-def get_contract_at(address: Address) -> ContractProxy:
+def get_at(address: Address) -> Proxy:
 	"""
 	Create a proxy object for interacting with a deployed GenVM contract.
 
@@ -256,14 +256,14 @@ class GenVMContractDeclaration[TView, TWrite](typing.Protocol):
 	"""
 	Protocol for defining contract interface declarations.
 
-	This protocol is used with the `@gl.contract_interface` decorator to create
+	This protocol is used with the `@gl.contract.interface` decorator to create
 	type-safe interfaces for interacting with specific contract types.
 
 	:param TView: Type containing view method declarations
 	:param TWrite: Type containing write method declarations
 
 	Example:
-		>>> @gl.contract_interface
+		>>> @gl.contract.interface
 		>>> class MyContract:
 		>>>     class View:
 		>>>         def get_balance(self, user: Address) -> u256: ...
@@ -289,9 +289,9 @@ class GenVMContractDeclaration[TView, TWrite](typing.Protocol):
 	"""
 
 
-def contract_interface[TView, TWrite](
+def interface[TView, TWrite](
 	_declaration: GenVMContractDeclaration[TView, TWrite],
-) -> typing.Callable[[Address], ContractProxy[TView, TWrite]]:
+) -> typing.Callable[[Address], Proxy[TView, TWrite]]:
 	# editorconfig-checker-disable
 	"""
 	Decorator for creating type-safe contract interfaces.
@@ -304,7 +304,7 @@ def contract_interface[TView, TWrite](
 	:returns: Factory function that creates typed contract proxies
 
 	Example:
-		>>> @gl.contract_interface
+		>>> @gl.contract.interface
 		>>> class ERC20Contract:
 		>>>     class View:
 		>>>         def balance_of(self, owner: Address) -> u256: ...
@@ -322,17 +322,17 @@ def contract_interface[TView, TWrite](
 	.. note::
 		This decorator provides no runtime functionality - it's purely for
 		type safety and developer experience. The actual contract interaction
-		uses the same runtime mechanisms as `get_contract_at`.
+		uses the same runtime mechanisms as `get_at`.
 	"""
 	# editorconfig-checker-enable
-	return get_contract_at
+	return get_at
 
 
 from genlayer.types import u8, u256
 
 
 @typing.overload
-def deploy_contract(
+def deploy(
 	*,
 	code: bytes,
 	args: collections.abc.Sequence[calldata.Encodable] = [],
@@ -344,7 +344,7 @@ def deploy_contract(
 
 
 @typing.overload
-def deploy_contract(
+def deploy(
 	*,
 	code: bytes,
 	args: collections.abc.Sequence[calldata.Encodable] = [],
@@ -355,7 +355,7 @@ def deploy_contract(
 ) -> Address: ...
 
 
-def deploy_contract(
+def deploy(
 	*,
 	code: bytes,
 	args: collections.abc.Sequence[calldata.Encodable] = [],
@@ -381,14 +381,14 @@ def deploy_contract(
 
 	Example:
 		>>> # Non-deterministic deployment
-		>>> deploy_contract(
+		>>> deploy(
 		>>>     code=contract_source_str.encode('utf-8'),
 		>>>     args=[initial_supply],
 		>>>     kwargs={"name": "MyToken", "symbol": "MTK"}
 		>>> )
 		>>>
 		>>> # Deterministic deployment
-		>>> address = deploy_contract(
+		>>> address = deploy(
 		>>>     code=contract_source_zip_as_bytes,
 		>>>     args=[initial_supply],
 		>>>     salt_nonce=12345,
@@ -585,8 +585,3 @@ Contract.__handle_undefined_method__.__isabstractmethod__ = True  # type: ignore
 Contract.__receive__.__isabstractmethod__ = True  # type: ignore
 
 __known_contract__: type[Contract] | None = None
-
-# Aliases
-interface = contract_interface
-deploy = deploy_contract
-get_at = get_contract_at

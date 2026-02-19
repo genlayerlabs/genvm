@@ -13,7 +13,7 @@ class Contract(gl.contract.Contract):
 
 	@gl.public.write
 	def rback(self):
-		gl.vm.user_error_immediate("nah, I won't execute")
+		gl.vm.UserError.immediate("nah, I won't execute")
 
 	def priv(self):
 		eval("print('init from priv!')")

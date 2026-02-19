@@ -8,7 +8,7 @@ class Contract(gl.contract.Contract):
 		try:
 
 			def run():
-				gl.vm.user_error_immediate("nah, I won't execute")
+				gl.vm.UserError.immediate("nah, I won't execute")
 
 			res = gl.eq_principle.strict_eq(run).get()
 		except gl.vm.UserError as r:

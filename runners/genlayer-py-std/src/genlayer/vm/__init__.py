@@ -6,7 +6,6 @@ This module provides:
 - Non-deterministic execution with ``run_nondet`` and ``run_nondet_unsafe``
 - Result types: ``Return``, ``VMError``, ``UserError``, ``Result``
 - Event emission with ``Event``
-- Advanced operations: ``emit_raw_event``, ``user_error_immediate``
 """
 
 __all__ = (
@@ -19,12 +18,7 @@ __all__ = (
 	'VMError',
 	'UserError',
 	'Result',
-	# events
 	'Event',
-	# advanced
-	'emit_raw_event',
-	'user_error_immediate',
-	# trace
 	'trace',
 	'trace_time_micro',
 )
@@ -39,6 +33,8 @@ import genlayer.calldata as calldata
 import genlayer._internal.gl_call as gl_call
 
 from genlayer._internal.public_abi import ResultCode
+
+from genlayer.types.keccak import Keccak256
 
 
 @dataclasses.dataclass
@@ -81,6 +77,14 @@ class UserError(Exception):
 
 	def __str__(self) -> str:
 		return repr(self)
+
+	@staticmethod
+	def immediate(reason: str) -> typing.NoReturn:
+		"""
+		Performs an immediate error, current VM won't be able to handle it, stack unwind will not happen
+		"""
+
+		gl_call.rollback(reason)
 
 
 type Result[T: calldata.Decoded] = Return[T] | VMError | UserError
@@ -286,58 +290,6 @@ def run_nondet[T: calldata.Decoded](
 	return res
 
 
-# --- events (from gl/events.py) ---
-
-from genlayer._internal.event import Event
-from genlayer.types.keccak import Keccak256
-
-
-def _emit(self: Event) -> None:
-	topics = [Keccak256(self.signature.encode('utf-8')).digest()]
-	for i in self.indexed:
-		d = self._blob[i]
-		as_cd = calldata.encode(d)
-		if len(as_cd) > 32:
-			as_cd = Keccak256(as_cd).digest()
-		else:
-			as_cd = as_cd + b'\x00' * (32 - len(as_cd))
-		topics.append(as_cd)
-
-	emit_raw_event(topics, self._blob)
-
-
-Event.emit = _emit
-
-
-# --- advanced (from gl/advanced.py) ---
-
-
-def emit_raw_event(
-	topics: list[bytes],
-	blob: calldata.Encodable,
-) -> None:
-	"""
-	Emits a raw event with the given name, indexed fields and blob of data.
-	"""
-	gl_call.gl_call_generic(
-		{
-			'EmitEvent': {
-				'topics': topics,
-				'blob': blob,
-			}
-		},
-		lambda _x: None,
-	).get()
-
-
-def user_error_immediate(reason: str) -> typing.NoReturn:
-	"""
-	Performs an immediate error, current VM won't be able to handle it, stack unwind will not happen
-	"""
-
-	gl_call.rollback(reason)
-
-
 # --- trace (from gl/__init__.py) ---
 
 import _genlayer_wasi as wasi
@@ -364,3 +316,146 @@ def trace_time_micro() -> int:
 		},
 		lambda x: typing.cast(int, calldata.decode(x)),
 	).get()
+
+
+# --- event ----
+import genlayer._internal.public_abi as ABI
+from genlayer._internal import reflect
+import inspect
+
+
+class Event:
+	"""
+	.. code-block:: python
+
+		class TransferOccurredEvent(gl.Event):
+			def __init__(self, from: Address, to: Address, /): ...
+
+		class TransferOccurredEvent(gl.Event):
+			def __init__(self, from: Address, to: Address, /, **blob): ...
+	"""
+
+	def __init__(self):
+		raise NotImplementedError()
+
+	signature: str
+	"""
+	Event signature (built-in/main topic). Consists of name and indexed fields in parenthesis, **sorted**
+
+	Example: ``TransferOccurredEvent(from,to)``
+	"""
+	name: str
+	"""
+	Event name. If not overridden it will be set to ``__name__``
+	"""
+	indexed: tuple[str, ...]
+	"""
+	tuple of indexed arguments name in **sorted** order
+	"""
+
+	_blob: dict[str, calldata.Encodable]
+
+	__slots__ = ('_blob',)
+
+	@staticmethod
+	def emit_raw(
+		topics: list[bytes],
+		blob: calldata.Encodable,
+	) -> None:
+		"""
+		Emits a raw event with the given name, indexed fields and blob of data.
+		"""
+		gl_call.gl_call_generic(
+			{
+				'EmitEvent': {
+					'topics': topics,
+					'blob': blob,
+				}
+			},
+			lambda _x: None,
+		).get()
+
+	@staticmethod
+	def _do_init(cls) -> None:
+		old_init = cls.__init__
+		assert old_init is not Event.__init__
+
+		cls.__slots__ = ('_blob',)
+
+		sig = inspect.signature(old_init)
+
+		indexed_args_lst: list[str] = []
+
+		event_name = getattr(cls, 'name', cls.__name__)
+
+		for i, (name, param) in enumerate(sig.parameters.items()):
+			with reflect.context_notes(f'parameter `{name}`'):
+				if i == 0:
+					if name != 'self':
+						raise TypeError('first argument must be `self`')
+					continue
+
+				match param.kind:
+					case inspect.Parameter.VAR_POSITIONAL:
+						raise TypeError('`*args` is forbidden')
+					case inspect.Parameter.KEYWORD_ONLY:
+						raise TypeError('keyword-only arguments are forbidden')
+					case inspect.Parameter.POSITIONAL_OR_KEYWORD:
+						raise TypeError('specify `/` after indexed fields')
+					case inspect.Parameter.VAR_KEYWORD:
+						pass
+					case inspect.Parameter.POSITIONAL_ONLY:
+						indexed_args_lst.append(name)
+
+		indexed_args = tuple(sorted(indexed_args_lst))
+
+		def __init__(self, *args, **kwargs):
+			if len(args) != len(indexed_args):
+				raise TypeError(
+					f'indexed fields mismatch, expected {indexed_args}, but got {len(args)} positional arguments'
+				)
+
+			for name, val in zip(indexed_args, args):
+				if name in kwargs:
+					raise TypeError(f'indexed field `{name}` must not be present in blob')
+				kwargs[name] = val
+
+			self._blob = kwargs
+
+		signature = event_name
+		signature += '('
+		signature += ','.join(indexed_args)
+		signature += ')'
+
+		if len(indexed_args) > ABI.EVENT_MAX_TOPICS:
+			import warnings
+
+			warnings.warn(
+				f'event has too many indexed fields, it may not be emitted correctly: `{signature}`'
+			)
+
+		cls.name = event_name
+		cls.signature = signature
+		cls.indexed = indexed_args
+		cls.__init__ = __init__
+
+	def __init_subclass__(cls) -> None:
+		with reflect.context_notes('generating event class'):
+			with reflect.context_type(cls):
+				Event._do_init(cls)
+
+	def emit(self) -> None:
+		"""
+		emit this event
+		"""
+		topics = [Keccak256(self.signature.encode('utf-8')).digest()]
+		for i in self.indexed:
+			d = self._blob[i]
+			as_cd = calldata.encode(d)
+			if len(as_cd) > 32:
+				as_cd = Keccak256(as_cd).digest()
+			else:
+				as_cd = as_cd + b'\x00' * (32 - len(as_cd))
+			topics.append(as_cd)
+
+		Event.emit_raw(topics, self._blob)

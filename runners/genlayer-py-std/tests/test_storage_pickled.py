@@ -3,8 +3,6 @@ import pytest
 from genlayer.storage._internal.generate import generate_storage
 import genlayer as gl
 
-import datetime
-
 
 @generate_storage
 class Store:
