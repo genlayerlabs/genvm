@@ -23,6 +23,14 @@ __all__ = (
 	'trace_time_micro',
 )
 
+from genlayer import IS_IN_VM
+import typing
+
+if typing.TYPE_CHECKING or IS_IN_VM:
+	import _genlayer_wasi as wasi
+
+IS_INSIDE = IS_IN_VM
+
 import typing
 import dataclasses
 import collections.abc
@@ -288,11 +296,6 @@ def run_nondet[T: calldata.Decoded](
 	)
 
 	return res
-
-
-# --- trace (from gl/__init__.py) ---
-
-import _genlayer_wasi as wasi
 
 
 def trace(*objs: typing.Any, sep: str = ' '):

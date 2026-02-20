@@ -5,7 +5,11 @@ import atexit
 import genlayer.calldata as calldata
 import collections.abc
 from genlayer.types import Lazy
-from _genlayer_wasi import gl_call as _imp_raw
+
+from genlayer import IS_IN_VM
+
+if typing.TYPE_CHECKING or IS_IN_VM:
+	from _genlayer_wasi import gl_call as _imp_raw
 
 
 def _imp(data: calldata.Encodable) -> int:

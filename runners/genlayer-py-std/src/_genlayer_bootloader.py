@@ -41,7 +41,7 @@ if os.getenv('GENLAYER_ENABLE_PROFILER', 'false') == 'true':
 	atexit.register(exit_hook)
 
 
-from genlayer._internal.msg import message_raw, MessageRawType
+import genlayer.message as gl_message
 from genlayer._internal.public_abi import EntryKind
 
 import genlayer.calldata as calldata
@@ -82,7 +82,7 @@ def _handle_main() -> typing.NoReturn:
 	@dataclasses.dataclass
 	class MethodResolverInfo:
 		cd: CalldataSchema
-		msg: MessageRawType
+		msg: gl_message.MessageRawType
 		contract_type: type[Contract]
 
 	def check_abstracts(ctx: MethodResolverInfo, meth: typing.Callable) -> str | None:
@@ -154,17 +154,17 @@ def _handle_main() -> typing.NoReturn:
 	if __known_contract__ is None:
 		raise Exception('no contract defined')
 
-	cd_raw = calldata.decode(message_raw['entry_data'])
+	cd_raw = calldata.decode(gl_message.raw['entry_data'])
 	if not isinstance(cd_raw, dict):
 		raise TypeError(
 			f'invalid calldata, expected dict got `{reflect.repr_type(cd_raw)}`'
 		)
 
-	if message_raw.get('is_init'):
+	if gl_message.raw.get('is_init'):
 		root_slot.lock_default()
 
 	cd = typing.cast(CalldataSchema, cd_raw)
-	ctx = MethodResolverInfo(cd, message_raw, __known_contract__)
+	ctx = MethodResolverInfo(cd, gl_message.raw, __known_contract__)
 	meth2call = resolve_method(ctx)
 
 	contract_instance = root_slot.get_contract_instance(__known_contract__)
@@ -176,20 +176,20 @@ def _handle_main() -> typing.NoReturn:
 import os
 
 if os.getenv('GENERATING_DOCS', 'false') != 'true':
-	match message_raw['entry_kind']:
+	match gl_message.raw['entry_kind']:
 		case EntryKind.MAIN:
 			_handle_main()
 		case EntryKind.SANDBOX:
 			import pickle
 
-			runner = pickle.loads(message_raw['entry_data'])
+			runner = pickle.loads(gl_message.raw['entry_data'])
 
 			_give_result(runner)
 		case EntryKind.CONSENSUS_STAGE:
 			import pickle
 
-			runner = pickle.loads(message_raw['entry_data'])
-			stage_data = message_raw['entry_stage_data']
+			runner = pickle.loads(gl_message.raw['entry_data'])
+			stage_data = gl_message.raw['entry_stage_data']
 
 			_give_result(lambda: runner(stage_data))
 		case x:

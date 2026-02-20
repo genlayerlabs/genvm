@@ -20,6 +20,15 @@ This provides access to:
 - Method decorators via ``gl.public`` and ``gl.private``
 """
 
+IS_IN_VM = False
+
+try:
+	import _genlayer_wasi
+
+	IS_IN_VM = True
+except ImportError:
+	pass
+
 import os
 import typing
 

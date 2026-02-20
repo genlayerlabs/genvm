@@ -4,88 +4,102 @@ v0.3.0
 Migration Guide
 ---------------
 
-This release introduces a cleaner module structure for the GenLayer Python SDK.
-The recommended import pattern is now:
+v0.3.0 introduces a major restructuring of the standard library. The ``genlayer.gl`` and ``genlayer.py`` intermediate packages are removed. All public API is now accessible directly under the ``genlayer`` namespace.
 
-.. code-block:: python
+Import Pattern
+~~~~~~~~~~~~~~
 
-    import genlayer as gl
-    from genlayer.types import *
-
-Contract Declaration
-~~~~~~~~~~~~~~~~~~~~
+The recommended import pattern has changed:
 
 .. code-block:: python
 
     # v0.1.x
     from genlayer import *
 
-    class Contract(gl.Contract):
-        @gl.public.write
-        def foo(self): ...
-
     # v0.3.0
     import genlayer as gl
     from genlayer.types import *
 
-    class Contract(gl.contract.Contract):
-        @gl.public.write
-        def foo(self): ...
+The ``from genlayer import *`` star-import previously brought ``gl`` (a lazy proxy to ``genlayer.gl``), all types, and storage names into scope. Now ``import genlayer as gl`` gives you direct access to submodules (``gl.contract``, ``gl.vm``, ``gl.message``, etc.), decorators (``gl.public``, ``gl.private``), and storage types (``gl.TreeMap``, ``gl.DynArray``, ``gl.Array``). The ``from genlayer.types import *`` import brings the type aliases (``u8``..``u256``, ``i8``..``i256``, ``Address``, ``bigint``, etc.) into local scope.
 
-Contract Deployment
+Module Path Changes
 ~~~~~~~~~~~~~~~~~~~
+
+All ``genlayer.py.*`` and ``genlayer.gl.*`` paths are removed. Here is the mapping:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 50 50
+
+   * - v0.1.x
+     - v0.3.0
+   * - ``genlayer.py.types``
+     - ``genlayer.types``
+   * - ``genlayer.py.calldata``
+     - ``genlayer.calldata``
+   * - ``genlayer.py.storage``
+     - ``genlayer.storage``
+   * - ``genlayer.py.evm``
+     - ``genlayer.evm``
+   * - ``genlayer.gl.vm``
+     - ``genlayer.vm``
+   * - ``genlayer.gl.nondet``
+     - ``genlayer.nondet``
+   * - ``genlayer.gl.eq_principle``
+     - ``genlayer.eq_principle``
+   * - ``genlayer.gl.genvm_contracts``
+     - ``genlayer.contract``
+   * - ``genlayer.gl.annotations``
+     - ``genlayer._internal.annotations``
+   * - ``genlayer.gl.advanced``
+     - removed (see below)
+
+Contract Declaration
+~~~~~~~~~~~~~~~~~~~~
+
+``gl.Contract`` is now ``gl.contract.Contract``:
 
 .. code-block:: python
 
     # v0.1.x
-    gl.deploy_contract(code=b'...', args=[...])
+    class MyToken(gl.Contract):
+        ...
 
     # v0.3.0
-    gl.contract.deploy(code=b'...', args=[...])
+    class MyToken(gl.contract.Contract):
+        ...
 
 Contract Interaction
 ~~~~~~~~~~~~~~~~~~~~
+
+Functions for interacting with other contracts have been renamed and moved into ``gl.contract``:
 
 .. code-block:: python
 
     # v0.1.x
     contract = gl.get_contract_at(address)
+    gl.deploy_contract(code=source, args=[...])
+
+    @gl.contract_interface
+    class IToken:
+        class View:
+            def balance_of(self, owner: Address) -> u256: ...
 
     # v0.3.0
     contract = gl.contract.get_at(address)
+    gl.contract.deploy(code=source, args=[...])
 
-Contract Interfaces
-~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-    # v0.1.x
-    @gl.contract_interface
-    class MyInterface:
-        class View: ...
-        class Write: ...
-
-    # v0.3.0
     @gl.contract.interface
-    class MyInterface:
-        class View: ...
-        class Write: ...
+    class IToken:
+        class View:
+            def balance_of(self, owner: Address) -> u256: ...
 
-Events
-~~~~~~
-
-.. code-block:: python
-
-    # v0.1.x
-    class MyEvent(gl.Event):
-        def __init__(self, x: int, /): ...
-
-    # v0.3.0
-    class MyEvent(gl.vm.Event):
-        def __init__(self, x: int, /): ...
+The ``ContractProxy`` type is renamed to ``gl.contract.Proxy``.
 
 Message Context
 ~~~~~~~~~~~~~~~
+
+The ``gl.message`` object was a ``NamedTuple``. It is now a module (``genlayer.message``) with the same fields as module-level attributes:
 
 .. code-block:: python
 
@@ -93,98 +107,122 @@ Message Context
     sender = gl.message.sender_address
     value = gl.message.value
 
-    # v0.3.0 (unchanged, but now also available as)
-    sender = gl.message.sender_address  # still works
-    value = gl.message.value            # still works
+    # v0.3.0 (identical usage, but gl.message is a module now)
+    sender = gl.message.sender_address
+    value = gl.message.value
 
-    # Direct field access also available:
-    from genlayer import message
-    sender = message.sender_address
-    value = message.value
+``gl.message_raw`` is now ``gl.message.raw``.
 
-Storage Types
-~~~~~~~~~~~~~
+Events
+~~~~~~
+
+The ``Event`` class has moved from ``genlayer.gl`` to ``genlayer.vm``:
 
 .. code-block:: python
 
     # v0.1.x
-    from genlayer import *
-    # allow_storage was available via star import
-
-    @allow_storage
-    class MyStorage:
-        foo: u64
+    class Transfer(gl.Event):
+        def __init__(self, sender: Address, to: Address, /): ...
 
     # v0.3.0
-    import genlayer as gl
-    from genlayer.types import *
-    from genlayer.storage import allow_storage
+    class Transfer(gl.vm.Event):
+        def __init__(self, sender: Address, to: Address, /): ...
 
-    @allow_storage
-    class MyStorage:
-        foo: u64
+``gl.advanced.emit_raw_event(topics, blob)`` is now ``gl.vm.Event.emit_raw(topics, blob)``.
 
-Breaking Changes
-----------------
+Advanced / Error Handling
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#. **Import pattern changed**: ``from genlayer import *`` no longer exports types and storage utilities directly. Use ``from genlayer.types import *`` for types and ``from genlayer.storage import allow_storage`` for storage decorators.
+The ``genlayer.gl.advanced`` module is removed. Its functionality has been relocated:
 
-#. **Contract base class moved**: ``gl.Contract`` is now ``gl.contract.Contract``
+.. code-block:: python
 
-#. **Contract functions moved**: Contract-related functions moved to ``gl.contract`` module:
+    # v0.1.x
+    gl.advanced.user_error_immediate("reason")
+    gl.advanced.emit_raw_event(topics, blob)
 
-   - ``gl.deploy_contract`` → ``gl.contract.deploy``
-   - ``gl.get_contract_at`` → ``gl.contract.get_at``
-   - ``gl.contract_interface`` → ``gl.contract.interface``
+    # v0.3.0
+    gl.vm.UserError.immediate("reason")
+    gl.vm.Event.emit_raw(topics, blob)
 
-#. **Event class moved**: ``gl.Event`` is now ``gl.vm.Event``
+VM Tracing
+~~~~~~~~~~
 
-#. **MessageType removed**: The ``MessageType`` named tuple wrapper has been removed. Use ``gl.message`` fields directly or ``gl.message.raw`` for the full raw message.
+Trace functions have moved from ``genlayer.gl`` to ``genlayer.vm``:
 
-New Features
-------------
+.. code-block:: python
 
-#. **Cleaner module structure**: The SDK now follows a more intuitive module layout:
+    # v0.1.x
+    gl.trace("debug message")
+    gl.trace_time_micro()
 
-   - ``genlayer.contract`` - Contract declaration and interaction
-   - ``genlayer.message`` - Transaction message context with direct field access
-   - ``genlayer.vm`` - VM operations, sandbox, events, and advanced utilities
-   - ``genlayer.evm`` - EVM contract interaction
-   - ``genlayer.nondet`` - Non-deterministic operations (LLM, web)
-   - ``genlayer.eq_principle`` - Equivalence principles for consensus
-   - ``genlayer.types`` - Type definitions (Address, u256, etc.)
-   - ``genlayer.calldata`` - Calldata encoding/decoding
-   - ``genlayer.storage`` - Persistent storage utilities
-   - ``genlayer.wasi`` - Low-level WASI bindings
+    # v0.3.0
+    gl.vm.trace("debug message")
+    gl.vm.trace_time_micro()
 
-#. **Direct message field access**: Message context fields are now available directly:
+Storage
+~~~~~~~
 
-   .. code-block:: python
+``allow_storage`` decorator is renamed to ``allow``:
 
-       import genlayer as gl
+.. code-block:: python
 
-       # These are now directly accessible:
-       gl.message.contract_address
-       gl.message.sender_address
-       gl.message.origin_address
-       gl.message.value
-       gl.message.chain_id
+    # v0.1.x
+    @gl.storage.allow_storage
+    class MyRecord:
+        x: u32
 
-       # Full raw message still available:
-       gl.message.raw  # includes stack, datetime, is_init, entry_kind, etc.
+    # v0.3.0
+    @gl.storage.allow
+    class MyRecord:
+        x: u32
 
-#. **Merged advanced module**: Advanced VM operations are now part of ``gl.vm``:
+A new ``gl.storage.Pickled[T]`` helper is available for storing arbitrary picklable objects.
 
-   - ``gl.vm.emit_raw_event()``
-   - ``gl.vm.user_error_immediate()``
-   - ``gl.vm.Event``
+Decorators
+~~~~~~~~~~
 
-#. **Backward compatibility**: The legacy ``gl`` namespace (``from genlayer import gl``) is preserved for backward compatibility during migration.
+``gl.public`` and ``gl.private`` are still available directly on ``gl``:
 
-API Improvements
-----------------
+.. code-block:: python
 
-#. **Lazy loading**: All submodules use lazy loading for faster import times
-#. **Better discoverability**: Related functionality grouped into logical modules
-#. **Cleaner namespace**: Top-level ``genlayer`` module no longer polluted with all types
-#. **Type checking support**: Full type annotations preserved for IDE support
+    # Both v0.1.x and v0.3.0
+    @gl.public.write
+    def transfer(self, to: Address, amount: u256): ...
+
+    @gl.public.view
+    def balance_of(self, owner: Address) -> u256: ...
+
+Summary of Renames
+~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 50 50
+
+   * - v0.1.x
+     - v0.3.0
+   * - ``gl.Contract``
+     - ``gl.contract.Contract``
+   * - ``gl.contract_interface``
+     - ``gl.contract.interface``
+   * - ``gl.deploy_contract(...)``
+     - ``gl.contract.deploy(...)``
+   * - ``gl.get_contract_at(addr)``
+     - ``gl.contract.get_at(addr)``
+   * - ``gl.ContractProxy``
+     - ``gl.contract.Proxy``
+   * - ``gl.Event``
+     - ``gl.vm.Event``
+   * - ``gl.advanced.user_error_immediate(...)``
+     - ``gl.vm.UserError.immediate(...)``
+   * - ``gl.advanced.emit_raw_event(...)``
+     - ``gl.vm.Event.emit_raw(...)``
+   * - ``gl.trace(...)``
+     - ``gl.vm.trace(...)``
+   * - ``gl.trace_time_micro()``
+     - ``gl.vm.trace_time_micro()``
+   * - ``gl.message_raw``
+     - ``gl.message.raw``
+   * - ``gl.storage.allow_storage``
+     - ``gl.storage.allow``
