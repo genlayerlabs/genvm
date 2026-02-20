@@ -1,4 +1,6 @@
 local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/dup-dependency.py') {
-    "prepare": '${jsonnetDir}/dup-dependency-prepare.py'
+local util = import 'templates/util.jsonnet';
+{
+	prepare: '${jsonnetDir}/dup-dependency-prepare.py',
+	entry: util.addPaths([simple.run('${jsonnetDir}/dup-dependency.py')])
 }

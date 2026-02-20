@@ -1,9 +1,10 @@
 local simple_deploy = import 'templates/simple_deploy.jsonnet';
-simple_deploy.run('${jsonnetDir}/eq_prompt_non_comparative.py') {
+local util = import 'templates/util.jsonnet';
+{entry: util.addPaths([simple_deploy.run('${jsonnetDir}/eq_prompt_non_comparative.py') {
     leader_nondet: [
         {
             "kind": "return",
             "value": "Rats are awful and stupid pets."
         }
     ]
-}
+}])}

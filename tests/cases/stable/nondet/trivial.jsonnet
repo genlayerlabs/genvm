@@ -1,9 +1,10 @@
 local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/${fileBaseName}.py') {
+local util = import 'templates/util.jsonnet';
+{entry: util.addPaths([simple.run('${jsonnetDir}/${fileBaseName}.py') {
     "calldata": |||
         {
             "method": "init",
             "args": []
         }
     |||
-}
+}])}

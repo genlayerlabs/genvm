@@ -1,5 +1,6 @@
 local simple = import 'templates/simple.jsonnet';
-[
+local util = import 'templates/util.jsonnet';
+{entry: util.addPaths([util.chain([
     simple.run('${jsonnetDir}/get_webpage_wait_js.py') {
         "calldata": |||
             {
@@ -18,4 +19,4 @@ local simple = import 'templates/simple.jsonnet';
         |||,
         deadline: 60,
     }
-]
+])])}

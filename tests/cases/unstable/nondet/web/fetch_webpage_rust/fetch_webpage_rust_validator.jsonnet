@@ -1,6 +1,8 @@
 local simple = import 'templates/simple_deploy.jsonnet';
-simple.run('${jsonnetDir}/fetch_webpage_validator.wasm') {
-    "prepare": '${jsonnetDir}/prepare_validator.py',
+local util = import 'templates/util.jsonnet';
+{
+	prepare: '${jsonnetDir}/prepare_validator.py',
+	entry: util.addPaths([simple.run('${jsonnetDir}/fetch_webpage_validator.wasm') {
     "calldata": |||
         {}
     |||,
@@ -11,4 +13,5 @@ simple.run('${jsonnetDir}/fetch_webpage_validator.wasm') {
             "value": "Hello world!"
         }
     ]
+}])
 }

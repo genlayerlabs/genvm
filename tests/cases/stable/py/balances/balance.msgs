@@ -1,3 +1,0 @@
-send:
-	{'on': 'finalized', 'value': '0x5'}
-	b'\x06'

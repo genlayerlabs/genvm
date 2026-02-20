@@ -1,4 +1,6 @@
 local simple_deploy = import 'templates/simple_deploy.jsonnet';
-simple_deploy.run('${jsonnetDir}/contract.zip') {
-    "prepare": '${jsonnetDir}/prepare.py',
+local util = import 'templates/util.jsonnet';
+{
+	prepare: '${jsonnetDir}/prepare.py',
+	entry: util.addPaths([simple_deploy.run('${jsonnetDir}/contract.zip')])
 }

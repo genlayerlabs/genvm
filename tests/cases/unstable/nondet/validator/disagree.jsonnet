@@ -1,5 +1,6 @@
 local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/../web/get_webpage.py') {
+local util = import 'templates/util.jsonnet';
+{entry: util.addPaths([simple.run('${jsonnetDir}/../web/get_webpage.py') {
     "calldata": |||
         {
             "method": "main",
@@ -12,4 +13,4 @@ simple.run('${jsonnetDir}/../web/get_webpage.py') {
             "value": "Hello world~"
         }
     ]
-}
+}])}

@@ -1,5 +1,6 @@
 local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/simple.py') {
+local util = import 'templates/util.jsonnet';
+{entry: util.addPaths([simple.run('${jsonnetDir}/simple.py') {
     "calldata": |||
         {
             "method": "ex",
@@ -12,4 +13,4 @@ simple.run('${jsonnetDir}/simple.py') {
             "value": "exit_code 1"
         }
     ],
-}
+}])}

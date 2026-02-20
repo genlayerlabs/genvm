@@ -80,14 +80,34 @@ def _unfold_conf(x: typing.Any, vars: dict[str, str]) -> typing.Any:
 	return x
 
 
+def _flatten_tree(
+	entries: list[dict],
+	parent_path: str | None = None,
+) -> list[tuple[str, str | None, dict]]:
+	"""DFS-traverse the step tree and return (tree_path, parent_tree_path, step_conf) tuples."""
+	result = []
+	for i, entry in enumerate(entries):
+		if parent_path is None:
+			tree_path = str(i)
+		else:
+			tree_path = f'{parent_path}_{i}'
+		step_conf = {k: v for k, v in entry.items() if k != 'next'}
+		result.append((tree_path, parent_path, step_conf))
+		if 'next' in entry:
+			result.extend(_flatten_tree(entry['next'], tree_path))
+	return result
+
+
 @dataclass
 class IntegrationSetupResult:
 	"""Result from IntegrationSetupStep, passed to subsequent steps."""
 
 	tmp_dir: Path
 	empty_storage: Path
-	jsonnet_conf: list[dict]
 	skipped: bool = False
+
+
+_TOP_LEVEL_METADATA_KEYS = frozenset({'entry', 'tags'})
 
 
 @dataclass
@@ -98,34 +118,49 @@ class IntegrationTestCase(ya_test_runner.test.Case):
 	jsonnet_path: Path
 	manager_service: ya_test_runner.stage.collection.Service
 	webdriver_service: ya_test_runner.stage.collection.Service
+	jsonnet_parsed: dict | None = None
 
 	async def into_steps(self) -> list[ya_test_runner.exec.step.Step]:
-		import _jsonnet
-
 		jsonnet_path = self.jsonnet_path
 
 		# Check for skip file early
 		if jsonnet_path.with_suffix('.skip').exists():
 			return [IntegrationSkipStep(self)]
 
-		# Load jsonnet configuration
-		jsonnet_conf = _jsonnet.evaluate_file(
-			str(jsonnet_path), jpathdir=[str(TEMPLATES_DIR.parent)]
-		)
-		jsonnet_conf = json.loads(jsonnet_conf)
-		if not isinstance(jsonnet_conf, list):
-			jsonnet_conf = [jsonnet_conf]
+		# Use cached parse from collection time, or evaluate now
+		if self.jsonnet_parsed is not None:
+			jsonnet_conf = self.jsonnet_parsed
+		else:
+			import _jsonnet
 
-		jsonnet_conf = _unfold_conf(
-			jsonnet_conf,
-			{'jsonnetDir': str(jsonnet_path.parent), 'fileBaseName': jsonnet_path.stem},
-		)
+			jsonnet_conf = _jsonnet.evaluate_file(
+				str(jsonnet_path), jpathdir=[str(TEMPLATES_DIR.parent)]
+			)
+			jsonnet_conf = json.loads(jsonnet_conf)
 
-		# Calculate paths
+		# Calculate paths early so ${tmpDir} is available for variable substitution
 		rel_path = jsonnet_path.relative_to(CASES_DIR)
 		tmp_dir = local_ctx.shared.artifacts_dir.joinpath(
 			'integration', rel_path
 		).with_suffix('')
+
+		jsonnet_conf = _unfold_conf(
+			jsonnet_conf,
+			{
+				'jsonnetDir': str(jsonnet_path.parent),
+				'fileBaseName': jsonnet_path.stem,
+				'tmpDir': str(tmp_dir),
+			},
+		)
+
+		# Extract top-level fields (exclude metadata-only keys)
+		top_level_conf = {
+			k: v for k, v in jsonnet_conf.items() if k not in _TOP_LEVEL_METADATA_KEYS
+		}
+		entries = jsonnet_conf['entry']
+
+		# Flatten tree
+		flat_steps = _flatten_tree(entries)
 
 		is_unstable = 'unstable' in self.description.tags
 		max_attempts = 3 if is_unstable else 1
@@ -136,19 +171,21 @@ class IntegrationTestCase(ya_test_runner.test.Case):
 		steps.append(
 			IntegrationSetupStep(
 				test_case=self,
-				jsonnet_conf=jsonnet_conf,
+				top_level_conf=top_level_conf,
 				tmp_dir=tmp_dir,
 			)
 		)
 
-		# One step per jsonnet entry
-		for i, single_conf in enumerate(jsonnet_conf):
+		# One step per flattened tree node
+		total_steps = len(flat_steps)
+		for tree_path, parent_tree_path, single_conf in flat_steps:
 			is_benchmark = single_conf.get('benchmark', False)
 			cur_step = IntegrationSingleStep(
 				test_case=self,
-				step_index=i,
+				tree_path=tree_path,
+				parent_tree_path=parent_tree_path,
 				single_conf=single_conf,
-				total_steps=len(jsonnet_conf),
+				total_steps=total_steps,
 				tmp_dir=tmp_dir,
 				max_attempts=max_attempts,
 			)
@@ -206,11 +243,11 @@ class IntegrationSetupStep(ya_test_runner.exec.step.Python):
 	def __init__(
 		self,
 		test_case: IntegrationTestCase,
-		jsonnet_conf: list[dict],
+		top_level_conf: dict,
 		tmp_dir: Path,
 	):
 		self._test_case = test_case
-		self._jsonnet_conf = jsonnet_conf
+		self._top_level_conf = top_level_conf
 		self._tmp_dir = tmp_dir
 
 	def to_str(self) -> str:
@@ -222,9 +259,9 @@ class IntegrationSetupStep(ya_test_runner.exec.step.Python):
 		self._tmp_dir.mkdir(exist_ok=True, parents=True)
 
 		# Run preparation if needed
-		if 'prepare' in self._jsonnet_conf[0]:
+		if 'prepare' in self._top_level_conf:
 			cmd = Command(
-				args=[sys.executable, self._jsonnet_conf[0]['prepare']],
+				args=[sys.executable, self._top_level_conf['prepare']],
 				cwd=self._test_case.jsonnet_path.parent,
 				env=default_env,
 			)
@@ -246,7 +283,7 @@ class IntegrationSetupStep(ya_test_runner.exec.step.Python):
 
 		# Set up base storage
 		base_mock_storage = MockStorage()
-		if storage_json := self._jsonnet_conf[0].get('storage_json'):
+		if storage_json := self._top_level_conf.get('storage_json'):
 			storage_b64 = json.loads(Path(storage_json).read_text())
 			base_mock_storage._storages = {
 				Address(a): {
@@ -262,7 +299,6 @@ class IntegrationSetupStep(ya_test_runner.exec.step.Python):
 		return IntegrationSetupResult(
 			tmp_dir=self._tmp_dir,
 			empty_storage=empty_storage,
-			jsonnet_conf=self._jsonnet_conf,
 		)
 
 
@@ -281,21 +317,23 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 	def __init__(
 		self,
 		test_case: IntegrationTestCase,
-		step_index: int,
+		tree_path: str,
+		parent_tree_path: str | None,
 		single_conf: dict,
 		total_steps: int,
 		tmp_dir: Path,
 		max_attempts: int,
 	):
 		self._test_case = test_case
-		self._step_index = step_index
+		self._tree_path = tree_path
+		self._parent_tree_path = parent_tree_path
 		self._single_conf = single_conf
 		self._total_steps = total_steps
 		self._tmp_dir = tmp_dir
 		self._max_attempts = max_attempts
 
 	def to_str(self) -> str:
-		return f'<step {self._step_index + 1}/{self._total_steps}: {self._test_case.jsonnet_path.name}>'
+		return f'<step {self._tree_path}: {self._test_case.jsonnet_path.name}>'
 
 	async def run(self, previous_results: list[typing.Any]) -> ya_test_runner.test.Result:
 		# Get setup result from first step
@@ -310,7 +348,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					else ya_test_runner.Formatter.Level.DEBUG,
 					f'Test step passed',
 					test_name=str(self._test_case.description.name),
-					step=self._step_index + 1,
+					tree_path=self._tree_path,
 					total_steps=self._total_steps,
 				)
 				return ya_test_runner.test.Result(
@@ -334,7 +372,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				attempt=attempt + 1,
 				max_attempts=self._max_attempts,
 				test_name=str(self._test_case.description.name),
-				step=self._step_index,
+				tree_path=self._tree_path,
 				context=result.get('context', {}),
 			)
 
@@ -346,22 +384,19 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 	async def _run_single_step(self, empty_storage: Path) -> dict:
 		single_conf = pickle.loads(pickle.dumps(self._single_conf))  # Deep copy
 		jsonnet_path = self._test_case.jsonnet_path
-		step_index = self._step_index
+		tree_path = self._tree_path
+		parent_tree_path = self._parent_tree_path
 
-		if self._total_steps == 1:
-			my_tmp_dir = self._tmp_dir
-			suff = ''
-		else:
-			my_tmp_dir = self._tmp_dir.joinpath(str(step_index))
-			suff = f'.{step_index}'
+		my_tmp_dir = self._tmp_dir.joinpath(tree_path)
+		suff = f'.{tree_path}'
 
 		my_tmp_dir.mkdir(exist_ok=True, parents=True)
 
 		# Set up storage paths
-		if step_index == 0:
+		if parent_tree_path is None:
 			pre_storage = empty_storage
 		else:
-			pre_storage = self._tmp_dir.joinpath(str(step_index - 1), 'storage.pickle')
+			pre_storage = self._tmp_dir.joinpath(parent_tree_path, 'storage.pickle')
 		post_storage = my_tmp_dir.joinpath('storage.pickle')
 
 		# Prepare calldata
@@ -397,7 +432,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 						'passed': False,
 						'context': {
 							'reason': 'wat2wasm failed',
-							'step': step_index,
+							'tree_path': tree_path,
 							'exit_code': result.exit_code,
 							'stdout': result.stdout,
 							'stderr': result.stderr,
@@ -468,18 +503,22 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					calldata=calldata_bytes,
 					request_extra=request_extra,
 				)
+				stdout_raw = res.stdout
+				return_part = ''
 				if res.result_kind == public_abi.ResultCode.RETURN:
-					res.stdout += (
+					return_part += (
 						f'executed with `Return({gvm_calldata.to_str(res.result_data)})`\n'
 					)
 				elif res.result_kind == public_abi.ResultCode.VM_ERROR:
-					res.stdout += f'executed with `VMError("{res.result_data}")`\n'
+					return_part += f'executed with `VMError("{res.result_data}")`\n'
 				elif res.result_kind == public_abi.ResultCode.USER_ERROR:
-					res.stdout += f'executed with `UserError("{res.result_data}")`\n'
+					return_part += f'executed with `UserError("{res.result_data}")`\n'
+				nondet_part = ''
 				if mock_host.nondet_disagreement_call_no is not None:
-					res.stdout += (
+					nondet_part = (
 						f'nondet disagreement: {mock_host.nondet_disagreement_call_no}\n'
 					)
+				res.stdout = stdout_raw + return_part + nondet_part
 				# Apply events and storage changes
 				for evs in res.result_events:
 					mock_host.post_event(evs[:-1], evs[-1])
@@ -495,7 +534,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					'passed': False,
 					'context': {
 						'exception': e,
-						'step': step_index,
+						'tree_path': tree_path,
 					},
 				}
 
@@ -506,49 +545,42 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 			'\n'.join(json.dumps(x) for x in res.genvm_log)
 		)
 
-		# Validate stdout
-		exp_stdout_path = jsonnet_path.with_suffix(f'{suff}.stdout')
-		if exp_stdout_path.exists():
-			if exp_stdout_path.read_text() != res.stdout:
+		# Save RunHostAndProgramRes pickle
+		result_path = Path(single_conf['result_path'])
+		result_path.parent.mkdir(exist_ok=True, parents=True)
+		with open(result_path, 'wb') as f:
+			pickle.dump(res, f)
+
+		# Build semantics from components
+		messages_content = messages_path.read_text() if messages_path.exists() else ''
+		semantics_parts = {
+			'stdout': stdout_raw,
+			'return': return_part,
+			'nondet': nondet_part,
+			'messages': messages_content,
+		}
+		semantics = ''.join(
+			semantics_parts[c] for c in single_conf['expected_semantics_components']
+		)
+
+		# Validate semantics
+		exp_semantics_path = Path(single_conf['expected_semantics_path'])
+		if exp_semantics_path.exists():
+			if exp_semantics_path.read_text() != semantics:
 				return {
 					'passed': False,
 					'context': {
-						'reason': 'stdout mismatch',
-						'expected_path': str(exp_stdout_path),
+						'reason': 'semantics mismatch',
+						'expected_path': str(exp_semantics_path),
 						'got_path': str(my_tmp_dir.joinpath('stdout.txt')),
-						'stdout': res.stdout,
+						'semantics': semantics,
 						'stderr': res.stderr,
 						'genvm_log': res.genvm_log,
 					},
 				}
 		else:
 			# Create expected output file
-			exp_stdout_path.write_text(res.stdout)
-
-		# Validate messages
-		expected_messages_path = jsonnet_path.with_suffix(f'{suff}.msgs')
-		if messages_path.exists() != expected_messages_path.exists():
-			return {
-				'passed': False,
-				'context': {
-					'reason': 'messages existence mismatch',
-					'messages_path': str(messages_path),
-					'expected_messages_path': str(expected_messages_path),
-				},
-			}
-
-		if messages_path.exists():
-			got = messages_path.read_text()
-			exp = expected_messages_path.read_text()
-			if got != exp:
-				return {
-					'passed': False,
-					'context': {
-						'reason': 'messages differ',
-						'messages_path': str(messages_path),
-						'expected_messages_path': str(expected_messages_path),
-					},
-				}
+			exp_semantics_path.write_text(semantics)
 
 		return {'passed': True, 'context': {'execution_time': res.execution_time}}
 
@@ -576,6 +608,8 @@ def integration_test(
 		modules_service: The modules service (Llm, Web) for unstable/semi-stable tests
 		webdriver_service: Optional webdriver service for web tests
 	"""
+	import _jsonnet
+
 	jsonnet_files = list(CASES_DIR.glob('**/*.jsonnet'))
 	jsonnet_files.sort()
 
@@ -593,6 +627,17 @@ def integration_test(
 			tags.add('stable')
 			stability_tag = 'stable'
 
+		# Parse jsonnet at collection time to extract metadata tags and cache result
+		jsonnet_parsed = None
+		if not jsonnet_file.with_suffix('.skip').exists():
+			jsonnet_result = _jsonnet.evaluate_file(
+				str(jsonnet_file), jpathdir=[str(TEMPLATES_DIR.parent)]
+			)
+			jsonnet_parsed = json.loads(jsonnet_result)
+			extra_tags = jsonnet_parsed.get('tags', [])
+			if extra_tags:
+				tags.update(extra_tags)
+
 		needed_services: set[ya_test_runner.stage.collection.Service] = {manager_service}
 
 		if 'stable' not in tags:
@@ -608,14 +653,12 @@ def integration_test(
 			console_pool=False,  # Integration tests can run in parallel
 		)
 
-		if '/bench/' in test_name:
-			desc = desc.with_tags(['bench'])
-
 		case = IntegrationTestCase(
 			description=desc,
 			jsonnet_path=jsonnet_file,
 			manager_service=manager_service,
 			webdriver_service=webdriver_service,
+			jsonnet_parsed=jsonnet_parsed,
 		)
 
 		ctx.add_case(case)

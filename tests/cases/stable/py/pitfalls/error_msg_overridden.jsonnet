@@ -1,5 +1,6 @@
 local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/error_msg_overridden.py') {
+local util = import 'templates/util.jsonnet';
+{entry: util.addPaths([simple.run('${jsonnetDir}/error_msg_overridden.py') {
     "calldata": |||
         {
             "method": "#error"
@@ -8,4 +9,4 @@ simple.run('${jsonnetDir}/error_msg_overridden.py') {
     message+: {
         value: 100
     }
-}
+}])}

@@ -1,6 +1,7 @@
 local simple = import 'templates/simple.jsonnet';
 local s = simple.run('${jsonnetDir}/code.py');
-[
+local util = import 'templates/util.jsonnet';
+{entry: util.addPaths([util.chain([
     s {
         "calldata": |||
             {
@@ -27,4 +28,4 @@ local s = simple.run('${jsonnetDir}/code.py');
         |||,
         code: null,
     }
-]
+])])}
