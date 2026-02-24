@@ -2,28 +2,28 @@ local simple = import 'templates/simple.jsonnet';
 local s = simple.run('${jsonnetDir}/send_message_on.py');
 local util = import 'templates/util.jsonnet';
 {entry: util.addPaths([util.chain([
-    s {
-        "calldata": |||
-            {
-                "method": "main",
-                "args": ["finalized"],
-            }
-        |||
-    },
-        s {
-        "calldata": |||
-            {
-                "method": "main",
-                "args": ["accepted"],
-            }
-        |||
-    },
-        s {
-        "calldata": |||
-            {
-                "method": "main",
-                "args": ["random"],
-            }
-        |||
-    },
+	s {
+		"calldata": |||
+			{
+				"method": "main",
+				"args": ["finalized"],
+			}
+		|||
+	},
+		s {
+		"calldata": |||
+			{
+				"method": "main",
+				"args": ["accepted"],
+			}
+		|||
+	},
+		s {
+		"calldata": |||
+			{
+				"method": "main",
+				"args": ["random"],
+			}
+		|||
+	},
 ])])}
