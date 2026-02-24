@@ -82,19 +82,16 @@ def _unfold_conf(x: typing.Any, vars: dict[str, str]) -> typing.Any:
 
 def _flatten_tree(
 	entries: list[dict],
-	parent_path: str | None = None,
 ) -> list[tuple[str, str | None, dict]]:
 	"""DFS-traverse the step tree and return (tree_path, parent_tree_path, step_conf) tuples."""
 	result = []
-	for i, entry in enumerate(entries):
-		if parent_path is None:
-			tree_path = str(i)
-		else:
-			tree_path = f'{parent_path}_{i}'
+	for entry in entries:
 		step_conf = {k: v for k, v in entry.items() if k != 'next'}
-		result.append((tree_path, parent_path, step_conf))
+		tree_path = step_conf['tree_path']
+		parent_tree_path = step_conf.get('parent_tree_path')
+		result.append((tree_path, parent_tree_path, step_conf))
 		if 'next' in entry:
-			result.extend(_flatten_tree(entry['next'], tree_path))
+			result.extend(_flatten_tree(entry['next']))
 	return result
 
 
@@ -458,12 +455,21 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		mock_sock_path = Path('/tmp', 'genvm-test', rel_path.with_suffix(f'.sock{suff}'))
 		mock_sock_path.parent.mkdir(exist_ok=True, parents=True)
 
+		# Load leader nondet results if available (for v/s modes)
+		leader_nondet = single_conf.get('leader_nondet', None)
+		leader_nondet_path = single_conf.get('leader_nondet_path')
+		if leader_nondet is None and leader_nondet_path is not None:
+			lnp = Path(leader_nondet_path)
+			if lnp.exists():
+				with open(lnp, 'rb') as f:
+					leader_nondet = pickle.load(f)
+
 		# Create mock host
 		host = MockHost(
 			path=str(mock_sock_path),
 			storage_path_post=post_storage,
 			storage_path_pre=pre_storage,
-			leader_nondet=single_conf.get('leader_nondet', None),
+			leader_nondet=leader_nondet,
 			messages_path=messages_path,
 			balances={Address(k): v for k, v in single_conf.get('balances', {}).items()},
 			running_address=single_conf['message']['contract_address'],
@@ -488,13 +494,14 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				request_extra = {}
 				if 'stable' in self._test_case.description.tags:
 					request_extra['no_modules'] = True
+				mode = single_conf.get('mode', 'l')
 				res = await base_host.run_genvm(
 					mock_host,
 					manager_uri=manager_uri,
 					message=single_conf['message'],
 					timeout=single_conf.get('deadline', 10 * 60),
 					capture_output=True,
-					is_sync=single_conf.get('sync', False),
+					is_sync=(mode == 's'),
 					host_data=host_data,
 					logger=logger,
 					host='unix://' + mock_host.path,
@@ -538,6 +545,15 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					},
 				}
 
+		# Save leader nondet results for v/s modes
+		if host.nondet_results:
+			nondet_list = [
+				host.nondet_results[i] for i in range(max(host.nondet_results.keys()) + 1)
+			]
+			leader_nondet_save_path = my_tmp_dir.joinpath('leader_nondet.pickle')
+			with open(leader_nondet_save_path, 'wb') as f:
+				pickle.dump(nondet_list, f)
+
 		# Save outputs
 		my_tmp_dir.joinpath('stdout.txt').write_text(res.stdout)
 		my_tmp_dir.joinpath('stderr.txt').write_text(res.stderr)
@@ -551,6 +567,37 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		with open(result_path, 'wb') as f:
 			pickle.dump(res, f)
 
+		# Write hash file (calldata-encoded deterministic result fields)
+		hash_data = gvm_calldata.encode(
+			(
+				int(res.result_kind),
+				res.result_data,
+				res.result_fingerprint,
+				res.result_storage_changes,
+				res.result_events,
+			)
+		)
+		hash_path = Path(single_conf['expected_hash_parts'])
+		hash_path.parent.mkdir(exist_ok=True, parents=True)
+		hash_path.write_bytes(hash_data)
+
+		# Verify against leader hash if specified
+		verify_against_path = single_conf.get('verify_against_path')
+		if verify_against_path is not None:
+			verify_path = Path(verify_against_path)
+			if verify_path.exists():
+				expected_hash = verify_path.read_bytes()
+				if expected_hash != hash_data:
+					return {
+						'passed': False,
+						'context': {
+							'reason': 'hash mismatch against leader',
+							'verify_against_path': str(verify_path),
+							'hash_path': str(hash_path),
+							'tree_path': tree_path,
+						},
+					}
+
 		# Build semantics from components
 		messages_content = messages_path.read_text() if messages_path.exists() else ''
 		semantics_parts = {
@@ -559,11 +606,11 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 			'nondet': nondet_part,
 			'messages': messages_content,
 		}
-		semantics = ''.join(
-			semantics_parts[c] for c in single_conf['expected_semantics_components']
-		)
+		semantics_components = single_conf['expected_semantics_components']
+		if not semantics_components:
+			return {'passed': True, 'context': {'execution_time': res.execution_time}}
+		semantics = ''.join(semantics_parts[c] for c in semantics_components)
 
-		# Validate semantics
 		exp_semantics_path = Path(single_conf['expected_semantics_path'])
 		if exp_semantics_path.exists():
 			if exp_semantics_path.read_text() != semantics:

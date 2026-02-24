@@ -5,6 +5,8 @@ local addOutPaths(entry, data) =
 	{
 		entry:
 			entry + {
+				tree_path: treePath,
+				parent_tree_path: parentPath,
 				[if !std.objectHas(entry, 'modes') then 'modes']: 'lvs',
 				[if !std.objectHas(entry, 'verify_against_path') then 'verify_against_path']: null,
 				expected_semantics_path: '${jsonnetDir}/${fileBaseName}' + suff + '.stdout',
@@ -17,24 +19,53 @@ local addOutPaths(entry, data) =
 		},
 	};
 
+local expandModes(entry) =
+	local modes = std.stringChars(entry.modes);
+	local hasLeader = std.member(modes, 'l');
+	local leaderHashPath = entry.expected_hash_parts;
+	local leaderNondetPath = std.strReplace(entry.result_path, '/result.pickle', '/leader_nondet.pickle');
+	[
+		local isLeader = m == 'l';
+		local base = if isLeader then entry
+			else {[k]: entry[k] for k in std.objectFields(entry) if k != 'next'};
+		base + {
+			mode: m,
+		} + (
+			if !isLeader then {
+				tree_path: entry.tree_path + '.' + m,
+				expected_hash_parts: std.strReplace(entry.expected_hash_parts, '.hash', '.' + m + '.hash'),
+				result_path: std.strReplace(entry.result_path, '/result.pickle', '.' + m + '/result.pickle'),
+				expected_semantics_components: [],
+			} else {}
+		) + (
+			if !isLeader && hasLeader then {
+				verify_against_path: leaderHashPath,
+				leader_nondet_path: leaderNondetPath,
+			} else {}
+		)
+		for m in modes
+	];
+
 local recurse(entries, data) =
-[
-	local res = std.foldl((function(acc, nxt) nxt(acc.entry, acc.data)), [addOutPaths], {
-		data: data {i:i},
-		entry: entries[i],
-	});
+	std.flatMap(function(i)
+		local res = std.foldl((function(acc, nxt) nxt(acc.entry, acc.data)), [addOutPaths], {
+			data: data {i: i},
+			entry: entries[i],
+		});
 
-	local entry = res.entry;
-	local data = res.data;
+		local entry = res.entry;
+		local entryData = res.data;
+		local expanded = expandModes(entry);
 
-	entry + (
-		if std.objectHas(entry, 'next') then {
-			next: recurse(entry.next, data)
-		} else {}
-	)
-
-	for i in std.range(0, std.length(entries) - 1)
-];
+		[
+			e + (
+				if std.objectHas(e, 'next') then {
+					next: recurse(e.next, entryData)
+				} else {}
+			)
+			for e in expanded
+		]
+	, std.range(0, std.length(entries) - 1));
 
 {
 	chain(steps)::

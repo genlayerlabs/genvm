@@ -7,7 +7,7 @@ local util = import 'templates/util.jsonnet';
             "args": []
         }
     |||,
-    sync: true,
+    modes: 's',
     leader_nondet: [
         {
             "kind": "return",
