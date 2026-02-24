@@ -7,10 +7,12 @@ local util = import 'templates/util.jsonnet';
 			"args": ["text"]
 		}
 	|||,
+	modes: 'v',
 	leader_nondet: [
 		{
 			"kind": "return",
 			"value": "Hello world~"
 		}
-	]
+	],
+	stable_hash: true,
 }])}

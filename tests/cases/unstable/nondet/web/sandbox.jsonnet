@@ -6,5 +6,6 @@ local util = import 'templates/util.jsonnet';
 			"method": "main",
 			"args": ["gl.nondet.web.render('https://test-server.genlayer.com/static/genvm/hello.html', mode='text')"]
 		}
-	|||
+	|||,
+	stable_hash: false,
 }])}

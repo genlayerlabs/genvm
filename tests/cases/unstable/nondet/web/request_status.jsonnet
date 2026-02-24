@@ -8,7 +8,8 @@ local util = import 'templates/util.jsonnet';
 				"method": "main",
 				"args": [200]
 			}
-		|||
+		|||,
+		stable_hash: false,
 	},
 	s {
 		"calldata": |||
@@ -16,6 +17,7 @@ local util = import 'templates/util.jsonnet';
 				"method": "main",
 				"args": [404]
 			}
-		|||
+		|||,
+		stable_hash: false,
 	},
 ])])}

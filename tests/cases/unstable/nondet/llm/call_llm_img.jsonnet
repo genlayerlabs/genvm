@@ -1,3 +1,7 @@
 local simple_deploy = import 'templates/simple_deploy.jsonnet';
 local util = import 'templates/util.jsonnet';
-{entry: util.addPaths([simple_deploy.run('${jsonnetDir}/call_llm_img.py')])}
+{
+	entry: util.addPaths([
+		simple_deploy.run('${jsonnetDir}/call_llm_img.py') { stable_hash: false }
+	]),
+}

@@ -12,5 +12,7 @@ local util = import 'templates/util.jsonnet';
 			"kind": "return",
 			"value": "Hello world!"
 		}
-	]
+	],
+	modes: 'vs',
+	stable_hash: true,
 }])}

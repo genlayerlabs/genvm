@@ -6,5 +6,7 @@ local util = import 'templates/util.jsonnet';
 			"kind": "return",
 			"value": "Rats are awful and stupid pets."
 		}
-	]
+	],
+	modes: 'v',
+	stable_hash: true,
 }])}

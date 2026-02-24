@@ -9,6 +9,7 @@ local util = import 'templates/util.jsonnet';
 			}
 		|||,
 		deadline: 60,
+		stable_hash: false,
 	},
 	simple.run('${jsonnetDir}/get_webpage_wait_js.py') {
 		"calldata": |||
@@ -18,5 +19,6 @@ local util = import 'templates/util.jsonnet';
 			}
 		|||,
 		deadline: 60,
+		stable_hash: false,
 	}
 ])])}

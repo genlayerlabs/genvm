@@ -21,6 +21,10 @@ from ya_test_runner.exec.command import Command, RunMode
 from ya_test_runner.test import CONST_PASSED
 import ya_test_runner_plugins.genvm as genvm
 
+import difflib
+import itertools
+import io
+
 # Get the local context
 local_ctx = ya_test_runner.stage.configuration.current_context()
 
@@ -134,6 +138,13 @@ class IntegrationTestCase(ya_test_runner.test.Case):
 				str(jsonnet_path), jpathdir=[str(TEMPLATES_DIR.parent)]
 			)
 			jsonnet_conf = json.loads(jsonnet_conf)
+
+		local_ctx.shared.logger.debug(
+			'Parsed jsonnet configuration',
+			test_name=str(self.description.name),
+			jsonnet_path=str(jsonnet_path),
+			conf=jsonnet_conf,
+		)
 
 		# Calculate paths early so ${tmpDir} is available for variable substitution
 		rel_path = jsonnet_path.relative_to(CASES_DIR)
@@ -308,6 +319,32 @@ FAKE_NODE_PUBLIC_KEY = '6478c39d71a8e469a2dfc5f467ab48e449012308228ab81aa2341107
 SIGNER_URL = 'https://test-server.genlayer.com/genvm/sign'
 
 
+def _get_diffs[T](exp: T, got: T, dump: typing.Callable[[T], str]) -> dict | None:
+	if exp == got:
+		return None
+	exp_txt = dump(exp)
+	got_txt = dump(got)
+	diff = difflib.unified_diff(
+		exp_txt.splitlines(keepends=False),
+		got_txt.splitlines(keepends=False),
+	)
+
+	return {
+		'exp': exp,
+		'got': got,
+		'diff': '\n'.join(itertools.islice(diff, 5)),
+	}
+
+
+def _calldata_to_fancy_str(calldata: bytes) -> str:
+	cd = gvm_calldata.decode(calldata)
+	buf = io.StringIO()
+	ya_test_runner.formatter.TextFormatter(
+		ya_test_runner.formatter.NoLockTextIO(buf)
+	).dump(ya_test_runner.formatter.Formatter.Level.ERROR, 'calldata', calldata=cd)
+	return buf.getvalue()
+
+
 class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 	"""Executes a single step of an integration test."""
 
@@ -393,8 +430,11 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		if parent_tree_path is None:
 			pre_storage = empty_storage
 		else:
-			pre_storage = self._tmp_dir.joinpath(parent_tree_path, 'storage.pickle')
-		post_storage = my_tmp_dir.joinpath('storage.pickle')
+			pre_storage = self._tmp_dir.joinpath(parent_tree_path + '_storage.pickle')
+		post_storage = my_tmp_dir.parent.joinpath(my_tmp_dir.name[:-1] + '_storage.pickle')
+
+		config_str = json.dumps(single_conf, indent=2)
+		my_tmp_dir.joinpath('config.json').write_text(config_str)
 
 		# Prepare calldata
 		calldata_bytes = gvm_calldata.encode(
@@ -449,19 +489,25 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 			single_conf['message']['origin_address']
 		)
 
+		path_to_which_leader_puts_result = my_tmp_dir.parent.joinpath(
+			my_tmp_dir.name[:-1] + '_leader_nondet.pickle'
+		)
+
 		# Set up paths
 		messages_path = my_tmp_dir.joinpath('messages.txt')
 		rel_path = jsonnet_path.relative_to(CASES_DIR)
 		mock_sock_path = Path('/tmp', 'genvm-test', rel_path.with_suffix(f'.sock{suff}'))
 		mock_sock_path.parent.mkdir(exist_ok=True, parents=True)
 
+		is_leader = single_conf.get('mode') == 'l'
+
 		# Load leader nondet results if available (for v/s modes)
-		leader_nondet = single_conf.get('leader_nondet', None)
-		leader_nondet_path = single_conf.get('leader_nondet_path')
-		if leader_nondet is None and leader_nondet_path is not None:
-			lnp = Path(leader_nondet_path)
-			if lnp.exists():
-				with open(lnp, 'rb') as f:
+		if is_leader:
+			leader_nondet = None
+		else:
+			leader_nondet = single_conf.get('leader_nondet', None)
+			if leader_nondet is None:
+				with open(path_to_which_leader_puts_result, 'rb') as f:
 					leader_nondet = pickle.load(f)
 
 		# Create mock host
@@ -546,12 +592,13 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				}
 
 		# Save leader nondet results for v/s modes
-		if host.nondet_results:
-			nondet_list = [
-				host.nondet_results[i] for i in range(max(host.nondet_results.keys()) + 1)
-			]
-			leader_nondet_save_path = my_tmp_dir.joinpath('leader_nondet.pickle')
-			with open(leader_nondet_save_path, 'wb') as f:
+		if is_leader:
+			if len(host.nondet_results) == 0:
+				nondet_list = []
+			else:
+				size = max(host.nondet_results.keys()) + 1
+				nondet_list = [host.nondet_results[i] for i in range(size)]
+			with open(path_to_which_leader_puts_result, 'wb') as f:
 				pickle.dump(nondet_list, f)
 
 		# Save outputs
@@ -577,26 +624,6 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				res.result_events,
 			)
 		)
-		hash_path = Path(single_conf['expected_hash_parts'])
-		hash_path.parent.mkdir(exist_ok=True, parents=True)
-		hash_path.write_bytes(hash_data)
-
-		# Verify against leader hash if specified
-		verify_against_path = single_conf.get('verify_against_path')
-		if verify_against_path is not None:
-			verify_path = Path(verify_against_path)
-			if verify_path.exists():
-				expected_hash = verify_path.read_bytes()
-				if expected_hash != hash_data:
-					return {
-						'passed': False,
-						'context': {
-							'reason': 'hash mismatch against leader',
-							'verify_against_path': str(verify_path),
-							'hash_path': str(hash_path),
-							'tree_path': tree_path,
-						},
-					}
 
 		# Build semantics from components
 		messages_content = messages_path.read_text() if messages_path.exists() else ''
@@ -607,27 +634,57 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 			'messages': messages_content,
 		}
 		semantics_components = single_conf['expected_semantics_components']
-		if not semantics_components:
-			return {'passed': True, 'context': {'execution_time': res.execution_time}}
-		semantics = ''.join(semantics_parts[c] for c in semantics_components)
+		if semantics_components:
+			semantics = ''.join(semantics_parts[c] for c in semantics_components)
 
-		exp_semantics_path = Path(single_conf['expected_semantics_path'])
-		if exp_semantics_path.exists():
-			if exp_semantics_path.read_text() != semantics:
-				return {
-					'passed': False,
-					'context': {
-						'reason': 'semantics mismatch',
-						'expected_path': str(exp_semantics_path),
-						'got_path': str(my_tmp_dir.joinpath('stdout.txt')),
-						'semantics': semantics,
-						'stderr': res.stderr,
-						'genvm_log': res.genvm_log,
-					},
-				}
-		else:
-			# Create expected output file
-			exp_semantics_path.write_text(semantics)
+			exp_semantics_path = Path(single_conf['expected_semantics_path'])
+			if exp_semantics_path.exists():
+				exp_text = exp_semantics_path.read_text()
+				diff = _get_diffs(exp_text, semantics, lambda x: x)
+				if diff is not None:
+					return {
+						'passed': False,
+						'context': {
+							'reason': 'semantics mismatch',
+							'expected_path': str(exp_semantics_path),
+							'got_path': str(my_tmp_dir.joinpath('stdout.txt')),
+							'semantics': semantics,
+							'stderr': res.stderr,
+							'genvm_log': res.genvm_log,
+							**diff,
+						},
+					}
+			else:
+				# Create expected output file
+				exp_semantics_path.write_text(semantics)
+
+		my_tmp_dir.joinpath('hash').write_bytes(base64.b64encode(hash_data))
+
+		expected_hash_path = single_conf['expected_hash_path']
+
+		if expected_hash_path is not None:
+			expected_hash_path = Path(expected_hash_path)
+
+			if expected_hash_path.exists():
+				original_hash = base64.b64decode(expected_hash_path.read_text().strip())
+
+				diff = _get_diffs(original_hash, hash_data, _calldata_to_fancy_str)
+
+				if diff is not None:
+					return {
+						'passed': False,
+						'context': {
+							'reason': 'hash mismatch',
+							'hash_path': str(expected_hash_path),
+							'tree_path': tree_path,
+							**diff,
+						},
+					}
+			else:
+				expected_hash_path.parent.mkdir(exist_ok=True, parents=True)
+				expected_hash_path.write_text(
+					base64.b64encode(hash_data).decode('ascii') + '\n'
+				)
 
 		return {'passed': True, 'context': {'execution_time': res.execution_time}}
 

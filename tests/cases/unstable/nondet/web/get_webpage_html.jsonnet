@@ -6,5 +6,6 @@ local util = import 'templates/util.jsonnet';
 			"method": "main",
 			"args": ["html"]
 		}
-	|||
+	|||,
+	stable_hash: false,
 }])}

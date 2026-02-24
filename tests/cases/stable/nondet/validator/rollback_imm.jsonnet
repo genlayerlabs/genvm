@@ -6,9 +6,10 @@ local s = simple.run('${jsonnetDir}/rollback_imm.py') {
 			"args": []
 		}
 	|||,
+	modes: 'v',
 };
 local util = import 'templates/util.jsonnet';
-{entry: util.addPaths([util.chain([
+{entry: util.addPaths([
 	s {
 		leader_nondet: [
 			{
@@ -25,4 +26,4 @@ local util = import 'templates/util.jsonnet';
 			}
 		]
 	},
-])])}
+])}

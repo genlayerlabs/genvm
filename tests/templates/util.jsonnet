@@ -8,11 +8,8 @@ local addOutPaths(entry, data) =
 				tree_path: treePath,
 				parent_tree_path: parentPath,
 				[if !std.objectHas(entry, 'modes') then 'modes']: 'lvs',
-				[if !std.objectHas(entry, 'verify_against_path') then 'verify_against_path']: null,
 				expected_semantics_path: '${jsonnetDir}/${fileBaseName}' + suff + '.stdout',
 				[if !std.objectHas(entry, 'expected_semantics_components') then 'expected_semantics_components']: ['stdout', 'return', 'nondet', 'messages'],
-				expected_hash_parts: '${jsonnetDir}/${fileBaseName}' + suff + '.hash',
-				result_path: '${tmpDir}/' + treePath + '/result.pickle',
 			},
 		data+: {
 			parentPath: treePath,
@@ -21,28 +18,40 @@ local addOutPaths(entry, data) =
 
 local expandModes(entry) =
 	local modes = std.stringChars(entry.modes);
-	local hasLeader = std.member(modes, 'l');
-	local leaderHashPath = entry.expected_hash_parts;
-	local leaderNondetPath = std.strReplace(entry.result_path, '/result.pickle', '/leader_nondet.pickle');
+	local hasLeaderMode = std.member(modes, 'l');
+	local hasValidatorMode = std.member(modes, 'v');
+	local hasLeaderResult = std.objectHas(entry, 'leader_nondet');
+	local is_stable_hash = std.get(entry, 'stable_hash', true);
+
 	[
+		local result_path = '${tmpDir}/' + entry.tree_path + m + '/result.pickle';
 		local isLeader = m == 'l';
-		local base = if isLeader then entry
+		local expected_hash_path =
+			if is_stable_hash
+			then '${jsonnetDir}/${fileBaseName}.' + entry.tree_path + '.hash'
+			else if isLeader
+			then null
+			else if hasLeaderMode
+			then '${tmpDir}/' + entry.tree_path + 'l/hash'
+			else if hasValidatorMode
+			then '${tmpDir}/' + entry.tree_path + 'v/hash'
+			else null
+			;
+		local mainMode = if hasLeaderMode then 'l' else if hasValidatorMode then 'v' else 's';
+		local base =
+			if isLeader
+			then entry
 			else {[k]: entry[k] for k in std.objectFields(entry) if k != 'next'};
 		base + {
 			mode: m,
-		} + (
-			if !isLeader then {
-				tree_path: entry.tree_path + '.' + m,
-				expected_hash_parts: std.strReplace(entry.expected_hash_parts, '.hash', '.' + m + '.hash'),
-				result_path: std.strReplace(entry.result_path, '/result.pickle', '.' + m + '/result.pickle'),
-				expected_semantics_components: [],
-			} else {}
-		) + (
-			if !isLeader && hasLeader then {
-				verify_against_path: leaderHashPath,
-				leader_nondet_path: leaderNondetPath,
-			} else {}
-		)
+			result_path: result_path,
+			expected_hash_path: expected_hash_path,
+			tree_path: entry.tree_path + m,
+		} +
+			if m != mainMode
+			then
+			{ expected_semantics_components: [] }
+			else {}
 		for m in modes
 	];
 

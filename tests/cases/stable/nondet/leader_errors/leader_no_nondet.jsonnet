@@ -7,5 +7,6 @@ local util = import 'templates/util.jsonnet';
 			"args": []
 		}
 	|||,
+	'modes': 'vs',
 	leader_nondet: [],
 }])}

@@ -356,13 +356,16 @@ def main() -> None:
 
 	base_args, remaining_args = base_parser.parse_known_args()
 
+	stdoutWithLock = formatter.DefaultLockableTextIO(sys.stdout)
+	stderrWithLock = formatter.DefaultLockableTextIO(sys.stderr)
+
 	match base_args.log_format:
 		case 'text':
-			logger = formatter.TextFormatter(sys.stderr)
-			printer = formatter.TextFormatter(sys.stdout)
+			logger = formatter.TextFormatter(stderrWithLock)
+			printer = formatter.TextFormatter(stdoutWithLock)
 		case 'json':
-			logger = formatter.JsonFormatter(sys.stderr)
-			printer = formatter.JsonFormatter(sys.stdout)
+			logger = formatter.JsonFormatter(stderrWithLock)
+			printer = formatter.JsonFormatter(stdoutWithLock)
 		case _:
 			raise RuntimeError(f'unknown log format: {base_args.log_format}')
 

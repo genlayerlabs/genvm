@@ -1,3 +1,3 @@
 local simple_deploy = import 'templates/simple_deploy.jsonnet';
 local util = import 'templates/util.jsonnet';
-{entry: util.addPaths([simple_deploy.run('${jsonnetDir}/get_webpage_404.py')])}
+{entry: util.addPaths([simple_deploy.run('${jsonnetDir}/get_webpage_404.py') { stable_hash: false }])}

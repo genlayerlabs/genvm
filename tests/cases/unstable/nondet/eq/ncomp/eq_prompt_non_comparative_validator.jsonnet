@@ -6,5 +6,7 @@ local util = import 'templates/util.jsonnet';
 			"kind": "return",
 			"value": "Rats make fantastic pets, being affectionate, intelligent, and playful. They form strong bonds with humans, learn tricks, and possess charming, adaptable personalities."
 		}
-	]
+	],
+	modes: 'v',
+	stable_hash: true,
 }])}

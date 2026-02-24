@@ -13,4 +13,5 @@ local util = import 'templates/util.jsonnet';
 			"value": "exit_code 1"
 		}
 	],
+	modes: 'v',
 }])}

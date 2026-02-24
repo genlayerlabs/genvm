@@ -67,14 +67,14 @@ impl CtxPart {
         }
 
         res.inspect_err(|err| {
-            log_error!(
+            log_info!(
                 prompt:serde = prompt,
                 model = model,
                 mode:? = format,
                 provider_id = provider_id,
                 error:ah = err,
                 genvm_id = dflt.hello.genvm_id;
-                "prompt execution error"
+                "prompt execution error (note: script should handle this error later)"
             );
         })
     }
