@@ -1,2 +1,1 @@
-wow, loaded with js
-executed with `Return(null)`
+executed with `VMError("exit_code 1")`

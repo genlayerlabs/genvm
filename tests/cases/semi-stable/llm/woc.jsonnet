@@ -1,4 +1,5 @@
-local simple = import 'templates/simple.jsonnet';
+local simple = import 'templates/simple_deploy.jsonnet';
+local msg = import 'templates/message.json';
 local s = simple.run('${jsonnetDir}/${fileBaseName}.py');
 local util = import 'templates/util.jsonnet';
 {entry: util.addPaths([util.chain([
@@ -8,12 +9,11 @@ local util = import 'templates/util.jsonnet';
 				"args": [True]
 			}
 		|||,
-		"message": super.message + {
-			"is_init": true,
-		}
 	},
 
 	s {
+		code: null,
+		message: msg,
 		"calldata": |||
 			{
 				"method": "get_have_coin",
@@ -22,15 +22,20 @@ local util = import 'templates/util.jsonnet';
 	},
 
 	s {
+		code: null,
+		message: msg,
 		"calldata": |||
 			{
 				"method": "ask_for_coin",
 				"args": ["pwease"],
 			}
 		|||,
+		stable_hash: false,
 	},
 
 	s {
+		code: null,
+		message: msg,
 		"calldata": |||
 			{
 				"method": "get_have_coin",

@@ -1,9 +1,3 @@
-local simple = import 'templates/simple.jsonnet';
+local simple = import 'templates/simple_deploy_then_write.jsonnet';
 local util = import 'templates/util.jsonnet';
-{entry: util.addPaths([simple.run('${jsonnetDir}/error_msg.py') {
-	"calldata": |||
-		{
-			"method": "#error"
-		}
-	|||
-}])}
+{entry: util.addPaths([simple.run('${jsonnetDir}/error_msg.py', '#error')])}

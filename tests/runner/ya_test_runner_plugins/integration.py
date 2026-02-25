@@ -437,10 +437,15 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		my_tmp_dir.joinpath('config.json').write_text(config_str)
 
 		# Prepare calldata
+		calldata_eval_vars = {}
+		calldata_eval_vars['Address'] = gvm_calldata.Address
+		calldata_eval_vars['true'] = True
+		calldata_eval_vars['false'] = False
+
 		calldata_bytes = gvm_calldata.encode(
 			eval(
 				single_conf['calldata'],
-				globals(),
+				calldata_eval_vars,
 				single_conf.get('vars', {}).copy(),
 			)
 		)
@@ -540,6 +545,9 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				request_extra = {}
 				if 'stable' in self._test_case.description.tags:
 					request_extra['no_modules'] = True
+
+				if not single_conf['message'].get('is_init', False):
+					code = None
 				mode = single_conf.get('mode', 'l')
 				res = await base_host.run_genvm(
 					mock_host,

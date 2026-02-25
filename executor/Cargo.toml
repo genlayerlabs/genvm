@@ -2,6 +2,9 @@
 name = "genvm"
 version = "0.1.0"
 edition = "2021"
+
+[features]
+test_always_fail_module = []
 [profile.dev.package.wasmtime]
 opt-level = 2
 [profile.dev.package.wasmparser]

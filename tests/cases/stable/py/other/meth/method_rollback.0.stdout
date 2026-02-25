@@ -1,1 +1,2 @@
-executed with `UserError("nah, I won't execute")`
+init
+executed with `Return(null)`

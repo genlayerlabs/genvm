@@ -1,2 +1,1 @@
-200
-executed with `Return(null)`
+executed with `VMError("exit_code 1")`

@@ -1,4 +1,4 @@
-local simple = import 'templates/simple.jsonnet';
+local simple = import 'templates/simple_deploy.jsonnet';
 local util = import 'templates/util.jsonnet';
 {
 	prepare: '${jsonnetDir}/prepare.py',

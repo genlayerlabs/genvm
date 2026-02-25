@@ -1,0 +1,3 @@
+Return(calldata='Hello world!')
+loads
+executed with `Return(null)`

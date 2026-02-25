@@ -1,4 +1,5 @@
-local simple = import 'templates/simple.jsonnet';
+local simple = import 'templates/simple_deploy.jsonnet';
+local msg = import 'templates/message.json';
 local s = simple.run('${jsonnetDir}/request_status.py');
 local util = import 'templates/util.jsonnet';
 {entry: util.addPaths([util.chain([
@@ -12,6 +13,8 @@ local util = import 'templates/util.jsonnet';
 		stable_hash: false,
 	},
 	s {
+		code: null,
+		message: msg,
 		"calldata": |||
 			{
 				"method": "main",

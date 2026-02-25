@@ -203,6 +203,15 @@ impl Module {
         V: serde::Serialize,
         R: serde::Serialize + serde::de::DeserializeOwned,
     {
+        #[cfg(feature = "test_always_fail_module")]
+        {
+            let _ = val;
+            return Ok(Err(GenericValue::Str(format!(
+                "module {} is stubbed out",
+                self.name
+            ))));
+        }
+
         tokio::select! {
             _ = self.cancellation.chan.closed() => {
                 anyhow::bail!("timeout") // it will be replaced later
