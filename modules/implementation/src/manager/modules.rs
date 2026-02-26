@@ -84,6 +84,61 @@ pub struct StartRequest {
     pub config: serde_json::Value,
     #[serde(default)]
     pub allow_empty_backends: bool,
+    /// When true, the module will always return a user error for every request
+    /// instead of actually processing it. Config is still loaded normally.
+    #[serde(default)]
+    pub user_error: bool,
+}
+
+/// Creates a stream handler that always responds with `Result::UserError` for every request.
+/// Maintains the wire protocol (reads hello, then loops reading messages and writing error responses).
+fn create_user_error_stream_handler() -> StreamHandler {
+    Arc::new(|mut stream: Box<dyn genvm_common::io::Stream>, _exec_ctx| {
+        Box::pin(async move {
+            // Read and discard the hello message (maintain protocol)
+            match crate::common::read_message(&mut stream).await {
+                Ok(Some(_)) => {}
+                _ => return,
+            }
+
+            // For each incoming message, return a user error
+            loop {
+                match crate::common::read_message(&mut stream).await {
+                    Ok(Some(_)) => {}
+                    _ => return,
+                }
+
+                let response = genvm_modules_interfaces::Result::<()>::UserError(
+                    genvm_modules_interfaces::GenericValue::Map(BTreeMap::from([
+                        (
+                            "causes".to_owned(),
+                            genvm_modules_interfaces::GenericValue::Array(vec![
+                                genvm_modules_interfaces::GenericValue::Str(
+                                    "MODULE_USER_ERROR".to_owned(),
+                                ),
+                            ]),
+                        ),
+                        (
+                            "ctx".to_owned(),
+                            genvm_modules_interfaces::GenericValue::Map(BTreeMap::new()),
+                        ),
+                    ])),
+                );
+
+                let Ok(answer) = genvm_common::calldata::to_value(&response) else {
+                    return;
+                };
+                let message = genvm_common::calldata::encode(&answer);
+
+                if crate::common::write_message(&mut stream, &message)
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+            }
+        }) as Pin<Box<dyn Future<Output = ()> + Send>>
+    })
 }
 
 impl Ctx {
@@ -155,14 +210,94 @@ impl Ctx {
             &genvm_common::templater::DOLLAR_UNFOLDER_RE,
         )?;
 
-        match req.module_type {
+        if req.user_error {
+            self.start_user_error(req.module_type, config, module_cancel, canceller)
+                .await
+        } else {
+            self.start_real(
+                req.module_type,
+                config,
+                req.allow_empty_backends,
+                nested_cancel,
+                module_cancel,
+                canceller,
+            )
+            .await
+        }
+    }
+
+    async fn start_user_error(
+        &self,
+        module_type: Type,
+        config: serde_json::Value,
+        cancel_token: Arc<cancellation::Token>,
+        canceller: impl Fn() + Send + Sync + 'static,
+    ) -> anyhow::Result<()> {
+        let handler = create_user_error_stream_handler();
+        let module_task = tokio::task::spawn(std::future::ready(Ok(())));
+        let base = ModuleStateBase {
+            canceller: Box::new(canceller),
+            cancel_token,
+            handler,
+            _task: module_task,
+        };
+
+        match module_type {
             Type::Llm => {
                 let mut module_lock = self.llm_module.write().await;
                 if module_lock.is_some() {
                     anyhow::bail!("module_already_running");
                 }
 
-                let allow_empty_backends = req.allow_empty_backends;
+                let mut config: crate::llm::config::Config = serde_json::from_value(config)?;
+                config.backends.retain(|_k, v| v.enabled);
+                let config = sync::DArc::new(config);
+
+                let providers: BTreeMap<_, _> = config
+                    .backends
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.to_provider()))
+                    .collect();
+                let providers = Arc::new(providers);
+
+                *module_lock = Some(ModuleStateLlm {
+                    base,
+                    config,
+                    providers,
+                });
+            }
+            Type::Web => {
+                let mut module_lock = self.web_module.write().await;
+                if module_lock.is_some() {
+                    anyhow::bail!("module_already_running");
+                }
+
+                let config: crate::web::config::Config = serde_json::from_value(config)?;
+                let config = sync::DArc::new(config);
+
+                *module_lock = Some(ModuleStateWeb { base, config });
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn start_real(
+        &self,
+        module_type: Type,
+        config: serde_json::Value,
+        allow_empty_backends: bool,
+        nested_cancel: Arc<cancellation::Token>,
+        cancel_token: Arc<cancellation::Token>,
+        canceller: impl Fn() + Send + Sync + 'static,
+    ) -> anyhow::Result<()> {
+        match module_type {
+            Type::Llm => {
+                let mut module_lock = self.llm_module.write().await;
+                if module_lock.is_some() {
+                    anyhow::bail!("module_already_running");
+                }
+
                 let config = serde_json::from_value(config)?;
                 let (handler, bind_future, llm_config, providers) =
                     crate::llm::create_llm_module(nested_cancel, config, allow_empty_backends)
@@ -176,7 +311,7 @@ impl Ctx {
                 *module_lock = Some(ModuleStateLlm {
                     base: ModuleStateBase {
                         canceller: Box::new(canceller),
-                        cancel_token: module_cancel,
+                        cancel_token,
                         handler,
                         _task: module_task,
                     },
@@ -202,7 +337,7 @@ impl Ctx {
                 *module_lock = Some(ModuleStateWeb {
                     base: ModuleStateBase {
                         canceller: Box::new(canceller),
-                        cancel_token: module_cancel,
+                        cancel_token,
                         handler,
                         _task: module_task,
                     },

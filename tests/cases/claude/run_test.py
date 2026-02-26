@@ -39,7 +39,7 @@ def main():
 	test_dir = sys.argv[1]
 	extra_args = sys.argv[2:]
 
-	test_name = f'tests/cases/stable/claude/{test_dir}'
+	test_name = f'tests/cases/claude/{test_dir}'
 
 	cmd = [
 		binary,

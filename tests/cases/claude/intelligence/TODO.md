@@ -3,7 +3,7 @@
 ## High Priority
 
 - [ ] Explore executor host functions (`executor/src/host/`) for non-determinism vectors
-- [ ] Explore WASI implementation for filesystem/clock/random syscalls that could cause divergence
+- [x] Explore WASI implementation for filesystem/clock/random syscalls that could cause divergence (all deterministic - MT19937 rng, fixed clocks, FNV hash, deterministic memory)
 - [ ] Test floating point operations across leader/validators for determinism
 - [ ] Test memory allocation patterns that might differ across runs
 

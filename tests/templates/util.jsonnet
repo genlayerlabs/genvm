@@ -87,6 +87,17 @@ local recurse(entries, data) =
 	updateField(obj, field, fn)::
 		obj + {[field]: fn(obj[field])},
 
+	mapGraph(fn, entries)::
+		[
+			local mapped = fn(entries[i]);
+			mapped + (
+				if std.objectHas(mapped, 'next')
+				then { next: $.mapGraph(fn, mapped.next) }
+				else {}
+			)
+			for i in std.range(0, std.length(entries) - 1)
+		],
+
 	addPaths(entries):: recurse(entries, {
 		parentPath: null
 	}),

@@ -32,6 +32,8 @@ For all test transactions specify:
 
 For top-level test object specify `tags: ["fuzz"]`
 
+You can write tests in rust, if you find it necessary. See tests/cases/unstable/nondet/web/fetch_webpage_rust for an example
+
 ## Running tests
 
 ```bash
@@ -46,4 +48,7 @@ For top-level test object specify `tags: ["fuzz"]`
 
 # Output lives in directories like
 ls build/test-artifacts/integration/stable/claude/example/
+
+# pattern is akin to
+# build/test-artifacts/integration/stable/claude/<test-dir>/<jsonnet-name>/{0l,0v,0s}/
 ```
