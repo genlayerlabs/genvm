@@ -1,2 +1,1 @@
-executed with `UserError("other rollback")`
-nondet disagreement: 0
+executed with `Return(null)`

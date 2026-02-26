@@ -163,6 +163,8 @@
 								'';
 							in
 							{
+								packages.ya-test-runner = ya-test-runner;
+
 								devShells.py-test = pkgs.mkShell {
 									packages = packages-py-test ++ [ pkgs.ruby ];
 									shellHook = shell-hook-base;

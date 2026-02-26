@@ -100,14 +100,7 @@ def _print_test_result(
 		# Build the output dict for failed tests
 		output_kv = {}
 		if not passed and context:
-			if 'reason' in context:
-				output_kv['reason'] = context['reason']
-			if 'exception' in context:
-				output_kv['exception'] = context['exception']
-			if 'stdout' in context and context['stdout']:
-				output_kv['stdout'] = context['stdout']
-			if 'stderr' in context and context['stderr']:
-				output_kv['stderr'] = context['stderr']
+			output_kv.update(context)
 
 		ctx.shared.printer.put(
 			f'{sign} {case_name} in {elapsed_str}',

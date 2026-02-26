@@ -64,6 +64,7 @@ class MockHost(IHost):
 		self.messages_path = messages_path
 		self.balances = balances
 		self.nondet_disagreement_call_no = None
+		self.nondet_results: dict[int, bytes] = {}
 
 	def __enter__(self):
 		self.created = False
@@ -131,6 +132,8 @@ class MockHost(IHost):
 		if call_no >= len(self.leader_nondet):
 			raise HostException(host_fns.Errors.ABSENT)
 		res = self.leader_nondet[call_no]
+		if isinstance(res, (bytes, bytearray, memoryview)):
+			return bytes(res)
 		if res['kind'] == 'return':
 			return bytes([public_abi.ResultCode.RETURN]) + _calldata.encode(res['value'])
 		if res['kind'] == 'rollback':
@@ -140,7 +143,7 @@ class MockHost(IHost):
 		assert False
 
 	async def post_nondet_result(self, call_no: int, data: collections.abc.Buffer):
-		pass
+		self.nondet_results[call_no] = bytes(data)
 
 	async def post_message(
 		self, account: bytes, calldata: bytes, data: DefaultTransactionData

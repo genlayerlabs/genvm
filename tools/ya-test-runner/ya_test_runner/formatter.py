@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import threading
 import traceback
+import typing
 import unicodedata
 
 
@@ -42,7 +43,7 @@ class Sink(abc.ABC):
 	def put(self, main_topic: str, **kv) -> None: ...
 
 
-class Formatter(abc.ABC):
+class Formatter(metaclass=abc.ABCMeta):
 	Level = Level
 
 	@abc.abstractmethod
@@ -86,19 +87,30 @@ class _WithKeysFormatter(Formatter):
 			self.keys = keys
 			self.parent = parent
 
-	def log(self, level: Level, message: str, **kwargs) -> None:
-		self.parent.log(level, message, **self.keys, **kwargs)
+	def accepts(self, level: Level) -> bool:
+		return self.parent.accepts(level)
+
+	def dump(self, level: Level, message: str, **kw) -> None:
+		self.parent.dump(level, message, **self.keys, **kw)
 
 	def with_keys(self, keys: dict) -> Formatter:
 		return _WithKeysFormatter(self.parent, {**self.keys, **keys})
 
 
 class NoFormatter(Formatter):
-	def log(self, level: Level, message: str, **kwargs) -> None:
+	def dump(self, level: Level, message: str, **kwargs) -> None:
 		pass
+
+	def accepts(self, level: Level) -> bool:
+		return False
 
 	def with_keys(self, keys: dict) -> Formatter:
 		return self
+
+	INSTANCE: typing.ClassVar['NoFormatter']
+
+
+NoFormatter.INSTANCE = NoFormatter()
 
 
 def _is_small(x) -> bool:
@@ -155,63 +167,109 @@ def _to_safe_str(x: str) -> str:
 	return ''.join(as_arr)
 
 
+class LockableTextIO(metaclass=abc.ABCMeta):
+	@abc.abstractmethod
+	def __enter__(self) -> io.TextIOBase: ...
+	@abc.abstractmethod
+	def __exit__(self, exc_type, exc_val, exc_tb) -> None: ...
+
+
+class Lockable(typing.Protocol):
+	def acquire(self) -> typing.Any: ...
+	def release(self) -> None: ...
+
+
+class NoLockTextIO(LockableTextIO):
+	def __init__(self, file: io.TextIOBase):
+		self.file = file
+
+	def __enter__(self) -> io.TextIOBase:
+		return self.file
+
+	def __exit__(self, exc_type, exc_val, exc_tb):
+		self.file.flush()
+
+
+class DefaultLockableTextIO(LockableTextIO):
+	lock: Lockable
+
+	def __init__(self, file: io.TextIOBase, lock: Lockable | None = None):
+		if lock is None:
+			lock = threading.Lock()
+		self.lock = lock
+		self.file = file
+
+	def __enter__(self) -> io.TextIOBase:
+		self.lock.acquire()
+		return self.file
+
+	def __exit__(self, exc_type, exc_val, exc_tb):
+		self.lock.release()
+		self.file.flush()
+		pass
+
+
 class TextFormatter(Formatter, Sink):
-	def __init__(self, file: io.TextIOBase, min_level: Level = Level.INFO):
+	def __init__(self, file: LockableTextIO, min_level: Level = Level.INFO):
 		self.file = file
 		self.min_level = min_level
 
 	def accepts(self, level: Level) -> bool:
 		return level.value >= self.min_level.value
 
-	def _do_dump(self, ind, data):
+	def _do_dump(self, f: io.TextIOBase, ind, data):
 		if isinstance(data, (set, frozenset, BaseException)):
 			data = _log_unwrap(data)
 
 		if isinstance(data, collections.abc.Mapping):
 			for k, v in data.items():
-				self.file.write('  ' * ind)
+				f.write('  ' * ind)
 				if _is_small(v):
-					self.file.write(k)
-					self.file.write(': ')
-					self.file.write(_small_to_str(v))
-					self.file.write('\n')
+					f.write(k)
+					f.write(': ')
+					f.write(_small_to_str(v))
+					f.write('\n')
 				elif isinstance(v, collections.abc.Iterable) and _is_small(k):
-					self.file.write(f'{k}:\n')
-					self._do_dump(ind + 1, v)
+					f.write(f'{k}:\n')
+					self._do_dump(f, ind + 1, v)
 				else:
-					self.file.write(f'=== {k} === \n')
-					self._do_dump(ind + 1, v)
+					f.write(f'=== {k} === \n')
+					self._do_dump(f, ind + 1, v)
 		elif isinstance(data, str):
 			if '\n' in data:
 				for line in data.splitlines():
-					self.file.write('  ' * ind)
-					self.file.write(_to_safe_str(line.rstrip()))
-					self.file.write('\n')
+					f.write('  ' * ind)
+					f.write(_to_safe_str(line.rstrip()))
+					f.write('\n')
 			else:
-				self.file.write('  ' * ind)
-				self.file.write(_to_safe_str(repr(data)))
-				self.file.write('\n')
+				f.write('  ' * ind)
+				f.write(_to_safe_str(repr(data)))
+				f.write('\n')
+		elif isinstance(data, bytes):
+			f.write('  ' * ind)
+			f.write(_to_safe_str(repr(data)))
+			f.write('\n')
 		elif isinstance(data, collections.abc.Iterable):
 			for item in data:
 				if _is_small(item):
-					self.file.write('  ' * ind + '- ')
-					self.file.write(_small_to_str(item))
-					self.file.write('\n')
+					f.write('  ' * ind + '- ')
+					f.write(_small_to_str(item))
+					f.write('\n')
 				else:
-					self.file.write('  ' * ind)
-					self.file.write('-\n')
-					self._do_dump(ind + 1, item)
+					f.write('  ' * ind)
+					f.write('-\n')
+					self._do_dump(f, ind + 1, item)
 		else:
-			self.file.write('  ' * ind)
-			self.file.write(_small_to_str(data))
-			self.file.write('\n')
+			f.write('  ' * ind)
+			f.write(_small_to_str(data))
+			f.write('\n')
 
 	def put(self, main_topic: str, **kv):
-		self.file.write(main_topic)
-		self.file.write('\n')
-		self._do_dump(1, kv)
-		self.file.flush()
-		pass
+		with self.file as f:
+			f.write(main_topic)
+			f.write('\n')
+			self._do_dump(f, 1, kv)
+			f.flush()
 
 	def dump(self, level: Level, message: str, **kw) -> None:
 		self.put(f'[{level.name.upper()}] {message}', **kw)
@@ -279,7 +337,7 @@ def _log_unwrap(x, seen: set[int] | None = None):
 
 
 class JsonFormatter(Formatter, Sink):
-	def __init__(self, file: io.TextIOBase, min_level: Level = Level.INFO):
+	def __init__(self, file: LockableTextIO, min_level: Level = Level.INFO):
 		self.file = file
 		self.min_level = min_level
 
@@ -292,13 +350,13 @@ class JsonFormatter(Formatter, Sink):
 			dct['level'] = level
 		dct['message'] = main_topic
 		dct.update(_log_unwrap(kv))
-		json.dump(
-			dct,
-			self.file,
-		)
+		with self.file as f:
+			json.dump(
+				dct,
+				f,
+			)
 
-		self.file.write('\n')
-		self.file.flush()
+			f.write('\n')
 
 	def dump(self, level: Level, message: str, **kw) -> None:
 		self.put(message, level=level, **kw)

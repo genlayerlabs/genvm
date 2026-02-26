@@ -21,6 +21,15 @@ end
 
 $source_dir = Pathname.new(__FILE__).dirname.expand_path
 
+$options = {}
+OptionParser.new do |opts|
+	opts.banner = "Usage: configure.rb [options]"
+
+	opts.on("--test-always-fail-module", "Enable test_always_fail_module feature on executor") do
+		$options[:test_always_fail_module] = true
+	end
+end.parse!
+
 module Ninja
 	class RawStr < String
 		def initialize(str)
@@ -453,7 +462,11 @@ def generator.register_cargo(rel_path, extra_args: [], build_to: nil)
 	end
 end
 
-generator.register_cargo('executor', build_to: 'out/executor/vTEST/bin/genvm')
+executor_extra_args = []
+if $options[:test_always_fail_module]
+end
+
+generator.register_cargo('executor', extra_args: executor_extra_args, build_to: 'out/executor/vTEST/bin/genvm')
 generator.register_cargo('executor/common')
 generator.register_cargo('modules/implementation', extra_args: ['--features', 'vendored-lua'], build_to: 'out/bin/genvm-modules')
 generator.register_cargo('modules/interfaces')

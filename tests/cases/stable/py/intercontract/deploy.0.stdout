@@ -1,0 +1,5 @@
+executed with `Return(null)`
+deploy:
+	{'on': 'finalized', 'salt_nonce': '0x0', 'value': '0x0'}
+	b'\x06'
+	b'not really a contract'

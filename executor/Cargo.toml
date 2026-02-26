@@ -2,6 +2,7 @@
 name = "genvm"
 version = "0.1.0"
 edition = "2021"
+
 [profile.dev.package.wasmtime]
 opt-level = 2
 [profile.dev.package.wasmparser]

@@ -1,0 +1,4 @@
+executed with `Return(null)`
+send:
+	{'on': 'finalized', 'value': '0x0'}
+	b'\x16\x04args\x15\t\x11\x06method\x1cfoo'

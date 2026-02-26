@@ -1,6 +1,7 @@
 *.onnx linguist-vendored
 *.txt linguist-vendored
 *.stdout linguist-vendored
+*.hash linguist-vendored
 *.lock linguist-vendored
 runners/py-libs/pure-py/** linguist-vendored
 runners/models/** linguist-vendored

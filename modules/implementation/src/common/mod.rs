@@ -173,7 +173,7 @@ pub trait MessageHandlerProvider<T, R>: Sync + Send {
 
 /// Write a length-prefixed message to a stream
 /// Format: 4 bytes big-endian length + body
-async fn write_message<S: tokio::io::AsyncWrite + Unpin>(
+pub(crate) async fn write_message<S: tokio::io::AsyncWrite + Unpin>(
     stream: &mut S,
     data: &[u8],
 ) -> anyhow::Result<()> {
@@ -187,7 +187,7 @@ async fn write_message<S: tokio::io::AsyncWrite + Unpin>(
 /// Read a length-prefixed message from a stream
 /// Format: 4 bytes big-endian length + body
 /// Returns None if the stream is closed (EOF on length read)
-async fn read_message<S: tokio::io::AsyncRead + Unpin>(
+pub(crate) async fn read_message<S: tokio::io::AsyncRead + Unpin>(
     stream: &mut S,
 ) -> anyhow::Result<Option<Vec<u8>>> {
     let mut len_buf = [0u8; 4];

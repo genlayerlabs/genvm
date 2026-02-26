@@ -1,39 +1,45 @@
-local simple = import 'templates/simple.jsonnet';
+local simple = import 'templates/simple_deploy.jsonnet';
+local msg = import 'templates/message.json';
 local s = simple.run('${jsonnetDir}/${fileBaseName}.py');
-[
-    s {
-        "calldata": |||
-            {
-                "args": [True]
-            }
-        |||,
-        "message": super.message + {
-            "is_init": true,
-        }
-    },
+local util = import 'templates/util.jsonnet';
+{entry: util.addPaths([util.chain([
+	s {
+		"calldata": |||
+			{
+				"args": [True]
+			}
+		|||,
+	},
 
-    s {
-        "calldata": |||
-            {
-                "method": "get_have_coin",
-            }
-        |||,
-    },
+	s {
+		code: null,
+		message: msg,
+		"calldata": |||
+			{
+				"method": "get_have_coin",
+			}
+		|||,
+	},
 
-    s {
-        "calldata": |||
-            {
-                "method": "ask_for_coin",
-                "args": ["pwease"],
-            }
-        |||,
-    },
+	s {
+		code: null,
+		message: msg,
+		"calldata": |||
+			{
+				"method": "ask_for_coin",
+				"args": ["pwease"],
+			}
+		|||,
+		stable_hash: false,
+	},
 
-    s {
-        "calldata": |||
-            {
-                "method": "get_have_coin",
-            }
-        |||,
-    },
-]
+	s {
+		code: null,
+		message: msg,
+		"calldata": |||
+			{
+				"method": "get_have_coin",
+			}
+		|||,
+	},
+])])}

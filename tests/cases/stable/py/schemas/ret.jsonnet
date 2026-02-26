@@ -1,8 +1,3 @@
-local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/trivial.py') {
-    "calldata": |||
-        {
-            "method": "#get-schema"
-        }
-    |||
-}
+local simple = import 'templates/simple_deploy_then_write.jsonnet';
+local util = import 'templates/util.jsonnet';
+{entry: util.addPaths([simple.run('${jsonnetDir}/trivial.py', '#get-schema')])}

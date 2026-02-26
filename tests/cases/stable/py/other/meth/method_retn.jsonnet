@@ -1,9 +1,3 @@
-local simple = import 'templates/simple.jsonnet';
-simple.run('${jsonnetDir}/methods.py') {
-    "calldata": |||
-        {
-            "method": "retn",
-            "args": []
-        }
-    |||
-}
+local simple = import 'templates/simple_deploy_then_write.jsonnet';
+local util = import 'templates/util.jsonnet';
+{entry: util.addPaths([simple.run('${jsonnetDir}/methods.py', 'retn')])}

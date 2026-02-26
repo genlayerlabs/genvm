@@ -44,11 +44,11 @@ async def start_webdriver_service(
 
 _LOG_LEVEL_PRIORITY = {
 	'trace': 0,
-	'debug': 1,
-	'info': 2,
-	'warn': 3,
-	'warning': 3,
-	'error': 4,
+	'debug': 10,
+	'info': 20,
+	'warn': 30,
+	'warning': 30,
+	'error': 40,
 }
 
 
@@ -220,3 +220,24 @@ class ModulesService(ya_test_runner.exec.service.Service):
 		)
 
 		return ModulesHandle(self._manager_uri)
+
+
+class _NoOpHandle(ya_test_runner.exec.service.Handle):
+	async def healthy(self) -> bool:
+		return True
+
+	async def interrupt(self) -> None:
+		pass
+
+
+class NoOpService(ya_test_runner.exec.service.Service):
+	async def start(self) -> _NoOpHandle:
+		return _NoOpHandle()
+
+
+class ExternalManagerService(ya_test_runner.exec.service.Service):
+	def __init__(self, *, port: int):
+		self._port = port
+
+	async def start(self) -> ManagerHandle:
+		return ManagerHandle(self._port, process=None, log_file=None, log_tasks=None)

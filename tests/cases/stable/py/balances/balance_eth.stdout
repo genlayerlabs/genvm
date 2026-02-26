@@ -1,9 +1,0 @@
-main self 10
-main At(self) 10
-=== transfer ===
-main self 5
-main At(self) 10
-=== call .view() ===
-nested self 10
-nested At(self) 10
-executed with `Return(null)`

@@ -1,2 +1,1 @@
-8 [0...9)
-executed with `Return({"a":1,"b":[1,2,3]})`
+executed with `Return(null)`
