@@ -47,7 +47,7 @@ from ya_test_runner_plugins import cargo, pytest, integration, genvm
 
 def collect_rust(ctx: ya_test_runner.stage.collection.Context):
 	for t in filter(lambda x: x.name == 'Cargo.toml', ctx.shared.git_files):
-		ctx.shared.logger.info('discovered Cargo.toml', path=t)
+		ctx.shared.logger.debug('discovered Cargo.toml', path=t)
 		rust_root_dir = t.parent
 		test_dir = rust_root_dir.joinpath('tests')
 		if test_dir.exists():
@@ -63,7 +63,7 @@ def collect_rust(ctx: ya_test_runner.stage.collection.Context):
 		fuzz_files = list(rust_root_dir.glob('fuzz/*.rs'))
 		fuzz_files.sort()
 		for fuzz_file in fuzz_files:
-			ctx.shared.logger.info('discovered fuzz target', path=fuzz_file)
+			ctx.shared.logger.debug('discovered fuzz target', path=fuzz_file)
 
 			name = fuzz_file.relative_to(ctx.shared.root_dir)
 			name = f'{name.parent}/{name.stem}'
@@ -115,6 +115,13 @@ local_ctx.run_parser.add_argument(
 	help='Reroute GenVM Manager to the specified environment',
 )
 
+local_ctx.run_parser.add_argument(
+	'--no-manager',
+	default=False,
+	action='store_true',
+	help='Do not start manager, modules, or webdriver services (assumes manager is already running)',
+)
+
 
 def collect_integration(ctx: ya_test_runner.stage.collection.Context):
 	# Load build info to find binary paths
@@ -128,37 +135,45 @@ def collect_integration(ctx: ya_test_runner.stage.collection.Context):
 
 	# for non-run
 	reroute_to = getattr(ctx.configuration.args, 'genvm_reroute_to', 'vTEST')
+	no_manager = getattr(ctx.configuration.args, 'no_manager', False)
 
-	manager_impl = genvm.ManagerService(
-		bin_path=build_dir.joinpath('out', 'bin', 'genvm-modules'),
-		reroute_to=reroute_to,
-		log_path=tests_output_root.joinpath('manager.log'),
-		env=ctx.configuration,
-	)
+	manager_port = genvm.get_manager_port(ctx.configuration)
+
+	if no_manager:
+		manager_impl = genvm.ExternalManagerService(port=manager_port)
+		webdriver_impl = genvm.NoOpService()
+		modules_impl = genvm.NoOpService()
+	else:
+		manager_impl = genvm.ManagerService(
+			bin_path=build_dir.joinpath('out', 'bin', 'genvm-modules'),
+			reroute_to=reroute_to,
+			log_path=tests_output_root.joinpath('manager.log'),
+			env=ctx.configuration,
+		)
+		# Create webdriver service
+		webdriver_impl = ya_test_runner.exec.service.FunctionService(
+			lambda: genvm.start_webdriver_service(ctx.configuration)
+		)
+		# This starts Llm and Web modules on the manager
+		modules_impl = genvm.ModulesService(
+			manager_uri=f'http://localhost:{manager_port}',
+		)
+
 	manager_service = ctx.new_service(
 		name=f'manager',
 		manager=manager_impl,
 	)
-	manager_port = genvm.get_manager_port(ctx.configuration)
 	manager_service.meta = {'port': manager_port}
 
-	# Create webdriver service
-	webdriver_impl = ya_test_runner.exec.service.FunctionService(
-		lambda: genvm.start_webdriver_service(ctx.configuration)
-	)
 	webdriver_service = ctx.new_service(
 		name=f'webdriver',
 		manager=webdriver_impl,
 	)
 
-	# This starts Llm and Web modules on the manager
-	modules_impl = genvm.ModulesService(
-		manager_uri=f'http://localhost:{manager_port}',
-	)
 	modules_service = ctx.new_service(
 		name='modules',
 		manager=modules_impl,
-		depends_on=[manager_service, webdriver_service],
+		depends_on=[] if no_manager else [manager_service, webdriver_service],
 	)
 
 	# Collect integration tests
