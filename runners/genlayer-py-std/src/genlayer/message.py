@@ -59,7 +59,7 @@ class MessageRawType(typing.TypedDict):
 	See :ref:`startup-process-reference` for more details.
 	"""
 	entry_data: bytes
-	entry_stage_data: calldata.Encodable
+	entry_stage_data: calldata.Decoded
 
 
 contract_address: Address = ...  # type: ignore
@@ -85,7 +85,7 @@ entry_kind: int = ...  # type: ignore
 
 entry_data: bytes = ...  # type: ignore
 
-entry_stage_data: calldata.Encodable = ...  # type: ignore
+entry_stage_data: calldata.Decoded = ...  # type: ignore
 
 if os.getenv('GENERATING_DOCS', 'false') == 'true':
 	raw: MessageRawType = ...  # type: ignore

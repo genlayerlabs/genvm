@@ -42,7 +42,7 @@ import ya_test_runner_plugins
 local_ctx.shared.logger.trace(
 	'import path', path=sys.path, plugins_path=ya_test_runner_plugins.__path__
 )
-from ya_test_runner_plugins import cargo, pytest, integration, genvm
+from ya_test_runner_plugins import cargo, pytest, integration, genvm, parse_version
 
 
 def collect_rust(ctx: ya_test_runner.stage.collection.Context):
@@ -186,3 +186,42 @@ def collect_integration(ctx: ya_test_runner.stage.collection.Context):
 
 
 local_ctx.add_collector(collect_integration)
+
+
+def collect_parse_version(ctx: ya_test_runner.stage.collection.Context):
+	build_info = json.loads(
+		ctx.shared.root_dir.joinpath('build', 'info.json').read_text()
+	)
+	build_dir = Path(build_info['build_dir'])
+
+	reroute_to = getattr(ctx.configuration.args, 'genvm_reroute_to', 'vTEST')
+	genvm_bin = build_dir / 'out' / 'executor' / reroute_to / 'bin' / 'genvm'
+	config_path = build_dir / 'out' / 'executor' / reroute_to / 'config' / 'genvm.yaml'
+
+	artifacts_dir = ctx.shared.artifacts_dir / 'parse_version'
+	artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+	test_dir = ctx.shared.root_dir / 'tests' / 'cases' / 'stable' / 'parse_version'
+	wat_files = sorted(test_dir.glob('*.wat'))
+
+	for wat_file in wat_files:
+		expected_file = wat_file.with_suffix('.expected')
+		if not expected_file.exists():
+			ctx.shared.logger.warning(
+				'no .expected file for WAT test', wat_file=str(wat_file)
+			)
+			continue
+
+		name = f'tests/cases/stable/parse_version/{wat_file.stem}'
+		ctx.configuration.plugins.parse_version_test(
+			ctx,
+			ya_test_runner.test.Description(name),
+			wat_file=wat_file,
+			expected_file=expected_file,
+			genvm_bin=genvm_bin,
+			config_path=config_path,
+			artifacts_dir=artifacts_dir,
+		)
+
+
+local_ctx.add_collector(collect_parse_version)
