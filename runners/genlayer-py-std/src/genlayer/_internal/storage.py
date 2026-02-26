@@ -15,14 +15,6 @@ class _ActualStorageMan(Manager):
 	def __init__(self):
 		self._slots = {}
 
-	def __getstate__(self) -> object:
-		import warnings
-
-		warnings.warn(
-			'Detected pickling storage class. Reading storage in nondet mode is not supported'
-		)
-		return super().__getstate__()
-
 	def get_store_slot(self, addr: bytes) -> Slot:
 		ret = self._slots.get(addr, None)
 		if ret is None:
