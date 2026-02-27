@@ -145,100 +145,172 @@ impl Parser<'_> {
     }
 
     fn fetch_val(&mut self) -> Result<Value, DecodeError> {
-        let mut val = self.fetch_uleb()?;
+        enum Frame {
+            Array {
+                collected: Vec<Value>,
+                remaining: usize,
+            },
+            Map {
+                collected: BTreeMap<String, Value>,
+                remaining: usize,
+                current_key: String,
+            },
+        }
 
-        let val_least_byte = (val.iter_u32_digits().next().unwrap_or(0) & (u8::MAX as u32)) as u8;
-        let typ = val_least_byte & (((1 << BITS_IN_TYPE) - 1) as u8);
+        let mut stack: Vec<Frame> = Vec::new();
 
-        val >>= BITS_IN_TYPE;
+        'parse: loop {
+            let mut val = self.fetch_uleb()?;
 
-        match typ {
-            TYPE_SPECIAL => {
-                if val.bits() > 8 - BITS_IN_TYPE as u64 {
-                    return Err(DecodeError::InvalidSpecialValue {
-                        value: val_least_byte,
-                    });
-                }
-                match val_least_byte {
-                    SPECIAL_NULL => Ok(Value::Null),
-                    SPECIAL_TRUE => Ok(Value::Bool(true)),
-                    SPECIAL_FALSE => Ok(Value::Bool(false)),
-                    SPECIAL_ADDR => {
-                        let addr_slice = self.fetch_slice(ADDRESS_SIZE)?;
+            let val_least_byte =
+                (val.iter_u32_digits().next().unwrap_or(0) & (u8::MAX as u32)) as u8;
+            let typ = val_least_byte & (((1 << BITS_IN_TYPE) - 1) as u8);
 
-                        let mut addr = [0; ADDRESS_SIZE];
-                        addr.copy_from_slice(addr_slice);
+            val >>= BITS_IN_TYPE;
 
-                        Ok(Value::Address(Address(addr)))
+            let mut completed = match typ {
+                TYPE_SPECIAL => {
+                    if val.bits() > 8 - BITS_IN_TYPE as u64 {
+                        return Err(DecodeError::InvalidSpecialValue {
+                            value: val_least_byte,
+                        });
                     }
-                    x => Err(DecodeError::InvalidSpecialValue { value: x }),
-                }
-            }
-            TYPE_BYTES => {
-                let full_size = Self::map_to_size(&val)?;
-                let slice = self.fetch_slice(full_size)?;
+                    match val_least_byte {
+                        SPECIAL_NULL => Value::Null,
+                        SPECIAL_TRUE => Value::Bool(true),
+                        SPECIAL_FALSE => Value::Bool(false),
+                        SPECIAL_ADDR => {
+                            let addr_slice = self.fetch_slice(ADDRESS_SIZE)?;
 
-                Ok(Value::Bytes(Vec::from(slice)))
-            }
-            TYPE_ARR => {
-                let full_size = Self::map_to_size(&val)?;
-                let mut ret = Vec::new();
+                            let mut addr = [0; ADDRESS_SIZE];
+                            addr.copy_from_slice(addr_slice);
 
-                for _i in 0..full_size {
-                    ret.push(self.fetch_val()?);
-                }
-
-                Ok(Value::Array(ret))
-            }
-            TYPE_STR => {
-                let full_size = Self::map_to_size(&val)?;
-                let slice = self.fetch_slice(full_size)?;
-
-                let as_str = std::str::from_utf8(slice)?;
-
-                Ok(Value::Str(String::from(as_str)))
-            }
-            TYPE_MAP => {
-                let full_size = Self::map_to_size(&val)?;
-
-                let mut ret: BTreeMap<String, Value> = BTreeMap::new();
-
-                for _i in 0..full_size {
-                    let str_size = self.fetch_uleb()?;
-                    let str_size = Self::map_to_size(&str_size)?;
-
-                    let slice = self.fetch_slice(str_size)?;
-                    let as_str = std::str::from_utf8(slice)?.to_owned();
-
-                    if let Some((k, _)) = ret.last_key_value() {
-                        if k >= &as_str {
-                            return Err(DecodeError::InvalidMapOrdering {
-                                prev: k.clone(),
-                                current: as_str,
-                            });
+                            Value::Address(Address(addr))
                         }
+                        x => return Err(DecodeError::InvalidSpecialValue { value: x }),
                     }
-
-                    let val = self.fetch_val()?;
-
-                    ret.insert(as_str, val);
                 }
+                TYPE_BYTES => {
+                    let full_size = Self::map_to_size(&val)?;
+                    let slice = self.fetch_slice(full_size)?;
 
-                Ok(Value::Map(ret))
-            }
-            TYPE_NINT => {
-                val += 1u32;
+                    Value::Bytes(Vec::from(slice))
+                }
+                TYPE_STR => {
+                    let full_size = Self::map_to_size(&val)?;
+                    let slice = self.fetch_slice(full_size)?;
 
-                Ok(Value::Number(num_bigint::BigInt::from_biguint(
-                    num_bigint::Sign::Minus,
+                    let as_str = std::str::from_utf8(slice)?;
+
+                    Value::Str(String::from(as_str))
+                }
+                TYPE_PINT => Value::Number(num_bigint::BigInt::from_biguint(
+                    num_bigint::Sign::Plus,
                     val,
-                )))
+                )),
+                TYPE_NINT => {
+                    val += 1u32;
+
+                    Value::Number(num_bigint::BigInt::from_biguint(
+                        num_bigint::Sign::Minus,
+                        val,
+                    ))
+                }
+                TYPE_ARR => {
+                    let full_size = Self::map_to_size(&val)?;
+                    if self.0.len() < full_size {
+                        return Err(DecodeError::UnexpectedEnd {
+                            expected: full_size,
+                            available: self.0.len(),
+                        });
+                    }
+                    if full_size == 0 {
+                        Value::Array(Vec::new())
+                    } else {
+                        stack.push(Frame::Array {
+                            collected: Vec::with_capacity(full_size),
+                            remaining: full_size,
+                        });
+                        continue 'parse;
+                    }
+                }
+                TYPE_MAP => {
+                    let full_size = Self::map_to_size(&val)?;
+                    if self.0.len() < full_size.saturating_mul(2) {
+                        return Err(DecodeError::UnexpectedEnd {
+                            expected: full_size.saturating_mul(2),
+                            available: self.0.len(),
+                        });
+                    }
+                    if full_size == 0 {
+                        Value::Map(BTreeMap::new())
+                    } else {
+                        let str_size = self.fetch_uleb()?;
+                        let str_size = Self::map_to_size(&str_size)?;
+                        let slice = self.fetch_slice(str_size)?;
+                        let current_key = std::str::from_utf8(slice)?.to_owned();
+
+                        stack.push(Frame::Map {
+                            collected: BTreeMap::new(),
+                            remaining: full_size,
+                            current_key,
+                        });
+                        continue 'parse;
+                    }
+                }
+                v => return Err(DecodeError::InvalidType { type_tag: v }),
+            };
+
+            loop {
+                let frame = match stack.last_mut() {
+                    None => return Ok(completed),
+                    Some(frame) => frame,
+                };
+
+                match frame {
+                    Frame::Array {
+                        collected,
+                        remaining,
+                    } => {
+                        collected.push(completed);
+                        *remaining -= 1;
+                        if *remaining > 0 {
+                            continue 'parse;
+                        }
+                        completed = Value::Array(std::mem::take(collected));
+                        stack.pop();
+                    }
+                    Frame::Map {
+                        collected,
+                        remaining,
+                        current_key,
+                    } => {
+                        let key = std::mem::take(current_key);
+                        collected.insert(key, completed);
+                        *remaining -= 1;
+                        if *remaining > 0 {
+                            let str_size = self.fetch_uleb()?;
+                            let str_size = Self::map_to_size(&str_size)?;
+                            let slice = self.fetch_slice(str_size)?;
+                            let new_key = std::str::from_utf8(slice)?.to_owned();
+
+                            if let Some((k, _)) = collected.last_key_value() {
+                                if k >= &new_key {
+                                    return Err(DecodeError::InvalidMapOrdering {
+                                        prev: k.clone(),
+                                        current: new_key,
+                                    });
+                                }
+                            }
+
+                            *current_key = new_key;
+                            continue 'parse;
+                        }
+                        completed = Value::Map(std::mem::take(collected));
+                        stack.pop();
+                    }
+                }
             }
-            TYPE_PINT => Ok(Value::Number(num_bigint::BigInt::from_biguint(
-                num_bigint::Sign::Plus,
-                val,
-            ))),
-            v => Err(DecodeError::InvalidType { type_tag: v }),
         }
     }
 }
@@ -282,72 +354,86 @@ fn append_uleb(to: &mut Vec<u8>, mut num: num_bigint::BigUint) {
 }
 
 pub fn encode_to(to: &mut Vec<u8>, value: &Value) {
-    match value {
-        Value::Null => to.push(SPECIAL_NULL),
-        Value::Bool(false) => to.push(SPECIAL_FALSE),
-        Value::Bool(true) => to.push(SPECIAL_TRUE),
-        Value::Address(address) => {
-            to.push(SPECIAL_ADDR);
-            to.extend_from_slice(&address.0);
-        }
-        Value::Str(data) => {
-            let mut size = num_bigint::BigUint::from(data.len());
-            size <<= BITS_IN_TYPE;
-            size += TYPE_STR; // same as |
+    enum Item<'a> {
+        Value(&'a Value),
+        MapKey(&'a str),
+    }
 
-            append_uleb(to, size);
+    let mut stack: Vec<Item> = vec![Item::Value(value)];
 
-            to.extend_from_slice(data.as_bytes());
-        }
-        Value::Bytes(data) => {
-            let mut size = num_bigint::BigUint::from(data.len());
-            size <<= BITS_IN_TYPE;
-            size += TYPE_BYTES; // same as |
-
-            append_uleb(to, size);
-
-            to.extend_from_slice(data);
-        }
-        Value::Number(big_int) => {
-            if big_int.sign() == num_bigint::Sign::Minus {
-                let mut mag = big_int.magnitude().clone();
-                mag -= 1u32;
-
-                mag <<= BITS_IN_TYPE;
-                mag += TYPE_NINT; // same as |
-
-                append_uleb(to, mag);
-            } else {
-                let mut mag = big_int.magnitude().clone();
-                mag <<= BITS_IN_TYPE;
-                mag += TYPE_PINT; // same as |
-
-                append_uleb(to, mag);
+    while let Some(item) = stack.pop() {
+        match item {
+            Item::MapKey(key) => {
+                append_uleb(to, num_bigint::BigUint::from(key.len()));
+                to.extend(key.as_bytes());
             }
-        }
-        Value::Map(values) => {
-            let mut size = num_bigint::BigUint::from(values.len());
-            size <<= BITS_IN_TYPE;
-            size += TYPE_MAP; // same as |
+            Item::Value(value) => match value {
+                Value::Null => to.push(SPECIAL_NULL),
+                Value::Bool(false) => to.push(SPECIAL_FALSE),
+                Value::Bool(true) => to.push(SPECIAL_TRUE),
+                Value::Address(address) => {
+                    to.push(SPECIAL_ADDR);
+                    to.extend_from_slice(&address.0);
+                }
+                Value::Str(data) => {
+                    let mut size = num_bigint::BigUint::from(data.len());
+                    size <<= BITS_IN_TYPE;
+                    size += TYPE_STR; // same as |
 
-            append_uleb(to, size);
+                    append_uleb(to, size);
 
-            for (k, v) in values {
-                append_uleb(to, num_bigint::BigUint::from(k.len()));
-                to.extend(k.as_bytes());
-                encode_to(to, v);
-            }
-        }
-        Value::Array(values) => {
-            let mut size = num_bigint::BigUint::from(values.len());
-            size <<= BITS_IN_TYPE;
-            size += TYPE_ARR; // same as |
+                    to.extend_from_slice(data.as_bytes());
+                }
+                Value::Bytes(data) => {
+                    let mut size = num_bigint::BigUint::from(data.len());
+                    size <<= BITS_IN_TYPE;
+                    size += TYPE_BYTES; // same as |
 
-            append_uleb(to, size);
+                    append_uleb(to, size);
 
-            for x in values {
-                encode_to(to, x);
-            }
+                    to.extend_from_slice(data);
+                }
+                Value::Number(big_int) => {
+                    if big_int.sign() == num_bigint::Sign::Minus {
+                        let mut mag = big_int.magnitude().clone();
+                        mag -= 1u32;
+
+                        mag <<= BITS_IN_TYPE;
+                        mag += TYPE_NINT; // same as |
+
+                        append_uleb(to, mag);
+                    } else {
+                        let mut mag = big_int.magnitude().clone();
+                        mag <<= BITS_IN_TYPE;
+                        mag += TYPE_PINT; // same as |
+
+                        append_uleb(to, mag);
+                    }
+                }
+                Value::Map(values) => {
+                    let mut size = num_bigint::BigUint::from(values.len());
+                    size <<= BITS_IN_TYPE;
+                    size += TYPE_MAP; // same as |
+
+                    append_uleb(to, size);
+
+                    for (k, v) in values.iter().rev() {
+                        stack.push(Item::Value(v));
+                        stack.push(Item::MapKey(k));
+                    }
+                }
+                Value::Array(values) => {
+                    let mut size = num_bigint::BigUint::from(values.len());
+                    size <<= BITS_IN_TYPE;
+                    size += TYPE_ARR; // same as |
+
+                    append_uleb(to, size);
+
+                    for x in values.iter().rev() {
+                        stack.push(Item::Value(x));
+                    }
+                }
+            },
         }
     }
 }
