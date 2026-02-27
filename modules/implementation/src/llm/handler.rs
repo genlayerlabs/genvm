@@ -86,7 +86,26 @@ impl crate::common::MessageHandler<llm_iface::Message, FullResponse> for Handler
                 payload,
                 remaining_fuel_as_gen,
             } => {
+                if payload.images.len() > 2 {
+                    return Err(ModuleError {
+                        causes: vec!["TOO_MANY_IMAGES".into()],
+                        fatal: false,
+                        ctx: BTreeMap::new(),
+                    }
+                    .into());
+                }
+
                 for img in &payload.images {
+                    const IMG_MAX_SIZE: usize = 5 * 1024 * 1024; // 5 MB
+                    if img.len() > IMG_MAX_SIZE {
+                        return Err(ModuleError {
+                            causes: vec!["IMAGE_TOO_LARGE".into()],
+                            fatal: false,
+                            ctx: BTreeMap::new(),
+                        }
+                        .into());
+                    }
+
                     if prompt::ImageType::sniff(img.as_ref()).is_none() {
                         return Err(ModuleError {
                             causes: vec!["INVALID_IMAGE".into()],

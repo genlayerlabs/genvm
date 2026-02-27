@@ -896,14 +896,21 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let slot = SlotID::read_from_mem(mem, slot)?;
         let mem_size = buf_len as usize;
-        let mut vec = Vec::with_capacity(mem_size);
-        unsafe { vec.set_len(mem_size) };
+
+        let mut vec_buf = Vec::new();
+        let (should_copy, vec) = if let Some(buf) = mem.as_slice_mut(buf)? {
+            (false, buf)
+        } else {
+            vec_buf.reserve(mem_size);
+            unsafe { vec_buf.set_len(mem_size) };
+            (true, vec_buf.as_mut_slice())
+        };
 
         if self.context.data.conf.state_mode == public_abi::StorageType::Default {
             self.context
                 .data
                 .storage
-                .read(slot, index, &mut vec)
+                .read(slot, index, vec)
                 .await
                 .map_err(generated::types::Error::trap)?;
         } else {
@@ -913,17 +920,14 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 .host
                 .lock()
                 .await
-                .storage_read(
-                    self.context.data.conf.state_mode,
-                    account,
-                    slot,
-                    index,
-                    &mut vec,
-                )
+                .storage_read(self.context.data.conf.state_mode, account, slot, index, vec)
                 .map_err(generated::types::Error::trap)?;
         }
 
-        mem.copy_from_slice(&vec, buf)?;
+        if should_copy {
+            mem.copy_from_slice(&vec_buf, buf)?;
+        }
+
         Ok(())
     }
 
