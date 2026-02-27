@@ -131,6 +131,7 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         metrics,
         storage_pages_limit: std::sync::atomic::AtomicU64::new(args.storage_pages),
         receipt_words_remaining: std::sync::atomic::AtomicU64::new(args.receipt_words),
+        messages_decremented: Default::default(),
     });
 
     let hosts: Vec<genvm::Host> = args
