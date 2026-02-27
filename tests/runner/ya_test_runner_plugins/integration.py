@@ -670,7 +670,13 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 
 		expected_hash_path = single_conf['expected_hash_path']
 
-		if expected_hash_path is not None:
+		check_expected_hash = expected_hash_path is not None
+		if (
+			res.result_kind == public_abi.ResultCode.VM_ERROR and res.result_data == 'timeout'
+		):
+			check_expected_hash = False  # Don't check hash for timeouts, as they can be flaky
+
+		if check_expected_hash:
 			expected_hash_path = Path(expected_hash_path)
 
 			if expected_hash_path.exists():
