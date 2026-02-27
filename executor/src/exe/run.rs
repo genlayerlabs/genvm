@@ -130,6 +130,7 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         debug_mode: args.debug_mode,
         metrics: genvm::Metrics::default(),
         storage_pages_limit: std::sync::atomic::AtomicU64::new(args.storage_pages),
+        messages_decremented: Default::default(),
     });
 
     let host = genvm::Host::connect(&args.host, shared_data.gep(|x| &x.metrics.host))?;

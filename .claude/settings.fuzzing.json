@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(./tests/cases/stable/claude/run_test.py:*)",
+      "Bash(./tests/cases/claude/run_test.py:*)",
       "Edit(tests/cases/claude/agent/**)",
       "Write(tests/cases/claude/agent/**)",
       "Edit(tests/cases/claude/intelligence/**)",
@@ -12,7 +12,7 @@
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "excludedCommands": [
-      "./tests/cases/stable/claude/run_test.py"
+      "./tests/cases/claude/run_test.py"
     ]
   }
 }

@@ -106,7 +106,6 @@ pub struct SingleVMData {
 
 pub struct Context {
     pub data: SingleVMData,
-    pub messages_decremented: primitive_types::U256,
 
     pub start_time: std::time::Instant,
     pub prev_time: std::time::Instant,
@@ -189,7 +188,6 @@ impl Context {
 
         Self {
             data,
-            messages_decremented: primitive_types::U256::zero(),
             start_time: now,
             prev_time: now,
         }
@@ -388,13 +386,16 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
 
+                let sd = self.context.data.supervisor.shared_data.clone();
+                let mut messages_decremented = sd.messages_decremented.lock().await;
+
                 if !value.is_zero() {
                     let my_balance = self
                         .context
                         .get_balance_impl(self.context.data.message_data.message.contract_address)
                         .await?;
 
-                    if value + self.context.messages_decremented > my_balance {
+                    if value + *messages_decremented > my_balance {
                         return Err(generated::types::Errno::Inbalance.into());
                     }
                 }
@@ -412,7 +413,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .eth_send(address, &calldata, &data_str)
                     .map_err(generated::types::Error::trap)?;
 
-                self.context.messages_decremented += value;
+                *messages_decremented += value;
                 Ok(file_fd_none())
             }
             gl_call::Message::EthCall { address, calldata } => {
@@ -575,13 +576,16 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
 
+                let sd = self.context.data.supervisor.shared_data.clone();
+                let mut messages_decremented = sd.messages_decremented.lock().await;
+
                 if !value.is_zero() {
                     let my_balance = self
                         .context
                         .get_balance_impl(self.context.data.message_data.message.contract_address)
                         .await?;
 
-                    if value + self.context.messages_decremented > my_balance {
+                    if value + *messages_decremented > my_balance {
                         return Err(generated::types::Errno::Inbalance.into());
                     }
                 }
@@ -604,7 +608,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .post_message(&address, &calldata_encoded, &data_str)
                     .map_err(generated::types::Error::trap)?;
 
-                self.context.messages_decremented += value;
+                *messages_decremented += value;
 
                 Ok(file_fd_none())
             }
@@ -622,13 +626,16 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
 
+                let sd = self.context.data.supervisor.shared_data.clone();
+                let mut messages_decremented = sd.messages_decremented.lock().await;
+
                 if !value.is_zero() {
                     let my_balance = self
                         .context
                         .get_balance_impl(self.context.data.message_data.message.contract_address)
                         .await?;
 
-                    if value + self.context.messages_decremented > my_balance {
+                    if value + *messages_decremented > my_balance {
                         return Err(generated::types::Errno::Inbalance.into());
                     }
                 }
@@ -652,7 +659,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .deploy_contract(&calldata_encoded, &code, &data_str)
                     .map_err(generated::types::Error::trap)?;
 
-                self.context.messages_decremented += value;
+                *messages_decremented += value;
 
                 Ok(file_fd_none())
             }
@@ -1003,7 +1010,15 @@ impl Context {
         let mut res = self.get_balance_impl(address).await?;
 
         if is_self && self.data.conf.is_main() {
-            res -= self.messages_decremented;
+            let messages_decremented = *self
+                .data
+                .supervisor
+                .shared_data
+                .messages_decremented
+                .lock()
+                .await;
+
+            res -= messages_decremented;
         }
 
         let res = res.to_little_endian();
