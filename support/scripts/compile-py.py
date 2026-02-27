@@ -27,8 +27,8 @@ while _root.parent != _root:
 		break
 	_root = _root.parent
 
-import genlayer.py.calldata as gvm_calldata
-from genlayer.py.types import Address
+import genlayer.calldata as gvm_calldata
+from genlayer.types import Address
 import origin.base_host as base_host
 import origin.public_abi as public_abi
 from origin.base_host import IHost, HostException
@@ -37,11 +37,11 @@ from origin import host_fns
 COMPILER_CONTRACT = """\
 # { "Depends": "py-genlayer:test" }
 
-from genlayer import *
+import genlayer as gl
 import importlib._bootstrap_external
 import importlib.util
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	def __init__(self, name: str, code: bytes):
 		opt_level = 0
 		pyc_name = importlib.util.cache_from_source(name, optimization='')
