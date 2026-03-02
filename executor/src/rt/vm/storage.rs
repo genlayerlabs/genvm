@@ -2,6 +2,7 @@ use std::mem::MaybeUninit;
 use std::ops::DerefMut;
 
 use const_lru::ConstLru;
+use genlayer_sdk::abi;
 use genvm_common::{calldata, sync};
 
 use crate::{host::message::root_offsets, rt, SlotID};
@@ -379,7 +380,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         let code_slot = SlotID::ZERO.indirection(root_offsets::CODE);
 
         if code.len() > (u32::MAX - 4) as usize {
-            return Err(rt::errors::VMError::oos(None).into());
+            return Err(rt::errors::VMError(abi::consts::VmError::oom().storage(), None).into());
         }
 
         let code_len = code.len() as u32;
@@ -402,7 +403,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         let code_size = u32::from_le_bytes(len_buf);
 
         if !limiter.consume(code_size) {
-            return Err(rt::errors::VMError::oom(None).into());
+            return Err(rt::errors::VMError(abi::consts::VmError::oom().storage(), None).into());
         }
 
         let res = Box::new_uninit_slice(code_size as usize);

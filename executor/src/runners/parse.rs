@@ -1,4 +1,5 @@
 use crate::{public_abi, rt};
+use genlayer_sdk::abi;
 use genvm_common::*;
 
 fn detect_version_from_wasm(code: &[u8]) -> anyhow::Result<String> {
@@ -47,10 +48,7 @@ pub fn parse(code: bytes::Bytes) -> anyhow::Result<super::Archive> {
 fn code_to_archive_from_text(code: bytes::Bytes) -> anyhow::Result<super::Archive> {
     let code_str = std::str::from_utf8(code.as_ref()).map_err(|e| {
         rt::errors::VMError(
-            format!(
-                "{} not_utf8_text",
-                public_abi::VmError::InvalidContract.value()
-            ),
+            abi::consts::VmError::invalid_contract().not_utf8_text(),
             Some(anyhow::Error::from(e)),
         )
     })?;
@@ -62,10 +60,7 @@ fn code_to_archive_from_text(code: bytes::Bytes) -> anyhow::Result<super::Archiv
             }
         }
         Err(rt::errors::VMError(
-            format!(
-                "{} absent_runner_comment",
-                public_abi::VmError::InvalidContract.value()
-            ),
+            abi::consts::VmError::invalid_contract().absent_runner_comment(),
             None,
         ))
     })()?;
@@ -85,7 +80,6 @@ fn code_to_archive_from_text(code: bytes::Bytes) -> anyhow::Result<super::Archiv
             if l.trim().starts_with("v") {
                 version_string.push_str(l);
             } else {
-                log_warn!(default = public_abi::ABSENT_VERSION; "runner comment does not start with version, using default");
                 version_string.push_str(public_abi::ABSENT_VERSION);
 
                 code_comment.push_str(l)

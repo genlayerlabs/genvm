@@ -4,6 +4,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use std::borrow::Cow;
+
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum ResultCode {
@@ -119,43 +121,12 @@ impl TryFrom<u8> for EntryKind {
         }
     }
 }
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
-#[repr(u32)]
-pub enum MemoryLimiterConsts {
-    TableEntry = 64,
-    FileMapping = 256,
-    FdAllocation = 96,
+pub mod memory_limiter_consts {
+    pub const TABLE_ENTRY: u32 = 64;
+    pub const FILE_MAPPING: u32 = 256;
+    pub const FD_ALLOCATION: u32 = 96;
 }
 
-impl MemoryLimiterConsts {
-    pub fn value(self) -> u32 {
-        match self {
-            MemoryLimiterConsts::TableEntry => 64,
-            MemoryLimiterConsts::FileMapping => 256,
-            MemoryLimiterConsts::FdAllocation => 96,
-        }
-    }
-    pub fn str_snake_case(self) -> &'static str {
-        match self {
-            MemoryLimiterConsts::TableEntry => "table_entry",
-            MemoryLimiterConsts::FileMapping => "file_mapping",
-            MemoryLimiterConsts::FdAllocation => "fd_allocation",
-        }
-    }
-}
-
-impl TryFrom<u32> for MemoryLimiterConsts {
-    type Error = ();
-
-    fn try_from(value: u32) -> Result<Self, ()> {
-        match value {
-            64 => Ok(MemoryLimiterConsts::TableEntry),
-            256 => Ok(MemoryLimiterConsts::FileMapping),
-            96 => Ok(MemoryLimiterConsts::FdAllocation),
-            _ => Err(()),
-        }
-    }
-}
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum SpecialMethod {
     GetSchema,
@@ -188,54 +159,119 @@ impl TryFrom<&str> for SpecialMethod {
         }
     }
 }
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
-pub enum VmError {
-    Timeout,
-    ExitCode,
-    ValidatorDisagrees,
-    VersionTooBig,
-    Oom,
-    InvalidContract,
+#[allow(non_snake_case)]
+pub mod __VmError {
+    use super::VmError;
+    use std::borrow::Cow;
+
+    pub struct OomRam;
+
+    impl OomRam {
+        pub const fn val(&self) -> VmError {
+            VmError(Cow::Borrowed("OOM RAM"))
+        }
+        pub const fn table(&self) -> VmError {
+            VmError(Cow::Borrowed("OOM RAM table"))
+        }
+        pub const fn memory(&self) -> VmError {
+            VmError(Cow::Borrowed("OOM RAM memory"))
+        }
+    }
+
+    pub struct Oom;
+
+    impl Oom {
+        pub const fn storage(&self) -> VmError {
+            VmError(Cow::Borrowed("OOM Storage"))
+        }
+        pub const fn ram(&self) -> OomRam {
+            OomRam
+        }
+    }
+
+    pub struct InvalidContractWasm;
+
+    impl InvalidContractWasm {
+        pub const fn validating(&self) -> VmError {
+            VmError(Cow::Borrowed("invalid_contract wasm validating"))
+        }
+        pub const fn linking(&self) -> VmError {
+            VmError(Cow::Borrowed("invalid_contract wasm linking"))
+        }
+        pub const fn entrypoint(&self) -> VmError {
+            VmError(Cow::Borrowed("invalid_contract wasm entrypoint"))
+        }
+    }
+
+    pub struct InvalidContract;
+
+    impl InvalidContract {
+        pub const fn val(&self) -> VmError {
+            VmError(Cow::Borrowed("invalid_contract"))
+        }
+        pub const fn absent_runner_comment(&self) -> VmError {
+            VmError(Cow::Borrowed("invalid_contract absent_runner_comment"))
+        }
+        pub const fn not_utf8_text(&self) -> VmError {
+            VmError(Cow::Borrowed("invalid_contract not_utf8_text"))
+        }
+        pub const fn malformed_runner(&self) -> VmError {
+            VmError(Cow::Borrowed("invalid_contract malformed_runner"))
+        }
+        pub const fn wasm(&self) -> InvalidContractWasm {
+            InvalidContractWasm
+        }
+    }
+
+    pub struct ExitCode;
+
+    impl ExitCode {
+        pub fn val_i32(&self, v: i32) -> VmError {
+            VmError(Cow::Owned(format!("exit_code {v}")))
+        }
+    }
+
+    pub struct WasmTrap;
+
+    impl WasmTrap {
+        pub fn val_str(&self, v: &str) -> VmError {
+            VmError(Cow::Owned(format!("wasm_trap {v}")))
+        }
+    }
+
+    pub struct Host;
+
+    impl Host {
+        pub fn val_str(&self, v: &str) -> VmError {
+            VmError(Cow::Owned(format!("host {v}")))
+        }
+    }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VmError(pub Cow<'static, str>);
 
 impl VmError {
-    pub fn value(self) -> &'static str {
-        match self {
-            VmError::Timeout => "timeout",
-            VmError::ExitCode => "exit_code",
-            VmError::ValidatorDisagrees => "validator_disagrees",
-            VmError::VersionTooBig => "version_too_big",
-            VmError::Oom => "OOM",
-            VmError::InvalidContract => "invalid_contract",
-        }
+    pub const fn timeout() -> Self {
+        Self(Cow::Borrowed("timeout"))
     }
-    pub fn str_snake_case(self) -> &'static str {
-        match self {
-            VmError::Timeout => "timeout",
-            VmError::ExitCode => "exit_code",
-            VmError::ValidatorDisagrees => "validator_disagrees",
-            VmError::VersionTooBig => "version_too_big",
-            VmError::Oom => "oom",
-            VmError::InvalidContract => "invalid_contract",
-        }
+    pub const fn exit_code() -> __VmError::ExitCode {
+        __VmError::ExitCode
+    }
+    pub const fn wasm_trap() -> __VmError::WasmTrap {
+        __VmError::WasmTrap
+    }
+    pub const fn oom() -> __VmError::Oom {
+        __VmError::Oom
+    }
+    pub const fn invalid_contract() -> __VmError::InvalidContract {
+        __VmError::InvalidContract
+    }
+    pub const fn host() -> __VmError::Host {
+        __VmError::Host
     }
 }
 
-impl TryFrom<&str> for VmError {
-    type Error = ();
-
-    fn try_from(value: &str) -> Result<Self, ()> {
-        match value {
-            "timeout" => Ok(VmError::Timeout),
-            "exit_code" => Ok(VmError::ExitCode),
-            "validator_disagrees" => Ok(VmError::ValidatorDisagrees),
-            "version_too_big" => Ok(VmError::VersionTooBig),
-            "OOM" => Ok(VmError::Oom),
-            "invalid_contract" => Ok(VmError::InvalidContract),
-            _ => Err(()),
-        }
-    }
-}
 pub const EVENT_MAX_TOPICS: u32 = 4;
 pub const ABSENT_VERSION: &'static str = "v0.1.0";
 pub const CODE_SLOT_OFFSET: u32 = 1;

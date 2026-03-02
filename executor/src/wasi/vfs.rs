@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use genlayer_sdk::abi;
+
 use crate::{public_abi, rt};
 
 pub struct FileContents {
@@ -61,9 +63,11 @@ impl VFS {
             None => {
                 if !self
                     .limiter
-                    .consume(public_abi::MemoryLimiterConsts::FdAllocation as u32)
+                    .consume(public_abi::memory_limiter_consts::FD_ALLOCATION)
                 {
-                    return Err(rt::errors::VMError::oom(None).into());
+                    return Err(
+                        rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into(),
+                    );
                 }
                 self.next_free_descriptor += 1;
                 Ok(self.next_free_descriptor)
@@ -95,7 +99,7 @@ impl VFS {
 
     pub fn place_content(&mut self, value: FileContents) -> anyhow::Result<u32> {
         if value.release_memory && !self.limiter.consume(value.contents.len() as u32) {
-            return Err(rt::errors::VMError::oom(None).into());
+            return Err(rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into());
         }
 
         let fd = self.alloc_fd()?;

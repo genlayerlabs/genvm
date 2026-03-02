@@ -1,6 +1,7 @@
 pub mod host_fns;
 pub mod message;
 
+use genlayer_sdk::abi;
 use genvm_common::*;
 
 use crate::public_abi;
@@ -101,7 +102,11 @@ fn handle_host_error(sock: &mut dyn Sock, context: &str) -> Result<()> {
     if e == host_fns::Errors::Ok {
         Ok(())
     } else {
-        Err(rt::errors::VMError(format!("host {}", e.str_snake_case()), None).into())
+        Err(rt::errors::VMError(
+            abi::consts::VmError::host().val_str(e.str_snake_case()),
+            None,
+        )
+        .into())
     }
 }
 
@@ -263,7 +268,7 @@ impl Host {
         let len = u32::from_le_bytes(len_buf);
 
         if !limiter.consume_mul(len, SlotID::SIZE) {
-            return Err(rt::errors::VMError::oom(None).into());
+            return Err(rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into());
         }
 
         let res = Box::new_uninit_slice(len as usize);

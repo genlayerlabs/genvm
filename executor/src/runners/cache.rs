@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use super::*;
+use genlayer_sdk::abi;
 use genvm_common::*;
 
 pub struct Reader {
@@ -83,7 +84,10 @@ impl Reader {
                 called.store(true, std::sync::atomic::Ordering::SeqCst);
                 let arch = arch_provider().await?;
                 if !limiter.consume(arch.total_size) {
-                    return Err(anyhow::Error::from(rt::errors::VMError::oom(None)));
+                    return Err(anyhow::Error::from(rt::errors::VMError(
+                        abi::consts::VmError::oom().storage(),
+                        None,
+                    )));
                 }
                 Ok(ArchiveCache::new(name, arch))
             })
@@ -92,7 +96,10 @@ impl Reader {
         if !called.load(std::sync::atomic::Ordering::SeqCst)
             && !limiter.consume(res.files.total_size)
         {
-            return Err(anyhow::Error::from(rt::errors::VMError::oom(None)));
+            return Err(anyhow::Error::from(rt::errors::VMError(
+                abi::consts::VmError::oom().storage(),
+                None,
+            )));
         }
 
         Ok(res)

@@ -1,3 +1,4 @@
+use genlayer_sdk::abi;
 use genvm_common::*;
 use std::sync::{atomic::AtomicU32, Arc};
 
@@ -148,7 +149,7 @@ impl wasmtime::ResourceLimiter for Limiter {
         let success = self.consume(delta);
 
         if current == 0 && !success {
-            Err(rt::errors::VMError::oom(None).into())
+            Err(rt::errors::VMError(abi::consts::VmError::oom().ram().memory(), None).into())
         } else {
             Ok(success)
         }
@@ -167,10 +168,10 @@ impl wasmtime::ResourceLimiter for Limiter {
         }
 
         let delta = delta as u32;
-        let success = self.consume_mul(delta, public_abi::MemoryLimiterConsts::TableEntry.value());
+        let success = self.consume_mul(delta, abi::consts::memory_limiter_consts::TABLE_ENTRY);
 
         if current == 0 && !success {
-            Err(rt::errors::VMError::oom(None).into())
+            Err(rt::errors::VMError(abi::consts::VmError::oom().ram().table(), None).into())
         } else {
             Ok(success)
         }

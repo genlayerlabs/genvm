@@ -1,4 +1,5 @@
 use anyhow::Context;
+use genlayer_sdk::abi;
 
 use crate::rt;
 use genvm_common::*;
@@ -51,7 +52,13 @@ impl super::Supervisor {
                 .gep(|x| &x.metrics.supervisor.compilation_time),
         );
 
-        self.validate_wasm(wasm)?;
+        if let Err(validate) = self.validate_wasm(wasm) {
+            return Err(rt::errors::VMError::wrap(
+                abi::consts::VmError::invalid_contract().wasm().validating(),
+                validate,
+            )
+            .into());
+        }
 
         let start_time = std::time::Instant::now();
         let module_det = wasmtime::CodeBuilder::new(&self.engines.det)
@@ -59,14 +66,37 @@ impl super::Supervisor {
                 std::borrow::Cow::Borrowed(wasm),
                 Some(std::path::Path::new(debug_path)),
             )?
-            .compile_module()?;
+            .compile_module();
+
+        let module_det = match module_det {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(rt::errors::VMError::wrap(
+                    abi::consts::VmError::invalid_contract().wasm().validating(),
+                    e,
+                )
+                .into());
+            }
+        };
 
         let module_non_det = wasmtime::CodeBuilder::new(&self.engines.non_det)
             .wasm_binary(
                 std::borrow::Cow::Borrowed(wasm),
                 Some(std::path::Path::new(debug_path)),
             )?
-            .compile_module()?;
+            .compile_module();
+
+        let module_non_det = match module_non_det {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(rt::errors::VMError::wrap(
+                    abi::consts::VmError::invalid_contract().wasm().validating(),
+                    e,
+                )
+                .into());
+            }
+        };
+
         log_info!(status = "done", duration:? = start_time.elapsed(), path = debug_path; "cache compiling");
 
         std::mem::drop(tok);

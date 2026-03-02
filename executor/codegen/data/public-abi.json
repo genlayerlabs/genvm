@@ -31,7 +31,7 @@
     }
   },
   {
-    "type": "enum",
+    "type": "consts",
     "name": "memory_limiter_consts",
     "repr": "u32",
     "values": {
@@ -50,17 +50,48 @@
     }
   },
   {
-    "type": "enum",
+    "type": "str_trie",
     "name": "vm_error",
-    "repr": "str",
-    "values": {
-      "timeout": "timeout",
-      "exit_code": "exit_code",
-      "validator_disagrees": "validator_disagrees",
-      "version_too_big": "version_too_big",
-      "oom": "OOM",
-      "invalid_contract": "invalid_contract"
-    }
+    "values": [
+      "timeout",
+      {
+        "head": "exit_code",
+        "tail": "$i32"
+      },
+      {
+        "head": "wasm_trap",
+        "tail": "$str"
+      },
+      {
+        "head": "OOM",
+        "tail": [
+          {
+            "head": "RAM",
+            "tail": [
+              [], "table", "memory"
+            ]
+          },
+          "Storage"
+        ]
+      },
+      {
+        "head": "invalid_contract",
+        "tail": [
+          null,
+          "absent_runner_comment",
+          "not_utf8_text",
+          "malformed_runner",
+          {
+            "head": "wasm",
+            "tail": ["validating", "linking", "entrypoint"]
+          }
+        ]
+      },
+      {
+        "head": "host",
+        "tail": "$str"
+      }
+    ]
   },
   {
     "type": "const",

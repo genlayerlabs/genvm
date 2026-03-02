@@ -392,17 +392,13 @@ async fn apply_contract_actions_inner(
             &limiter,
         )
         .await
-        .map_err(|e| {
-            rt::errors::VMError::wrap(public_abi::VmError::InvalidContract.value().to_owned(), e)
-        })?;
+        .map_err(|e| rt::errors::VMError::wrap(public_abi::VmError::invalid_contract().val(), e))?;
 
     let actions = arch
         .get_actions()
         .await
         .with_context(|| format!("loading init actions for contract {contract_id}"))
-        .map_err(|e| {
-            rt::errors::VMError::wrap(public_abi::VmError::InvalidContract.value().to_owned(), e)
-        })?;
+        .map_err(|e| rt::errors::VMError::wrap(public_abi::VmError::invalid_contract().val(), e))?;
 
     let mut ctx = actions::Ctx {
         env: BTreeMap::new(),
@@ -421,7 +417,7 @@ async fn apply_contract_actions_inner(
         }
         Err(e) => {
             return Err(rt::errors::VMError::wrap(
-                public_abi::VmError::InvalidContract.value().into(),
+                public_abi::VmError::invalid_contract().val(),
                 e,
             )
             .into());

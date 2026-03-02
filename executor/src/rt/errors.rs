@@ -1,31 +1,22 @@
-use std::collections::BTreeMap;
+use std::{borrow::Cow, collections::BTreeMap};
 
 use crate::{public_abi, rt};
+use genlayer_sdk::abi;
 use genvm_common::*;
 
 #[derive(Debug)]
-pub struct VMError(pub String, pub Option<anyhow::Error>);
+pub struct VMError(pub abi::consts::VmError, pub Option<anyhow::Error>);
 
 impl std::error::Error for VMError {}
 
 impl std::fmt::Display for VMError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "VMError({})", self.0)
+        write!(f, "VMError({})", self.0 .0)
     }
 }
 
 impl VMError {
-    pub fn oom(cause: Option<anyhow::Error>) -> Self {
-        VMError(public_abi::VmError::Oom.value().into(), cause)
-    }
-
-    pub fn oos(cause: Option<anyhow::Error>) -> Self {
-        let mut str = public_abi::VmError::Oom.value().to_owned();
-        str.push_str(" storage");
-        VMError(str, cause)
-    }
-
-    pub fn wrap(message: String, cause: anyhow::Error) -> Self {
+    pub fn wrap(message: abi::consts::VmError, cause: anyhow::Error) -> Self {
         match cause.downcast::<VMError>() {
             Err(cause) => Self(message, Some(cause)),
             Ok(v) => v,
@@ -38,14 +29,19 @@ pub fn unwrap_vm_errors(err: anyhow::Error) -> anyhow::Result<rt::vm::RunOk> {
     let res: anyhow::Result<rt::vm::RunOk> = [
         |e: anyhow::Error| match e.downcast::<crate::wasi::preview1::I32Exit>() {
             Ok(crate::wasi::preview1::I32Exit(0)) => Ok(rt::vm::RunOk::empty_return()),
-            Ok(crate::wasi::preview1::I32Exit(v)) => {
-                Ok(rt::vm::RunOk::VMError(format!("exit_code {v}"), None))
-            }
+            Ok(crate::wasi::preview1::I32Exit(v)) => Ok(rt::vm::RunOk::VMError(
+                abi::consts::VmError::exit_code().val_i32(v),
+                None,
+            )),
             Err(e) => Err(e),
         },
         |e: anyhow::Error| {
-            e.downcast::<wasmtime::Trap>()
-                .map(|v| rt::vm::RunOk::VMError(format!("wasm_trap {v:?}"), Some(v.into())))
+            e.downcast::<wasmtime::Trap>().map(|v| {
+                rt::vm::RunOk::VMError(
+                    abi::consts::VmError::wasm_trap().val_str(&v.to_string()),
+                    Some(v.into()),
+                )
+            })
         },
         |e: anyhow::Error| {
             e.downcast::<rt::errors::VMError>()

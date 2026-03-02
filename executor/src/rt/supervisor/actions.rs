@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use crate::{caching, public_abi, rt, runners};
 
 use anyhow::Context;
+use genlayer_sdk::abi;
 use genvm_common::*;
 use symbol_table::GlobalSymbol;
 
@@ -12,6 +13,14 @@ pub struct Ctx<'a, 'b> {
     pub contract_id: symbol_table::GlobalSymbol,
     pub supervisor: &'a rt::supervisor::Supervisor,
     pub vm: &'b mut rt::vm::VMBase,
+}
+
+fn make_malformed_runner_error(extra_msg: &str) -> anyhow::Error {
+    rt::errors::VMError(
+        public_abi::VmError::invalid_contract().malformed_runner(),
+        Some(anyhow::anyhow!("{}", extra_msg)),
+    )
+    .into()
 }
 
 impl Ctx<'_, '_> {
@@ -25,7 +34,9 @@ impl Ctx<'_, '_> {
         let uid = self.full_check_runner_uid(uid)?;
 
         let Some((runner_id, runner_hash)) = runners::verify_runner(uid.as_str()) else {
-            anyhow::bail!("invalid runner id: {}", uid);
+            return Err(make_malformed_runner_error(
+                "runner id doesn't match expected format",
+            ));
         };
 
         let limiter = &self.vm.store.data_mut().limits;
@@ -64,7 +75,9 @@ impl Ctx<'_, '_> {
             return Ok(self.contract_id);
         }
         let Some((runner_id, runner_hash)) = runners::verify_runner(id.as_str()) else {
-            anyhow::bail!("invalid runner id: {}", id);
+            return Err(make_malformed_runner_error(
+                "runner id doesn't match expected format",
+            ));
         };
 
         let runner_id = GlobalSymbol::new(runner_id);
@@ -79,7 +92,9 @@ impl Ctx<'_, '_> {
         };
 
         let Some(runner_hash) = runner_hash else {
-            anyhow::bail!("invalid runner id: {}", id);
+            return Err(make_malformed_runner_error(
+                "runner id doesn't match expected format",
+            ));
         };
 
         if !self
@@ -192,9 +207,7 @@ impl Ctx<'_, '_> {
         use runners::InitAction;
 
         if self.supervisor.shared_data.cancellation.is_cancelled() {
-            return Err(
-                rt::errors::VMError(public_abi::VmError::Timeout.value().to_owned(), None).into(),
-            );
+            return Err(rt::errors::VMError(public_abi::VmError::timeout(), None).into());
         }
 
         match action {
@@ -217,11 +230,9 @@ impl Ctx<'_, '_> {
 
                     for (name, file_contents) in range {
                         if self.supervisor.shared_data.cancellation.is_cancelled() {
-                            return Err(rt::errors::VMError(
-                                public_abi::VmError::Timeout.value().to_owned(),
-                                None,
-                            )
-                            .into());
+                            return Err(
+                                rt::errors::VMError(public_abi::VmError::timeout(), None).into()
+                            );
                         }
 
                         if name.ends_with("/") {
@@ -243,10 +254,14 @@ impl Ctx<'_, '_> {
                         let limiter = &self.vm.store.data_mut().limits;
 
                         if !limiter.consume(
-                            public_abi::MemoryLimiterConsts::FileMapping.value()
+                            public_abi::memory_limiter_consts::FILE_MAPPING
                                 + name_in_fs.len() as u32,
                         ) {
-                            return Err(rt::errors::VMError::oom(None).into());
+                            return Err(rt::errors::VMError(
+                                abi::consts::VmError::oom().ram().val(),
+                                None,
+                            )
+                            .into());
                         }
 
                         self.vm
@@ -259,10 +274,14 @@ impl Ctx<'_, '_> {
                 } else {
                     let limiter = &self.vm.store.data_mut().limits;
 
-                    if !limiter.consume(
-                        public_abi::MemoryLimiterConsts::FileMapping.value() + to.len() as u32,
-                    ) {
-                        return Err(rt::errors::VMError::oom(None).into());
+                    if !limiter
+                        .consume(public_abi::memory_limiter_consts::FILE_MAPPING + to.len() as u32)
+                    {
+                        return Err(rt::errors::VMError(
+                            abi::consts::VmError::oom().ram().val(),
+                            None,
+                        )
+                        .into());
                     }
 
                     self.vm
@@ -317,7 +336,7 @@ impl Ctx<'_, '_> {
                         .with_context(|| format!("getting module name for {path:?} of {current}"))
                         .map_err(|e| {
                             rt::errors::VMError::wrap(
-                                format!("{} wasm", public_abi::VmError::InvalidContract.value()),
+                                public_abi::VmError::invalid_contract().wasm().linking(),
                                 e,
                             )
                         })?;
@@ -375,11 +394,9 @@ impl Ctx<'_, '_> {
             InitAction::Seq(vec) => {
                 for act in vec {
                     if self.supervisor.shared_data.cancellation.is_cancelled() {
-                        return Err(rt::errors::VMError(
-                            public_abi::VmError::Timeout.value().to_owned(),
-                            None,
-                        )
-                        .into());
+                        return Err(
+                            rt::errors::VMError(public_abi::VmError::timeout(), None).into()
+                        );
                     }
 
                     if let Some(x) = Box::pin(self.apply(act, current, current_runner_arch)).await?

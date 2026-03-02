@@ -1,5 +1,8 @@
+use std::borrow::Cow;
+
 use crate::{public_abi, rt, wasi};
 
+use genlayer_sdk::abi;
 use genvm_common::*;
 use itertools::Itertools;
 
@@ -9,7 +12,10 @@ pub mod storage;
 pub enum RunOk {
     Return(Vec<u8>),
     UserError(String),
-    VMError(String, #[serde(skip_serializing)] Option<anyhow::Error>),
+    VMError(
+        abi::consts::VmError,
+        #[serde(skip_serializing)] Option<anyhow::Error>,
+    ),
 }
 
 pub struct RunResult {
@@ -74,7 +80,7 @@ impl RunOk {
                 .chain(buf.as_bytes().iter().cloned()),
             RunOk::VMError(buf, _) => [ResultCode::VmError as u8]
                 .into_iter()
-                .chain(buf.as_bytes().iter().cloned()),
+                .chain(buf.0.as_bytes().iter().cloned()),
         }
     }
 }
@@ -142,7 +148,7 @@ impl VM<wasmtime::Instance> {
             Err(e) => {
                 return Ok(RunResult {
                     run_ok: RunOk::VMError(
-                        public_abi::VmError::InvalidContract.value().to_owned(),
+                        public_abi::VmError::invalid_contract().wasm().entrypoint(),
                         Some(e),
                     ),
                     fingerprint: None,
@@ -187,14 +193,14 @@ impl VM<wasmtime::Instance> {
             match res {
                 Ok((rt::vm::RunOk::VMError(msg, cause), fp)) => Ok((
                     rt::vm::RunOk::VMError(
-                        public_abi::VmError::Timeout.value().into(),
-                        cause.map(|v| v.context(msg)),
+                        public_abi::VmError::timeout(),
+                        cause.map(|v| v.context(msg.0)),
                     ),
                     fp,
                 )),
                 Ok(r) => Ok(r),
                 Err(e) => Ok((
-                    rt::vm::RunOk::VMError(public_abi::VmError::Timeout.value().into(), Some(e)),
+                    rt::vm::RunOk::VMError(public_abi::VmError::timeout(), Some(e)),
                     None,
                 )),
             }
@@ -209,7 +215,7 @@ impl VM<wasmtime::Instance> {
                 log_debug!(result = "UserError", message = msg; "execution result unwrapped")
             }
             Ok((rt::vm::RunOk::VMError(e, cause), _)) => {
-                log_debug!(result = "VMError", message = e, cause:? = cause; "execution result unwrapped")
+                log_debug!(result = "VMError", message = e.0, cause:? = cause; "execution result unwrapped")
             }
             Err(e) => {
                 log_debug!(result = "Error", error:ah = e; "execution result unwrapped")
