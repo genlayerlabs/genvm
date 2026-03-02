@@ -44,6 +44,14 @@ def create_parser() -> ParserResult:
 	default_cpu_count = os.cpu_count() or 1
 
 	run_parser.add_argument(
+		'--junit-xml',
+		type=str,
+		default=None,
+		metavar='FILE',
+		help='Write JUnit XML report to FILE (default: <artifacts_dir>/junit.xml)',
+	)
+
+	run_parser.add_argument(
 		'--max-concurrent',
 		type=int,
 		default=default_cpu_count,
@@ -73,6 +81,7 @@ def create_parser() -> ParserResult:
 
 
 from . import const
+import xml.etree.ElementTree as ET
 
 
 def _show_execution_plan(
@@ -186,6 +195,39 @@ def workflow_run(
 		signal.signal(signal.SIGINT, original_handler)
 
 
+def _write_junit_xml(
+	path: Path,
+	shared: ya_test_runner.SharedContext,
+	exec_env: ya_test_runner.stage.execution.Env,
+) -> None:
+	testsuites = ET.Element('testsuites')
+	testsuite = ET.SubElement(testsuites, 'testsuite', name='ya-test-runner')
+
+	total_time = 0.0
+	failures = 0
+	for record in exec_env.results:
+		total_time += record.elapsed_seconds
+		attrs = {
+			'name': record.name,
+			'time': f'{record.elapsed_seconds:.3f}',
+		}
+		testcase = ET.SubElement(testsuite, 'testcase', **attrs)
+		if not record.passed:
+			failures += 1
+			failure = ET.SubElement(testcase, 'failure', message='Test failed')
+			if record.failure_message:
+				failure.text = record.failure_message
+
+	testsuite.set('tests', str(len(exec_env.results)))
+	testsuite.set('failures', str(failures))
+	testsuite.set('time', f'{total_time:.3f}')
+
+	path.parent.mkdir(parents=True, exist_ok=True)
+	tree = ET.ElementTree(testsuites)
+	ET.indent(tree)
+	tree.write(path, xml_declaration=True, encoding='unicode')
+
+
 def _workflow_run_inner(
 	shared_context: ya_test_runner.SharedContext,
 	conf_env: ya_test_runner.stage.configuration.Env,
@@ -213,6 +255,15 @@ def _workflow_run_inner(
 		)
 	)
 	shared_context.logger.debug('stage completed', stage='execution')
+
+	junit_xml_path = conf_env.args.junit_xml
+	if junit_xml_path is None:
+		junit_xml_path = shared_context.artifacts_dir / 'junit.xml'
+	else:
+		junit_xml_path = Path(junit_xml_path)
+	conf_env.post_run_steps.append(
+		lambda shared, env: _write_junit_xml(junit_xml_path, shared, env)
+	)
 
 	success = ya_test_runner.stage.report.run(
 		shared_context,

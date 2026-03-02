@@ -101,7 +101,7 @@ fn handle_host_error(sock: &mut dyn Sock, context: &str) -> Result<()> {
     if e == host_fns::Errors::Ok {
         Ok(())
     } else {
-        Err(rt::errors::VMError(e.str_snake_case().to_owned(), None).into())
+        Err(rt::errors::VMError(format!("host {}", e.str_snake_case()), None).into())
     }
 }
 

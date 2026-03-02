@@ -25,9 +25,17 @@ class _Colors:
 	ENDC = '\033[0m'
 
 
+class TestRecord(typing.NamedTuple):
+	name: str
+	passed: bool
+	elapsed_seconds: float
+	failure_message: str | None
+
+
 class Env(typing.NamedTuple):
 	success_count: int
 	failed: list[str]
+	results: list[TestRecord]
 
 
 from collections import deque
@@ -71,6 +79,7 @@ class MultiSemaphore:
 class _ExecutionContext:
 	shared: SharedContext
 	failed: list[str]
+	results: list[TestRecord]
 	should_stop: asyncio.Event
 	semaphore: MultiSemaphore
 	fail_fast: bool = False
@@ -287,6 +296,22 @@ async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Cas
 			if ctx.fail_fast:
 				ctx.should_stop.set()
 
+		failure_message = None
+		if not success:
+			if 'exception' in context:
+				failure_message = str(context['exception'])
+			elif 'stderr' in context:
+				failure_message = str(context['stderr'])
+
+		ctx.results.append(
+			TestRecord(
+				name=case.description.name,
+				passed=success,
+				elapsed_seconds=elapsed,
+				failure_message=failure_message,
+			)
+		)
+
 		# Print result (skip hidden successes)
 		if not (case.hidden and success):
 			_print_test_result(
@@ -335,6 +360,7 @@ async def run(shared: SharedContext, collection_env: SchedulingEnv) -> Env:
 	ctx = _ExecutionContext(
 		shared=shared,
 		failed=[],
+		results=[],
 		should_stop=should_stop,
 		fail_fast=fail_fast,
 		semaphore=MultiSemaphore(collection_env.args.max_concurrent),
@@ -392,4 +418,5 @@ async def run(shared: SharedContext, collection_env: SchedulingEnv) -> Env:
 	return Env(
 		success_count=ctx.success_count,
 		failed=ctx.failed,
+		results=ctx.results,
 	)

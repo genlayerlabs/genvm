@@ -20,7 +20,7 @@ def _generate_view(name: str, params: tuple[type], ret: type) -> typing.Any:
 		return gl_call.gl_call_generic(
 			{
 				'EthCall': {
-					'address': self.parent.address,
+					'address': self._proxy_parent.address,
 					'calldata': calldata,
 				}
 			},
