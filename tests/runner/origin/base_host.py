@@ -268,8 +268,10 @@ class RunHostAndProgramRes:
 
 	execution_time: float
 
+	execution_hash: bytes
+
 	result_kind: public_abi.ResultCode
-	result_data: typing.Any
+	result_data: gvm_calldata.Decoded
 	result_fingerprint: ResultFingerprint | None
 	result_storage_changes: list[tuple[bytes, bytes]]
 	result_emissions: list[ResultEmission]
@@ -463,6 +465,7 @@ async def run_genvm(
 			raise final_exception from exceptions[0]
 
 		if result_host is None:
+			execution_hash = b''
 			result_kind = public_abi.ResultCode.INTERNAL_ERROR
 			result_data = 'no_result'
 			result_fingerprint = None
@@ -472,6 +475,7 @@ async def run_genvm(
 		else:
 			result_kind = result_host[0]
 			decoded = gvm_calldata.decode(result_host[1])
+			execution_hash = decoded.get('execution_hash', b'')
 			result_data = decoded.get('data')
 			result_fingerprint = decoded.get('fingerprint')
 			result_storage_changes = decoded.get('storage_changes', [])
@@ -496,6 +500,7 @@ async def run_genvm(
 			stdout=status['stdout'],
 			stderr=status['stderr'],
 			genvm_log=status.get('genvm_log') or [],
+			execution_hash=execution_hash,
 			result_kind=result_kind,
 			result_data=result_data,
 			result_fingerprint=result_fingerprint,

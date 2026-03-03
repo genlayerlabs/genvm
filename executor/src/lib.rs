@@ -152,22 +152,22 @@ pub async fn run_with_impl(
         Err(e) => {
             return match rt::errors::unwrap_vm_errors(e) {
                 Err(e) => Err(e),
-                Ok(v) => Ok(rt::vm::FullResult {
-                    fingerprint: None,
-                    kind: match &v {
+                Ok(v) => Ok(rt::vm::FullResult::new(
+                    match &v {
                         rt::vm::RunOk::Return(_) => public_abi::ResultCode::Return,
                         rt::vm::RunOk::UserError(_) => public_abi::ResultCode::UserError,
                         rt::vm::RunOk::VMError(_, _) => public_abi::ResultCode::VmError,
                     },
-                    data: match v {
+                    match v {
                         rt::vm::RunOk::Return(buf) => calldata::decode(&buf)?,
                         rt::vm::RunOk::UserError(buf) => calldata::Value::Str(buf),
                         rt::vm::RunOk::VMError(msg, _) => calldata::Value::Str(msg),
                     },
-                    storage_changes: Vec::new(),
-                    emissions: Vec::new(),
-                    nondet_results: Vec::new(),
-                }),
+                    None,
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                )),
             };
         }
         Ok(v) => v,
@@ -175,22 +175,22 @@ pub async fn run_with_impl(
 
     let run_result = vm.run().await?;
 
-    Ok(rt::vm::FullResult {
-        fingerprint: run_result.fingerprint,
-        kind: match &run_result.run_ok {
+    Ok(rt::vm::FullResult::new(
+        match &run_result.run_ok {
             rt::vm::RunOk::Return(_) => public_abi::ResultCode::Return,
             rt::vm::RunOk::UserError(_) => public_abi::ResultCode::UserError,
             rt::vm::RunOk::VMError(_, _) => public_abi::ResultCode::VmError,
         },
-        data: match run_result.run_ok {
+        match run_result.run_ok {
             rt::vm::RunOk::Return(buf) => calldata::decode(&buf)?,
             rt::vm::RunOk::UserError(buf) => calldata::Value::Str(buf),
             rt::vm::RunOk::VMError(msg, _) => calldata::Value::Str(msg),
         },
-        storage_changes: run_result.vm_data.storage.make_delta(),
-        emissions: run_result.vm_data.emissions,
-        nondet_results: supervisor.take_nondet_results().await,
-    })
+        run_result.fingerprint,
+        run_result.vm_data.storage.make_delta(),
+        run_result.vm_data.emissions,
+        supervisor.take_nondet_results().await,
+    ))
 }
 
 pub async fn run_with(
@@ -226,14 +226,14 @@ pub async fn run_with(
                 Ok(r)
             }
             Err(_e) => Ok((
-                rt::vm::FullResult {
-                    fingerprint: None,
-                    kind: public_abi::ResultCode::VmError,
-                    data: calldata::Value::Str(public_abi::VmError::Timeout.value().into()),
-                    storage_changes: Vec::new(),
-                    emissions: Vec::new(),
-                    nondet_results: Vec::new(),
-                },
+                rt::vm::FullResult::new(
+                    public_abi::ResultCode::VmError,
+                    calldata::Value::Str(public_abi::VmError::Timeout.value().into()),
+                    None,
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                ),
                 None,
             )),
         }

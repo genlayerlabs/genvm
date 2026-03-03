@@ -244,14 +244,14 @@ impl Host {
             }
             Err(e) => {
                 let mut encoded = Vec::from([ResultCode::InternalError as u8]);
-                let fake_res = rt::vm::FullResult {
-                    kind: public_abi::ResultCode::InternalError,
-                    data: calldata::Value::Str(format!("{e:?}")),
-                    fingerprint: None,
-                    storage_changes: Vec::new(),
-                    emissions: Vec::new(),
-                    nondet_results: Vec::new(),
-                };
+                let fake_res = rt::vm::FullResult::new(
+                    public_abi::ResultCode::InternalError,
+                    calldata::Value::Str(format!("{e:?}")),
+                    None,
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                );
                 let as_value = calldata::to_value(&fake_res)?;
                 calldata::encode_to(&mut encoded, &as_value)?;
 
