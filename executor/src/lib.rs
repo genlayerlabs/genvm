@@ -131,7 +131,7 @@ pub async fn run_with_impl(
         should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(true)),
 
         storage: topmost_storage,
-        events: Vec::new(),
+        emissions: Vec::new(),
     };
 
     let limiter = supervisor
@@ -163,7 +163,8 @@ pub async fn run_with_impl(
                         rt::vm::RunOk::VMError(msg, _) => calldata::Value::Str(msg),
                     },
                     storage_changes: Vec::new(),
-                    events: Vec::new(),
+                    emissions: Vec::new(),
+                    nondet_results: Vec::new(),
                 }),
             };
         }
@@ -185,7 +186,8 @@ pub async fn run_with_impl(
             rt::vm::RunOk::VMError(msg, _) => calldata::Value::Str(msg),
         },
         storage_changes: run_result.vm_data.storage.make_delta(),
-        events: run_result.vm_data.events,
+        emissions: run_result.vm_data.emissions,
+        nondet_results: supervisor.take_nondet_results().await,
     })
 }
 
@@ -227,7 +229,8 @@ pub async fn run_with(
                     kind: public_abi::ResultCode::VmError,
                     data: calldata::Value::Str(public_abi::VmError::Timeout.value().into()),
                     storage_changes: Vec::new(),
-                    events: Vec::new(),
+                    emissions: Vec::new(),
+                    nondet_results: Vec::new(),
                 },
                 None,
             )),

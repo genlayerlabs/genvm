@@ -499,7 +499,6 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		)
 
 		# Set up paths
-		messages_path = my_tmp_dir.joinpath('messages.txt')
 		rel_path = jsonnet_path.relative_to(CASES_DIR)
 		mock_sock_path = Path('/tmp', 'genvm-test', rel_path.with_suffix(f'.sock{suff}'))
 		mock_sock_path.parent.mkdir(exist_ok=True, parents=True)
@@ -521,7 +520,6 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 			storage_path_post=post_storage,
 			storage_path_pre=pre_storage,
 			leader_nondet=leader_nondet,
-			messages_path=messages_path,
 			balances={Address(k): v for k, v in single_conf.get('balances', {}).items()},
 			running_address=single_conf['message']['contract_address'],
 		)
@@ -580,9 +578,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 						f'nondet disagreement: {mock_host.nondet_disagreement_call_no}\n'
 					)
 				res.stdout = stdout_raw + return_part + nondet_part
-				# Apply events and storage changes
-				for evs in res.result_events:
-					mock_host.post_event(evs[:-1], evs[-1])
+
 				for k, v in res.result_storage_changes:
 					mock_host.storage.write(
 						mock_host.running_address,
@@ -601,11 +597,8 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 
 		# Save leader nondet results for v/s modes
 		if is_leader:
-			if len(host.nondet_results) == 0:
-				nondet_list = []
-			else:
-				size = max(host.nondet_results.keys()) + 1
-				nondet_list = [host.nondet_results[i] for i in range(size)]
+			nondet_list = res.result_nondet_results
+
 			with open(path_to_which_leader_puts_result, 'wb') as f:
 				pickle.dump(nondet_list, f)
 
@@ -622,24 +615,33 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		with open(result_path, 'wb') as f:
 			pickle.dump(res, f)
 
+		result_events: list[list[bytes]] = []
+
+		messages_content = []
+		for em in res.result_emissions:
+			if em['type'] == 'EmitEvent':
+				tem = typing.cast(base_host.EmitEventInner, em)
+				blob = gvm_calldata.encode(tem['blob'])
+				result_events.append([*tem['topics'], blob])
+			messages_content.append(gvm_calldata.to_str(em))
+			messages_content.append('\n')
+
 		# Write hash file (calldata-encoded deterministic result fields)
 		hash_data = gvm_calldata.encode(
-			(
+			[
 				int(res.result_kind),
 				res.result_data,
 				res.result_fingerprint,
 				res.result_storage_changes,
-				res.result_events,
-			)
+				result_events,
+			]
 		)
 
-		# Build semantics from components
-		messages_content = messages_path.read_text() if messages_path.exists() else ''
 		semantics_parts = {
 			'stdout': stdout_raw,
 			'return': return_part,
 			'nondet': nondet_part,
-			'messages': messages_content,
+			'messages': ''.join(messages_content),
 		}
 		semantics_components = single_conf['expected_semantics_components']
 		if semantics_components:

@@ -66,6 +66,7 @@ pub struct Supervisor {
 
     pub nondet_call_no: AtomicU32,
     pub balances: dashmap::DashMap<calldata::Address, primitive_types::U256>,
+    pub nondet_results: tokio::sync::Mutex<Vec<bytes::Bytes>>,
 
     queue: NondetQueue,
     runner_cache: runners::cache::Reader,
@@ -174,6 +175,19 @@ pub async fn submit_nondet_vm_task(zelf: &Arc<Supervisor>, task: NonDetVMTask) {
 }
 
 impl Supervisor {
+    pub async fn push_nondet_result(&self, call_no: u32, result: bytes::Bytes) {
+        let mut vec = self.nondet_results.lock().await;
+        let idx = call_no as usize;
+        while vec.len() <= idx {
+            vec.push(bytes::Bytes::new());
+        }
+        vec[idx] = result;
+    }
+
+    pub async fn take_nondet_results(&self) -> Vec<bytes::Bytes> {
+        self.nondet_results.lock().await.clone()
+    }
+
     pub fn get_storage_limiter(&self) -> rt::vm::storage::Limiter {
         rt::vm::storage::Limiter::new(self.shared_data.gep(|x| &x.storage_pages_limit))
     }
@@ -223,6 +237,7 @@ impl Supervisor {
             locked_slots: ctor.locked_slots,
             nondet_call_no: AtomicU32::new(0),
             balances: dashmap::DashMap::new(),
+            nondet_results: Default::default(),
             queue: NondetQueue {
                 sender,
                 receiver,

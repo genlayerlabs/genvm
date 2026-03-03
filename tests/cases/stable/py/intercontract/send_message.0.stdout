@@ -1,4 +1,2 @@
 executed with `Return(null)`
-send:
-	{'on': 'finalized', 'value': '0x0'}
-	b'\x16\x04args\x15\t\x11\x06method\x1cfoo'
+{"address":addr#3030303030303030303030303030303030303030,"calldata":{"args":[1,2],"method":"foo"},"on":"finalized","type":"PostMessage","value":"0x0"}

@@ -257,11 +257,13 @@ pub fn decode(data: &[u8]) -> Result<Value, DecodeError> {
     Ok(ret)
 }
 
-fn append_uleb(to: &mut Vec<u8>, mut num: num_bigint::BigUint) {
+fn append_uleb<A: Appender>(
+    to: &mut A,
+    mut num: num_bigint::BigUint,
+) -> core::result::Result<(), A::Error> {
     if num == num_bigint::BigUint::ZERO {
-        to.push(0);
-
-        return;
+        to.write_all(&[0])?;
+        return Ok(());
     }
 
     loop {
@@ -273,40 +275,48 @@ fn append_uleb(to: &mut Vec<u8>, mut num: num_bigint::BigUint) {
             cur |= 0x80;
         }
 
-        to.push(cur);
+        to.write_all(&[cur])?;
 
         if !has_next {
-            break;
+            return Ok(());
         }
     }
 }
 
-pub fn encode_to(to: &mut Vec<u8>, value: &Value) {
+pub trait Appender {
+    type Error;
+
+    fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error>;
+
+    fn write_one(&mut self, byte: u8) -> Result<(), Self::Error> {
+        self.write_all(&[byte])
+    }
+}
+
+pub fn encode_to<A: Appender>(to: &mut A, value: &Value) -> core::result::Result<(), A::Error> {
     match value {
-        Value::Null => to.push(SPECIAL_NULL),
-        Value::Bool(false) => to.push(SPECIAL_FALSE),
-        Value::Bool(true) => to.push(SPECIAL_TRUE),
+        Value::Null => to.write_all(&[SPECIAL_NULL]),
+        Value::Bool(false) => to.write_all(&[SPECIAL_FALSE]),
+        Value::Bool(true) => to.write_all(&[SPECIAL_TRUE]),
         Value::Address(address) => {
-            to.push(SPECIAL_ADDR);
-            to.extend_from_slice(&address.0);
+            to.write_all(&[SPECIAL_ADDR])?;
+            to.write_all(&address.0)
         }
         Value::Str(data) => {
             let mut size = num_bigint::BigUint::from(data.len());
             size <<= BITS_IN_TYPE;
             size += TYPE_STR; // same as |
 
-            append_uleb(to, size);
-
-            to.extend_from_slice(data.as_bytes());
+            append_uleb(to, size)?;
+            to.write_all(data.as_bytes())
         }
         Value::Bytes(data) => {
             let mut size = num_bigint::BigUint::from(data.len());
             size <<= BITS_IN_TYPE;
             size += TYPE_BYTES; // same as |
 
-            append_uleb(to, size);
-
-            to.extend_from_slice(data);
+            append_uleb(to, size)?;
+            to.write_all(data)
         }
         Value::Number(big_int) => {
             if big_int.sign() == num_bigint::Sign::Minus {
@@ -316,13 +326,13 @@ pub fn encode_to(to: &mut Vec<u8>, value: &Value) {
                 mag <<= BITS_IN_TYPE;
                 mag += TYPE_NINT; // same as |
 
-                append_uleb(to, mag);
+                append_uleb(to, mag)
             } else {
                 let mut mag = big_int.magnitude().clone();
                 mag <<= BITS_IN_TYPE;
                 mag += TYPE_PINT; // same as |
 
-                append_uleb(to, mag);
+                append_uleb(to, mag)
             }
         }
         Value::Map(values) => {
@@ -330,32 +340,44 @@ pub fn encode_to(to: &mut Vec<u8>, value: &Value) {
             size <<= BITS_IN_TYPE;
             size += TYPE_MAP; // same as |
 
-            append_uleb(to, size);
+            append_uleb(to, size)?;
 
             for (k, v) in values {
-                append_uleb(to, num_bigint::BigUint::from(k.len()));
-                to.extend(k.as_bytes());
-                encode_to(to, v);
+                append_uleb(to, num_bigint::BigUint::from(k.len()))?;
+                to.write_all(k.as_bytes())?;
+                encode_to(to, v)?;
             }
+            Ok(())
         }
         Value::Array(values) => {
             let mut size = num_bigint::BigUint::from(values.len());
             size <<= BITS_IN_TYPE;
             size += TYPE_ARR; // same as |
 
-            append_uleb(to, size);
+            append_uleb(to, size)?;
 
             for x in values {
-                encode_to(to, x);
+                encode_to(to, x)?;
             }
+            Ok(())
         }
+    }
+}
+
+impl Appender for Vec<u8> {
+    type Error = std::convert::Infallible;
+
+    fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+        self.extend_from_slice(data);
+        Ok(())
     }
 }
 
 pub fn encode(value: &Value) -> Vec<u8> {
     let mut ret = Vec::new();
 
-    encode_to(&mut ret, value);
-
-    ret
+    match encode_to(&mut ret, value) {
+        Ok(()) => ret,
+        Err(e) => match e {},
+    }
 }

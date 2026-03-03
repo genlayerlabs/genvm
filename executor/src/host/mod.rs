@@ -122,22 +122,6 @@ impl Host {
         )
     }
 
-    pub fn get_calldata(&mut self, calldata: &mut Vec<u8>) -> Result<()> {
-        let mut sock = self.lock_sock();
-        sock.write_all(&[host_fns::Methods::GetCalldata as u8])?;
-
-        handle_host_error(&mut **sock, "get_calldata")?;
-
-        let len = read_u32(&mut **sock, "get_calldata length")? as usize;
-        calldata.reserve(len);
-        let index = calldata.len();
-        unsafe {
-            calldata.set_len(index + len);
-        }
-        sock.read_exact(&mut calldata[index..index + len])?;
-        Ok(())
-    }
-
     fn get_locked_slots(
         &mut self,
         contract_address: calldata::Address,
@@ -254,7 +238,7 @@ impl Host {
             Ok(d) => {
                 let mut encoded = Vec::from([d.kind as u8]);
                 let as_value = calldata::to_value(d)?;
-                calldata::encode_to(&mut encoded, &as_value);
+                calldata::encode_to(&mut encoded, &as_value)?;
 
                 encoded
             }
@@ -265,10 +249,11 @@ impl Host {
                     data: calldata::Value::Str(format!("{e:?}")),
                     fingerprint: None,
                     storage_changes: Vec::new(),
-                    events: Vec::new(),
+                    emissions: Vec::new(),
+                    nondet_results: Vec::new(),
                 };
                 let as_value = calldata::to_value(&fake_res)?;
-                calldata::encode_to(&mut encoded, &as_value);
+                calldata::encode_to(&mut encoded, &as_value)?;
 
                 encoded
             }
@@ -321,61 +306,6 @@ impl Host {
         Ok(Some(res))
     }
 
-    pub fn post_nondet_result(&mut self, call_no: u32, res: &rt::vm::RunOk) -> Result<()> {
-        log_trace!(call_no = call_no; "post_nondet_result");
-
-        let mut sock = self.lock_sock();
-        sock.write_all(&[host_fns::Methods::PostNondetResult as u8])?;
-        sock.write_all(&call_no.to_le_bytes())?;
-
-        write_slice(&mut **sock, &Vec::from_iter(res.as_bytes_iter()))?;
-
-        sock.flush()?;
-
-        handle_host_error(&mut **sock, "post_nondet_result")?;
-
-        Ok(())
-    }
-
-    pub fn post_message(
-        &mut self,
-        account: &calldata::Address,
-        calldata: &[u8],
-        data: &str,
-    ) -> Result<()> {
-        log_trace!("post_message");
-
-        let mut sock = self.lock_sock();
-        sock.write_all(&[host_fns::Methods::PostMessage as u8])?;
-        sock.write_all(&account.raw())?;
-
-        write_slice(&mut **sock, calldata)?;
-        write_slice(&mut **sock, data.as_bytes())?;
-
-        sock.flush()?;
-
-        handle_host_error(&mut **sock, "post_message")?;
-
-        Ok(())
-    }
-
-    pub fn deploy_contract(&mut self, calldata: &[u8], code: &[u8], data: &str) -> Result<()> {
-        log_trace!("deploy_contract");
-
-        let mut sock = self.lock_sock();
-        sock.write_all(&[host_fns::Methods::DeployContract as u8])?;
-
-        write_slice(&mut **sock, calldata)?;
-        write_slice(&mut **sock, code)?;
-        write_slice(&mut **sock, data.as_bytes())?;
-
-        sock.flush()?;
-
-        handle_host_error(&mut **sock, "deploy_contract")?;
-
-        Ok(())
-    }
-
     pub fn consume_fuel(&mut self, gas: u64) -> Result<()> {
         log_trace!("consume_fuel");
 
@@ -401,32 +331,6 @@ impl Host {
         handle_host_error(&mut **sock, "eth_call")?;
 
         read_bytes(&mut **sock, "eth_call result")
-    }
-
-    pub fn eth_send(
-        &mut self,
-        address: calldata::Address,
-        calldata: &[u8],
-        data: &str,
-    ) -> Result<()> {
-        log_trace!("eth_send");
-
-        let mut sock = self.lock_sock();
-        sock.write_all(&[host_fns::Methods::EthSend as u8])?;
-
-        sock.write_all(&address.raw())?;
-
-        sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
-        sock.write_all(calldata)?;
-
-        sock.write_all(&(data.len() as u32).to_le_bytes())?;
-        sock.write_all(data.as_bytes())?;
-
-        sock.flush()?;
-
-        handle_host_error(&mut **sock, "eth_send")?;
-
-        Ok(())
     }
 
     pub fn get_balance(&mut self, address: calldata::Address) -> Result<primitive_types::U256> {

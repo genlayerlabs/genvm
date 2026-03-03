@@ -7,6 +7,4 @@ main At(self) 10
 nested self 10
 nested At(self) 10
 executed with `Return(null)`
-eth_send:
-	b''
-	{'value': '0x5'}
+{"address":addr#0200000000000000000000000000000000000000,"calldata":b#,"type":"EthSend","value":"0x5"}

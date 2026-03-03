@@ -393,10 +393,8 @@ pub struct Request {
     pub host: String,
     #[serde(default)]
     pub extra_args: Vec<String>,
-    #[serde_as(as = "serde_with::Bytes")]
-    pub calldata: Vec<u8>,
-    #[serde(with = "serde_bytes")]
-    pub code: Option<Vec<u8>>,
+    pub calldata: bytes::Bytes,
+    pub code: Option<bytes::Bytes>,
     #[serde(default = "default_permissions")]
     pub permissions: String,
     /// If true, don't require modules even if permissions suggest they're needed
@@ -728,7 +726,7 @@ fn setup_module_relays(
 /// Spawns an async task that writes execution data to the child's stdin.
 fn spawn_stdin_writer(
     stdin: tokio::process::ChildStdin,
-    execution_data_bytes: Vec<u8>,
+    execution_data_bytes: bytes::Bytes,
 ) -> tokio::task::JoinHandle<std::io::Result<()>> {
     tokio::task::spawn(async move {
         use tokio::io::AsyncWriteExt;
@@ -871,6 +869,8 @@ pub async fn start_genvm(
     };
     let execution_data_bytes =
         genvm_common::calldata::encode(&genvm_common::calldata::to_value(&execution_data)?);
+
+    let execution_data_bytes = bytes::Bytes::from(execution_data_bytes);
 
     // Spawn log reader
     if req.capture_output {

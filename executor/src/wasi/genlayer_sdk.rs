@@ -10,7 +10,7 @@ use crate::host::{self, SlotID};
 use crate::{calldata, public_abi, rt};
 
 pub use genlayer_sdk::abi::entry::ExtendedMessage;
-use genlayer_sdk::abi::gl_call;
+use genlayer_sdk::abi::{self, gl_call};
 
 use super::{base, vfs};
 
@@ -23,18 +23,18 @@ pub trait ExtendedMessageExt {
     fn fork_leader(
         &self,
         entry_kind: public_abi::EntryKind,
-        entry_data: Vec<u8>,
+        entry_data: bytes::Bytes,
         entry_leader_data: Option<rt::vm::RunOk>,
     ) -> ExtendedMessage;
 
-    fn fork(&self, entry_kind: public_abi::EntryKind, entry_data: Vec<u8>) -> ExtendedMessage;
+    fn fork(&self, entry_kind: public_abi::EntryKind, entry_data: bytes::Bytes) -> ExtendedMessage;
 }
 
 impl ExtendedMessageExt for ExtendedMessage {
     fn fork_leader(
         &self,
         entry_kind: public_abi::EntryKind,
-        entry_data: Vec<u8>,
+        entry_data: bytes::Bytes,
         entry_leader_data: Option<rt::vm::RunOk>,
     ) -> ExtendedMessage {
         use genlayer_sdk::abi::entry::MessageData;
@@ -64,7 +64,7 @@ impl ExtendedMessageExt for ExtendedMessage {
         }
     }
 
-    fn fork(&self, entry_kind: public_abi::EntryKind, entry_data: Vec<u8>) -> ExtendedMessage {
+    fn fork(&self, entry_kind: public_abi::EntryKind, entry_data: bytes::Bytes) -> ExtendedMessage {
         self.fork_leader(entry_kind, entry_data, None)
     }
 }
@@ -101,7 +101,7 @@ pub struct SingleVMData {
     pub supervisor: Arc<rt::supervisor::Supervisor>,
     pub storage: rt::vm::storage::Storage<StorageHostHolder>,
     pub should_capture_fp: Arc<std::sync::atomic::AtomicBool>,
-    pub events: Vec<Vec<bytes::Bytes>>,
+    pub emissions: Vec<genlayer_sdk::abi::ExecutionEmission>,
 }
 
 pub struct Context {
@@ -399,18 +399,14 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                 }
 
-                let data_json = serde_json::json!({
-                    "value": format!("0x{:x}", value),
-                });
-                let data_str = serde_json::to_string(&data_json).unwrap();
-
-                let supervisor = self.context.data.supervisor.clone();
-                let res = supervisor
-                    .host
-                    .lock()
-                    .await
-                    .eth_send(address, &calldata, &data_str)
-                    .map_err(generated::types::Error::trap)?;
+                self.context
+                    .data
+                    .emissions
+                    .push(genlayer_sdk::abi::ExecutionEmission::EthSend {
+                        address,
+                        calldata,
+                        value,
+                    });
 
                 self.context.messages_decremented += value;
                 Ok(file_fd_none())
@@ -466,7 +462,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .context
                     .data
                     .message_data
-                    .fork(public_abi::EntryKind::Main, calldata_encoded);
+                    .fork(public_abi::EntryKind::Main, calldata_encoded.into());
                 my_data.message.stack.push(my_data.message.contract_address);
 
                 let calldata_encoded = calldata::encode(&calldata);
@@ -510,7 +506,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     ),
                     supervisor: supervisor.clone(),
                     should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(true)),
-                    events: Vec::new(),
+                    emissions: Vec::new(),
                 };
 
                 let res = self
@@ -536,29 +532,51 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let mut real_topics: Vec<bytes::Bytes> =
                     Vec::with_capacity(public_abi::EVENT_MAX_TOPICS as usize + 1);
 
-                for (i, gl_call::Bytes(t)) in topics.iter().enumerate() {
+                for (i, t) in topics.iter().enumerate() {
                     if t.len() != 32 {
                         log_warn!(len = t.len(); "invalid topic length");
 
                         return Err(generated::types::Errno::Inval.into());
                     }
 
-                    real_topics.push(bytes::Bytes::copy_from_slice(t));
+                    real_topics.push(t.clone());
                 }
 
-                let blob_data = calldata::encode(&calldata::Value::Map(blob));
+                struct CountingAppender(usize);
+                impl calldata::Appender for CountingAppender {
+                    type Error = std::convert::Infallible;
+
+                    fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+                        self.0 += data.len();
+                        Ok(())
+                    }
+                }
+
+                let mut blob_data_len = CountingAppender(0);
+
+                let val = calldata::Value::Map(blob);
+                calldata::encode_to(&mut blob_data_len, &val).unwrap_or_else(|e| match e {});
+                let blob = match val {
+                    calldata::Value::Map(m) => m,
+                    _ => unreachable!(),
+                };
 
                 let supervisor = self.context.data.supervisor.clone();
 
-                let size = topics.len() + (blob_data.len() + 31) / 32;
+                let size = topics.len() + (blob_data_len.0 + 31) / 32;
                 let size = size as u64;
                 supervisor
                     .get_storage_limiter()
                     .consume(size)
                     .map_err(generated::types::Error::trap)?;
 
-                real_topics.push(blob_data.into());
-                self.context.data.events.push(real_topics);
+                self.context
+                    .data
+                    .emissions
+                    .push(abi::ExecutionEmission::EmitEvent {
+                        topics: real_topics,
+                        blob,
+                    });
 
                 return Ok(file_fd_none());
             }
@@ -586,23 +604,14 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                 }
 
-                let calldata_encoded = calldata::encode(&calldata);
-
-                let data_json = serde_json::json!({
-                    "value": format!("0x{:x}", value),
-                    "on": on,
-                });
-                let data_str = serde_json::to_string(&data_json).unwrap();
-
-                let res = self
-                    .context
-                    .data
-                    .supervisor
-                    .host
-                    .lock()
-                    .await
-                    .post_message(&address, &calldata_encoded, &data_str)
-                    .map_err(generated::types::Error::trap)?;
+                self.context.data.emissions.push(
+                    genlayer_sdk::abi::ExecutionEmission::PostMessage {
+                        address,
+                        calldata,
+                        value,
+                        on,
+                    },
+                );
 
                 self.context.messages_decremented += value;
 
@@ -633,24 +642,15 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                 }
 
-                let calldata_encoded = calldata::encode(&calldata);
-
-                let data_json = serde_json::json!({
-                    "value": format!("0x{:x}", value),
-                    "salt_nonce": format!("0x{:x}", salt_nonce),
-                    "on": on,
-                });
-                let data_str = serde_json::to_string(&data_json).unwrap();
-
-                let res = self
-                    .context
-                    .data
-                    .supervisor
-                    .host
-                    .lock()
-                    .await
-                    .deploy_contract(&calldata_encoded, &code, &data_str)
-                    .map_err(generated::types::Error::trap)?;
+                self.context.data.emissions.push(
+                    genlayer_sdk::abi::ExecutionEmission::DeployContract {
+                        calldata,
+                        code,
+                        value,
+                        on,
+                        salt_nonce,
+                    },
+                );
 
                 self.context.messages_decremented += value;
 
@@ -1118,8 +1118,8 @@ impl ContextVFS<'_> {
 
     async fn run_nondet(
         &mut self,
-        data_leader: Vec<u8>,
-        data_validator: Vec<u8>,
+        data_leader: bytes::Bytes,
+        data_validator: bytes::Bytes,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if !self.context.data.conf.can_spawn_nondet {
             return Err(generated::types::Errno::Forbidden.into());
@@ -1192,7 +1192,7 @@ impl ContextVFS<'_> {
                 supervisor: supervisor.clone(),
                 should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 storage: storage_checkpoint,
-                events: Vec::new(),
+                emissions: Vec::new(),
             };
 
             let task_done = Arc::new(tokio::sync::Notify::new());
@@ -1212,11 +1212,11 @@ impl ContextVFS<'_> {
                     self.context
                         .data
                         .supervisor
-                        .host
-                        .lock()
-                        .await
-                        .post_nondet_result(call_no, &res)
-                        .map_err(generated::types::Error::trap)?;
+                        .push_nondet_result(
+                            call_no,
+                            bytes::Bytes::from(Vec::from_iter(res.as_bytes_iter())),
+                        )
+                        .await;
 
                     res
                 }
@@ -1234,7 +1234,7 @@ impl ContextVFS<'_> {
 
     async fn sandbox(
         &mut self,
-        data: Vec<u8>,
+        data: bytes::Bytes,
         allow_write_ops: bool,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         let supervisor = self.context.data.supervisor.clone();
@@ -1264,7 +1264,7 @@ impl ContextVFS<'_> {
             supervisor: supervisor.clone(),
             should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             storage: storage_checkpoint,
-            events: Vec::new(),
+            emissions: Vec::new(),
         };
 
         let my_res = self.context.spawn_and_run(&supervisor, vm_data).await;

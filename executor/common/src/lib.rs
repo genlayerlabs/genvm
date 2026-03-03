@@ -16,14 +16,15 @@ pub mod version;
 pub mod util;
 
 pub mod domain {
+    use bytes::Bytes;
     pub use genlayer_sdk::abi::entry::MessageData;
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
     pub struct ExecutionData {
-        pub calldata: Vec<u8>,
+        pub calldata: Bytes,
         pub message: MessageData,
         pub host_data: String,
-        pub code: Option<Vec<u8>>,
+        pub code: Option<Bytes>,
     }
 }
 

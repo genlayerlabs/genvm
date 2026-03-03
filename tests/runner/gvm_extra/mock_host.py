@@ -39,13 +39,11 @@ class MockStorage:
 class MockHost(IHost):
 	sock: socket.socket | None
 	storage: MockStorage | None
-	messages_file: io.TextIOWrapper | None
 
 	def __init__(
 		self,
 		*,
 		path: str,
-		messages_path: Path,
 		storage_path_pre: Path,
 		storage_path_post: Path,
 		balances: dict[Address, int],
@@ -60,11 +58,8 @@ class MockHost(IHost):
 		self.storage = None
 		self.sock = None
 		self.thread = None
-		self.messages_file = None
-		self.messages_path = messages_path
 		self.balances = balances
 		self.nondet_disagreement_call_no = None
-		self.nondet_results: dict[int, bytes] = {}
 
 	def __enter__(self):
 		self.created = False
@@ -85,9 +80,6 @@ class MockHost(IHost):
 			with open(self.storage_path_post, 'wb') as f:
 				pickle.dump(self.storage, f)
 			self.storage = None
-		if self.messages_file is not None:
-			self.messages_file.close()
-			self.messages_file = None
 		if self.sock is not None:
 			self.sock.close()
 		Path(self.path).unlink(missing_ok=True)
@@ -145,40 +137,14 @@ class MockHost(IHost):
 	async def post_nondet_result(self, call_no: int, data: collections.abc.Buffer):
 		self.nondet_results[call_no] = bytes(data)
 
-	async def post_message(
-		self, account: bytes, calldata: bytes, data: DefaultTransactionData
-	) -> None:
-		if self.messages_file is None:
-			self.messages_file = open(self.messages_path, 'wt')
-		self.messages_file.write(f'send:\n\t{data}\n\t{calldata}\n')
-
-	async def deploy_contract(
-		self, calldata: bytes, code: bytes, data: DefaultTransactionData, /
-	) -> None:
-		if self.messages_file is None:
-			self.messages_file = open(self.messages_path, 'wt')
-		self.messages_file.write(f'deploy:\n\t{data}\n\t{calldata}\n\t{code}\n')
-
-	async def eth_send(
-		self, account: bytes, calldata: bytes, data: DefaultEthTransactionData, /
-	) -> None:
-		if self.messages_file is None:
-			self.messages_file = open(self.messages_path, 'wt')
-		self.messages_file.write(f'eth_send:\n\t{calldata}\n\t{data}\n')
-
 	async def eth_call(self, account: bytes, calldata: bytes, /) -> bytes:
-		assert False
+		raise HostException(host_fns.Errors.ABSENT)
 
 	async def consume_gas(self, gas: int):
 		pass
 
 	async def get_balance(self, account: bytes) -> int:
 		return self.balances.get(Address(account), 0)
-
-	def post_event(self, topics: list[bytes], blob: bytes) -> None:
-		if self.messages_file is None:
-			self.messages_file = open(self.messages_path, 'wt')
-		self.messages_file.write(f'post_event:\n\t{topics}\n\t{bytes(blob)}\n')
 
 
 if __name__ == '__main__':
