@@ -161,66 +161,40 @@ impl TryFrom<&str> for SpecialMethod {
 }
 #[allow(non_snake_case)]
 pub mod __VmError {
-    use super::VmError;
     use std::borrow::Cow;
+    use super::VmError;
 
     pub struct OomRam;
 
     impl OomRam {
-        pub const fn val(&self) -> VmError {
-            VmError(Cow::Borrowed("OOM RAM"))
-        }
-        pub const fn table(&self) -> VmError {
-            VmError(Cow::Borrowed("OOM RAM table"))
-        }
-        pub const fn memory(&self) -> VmError {
-            VmError(Cow::Borrowed("OOM RAM memory"))
-        }
+        pub const fn val(&self) -> VmError { VmError(Cow::Borrowed("OOM RAM")) }
+        pub const fn table(&self) -> VmError { VmError(Cow::Borrowed("OOM RAM table")) }
+        pub const fn memory(&self) -> VmError { VmError(Cow::Borrowed("OOM RAM memory")) }
     }
 
     pub struct Oom;
 
     impl Oom {
-        pub const fn storage(&self) -> VmError {
-            VmError(Cow::Borrowed("OOM Storage"))
-        }
-        pub const fn ram(&self) -> OomRam {
-            OomRam
-        }
+        pub const fn storage(&self) -> VmError { VmError(Cow::Borrowed("OOM Storage")) }
+        pub const fn ram(&self) -> OomRam { OomRam }
     }
 
     pub struct InvalidContractWasm;
 
     impl InvalidContractWasm {
-        pub const fn validating(&self) -> VmError {
-            VmError(Cow::Borrowed("invalid_contract wasm validating"))
-        }
-        pub const fn linking(&self) -> VmError {
-            VmError(Cow::Borrowed("invalid_contract wasm linking"))
-        }
-        pub const fn entrypoint(&self) -> VmError {
-            VmError(Cow::Borrowed("invalid_contract wasm entrypoint"))
-        }
+        pub const fn validating(&self) -> VmError { VmError(Cow::Borrowed("invalid_contract wasm validating")) }
+        pub const fn linking(&self) -> VmError { VmError(Cow::Borrowed("invalid_contract wasm linking")) }
+        pub const fn entrypoint(&self) -> VmError { VmError(Cow::Borrowed("invalid_contract wasm entrypoint")) }
     }
 
     pub struct InvalidContract;
 
     impl InvalidContract {
-        pub const fn val(&self) -> VmError {
-            VmError(Cow::Borrowed("invalid_contract"))
-        }
-        pub const fn absent_runner_comment(&self) -> VmError {
-            VmError(Cow::Borrowed("invalid_contract absent_runner_comment"))
-        }
-        pub const fn not_utf8_text(&self) -> VmError {
-            VmError(Cow::Borrowed("invalid_contract not_utf8_text"))
-        }
-        pub const fn malformed_runner(&self) -> VmError {
-            VmError(Cow::Borrowed("invalid_contract malformed_runner"))
-        }
-        pub const fn wasm(&self) -> InvalidContractWasm {
-            InvalidContractWasm
-        }
+        pub const fn val(&self) -> VmError { VmError(Cow::Borrowed("invalid_contract")) }
+        pub const fn absent_runner_comment(&self) -> VmError { VmError(Cow::Borrowed("invalid_contract absent_runner_comment")) }
+        pub const fn not_utf8_text(&self) -> VmError { VmError(Cow::Borrowed("invalid_contract not_utf8_text")) }
+        pub const fn malformed_runner(&self) -> VmError { VmError(Cow::Borrowed("invalid_contract malformed_runner")) }
+        pub const fn wasm(&self) -> InvalidContractWasm { InvalidContractWasm }
     }
 
     pub struct ExitCode;
@@ -246,30 +220,19 @@ pub mod __VmError {
             VmError(Cow::Owned(format!("host {v}")))
         }
     }
+
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct VmError(pub Cow<'static, str>);
 
 impl VmError {
-    pub const fn timeout() -> Self {
-        Self(Cow::Borrowed("timeout"))
-    }
-    pub const fn exit_code() -> __VmError::ExitCode {
-        __VmError::ExitCode
-    }
-    pub const fn wasm_trap() -> __VmError::WasmTrap {
-        __VmError::WasmTrap
-    }
-    pub const fn oom() -> __VmError::Oom {
-        __VmError::Oom
-    }
-    pub const fn invalid_contract() -> __VmError::InvalidContract {
-        __VmError::InvalidContract
-    }
-    pub const fn host() -> __VmError::Host {
-        __VmError::Host
-    }
+    pub const fn timeout() -> Self { Self(Cow::Borrowed("timeout")) }
+    pub const fn exit_code() -> __VmError::ExitCode { __VmError::ExitCode }
+    pub const fn wasm_trap() -> __VmError::WasmTrap { __VmError::WasmTrap }
+    pub const fn oom() -> __VmError::Oom { __VmError::Oom }
+    pub const fn invalid_contract() -> __VmError::InvalidContract { __VmError::InvalidContract }
+    pub const fn host() -> __VmError::Host { __VmError::Host }
 }
 
 pub const EVENT_MAX_TOPICS: u32 = 4;

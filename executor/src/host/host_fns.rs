@@ -8,34 +8,31 @@ use serde::{Deserialize, Serialize};
 #[repr(u8)]
 pub enum Methods {
     StorageRead = 0,
-    StorageWrite = 1,
-    ConsumeFuel = 2,
-    EthCall = 3,
-    GetBalance = 4,
-    RemainingFuelAsGen = 5,
-    NotifyNondetDisagreement = 6,
-    ConsumeResult = 7,
-    NotifyFinished = 8,
+    ConsumeFuel = 1,
+    EthCall = 2,
+    GetBalance = 3,
+    RemainingFuelAsGen = 4,
+    NotifyNondetDisagreement = 5,
+    ConsumeResult = 6,
+    NotifyFinished = 7,
 }
 
 impl Methods {
     pub fn value(self) -> u8 {
         match self {
             Methods::StorageRead => 0,
-            Methods::StorageWrite => 1,
-            Methods::ConsumeFuel => 2,
-            Methods::EthCall => 3,
-            Methods::GetBalance => 4,
-            Methods::RemainingFuelAsGen => 5,
-            Methods::NotifyNondetDisagreement => 6,
-            Methods::ConsumeResult => 7,
-            Methods::NotifyFinished => 8,
+            Methods::ConsumeFuel => 1,
+            Methods::EthCall => 2,
+            Methods::GetBalance => 3,
+            Methods::RemainingFuelAsGen => 4,
+            Methods::NotifyNondetDisagreement => 5,
+            Methods::ConsumeResult => 6,
+            Methods::NotifyFinished => 7,
         }
     }
     pub fn str_snake_case(self) -> &'static str {
         match self {
             Methods::StorageRead => "storage_read",
-            Methods::StorageWrite => "storage_write",
             Methods::ConsumeFuel => "consume_fuel",
             Methods::EthCall => "eth_call",
             Methods::GetBalance => "get_balance",
@@ -53,14 +50,13 @@ impl TryFrom<u8> for Methods {
     fn try_from(value: u8) -> Result<Self, ()> {
         match value {
             0 => Ok(Methods::StorageRead),
-            1 => Ok(Methods::StorageWrite),
-            2 => Ok(Methods::ConsumeFuel),
-            3 => Ok(Methods::EthCall),
-            4 => Ok(Methods::GetBalance),
-            5 => Ok(Methods::RemainingFuelAsGen),
-            6 => Ok(Methods::NotifyNondetDisagreement),
-            7 => Ok(Methods::ConsumeResult),
-            8 => Ok(Methods::NotifyFinished),
+            1 => Ok(Methods::ConsumeFuel),
+            2 => Ok(Methods::EthCall),
+            3 => Ok(Methods::GetBalance),
+            4 => Ok(Methods::RemainingFuelAsGen),
+            5 => Ok(Methods::NotifyNondetDisagreement),
+            6 => Ok(Methods::ConsumeResult),
+            7 => Ok(Methods::NotifyFinished),
             _ => Err(()),
         }
     }

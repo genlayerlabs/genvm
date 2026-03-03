@@ -5,14 +5,13 @@
         "name": "methods",
         "values": {
             "storage_read": 0,
-            "storage_write": 1,
-            "consume_fuel": 2,
-            "eth_call": 3,
-            "get_balance": 4,
-            "remaining_fuel_as_gen": 5,
-            "notify_nondet_disagreement": 6,
-            "consume_result": 7,
-            "notify_finished": 8
+            "consume_fuel": 1,
+            "eth_call": 2,
+            "get_balance": 3,
+            "remaining_fuel_as_gen": 4,
+            "notify_nondet_disagreement": 5,
+            "consume_result": 6,
+            "notify_finished": 7
         }
     },
     {
