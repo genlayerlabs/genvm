@@ -56,6 +56,7 @@ pub struct Ctor {
 
     pub limiter: rt::DetNondet<rt::memlimiter::Limiter>,
     pub locked_slots: host::LockedSlotsSet,
+    pub leader_nondet_results: Option<Vec<bytes::Bytes>>,
 }
 
 pub struct Supervisor {
@@ -67,6 +68,7 @@ pub struct Supervisor {
     pub nondet_call_no: AtomicU32,
     pub balances: dashmap::DashMap<calldata::Address, primitive_types::U256>,
     pub nondet_results: tokio::sync::Mutex<Vec<bytes::Bytes>>,
+    pub leader_nondet_results: Option<Vec<bytes::Bytes>>,
 
     queue: NondetQueue,
     runner_cache: runners::cache::Reader,
@@ -188,6 +190,16 @@ impl Supervisor {
         self.nondet_results.lock().await.clone()
     }
 
+    pub fn get_leader_nondet_result(&self, call_no: u32) -> Option<bytes::Bytes> {
+        self.leader_nondet_results
+            .as_ref()
+            .and_then(|v| v.get(call_no as usize).cloned())
+    }
+
+    pub fn is_leader(&self) -> bool {
+        self.leader_nondet_results.is_none()
+    }
+
     pub fn get_storage_limiter(&self) -> rt::vm::storage::Limiter {
         rt::vm::storage::Limiter::new(self.shared_data.gep(|x| &x.storage_pages_limit))
     }
@@ -238,6 +250,7 @@ impl Supervisor {
             nondet_call_no: AtomicU32::new(0),
             balances: dashmap::DashMap::new(),
             nondet_results: Default::default(),
+            leader_nondet_results: ctor.leader_nondet_results,
             queue: NondetQueue {
                 sender,
                 receiver,

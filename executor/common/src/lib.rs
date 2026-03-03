@@ -25,6 +25,8 @@ pub mod domain {
         pub message: MessageData,
         pub host_data: String,
         pub code: Option<Bytes>,
+        #[serde(default)]
+        pub leader_nondet_results: Option<Vec<Bytes>>,
     }
 }
 

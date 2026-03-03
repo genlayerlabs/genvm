@@ -513,13 +513,32 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 			if leader_nondet is None:
 				with open(path_to_which_leader_puts_result, 'rb') as f:
 					leader_nondet = pickle.load(f)
+			if leader_nondet is not None:
+				encoded_nondet = []
+				for res in leader_nondet:
+					if isinstance(res, (bytes, bytearray, memoryview)):
+						encoded_nondet.append(bytes(res))
+					elif res['kind'] == 'return':
+						encoded_nondet.append(
+							bytes([public_abi.ResultCode.RETURN]) + gvm_calldata.encode(res['value'])
+						)
+					elif res['kind'] == 'rollback':
+						encoded_nondet.append(
+							bytes([public_abi.ResultCode.USER_ERROR]) + res['value'].encode('utf-8')
+						)
+					elif res['kind'] == 'contract_error':
+						encoded_nondet.append(
+							bytes([public_abi.ResultCode.VM_ERROR]) + res['value'].encode('utf-8')
+						)
+					else:
+						raise ValueError(f'unknown leader_nondet kind: {res["kind"]}')
+				leader_nondet = encoded_nondet
 
 		# Create mock host
 		host = MockHost(
 			path=str(mock_sock_path),
 			storage_path_post=post_storage,
 			storage_path_pre=pre_storage,
-			leader_nondet=leader_nondet,
 			balances={Address(k): v for k, v in single_conf.get('balances', {}).items()},
 			running_address=single_conf['message']['contract_address'],
 		)
@@ -560,6 +579,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					extra_args=['--debug-mode'],
 					code=code,
 					calldata=calldata_bytes,
+					leader_nondet_results=leader_nondet,
 					request_extra=request_extra,
 				)
 				stdout_raw = res.stdout

@@ -22,7 +22,7 @@ pub mod gl_call;
 pub mod wasi;
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, tag = "type")]
 pub enum ExecutionEmission {
     EthSend {

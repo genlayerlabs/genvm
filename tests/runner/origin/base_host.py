@@ -130,10 +130,6 @@ class IHost(metaclass=abc.ABCMeta):
 	) -> bytes: ...
 
 	@abc.abstractmethod
-	async def get_leader_nondet_result(
-		self, call_no: int, /
-	) -> collections.abc.Buffer: ...
-	@abc.abstractmethod
 	async def consume_gas(self, gas: int, /) -> None: ...
 	@abc.abstractmethod
 	async def eth_call(self, account: bytes, calldata: bytes, /) -> bytes: ...
@@ -222,17 +218,6 @@ async def host_loop(
 				await send_all(bytes([0]))
 
 				return public_abi.ResultCode(res[0]), res[1:]
-			case host_fns.Methods.GET_LEADER_NONDET_RESULT:
-				call_no = await recv_int()
-				try:
-					data = await handler.get_leader_nondet_result(call_no)
-				except HostException as e:
-					await send_all(bytes([e.error_code]))
-				else:
-					await send_all(bytes([host_fns.Errors.OK]))
-					data = memoryview(data)
-					await send_int(len(data))
-					await send_all(data)
 			case host_fns.Methods.CONSUME_FUEL:
 				gas = await recv_int(8)
 				await handler.consume_gas(gas)
@@ -322,6 +307,7 @@ async def run_genvm(
 	storage_pages: int = 10_000_000,
 	code: bytes | None = None,
 	calldata: bytes,
+	leader_nondet_results: list[bytes] | None = None,
 	request_extra: dict[str, gvm_calldata.Encodable] = {},
 ) -> RunHostAndProgramRes:
 	if logger is None:
@@ -358,6 +344,7 @@ async def run_genvm(
 						'storage_pages': storage_pages,
 						'code': code,
 						'calldata': calldata,
+						'leader_nondet_results': leader_nondet_results,
 						**request_extra,
 					}
 				),

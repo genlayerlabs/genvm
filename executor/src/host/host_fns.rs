@@ -14,8 +14,7 @@ pub enum Methods {
     GetBalance = 4,
     RemainingFuelAsGen = 5,
     NotifyNondetDisagreement = 6,
-    GetLeaderNondetResult = 7,
-    ConsumeResult = 8,
+    ConsumeResult = 7,
 }
 
 impl Methods {
@@ -28,8 +27,7 @@ impl Methods {
             Methods::GetBalance => 4,
             Methods::RemainingFuelAsGen => 5,
             Methods::NotifyNondetDisagreement => 6,
-            Methods::GetLeaderNondetResult => 7,
-            Methods::ConsumeResult => 8,
+            Methods::ConsumeResult => 7,
         }
     }
     pub fn str_snake_case(self) -> &'static str {
@@ -41,7 +39,6 @@ impl Methods {
             Methods::GetBalance => "get_balance",
             Methods::RemainingFuelAsGen => "remaining_fuel_as_gen",
             Methods::NotifyNondetDisagreement => "notify_nondet_disagreement",
-            Methods::GetLeaderNondetResult => "get_leader_nondet_result",
             Methods::ConsumeResult => "consume_result",
         }
     }
@@ -59,8 +56,7 @@ impl TryFrom<u8> for Methods {
             4 => Ok(Methods::GetBalance),
             5 => Ok(Methods::RemainingFuelAsGen),
             6 => Ok(Methods::NotifyNondetDisagreement),
-            7 => Ok(Methods::GetLeaderNondetResult),
-            8 => Ok(Methods::ConsumeResult),
+            7 => Ok(Methods::ConsumeResult),
             _ => Err(()),
         }
     }
@@ -71,8 +67,7 @@ pub enum Errors {
     Ok = 0,
     Absent = 1,
     Forbidden = 2,
-    IAmLeader = 3,
-    OutOfStorageGas = 4,
+    OutOfStorageGas = 3,
 }
 
 impl Errors {
@@ -81,8 +76,7 @@ impl Errors {
             Errors::Ok => 0,
             Errors::Absent => 1,
             Errors::Forbidden => 2,
-            Errors::IAmLeader => 3,
-            Errors::OutOfStorageGas => 4,
+            Errors::OutOfStorageGas => 3,
         }
     }
     pub fn str_snake_case(self) -> &'static str {
@@ -90,7 +84,6 @@ impl Errors {
             Errors::Ok => "ok",
             Errors::Absent => "absent",
             Errors::Forbidden => "forbidden",
-            Errors::IAmLeader => "i_am_leader",
             Errors::OutOfStorageGas => "out_of_storage_gas",
         }
     }
@@ -104,8 +97,7 @@ impl TryFrom<u8> for Errors {
             0 => Ok(Errors::Ok),
             1 => Ok(Errors::Absent),
             2 => Ok(Errors::Forbidden),
-            3 => Ok(Errors::IAmLeader),
-            4 => Ok(Errors::OutOfStorageGas),
+            3 => Ok(Errors::OutOfStorageGas),
             _ => Err(()),
         }
     }

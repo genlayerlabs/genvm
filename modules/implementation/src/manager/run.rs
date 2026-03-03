@@ -400,6 +400,8 @@ pub struct Request {
     /// If true, don't require modules even if permissions suggest they're needed
     #[serde(default)]
     pub no_modules: bool,
+    #[serde(default)]
+    pub leader_nondet_results: Option<Vec<bytes::Bytes>>,
 }
 
 fn default_permissions() -> String {
@@ -866,6 +868,7 @@ pub async fn start_genvm(
         message: req.message.clone(),
         host_data: req.host_data.clone(),
         code: req.code.clone(),
+        leader_nondet_results: req.leader_nondet_results.clone(),
     };
     let execution_data_bytes =
         genvm_common::calldata::encode(&genvm_common::calldata::to_value(&execution_data)?);

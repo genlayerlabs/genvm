@@ -47,14 +47,12 @@ class MockHost(IHost):
 		storage_path_pre: Path,
 		storage_path_post: Path,
 		balances: dict[Address, int],
-		leader_nondet,
 		running_address: Address,
 	):
 		self.running_address = running_address
 		self.path = path
 		self.storage_path_pre = storage_path_pre
 		self.storage_path_post = storage_path_post
-		self.leader_nondet = leader_nondet
 		self.storage = None
 		self.sock = None
 		self.thread = None
@@ -117,25 +115,6 @@ class MockHost(IHost):
 
 	async def remaining_fuel_as_gen(self) -> int:
 		return 2**32
-
-	async def get_leader_nondet_result(self, call_no: int, /) -> collections.abc.Buffer:
-		if self.leader_nondet is None:
-			raise HostException(host_fns.Errors.I_AM_LEADER)
-		if call_no >= len(self.leader_nondet):
-			raise HostException(host_fns.Errors.ABSENT)
-		res = self.leader_nondet[call_no]
-		if isinstance(res, (bytes, bytearray, memoryview)):
-			return bytes(res)
-		if res['kind'] == 'return':
-			return bytes([public_abi.ResultCode.RETURN]) + _calldata.encode(res['value'])
-		if res['kind'] == 'rollback':
-			return bytes([public_abi.ResultCode.USER_ERROR]) + res['value'].encode('utf-8')
-		if res['kind'] == 'contract_error':
-			return bytes([public_abi.ResultCode.VM_ERROR]) + res['value'].encode('utf-8')
-		assert False
-
-	async def post_nondet_result(self, call_no: int, data: collections.abc.Buffer):
-		self.nondet_results[call_no] = bytes(data)
 
 	async def eth_call(self, account: bytes, calldata: bytes, /) -> bytes:
 		raise HostException(host_fns.Errors.ABSENT)

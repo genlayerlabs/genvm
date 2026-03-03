@@ -1132,15 +1132,47 @@ impl ContextVFS<'_> {
             .nondet_call_no
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
-        let leaders_res = self
+        let leaders_res_bytes = self
             .context
             .data
             .supervisor
-            .host
-            .lock()
-            .await
-            .get_leader_result(call_no)
-            .map_err(generated::types::Error::trap)?;
+            .get_leader_nondet_result(call_no);
+
+        let leaders_res = match leaders_res_bytes {
+            None if self.context.data.supervisor.is_leader() => None,
+            None => {
+                return Err(generated::types::Error::trap(
+                    rt::errors::VMError("absent".into(), None).into(),
+                ));
+            }
+            Some(data) => {
+                use crate::public_abi::ResultCode;
+                let rest = &data[1..];
+                let res = match data[0] {
+                    x if x == ResultCode::Return as u8 => rt::vm::RunOk::Return(rest.into()),
+                    x if x == ResultCode::UserError as u8 => {
+                        rt::vm::RunOk::UserError(String::from(
+                            std::str::from_utf8(rest)
+                                .map_err(|e| generated::types::Error::trap(anyhow::anyhow!(e)))?,
+                        ))
+                    }
+                    x if x == ResultCode::VmError as u8 => rt::vm::RunOk::VMError(
+                        String::from(
+                            std::str::from_utf8(rest)
+                                .map_err(|e| generated::types::Error::trap(anyhow::anyhow!(e)))?,
+                        ),
+                        None,
+                    ),
+                    x => {
+                        return Err(generated::types::Error::trap(anyhow::anyhow!(
+                            "invalid leader result code: {}",
+                            x
+                        )));
+                    }
+                };
+                Some(res)
+            }
+        };
 
         let result_to_return = if self.context.data.supervisor.shared_data.is_sync {
             match leaders_res {

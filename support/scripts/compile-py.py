@@ -98,12 +98,6 @@ class CompileHost(IHost):
 	async def storage_read(self, mode, account, slot, index, le):
 		return b'\x00' * le
 
-	async def get_leader_nondet_result(self, call_no):
-		raise HostException(host_fns.Errors.I_AM_LEADER)
-
-	async def post_nondet_result(self, call_no, data):
-		pass
-
 	async def post_message(self, account, calldata, data):
 		pass
 

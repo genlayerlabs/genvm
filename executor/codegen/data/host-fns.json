@@ -11,8 +11,7 @@
             "get_balance": 4,
             "remaining_fuel_as_gen": 5,
             "notify_nondet_disagreement": 6,
-            "get_leader_nondet_result": 7,
-            "consume_result": 8
+            "consume_result": 7
         }
     },
     {
@@ -23,8 +22,7 @@
           "ok": 0,
           "absent": 1,
           "forbidden": 2,
-          "i_am_leader": 3,
-          "out_of_storage_gas": 4
+          "out_of_storage_gas": 3
       }
   }
 ]

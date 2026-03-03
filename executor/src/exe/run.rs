@@ -149,8 +149,15 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
 
     let rt = runtime.enter();
 
-    let supervisor = genvm::create_supervisor(&config, host, host_data, shared_data, message)
-        .with_context(|| format!("creating supervisor for genvm_id {genvm_id}"))?;
+    let supervisor = genvm::create_supervisor(
+        &config,
+        host,
+        host_data,
+        shared_data,
+        message,
+        execution_data.leader_nondet_results.clone(),
+    )
+    .with_context(|| format!("creating supervisor for genvm_id {genvm_id}"))?;
 
     std::mem::drop(rt);
 

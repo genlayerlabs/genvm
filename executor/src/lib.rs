@@ -32,6 +32,7 @@ pub fn create_supervisor(
     host_data: genvm_modules_interfaces::HostData,
     shared_data: sync::DArc<rt::SharedData>,
     message: &domain::MessageData,
+    leader_nondet_results: Option<Vec<bytes::Bytes>>,
 ) -> Result<Arc<rt::supervisor::Supervisor>> {
     let metrics = shared_data.gep(|x| &x.metrics);
 
@@ -70,6 +71,7 @@ pub fn create_supervisor(
             non_det: rt::memlimiter::Limiter::new("nondet"),
         },
         locked_slots,
+        leader_nondet_results,
     };
 
     rt::supervisor::Supervisor::start(config, ctor, host)

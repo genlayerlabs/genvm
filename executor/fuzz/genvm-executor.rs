@@ -27,6 +27,8 @@ fn wasm_smith_config() -> wasm_smith::Config {
     config
 }
 
+use genlayer_sdk::abi::ExecutionEmission;
+
 #[derive(Clone, Copy, Debug)]
 struct FuzzNext;
 
@@ -143,23 +145,8 @@ impl DuplexStream {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SequentialEvent {
-    Event {
-        topics: Vec<[u8; 32]>,
-        blob: Vec<u8>,
-    },
-    Message {
-        to: genvm::calldata::Address,
-        internal: bool,
-        data: Vec<u8>,
-    },
-}
-
 #[derive(Debug, PartialEq, Eq)]
 struct HostAccumulatedData {
-    messages: Vec<SequentialEvent>,
-    eq_outputs: Vec<Vec<u8>>,
     result: Vec<u8>,
 }
 
@@ -172,7 +159,7 @@ mod mock_host {
     use std::io::{Read, Write};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    use crate::{HostAccumulatedData, SequentialEvent};
+    use crate::HostAccumulatedData;
 
     use super::AsyncDuplexStream;
 
@@ -185,12 +172,8 @@ mod mock_host {
 
     pub struct MockHost {
         pub sock: MockWriter,
-        pub eq_outputs: Option<Vec<Vec<u8>>>,
         pub storage: HashMap<[u8; 36], [u8; 32]>,
         pub calldata: Vec<u8>,
-        pub collected_eq_outputs: Vec<Vec<u8>>,
-
-        pub seq_events: Vec<SequentialEvent>,
     }
 
     impl MockWriter {
@@ -346,12 +329,6 @@ mod mock_host {
                 log_debug!(method:? = method; "mock host called");
 
                 match method {
-                    host_fns::Methods::GetCalldata => {
-                        self.sock.write_error(host_fns::Errors::Ok).await?;
-                        self.sock.write_slice(&self.calldata).await?;
-                        self.sock.sock.flush().await?;
-                    }
-
                     host_fns::Methods::StorageRead => {
                         let mut mode_buf = [0u8; 1];
                         self.sock.read_exact(&mut mode_buf).await?;
@@ -397,82 +374,12 @@ mod mock_host {
                         self.sock.sock.write_all(&[0x00]).await?;
                         self.sock.sock.flush().await?;
 
-                        return Ok(HostAccumulatedData {
-                            messages: self.seq_events,
-                            eq_outputs: self.collected_eq_outputs,
-                            result,
-                        });
-                    }
-
-                    host_fns::Methods::GetLeaderNondetResult => {
-                        let call_no = self.sock.read_u32().await?;
-
-                        if let Some(ref eq_outputs) = self.eq_outputs {
-                            if call_no < eq_outputs.len() as u32 {
-                                let output = &eq_outputs[call_no as usize];
-                                self.sock.write_error(host_fns::Errors::Ok).await?;
-                                self.sock.write_slice(output).await?;
-                            } else {
-                                self.sock.write_error(host_fns::Errors::Absent).await?;
-                            }
-                        } else {
-                            self.sock.write_error(host_fns::Errors::IAmLeader).await?;
-                        }
-                        self.sock.sock.flush().await?;
-                    }
-
-                    host_fns::Methods::PostNondetResult => {
-                        let call_no = self.sock.read_u32().await?;
-                        let result = self.sock.read_slice().await?;
-
-                        while self.collected_eq_outputs.len() <= call_no as usize {
-                            self.collected_eq_outputs.push(Vec::new());
-                        }
-
-                        // Store the result for later comparison
-                        self.collected_eq_outputs[call_no as usize] = result;
-
-                        self.sock.write_error(host_fns::Errors::Ok).await?;
-                        self.sock.sock.flush().await?;
-                    }
-
-                    host_fns::Methods::PostMessage => {
-                        let mut account = [0u8; ACCOUNT_ADDR_SIZE];
-                        self.sock.read_exact(&mut account).await?;
-
-                        let calldata = self.sock.read_slice().await?;
-                        let message_data = self.sock.read_slice().await?;
-
-                        self.seq_events.push(SequentialEvent::Message {
-                            to: genvm::calldata::Address::from(account),
-                            internal: true,
-                            data: calldata,
-                        });
-
-                        self.sock.write_error(host_fns::Errors::Ok).await?;
-                        self.sock.sock.flush().await?;
+                        return Ok(HostAccumulatedData { result });
                     }
 
                     host_fns::Methods::ConsumeFuel => {
                         let _gas = self.sock.read_u64().await?;
                         // No response needed for consume_fuel
-                    }
-
-                    host_fns::Methods::DeployContract => {
-                        let mut calldata = self.sock.read_slice().await?;
-                        let code = self.sock.read_slice().await?;
-                        let message_data = self.sock.read_slice().await?;
-
-                        calldata.extend_from_slice(&code); // just ok
-
-                        self.seq_events.push(SequentialEvent::Message {
-                            to: genvm::calldata::Address::zero(),
-                            internal: true,
-                            data: calldata,
-                        });
-
-                        self.sock.write_error(host_fns::Errors::Ok).await?;
-                        self.sock.sock.flush().await?;
                     }
 
                     host_fns::Methods::EthCall => {
@@ -484,48 +391,6 @@ mod mock_host {
                         // Return empty result for mock
                         self.sock.write_error(host_fns::Errors::Ok).await?;
                         self.sock.write_slice(&[]).await?;
-                        self.sock.sock.flush().await?;
-                    }
-
-                    host_fns::Methods::EthSend => {
-                        let mut account = [0u8; ACCOUNT_ADDR_SIZE];
-                        self.sock.read_exact(&mut account).await?;
-
-                        let calldata = self.sock.read_slice().await?;
-                        let message_data = self.sock.read_slice().await?;
-
-                        self.seq_events.push(SequentialEvent::Message {
-                            to: genvm::calldata::Address::from(account),
-                            internal: false,
-                            data: calldata,
-                        });
-
-                        self.sock.write_error(host_fns::Errors::Ok).await?;
-                        self.sock.sock.flush().await?;
-                    }
-
-                    host_fns::Methods::PostEvent => {
-                        let topics_len = {
-                            let mut buf = [0u8; 1];
-                            self.sock.read_exact(&mut buf).await?;
-                            buf[0]
-                        };
-
-                        let mut topics = Vec::new();
-
-                        for _ in 0..topics_len {
-                            let mut topic = [0u8; 32];
-                            self.sock.read_exact(&mut topic).await?;
-
-                            topics.push(topic);
-                        }
-
-                        let blob = self.sock.read_slice().await?;
-
-                        self.seq_events
-                            .push(SequentialEvent::Event { topics, blob });
-
-                        self.sock.write_error(host_fns::Errors::Ok).await?;
                         self.sock.sock.flush().await?;
                     }
 
@@ -647,6 +512,8 @@ struct ReturnToCompare {
 struct LeaderData {
     retn: ReturnToCompare,
     host_data: HostAccumulatedData,
+    emissions: Vec<ExecutionEmission>,
+    nondet_results: Vec<bytes::Bytes>,
 }
 
 async fn start_timeouts(
@@ -674,14 +541,14 @@ async fn start_timeouts(
 async fn run_with(
     data: &FuzzingInput,
     contract_code: &[u8],
-    eq_outputs: Option<Vec<Vec<u8>>>,
+    leader_nondet_results: Option<Vec<bytes::Bytes>>,
     test_done: Arc<cancellation::Token>,
 ) -> anyhow::Result<LeaderData> {
     let (token, had_timeout) = start_timeouts(test_done).await;
 
     let shared_data = sync::DArc::new(genvm::rt::SharedData {
         cancellation: token,
-        is_sync: eq_outputs.is_some(),
+        is_sync: leader_nondet_results.is_some(),
         genvm_id: genvm_modules_interfaces::GenVMId(1),
         debug_mode: false,
         metrics: genvm::Metrics::default(),
@@ -724,14 +591,11 @@ async fn run_with(
     let host = genvm::Host::new(Box::new(duplex_b), shared_data.gep(|x| &x.metrics.host));
 
     let mut actual_host = mock_host::MockHost {
-        eq_outputs,
         sock: mock_host::MockWriter {
             sock: duplex_a.into_async(),
         },
         storage: HashMap::new(),
         calldata: Vec::new(),
-        collected_eq_outputs: Vec::new(),
-        seq_events: Vec::new(),
     };
 
     actual_host.write_code(contract_code)?;
@@ -740,8 +604,15 @@ async fn run_with(
 
     let host_data_str = serde_json::to_string(&host_data)?;
 
-    let supervisor = genvm::create_supervisor(&config, host, host_data, shared_data, &data.msg)
-        .with_context(|| "creating supervisor")?;
+    let supervisor = genvm::create_supervisor(
+        &config,
+        host,
+        host_data,
+        shared_data,
+        &data.msg,
+        leader_nondet_results.clone(),
+    )
+    .with_context(|| "creating supervisor")?;
 
     let (full_res, _) = genvm::run_with(
         domain::ExecutionData {
@@ -749,6 +620,7 @@ async fn run_with(
             message: data.msg.clone(),
             host_data: host_data_str,
             code: Some(contract_code.to_vec()),
+            leader_nondet_results,
         },
         supervisor,
         &data.get_perms(),
@@ -769,6 +641,8 @@ async fn run_with(
             fingerprint: full_res.fingerprint,
         },
         host_data,
+        emissions: full_res.emissions,
+        nondet_results: full_res.nondet_results,
     })
 }
 
@@ -796,7 +670,7 @@ async fn do_fuzzing(data: FuzzingInput, contract_code: &[u8]) -> anyhow::Result<
     let validator_res = run_with(
         &data,
         contract_code,
-        Some(leader_res.host_data.eq_outputs),
+        Some(leader_res.nondet_results),
         token.clone(),
     )
     .await
@@ -805,10 +679,7 @@ async fn do_fuzzing(data: FuzzingInput, contract_code: &[u8]) -> anyhow::Result<
     log_debug!(validator_res:? = validator_res; "validator result");
 
     assert_eq!(leader_res.retn.fingerprint, validator_res.retn.fingerprint);
-    assert_eq!(
-        leader_res.host_data.messages,
-        validator_res.host_data.messages
-    );
+    assert_eq!(leader_res.emissions, validator_res.emissions);
 
     assert_eq!(leader_res.retn.kind, validator_res.retn.kind);
     assert_eq!(leader_res.retn.result_data, validator_res.retn.result_data);

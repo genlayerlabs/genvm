@@ -274,38 +274,6 @@ impl Host {
         Ok(())
     }
 
-    pub fn get_leader_result(&mut self, call_no: u32) -> Result<Option<rt::vm::RunOk>> {
-        log_trace!("get_leader_result");
-
-        let mut sock = self.lock_sock();
-        sock.write_all(&[host_fns::Methods::GetLeaderNondetResult as u8])?;
-        sock.write_all(&call_no.to_le_bytes())?;
-
-        match read_host_error(&mut **sock, "get_leader_result")? {
-            host_fns::Errors::Ok => {}
-            host_fns::Errors::IAmLeader => {
-                return Ok(None);
-            }
-            e => return Err(rt::errors::VMError(e.str_snake_case().to_owned(), None).into()),
-        }
-
-        let leaders_result = read_bytes(&mut **sock, "get_leader_result")?;
-
-        let rest = &leaders_result[1..];
-
-        let res = match leaders_result[0] {
-            x if x == ResultCode::Return as u8 => rt::vm::RunOk::Return(rest.into()),
-            x if x == ResultCode::UserError as u8 => {
-                rt::vm::RunOk::UserError(String::from(str::from_utf8(rest)?))
-            }
-            x if x == ResultCode::VmError as u8 => {
-                rt::vm::RunOk::VMError(String::from(str::from_utf8(rest)?), None)
-            }
-            x => anyhow::bail!("host returned incorrect result id {}", x),
-        };
-        Ok(Some(res))
-    }
-
     pub fn consume_fuel(&mut self, gas: u64) -> Result<()> {
         log_trace!("consume_fuel");
 
