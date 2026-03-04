@@ -43,8 +43,9 @@ def get(
 	url: str,
 	*,
 	headers: dict[str, str | bytes] = {},
+	sign: bool = False,
 ) -> Lazy[Response]:
-	return request.lazy(url, method='GET', headers=headers)
+	return request.lazy(url, method='GET', headers=headers, sign=sign)
 
 
 @_lazy_api
@@ -53,8 +54,9 @@ def post(
 	*,
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
+	sign: bool = False,
 ) -> Lazy[Response]:
-	return request.lazy(url, method='POST', body=body, headers=headers)
+	return request.lazy(url, method='POST', body=body, headers=headers, sign=sign)
 
 
 @_lazy_api
@@ -63,8 +65,9 @@ def delete(
 	*,
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
+	sign: bool = False,
 ) -> Lazy[Response]:
-	return request.lazy(url, method='DELETE', body=body, headers=headers)
+	return request.lazy(url, method='DELETE', body=body, headers=headers, sign=sign)
 
 
 @_lazy_api
@@ -73,8 +76,9 @@ def head(
 	*,
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
+	sign: bool = False,
 ) -> Lazy[Response]:
-	return request.lazy(url, method='HEAD', body=body, headers=headers)
+	return request.lazy(url, method='HEAD', body=body, headers=headers, sign=sign)
 
 
 @_lazy_api
@@ -83,8 +87,9 @@ def patch(
 	*,
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
+	sign: bool = False,
 ) -> Lazy[Response]:
-	return request.lazy(url, method='PATCH', body=body, headers=headers)
+	return request.lazy(url, method='PATCH', body=body, headers=headers, sign=sign)
 
 
 @_lazy_api
@@ -94,6 +99,7 @@ def request(
 	method: typing.Literal['GET', 'POST', 'DELETE', 'HEAD', 'OPTIONS', 'PATCH'],
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
+	sign: bool = False,
 ) -> Lazy[Response]:
 	return gl_call.gl_call_generic(
 		{
@@ -102,6 +108,7 @@ def request(
 				'method': method,
 				'body': str_or_bytes_to_bytes(body),
 				'headers': {k: str_or_bytes_to_bytes(v) for k, v in headers.items()},
+				'sign': sign,
 			}
 		},
 		lambda x: Response(**(_decode_nondet(x)['response'])),
