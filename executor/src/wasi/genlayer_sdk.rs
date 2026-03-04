@@ -18,6 +18,35 @@ fn default_entry_stage_data() -> calldata::Value {
     calldata::Value::Null
 }
 
+fn calc_receipt_size(len: usize) -> u64 {
+    ((len + 255) / 256) as u64
+}
+
+fn consume_receipt_words(
+    shared_data: &rt::SharedData,
+    words: u64,
+) -> Result<(), generated::types::Error> {
+    if words == 0 {
+        return Ok(());
+    }
+    shared_data
+        .receipt_words_remaining
+        .fetch_update(
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+            |current| current.checked_sub(words),
+        )
+        .map_err(|current| {
+            generated::types::Error::trap(
+                rt::errors::VMError::oos(Some(anyhow::anyhow!(
+                    "consuming {words} receipt words (available: {current})"
+                )))
+                .into(),
+            )
+        })?;
+    Ok(())
+}
+
 /// Extension methods for ExtendedMessage specific to the executor
 pub trait ExtendedMessageExt {
     fn fork_leader(
@@ -399,14 +428,21 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                 }
 
-                self.context
-                    .data
-                    .emissions
-                    .push(genlayer_sdk::abi::ExecutionEmission::EthSend {
-                        address,
-                        calldata,
-                        value,
-                    });
+                let emission = genlayer_sdk::abi::ExecutionEmission::EthSend {
+                    address,
+                    calldata,
+                    value,
+                };
+                let encoded = calldata::encode(
+                    &calldata::to_value(&emission)
+                        .map_err(|e| generated::types::Error::trap(e.into()))?,
+                );
+                consume_receipt_words(
+                    &self.context.data.supervisor.shared_data,
+                    calc_receipt_size(encoded.len()),
+                )?;
+
+                self.context.data.emissions.push(emission);
 
                 self.context.messages_decremented += value;
                 Ok(file_fd_none())
@@ -604,14 +640,22 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                 }
 
-                self.context.data.emissions.push(
-                    genlayer_sdk::abi::ExecutionEmission::PostMessage {
-                        address,
-                        calldata,
-                        value,
-                        on,
-                    },
+                let emission = genlayer_sdk::abi::ExecutionEmission::PostMessage {
+                    address,
+                    calldata,
+                    value,
+                    on,
+                };
+                let encoded = calldata::encode(
+                    &calldata::to_value(&emission)
+                        .map_err(|e| generated::types::Error::trap(e.into()))?,
                 );
+                consume_receipt_words(
+                    &self.context.data.supervisor.shared_data,
+                    calc_receipt_size(encoded.len()),
+                )?;
+
+                self.context.data.emissions.push(emission);
 
                 self.context.messages_decremented += value;
 
@@ -642,15 +686,23 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                 }
 
-                self.context.data.emissions.push(
-                    genlayer_sdk::abi::ExecutionEmission::DeployContract {
-                        calldata,
-                        code,
-                        value,
-                        on,
-                        salt_nonce,
-                    },
+                let emission = genlayer_sdk::abi::ExecutionEmission::DeployContract {
+                    calldata,
+                    code,
+                    value,
+                    on,
+                    salt_nonce,
+                };
+                let encoded = calldata::encode(
+                    &calldata::to_value(&emission)
+                        .map_err(|e| generated::types::Error::trap(e.into()))?,
                 );
+                consume_receipt_words(
+                    &self.context.data.supervisor.shared_data,
+                    calc_receipt_size(encoded.len()),
+                )?;
+
+                self.context.data.emissions.push(emission);
 
                 self.context.messages_decremented += value;
 
@@ -1137,6 +1189,13 @@ impl ContextVFS<'_> {
             .data
             .supervisor
             .get_leader_nondet_result(call_no);
+
+        if let Some(ref data) = leaders_res_bytes {
+            consume_receipt_words(
+                &self.context.data.supervisor.shared_data,
+                calc_receipt_size(data.len()),
+            )?;
+        }
 
         let leaders_res = match leaders_res_bytes {
             None if self.context.data.supervisor.is_leader() => None,

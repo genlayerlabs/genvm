@@ -43,6 +43,7 @@ pub struct SharedData {
     pub debug_mode: bool,
     pub metrics: crate::Metrics,
     pub storage_pages_limit: std::sync::atomic::AtomicU64,
+    pub receipt_words_remaining: std::sync::atomic::AtomicU64,
 }
 
 pub fn parse_host_data(

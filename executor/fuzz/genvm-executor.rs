@@ -553,6 +553,7 @@ async fn run_with(
         debug_mode: false,
         metrics: genvm::Metrics::default(),
         storage_pages_limit: std::sync::atomic::AtomicU64::new(128),
+        receipt_words_remaining: std::sync::atomic::AtomicU64::new(0),
     });
 
     let mut registry_dir = std::env::current_dir()?;

@@ -388,6 +388,8 @@ pub struct Request {
     #[serde(default = "default_max_execution_minutes")]
     pub max_execution_minutes: u64,
     pub storage_pages: u64,
+    #[serde(default)]
+    pub receipt_words: u64,
     pub host_data: String,
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub host: String,
@@ -662,6 +664,9 @@ fn build_genvm_command(
 
     proc.arg("--storage-pages");
     proc.arg(req.storage_pages.to_string());
+
+    proc.arg("--receipt-words");
+    proc.arg(req.receipt_words.to_string());
 
     proc.arg("--host");
     proc.arg(&req.host);

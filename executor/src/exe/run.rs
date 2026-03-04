@@ -44,6 +44,8 @@ pub struct Args {
     genvm_id: Option<u64>,
     #[arg(long, help = "max amount of storage pages to be written")]
     storage_pages: u64,
+    #[arg(long, default_value_t = 0, help = "max amount of receipt words")]
+    receipt_words: u64,
     #[clap(long, help = "what to output to stdout/stderr")]
     print: Vec<PrintOption>,
     #[clap(long, default_value_t = false)]
@@ -130,6 +132,7 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         debug_mode: args.debug_mode,
         metrics: genvm::Metrics::default(),
         storage_pages_limit: std::sync::atomic::AtomicU64::new(args.storage_pages),
+        receipt_words_remaining: std::sync::atomic::AtomicU64::new(args.receipt_words),
     });
 
     let host = genvm::Host::connect(&args.host, shared_data.gep(|x| &x.metrics.host))?;
