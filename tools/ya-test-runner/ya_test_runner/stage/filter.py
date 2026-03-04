@@ -133,6 +133,14 @@ def run(shared: SharedContext, collection_env: Env) -> Env:
 	if collection_env.args.continue_from:
 		continue_tests = _load_continue_file(shared, collection_env.args.continue_from)
 
+	import ya_test_runner.test
+
+	# Build name -> case lookup for dependency resolution
+	all_cases_by_name: dict[str, ya_test_runner.test.Case] = {}
+	for case in collection_env.cases:
+		all_cases_by_name[case.description.name] = case
+
+	selected_names: set[str] = set()
 	for case in collection_env.cases:
 		# Apply name regex filter
 		if not test_name_regex.search(case.description.name):
@@ -146,8 +154,22 @@ def run(shared: SharedContext, collection_env: Env) -> Env:
 		if continue_tests is not None and case.description.name not in continue_tests:
 			continue
 
-		new_cases.append(case)
+		selected_names.add(case.description.name)
 
+	# Transitively include all dependencies, marking pulled-in cases as hidden
+	def _ensure_deps(name: str) -> None:
+		case = all_cases_by_name.get(name)
+		if case is None:
+			return
+		for dep_name in case.description.depends_on:
+			if dep_name not in selected_names:
+				selected_names.add(dep_name)
+				_ensure_deps(dep_name)
+
+	for name in list(selected_names):
+		_ensure_deps(name)
+
+	new_cases = [c for c in collection_env.cases if c.description.name in selected_names]
 	new_cases.sort(key=lambda c: c.description.name)
 
 	return Env(

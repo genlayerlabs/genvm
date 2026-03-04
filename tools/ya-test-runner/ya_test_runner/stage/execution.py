@@ -77,6 +77,9 @@ class _ExecutionContext:
 	success_count: int = 0
 	skipped: int = 0
 	running_services: dict[str, Handle] = field(default_factory=dict)
+	# Per-test completion tracking for test-to-test dependencies
+	test_completed: dict[str, asyncio.Event] = field(default_factory=dict)
+	test_passed: dict[str, bool] = field(default_factory=dict)
 
 
 def _print_test_result(
@@ -174,10 +177,48 @@ async def _stop_all_services(ctx: _ExecutionContext) -> None:
 				)
 
 
+async def _await_test_dependencies(
+	ctx: _ExecutionContext, case: ya_test_runner.test.Case
+) -> list[str]:
+	"""
+	Wait for all test dependencies to complete.
+	Returns list of failed dependency names (empty if all passed or were absent).
+	Dependencies not in the current test set (e.g. filtered out) are ignored.
+	"""
+	failed_deps: list[str] = []
+	for dep_name in case.description.depends_on:
+		event = ctx.test_completed.get(dep_name)
+		if event is None:
+			# Dependency not in current test set (filtered out), treat as satisfied
+			continue
+		await event.wait()
+		if not ctx.test_passed.get(dep_name, False):
+			failed_deps.append(dep_name)
+	return failed_deps
+
+
 async def _run_case(
 	ctx: _ExecutionContext, case: ya_test_runner.test.Case, latch: _CountDownLatch
 ):
+	name = case.description.name
 	try:
+		# Wait for test dependencies before acquiring semaphore
+		if case.description.depends_on:
+			failed_deps = await _await_test_dependencies(ctx, case)
+			if failed_deps:
+				# Skip this test: dependency failed
+				ctx.skipped += 1
+				ctx.failed.append(name)
+				if ctx.fail_fast:
+					ctx.should_stop.set()
+				if not case.hidden:
+					with FORMATTING_MUTEX:
+						deps_str = ', '.join(failed_deps)
+						ctx.shared.printer.put(
+							f'{_Colors.WARNING}⊘{_Colors.ENDC} {name} skipped (dependency failed: {deps_str})',
+						)
+				return
+
 		permits = 1
 		if case.description.console_pool:
 			permits = ctx.semaphore.max_value
@@ -189,6 +230,11 @@ async def _run_case(
 		finally:
 			ctx.semaphore.release(permits)
 	finally:
+		# Signal completion (pass or fail) so dependents can proceed
+		ctx.test_passed.setdefault(name, name not in ctx.failed)
+		event = ctx.test_completed.get(name)
+		if event is not None:
+			event.set()
 		latch.decrement()
 
 
@@ -225,7 +271,7 @@ async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Cas
 		if test_case_result.context:
 			context.update(test_case_result.context)
 
-		if success:
+		if success and not case.hidden:
 			ctx.success_count += 1
 	except Exception as e:
 		elapsed = time.monotonic() - start_time
@@ -241,14 +287,15 @@ async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Cas
 			if ctx.fail_fast:
 				ctx.should_stop.set()
 
-		# Print result immediately
-		_print_test_result(
-			ctx,
-			case.description.name,
-			success,
-			elapsed,
-			context if not success else None,
-		)
+		# Print result (skip hidden successes)
+		if not (case.hidden and success):
+			_print_test_result(
+				ctx,
+				case.description.name,
+				success,
+				elapsed,
+				context if not success else None,
+			)
 
 
 _background_tasks: set[asyncio.Task] = set()
@@ -276,12 +323,22 @@ async def run(shared: SharedContext, collection_env: SchedulingEnv) -> Env:
 	# Get fail_fast from args, default to False if not present
 	fail_fast = getattr(collection_env.args, 'fail_fast', False)
 
+	# Collect all test names to create completion events
+	all_test_names: set[str] = set()
+	for action in collection_env.actions:
+		if isinstance(action, StartCases):
+			for case in action.cases:
+				all_test_names.add(case.description.name)
+
+	test_completed = {name: asyncio.Event() for name in all_test_names}
+
 	ctx = _ExecutionContext(
 		shared=shared,
 		failed=[],
 		should_stop=should_stop,
 		fail_fast=fail_fast,
 		semaphore=MultiSemaphore(collection_env.args.max_concurrent),
+		test_completed=test_completed,
 	)
 
 	# Check for interruption periodically
