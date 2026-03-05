@@ -396,9 +396,9 @@ pub struct Request {
     pub capture_output: bool,
     #[serde(default = "default_max_execution_minutes")]
     pub max_execution_minutes: u64,
-    pub storage_pages: u64,
-    #[serde(default)]
-    pub receipt_words: u64,
+    pub data_fees_limit: num_bigint::BigInt,
+    pub storage_page_cost: u32,
+    pub receipt_word_cost: u32,
     pub host_data: String,
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub host: String,
@@ -411,7 +411,6 @@ pub struct Request {
     /// If true, don't require modules even if permissions suggest they're needed
     #[serde(default)]
     pub no_modules: bool,
-    #[serde(default)]
     pub leader_nondet_results: Option<Vec<bytes::Bytes>>,
 }
 
@@ -738,12 +737,6 @@ fn build_genvm_command(
         proc.arg("--sync");
     }
 
-    proc.arg("--storage-pages");
-    proc.arg(req.storage_pages.to_string());
-
-    proc.arg("--receipt-words");
-    proc.arg(req.receipt_words.to_string());
-
     proc.arg("--host");
     proc.arg(&req.host);
 
@@ -963,6 +956,9 @@ pub async fn start_genvm(
         code: req.code.clone(),
         leader_nondet_results: req.leader_nondet_results.clone(),
         method_hosts,
+        data_fees_limit: req.data_fees_limit.clone(),
+        storage_page_cost: req.storage_page_cost,
+        receipt_word_cost: req.receipt_word_cost,
     };
     let execution_data_bytes =
         genvm_common::calldata::encode(&genvm_common::calldata::to_value(&execution_data)?);

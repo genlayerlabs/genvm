@@ -54,32 +54,20 @@ pub trait HostStorageLocking {
 }
 
 #[derive(Clone, Debug)]
-pub struct Limiter(sync::DArc<std::sync::atomic::AtomicU64>);
+pub struct Limiter(sync::DArc<rt::DataFeesLimit>);
 
 impl Limiter {
-    pub fn new(storage_pages_limit: sync::DArc<std::sync::atomic::AtomicU64>) -> Self {
-        Self(storage_pages_limit)
+    pub fn new(data_fees_limit: sync::DArc<rt::DataFeesLimit>) -> Self {
+        Self(data_fees_limit)
     }
 
-    pub fn consume(&self, amount: u64) -> anyhow::Result<()> {
-        self.0
-            .fetch_update(
-                std::sync::atomic::Ordering::SeqCst,
-                std::sync::atomic::Ordering::SeqCst,
-                |current| {
-                    if amount > current {
-                        None
-                    } else {
-                        Some(current - amount)
-                    }
-                },
-            )
-            .map_err(|current| {
-                anyhow::anyhow!(rt::errors::VMError::oos(Some(anyhow::anyhow!(
-                    "consuming {amount} storage pages (available: {current})"
-                ))))
-            })?;
-
+    pub async fn consume(&self, amount: u64) -> anyhow::Result<()> {
+        if !self.0.consume_storage_pages(amount).await {
+            return Err(rt::errors::VMError::oos(Some(anyhow::anyhow!(
+                "consuming {amount} storage pages"
+            )))
+            .into());
+        }
         Ok(())
     }
 }
@@ -103,9 +91,9 @@ impl StoragePagesOverride {
         self.0.get(&key).cloned()
     }
 
-    fn write_page(&mut self, key: PageID, value: [u8; 32]) -> anyhow::Result<()> {
+    async fn write_page(&mut self, key: PageID, value: [u8; 32]) -> anyhow::Result<()> {
         if !self.0.contains_key(&key) {
-            self.1.consume(1)?;
+            self.1.consume(1).await?;
         }
         self.0 = self.0.insert(key, value);
 
@@ -139,8 +127,8 @@ impl<HS: Send + Sync> Storage<HS> {
     }
 
     #[inline(always)]
-    pub fn write_page(&mut self, key: PageID, value: [u8; 32]) -> anyhow::Result<()> {
-        self.pages.write_page(key, value)
+    pub async fn write_page(&mut self, key: PageID, value: [u8; 32]) -> anyhow::Result<()> {
+        self.pages.write_page(key, value).await
     }
 
     pub fn make_delta(&self) -> Vec<Delta> {
@@ -296,7 +284,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
             page_data[offset_in_page..offset_in_page + buf.len()].copy_from_slice(buf);
         }
 
-        self.write_page(page_id, page_data)?;
+        self.write_page(page_id, page_data).await?;
         Ok(())
     }
 
@@ -344,7 +332,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
                 let copy_len = 32 - offset_in_page;
                 page_data[offset_in_page..].copy_from_slice(&buf[..copy_len]);
 
-                self.pages.write_page(page_id, page_data)?;
+                self.pages.write_page(page_id, page_data).await?;
             }
 
             if partial_last {
@@ -361,7 +349,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
                 let src_offset = buf.len() - end_offset_in_page;
                 page_data[..end_offset_in_page].copy_from_slice(&buf[src_offset..]);
 
-                self.pages.write_page(page_id, page_data)?;
+                self.pages.write_page(page_id, page_data).await?;
             }
         }
 
@@ -381,7 +369,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
             let src_offset = page_start - start_index;
             let mut page_data = [0u8; 32];
             page_data.copy_from_slice(&buf[src_offset..src_offset + 32]);
-            self.write_page(page_id, page_data)?;
+            self.write_page(page_id, page_data).await?;
         }
 
         Ok(())

@@ -1,5 +1,8 @@
 use arbitrary::Arbitrary;
-use genvm::{rt::vm::storage::HostStorageLocking, SlotID};
+use genvm::{
+    rt::{self, vm::storage::HostStorageLocking},
+    SlotID,
+};
 use genvm_common::{calldata, sync};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -146,7 +149,11 @@ async fn run_storage_fuzz(input: FuzzInput) -> anyhow::Result<()> {
     let host = MockHostStorageHolder(Arc::new(tokio::sync::Mutex::new(mock_host)));
     let mut storage = Storage::new(
         address,
-        genvm::rt::vm::storage::Limiter::new(sync::DArc::new(u64::MAX.into())),
+        genvm::rt::vm::storage::Limiter::new(sync::DArc::new(rt::DataFeesLimit::new(
+            primitive_types::U256::MAX,
+            0,
+            0,
+        ))),
         host.clone(),
     );
 

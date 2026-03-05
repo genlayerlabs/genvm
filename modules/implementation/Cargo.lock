@@ -952,6 +952,7 @@ dependencies = [
  "image",
  "libc",
  "mlua",
+ "num-bigint",
  "papaya",
  "rand 0.9.1",
  "regex",

@@ -18,6 +18,8 @@ use wasi::genlayer_sdk::ExtendedMessage;
 
 use std::sync::Arc;
 
+use crate::wasi::genlayer_sdk::VMDataAccumulator;
+
 #[derive(Default, Debug, serde::Serialize)]
 pub struct Metrics {
     pub supervisor: rt::Metrics,
@@ -87,14 +89,6 @@ pub fn create_supervisor(
     rt::supervisor::Supervisor::start(config, ctor)
 }
 
-fn log_vm_error(e: &anyhow::Error) {
-    if let Some(rt::errors::VMError(msg, Some(err))) = e.downcast_ref() {
-        log_error!(msg = msg, error:ah = err; "vm error");
-    } else {
-        log_error!(error:ah = e; "vm error");
-    }
-}
-
 pub async fn run_with_impl(
     entry_data: domain::ExecutionData,
     supervisor: Arc<rt::supervisor::Supervisor>,
@@ -122,6 +116,8 @@ pub async fn run_with_impl(
         log_debug!("code is null");
     }
 
+    let data_fees_limit = supervisor.shared_data.gep(|x| &x.data_fees_limit);
+
     let essential_data = wasi::genlayer_sdk::SingleVMData {
         conf: wasi::base::Config {
             needs_error_fingerprint: true,
@@ -143,32 +139,14 @@ pub async fn run_with_impl(
         should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(true)),
 
         storage: topmost_storage,
-        emissions: Vec::new(),
+        accumulator: VMDataAccumulator {
+            data_fees_limit: data_fees_limit,
+            messages_value_decremented: primitive_types::U256::zero(),
+            emissions: Vec::new(),
+        },
     };
 
-    let limiter = supervisor
-        .limiter
-        .get(essential_data.conf.is_deterministic)
-        .derived();
-
-    let vm = rt::supervisor::spawn(&supervisor, essential_data, limiter)
-        .await
-        .inspect_err(log_vm_error)?;
-    let vm = rt::supervisor::apply_contract_actions(&supervisor, vm)
-        .await
-        .inspect_err(log_vm_error);
-
-    let vm = match vm {
-        Err(e) => {
-            return match rt::errors::unwrap_vm_errors(e) {
-                Err(e) => Err(e),
-                Ok(v) => Ok(rt::vm::FullResult::empty_from(v)),
-            };
-        }
-        Ok(v) => v,
-    };
-
-    let run_result = vm.run().await?;
+    let run_result = rt::spawn_apply_run(&supervisor, essential_data).await?;
 
     Ok(rt::vm::FullResult {
         kind: match &run_result.run_ok {
@@ -183,9 +161,7 @@ pub async fn run_with_impl(
         },
         fingerprint: run_result.fingerprint,
         storage_changes: run_result.vm_data.storage.make_delta(),
-        emissions: run_result.vm_data.emissions,
-        //nondet_results: supervisor.take_nondet_results().await,
-        //nondet_disagreement: supervisor.,
+        emissions: run_result.vm_data.accumulator.emissions,
     })
 }
 
@@ -285,11 +261,14 @@ pub async fn run_with(
 
     log_debug!("sending final result");
 
+    let data_fees_remaining = supervisor.shared_data.data_fees_limit.remaining_fast();
+
     let res = match res {
         Ok((a, b)) => Ok(host::FullResult::new(
             a,
             supervisor.take_nondet_results().await,
             b,
+            data_fees_remaining,
         )),
         Err(e) => Err(e),
     };

@@ -30,10 +30,6 @@ pub struct Args {
     host: Vec<String>,
     #[arg(long, help = "id to pass to modules, useful for aggregating logs")]
     genvm_id: Option<u64>,
-    #[arg(long, help = "max amount of storage pages to be written")]
-    storage_pages: u64,
-    #[arg(long, default_value_t = 0, help = "max amount of receipt words")]
-    receipt_words: u64,
     #[clap(long, default_value_t = false)]
     sync: bool,
     #[clap(
@@ -119,9 +115,22 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
     let metrics_for_each_host = args
         .host
         .iter()
-        .map(|host| genvm::host::Metrics::default())
+        .map(|_| genvm::host::Metrics::default())
         .collect::<Vec<_>>();
     metrics.hosts = Box::from(metrics_for_each_host);
+
+    let data_fees_limit = {
+        let (sign, bytes) = execution_data.data_fees_limit.to_bytes_be();
+        anyhow::ensure!(
+            sign != num_bigint::Sign::Minus,
+            "data_fees_limit must be non-negative"
+        );
+        let mut buf = [0u8; 32];
+        let start = 32usize.saturating_sub(bytes.len());
+        anyhow::ensure!(bytes.len() <= 32, "data_fees_limit exceeds U256 range");
+        buf[start..].copy_from_slice(&bytes);
+        primitive_types::U256::from_big_endian(&buf)
+    };
 
     let shared_data = sync::DArc::new(genvm::rt::SharedData {
         cancellation: token,
@@ -129,9 +138,11 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         genvm_id: genvm_modules_interfaces::GenVMId(genvm_id),
         debug_mode: args.debug_mode,
         metrics,
-        storage_pages_limit: std::sync::atomic::AtomicU64::new(args.storage_pages),
-        receipt_words_remaining: std::sync::atomic::AtomicU64::new(args.receipt_words),
-        messages_decremented: Default::default(),
+        data_fees_limit: genvm::rt::DataFeesLimit::new(
+            data_fees_limit,
+            execution_data.storage_page_cost,
+            execution_data.receipt_word_cost,
+        ),
     });
 
     let hosts: Vec<genvm::Host> = args

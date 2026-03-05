@@ -159,6 +159,8 @@ pub struct FullResult {
 
     pub nondet_disagreement: Option<u32>,
     pub nondet_results: Vec<bytes::Bytes>,
+
+    pub data_fees_remaining: u64,
 }
 
 impl FullResult {
@@ -172,6 +174,7 @@ impl FullResult {
             emissions: Vec::new(),
             nondet_disagreement: None,
             nondet_results: Vec::new(),
+            data_fees_remaining: 0,
         }
     }
 }
@@ -192,6 +195,7 @@ impl FullResult {
         rt_result: rt::vm::FullResult,
         nondet_results: Vec<bytes::Bytes>,
         nondet_disagreement: Option<u32>,
+        data_fees_remaining: u64,
     ) -> Self {
         #[derive(serde::Serialize)]
         struct Hashable<'a> {
@@ -199,6 +203,7 @@ impl FullResult {
             data: &'a calldata::Value,
             fingerprint: &'a Option<rt::errors::Fingerprint>,
             storage_changes: &'a Vec<rt::vm::storage::Delta>,
+            data_fees_remaining: u64,
         }
 
         let hashable = Hashable {
@@ -206,6 +211,7 @@ impl FullResult {
             data: &rt_result.data,
             fingerprint: &rt_result.fingerprint,
             storage_changes: &rt_result.storage_changes,
+            data_fees_remaining,
         };
 
         let as_value = calldata::to_value(&hashable).expect("failed to serialize hashable");
@@ -226,6 +232,7 @@ impl FullResult {
             emissions: rt_result.emissions,
             nondet_results,
             nondet_disagreement,
+            data_fees_remaining,
         }
     }
 }
