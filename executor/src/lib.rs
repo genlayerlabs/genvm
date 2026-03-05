@@ -21,14 +21,15 @@ use std::sync::Arc;
 #[derive(Default, Debug, serde::Serialize)]
 pub struct Metrics {
     pub supervisor: rt::Metrics,
-    pub host: host::Metrics,
     pub web_module: modules::Metrics,
     pub llm_module: modules::Metrics,
+    pub hosts: Box<[host::Metrics]>,
 }
 
 pub fn create_supervisor(
     config: &config::Config,
-    mut host: Host,
+    mut hosts: Vec<Host>,
+    method_hosts: Vec<u8>,
     host_data: genvm_modules_interfaces::HostData,
     shared_data: sync::DArc<rt::SharedData>,
     message: &domain::MessageData,
@@ -57,11 +58,19 @@ pub fn create_supervisor(
 
     let limiter_det = rt::memlimiter::Limiter::new("det");
 
-    let locked_slots = host.get_locked_slots_for_sender(
+    let storage_host_idx = if (host::host_fns::Methods::StorageRead as usize) < method_hosts.len() {
+        method_hosts[host::host_fns::Methods::StorageRead as usize] as usize
+    } else {
+        0
+    };
+
+    let locked_slots = hosts[storage_host_idx].get_locked_slots_for_sender(
         calldata::Address::from(message.contract_address.raw()),
         calldata::Address::from(message.sender_address.raw()),
         &limiter_det,
     )?;
+
+    let multi_host = host::MultiHost::new(hosts, method_hosts);
 
     let ctor = rt::supervisor::Ctor {
         shared_data,
@@ -72,9 +81,10 @@ pub fn create_supervisor(
         },
         locked_slots,
         leader_nondet_results,
+        multi_host,
     };
 
-    rt::supervisor::Supervisor::start(config, ctor, host)
+    rt::supervisor::Supervisor::start(config, ctor)
 }
 
 fn log_vm_error(e: &anyhow::Error) {
@@ -152,22 +162,7 @@ pub async fn run_with_impl(
         Err(e) => {
             return match rt::errors::unwrap_vm_errors(e) {
                 Err(e) => Err(e),
-                Ok(v) => Ok(rt::vm::FullResult::new(
-                    match &v {
-                        rt::vm::RunOk::Return(_) => public_abi::ResultCode::Return,
-                        rt::vm::RunOk::UserError(_) => public_abi::ResultCode::UserError,
-                        rt::vm::RunOk::VMError(_, _) => public_abi::ResultCode::VmError,
-                    },
-                    match v {
-                        rt::vm::RunOk::Return(buf) => calldata::decode(&buf)?,
-                        rt::vm::RunOk::UserError(buf) => calldata::Value::Str(buf),
-                        rt::vm::RunOk::VMError(msg, _) => calldata::Value::Str(msg),
-                    },
-                    None,
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                )),
+                Ok(v) => Ok(rt::vm::FullResult::empty_from(v)),
             };
         }
         Ok(v) => v,
@@ -175,29 +170,30 @@ pub async fn run_with_impl(
 
     let run_result = vm.run().await?;
 
-    Ok(rt::vm::FullResult::new(
-        match &run_result.run_ok {
+    Ok(rt::vm::FullResult {
+        kind: match &run_result.run_ok {
             rt::vm::RunOk::Return(_) => public_abi::ResultCode::Return,
             rt::vm::RunOk::UserError(_) => public_abi::ResultCode::UserError,
             rt::vm::RunOk::VMError(_, _) => public_abi::ResultCode::VmError,
         },
-        match run_result.run_ok {
+        data: match run_result.run_ok {
             rt::vm::RunOk::Return(buf) => calldata::decode(&buf)?,
             rt::vm::RunOk::UserError(buf) => calldata::Value::Str(buf),
             rt::vm::RunOk::VMError(msg, _) => calldata::Value::Str(msg),
         },
-        run_result.fingerprint,
-        run_result.vm_data.storage.make_delta(),
-        run_result.vm_data.emissions,
-        supervisor.take_nondet_results().await,
-    ))
+        fingerprint: run_result.fingerprint,
+        storage_changes: run_result.vm_data.storage.make_delta(),
+        emissions: run_result.vm_data.emissions,
+        //nondet_results: supervisor.take_nondet_results().await,
+        //nondet_disagreement: supervisor.,
+    })
 }
 
 pub async fn run_with(
     entry_data: domain::ExecutionData,
     supervisor: Arc<rt::supervisor::Supervisor>,
     permissions: &str,
-) -> anyhow::Result<(rt::vm::FullResult, Option<u32>)> {
+) -> anyhow::Result<host::FullResult> {
     let res = run_with_impl(entry_data, supervisor.clone(), permissions).await;
 
     log_debug!("deterministic execution done");
@@ -225,17 +221,7 @@ pub async fn run_with(
                 }
                 Ok(r)
             }
-            Err(_e) => Ok((
-                rt::vm::FullResult::new(
-                    public_abi::ResultCode::VmError,
-                    calldata::Value::Str(public_abi::VmError::Timeout.value().into()),
-                    None,
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                ),
-                None,
-            )),
+            Err(_e) => Ok((rt::vm::FullResult::timeout(), None)),
         }
     } else {
         merged_result
@@ -246,7 +232,10 @@ pub async fn run_with(
     });
 
     if let Ok((_, Some(disag))) = &res {
-        let mut host = supervisor.host.lock().await;
+        let mut host = supervisor
+            .host
+            .lock_for(host::host_fns::Methods::NotifyNondetDisagreement)
+            .await;
         host.notify_nondet_disagreement(*disag)?;
     }
 
@@ -294,19 +283,34 @@ pub async fn run_with(
 
     log_info!(metrics:serde = all_metrics; "metrics");
 
-    log_debug!("sending final result to host");
+    log_debug!("sending final result");
 
-    let (res, nondet_disagree) = match res {
-        Ok((a, b)) => (Ok(a), b),
-        Err(e) => (Err(e), None),
+    let res = match res {
+        Ok((a, b)) => Ok(host::FullResult::new(
+            a,
+            supervisor.take_nondet_results().await,
+            b,
+        )),
+        Err(e) => Err(e),
     };
 
-    let mut host = supervisor.host.lock().await;
-    host.consume_result(&res)?;
-    std::mem::drop(host);
-
-    match res {
-        Ok(r) => Ok((r, nondet_disagree)),
-        Err(e) => Err(e),
+    {
+        let mut host = supervisor
+            .host
+            .lock_for(host::host_fns::Methods::ConsumeResult)
+            .await;
+        host.consume_result(&res)?;
     }
+
+    {
+        let mut host = supervisor
+            .host
+            .lock_for(host::host_fns::Methods::NotifyFinished)
+            .await;
+        host.notify_finished()?;
+    }
+
+    host::all_useful_work_done();
+
+    res
 }

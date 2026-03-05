@@ -9,7 +9,7 @@ import typing
 
 def add_args(parser: argparse.ArgumentParser) -> None:
 	parser.add_argument(
-		'--test-name',
+		'--filter-name',
 		type=str,
 		help='Only run tests matching this regex',
 		default='.*',
@@ -17,7 +17,7 @@ def add_args(parser: argparse.ArgumentParser) -> None:
 	)
 
 	parser.add_argument(
-		'--test-tags',
+		'--filter-tag',
 		type=str,
 		help='Only run tests matching this tags, `(a|b)&!c`',
 		default='true',
@@ -25,7 +25,7 @@ def add_args(parser: argparse.ArgumentParser) -> None:
 	)
 
 	parser.add_argument(
-		'--continue-from',
+		'--filter-continue',
 		type=str,
 		help='Only run tests listed in the specified continue file (from a previous failed run)',
 		default=None,
@@ -121,17 +121,17 @@ def _load_continue_file(shared: SharedContext, filepath: str) -> set[str]:
 
 def run(shared: SharedContext, collection_env: Env) -> Env:
 	new_cases = []
-	test_name_filter = collection_env.args.test_name
+	test_name_filter = collection_env.args.filter_name
 	test_name_regex = re.compile(test_name_filter)
 
-	tags_expr_toks = _tokenize_expr(collection_env.args.test_tags)
+	tags_expr_toks = _tokenize_expr(collection_env.args.filter_tag)
 	tags_expr_toks.reverse()
 	tags_expr = _parse_tags_expr(tags_expr_toks, 2)
 
 	# Load continue file if specified
 	continue_tests: set[str] | None = None
-	if collection_env.args.continue_from:
-		continue_tests = _load_continue_file(shared, collection_env.args.continue_from)
+	if collection_env.args.filter_continue:
+		continue_tests = _load_continue_file(shared, collection_env.args.filter_continue)
 
 	import ya_test_runner.test
 

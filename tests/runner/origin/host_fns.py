@@ -13,6 +13,7 @@ class Methods(IntEnum):
 	REMAINING_FUEL_AS_GEN = 5
 	NOTIFY_NONDET_DISAGREEMENT = 6
 	CONSUME_RESULT = 7
+	NOTIFY_FINISHED = 8
 
 
 class Errors(IntEnum):

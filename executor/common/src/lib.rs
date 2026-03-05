@@ -25,8 +25,9 @@ pub mod domain {
         pub message: MessageData,
         pub host_data: String,
         pub code: Option<Bytes>,
-        #[serde(default)]
         pub leader_nondet_results: Option<Vec<Bytes>>,
+        /// Maps each host method (by index) to a host id. When empty, all methods use host 0.
+        pub method_hosts: Vec<u8>,
     }
 }
 

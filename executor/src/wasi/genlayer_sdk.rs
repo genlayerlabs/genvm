@@ -114,13 +114,16 @@ impl rt::vm::storage::HostStorage for StorageHostLock<'_> {
 }
 
 #[derive(Clone)]
-pub struct StorageHostHolder(pub Arc<tokio::sync::Mutex<host::Host>>, pub ReadToken);
+pub struct StorageHostHolder(pub Arc<host::MultiHost>, pub ReadToken);
 
 impl rt::vm::storage::HostStorageLocking for StorageHostHolder {
     type ReturnType<'a> = StorageHostLock<'a>;
 
     async fn lock(&self) -> Self::ReturnType<'_> {
-        StorageHostLock(self.0.lock().await, self.1.clone())
+        StorageHostLock(
+            self.0.lock_for(host::host_fns::Methods::StorageRead).await,
+            self.1.clone(),
+        )
     }
 }
 
@@ -458,7 +461,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let supervisor = self.context.data.supervisor.clone();
                 let res = supervisor
                     .host
-                    .lock()
+                    .lock_for(host::host_fns::Methods::EthCall)
                     .await
                     .eth_call(address, &calldata)
                     .map_err(generated::types::Error::trap)?;
@@ -772,7 +775,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .data
                     .supervisor
                     .host
-                    .lock()
+                    .lock_for(host::host_fns::Methods::RemainingFuelAsGen)
                     .await
                     .remaining_fuel_as_gen()
                     .map_err(generated::types::Error::trap)?;
@@ -795,7 +798,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                     if let Ok(PromptAnswer { consumed_gen, .. }) = &result {
                         sup.host
-                            .lock()
+                            .lock_for(host::host_fns::Methods::ConsumeFuel)
                             .await
                             .consume_fuel(*consumed_gen)
                             .map_err(generated::types::Error::trap)?;
@@ -832,7 +835,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .data
                     .supervisor
                     .host
-                    .lock()
+                    .lock_for(host::host_fns::Methods::RemainingFuelAsGen)
                     .await
                     .remaining_fuel_as_gen()
                     .map_err(generated::types::Error::trap)?;
@@ -853,7 +856,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                     if let Ok(PromptAnswer { consumed_gen, .. }) = &answer {
                         sup.host
-                            .lock()
+                            .lock_for(host::host_fns::Methods::ConsumeFuel)
                             .await
                             .consume_fuel(*consumed_gen)
                             .map_err(generated::types::Error::trap)?;
@@ -956,7 +959,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 .data
                 .supervisor
                 .host
-                .lock()
+                .lock_for(host::host_fns::Methods::StorageRead)
                 .await
                 .storage_read(
                     self.context.data.conf.state_mode,
@@ -1076,7 +1079,7 @@ impl Context {
             .data
             .supervisor
             .host
-            .lock()
+            .lock_for(host::host_fns::Methods::GetBalance)
             .await
             .get_balance(address)
             .map_err(generated::types::Error::trap)?;

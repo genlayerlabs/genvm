@@ -18,70 +18,42 @@ pub struct RunResult {
     pub vm_data: wasi::genlayer_sdk::SingleVMData,
 }
 
-struct Sha3Appender(sha3::Sha3_256);
-
-impl calldata::Appender for Sha3Appender {
-    type Error = std::convert::Infallible;
-
-    fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
-        sha3::Digest::update(&mut self.0, data);
-        Ok(())
-    }
-}
-
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct FullResult {
-    pub execution_hash: bytes::Bytes,
-
     pub kind: public_abi::ResultCode,
     pub data: calldata::Value,
     pub fingerprint: Option<rt::errors::Fingerprint>,
     pub storage_changes: Vec<storage::Delta>,
 
     pub emissions: Vec<genlayer_sdk::abi::ExecutionEmission>,
-    pub nondet_results: Vec<bytes::Bytes>,
 }
 
 impl FullResult {
-    pub fn new(
-        kind: public_abi::ResultCode,
-        data: calldata::Value,
-        fingerprint: Option<rt::errors::Fingerprint>,
-        storage_changes: Vec<storage::Delta>,
-        emissions: Vec<genlayer_sdk::abi::ExecutionEmission>,
-        nondet_results: Vec<bytes::Bytes>,
-    ) -> Self {
-        #[derive(serde::Serialize)]
-        struct Hashable<'a> {
-            kind: &'a public_abi::ResultCode,
-            data: &'a calldata::Value,
-            fingerprint: &'a Option<rt::errors::Fingerprint>,
-            storage_changes: &'a Vec<storage::Delta>,
-        }
-
-        let hashable = Hashable {
-            kind: &kind,
-            data: &data,
-            fingerprint: &fingerprint,
-            storage_changes: &storage_changes,
-        };
-
-        let as_value = calldata::to_value(&hashable).expect("failed to serialize hashable");
-        let mut hasher = Sha3Appender(sha3::Digest::new());
-        match calldata::encode_to(&mut hasher, &as_value) {
-            Ok(()) => {}
-            Err(e) => match e {},
-        }
-        let execution_hash = bytes::Bytes::from(sha3::Digest::finalize(hasher.0).to_vec());
-
+    pub fn empty_from(run_ok: RunOk) -> Self {
         Self {
-            execution_hash,
-            kind,
-            data,
-            fingerprint,
-            storage_changes,
-            emissions,
-            nondet_results,
+            kind: match run_ok {
+                RunOk::Return(_) => public_abi::ResultCode::Return,
+                RunOk::UserError(_) => public_abi::ResultCode::UserError,
+                RunOk::VMError(_, _) => public_abi::ResultCode::VmError,
+            },
+            data: match run_ok {
+                RunOk::Return(buf) => calldata::Value::Bytes(buf),
+                RunOk::UserError(msg) => calldata::Value::Str(msg),
+                RunOk::VMError(msg, _) => calldata::Value::Str(msg),
+            },
+            fingerprint: None,
+            storage_changes: Vec::new(),
+            emissions: Vec::new(),
+        }
+    }
+
+    pub fn timeout() -> Self {
+        Self {
+            kind: public_abi::ResultCode::VmError,
+            data: calldata::Value::Str(public_abi::VmError::Timeout.value().into()),
+            fingerprint: None,
+            storage_changes: Vec::new(),
+            emissions: Vec::new(),
         }
     }
 }

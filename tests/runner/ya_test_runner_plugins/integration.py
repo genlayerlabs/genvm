@@ -146,7 +146,11 @@ class IntegrationSingleCase(ya_test_runner.test.Case):
 				steps.append(CheckInterruptedStep())
 				steps.append(ya_test_runner.test.BenchMeasureStep())
 				steps.append(step)
-			steps.append(ya_test_runner.test.BenchCollectStep(local_ctx.shared.printer))
+			steps.append(
+				ya_test_runner.test.BenchCollectStep(
+					local_ctx.shared.printer, test_name=self.description.name
+				)
+			)
 			return steps
 		return [step]
 

@@ -15,6 +15,7 @@ pub enum Methods {
     RemainingFuelAsGen = 5,
     NotifyNondetDisagreement = 6,
     ConsumeResult = 7,
+    NotifyFinished = 8,
 }
 
 impl Methods {
@@ -28,6 +29,7 @@ impl Methods {
             Methods::RemainingFuelAsGen => 5,
             Methods::NotifyNondetDisagreement => 6,
             Methods::ConsumeResult => 7,
+            Methods::NotifyFinished => 8,
         }
     }
     pub fn str_snake_case(self) -> &'static str {
@@ -40,6 +42,7 @@ impl Methods {
             Methods::RemainingFuelAsGen => "remaining_fuel_as_gen",
             Methods::NotifyNondetDisagreement => "notify_nondet_disagreement",
             Methods::ConsumeResult => "consume_result",
+            Methods::NotifyFinished => "notify_finished",
         }
     }
 }
@@ -57,6 +60,7 @@ impl TryFrom<u8> for Methods {
             5 => Ok(Methods::RemainingFuelAsGen),
             6 => Ok(Methods::NotifyNondetDisagreement),
             7 => Ok(Methods::ConsumeResult),
+            8 => Ok(Methods::NotifyFinished),
             _ => Err(()),
         }
     }

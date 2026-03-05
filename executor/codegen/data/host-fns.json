@@ -11,7 +11,8 @@
             "get_balance": 4,
             "remaining_fuel_as_gen": 5,
             "notify_nondet_disagreement": 6,
-            "consume_result": 7
+            "consume_result": 7,
+            "notify_finished": 8
         }
     },
     {

@@ -143,25 +143,50 @@ class IHost(metaclass=abc.ABCMeta):
 
 async def host_loop(
 	handler: IHost, cancellation: asyncio.Event, *, logger: Logger
-) -> tuple[public_abi.ResultCode, bytes]:
+) -> None:
 	async_loop = asyncio.get_event_loop()
 
 	logger.trace('entering loop')
 	sock = await handler.loop_enter(cancellation)
 	logger.trace('entered loop')
 
-	async def send_all(data: collections.abc.Buffer):
-		await async_loop.sock_sendall(sock, data)
+	socket_write_buffer = bytearray()
+	socket_read_buffer = bytearray(b'\x00' * 4096)
+
+	async def send_all(data: bytes | memoryview):
+		socket_write_buffer.extend(data)
+		if len(socket_write_buffer) > 4096:
+			await flush_socket_buffer()
+
+	async def flush_socket_buffer():
+		if len(socket_write_buffer) > 0:
+			await async_loop.sock_sendall(sock, socket_write_buffer)
+			socket_write_buffer.clear()
+
+	socket_read_buf = bytearray(65536)
+	socket_read_buf_view = memoryview(socket_read_buf)
+	socket_read_start = 0
+	socket_read_end = 0
 
 	async def read_exact(le: int) -> bytes:
-		buf = bytearray([0] * le)
+		nonlocal socket_read_start, socket_read_end
+		out = bytearray(le)
 		idx = 0
 		while idx < le:
-			read = await async_loop.sock_recv_into(sock, memoryview(buf)[idx:le])
-			if read == 0:
-				raise ConnectionResetError()
-			idx += read
-		return bytes(buf)
+			available = socket_read_end - socket_read_start
+			if available == 0:
+				socket_read_start = 0
+				socket_read_end = await async_loop.sock_recv_into(sock, socket_read_buf_view)
+				if socket_read_end == 0:
+					raise ConnectionResetError()
+				available = socket_read_end
+			take = min(available, le - idx)
+			out[idx : idx + take] = socket_read_buf[
+				socket_read_start : socket_read_start + take
+			]
+			idx += take
+			socket_read_start += take
+		return bytes(out)
 
 	async def recv_int(bytes: int = 4) -> int:
 		return int.from_bytes(await read_exact(bytes), byteorder='little', signed=False)
@@ -185,6 +210,9 @@ async def host_loop(
 		if meth_id is not None:
 			total_handling_time += cur_delta
 			time_per_method[meth_id.name] = time_per_method.get(meth_id.name, 0.0) + cur_delta
+
+		await flush_socket_buffer()
+
 		meth_id = host_fns.Methods(await recv_int(1))
 		logger.trace('got method', method=meth_id, method_name=meth_id.name)
 		call_counts[meth_id.name] = call_counts.get(meth_id.name, 0) + 1
@@ -207,17 +235,9 @@ async def host_loop(
 					await send_all(bytes([host_fns.Errors.OK]))
 					await send_all(res)
 			case host_fns.Methods.CONSUME_RESULT:
-				logger.debug(
-					'handling time',
-					total=total_handling_time,
-					by_method=time_per_method,
-					call_counts=call_counts,
+				raise Exception(
+					'CONSUME_RESULT is not supported in this host loop implementation, use manager provided one'
 				)
-				res = await read_slice()
-
-				await send_all(bytes([0]))
-
-				return public_abi.ResultCode(res[0]), res[1:]
 			case host_fns.Methods.CONSUME_FUEL:
 				gas = await recv_int(8)
 				await handler.consume_gas(gas)
@@ -256,6 +276,16 @@ async def host_loop(
 				call_no = await recv_int()
 				await handler.notify_nondet_disagreement(call_no)
 				# No response needed according to the spec
+			case host_fns.Methods.NOTIFY_FINISHED:
+				logger.debug(
+					'handling time',
+					total=total_handling_time,
+					by_method=time_per_method,
+					call_counts=call_counts,
+				)
+				await send_all(bytes([0]))
+				await flush_socket_buffer()
+				return None
 			case x:
 				raise Exception(f'unknown method {x}')
 
@@ -371,9 +401,8 @@ async def run_genvm(
 			started_at[0] = time.time()
 
 	async def wrap_host():
-		r = await host_loop(handler, cancellation_event, logger=logger)
+		await host_loop(handler, cancellation_event, logger=logger)
 		logger.debug('host loop finished')
-		return r
 
 	timeout_fired = asyncio.Event()
 
@@ -431,15 +460,10 @@ async def run_genvm(
 	exceptions: list[Exception] = []
 	result_host: tuple[public_abi.ResultCode, bytes] | None = None
 	try:
-		result_host = fut_host.result()
+		fut_host.result()
 	except ConnectionResetError as e:
-		if timeout_fired.is_set():
-			result_host = (
-				public_abi.ResultCode.VM_ERROR,
-				gvm_calldata.encode({'data': public_abi.VmError.TIMEOUT.value}),
-			)
-		else:
-			exceptions.append(e)
+		if not timeout_fired.is_set():
+			logger.warning('connection reset without timeout', error=e)
 	except Exception as e:
 		if not timeout_fired.is_set():
 			exceptions.append(e)
@@ -466,7 +490,21 @@ async def run_genvm(
 			final_exception = Exception('execution failed', exceptions[1:])
 			raise final_exception from exceptions[0]
 
-		if result_host is None:
+		# Result was sent to manager via consume_result, get it from status
+		consumed_result_raw = (
+			status.get('consumed_result') if isinstance(status, dict) else None
+		)
+		if consumed_result_raw is not None:
+			consumed_result_bytes = bytes(consumed_result_raw)
+			result_kind = public_abi.ResultCode(consumed_result_bytes[0])
+			decoded = gvm_calldata.decode(consumed_result_bytes[1:])
+			execution_hash = decoded.get('execution_hash', b'')
+			result_data = decoded.get('data')
+			result_fingerprint = decoded.get('fingerprint')
+			result_storage_changes = decoded.get('storage_changes', [])
+			result_emissions = decoded.get('emissions', [])
+			nondet_results = decoded.get('nondet_results', [])
+		else:
 			execution_hash = b''
 			result_kind = public_abi.ResultCode.INTERNAL_ERROR
 			result_data = 'no_result'
@@ -474,15 +512,6 @@ async def run_genvm(
 			result_storage_changes = []
 			result_emissions = []
 			nondet_results = []
-		else:
-			result_kind = result_host[0]
-			decoded = gvm_calldata.decode(result_host[1])
-			execution_hash = decoded.get('execution_hash', b'')
-			result_data = decoded.get('data')
-			result_fingerprint = decoded.get('fingerprint')
-			result_storage_changes = decoded.get('storage_changes', [])
-			result_emissions = decoded.get('emissions', [])
-			nondet_results = decoded.get('nondet_results', [])
 
 		vm_error_description: str | None = None
 		if result_kind == public_abi.ResultCode.VM_ERROR and isinstance(result_data, str):

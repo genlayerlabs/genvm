@@ -57,6 +57,7 @@ pub struct Ctor {
     pub limiter: rt::DetNondet<rt::memlimiter::Limiter>,
     pub locked_slots: host::LockedSlotsSet,
     pub leader_nondet_results: Option<Vec<bytes::Bytes>>,
+    pub multi_host: host::MultiHost,
 }
 
 pub struct Supervisor {
@@ -75,7 +76,7 @@ pub struct Supervisor {
     wasm_mod_cache: WasmModuleCache,
 
     pub(crate) engines: rt::DetNondet<wasmtime::Engine>,
-    pub(crate) host: Arc<tokio::sync::Mutex<host::Host>>,
+    pub(crate) host: Arc<host::MultiHost>,
 }
 
 pub fn create_engines(
@@ -204,11 +205,7 @@ impl Supervisor {
         rt::vm::storage::Limiter::new(self.shared_data.gep(|x| &x.storage_pages_limit))
     }
 
-    pub fn start(
-        config: &config::Config,
-        ctor: Ctor,
-        host: host::Host,
-    ) -> anyhow::Result<Arc<Self>> {
+    pub fn start(config: &config::Config, ctor: Ctor) -> anyhow::Result<Arc<Self>> {
         let my_cache_dir = runners::cache::get_cache_dir(&config.cache_dir).ok();
 
         let engines = create_engines(|base_conf| {
@@ -268,7 +265,7 @@ impl Supervisor {
                 cache_dir: my_cache_dir,
                 wasm_modules_cache: sync::CacheMap::new(),
             },
-            host: Arc::new(tokio::sync::Mutex::new(host)),
+            host: Arc::new(ctor.multi_host),
             engines,
         });
 
