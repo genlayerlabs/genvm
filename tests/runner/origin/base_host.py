@@ -515,6 +515,10 @@ async def run_genvm(
 			result_emissions = []
 			nondet_results = []
 
+		if timeout_fired.is_set() and result_kind != public_abi.ResultCode.RETURN:
+			result_kind = public_abi.ResultCode.VM_ERROR
+			result_data = public_abi.VmError.TIMEOUT.value
+
 		vm_error_description: str | None = None
 		if result_kind == public_abi.ResultCode.VM_ERROR and isinstance(result_data, str):
 			try:
