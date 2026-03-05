@@ -112,6 +112,8 @@ async def build(
 class ContainerHandle(ya_test_runner.exec.service.Handle):
 	def __init__(self, container_id: str):
 		self._container_id = container_id
+		self._stop_command = ['docker', 'stop', container_id]
+		local_ctx.shared.watchdog.add_command(self._stop_command)
 
 	async def get_logs(self, tail: int = 100) -> str:
 		"""Get recent logs from the container."""
@@ -215,8 +217,10 @@ class ContainerHandle(ya_test_runner.exec.service.Handle):
 
 	async def interrupt(self) -> None:
 		cmd = ya_test_runner.exec.command.Command(
-			args=['docker', 'stop', self._container_id],
+			args=self._stop_command,
 			cwd=local_ctx.shared.root_dir,
 			env=DEFAULT_ENV,
 		)
 		await cmd.run(ctx=local_ctx.shared, mode=ya_test_runner.exec.command.RunMode.SILENT)
+
+		local_ctx.shared.watchdog.remove_command(self._stop_command)

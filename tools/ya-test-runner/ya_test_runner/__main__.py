@@ -426,7 +426,10 @@ def main() -> None:
 		parser_result.parser.print_help()
 		sys.exit(1)
 
-	conf_env.args.func(shared_context, conf_env)
+	try:
+		conf_env.args.func(shared_context, conf_env)
+	finally:
+		shared_context.watchdog.stop()
 
 
 if __name__ == '__main__':

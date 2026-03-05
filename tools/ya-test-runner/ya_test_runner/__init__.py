@@ -20,6 +20,7 @@ import threading
 from typing import Any
 from . import formatter
 from ya_test_runner.formatter import Formatter, Sink
+from .util.watchdog import Watchdog
 
 
 @dataclass
@@ -27,6 +28,7 @@ class SharedContext:
 	root_dir: Path
 	logger: Formatter
 	printer: Sink
+	watchdog: Watchdog = field(default_factory=Watchdog.start)
 
 	_git_files: list[Path] | None = None
 	_interrupted: threading.Event = field(default_factory=threading.Event)
