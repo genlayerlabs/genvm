@@ -18,20 +18,24 @@ use wasi::genlayer_sdk::ExtendedMessage;
 
 use std::sync::Arc;
 
+use crate::wasi::genlayer_sdk::VMDataAccumulator;
+
 #[derive(Default, Debug, serde::Serialize)]
 pub struct Metrics {
     pub supervisor: rt::Metrics,
-    pub host: host::Metrics,
     pub web_module: modules::Metrics,
     pub llm_module: modules::Metrics,
+    pub hosts: Box<[host::Metrics]>,
 }
 
 pub fn create_supervisor(
     config: &config::Config,
-    mut host: Host,
+    mut hosts: Vec<Host>,
+    method_hosts: Vec<u8>,
     host_data: genvm_modules_interfaces::HostData,
     shared_data: sync::DArc<rt::SharedData>,
     message: &domain::MessageData,
+    leader_nondet_results: Option<Vec<bytes::Bytes>>,
 ) -> Result<Arc<rt::supervisor::Supervisor>> {
     let metrics = shared_data.gep(|x| &x.metrics);
 
@@ -56,11 +60,19 @@ pub fn create_supervisor(
 
     let limiter_det = rt::memlimiter::Limiter::new("det");
 
-    let locked_slots = host.get_locked_slots_for_sender(
+    let storage_host_idx = if (host::host_fns::Methods::StorageRead as usize) < method_hosts.len() {
+        method_hosts[host::host_fns::Methods::StorageRead as usize] as usize
+    } else {
+        0
+    };
+
+    let locked_slots = hosts[storage_host_idx].get_locked_slots_for_sender(
         calldata::Address::from(message.contract_address.raw()),
         calldata::Address::from(message.sender_address.raw()),
         &limiter_det,
     )?;
+
+    let multi_host = host::MultiHost::new(hosts, method_hosts);
 
     let ctor = rt::supervisor::Ctor {
         shared_data,
@@ -70,17 +82,11 @@ pub fn create_supervisor(
             non_det: rt::memlimiter::Limiter::new("nondet"),
         },
         locked_slots,
+        leader_nondet_results,
+        multi_host,
     };
 
-    rt::supervisor::Supervisor::start(config, ctor, host)
-}
-
-fn log_vm_error(e: &anyhow::Error) {
-    if let Some(rt::errors::VMError(msg, Some(err))) = e.downcast_ref() {
-        log_error!(msg = msg, error:ah = err; "vm error");
-    } else {
-        log_error!(error:ah = e; "vm error");
-    }
+    rt::supervisor::Supervisor::start(config, ctor)
 }
 
 pub async fn run_with_impl(
@@ -110,6 +116,8 @@ pub async fn run_with_impl(
         log_debug!("code is null");
     }
 
+    let data_fees_limit = supervisor.shared_data.gep(|x| &x.data_fees_limit);
+
     let essential_data = wasi::genlayer_sdk::SingleVMData {
         conf: wasi::base::Config {
             needs_error_fingerprint: true,
@@ -131,49 +139,16 @@ pub async fn run_with_impl(
         should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(true)),
 
         storage: topmost_storage,
-        events: Vec::new(),
+        accumulator: VMDataAccumulator {
+            data_fees_limit: data_fees_limit,
+            messages_value_decremented: primitive_types::U256::zero(),
+            emissions: Vec::new(),
+        },
     };
 
-    let limiter = supervisor
-        .limiter
-        .get(essential_data.conf.is_deterministic)
-        .derived();
-
-    let vm = rt::supervisor::spawn(&supervisor, essential_data, limiter)
-        .await
-        .inspect_err(log_vm_error)?;
-    let vm = rt::supervisor::apply_contract_actions(&supervisor, vm)
-        .await
-        .inspect_err(log_vm_error);
-
-    let vm = match vm {
-        Err(e) => {
-            return match rt::errors::unwrap_vm_errors(e) {
-                Err(e) => Err(e),
-                Ok(v) => Ok(rt::vm::FullResult {
-                    fingerprint: None,
-                    kind: match &v {
-                        rt::vm::RunOk::Return(_) => public_abi::ResultCode::Return,
-                        rt::vm::RunOk::UserError(_) => public_abi::ResultCode::UserError,
-                        rt::vm::RunOk::VMError(_, _) => public_abi::ResultCode::VmError,
-                    },
-                    data: match v {
-                        rt::vm::RunOk::Return(buf) => calldata::decode(&buf)?,
-                        rt::vm::RunOk::UserError(buf) => calldata::Value::Str(buf),
-                        rt::vm::RunOk::VMError(msg, _) => calldata::Value::Str(msg),
-                    },
-                    storage_changes: Vec::new(),
-                    events: Vec::new(),
-                }),
-            };
-        }
-        Ok(v) => v,
-    };
-
-    let run_result = vm.run().await?;
+    let run_result = rt::spawn_apply_run(&supervisor, essential_data).await?;
 
     Ok(rt::vm::FullResult {
-        fingerprint: run_result.fingerprint,
         kind: match &run_result.run_ok {
             rt::vm::RunOk::Return(_) => public_abi::ResultCode::Return,
             rt::vm::RunOk::UserError(_) => public_abi::ResultCode::UserError,
@@ -184,8 +159,9 @@ pub async fn run_with_impl(
             rt::vm::RunOk::UserError(buf) => calldata::Value::Str(buf),
             rt::vm::RunOk::VMError(msg, _) => calldata::Value::Str(msg),
         },
+        fingerprint: run_result.fingerprint,
         storage_changes: run_result.vm_data.storage.make_delta(),
-        events: run_result.vm_data.events,
+        emissions: run_result.vm_data.accumulator.emissions,
     })
 }
 
@@ -193,7 +169,7 @@ pub async fn run_with(
     entry_data: domain::ExecutionData,
     supervisor: Arc<rt::supervisor::Supervisor>,
     permissions: &str,
-) -> anyhow::Result<(rt::vm::FullResult, Option<u32>)> {
+) -> anyhow::Result<host::FullResult> {
     let res = run_with_impl(entry_data, supervisor.clone(), permissions).await;
 
     log_debug!("deterministic execution done");
@@ -221,16 +197,7 @@ pub async fn run_with(
                 }
                 Ok(r)
             }
-            Err(_e) => Ok((
-                rt::vm::FullResult {
-                    fingerprint: None,
-                    kind: public_abi::ResultCode::VmError,
-                    data: calldata::Value::Str(public_abi::VmError::Timeout.value().into()),
-                    storage_changes: Vec::new(),
-                    events: Vec::new(),
-                },
-                None,
-            )),
+            Err(_e) => Ok((rt::vm::FullResult::timeout(), None)),
         }
     } else {
         merged_result
@@ -241,7 +208,10 @@ pub async fn run_with(
     });
 
     if let Ok((_, Some(disag))) = &res {
-        let mut host = supervisor.host.lock().await;
+        let mut host = supervisor
+            .host
+            .lock_for(host::host_fns::Methods::NotifyNondetDisagreement)
+            .await;
         host.notify_nondet_disagreement(*disag)?;
     }
 
@@ -289,19 +259,37 @@ pub async fn run_with(
 
     log_info!(metrics:serde = all_metrics; "metrics");
 
-    log_debug!("sending final result to host");
+    log_debug!("sending final result");
 
-    let (res, nondet_disagree) = match res {
-        Ok((a, b)) => (Ok(a), b),
-        Err(e) => (Err(e), None),
+    let data_fees_remaining = supervisor.shared_data.data_fees_limit.remaining_fast();
+
+    let res = match res {
+        Ok((a, b)) => Ok(host::FullResult::new(
+            a,
+            supervisor.take_nondet_results().await,
+            b,
+            data_fees_remaining,
+        )),
+        Err(e) => Err(e),
     };
 
-    let mut host = supervisor.host.lock().await;
-    host.consume_result(&res)?;
-    std::mem::drop(host);
-
-    match res {
-        Ok(r) => Ok((r, nondet_disagree)),
-        Err(e) => Err(e),
+    {
+        let mut host = supervisor
+            .host
+            .lock_for(host::host_fns::Methods::ConsumeResult)
+            .await;
+        host.consume_result(&res)?;
     }
+
+    {
+        let mut host = supervisor
+            .host
+            .lock_for(host::host_fns::Methods::NotifyFinished)
+            .await;
+        host.notify_finished()?;
+    }
+
+    host::all_useful_work_done();
+
+    res
 }

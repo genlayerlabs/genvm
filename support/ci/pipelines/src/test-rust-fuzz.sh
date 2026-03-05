@@ -6,4 +6,4 @@ set -ex
 
 ruby ./configure.rb
 
-nix develop .#mock-tests --command ya-test-runner --test-tags "$(cat tests/presets/rust-fuzz.txt)" run
+nix develop .#mock-tests --command ya-test-runner --filter-tag "$(cat tests/presets/rust-fuzz.txt)" run

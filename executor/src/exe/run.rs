@@ -6,25 +6,10 @@ use std::{
 use genvm_common::*;
 
 use anyhow::{Context, Result};
-use clap::ValueEnum;
 use genvm::{
     config,
     rt::{self},
 };
-
-#[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
-#[clap(rename_all = "kebab_case")]
-enum PrintOption {
-    Result,
-    Fingerprint,
-    StderrFull,
-}
-
-impl std::fmt::Display for PrintOption {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.write_str(&format!("{self:?}").to_ascii_lowercase())
-    }
-}
 
 const EXECUTION_DATA_HELP: &str = "path to file containing encoded execution data (use '-' for stdin, 'fd://N' for file descriptor N)";
 
@@ -38,14 +23,13 @@ pub struct Args {
 
     #[arg(long, default_value = "-", help = EXECUTION_DATA_HELP)]
     execution_data: String,
-    #[arg(long, help = "host uri, preferably unix://")]
-    host: String,
+    #[arg(
+        long,
+        help = "host connections in format id=uri (e.g. 0=unix:///path or 1=fd://N)"
+    )]
+    host: Vec<String>,
     #[arg(long, help = "id to pass to modules, useful for aggregating logs")]
     genvm_id: Option<u64>,
-    #[arg(long, help = "max amount of storage pages to be written")]
-    storage_pages: u64,
-    #[clap(long, help = "what to output to stdout/stderr")]
-    print: Vec<PrintOption>,
     #[clap(long, default_value_t = false)]
     sync: bool,
     #[clap(
@@ -123,16 +107,56 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         Some(v) => *v,
     };
 
+    if args.host.is_empty() {
+        anyhow::bail!("at least one --host must be specified");
+    }
+
+    let mut metrics = genvm::Metrics::default();
+    let metrics_for_each_host = args
+        .host
+        .iter()
+        .map(|_| genvm::host::Metrics::default())
+        .collect::<Vec<_>>();
+    metrics.hosts = Box::from(metrics_for_each_host);
+
+    let data_fees_limit = {
+        let (sign, bytes) = execution_data.data_fees_limit.to_bytes_be();
+        anyhow::ensure!(
+            sign != num_bigint::Sign::Minus,
+            "data_fees_limit must be non-negative"
+        );
+        let mut buf = [0u8; 32];
+        let start = 32usize.saturating_sub(bytes.len());
+        anyhow::ensure!(bytes.len() <= 32, "data_fees_limit exceeds U256 range");
+        buf[start..].copy_from_slice(&bytes);
+        primitive_types::U256::from_big_endian(&buf)
+    };
+
     let shared_data = sync::DArc::new(genvm::rt::SharedData {
         cancellation: token,
         is_sync: args.sync,
         genvm_id: genvm_modules_interfaces::GenVMId(genvm_id),
         debug_mode: args.debug_mode,
-        metrics: genvm::Metrics::default(),
-        storage_pages_limit: std::sync::atomic::AtomicU64::new(args.storage_pages),
+        metrics,
+        data_fees_limit: genvm::rt::DataFeesLimit::new(
+            data_fees_limit,
+            execution_data.storage_page_cost,
+            execution_data.receipt_word_cost,
+        ),
     });
 
-    let host = genvm::Host::connect(&args.host, shared_data.gep(|x| &x.metrics.host))?;
+    let hosts: Vec<genvm::Host> = args
+        .host
+        .iter()
+        .enumerate()
+        .map(|(id, uri)| {
+            let metrics = shared_data.gep(|x| &x.metrics.hosts[id]);
+            genvm::Host::connect(uri, metrics)
+                .with_context(|| format!("connecting host {id} to {uri}"))
+        })
+        .collect::<Result<_>>()?;
+
+    let method_hosts = execution_data.method_hosts.clone();
 
     let mut perm_size = 0;
     for perm in ["r", "w", "s", "c", "n"] {
@@ -149,8 +173,16 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
 
     let rt = runtime.enter();
 
-    let supervisor = genvm::create_supervisor(&config, host, host_data, shared_data, message)
-        .with_context(|| format!("creating supervisor for genvm_id {genvm_id}"))?;
+    let supervisor = genvm::create_supervisor(
+        &config,
+        hosts,
+        method_hosts,
+        host_data,
+        shared_data,
+        message,
+        execution_data.leader_nondet_results.clone(),
+    )
+    .with_context(|| format!("creating supervisor for genvm_id {genvm_id}"))?;
 
     std::mem::drop(rt);
 
@@ -164,42 +196,6 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
 
     if let Err(err) = &res {
         log_error!(error:ah = err; "error running genvm");
-    }
-
-    if args.print.contains(&PrintOption::StderrFull) {
-        eprintln!("{res:?}");
-    }
-
-    if args.print.contains(&PrintOption::Result) {
-        match &res {
-            Ok((res, nondet)) => {
-                match res.kind {
-                    genvm::public_abi::ResultCode::VmError => {
-                        println!("executed with `VMError({})`", res.data);
-                    }
-                    genvm::public_abi::ResultCode::UserError => {
-                        println!("executed with `UserError({})`", res.data);
-                    }
-                    genvm::public_abi::ResultCode::Return => {
-                        println!("executed with `Return({})`", res.data);
-                    }
-                    _ => {}
-                }
-                if let Some(disag) = nondet {
-                    println!("nondet disagreement: {disag}");
-                }
-            }
-            Err(err) => {
-                println!("executed with `InternalError(\"\")`");
-                eprintln!("{err:?}");
-            }
-        }
-    }
-
-    if args.print.contains(&PrintOption::Fingerprint) {
-        if let Ok((rt::vm::FullResult { fingerprint, .. }, _)) = &res {
-            println!("Fingerprint: {fingerprint:?}");
-        }
     }
 
     runtime.block_on(async {

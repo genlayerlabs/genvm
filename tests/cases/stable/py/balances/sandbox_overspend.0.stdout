@@ -1,0 +1,5 @@
+balance before=100 after_first_send=40
+sandbox result=VMError(message='exit_code 1')
+balance final=40
+executed with `Return(null)`
+{"address":addr#0200000000000000000000000000000000000000,"calldata":{},"on":"finalized","type":"PostMessage","value":"0x3c"}

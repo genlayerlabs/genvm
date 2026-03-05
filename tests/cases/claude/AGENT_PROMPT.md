@@ -43,7 +43,7 @@ You can write tests in rust, if you find it necessary. See tests/cases/unstable/
 # example:
 ./tests/cases/stable/claude/run_test.py example
 
-# this runs: ya-test-runner --test-tags integration --test-name 'tests/cases/stable/claude/<test-dir>' run --no-manager
+# this runs: ya-test-runner --filter-tag integration --filter-name 'tests/cases/stable/claude/<test-dir>' run --no-manager
 # it assumes a manager is already running on port 3999
 
 # Output lives in directories like

@@ -9,7 +9,7 @@ Usage:
 	./run_test.py example
 
 This will run:
-	ya-test-runner --test-tags integration --test-name 'tests/cases/stable/claude/<test-dir>' run --no-manager
+	ya-test-runner --filter-tag integration --filter-name 'tests/cases/stable/claude/<test-dir>' run --no-manager
 """
 
 import subprocess
@@ -43,9 +43,9 @@ def main():
 
 	cmd = [
 		binary,
-		'--test-tags',
+		'--filter-tag',
 		'integration',
-		'--test-name',
+		'--filter-name',
 		test_name,
 		'run',
 		'--no-manager',

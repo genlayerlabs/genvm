@@ -64,6 +64,77 @@ def _topo_sort_services(services: set[Service]) -> list[Service]:
 	return result
 
 
+def _validate_test_dependencies(
+	cases: list[ya_test_runner.test.Case],
+) -> dict[str, ya_test_runner.test.Case]:
+	"""
+	Validate test-to-test dependencies: check for circular deps and return cases_by_name.
+	Dependencies on names not in the current set are silently ignored (e.g. filtered out).
+	"""
+	cases_by_name: dict[str, ya_test_runner.test.Case] = {}
+	for case in cases:
+		cases_by_name[case.description.name] = case
+
+	# Detect circular dependencies via DFS
+	visited: set[str] = set()
+	in_stack: set[str] = set()
+
+	def visit(name: str) -> None:
+		if name in visited:
+			return
+		if name in in_stack:
+			raise ValueError(f'Circular test dependency detected involving {name}')
+		in_stack.add(name)
+		case = cases_by_name.get(name)
+		if case is not None:
+			for dep_name in case.description.depends_on:
+				if dep_name in cases_by_name:
+					visit(dep_name)
+		in_stack.remove(name)
+		visited.add(name)
+
+	for name in cases_by_name:
+		visit(name)
+
+	return cases_by_name
+
+
+def _get_effective_services(
+	case: ya_test_runner.test.Case,
+	cases_by_name: dict[str, ya_test_runner.test.Case],
+	_memo: dict[str, frozenset[str]] | None = None,
+) -> frozenset[str]:
+	"""
+	Compute effective service names for a test case: its own services plus
+	services of all transitive test dependencies. This ensures a dependent
+	test is never placed in an earlier batch than its dependency.
+	"""
+	if _memo is None:
+		_memo = {}
+
+	name = case.description.name
+	if name in _memo:
+		return _memo[name]
+
+	names: set[str] = set()
+	# Own services
+	for svc in case.description.needed_services:
+		names.add(svc.name)
+		if svc.depends_on:
+			for dep in svc.depends_on:
+				names.add(dep.name)
+
+	# Transitive test dependency services
+	for dep_name in case.description.depends_on:
+		dep_case = cases_by_name.get(dep_name)
+		if dep_case is not None:
+			names.update(_get_effective_services(dep_case, cases_by_name, _memo))
+
+	result = frozenset(names)
+	_memo[name] = result
+	return result
+
+
 def run(shared: SharedContext, collection_env: CollectionEnv) -> Env:
 	next_id = 1
 	actions: list[Action] = []
@@ -71,35 +142,43 @@ def run(shared: SharedContext, collection_env: CollectionEnv) -> Env:
 	# Track running batches: batch_id -> set of service names the batch depends on
 	running_batches: dict[int, set[str]] = {}
 
-	# Collect all services needed by all cases
+	# Validate test dependencies and build name lookup
+	cases_by_name = _validate_test_dependencies(collection_env.cases)
+
+	# Collect all services needed by all cases (using effective services)
 	all_needed_services: set[Service] = set()
 	for case in collection_env.cases:
+		# Collect direct services
 		for svc in case.description.needed_services:
 			all_needed_services.add(svc)
-			# Also add dependencies
 			if svc.depends_on:
 				for dep in svc.depends_on:
 					all_needed_services.add(dep)
+		# Also collect services from test dependencies (transitively)
+		for dep_name in case.description.depends_on:
+			dep_case = cases_by_name.get(dep_name)
+			if dep_case is not None:
+				for svc in dep_case.description.needed_services:
+					all_needed_services.add(svc)
+					if svc.depends_on:
+						for dep in svc.depends_on:
+							all_needed_services.add(dep)
 
 	# Topo sort: dependencies first, dependents last
 	topo_sorted_services = _topo_sort_services(all_needed_services)
 
-	# Group cases by required services (as frozenset of names including dependencies)
-	def get_all_service_names(case: ya_test_runner.test.Case) -> frozenset[str]:
-		names: set[str] = set()
-		for svc in case.description.needed_services:
-			names.add(svc.name)
-			if svc.depends_on:
-				for dep in svc.depends_on:
-					names.add(dep.name)
-		return frozenset(names)
+	# Use effective services for batch placement
+	effective_services_memo: dict[str, frozenset[str]] = {}
 
-	# Separate cases by whether they need services
+	def get_effective_service_names(case: ya_test_runner.test.Case) -> frozenset[str]:
+		return _get_effective_services(case, cases_by_name, effective_services_memo)
+
+	# Separate cases by whether they have effective services
 	cases_without_services: list[ya_test_runner.test.Case] = []
 	cases_with_services: list[ya_test_runner.test.Case] = []
 
 	for case in collection_env.cases:
-		if len(case.description.needed_services) > 0:
+		if len(get_effective_service_names(case)) > 0:
 			cases_with_services.append(case)
 		else:
 			cases_without_services.append(case)
@@ -131,12 +210,12 @@ def run(shared: SharedContext, collection_env: CollectionEnv) -> Env:
 		actions.append(StartService(service=svc))
 		active_services.add(svc.name)
 
-		# Find cases that can now run (all their services are active)
+		# Find cases that can now run (all their effective services are active)
 		ready_cases: list[ya_test_runner.test.Case] = []
 		still_waiting: list[ya_test_runner.test.Case] = []
 
 		for case in remaining_cases:
-			required_services = get_all_service_names(case)
+			required_services = get_effective_service_names(case)
 			if required_services.issubset(active_services):
 				ready_cases.append(case)
 			else:
@@ -161,7 +240,7 @@ def run(shared: SharedContext, collection_env: CollectionEnv) -> Env:
 			# Track which services this batch depends on
 			batch_services: set[str] = set()
 			for case in parallel_batch:
-				batch_services.update(get_all_service_names(case))
+				batch_services.update(get_effective_service_names(case))
 			actions.append(StartCases(id=batch_id, cases=parallel_batch))
 			running_batches[batch_id] = batch_services
 

@@ -23,6 +23,7 @@ if True:
 			break
 		root = root.parent
 	import genlayer.py.calldata as gvm_calldata
+	from genlayer.py.types import Address
 
 
 from . import host_fns
@@ -55,6 +56,64 @@ class DeployDefaultTransactionData(DefaultTransactionData):
 	salt_nonce: typing.NotRequired[str]
 
 
+class Message(typing.TypedDict):
+	contract_address: Address
+	sender_address: Address
+	origin_address: Address
+	chain_id: int
+	value: typing.NotRequired[int]
+	is_init: bool
+	datetime: typing.NotRequired[str]
+
+
+class FingerprintFrame(typing.TypedDict):
+	module_name: str
+	func: int
+
+
+class ResultFingerprint(typing.TypedDict):
+	frames: list[FingerprintFrame]
+	module_instances: dict[str, typing.Any]
+
+
+class EthSendInner(typing.TypedDict):
+	type: typing.Literal['EthSend']
+	address: Address
+	calldata: bytes
+	value: int
+
+
+class PostMessageInner(typing.TypedDict):
+	type: typing.Literal['PostMessage']
+	address: Address
+	calldata: gvm_calldata.Decoded
+	value: int
+	on: typing.Literal['finalized', 'accepted']
+
+
+class DeployContractInner(typing.TypedDict):
+	type: typing.Literal['DeployContract']
+	calldata: gvm_calldata.Decoded
+	code: bytes
+	value: int
+	on: typing.Literal['finalized', 'accepted']
+	salt_nonce: int
+
+
+class EmitEventInner(typing.TypedDict):
+	type: typing.Literal['EmitEvent']
+	topics: list[bytes]
+	blob: dict[str, gvm_calldata.Decoded]
+
+
+type ResultEmission = typing.Union[
+	EthSendInner,
+	PostMessageInner,
+	DeployContractInner,
+	EmitEventInner,
+]
+
+
 class IHost(metaclass=abc.ABCMeta):
 	@abc.abstractmethod
 	async def loop_enter(self, cancellation: asyncio.Event) -> socket.socket: ...
@@ -71,27 +130,7 @@ class IHost(metaclass=abc.ABCMeta):
 	) -> bytes: ...
 
 	@abc.abstractmethod
-	async def get_leader_nondet_result(
-		self, call_no: int, /
-	) -> collections.abc.Buffer: ...
-	@abc.abstractmethod
-	async def post_nondet_result(
-		self, call_no: int, data: collections.abc.Buffer, /
-	) -> None: ...
-	@abc.abstractmethod
-	async def post_message(
-		self, account: bytes, calldata: bytes, data: DefaultTransactionData, /
-	) -> None: ...
-	@abc.abstractmethod
-	async def deploy_contract(
-		self, calldata: bytes, code: bytes, data: DeployDefaultTransactionData, /
-	) -> None: ...
-	@abc.abstractmethod
 	async def consume_gas(self, gas: int, /) -> None: ...
-	@abc.abstractmethod
-	async def eth_send(
-		self, account: bytes, calldata: bytes, data: DefaultEthTransactionData, /
-	) -> None: ...
 	@abc.abstractmethod
 	async def eth_call(self, account: bytes, calldata: bytes, /) -> bytes: ...
 	@abc.abstractmethod
@@ -104,25 +143,50 @@ class IHost(metaclass=abc.ABCMeta):
 
 async def host_loop(
 	handler: IHost, cancellation: asyncio.Event, *, logger: Logger
-) -> tuple[public_abi.ResultCode, bytes]:
+) -> None:
 	async_loop = asyncio.get_event_loop()
 
 	logger.trace('entering loop')
 	sock = await handler.loop_enter(cancellation)
 	logger.trace('entered loop')
 
-	async def send_all(data: collections.abc.Buffer):
-		await async_loop.sock_sendall(sock, data)
+	socket_write_buffer = bytearray()
+	socket_read_buffer = bytearray(b'\x00' * 4096)
+
+	async def send_all(data: bytes | memoryview):
+		socket_write_buffer.extend(data)
+		if len(socket_write_buffer) > 4096:
+			await flush_socket_buffer()
+
+	async def flush_socket_buffer():
+		if len(socket_write_buffer) > 0:
+			await async_loop.sock_sendall(sock, socket_write_buffer)
+			socket_write_buffer.clear()
+
+	socket_read_buf = bytearray(65536)
+	socket_read_buf_view = memoryview(socket_read_buf)
+	socket_read_start = 0
+	socket_read_end = 0
 
 	async def read_exact(le: int) -> bytes:
-		buf = bytearray([0] * le)
+		nonlocal socket_read_start, socket_read_end
+		out = bytearray(le)
 		idx = 0
 		while idx < le:
-			read = await async_loop.sock_recv_into(sock, memoryview(buf)[idx:le])
-			if read == 0:
-				raise ConnectionResetError()
-			idx += read
-		return bytes(buf)
+			available = socket_read_end - socket_read_start
+			if available == 0:
+				socket_read_start = 0
+				socket_read_end = await async_loop.sock_recv_into(sock, socket_read_buf_view)
+				if socket_read_end == 0:
+					raise ConnectionResetError()
+				available = socket_read_end
+			take = min(available, le - idx)
+			out[idx : idx + take] = socket_read_buf[
+				socket_read_start : socket_read_start + take
+			]
+			idx += take
+			socket_read_start += take
+		return bytes(out)
 
 	async def recv_int(bytes: int = 4) -> int:
 		return int.from_bytes(await read_exact(bytes), byteorder='little', signed=False)
@@ -146,6 +210,9 @@ async def host_loop(
 		if meth_id is not None:
 			total_handling_time += cur_delta
 			time_per_method[meth_id.name] = time_per_method.get(meth_id.name, 0.0) + cur_delta
+
+		await flush_socket_buffer()
+
 		meth_id = host_fns.Methods(await recv_int(1))
 		logger.trace('got method', method=meth_id, method_name=meth_id.name)
 		call_counts[meth_id.name] = call_counts.get(meth_id.name, 0) + 1
@@ -168,88 +235,12 @@ async def host_loop(
 					await send_all(bytes([host_fns.Errors.OK]))
 					await send_all(res)
 			case host_fns.Methods.CONSUME_RESULT:
-				logger.debug(
-					'handling time',
-					total=total_handling_time,
-					by_method=time_per_method,
-					call_counts=call_counts,
+				raise Exception(
+					'CONSUME_RESULT is not supported in this host loop implementation, use manager provided one'
 				)
-				res = await read_slice()
-
-				await send_all(bytes([0]))
-
-				return public_abi.ResultCode(res[0]), res[1:]
-			case host_fns.Methods.GET_LEADER_NONDET_RESULT:
-				call_no = await recv_int()
-				try:
-					data = await handler.get_leader_nondet_result(call_no)
-				except HostException as e:
-					await send_all(bytes([e.error_code]))
-				else:
-					await send_all(bytes([host_fns.Errors.OK]))
-					data = memoryview(data)
-					await send_int(len(data))
-					await send_all(data)
-			case host_fns.Methods.POST_NONDET_RESULT:
-				call_no = await recv_int()
-				try:
-					await handler.post_nondet_result(call_no, await read_slice())
-				except HostException as e:
-					await send_all(bytes([e.error_code]))
-				else:
-					await send_all(bytes([host_fns.Errors.OK]))
-			case host_fns.Methods.POST_MESSAGE:
-				account = await read_exact(ACCOUNT_ADDR_SIZE)
-
-				calldata_len = await recv_int()
-				calldata = await read_exact(calldata_len)
-
-				message_data_len = await recv_int()
-				message_data_bytes = await read_exact(message_data_len)
-				message_data = json.loads(str(message_data_bytes, 'utf-8'))
-
-				try:
-					await handler.post_message(account, calldata, message_data)
-				except HostException as e:
-					await send_all(bytes([e.error_code]))
-				else:
-					await send_all(bytes([host_fns.Errors.OK]))
 			case host_fns.Methods.CONSUME_FUEL:
 				gas = await recv_int(8)
 				await handler.consume_gas(gas)
-			case host_fns.Methods.DEPLOY_CONTRACT:
-				calldata_len = await recv_int()
-				calldata = await read_exact(calldata_len)
-
-				code_len = await recv_int()
-				code = await read_exact(code_len)
-
-				message_data_len = await recv_int()
-				message_data_bytes = await read_exact(message_data_len)
-				message_data = json.loads(str(message_data_bytes, 'utf-8'))
-
-				try:
-					await handler.deploy_contract(calldata, code, message_data)
-				except HostException as e:
-					await send_all(bytes([e.error_code]))
-				else:
-					await send_all(bytes([host_fns.Errors.OK]))
-
-			case host_fns.Methods.ETH_SEND:
-				account = await read_exact(ACCOUNT_ADDR_SIZE)
-				calldata_len = await recv_int()
-				calldata = await read_exact(calldata_len)
-
-				message_data_len = await recv_int()
-				message_data_bytes = await read_exact(message_data_len)
-				message_data = json.loads(str(message_data_bytes, 'utf-8'))
-
-				try:
-					await handler.eth_send(account, calldata, message_data)
-				except HostException as e:
-					await send_all(bytes([e.error_code]))
-				else:
-					await send_all(bytes([host_fns.Errors.OK]))
 			case host_fns.Methods.ETH_CALL:
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
 				calldata_len = await recv_int()
@@ -285,6 +276,16 @@ async def host_loop(
 				call_no = await recv_int()
 				await handler.notify_nondet_disagreement(call_no)
 				# No response needed according to the spec
+			case host_fns.Methods.NOTIFY_FINISHED:
+				logger.debug(
+					'handling time',
+					total=total_handling_time,
+					by_method=time_per_method,
+					call_counts=call_counts,
+				)
+				await send_all(bytes([0]))
+				await flush_socket_buffer()
+				return None
 			case x:
 				raise Exception(f'unknown method {x}')
 
@@ -297,11 +298,14 @@ class RunHostAndProgramRes:
 
 	execution_time: float
 
+	execution_hash: bytes
+
 	result_kind: public_abi.ResultCode
-	result_data: typing.Any
-	result_fingerprint: typing.Any
+	result_data: gvm_calldata.Decoded
+	result_fingerprint: ResultFingerprint | None
 	result_storage_changes: list[tuple[bytes, bytes]]
-	result_events: list[list[bytes]]
+	result_emissions: list[ResultEmission]
+	result_nondet_results: list[bytes]
 	vm_error_description: str | None = None
 
 
@@ -328,13 +332,16 @@ async def run_genvm(
 	logger: Logger | None = None,
 	is_sync: bool,
 	capture_output: bool = True,
-	message: gvm_calldata.Encodable,
+	message: Message,
 	host_data: str = '',
 	host: str,
 	extra_args: list[str] = [],
-	storage_pages: int = 10_000_000,
+	data_fees_limit: int = 10_000_000,
+	storage_page_cost: int = 1,
+	receipt_word_cost: int = 1,
 	code: bytes | None = None,
 	calldata: bytes,
+	leader_nondet_results: list[bytes] | None = None,
 	request_extra: dict[str, gvm_calldata.Encodable] = {},
 ) -> RunHostAndProgramRes:
 	if logger is None:
@@ -368,9 +375,12 @@ async def run_genvm(
 						'timestamp': timestamp,
 						'host': host,
 						'extra_args': extra_args,
-						'storage_pages': storage_pages,
 						'code': code,
 						'calldata': calldata,
+						'leader_nondet_results': leader_nondet_results,
+						'data_fees_limit': data_fees_limit,
+						'storage_page_cost': storage_page_cost,
+						'receipt_word_cost': receipt_word_cost,
 						**request_extra,
 					}
 				),
@@ -393,9 +403,8 @@ async def run_genvm(
 			started_at[0] = time.time()
 
 	async def wrap_host():
-		r = await host_loop(handler, cancellation_event, logger=logger)
+		await host_loop(handler, cancellation_event, logger=logger)
 		logger.debug('host loop finished')
-		return r
 
 	timeout_fired = asyncio.Event()
 
@@ -453,15 +462,10 @@ async def run_genvm(
 	exceptions: list[Exception] = []
 	result_host: tuple[public_abi.ResultCode, bytes] | None = None
 	try:
-		result_host = fut_host.result()
+		fut_host.result()
 	except ConnectionResetError as e:
-		if timeout_fired.is_set():
-			result_host = (
-				public_abi.ResultCode.VM_ERROR,
-				gvm_calldata.encode({'data': public_abi.VmError.TIMEOUT.value}),
-			)
-		else:
-			exceptions.append(e)
+		if not timeout_fired.is_set():
+			logger.warning('connection reset without timeout', error=e)
 	except Exception as e:
 		if not timeout_fired.is_set():
 			exceptions.append(e)
@@ -488,19 +492,28 @@ async def run_genvm(
 			final_exception = Exception('execution failed', exceptions[1:])
 			raise final_exception from exceptions[0]
 
-		if result_host is None:
+		# Result was sent to manager via consume_result, get it from status
+		consumed_result_raw = (
+			status.get('consumed_result') if isinstance(status, dict) else None
+		)
+		if consumed_result_raw is not None:
+			consumed_result_bytes = bytes(consumed_result_raw)
+			result_kind = public_abi.ResultCode(consumed_result_bytes[0])
+			decoded = gvm_calldata.decode(consumed_result_bytes[1:])
+			execution_hash = decoded.get('execution_hash', b'')
+			result_data = decoded.get('data')
+			result_fingerprint = decoded.get('fingerprint')
+			result_storage_changes = decoded.get('storage_changes', [])
+			result_emissions = decoded.get('emissions', [])
+			nondet_results = decoded.get('nondet_results', [])
+		else:
+			execution_hash = b''
 			result_kind = public_abi.ResultCode.INTERNAL_ERROR
 			result_data = 'no_result'
 			result_fingerprint = None
 			result_storage_changes = []
-			result_events = []
-		else:
-			result_kind = result_host[0]
-			decoded = gvm_calldata.decode(result_host[1])
-			result_data = decoded.get('data')
-			result_fingerprint = decoded.get('fingerprint')
-			result_storage_changes = decoded.get('storage_changes', [])
-			result_events = decoded.get('events', [])
+			result_emissions = []
+			nondet_results = []
 
 		vm_error_description: str | None = None
 		if result_kind == public_abi.ResultCode.VM_ERROR and isinstance(result_data, str):
@@ -520,11 +533,13 @@ async def run_genvm(
 			stdout=status['stdout'],
 			stderr=status['stderr'],
 			genvm_log=status.get('genvm_log') or [],
+			execution_hash=execution_hash,
 			result_kind=result_kind,
 			result_data=result_data,
 			result_fingerprint=result_fingerprint,
 			result_storage_changes=result_storage_changes,
-			result_events=result_events,
+			result_emissions=result_emissions,
+			result_nondet_results=nondet_results,
 			vm_error_description=vm_error_description,
 			execution_time=time.time() - started_at[0],
 		)

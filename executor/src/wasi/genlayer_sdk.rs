@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use genvm_common::sync::DArc;
 use genvm_common::*;
 
 use genvm_modules_interfaces::GenericValue;
@@ -10,7 +11,7 @@ use crate::host::{self, SlotID};
 use crate::{calldata, public_abi, rt};
 
 pub use genlayer_sdk::abi::entry::ExtendedMessage;
-use genlayer_sdk::abi::gl_call;
+use genlayer_sdk::abi::{self, gl_call};
 
 use super::{base, vfs};
 
@@ -18,23 +19,47 @@ fn default_entry_stage_data() -> calldata::Value {
     calldata::Value::Null
 }
 
+fn calc_receipt_size(len: usize) -> u64 {
+    ((len + 255) / 256) as u64
+}
+
+async fn consume_receipt_words(
+    shared_data: &rt::SharedData,
+    words: u64,
+) -> Result<(), generated::types::Error> {
+    if words == 0 {
+        return Ok(());
+    }
+    if !shared_data
+        .data_fees_limit
+        .consume_receipt_words(words)
+        .await
+    {
+        return Err(generated::types::Error::trap(
+            rt::errors::VMError::oos(Some(anyhow::anyhow!("consuming {words} receipt words")))
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Extension methods for ExtendedMessage specific to the executor
 pub trait ExtendedMessageExt {
     fn fork_leader(
         &self,
         entry_kind: public_abi::EntryKind,
-        entry_data: Vec<u8>,
+        entry_data: bytes::Bytes,
         entry_leader_data: Option<rt::vm::RunOk>,
     ) -> ExtendedMessage;
 
-    fn fork(&self, entry_kind: public_abi::EntryKind, entry_data: Vec<u8>) -> ExtendedMessage;
+    fn fork(&self, entry_kind: public_abi::EntryKind, entry_data: bytes::Bytes) -> ExtendedMessage;
 }
 
 impl ExtendedMessageExt for ExtendedMessage {
     fn fork_leader(
         &self,
         entry_kind: public_abi::EntryKind,
-        entry_data: Vec<u8>,
+        entry_data: bytes::Bytes,
         entry_leader_data: Option<rt::vm::RunOk>,
     ) -> ExtendedMessage {
         use genlayer_sdk::abi::entry::MessageData;
@@ -64,7 +89,7 @@ impl ExtendedMessageExt for ExtendedMessage {
         }
     }
 
-    fn fork(&self, entry_kind: public_abi::EntryKind, entry_data: Vec<u8>) -> ExtendedMessage {
+    fn fork(&self, entry_kind: public_abi::EntryKind, entry_data: bytes::Bytes) -> ExtendedMessage {
         self.fork_leader(entry_kind, entry_data, None)
     }
 }
@@ -85,14 +110,23 @@ impl rt::vm::storage::HostStorage for StorageHostLock<'_> {
 }
 
 #[derive(Clone)]
-pub struct StorageHostHolder(pub Arc<tokio::sync::Mutex<host::Host>>, pub ReadToken);
+pub struct StorageHostHolder(pub Arc<host::MultiHost>, pub ReadToken);
 
 impl rt::vm::storage::HostStorageLocking for StorageHostHolder {
     type ReturnType<'a> = StorageHostLock<'a>;
 
     async fn lock(&self) -> Self::ReturnType<'_> {
-        StorageHostLock(self.0.lock().await, self.1.clone())
+        StorageHostLock(
+            self.0.lock_for(host::host_fns::Methods::StorageRead).await,
+            self.1.clone(),
+        )
     }
+}
+
+pub struct VMDataAccumulator {
+    pub data_fees_limit: DArc<rt::DataFeesLimit>,
+    pub messages_value_decremented: primitive_types::U256,
+    pub emissions: Vec<genlayer_sdk::abi::ExecutionEmission>,
 }
 
 pub struct SingleVMData {
@@ -101,12 +135,11 @@ pub struct SingleVMData {
     pub supervisor: Arc<rt::supervisor::Supervisor>,
     pub storage: rt::vm::storage::Storage<StorageHostHolder>,
     pub should_capture_fp: Arc<std::sync::atomic::AtomicBool>,
-    pub events: Vec<Vec<bytes::Bytes>>,
+    pub accumulator: VMDataAccumulator,
 }
 
 pub struct Context {
     pub data: SingleVMData,
-    pub messages_decremented: primitive_types::U256,
 
     pub start_time: std::time::Instant,
     pub prev_time: std::time::Instant,
@@ -189,7 +222,6 @@ impl Context {
 
         Self {
             data,
-            messages_decremented: primitive_types::U256::zero(),
             start_time: now,
             prev_time: now,
         }
@@ -394,25 +426,30 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         .get_balance_impl(self.context.data.message_data.message.contract_address)
                         .await?;
 
-                    if value + self.context.messages_decremented > my_balance {
+                    if value + self.context.data.accumulator.messages_value_decremented > my_balance
+                    {
                         return Err(generated::types::Errno::Inbalance.into());
                     }
                 }
 
-                let data_json = serde_json::json!({
-                    "value": format!("0x{:x}", value),
-                });
-                let data_str = serde_json::to_string(&data_json).unwrap();
+                let emission = genlayer_sdk::abi::ExecutionEmission::EthSend {
+                    address,
+                    calldata,
+                    value,
+                };
+                let encoded = calldata::encode(
+                    &calldata::to_value(&emission)
+                        .map_err(|e| generated::types::Error::trap(e.into()))?,
+                );
+                consume_receipt_words(
+                    &self.context.data.supervisor.shared_data,
+                    calc_receipt_size(encoded.len()),
+                )
+                .await?;
 
-                let supervisor = self.context.data.supervisor.clone();
-                let res = supervisor
-                    .host
-                    .lock()
-                    .await
-                    .eth_send(address, &calldata, &data_str)
-                    .map_err(generated::types::Error::trap)?;
+                self.context.data.accumulator.emissions.push(emission);
 
-                self.context.messages_decremented += value;
+                self.context.data.accumulator.messages_value_decremented += value;
                 Ok(file_fd_none())
             }
             gl_call::Message::EthCall { address, calldata } => {
@@ -426,7 +463,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let supervisor = self.context.data.supervisor.clone();
                 let res = supervisor
                     .host
-                    .lock()
+                    .lock_for(host::host_fns::Methods::EthCall)
                     .await
                     .eth_call(address, &calldata)
                     .map_err(generated::types::Error::trap)?;
@@ -466,7 +503,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .context
                     .data
                     .message_data
-                    .fork(public_abi::EntryKind::Main, calldata_encoded);
+                    .fork(public_abi::EntryKind::Main, calldata_encoded.into());
                 my_data.message.stack.push(my_data.message.contract_address);
 
                 let calldata_encoded = calldata::encode(&calldata);
@@ -510,16 +547,22 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     ),
                     supervisor: supervisor.clone(),
                     should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(true)),
-                    events: Vec::new(),
+                    accumulator: VMDataAccumulator {
+                        data_fees_limit: self.context.data.accumulator.data_fees_limit.clone(),
+                        messages_value_decremented: self
+                            .context
+                            .data
+                            .accumulator
+                            .messages_value_decremented,
+                        emissions: Vec::new(),
+                    },
                 };
 
-                let res = self
-                    .context
-                    .spawn_and_run(&supervisor, vm_data)
+                let res = rt::spawn_apply_run(&supervisor, vm_data)
                     .await
                     .map_err(generated::types::Error::trap)?;
 
-                self.set_vm_run_result(res).map(|x| x.0)
+                self.set_vm_run_result(res.run_ok).map(|x| x.0)
             }
             gl_call::Message::EmitEvent { topics, blob } => {
                 if !self.context.data.conf.is_deterministic {
@@ -536,29 +579,53 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let mut real_topics: Vec<bytes::Bytes> =
                     Vec::with_capacity(public_abi::EVENT_MAX_TOPICS as usize + 1);
 
-                for (i, gl_call::Bytes(t)) in topics.iter().enumerate() {
+                for (i, t) in topics.iter().enumerate() {
                     if t.len() != 32 {
                         log_warn!(len = t.len(); "invalid topic length");
 
                         return Err(generated::types::Errno::Inval.into());
                     }
 
-                    real_topics.push(bytes::Bytes::copy_from_slice(t));
+                    real_topics.push(t.clone());
                 }
 
-                let blob_data = calldata::encode(&calldata::Value::Map(blob));
+                struct CountingAppender(usize);
+                impl calldata::Appender for CountingAppender {
+                    type Error = std::convert::Infallible;
+
+                    fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+                        self.0 += data.len();
+                        Ok(())
+                    }
+                }
+
+                let mut blob_data_len = CountingAppender(0);
+
+                let val = calldata::Value::Map(blob);
+                calldata::encode_to(&mut blob_data_len, &val).unwrap_or_else(|e| match e {});
+                let blob = match val {
+                    calldata::Value::Map(m) => m,
+                    _ => unreachable!(),
+                };
 
                 let supervisor = self.context.data.supervisor.clone();
 
-                let size = topics.len() + (blob_data.len() + 31) / 32;
+                let size = topics.len() + (blob_data_len.0 + 31) / 32;
                 let size = size as u64;
                 supervisor
                     .get_storage_limiter()
                     .consume(size)
+                    .await
                     .map_err(generated::types::Error::trap)?;
 
-                real_topics.push(blob_data.into());
-                self.context.data.events.push(real_topics);
+                self.context
+                    .data
+                    .accumulator
+                    .emissions
+                    .push(abi::ExecutionEmission::EmitEvent {
+                        topics: real_topics,
+                        blob,
+                    });
 
                 return Ok(file_fd_none());
             }
@@ -575,36 +642,39 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
 
+                let sd = self.context.data.supervisor.shared_data.clone();
+
                 if !value.is_zero() {
                     let my_balance = self
                         .context
                         .get_balance_impl(self.context.data.message_data.message.contract_address)
                         .await?;
 
-                    if value + self.context.messages_decremented > my_balance {
+                    if value + self.context.data.accumulator.messages_value_decremented > my_balance
+                    {
                         return Err(generated::types::Errno::Inbalance.into());
                     }
                 }
 
-                let calldata_encoded = calldata::encode(&calldata);
+                let emission = genlayer_sdk::abi::ExecutionEmission::PostMessage {
+                    address,
+                    calldata,
+                    value,
+                    on,
+                };
+                let encoded = calldata::encode(
+                    &calldata::to_value(&emission)
+                        .map_err(|e| generated::types::Error::trap(e.into()))?,
+                );
+                consume_receipt_words(
+                    &self.context.data.supervisor.shared_data,
+                    calc_receipt_size(encoded.len()),
+                )
+                .await?;
 
-                let data_json = serde_json::json!({
-                    "value": format!("0x{:x}", value),
-                    "on": on,
-                });
-                let data_str = serde_json::to_string(&data_json).unwrap();
+                self.context.data.accumulator.emissions.push(emission);
 
-                let res = self
-                    .context
-                    .data
-                    .supervisor
-                    .host
-                    .lock()
-                    .await
-                    .post_message(&address, &calldata_encoded, &data_str)
-                    .map_err(generated::types::Error::trap)?;
-
-                self.context.messages_decremented += value;
+                self.context.data.accumulator.messages_value_decremented += value;
 
                 Ok(file_fd_none())
             }
@@ -622,37 +692,40 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
 
+                let sd = self.context.data.supervisor.shared_data.clone();
+
                 if !value.is_zero() {
                     let my_balance = self
                         .context
                         .get_balance_impl(self.context.data.message_data.message.contract_address)
                         .await?;
 
-                    if value + self.context.messages_decremented > my_balance {
+                    if value + self.context.data.accumulator.messages_value_decremented > my_balance
+                    {
                         return Err(generated::types::Errno::Inbalance.into());
                     }
                 }
 
-                let calldata_encoded = calldata::encode(&calldata);
+                let emission = genlayer_sdk::abi::ExecutionEmission::DeployContract {
+                    calldata,
+                    code,
+                    value,
+                    on,
+                    salt_nonce,
+                };
+                let encoded = calldata::encode(
+                    &calldata::to_value(&emission)
+                        .map_err(|e| generated::types::Error::trap(e.into()))?,
+                );
+                consume_receipt_words(
+                    &self.context.data.supervisor.shared_data,
+                    calc_receipt_size(encoded.len()),
+                )
+                .await?;
 
-                let data_json = serde_json::json!({
-                    "value": format!("0x{:x}", value),
-                    "salt_nonce": format!("0x{:x}", salt_nonce),
-                    "on": on,
-                });
-                let data_str = serde_json::to_string(&data_json).unwrap();
+                self.context.data.accumulator.emissions.push(emission);
 
-                let res = self
-                    .context
-                    .data
-                    .supervisor
-                    .host
-                    .lock()
-                    .await
-                    .deploy_contract(&calldata_encoded, &code, &data_str)
-                    .map_err(generated::types::Error::trap)?;
-
-                self.context.messages_decremented += value;
+                self.context.data.accumulator.messages_value_decremented += value;
 
                 Ok(file_fd_none())
             }
@@ -720,7 +793,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .data
                     .supervisor
                     .host
-                    .lock()
+                    .lock_for(host::host_fns::Methods::RemainingFuelAsGen)
                     .await
                     .remaining_fuel_as_gen()
                     .map_err(generated::types::Error::trap)?;
@@ -743,7 +816,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                     if let Ok(PromptAnswer { consumed_gen, .. }) = &result {
                         sup.host
-                            .lock()
+                            .lock_for(host::host_fns::Methods::ConsumeFuel)
                             .await
                             .consume_fuel(*consumed_gen)
                             .map_err(generated::types::Error::trap)?;
@@ -780,7 +853,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .data
                     .supervisor
                     .host
-                    .lock()
+                    .lock_for(host::host_fns::Methods::RemainingFuelAsGen)
                     .await
                     .remaining_fuel_as_gen()
                     .map_err(generated::types::Error::trap)?;
@@ -801,7 +874,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                     if let Ok(PromptAnswer { consumed_gen, .. }) = &answer {
                         sup.host
-                            .lock()
+                            .lock_for(host::host_fns::Methods::ConsumeFuel)
                             .await
                             .consume_fuel(*consumed_gen)
                             .map_err(generated::types::Error::trap)?;
@@ -889,14 +962,21 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
         let slot = SlotID::read_from_mem(mem, slot)?;
         let mem_size = buf_len as usize;
-        let mut vec = Vec::with_capacity(mem_size);
-        unsafe { vec.set_len(mem_size) };
+
+        let mut vec_buf = Vec::new();
+        let (should_copy, vec) = if let Some(buf) = mem.as_slice_mut(buf)? {
+            (false, buf)
+        } else {
+            vec_buf.reserve(mem_size);
+            unsafe { vec_buf.set_len(mem_size) };
+            (true, vec_buf.as_mut_slice())
+        };
 
         if self.context.data.conf.state_mode == public_abi::StorageType::Default {
             self.context
                 .data
                 .storage
-                .read(slot, index, &mut vec)
+                .read(slot, index, vec)
                 .await
                 .map_err(generated::types::Error::trap)?;
         } else {
@@ -904,19 +984,16 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 .data
                 .supervisor
                 .host
-                .lock()
+                .lock_for(host::host_fns::Methods::StorageRead)
                 .await
-                .storage_read(
-                    self.context.data.conf.state_mode,
-                    account,
-                    slot,
-                    index,
-                    &mut vec,
-                )
+                .storage_read(self.context.data.conf.state_mode, account, slot, index, vec)
                 .map_err(generated::types::Error::trap)?;
         }
 
-        mem.copy_from_slice(&vec, buf)?;
+        if should_copy {
+            mem.copy_from_slice(&vec_buf, buf)?;
+        }
+
         Ok(())
     }
 
@@ -1003,7 +1080,9 @@ impl Context {
         let mut res = self.get_balance_impl(address).await?;
 
         if is_self && self.data.conf.is_main() {
-            res -= self.messages_decremented;
+            let messages_decremented = self.data.accumulator.messages_value_decremented;
+
+            res -= messages_decremented;
         }
 
         let res = res.to_little_endian();
@@ -1024,7 +1103,7 @@ impl Context {
             .data
             .supervisor
             .host
-            .lock()
+            .lock_for(host::host_fns::Methods::GetBalance)
             .await
             .get_balance(address)
             .map_err(generated::types::Error::trap)?;
@@ -1042,31 +1121,6 @@ impl Context {
             ("config".to_owned(), conf),
             ("message".to_owned(), msg),
         ]))
-    }
-
-    async fn spawn_and_run(
-        &mut self,
-        supervisor: &Arc<rt::supervisor::Supervisor>,
-        essential_data: SingleVMData,
-    ) -> anyhow::Result<rt::vm::RunOk> {
-        let limiter = self
-            .data
-            .supervisor
-            .limiter
-            .get(essential_data.conf.is_deterministic)
-            .derived();
-
-        let vm = rt::supervisor::spawn(supervisor, essential_data, limiter).await;
-        let vm = match vm {
-            Ok(vm) => rt::supervisor::apply_contract_actions(supervisor, vm).await,
-            Err(e) => Err(e),
-        };
-        let result = match vm {
-            Ok(vm) => vm.run().await,
-            Err(e) => Err(e),
-        };
-
-        result.map(|x| x.run_ok)
     }
 }
 
@@ -1118,8 +1172,8 @@ impl ContextVFS<'_> {
 
     async fn run_nondet(
         &mut self,
-        data_leader: Vec<u8>,
-        data_validator: Vec<u8>,
+        data_leader: bytes::Bytes,
+        data_validator: bytes::Bytes,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         if !self.context.data.conf.can_spawn_nondet {
             return Err(generated::types::Errno::Forbidden.into());
@@ -1132,15 +1186,55 @@ impl ContextVFS<'_> {
             .nondet_call_no
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
-        let leaders_res = self
+        let leaders_res_bytes = self
             .context
             .data
             .supervisor
-            .host
-            .lock()
-            .await
-            .get_leader_result(call_no)
-            .map_err(generated::types::Error::trap)?;
+            .get_leader_nondet_result(call_no);
+
+        if let Some(ref data) = leaders_res_bytes {
+            consume_receipt_words(
+                &self.context.data.supervisor.shared_data,
+                calc_receipt_size(data.len()),
+            )
+            .await?;
+        }
+
+        let leaders_res = match leaders_res_bytes {
+            None if self.context.data.supervisor.is_leader() => None,
+            None => {
+                return Err(generated::types::Error::trap(
+                    rt::errors::VMError("absent".into(), None).into(),
+                ));
+            }
+            Some(data) => {
+                use crate::public_abi::ResultCode;
+                let rest = &data[1..];
+                let res = match data[0] {
+                    x if x == ResultCode::Return as u8 => rt::vm::RunOk::Return(rest.into()),
+                    x if x == ResultCode::UserError as u8 => {
+                        rt::vm::RunOk::UserError(String::from(
+                            std::str::from_utf8(rest)
+                                .map_err(|e| generated::types::Error::trap(anyhow::anyhow!(e)))?,
+                        ))
+                    }
+                    x if x == ResultCode::VmError as u8 => rt::vm::RunOk::VMError(
+                        String::from(
+                            std::str::from_utf8(rest)
+                                .map_err(|e| generated::types::Error::trap(anyhow::anyhow!(e)))?,
+                        ),
+                        None,
+                    ),
+                    x => {
+                        return Err(generated::types::Error::trap(anyhow::anyhow!(
+                            "invalid leader result code: {}",
+                            x
+                        )));
+                    }
+                };
+                Some(res)
+            }
+        };
 
         let result_to_return = if self.context.data.supervisor.shared_data.is_sync {
             match leaders_res {
@@ -1177,6 +1271,17 @@ impl ContextVFS<'_> {
 
             let supervisor = self.context.data.supervisor.clone();
 
+            let fake_accum = VMDataAccumulator {
+                data_fees_limit: self.context.data.accumulator.data_fees_limit.clone(),
+                messages_value_decremented: self
+                    .context
+                    .data
+                    .accumulator
+                    .messages_value_decremented
+                    .clone(),
+                emissions: Vec::new(),
+            };
+
             let vm_data = SingleVMData {
                 conf: base::Config {
                     needs_error_fingerprint: false,
@@ -1192,7 +1297,7 @@ impl ContextVFS<'_> {
                 supervisor: supervisor.clone(),
                 should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 storage: storage_checkpoint,
-                events: Vec::new(),
+                accumulator: fake_accum,
             };
 
             let task_done = Arc::new(tokio::sync::Notify::new());
@@ -1212,11 +1317,11 @@ impl ContextVFS<'_> {
                     self.context
                         .data
                         .supervisor
-                        .host
-                        .lock()
-                        .await
-                        .post_nondet_result(call_no, &res)
-                        .map_err(generated::types::Error::trap)?;
+                        .push_nondet_result(
+                            call_no,
+                            bytes::Bytes::from(Vec::from_iter(res.as_bytes_iter())),
+                        )
+                        .await;
 
                     res
                 }
@@ -1234,7 +1339,7 @@ impl ContextVFS<'_> {
 
     async fn sandbox(
         &mut self,
-        data: Vec<u8>,
+        data: bytes::Bytes,
         allow_write_ops: bool,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         let supervisor = self.context.data.supervisor.clone();
@@ -1248,6 +1353,16 @@ impl ContextVFS<'_> {
         let zelf_conf = &self.context.data.conf;
 
         let storage_checkpoint = self.context.data.storage.clone();
+
+        let mut fake_my_data = VMDataAccumulator {
+            data_fees_limit: self.context.data.accumulator.data_fees_limit.clone(),
+            messages_value_decremented: primitive_types::U256::max_value(),
+            emissions: Vec::new(),
+        };
+
+        std::mem::swap(&mut self.context.data.accumulator, &mut fake_my_data);
+
+        let stolen_data = fake_my_data;
 
         let vm_data = SingleVMData {
             conf: base::Config {
@@ -1264,17 +1379,17 @@ impl ContextVFS<'_> {
             supervisor: supervisor.clone(),
             should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             storage: storage_checkpoint,
-            events: Vec::new(),
+            accumulator: stolen_data,
         };
 
-        let my_res = self.context.spawn_and_run(&supervisor, vm_data).await;
-        let my_res = match my_res {
-            Ok(res) => Ok(res),
-            Err(e) => rt::errors::unwrap_vm_errors(e),
-        }
-        .map_err(generated::types::Error::trap)?;
+        let my_res = rt::spawn_apply_run(&supervisor, vm_data)
+            .await
+            .map_err(generated::types::Error::trap)?;
 
-        let data: Box<[u8]> = my_res.as_bytes_iter().collect();
+        self.context.data.accumulator = my_res.vm_data.accumulator;
+        self.context.data.storage = my_res.vm_data.storage;
+
+        let data: Box<[u8]> = my_res.run_ok.as_bytes_iter().collect();
         Ok(generated::types::Fd::from(
             self.vfs
                 .place_content(vfs::FileContents {

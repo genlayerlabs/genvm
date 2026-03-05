@@ -1,0 +1,4 @@
+hello world 0
+counter before: 0
+counter after: 1
+executed with `Return(null)`

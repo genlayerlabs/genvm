@@ -43,6 +43,9 @@ pub struct SingleGenVMContextDone {
     pub stderr: String,
     pub genvm_log: Vec<serde_json::Map<String, serde_json::Value>>,
     pub metrics: serde_json::Value,
+    pub consumed_result: Option<Vec<u8>>,
+    pub version_major: u16,
+    pub version_minor: u16,
 }
 
 impl serde::Serialize for SingleGenVMContextDone {
@@ -52,12 +55,15 @@ impl serde::Serialize for SingleGenVMContextDone {
     {
         use serde::ser::SerializeStruct;
 
-        let mut state = serializer.serialize_struct("SingleGenVMContextDone", 5)?;
+        let mut state = serializer.serialize_struct("SingleGenVMContextDone", 8)?;
         state.serialize_field("finished_at", &self.finished_at.timestamp_millis())?;
         state.serialize_field("stdout", &self.stdout)?;
         state.serialize_field("stderr", &self.stderr)?;
         state.serialize_field("genvm_log", &self.genvm_log)?;
         state.serialize_field("metrics", &self.metrics)?;
+        state.serialize_field("consumed_result", &self.consumed_result)?;
+        state.serialize_field("version_major", &self.version_major)?;
+        state.serialize_field("version_minor", &self.version_minor)?;
         state.end()
     }
 }
@@ -65,6 +71,8 @@ impl serde::Serialize for SingleGenVMContextDone {
 struct SingleGenVMContext {
     id: GenVMId,
     version: String,
+    version_major: u16,
+    version_minor: u16,
     result: tokio::sync::OnceCell<SingleGenVMContextDone>,
     started_at: chrono::DateTime<chrono::Utc>,
     strict_deadline: chrono::DateTime<chrono::Utc>,
@@ -73,6 +81,7 @@ struct SingleGenVMContext {
     stdout: tokio::sync::OnceCell<String>,
     stderr: tokio::sync::OnceCell<String>,
     log_sink: LogSink,
+    consumed_result: tokio::sync::OnceCell<Vec<u8>>,
 
     process_handle: tokio::sync::Mutex<tokio::process::Child>,
     all_permits: crossbeam::atomic::AtomicCell<Option<Box<dyn std::any::Any + Send + Sync>>>,
@@ -387,21 +396,22 @@ pub struct Request {
     pub capture_output: bool,
     #[serde(default = "default_max_execution_minutes")]
     pub max_execution_minutes: u64,
-    pub storage_pages: u64,
+    pub data_fees_limit: num_bigint::BigInt,
+    pub storage_page_cost: u32,
+    pub receipt_word_cost: u32,
     pub host_data: String,
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub host: String,
     #[serde(default)]
     pub extra_args: Vec<String>,
-    #[serde_as(as = "serde_with::Bytes")]
-    pub calldata: Vec<u8>,
-    #[serde(with = "serde_bytes")]
-    pub code: Option<Vec<u8>>,
+    pub calldata: bytes::Bytes,
+    pub code: Option<bytes::Bytes>,
     #[serde(default = "default_permissions")]
     pub permissions: String,
     /// If true, don't require modules even if permissions suggest they're needed
     #[serde(default)]
     pub no_modules: bool,
+    pub leader_nondet_results: Option<Vec<bytes::Bytes>>,
 }
 
 fn default_permissions() -> String {
@@ -563,6 +573,70 @@ async fn pipe_read<P: tokio::io::AsyncReadExt + Unpin>(
     std::mem::drop(permit);
 }
 
+/// Handles the manager-side of the host protocol on a socketpair.
+/// Reads method bytes and responds according to the host protocol:
+/// - ConsumeResult (7): read length-prefixed result data, send ACK
+async fn read_manager_host_stream(
+    parent_fd: FdWrapper,
+    consumed_result: sync::DArc<tokio::sync::OnceCell<Vec<u8>>>,
+    genvm_id: GenVMId,
+) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let mut file = match parent_fd.into_async_fd() {
+        Ok(f) => f,
+        Err(e) => {
+            log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "failed to create async fd for manager host stream");
+            return;
+        }
+    };
+
+    loop {
+        let mut method_buf = [0u8; 1];
+        match file.read_exact(&mut method_buf).await {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "manager host stream closed");
+                return;
+            }
+            Err(e) => {
+                log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "failed to read method from manager host stream");
+                return;
+            }
+        }
+
+        match method_buf[0] {
+            // ConsumeResult
+            7 => {
+                // Read length-prefixed data
+                let mut len_buf = [0u8; 4];
+                if let Err(e) = file.read_exact(&mut len_buf).await {
+                    log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "failed to read result length");
+                    return;
+                }
+                let len = u32::from_le_bytes(len_buf) as usize;
+                let mut data = vec![0u8; len];
+                if let Err(e) = file.read_exact(&mut data).await {
+                    log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "failed to read result data");
+                    return;
+                }
+                log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0, len = len; "manager received consume_result");
+                let _ = consumed_result.set(data);
+                // Send ACK
+                if let Err(e) = file.write_all(&[0u8]).await {
+                    log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "failed to send ACK for consume_result");
+                    return;
+                }
+                let _ = file.flush().await;
+            }
+            other => {
+                log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, method = other; "unexpected method on manager host stream");
+                return;
+            }
+        }
+    }
+}
+
 impl Ctx {
     async fn check_proc(&self, exec: sync::DArc<SingleGenVMContext>) -> bool {
         if exec.result.initialized() {
@@ -608,6 +682,9 @@ impl Ctx {
                     stderr: stderr.to_owned(),
                     genvm_log,
                     metrics,
+                    consumed_result: exec.consumed_result.get().cloned(),
+                    version_major: exec.version_major,
+                    version_minor: exec.version_minor,
                 }) {
                     log_warn!(error:err = e; "error setting genvm result; it can happen rarely due to concurrency");
                 }
@@ -659,9 +736,6 @@ fn build_genvm_command(
     if req.is_sync {
         proc.arg("--sync");
     }
-
-    proc.arg("--storage-pages");
-    proc.arg(req.storage_pages.to_string());
 
     proc.arg("--host");
     proc.arg(&req.host);
@@ -728,7 +802,7 @@ fn setup_module_relays(
 /// Spawns an async task that writes execution data to the child's stdin.
 fn spawn_stdin_writer(
     stdin: tokio::process::ChildStdin,
-    execution_data_bytes: Vec<u8>,
+    execution_data_bytes: bytes::Bytes,
 ) -> tokio::task::JoinHandle<std::io::Result<()>> {
     tokio::task::spawn(async move {
         use tokio::io::AsyncWriteExt;
@@ -850,6 +924,13 @@ pub async fn start_genvm(
     let (read_fd, write_fd) = create_log_pipe()?;
     let mut proc = build_genvm_command(command_path, &req, genvm_id, &write_fd);
 
+    // Setup manager host socketpair (host id=1 for consume_result and notify_finished)
+    let (manager_parent, manager_child) = FdWrapper::socketpair()?;
+    manager_parent.set_cloexec(true)?;
+    manager_child.set_cloexec(false)?;
+    proc.arg("--host");
+    proc.arg(format!("fd://{}", manager_child.as_raw_fd()));
+
     // Setup module relays if needed
     let module_child_fds = if let Some(handlers) = module_handlers {
         let exec_ctx = execution_context
@@ -863,14 +944,26 @@ pub async fn start_genvm(
     };
 
     // Encode execution data
+    // Map ConsumeResult(7) to host 1 (manager).
+    // Unlisted methods default to host 0 (original host).
+    let mut method_hosts: Vec<u8> = vec![0; 8];
+    method_hosts[7] = 1; // ConsumeResult -> manager
+
     let execution_data = genvm_common::domain::ExecutionData {
         calldata: req.calldata.clone(),
         message: req.message.clone(),
         host_data: req.host_data.clone(),
         code: req.code.clone(),
+        leader_nondet_results: req.leader_nondet_results.clone(),
+        method_hosts,
+        data_fees_limit: req.data_fees_limit.clone(),
+        storage_page_cost: req.storage_page_cost,
+        receipt_word_cost: req.receipt_word_cost,
     };
     let execution_data_bytes =
         genvm_common::calldata::encode(&genvm_common::calldata::to_value(&execution_data)?);
+
+    let execution_data_bytes = bytes::Bytes::from(execution_data_bytes);
 
     // Spawn log reader
     if req.capture_output {
@@ -884,10 +977,11 @@ pub async fn start_genvm(
         tokio::spawn(read_log_pipe(read_fd, LogAppenderToLog(genvm_id)));
     };
 
-    // Spawn child process, then drop module child FDs
+    // Spawn child process, then drop child-side FDs
     let mut child = proc.spawn()?;
     log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0, pid:? = child.id(); "genvm process started");
     std::mem::drop(module_child_fds);
+    std::mem::drop(manager_child);
 
     // Spawn stdin writer
     let stdin_task = child
@@ -909,6 +1003,8 @@ pub async fn start_genvm(
     let exec_ctx = sync::DArc::new(SingleGenVMContext {
         result: tokio::sync::OnceCell::new(),
         version: version_str.to_owned(),
+        version_major: version.major as u16,
+        version_minor: version.minor as u16,
         id: genvm_id,
         process_handle: tokio::sync::Mutex::new(child),
         started_at: chrono::Utc::now(),
@@ -919,10 +1015,18 @@ pub async fn start_genvm(
         stdout: tokio::sync::OnceCell::new(),
         stderr: tokio::sync::OnceCell::new(),
         log_sink,
+        consumed_result: tokio::sync::OnceCell::new(),
 
         all_permits: crossbeam::atomic::AtomicCell::new(Some(Box::new(all_resources))),
         _execution_context: execution_context,
     });
+
+    // Spawn manager host protocol handler
+    tokio::spawn(read_manager_host_stream(
+        manager_parent,
+        exec_ctx.gep(|x| &x.consumed_result),
+        genvm_id,
+    ));
 
     // Spawn stdin monitor and pipe readers
     if let Some(stdin_task) = stdin_task {

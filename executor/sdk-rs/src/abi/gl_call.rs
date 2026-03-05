@@ -5,6 +5,7 @@
 
 use std::collections::BTreeMap;
 
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 
 use crate::calldata;
@@ -294,22 +295,21 @@ pub enum TracePayload {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum Message {
-    EthSend {
-        address: calldata::Address,
-        #[serde(with = "serde_bytes")]
-        calldata: Vec<u8>,
-        value: primitive_types::U256,
-    },
     EthCall {
         address: calldata::Address,
-        #[serde(with = "serde_bytes")]
-        calldata: Vec<u8>,
+        calldata: Bytes,
     },
     CallContract {
         address: calldata::Address,
         calldata: calldata::Value,
         #[serde(deserialize_with = "storage_type_from_bigint")]
         state: public_abi::StorageType,
+    },
+
+    EthSend {
+        address: calldata::Address,
+        calldata: Bytes,
+        value: primitive_types::U256,
     },
     PostMessage {
         address: calldata::Address,
@@ -319,23 +319,23 @@ pub enum Message {
     },
     DeployContract {
         calldata: calldata::Value,
-        #[serde(with = "serde_bytes")]
-        code: Vec<u8>,
+        code: Bytes,
         value: primitive_types::U256,
         on: On,
         salt_nonce: primitive_types::U256,
     },
+    EmitEvent {
+        topics: Vec<Bytes>,
+        blob: BTreeMap<String, calldata::Value>,
+    },
 
     RunNondet {
-        #[serde(with = "serde_bytes")]
-        data_leader: Vec<u8>,
-        #[serde(with = "serde_bytes")]
-        data_validator: Vec<u8>,
+        data_leader: Bytes,
+        data_validator: Bytes,
     },
 
     Sandbox {
-        #[serde(with = "serde_bytes")]
-        data: Vec<u8>,
+        data: Bytes,
 
         allow_write_ops: bool,
     },
@@ -348,15 +348,5 @@ pub enum Message {
     Rollback(String),
     Return(calldata::Value),
 
-    EmitEvent {
-        topics: Vec<Bytes>,
-        blob: BTreeMap<String, calldata::Value>,
-    },
-
     Trace(TracePayload),
 }
-
-/// Wrapper for raw bytes with serde_bytes serialization.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(transparent)]
-pub struct Bytes(#[serde(with = "serde_bytes")] pub Vec<u8>);

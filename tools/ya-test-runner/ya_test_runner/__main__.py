@@ -260,13 +260,20 @@ def workflow_list(
 		collectors_count=len(conf_env.collectors),
 	)
 
+	cases_info = []
+	for case in collection_env.cases:
+		info: dict[str, typing.Any] = {
+			'name': case.description.name,
+			'tags': case.description.tags,
+		}
+		if case.description.depends_on:
+			info['depends_on'] = sorted(case.description.depends_on)
+		cases_info.append(info)
+
 	shared_context.printer.put(
 		'available test cases',
 		total=len(collection_env.cases),
-		cases=[
-			{'name': case.description.name, 'tags': case.description.tags}
-			for case in collection_env.cases
-		],
+		cases=cases_info,
 	)
 
 
@@ -419,7 +426,10 @@ def main() -> None:
 		parser_result.parser.print_help()
 		sys.exit(1)
 
-	conf_env.args.func(shared_context, conf_env)
+	try:
+		conf_env.args.func(shared_context, conf_env)
+	finally:
+		shared_context.watchdog.stop()
 
 
 if __name__ == '__main__':

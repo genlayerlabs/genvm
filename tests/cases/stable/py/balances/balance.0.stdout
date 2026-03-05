@@ -7,6 +7,4 @@ main At(self) 10
 nested self 10
 nested At(self) 10
 executed with `Return(null)`
-send:
-	{'on': 'finalized', 'value': '0x5'}
-	b'\x06'
+{"address":addr#0200000000000000000000000000000000000000,"calldata":{},"on":"finalized","type":"PostMessage","value":"0x5"}

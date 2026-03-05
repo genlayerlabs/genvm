@@ -9,7 +9,7 @@ import typing
 
 def add_args(parser: argparse.ArgumentParser) -> None:
 	parser.add_argument(
-		'--test-name',
+		'--filter-name',
 		type=str,
 		help='Only run tests matching this regex',
 		default='.*',
@@ -17,7 +17,7 @@ def add_args(parser: argparse.ArgumentParser) -> None:
 	)
 
 	parser.add_argument(
-		'--test-tags',
+		'--filter-tag',
 		type=str,
 		help='Only run tests matching this tags, `(a|b)&!c`',
 		default='true',
@@ -25,7 +25,7 @@ def add_args(parser: argparse.ArgumentParser) -> None:
 	)
 
 	parser.add_argument(
-		'--continue-from',
+		'--filter-continue',
 		type=str,
 		help='Only run tests listed in the specified continue file (from a previous failed run)',
 		default=None,
@@ -121,18 +121,26 @@ def _load_continue_file(shared: SharedContext, filepath: str) -> set[str]:
 
 def run(shared: SharedContext, collection_env: Env) -> Env:
 	new_cases = []
-	test_name_filter = collection_env.args.test_name
+	test_name_filter = collection_env.args.filter_name
 	test_name_regex = re.compile(test_name_filter)
 
-	tags_expr_toks = _tokenize_expr(collection_env.args.test_tags)
+	tags_expr_toks = _tokenize_expr(collection_env.args.filter_tag)
 	tags_expr_toks.reverse()
 	tags_expr = _parse_tags_expr(tags_expr_toks, 2)
 
 	# Load continue file if specified
 	continue_tests: set[str] | None = None
-	if collection_env.args.continue_from:
-		continue_tests = _load_continue_file(shared, collection_env.args.continue_from)
+	if collection_env.args.filter_continue:
+		continue_tests = _load_continue_file(shared, collection_env.args.filter_continue)
 
+	import ya_test_runner.test
+
+	# Build name -> case lookup for dependency resolution
+	all_cases_by_name: dict[str, ya_test_runner.test.Case] = {}
+	for case in collection_env.cases:
+		all_cases_by_name[case.description.name] = case
+
+	selected_names: set[str] = set()
 	for case in collection_env.cases:
 		# Apply name regex filter
 		if not test_name_regex.search(case.description.name):
@@ -146,8 +154,22 @@ def run(shared: SharedContext, collection_env: Env) -> Env:
 		if continue_tests is not None and case.description.name not in continue_tests:
 			continue
 
-		new_cases.append(case)
+		selected_names.add(case.description.name)
 
+	# Transitively include all dependencies, marking pulled-in cases as hidden
+	def _ensure_deps(name: str) -> None:
+		case = all_cases_by_name.get(name)
+		if case is None:
+			return
+		for dep_name in case.description.depends_on:
+			if dep_name not in selected_names:
+				selected_names.add(dep_name)
+				_ensure_deps(dep_name)
+
+	for name in list(selected_names):
+		_ensure_deps(name)
+
+	new_cases = [c for c in collection_env.cases if c.description.name in selected_names]
 	new_cases.sort(key=lambda c: c.description.name)
 
 	return Env(

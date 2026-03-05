@@ -43,6 +43,7 @@ chrono = { version = "0.4.41", default-features = false, features = ["clock", "s
 ring = { version = "0.17.14", features = ["std"] }
 url = { version = "2.5.4", features = ["serde"] }
 hex = "0.4.3"
+num-bigint = { version = "0.4.6", features = ["serde"] }
 unicode-normalization = "0.1.20"
 unicode-width = "0.2.1"
 image = { version = "0.25.8", features = ["png", "jpeg", "webp"]}

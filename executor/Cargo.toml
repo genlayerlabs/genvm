@@ -16,10 +16,6 @@ debug = true
 static_mut_refs = "allow"
 
 [[example]]
-name = "fuzz-genvm-executor"
-path = "fuzz/genvm-executor.rs"
-
-[[example]]
 name = "fuzz-genvm-storage"
 path = "fuzz/genvm-storage.rs"
 

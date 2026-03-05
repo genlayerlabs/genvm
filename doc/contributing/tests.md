@@ -24,7 +24,7 @@ pip install ./tools/ya-test-runner
 ya-test-runner run
 
 # Run with tag filter
-ya-test-runner --test-tags 'stable' run
+ya-test-runner --filter-tag 'stable' run
 
 # Show available tests
 ya-test-runner show test
@@ -38,20 +38,20 @@ ya-test-runner show plan
 Tag expression presets are available in `tests/presets/`:
 ```bash
 # Run release tests (integration & stable)
-ya-test-runner --test-tags "$(cat tests/presets/release.txt)" run
+ya-test-runner --filter-tag "$(cat tests/presets/release.txt)" run
 
 # Run rust tests (rust | integration)
-ya-test-runner --test-tags "$(cat tests/presets/rust.txt)" run
+ya-test-runner --filter-tag "$(cat tests/presets/rust.txt)" run
 
 # Run python tests
-ya-test-runner --test-tags "$(cat tests/presets/python.txt)" run
+ya-test-runner --filter-tag "$(cat tests/presets/python.txt)" run
 ```
 
 ### Coverage Collection
 
 To collect coverage for Rust tests:
 ```bash
-nix develop .#rust-test --command ya-test-runner --test-tags rust --coverage run
+nix develop .#rust-test --command ya-test-runner --filter-tag rust --coverage run
 ```
 
 ### Re-running Failed Tests
@@ -60,17 +60,17 @@ When tests fail, ya-test-runner automatically writes the failed test names to a 
 
 ```bash
 # Use the continue file path shown in the failure summary
-ya-test-runner --continue-from 20260123-143052-abc123 run
+ya-test-runner --filter-continue 20260123-143052-abc123 run
 
 # Or use a full path
-ya-test-runner --continue-from build/test-artifacts/continue/20260123-143052-abc123 run
+ya-test-runner --filter-continue build/test-artifacts/continue/20260123-143052-abc123 run
 ```
 
 ### Useful Options
 
-- `--test-name REGEX` - Filter tests by name regex
-- `--test-tags EXPR` - Filter tests by tags (e.g., `stable & !slow`)
-- `--continue-from FILE` - Re-run only tests from a continue file (from a previous failed run)
+- `--filter-name REGEX` - Filter tests by name regex
+- `--filter-tag EXPR` - Filter tests by tags (e.g., `stable & !slow`)
+- `--filter-continue FILE` - Re-run only tests from a continue file (from a previous failed run)
 - `--fail-fast` - Stop on first failure
 - `--coverage` - Enable coverage collection for Rust tests
 - `--log-level {trace,debug,info,warning,error}` - Set logging level

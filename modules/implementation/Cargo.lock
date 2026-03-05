@@ -913,6 +913,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arbitrary",
+ "bytes",
  "chrono",
  "clap",
  "crossbeam",
@@ -951,6 +952,7 @@ dependencies = [
  "image",
  "libc",
  "mlua",
+ "num-bigint",
  "papaya",
  "rand 0.9.1",
  "regex",

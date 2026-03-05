@@ -1025,6 +1025,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arbitrary",
+ "bytes",
  "chrono",
  "clap",
  "crossbeam",

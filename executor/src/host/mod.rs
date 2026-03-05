@@ -10,6 +10,7 @@ use genvm_common::calldata::ADDRESS_SIZE;
 use message::root_offsets;
 
 use core::str;
+use std::os::fd::FromRawFd;
 
 use anyhow::{Context, Result};
 
@@ -43,6 +44,12 @@ impl Host {
                 std::os::unix::net::UnixStream::connect(std::path::Path::new(addr_suff))
                     .with_context(|| format!("connecting to {addr}"))?,
             ))
+        } else if let Some(fd_str) = addr.strip_prefix("fd://") {
+            let fd: i32 = fd_str
+                .parse()
+                .with_context(|| format!("parsing fd number from '{fd_str}'"))?;
+            let stream = unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd) };
+            Box::new(bufreaderwriter::seq::BufReaderWriterSeq::new_writer(stream))
         } else {
             Box::new(bufreaderwriter::seq::BufReaderWriterSeq::new_writer(
                 std::net::TcpStream::connect(addr)
@@ -98,6 +105,31 @@ fn handle_host_error(sock: &mut dyn Sock, context: &str) -> Result<()> {
     }
 }
 
+pub fn encode_result(res: &Result<FullResult>) -> Result<Vec<u8>> {
+    match res {
+        Ok(d) => {
+            let mut encoded = Vec::from([d.kind as u8]);
+            let as_value = calldata::to_value(d)?;
+            calldata::encode_to(&mut encoded, &as_value)?;
+            Ok(encoded)
+        }
+        Err(e) => {
+            let mut encoded = Vec::from([ResultCode::InternalError as u8]);
+            let fake_res = FullResult::new_internal_error(format!("{e:?}"));
+            let as_value = calldata::to_value(&fake_res)?;
+            calldata::encode_to(&mut encoded, &as_value)?;
+            Ok(encoded)
+        }
+    }
+}
+
+pub fn write_result_to_sock(sock: &mut dyn Sock, res: &Result<FullResult>) -> Result<()> {
+    let data = encode_result(res)?;
+    write_slice(sock, &data)?;
+    sock.flush()?;
+    Ok(())
+}
+
 pub struct LockedSlotsSet(Box<[SlotID]>);
 
 impl LockedSlotsSet {
@@ -107,12 +139,103 @@ impl LockedSlotsSet {
 }
 
 #[cfg(not(debug_assertions))]
-fn all_useful_work_done() {
+pub fn all_useful_work_done() {
     std::process::exit(0);
 }
 
 #[cfg(debug_assertions)]
-fn all_useful_work_done() {}
+pub fn all_useful_work_done() {}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FullResult {
+    pub execution_hash: bytes::Bytes,
+
+    pub kind: public_abi::ResultCode,
+    pub data: calldata::Value,
+    pub fingerprint: Option<rt::errors::Fingerprint>,
+    pub storage_changes: Vec<rt::vm::storage::Delta>,
+
+    pub emissions: Vec<genlayer_sdk::abi::ExecutionEmission>,
+
+    pub nondet_disagreement: Option<u32>,
+    pub nondet_results: Vec<bytes::Bytes>,
+
+    pub data_fees_remaining: u64,
+}
+
+impl FullResult {
+    pub fn new_internal_error(msg: String) -> Self {
+        Self {
+            execution_hash: bytes::Bytes::new(),
+            kind: public_abi::ResultCode::InternalError,
+            data: calldata::Value::Str(msg),
+            fingerprint: None,
+            storage_changes: Vec::new(),
+            emissions: Vec::new(),
+            nondet_disagreement: None,
+            nondet_results: Vec::new(),
+            data_fees_remaining: 0,
+        }
+    }
+}
+
+struct Sha3Appender(sha3::Sha3_256);
+
+impl calldata::Appender for Sha3Appender {
+    type Error = std::convert::Infallible;
+
+    fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+        sha3::Digest::update(&mut self.0, data);
+        Ok(())
+    }
+}
+
+impl FullResult {
+    pub fn new(
+        rt_result: rt::vm::FullResult,
+        nondet_results: Vec<bytes::Bytes>,
+        nondet_disagreement: Option<u32>,
+        data_fees_remaining: u64,
+    ) -> Self {
+        #[derive(serde::Serialize)]
+        struct Hashable<'a> {
+            kind: &'a public_abi::ResultCode,
+            data: &'a calldata::Value,
+            fingerprint: &'a Option<rt::errors::Fingerprint>,
+            storage_changes: &'a Vec<rt::vm::storage::Delta>,
+            data_fees_remaining: u64,
+        }
+
+        let hashable = Hashable {
+            kind: &rt_result.kind,
+            data: &rt_result.data,
+            fingerprint: &rt_result.fingerprint,
+            storage_changes: &rt_result.storage_changes,
+            data_fees_remaining,
+        };
+
+        let as_value = calldata::to_value(&hashable).expect("failed to serialize hashable");
+        let mut hasher = Sha3Appender(sha3::Digest::new());
+        match calldata::encode_to(&mut hasher, &as_value) {
+            Ok(()) => {}
+            Err(e) => match e {},
+        }
+        let execution_hash = bytes::Bytes::from(sha3::Digest::finalize(hasher.0).to_vec());
+
+        Self {
+            execution_hash,
+
+            data: rt_result.data,
+            fingerprint: rt_result.fingerprint,
+            kind: rt_result.kind,
+            storage_changes: rt_result.storage_changes,
+            emissions: rt_result.emissions,
+            nondet_results,
+            nondet_disagreement,
+            data_fees_remaining,
+        }
+    }
+}
 
 impl Host {
     fn lock_sock(&mut self) -> sync::Lock<&mut dyn Sock, stats::tracker::Time> {
@@ -120,22 +243,6 @@ impl Host {
             &mut *self.sock,
             stats::tracker::Time::new(self.metrics.gep(|x| &x.time)),
         )
-    }
-
-    pub fn get_calldata(&mut self, calldata: &mut Vec<u8>) -> Result<()> {
-        let mut sock = self.lock_sock();
-        sock.write_all(&[host_fns::Methods::GetCalldata as u8])?;
-
-        handle_host_error(&mut **sock, "get_calldata")?;
-
-        let len = read_u32(&mut **sock, "get_calldata length")? as usize;
-        calldata.reserve(len);
-        let index = calldata.len();
-        unsafe {
-            calldata.set_len(index + len);
-        }
-        sock.read_exact(&mut calldata[index..index + len])?;
-        Ok(())
     }
 
     fn get_locked_slots(
@@ -245,34 +352,12 @@ impl Host {
         Ok(())
     }
 
-    pub fn consume_result(&mut self, res: &Result<rt::vm::FullResult>) -> Result<()> {
+    pub fn consume_result(&mut self, res: &Result<FullResult>) -> Result<()> {
         log_trace!("consume_result");
 
+        let data = encode_result(res)?;
+
         let mut sock = self.lock_sock();
-
-        let data = match res {
-            Ok(d) => {
-                let mut encoded = Vec::from([d.kind as u8]);
-                let as_value = calldata::to_value(d)?;
-                calldata::encode_to(&mut encoded, &as_value);
-
-                encoded
-            }
-            Err(e) => {
-                let mut encoded = Vec::from([ResultCode::InternalError as u8]);
-                let fake_res = rt::vm::FullResult {
-                    kind: public_abi::ResultCode::InternalError,
-                    data: calldata::Value::Str(format!("{e:?}")),
-                    fingerprint: None,
-                    storage_changes: Vec::new(),
-                    events: Vec::new(),
-                };
-                let as_value = calldata::to_value(&fake_res)?;
-                calldata::encode_to(&mut encoded, &as_value);
-
-                encoded
-            }
-        };
 
         sock.write_all(&[host_fns::Methods::ConsumeResult as u8])?;
         write_slice(&mut **sock, &data)?;
@@ -284,94 +369,20 @@ impl Host {
 
         log_debug!("consume_result: ACK");
 
-        all_useful_work_done();
-
         Ok(())
     }
 
-    pub fn get_leader_result(&mut self, call_no: u32) -> Result<Option<rt::vm::RunOk>> {
-        log_trace!("get_leader_result");
+    pub fn notify_finished(&mut self) -> Result<()> {
+        log_trace!("notify_finished");
 
         let mut sock = self.lock_sock();
-        sock.write_all(&[host_fns::Methods::GetLeaderNondetResult as u8])?;
-        sock.write_all(&call_no.to_le_bytes())?;
-
-        match read_host_error(&mut **sock, "get_leader_result")? {
-            host_fns::Errors::Ok => {}
-            host_fns::Errors::IAmLeader => {
-                return Ok(None);
-            }
-            e => return Err(rt::errors::VMError(e.str_snake_case().to_owned(), None).into()),
-        }
-
-        let leaders_result = read_bytes(&mut **sock, "get_leader_result")?;
-
-        let rest = &leaders_result[1..];
-
-        let res = match leaders_result[0] {
-            x if x == ResultCode::Return as u8 => rt::vm::RunOk::Return(rest.into()),
-            x if x == ResultCode::UserError as u8 => {
-                rt::vm::RunOk::UserError(String::from(str::from_utf8(rest)?))
-            }
-            x if x == ResultCode::VmError as u8 => {
-                rt::vm::RunOk::VMError(String::from(str::from_utf8(rest)?), None)
-            }
-            x => anyhow::bail!("host returned incorrect result id {}", x),
-        };
-        Ok(Some(res))
-    }
-
-    pub fn post_nondet_result(&mut self, call_no: u32, res: &rt::vm::RunOk) -> Result<()> {
-        log_trace!(call_no = call_no; "post_nondet_result");
-
-        let mut sock = self.lock_sock();
-        sock.write_all(&[host_fns::Methods::PostNondetResult as u8])?;
-        sock.write_all(&call_no.to_le_bytes())?;
-
-        write_slice(&mut **sock, &Vec::from_iter(res.as_bytes_iter()))?;
-
+        sock.write_all(&[host_fns::Methods::NotifyFinished as u8])?;
         sock.flush()?;
 
-        handle_host_error(&mut **sock, "post_nondet_result")?;
+        let mut int_buf = [0; 1];
+        sock.read_exact(&mut int_buf)?;
 
-        Ok(())
-    }
-
-    pub fn post_message(
-        &mut self,
-        account: &calldata::Address,
-        calldata: &[u8],
-        data: &str,
-    ) -> Result<()> {
-        log_trace!("post_message");
-
-        let mut sock = self.lock_sock();
-        sock.write_all(&[host_fns::Methods::PostMessage as u8])?;
-        sock.write_all(&account.raw())?;
-
-        write_slice(&mut **sock, calldata)?;
-        write_slice(&mut **sock, data.as_bytes())?;
-
-        sock.flush()?;
-
-        handle_host_error(&mut **sock, "post_message")?;
-
-        Ok(())
-    }
-
-    pub fn deploy_contract(&mut self, calldata: &[u8], code: &[u8], data: &str) -> Result<()> {
-        log_trace!("deploy_contract");
-
-        let mut sock = self.lock_sock();
-        sock.write_all(&[host_fns::Methods::DeployContract as u8])?;
-
-        write_slice(&mut **sock, calldata)?;
-        write_slice(&mut **sock, code)?;
-        write_slice(&mut **sock, data.as_bytes())?;
-
-        sock.flush()?;
-
-        handle_host_error(&mut **sock, "deploy_contract")?;
+        log_debug!("notify_finished: ACK");
 
         Ok(())
     }
@@ -401,32 +412,6 @@ impl Host {
         handle_host_error(&mut **sock, "eth_call")?;
 
         read_bytes(&mut **sock, "eth_call result")
-    }
-
-    pub fn eth_send(
-        &mut self,
-        address: calldata::Address,
-        calldata: &[u8],
-        data: &str,
-    ) -> Result<()> {
-        log_trace!("eth_send");
-
-        let mut sock = self.lock_sock();
-        sock.write_all(&[host_fns::Methods::EthSend as u8])?;
-
-        sock.write_all(&address.raw())?;
-
-        sock.write_all(&(calldata.len() as u32).to_le_bytes())?;
-        sock.write_all(calldata)?;
-
-        sock.write_all(&(data.len() as u32).to_le_bytes())?;
-        sock.write_all(data.as_bytes())?;
-
-        sock.flush()?;
-
-        handle_host_error(&mut **sock, "eth_send")?;
-
-        Ok(())
     }
 
     pub fn get_balance(&mut self, address: calldata::Address) -> Result<primitive_types::U256> {
@@ -469,5 +454,28 @@ impl Host {
         sock.flush()?;
 
         Ok(())
+    }
+}
+
+pub struct MultiHost {
+    hosts: Vec<tokio::sync::Mutex<Host>>,
+    method_hosts: Vec<u8>,
+}
+
+impl MultiHost {
+    pub fn new(hosts: Vec<Host>, method_hosts: Vec<u8>) -> Self {
+        Self {
+            hosts: hosts.into_iter().map(tokio::sync::Mutex::new).collect(),
+            method_hosts,
+        }
+    }
+
+    pub async fn lock_for(&self, method: host_fns::Methods) -> tokio::sync::MutexGuard<'_, Host> {
+        let idx = if (method as usize) < self.method_hosts.len() {
+            self.method_hosts[method as usize] as usize
+        } else {
+            0
+        };
+        self.hosts[idx].lock().await
     }
 }

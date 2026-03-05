@@ -24,7 +24,38 @@ pub struct FullResult {
     pub data: calldata::Value,
     pub fingerprint: Option<rt::errors::Fingerprint>,
     pub storage_changes: Vec<storage::Delta>,
-    pub events: Vec<Vec<bytes::Bytes>>,
+
+    pub emissions: Vec<genlayer_sdk::abi::ExecutionEmission>,
+}
+
+impl FullResult {
+    pub fn empty_from(run_ok: RunOk) -> Self {
+        Self {
+            kind: match run_ok {
+                RunOk::Return(_) => public_abi::ResultCode::Return,
+                RunOk::UserError(_) => public_abi::ResultCode::UserError,
+                RunOk::VMError(_, _) => public_abi::ResultCode::VmError,
+            },
+            data: match run_ok {
+                RunOk::Return(buf) => calldata::Value::Bytes(buf),
+                RunOk::UserError(msg) => calldata::Value::Str(msg),
+                RunOk::VMError(msg, _) => calldata::Value::Str(msg),
+            },
+            fingerprint: None,
+            storage_changes: Vec::new(),
+            emissions: Vec::new(),
+        }
+    }
+
+    pub fn timeout() -> Self {
+        Self {
+            kind: public_abi::ResultCode::VmError,
+            data: calldata::Value::Str(public_abi::VmError::Timeout.value().into()),
+            fingerprint: None,
+            storage_changes: Vec::new(),
+            emissions: Vec::new(),
+        }
+    }
 }
 
 impl RunOk {
@@ -93,7 +124,9 @@ pub struct VM<T> {
 }
 
 impl VM<wasmtime::Instance> {
-    pub async fn run(mut self) -> anyhow::Result<RunResult> {
+    pub async fn run(
+        mut self,
+    ) -> Result<RunResult, (anyhow::Error, wasi::genlayer_sdk::SingleVMData)> {
         log_debug!(wasi_preview1: serde = self.vm_base.store.data().genlayer_ctx.preview1.log(), genlayer_sdk: serde = self.vm_base.store.data().genlayer_ctx.genlayer_sdk.log(); "run");
 
         let func = self
@@ -183,18 +216,30 @@ impl VM<wasmtime::Instance> {
             }
         };
 
-        let res = res?;
-        Ok(RunResult {
-            run_ok: res.0,
-            fingerprint: res.1,
-            vm_data: self
-                .vm_base
-                .store
-                .into_data()
-                .genlayer_ctx
-                .genlayer_sdk
-                .data,
-        })
+        match res {
+            Ok((run_ok, fingerprint)) => Ok(RunResult {
+                run_ok,
+                fingerprint,
+                vm_data: self
+                    .vm_base
+                    .store
+                    .into_data()
+                    .genlayer_ctx
+                    .genlayer_sdk
+                    .data,
+            }),
+            Err(e) => {
+                return Err((
+                    e,
+                    self.vm_base
+                        .store
+                        .into_data()
+                        .genlayer_ctx
+                        .genlayer_sdk
+                        .data,
+                ))
+            }
+        }
     }
 }
 

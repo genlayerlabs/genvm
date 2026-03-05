@@ -21,10 +21,27 @@ Host Loop Pseudocode
      data := read_bytes(len)
      return data
 
+Multi-Host
+~~~~~~~~~~
+
+GenVM supports multiple host connections. Each host method is routed to a
+specific host connection based on a ``method_hosts`` mapping in
+``ExecutionData``. The mapping is a byte array where each index corresponds to a
+method ID and the value is the host connection index. When the index is out of
+bounds or the array is empty, host 0 is used as the default.
+
+The executor accepts multiple ``--host`` arguments. Each host connection
+independently runs the protocol described below.
+
+In the manager deployment, host 0 is the node's host loop and host 1 is a
+socketpair to the manager. The manager routes ``consume_result`` to itself
+(host 1) while all other methods go to host 0.
+
 Protocol Loop
 ~~~~~~~~~~~~~
 
-The :term:`host` processes requests in a loop until ``consume_result``:
+The :term:`host` processes requests in a loop. Each host connection runs
+independently, handling only the methods routed to it:
 
 ::
 
@@ -48,50 +65,11 @@ The :term:`host` processes requests in a loop until ``consume_result``:
          host_result := read_slice()
          # this is needed to ensure that genvm doesn't close socket before all data is read
          write_byte 0x00
-         break
-
-       json/methods/get_leader_nondet_result:
-         call_no := read_u32_le
-         data, err := host_get_leader_nondet_result(call_no)
-         if err != json/errors/ok:
-           write_byte err
-         else:
-           write_byte json/errors/ok
-           write_byte_slice data
-
-       json/methods/post_nondet_result:
-         call_no := read_u32_le
-         result := read_slice()
-         err := host_post_nondet_result(call_no, result)
-         if err != json/errors/ok:
-           write_byte err
-         else:
-           write_byte json/errors/ok
-
-       json/methods/post_message:
-         address := read_bytes(ACCOUNT_ADDR_SIZE)
-         calldata := read_slice()
-         message_data := read_slice() # JSON string
-         err := host_post_message(address, calldata, message_data)
-         if err != json/errors/ok:
-           write_byte err
-         else:
-           write_byte json/errors/ok
 
        json/methods/consume_fuel:
          gas := read_u64_le
          host_consume_fuel(gas)
          # note: this method doesn't send any response
-
-       json/methods/deploy_contract:
-         calldata := read_slice()
-         code := read_slice()
-         message_data := read_slice() # JSON string
-         err := host_deploy_contract(calldata, code, message_data)
-         if err != json/errors/ok:
-           write_byte err
-         else:
-           write_byte json/errors/ok
 
        json/methods/eth_call:
          address := read_bytes(ACCOUNT_ADDR_SIZE)
@@ -102,16 +80,6 @@ The :term:`host` processes requests in a loop until ``consume_result``:
          else:
            write_byte json/errors/ok
            write_byte_slice result
-
-       json/methods/eth_send:
-         address := read_bytes(ACCOUNT_ADDR_SIZE)
-         calldata := read_slice()
-         message_data := read_slice() # JSON string
-         err := host_eth_send(address, calldata, message_data)
-         if err != json/errors/ok:
-           write_byte err
-         else:
-           write_byte json/errors/ok
 
        json/methods/get_balance:
          address := read_bytes(ACCOUNT_ADDR_SIZE)
@@ -134,3 +102,7 @@ The :term:`host` processes requests in a loop until ``consume_result``:
          call_no := read_u32_le
          host_notify_nondet_disagreement(call_no)
          # note: this method doesn't send any response
+
+       json/methods/notify_finished:
+         # signals that all execution is complete
+         write_byte 0x00

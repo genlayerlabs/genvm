@@ -16,12 +16,12 @@ nix develop .#mock-tests --command ya-test-runner run
 
 Run release tests (stable integration):
 ```bash
-nix develop .#mock-tests --command ya-test-runner --test-tags "$(cat tests/presets/release.txt)" run
+nix develop .#mock-tests --command ya-test-runner --filter-tag "$(cat tests/presets/release.txt)" run
 ```
 
 Run a specific test:
 ```bash
-nix develop .#mock-tests --command ya-test-runner run --test-name 'test_name'
+nix develop .#mock-tests --command ya-test-runner run --filter-name 'test_name'
 ```
 
 ## ya-test-runner Commands
@@ -34,9 +34,9 @@ ya-test-runner run [OPTIONS]
 **Options:**
 | Flag | Description |
 |------|-------------|
-| `--test-name REGEX` | Filter tests by name regex |
-| `--test-tags EXPR` | Filter tests by tags (e.g., `stable & !slow`) |
-| `--continue-from FILE` | Re-run only tests from a continue file |
+| `--filter-name REGEX` | Filter tests by name regex |
+| `--filter-tag EXPR` | Filter tests by tags (e.g., `stable & !slow`) |
+| `--filter-continue FILE` | Re-run only tests from a continue file |
 | `--fail-fast` | Stop execution after first failure |
 | `--coverage` | Enable coverage collection for Rust tests |
 | `--log-level LEVEL` | Set log level (trace/debug/info/warning/error) |
@@ -68,7 +68,7 @@ Presets are tag expressions stored in `tests/presets/`:
 
 Usage:
 ```bash
-ya-test-runner --test-tags "$(cat tests/presets/release.txt)" run
+ya-test-runner --filter-tag "$(cat tests/presets/release.txt)" run
 ```
 
 ## Test Categories
@@ -77,24 +77,24 @@ ya-test-runner --test-tags "$(cat tests/presets/release.txt)" run
 End-to-end tests using jsonnet configuration. Services (manager, modules, webdriver) are started automatically.
 
 ```bash
-nix develop .#mock-tests --command ya-test-runner --test-tags integration run
+nix develop .#mock-tests --command ya-test-runner --filter-tag integration run
 ```
 
 ### Rust Tests
 Cargo tests for Rust crates:
 ```bash
-nix develop .#rust-test --command ya-test-runner --test-tags rust run
+nix develop .#rust-test --command ya-test-runner --filter-tag rust run
 ```
 
 With coverage:
 ```bash
-nix develop .#rust-test --command ya-test-runner --test-tags rust --coverage run
+nix develop .#rust-test --command ya-test-runner --filter-tag rust --coverage run
 ```
 
 ### Python Tests
 Tests for the Python standard library (`genlayer-py-std`):
 ```bash
-nix develop .#mock-tests --command ya-test-runner --test-tags python run
+nix develop .#mock-tests --command ya-test-runner --filter-tag python run
 ```
 
 Or directly with pytest:
@@ -123,7 +123,7 @@ When tests fail, ya-test-runner writes failed test names to `build/test-artifact
 
 ```bash
 # Use filename shown in failure summary
-ya-test-runner --continue-from 20260123-143052-abc123 run
+ya-test-runner --filter-continue 20260123-143052-abc123 run
 ```
 
 ## Quick Reference
@@ -131,8 +131,8 @@ ya-test-runner --continue-from 20260123-143052-abc123 run
 | What to test | Command |
 |--------------|---------|
 | All tests | `nix develop .#mock-tests --command ya-test-runner run` |
-| Release tests | `nix develop .#mock-tests --command ya-test-runner --test-tags "$(cat tests/presets/release.txt)" run` |
-| Rust tests | `nix develop .#rust-test --command ya-test-runner --test-tags rust run` |
-| Re-run failed | `ya-test-runner --continue-from <file> run` |
+| Release tests | `nix develop .#mock-tests --command ya-test-runner --filter-tag "$(cat tests/presets/release.txt)" run` |
+| Rust tests | `nix develop .#rust-test --command ya-test-runner --filter-tag rust run` |
+| Re-run failed | `ya-test-runner --filter-continue <file> run` |
 | With debug logs | `nix develop .#mock-tests --command ya-test-runner run --log-level debug` |
 | Show test list | `nix develop .#mock-tests --command ya-test-runner show test` |

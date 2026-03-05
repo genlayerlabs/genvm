@@ -16,14 +16,21 @@ pub mod version;
 pub mod util;
 
 pub mod domain {
+    use bytes::Bytes;
     pub use genlayer_sdk::abi::entry::MessageData;
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
     pub struct ExecutionData {
-        pub calldata: Vec<u8>,
+        pub calldata: Bytes,
         pub message: MessageData,
         pub host_data: String,
-        pub code: Option<Vec<u8>>,
+        pub code: Option<Bytes>,
+        pub leader_nondet_results: Option<Vec<Bytes>>,
+        /// Maps each host method (by index) to a host id. When empty, all methods use host 0.
+        pub method_hosts: Vec<u8>,
+        pub data_fees_limit: num_bigint::BigInt,
+        pub storage_page_cost: u32,
+        pub receipt_word_cost: u32,
     }
 }
 

@@ -172,21 +172,25 @@ fn run_nondet(entry_data: &[u8]) -> Result<Value, ContractError> {
 pub struct FetchWebpageHandler;
 
 impl Contract for FetchWebpageHandler {
-    fn handle_main(&mut self, _message: MessageData, _data: Vec<u8>) -> Result<Value, String> {
+    fn handle_main(&mut self, _message: MessageData, _data: bytes::Bytes) -> Result<Value, String> {
         let op = NondetOp::FetchWebpage;
         let entry_data = calldata::encode(&calldata::to_value(&op).map_err(|e| e.to_string())?);
 
         run_nondet(&entry_data).map_err(|e| e.to_string())
     }
 
-    fn handle_sandbox(&mut self, _message: MessageData, _data: Vec<u8>) -> Result<Vec<u8>, String> {
+    fn handle_sandbox(
+        &mut self,
+        _message: MessageData,
+        _data: bytes::Bytes,
+    ) -> Result<Vec<u8>, String> {
         unimplemented!()
     }
 
     fn handle_consensus_stage(
         &mut self,
         _message: MessageData,
-        data: Vec<u8>,
+        data: bytes::Bytes,
         stage_data: ConsensusStageData,
     ) -> Result<Value, String> {
         let op_value = calldata::decode(&data).map_err(|e| e.to_string())?;

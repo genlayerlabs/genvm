@@ -15,6 +15,7 @@ class Description(typing.NamedTuple):
 	needed_services: frozenset['ya_test_runner.stage.collection.Service'] = frozenset()
 	tags: frozenset[str] = frozenset()
 	console_pool: bool = False
+	depends_on: frozenset[str] = frozenset()
 
 	def with_tags(self, new_tags: typing.Iterable[str]) -> 'Description':
 		return self._replace(tags=self.tags.union(new_tags))
@@ -23,6 +24,9 @@ class Description(typing.NamedTuple):
 		self, services: typing.Iterable['ya_test_runner.stage.collection.Service']
 	) -> 'Description':
 		return self._replace(needed_services=self.needed_services.union(services))
+
+	def with_depends_on(self, deps: typing.Iterable[str]) -> 'Description':
+		return self._replace(depends_on=self.depends_on.union(deps))
 
 
 @dataclass
@@ -35,6 +39,7 @@ class Result:
 
 class Case(metaclass=abc.ABCMeta):
 	description: Description
+	hidden: bool = False
 
 	@abc.abstractmethod
 	async def into_steps(self) -> list[exec.step.Step]: ...

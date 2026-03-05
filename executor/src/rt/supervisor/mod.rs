@@ -5,11 +5,13 @@ use std::{
 
 use anyhow::Context;
 use genvm_common::*;
+use symbol_table::GlobalSymbol;
 
 use crate::{
     config, host, public_abi,
     rt::{self, memlimiter, DetNondet},
-    runners, wasi,
+    runners,
+    wasi::{self, genlayer_sdk::SingleVMData},
 };
 
 mod actions;
@@ -56,6 +58,8 @@ pub struct Ctor {
 
     pub limiter: rt::DetNondet<rt::memlimiter::Limiter>,
     pub locked_slots: host::LockedSlotsSet,
+    pub leader_nondet_results: Option<Vec<bytes::Bytes>>,
+    pub multi_host: host::MultiHost,
 }
 
 pub struct Supervisor {
@@ -66,13 +70,15 @@ pub struct Supervisor {
 
     pub nondet_call_no: AtomicU32,
     pub balances: dashmap::DashMap<calldata::Address, primitive_types::U256>,
+    pub nondet_results: tokio::sync::Mutex<Vec<bytes::Bytes>>,
+    pub leader_nondet_results: Option<Vec<bytes::Bytes>>,
 
     queue: NondetQueue,
     runner_cache: runners::cache::Reader,
     wasm_mod_cache: WasmModuleCache,
 
     pub(crate) engines: rt::DetNondet<wasmtime::Engine>,
-    pub(crate) host: Arc<tokio::sync::Mutex<host::Host>>,
+    pub(crate) host: Arc<host::MultiHost>,
 }
 
 pub fn create_engines(
@@ -174,15 +180,34 @@ pub async fn submit_nondet_vm_task(zelf: &Arc<Supervisor>, task: NonDetVMTask) {
 }
 
 impl Supervisor {
-    pub fn get_storage_limiter(&self) -> rt::vm::storage::Limiter {
-        rt::vm::storage::Limiter::new(self.shared_data.gep(|x| &x.storage_pages_limit))
+    pub async fn push_nondet_result(&self, call_no: u32, result: bytes::Bytes) {
+        let mut vec = self.nondet_results.lock().await;
+        let idx = call_no as usize;
+        while vec.len() <= idx {
+            vec.push(bytes::Bytes::new());
+        }
+        vec[idx] = result;
     }
 
-    pub fn start(
-        config: &config::Config,
-        ctor: Ctor,
-        host: host::Host,
-    ) -> anyhow::Result<Arc<Self>> {
+    pub async fn take_nondet_results(&self) -> Vec<bytes::Bytes> {
+        self.nondet_results.lock().await.clone()
+    }
+
+    pub fn get_leader_nondet_result(&self, call_no: u32) -> Option<bytes::Bytes> {
+        self.leader_nondet_results
+            .as_ref()
+            .and_then(|v| v.get(call_no as usize).cloned())
+    }
+
+    pub fn is_leader(&self) -> bool {
+        self.leader_nondet_results.is_none()
+    }
+
+    pub fn get_storage_limiter(&self) -> rt::vm::storage::Limiter {
+        rt::vm::storage::Limiter::new(self.shared_data.gep(|x| &x.data_fees_limit))
+    }
+
+    pub fn start(config: &config::Config, ctor: Ctor) -> anyhow::Result<Arc<Self>> {
         let my_cache_dir = runners::cache::get_cache_dir(&config.cache_dir).ok();
 
         let engines = create_engines(|base_conf| {
@@ -223,6 +248,8 @@ impl Supervisor {
             locked_slots: ctor.locked_slots,
             nondet_call_no: AtomicU32::new(0),
             balances: dashmap::DashMap::new(),
+            nondet_results: Default::default(),
+            leader_nondet_results: ctor.leader_nondet_results,
             queue: NondetQueue {
                 sender,
                 receiver,
@@ -240,7 +267,7 @@ impl Supervisor {
                 cache_dir: my_cache_dir,
                 wasm_modules_cache: sync::CacheMap::new(),
             },
-            host: Arc::new(tokio::sync::Mutex::new(host)),
+            host: Arc::new(ctor.multi_host),
             engines,
         });
 
@@ -260,7 +287,7 @@ pub async fn spawn(
     zelf: &Arc<Supervisor>,
     vm: wasi::genlayer_sdk::SingleVMData,
     limiter: rt::memlimiter::Limiter,
-) -> anyhow::Result<rt::vm::VM<()>> {
+) -> std::result::Result<rt::vm::VM<()>, (anyhow::Error, wasi::genlayer_sdk::SingleVMData)> {
     let config_copy = vm.conf;
 
     let engine = zelf.engines.get(vm.conf.is_deterministic);
@@ -271,7 +298,7 @@ pub async fn spawn(
         engine,
         rt::vm::WasmtimeStoreData {
             limits: limiter.clone(),
-            genlayer_ctx: wasi::Context::new(vm, limiter)?,
+            genlayer_ctx: wasi::Context::new(vm, limiter),
             supervisor: zelf.clone(),
         },
         wasmtime::GenVMCtx {
@@ -287,9 +314,11 @@ pub async fn spawn(
     linker.allow_unknown_exports(false);
     linker.allow_shadowing(false);
 
-    wasi::add_to_linker_sync(&mut linker, |host: &mut rt::vm::WasmtimeStoreData| {
+    if let Err(e) = wasi::add_to_linker_sync(&mut linker, |host: &mut rt::vm::WasmtimeStoreData| {
         host.genlayer_ctx_mut()
-    })?;
+    }) {
+        return Err((e, store.into_data().genlayer_ctx.genlayer_sdk.data));
+    }
 
     Ok(rt::vm::VM {
         vm_base: rt::vm::VMBase {
@@ -304,7 +333,7 @@ pub async fn spawn(
 pub async fn apply_contract_actions(
     zelf: &std::sync::Arc<Supervisor>,
     mut vm: rt::vm::VM<()>,
-) -> anyhow::Result<rt::vm::VM<wasmtime::Instance>> {
+) -> std::result::Result<rt::vm::VM<wasmtime::Instance>, (anyhow::Error, SingleVMData)> {
     let contract_address = vm
         .vm_base
         .store
@@ -320,6 +349,26 @@ pub async fn apply_contract_actions(
 
     let limiter = vm.vm_base.store.data_mut().limits.clone();
 
+    let res = apply_contract_actions_inner(zelf, &mut vm, contract_id, limiter).await;
+
+    match res {
+        Ok(inst) => Ok(rt::vm::VM {
+            vm_base: vm.vm_base,
+            data: inst,
+        }),
+        Err(e) => Err((
+            e,
+            vm.vm_base.store.into_data().genlayer_ctx.genlayer_sdk.data,
+        )),
+    }
+}
+
+async fn apply_contract_actions_inner(
+    zelf: &std::sync::Arc<Supervisor>,
+    vm: &mut rt::vm::VM<()>,
+    contract_id: GlobalSymbol,
+    limiter: rt::memlimiter::Limiter,
+) -> anyhow::Result<wasmtime::Instance> {
     let arch = zelf
         .runner_cache
         .get_or_create(
@@ -379,10 +428,7 @@ pub async fn apply_contract_actions(
         }
     };
 
-    Ok(rt::vm::VM {
-        vm_base: vm.vm_base,
-        data: inst,
-    })
+    Ok(inst)
 }
 
 async fn run_single_nondet(
@@ -391,8 +437,8 @@ async fn run_single_nondet(
     limiter: memlimiter::Limiter,
 ) -> anyhow::Result<rt::vm::RunOk> {
     match run_single_nondet_inner(zelf, task, limiter).await {
-        Ok(v) => Ok(v),
-        Err(e) => rt::errors::unwrap_vm_errors(e),
+        Ok(v) => Ok(v.run_ok),
+        Err((e, _)) => rt::errors::unwrap_vm_errors(e),
     }
 }
 
@@ -400,10 +446,10 @@ async fn run_single_nondet_inner(
     zelf: &std::sync::Arc<Supervisor>,
     task: NonDetVMTask,
     limiter: memlimiter::Limiter,
-) -> anyhow::Result<rt::vm::RunOk> {
+) -> std::result::Result<rt::vm::RunResult, (anyhow::Error, wasi::genlayer_sdk::SingleVMData)> {
     let vm = spawn(zelf, task.task, limiter).await?;
     let vm = apply_contract_actions(zelf, vm).await?;
-    vm.run().await.map(|x| x.run_ok)
+    vm.run().await
 }
 
 async fn nondet_vm_processor(

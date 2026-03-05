@@ -87,126 +87,72 @@ def _unfold_conf(x: typing.Any, vars: dict[str, str]) -> typing.Any:
 def _flatten_tree(
 	entries: list[dict],
 ) -> list[tuple[str, str | None, dict]]:
-	"""DFS-traverse the step tree and return (tree_path, parent_tree_path, step_conf) tuples."""
-	result = []
+	"""
+	DFS-traverse the step tree and return (tree_path, depends_on_tree_path, step_conf) tuples.
+
+	The depends_on field is computed in the jsonnet template (util.jsonnet expandModes).
+	A null depends_on means the step depends on /prepare.
+	"""
+	result: list[tuple[str, str | None, dict]] = []
 	for entry in entries:
 		step_conf = {k: v for k, v in entry.items() if k != 'next'}
 		tree_path = step_conf['tree_path']
-		parent_tree_path = step_conf.get('parent_tree_path')
-		result.append((tree_path, parent_tree_path, step_conf))
+		depends_on = step_conf.get('depends_on')
+
+		result.append((tree_path, depends_on, step_conf))
 		if 'next' in entry:
 			result.extend(_flatten_tree(entry['next']))
 	return result
-
-
-@dataclass
-class IntegrationSetupResult:
-	"""Result from IntegrationSetupStep, passed to subsequent steps."""
-
-	tmp_dir: Path
-	empty_storage: Path
-	skipped: bool = False
 
 
 _TOP_LEVEL_METADATA_KEYS = frozenset({'entry', 'tags'})
 
 
 @dataclass
-class IntegrationTestCase(ya_test_runner.test.Case):
-	"""Integration test case wrapping a jsonnet test definition."""
+class IntegrationPrepareCase(ya_test_runner.test.Case):
+	"""Test case for the preparation/setup phase of an integration test."""
+
+	description: ya_test_runner.test.Description
+	jsonnet_path: Path
+	top_level_conf: dict
+	tmp_dir: Path
+
+	hidden: bool = True
+
+	async def into_steps(self) -> list[ya_test_runner.exec.step.Step]:
+		return [IntegrationSetupStep(self)]
+
+
+@dataclass
+class IntegrationSingleCase(ya_test_runner.test.Case):
+	"""Test case for a single step of an integration test."""
 
 	description: ya_test_runner.test.Description
 	jsonnet_path: Path
 	manager_service: ya_test_runner.stage.collection.Service
-	webdriver_service: ya_test_runner.stage.collection.Service
-	jsonnet_parsed: dict | None = None
+	tree_path: str
+	parent_tree_path: str | None
+	single_conf: dict
+	total_steps: int
+	tmp_dir: Path
+	max_attempts: int
+	is_benchmark: bool = False
 
 	async def into_steps(self) -> list[ya_test_runner.exec.step.Step]:
-		jsonnet_path = self.jsonnet_path
-
-		# Check for skip file early
-		if jsonnet_path.with_suffix('.skip').exists():
-			return [IntegrationSkipStep(self)]
-
-		# Use cached parse from collection time, or evaluate now
-		if self.jsonnet_parsed is not None:
-			jsonnet_conf = self.jsonnet_parsed
-		else:
-			import _jsonnet
-
-			jsonnet_conf = _jsonnet.evaluate_file(
-				str(jsonnet_path), jpathdir=[str(TEMPLATES_DIR.parent)]
+		step = IntegrationSingleStep(self)
+		if self.is_benchmark:
+			steps: list[ya_test_runner.exec.step.Step] = []
+			for i in range(10):
+				steps.append(CheckInterruptedStep())
+				steps.append(ya_test_runner.test.BenchMeasureStep())
+				steps.append(step)
+			steps.append(
+				ya_test_runner.test.BenchCollectStep(
+					local_ctx.shared.printer, test_name=self.description.name
+				)
 			)
-			jsonnet_conf = json.loads(jsonnet_conf)
-
-		local_ctx.shared.logger.debug(
-			'Parsed jsonnet configuration',
-			test_name=str(self.description.name),
-			jsonnet_path=str(jsonnet_path),
-			conf=jsonnet_conf,
-		)
-
-		# Calculate paths early so ${tmpDir} is available for variable substitution
-		rel_path = jsonnet_path.relative_to(CASES_DIR)
-		tmp_dir = local_ctx.shared.artifacts_dir.joinpath(
-			'integration', rel_path
-		).with_suffix('')
-
-		jsonnet_conf = _unfold_conf(
-			jsonnet_conf,
-			{
-				'jsonnetDir': str(jsonnet_path.parent),
-				'fileBaseName': jsonnet_path.stem,
-				'tmpDir': str(tmp_dir),
-			},
-		)
-
-		# Extract top-level fields (exclude metadata-only keys)
-		top_level_conf = {
-			k: v for k, v in jsonnet_conf.items() if k not in _TOP_LEVEL_METADATA_KEYS
-		}
-		entries = jsonnet_conf['entry']
-
-		# Flatten tree
-		flat_steps = _flatten_tree(entries)
-
-		is_unstable = 'unstable' in self.description.tags
-		max_attempts = 3 if is_unstable else 1
-
-		steps: list[ya_test_runner.exec.step.Step] = []
-
-		# Setup step
-		steps.append(
-			IntegrationSetupStep(
-				test_case=self,
-				top_level_conf=top_level_conf,
-				tmp_dir=tmp_dir,
-			)
-		)
-
-		# One step per flattened tree node
-		total_steps = len(flat_steps)
-		for tree_path, parent_tree_path, single_conf in flat_steps:
-			is_benchmark = single_conf.get('benchmark', False)
-			cur_step = IntegrationSingleStep(
-				test_case=self,
-				tree_path=tree_path,
-				parent_tree_path=parent_tree_path,
-				single_conf=single_conf,
-				total_steps=total_steps,
-				tmp_dir=tmp_dir,
-				max_attempts=max_attempts,
-			)
-			if is_benchmark:
-				for i in range(10):
-					steps.append(CheckInterruptedStep())
-					steps.append(ya_test_runner.test.BenchMeasureStep())
-					steps.append(cur_step)
-				steps.append(ya_test_runner.test.BenchCollectStep(local_ctx.shared.printer))
-			else:
-				steps.append(cur_step)
-
-		return steps
+			return steps
+		return [step]
 
 
 class CheckInterruptedStep(ya_test_runner.exec.step.Python):
@@ -227,16 +173,16 @@ class CheckInterruptedStep(ya_test_runner.exec.step.Python):
 class IntegrationSkipStep(ya_test_runner.exec.step.Python):
 	"""Returns a skipped result for tests with .skip file."""
 
-	def __init__(self, test_case: IntegrationTestCase):
-		self._test_case = test_case
+	def __init__(self, test_name: str):
+		self._test_name = test_name
 
 	def to_str(self) -> str:
-		return f'<skip: {self._test_case.jsonnet_path.name}>'
+		return f'<skip: {self._test_name}>'
 
 	async def run(self, previous_results: list[typing.Any]) -> ya_test_runner.test.Result:
 		local_ctx.shared.logger.warning(
 			'Test skipped',
-			test_name=self._test_case.description.name,
+			test_name=self._test_name,
 		)
 		return ya_test_runner.test.Result(
 			passed=True,
@@ -248,29 +194,25 @@ class IntegrationSkipStep(ya_test_runner.exec.step.Python):
 class IntegrationSetupStep(ya_test_runner.exec.step.Python):
 	"""Sets up the test environment: temp dir, prepare script, base storage."""
 
-	def __init__(
-		self,
-		test_case: IntegrationTestCase,
-		top_level_conf: dict,
-		tmp_dir: Path,
-	):
-		self._test_case = test_case
-		self._top_level_conf = top_level_conf
-		self._tmp_dir = tmp_dir
+	def __init__(self, case: IntegrationPrepareCase):
+		self._case = case
 
 	def to_str(self) -> str:
-		return f'<setup: {self._test_case.jsonnet_path.name}>'
+		return f'<setup: {self._case.jsonnet_path.name}>'
 
-	async def run(self, previous_results: list[typing.Any]) -> IntegrationSetupResult:
+	async def run(self, previous_results: list[typing.Any]) -> ya_test_runner.test.Result:
+		tmp_dir = self._case.tmp_dir
+		top_level_conf = self._case.top_level_conf
+
 		# Set up temp directory
-		shutil.rmtree(self._tmp_dir, ignore_errors=True)
-		self._tmp_dir.mkdir(exist_ok=True, parents=True)
+		shutil.rmtree(tmp_dir, ignore_errors=True)
+		tmp_dir.mkdir(exist_ok=True, parents=True)
 
 		# Run preparation if needed
-		if 'prepare' in self._top_level_conf:
+		if 'prepare' in top_level_conf:
 			cmd = Command(
-				args=[sys.executable, self._top_level_conf['prepare']],
-				cwd=self._test_case.jsonnet_path.parent,
+				args=[sys.executable, top_level_conf['prepare']],
+				cwd=self._case.jsonnet_path.parent,
 				env=default_env,
 			)
 			result = await cmd.run(local_ctx.shared, mode=RunMode.SILENT)
@@ -291,7 +233,7 @@ class IntegrationSetupStep(ya_test_runner.exec.step.Python):
 
 		# Set up base storage
 		base_mock_storage = MockStorage()
-		if storage_json := self._top_level_conf.get('storage_json'):
+		if storage_json := top_level_conf.get('storage_json'):
 			storage_b64 = json.loads(Path(storage_json).read_text())
 			base_mock_storage._storages = {
 				Address(a): {
@@ -300,13 +242,14 @@ class IntegrationSetupStep(ya_test_runner.exec.step.Python):
 				for a, kv in storage_b64.items()
 			}
 
-		empty_storage = self._tmp_dir.joinpath('empty-storage.pickle')
+		empty_storage = tmp_dir.joinpath('empty-storage.pickle')
 		with open(empty_storage, 'wb') as f:
 			pickle.dump(base_mock_storage, f)
 
-		return IntegrationSetupResult(
-			tmp_dir=self._tmp_dir,
-			empty_storage=empty_storage,
+		return ya_test_runner.test.Result(
+			passed=True,
+			context={},
+			elapsed_seconds=0,
 		)
 
 
@@ -348,43 +291,24 @@ def _calldata_to_fancy_str(calldata: bytes) -> str:
 class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 	"""Executes a single step of an integration test."""
 
-	def __init__(
-		self,
-		test_case: IntegrationTestCase,
-		tree_path: str,
-		parent_tree_path: str | None,
-		single_conf: dict,
-		total_steps: int,
-		tmp_dir: Path,
-		max_attempts: int,
-	):
-		self._test_case = test_case
-		self._tree_path = tree_path
-		self._parent_tree_path = parent_tree_path
-		self._single_conf = single_conf
-		self._total_steps = total_steps
-		self._tmp_dir = tmp_dir
-		self._max_attempts = max_attempts
+	def __init__(self, case: IntegrationSingleCase):
+		self._test_case = case
+		self._tree_path = case.tree_path
+		self._parent_tree_path = case.parent_tree_path
+		self._single_conf = case.single_conf
+		self._total_steps = case.total_steps
+		self._tmp_dir = case.tmp_dir
+		self._max_attempts = case.max_attempts
 
 	def to_str(self) -> str:
 		return f'<step {self._tree_path}: {self._test_case.jsonnet_path.name}>'
 
 	async def run(self, previous_results: list[typing.Any]) -> ya_test_runner.test.Result:
-		# Get setup result from first step
-		setup_result: IntegrationSetupResult = previous_results[0]
+		empty_storage = self._tmp_dir.joinpath('empty-storage.pickle')
 
 		for attempt in range(self._max_attempts):
-			result = await self._run_single_step(setup_result.empty_storage)
+			result = await self._run_single_step(empty_storage)
 			if result['passed']:
-				local_ctx.shared.logger.log(
-					ya_test_runner.Formatter.Level.INFO
-					if self._total_steps > 1
-					else ya_test_runner.Formatter.Level.DEBUG,
-					f'Test step passed',
-					test_name=str(self._test_case.description.name),
-					tree_path=self._tree_path,
-					total_steps=self._total_steps,
-				)
 				return ya_test_runner.test.Result(
 					passed=True,
 					context=result.get('context', {}),
@@ -499,7 +423,6 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		)
 
 		# Set up paths
-		messages_path = my_tmp_dir.joinpath('messages.txt')
 		rel_path = jsonnet_path.relative_to(CASES_DIR)
 		mock_sock_path = Path('/tmp', 'genvm-test', rel_path.with_suffix(f'.sock{suff}'))
 		mock_sock_path.parent.mkdir(exist_ok=True, parents=True)
@@ -514,14 +437,32 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 			if leader_nondet is None:
 				with open(path_to_which_leader_puts_result, 'rb') as f:
 					leader_nondet = pickle.load(f)
+			if leader_nondet is not None:
+				encoded_nondet = []
+				for res in leader_nondet:
+					if isinstance(res, (bytes, bytearray, memoryview)):
+						encoded_nondet.append(bytes(res))
+					elif res['kind'] == 'return':
+						encoded_nondet.append(
+							bytes([public_abi.ResultCode.RETURN]) + gvm_calldata.encode(res['value'])
+						)
+					elif res['kind'] == 'rollback':
+						encoded_nondet.append(
+							bytes([public_abi.ResultCode.USER_ERROR]) + res['value'].encode('utf-8')
+						)
+					elif res['kind'] == 'contract_error':
+						encoded_nondet.append(
+							bytes([public_abi.ResultCode.VM_ERROR]) + res['value'].encode('utf-8')
+						)
+					else:
+						raise ValueError(f'unknown leader_nondet kind: {res["kind"]}')
+				leader_nondet = encoded_nondet
 
 		# Create mock host
 		host = MockHost(
 			path=str(mock_sock_path),
 			storage_path_post=post_storage,
 			storage_path_pre=pre_storage,
-			leader_nondet=leader_nondet,
-			messages_path=messages_path,
 			balances={Address(k): v for k, v in single_conf.get('balances', {}).items()},
 			running_address=single_conf['message']['contract_address'],
 		)
@@ -562,6 +503,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					extra_args=['--debug-mode'],
 					code=code,
 					calldata=calldata_bytes,
+					leader_nondet_results=leader_nondet,
 					request_extra=request_extra,
 				)
 				stdout_raw = res.stdout
@@ -580,9 +522,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 						f'nondet disagreement: {mock_host.nondet_disagreement_call_no}\n'
 					)
 				res.stdout = stdout_raw + return_part + nondet_part
-				# Apply events and storage changes
-				for evs in res.result_events:
-					mock_host.post_event(evs[:-1], evs[-1])
+
 				for k, v in res.result_storage_changes:
 					mock_host.storage.write(
 						mock_host.running_address,
@@ -601,11 +541,8 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 
 		# Save leader nondet results for v/s modes
 		if is_leader:
-			if len(host.nondet_results) == 0:
-				nondet_list = []
-			else:
-				size = max(host.nondet_results.keys()) + 1
-				nondet_list = [host.nondet_results[i] for i in range(size)]
+			nondet_list = res.result_nondet_results
+
 			with open(path_to_which_leader_puts_result, 'wb') as f:
 				pickle.dump(nondet_list, f)
 
@@ -622,24 +559,33 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		with open(result_path, 'wb') as f:
 			pickle.dump(res, f)
 
+		result_events: list[list[bytes]] = []
+
+		messages_content = []
+		for em in res.result_emissions:
+			if em['type'] == 'EmitEvent':
+				tem = typing.cast(base_host.EmitEventInner, em)
+				blob = gvm_calldata.encode(tem['blob'])
+				result_events.append([*tem['topics'], blob])
+			messages_content.append(gvm_calldata.to_str(em))
+			messages_content.append('\n')
+
 		# Write hash file (calldata-encoded deterministic result fields)
 		hash_data = gvm_calldata.encode(
-			(
+			[
 				int(res.result_kind),
 				res.result_data,
 				res.result_fingerprint,
 				res.result_storage_changes,
-				res.result_events,
-			)
+				result_events,
+			]
 		)
 
-		# Build semantics from components
-		messages_content = messages_path.read_text() if messages_path.exists() else ''
 		semantics_parts = {
 			'stdout': stdout_raw,
 			'return': return_part,
 			'nondet': nondet_part,
-			'messages': messages_content,
+			'messages': ''.join(messages_content),
 		}
 		semantics_components = single_conf['expected_semantics_components']
 		if semantics_components:
@@ -720,11 +666,11 @@ def integration_test(
 	"""
 	Collect integration tests from tests/cases/ directory.
 
-	Args:
-		ctx: Collection context
-		manager_service: The manager service to use for all tests
-		modules_service: The modules service (Llm, Web) for unstable/semi-stable tests
-		webdriver_service: Optional webdriver service for web tests
+	Each jsonnet file produces multiple test cases:
+		- <name>/prepare  — setup (temp dir, prepare script, base storage)
+		- <name>/<tree_path><mode> — one per step (e.g. /0l, /0v, /0s)
+
+	Steps depend on /prepare, and child steps depend on their parent step.
 	"""
 	import _jsonnet
 
@@ -735,26 +681,13 @@ def integration_test(
 		rel_path = jsonnet_file.relative_to(CASES_DIR)
 
 		# Determine stability tag from path
-		# stable/, unstable/, semi-stable/
 		tags: set[str] = {'integration'}
 		stability_tag = rel_path.parts[0] if rel_path.parts else 'unknown'
 		if stability_tag in ('stable', 'unstable', 'semi-stable'):
 			tags.add(stability_tag)
 		elif stability_tag.startswith('_'):
-			# Files like _hello_world_.jsonnet are treated as stable
 			tags.add('stable')
 			stability_tag = 'stable'
-
-		# Parse jsonnet at collection time to extract metadata tags and cache result
-		jsonnet_parsed = None
-		if not jsonnet_file.with_suffix('.skip').exists():
-			jsonnet_result = _jsonnet.evaluate_file(
-				str(jsonnet_file), jpathdir=[str(TEMPLATES_DIR.parent)]
-			)
-			jsonnet_parsed = json.loads(jsonnet_result)
-			extra_tags = jsonnet_parsed.get('tags', [])
-			if extra_tags:
-				tags.update(extra_tags)
 
 		needed_services: set[ya_test_runner.stage.collection.Service] = {manager_service}
 
@@ -764,22 +697,117 @@ def integration_test(
 
 		test_name = str(jsonnet_file.relative_to(local_ctx.shared.root_dir))
 
-		desc = ya_test_runner.test.Description(
-			name=test_name,
-			needed_services=frozenset(needed_services),
-			tags=frozenset(tags),
-			console_pool=False,  # Integration tests can run in parallel
+		# Handle skipped tests
+		if jsonnet_file.with_suffix('.skip').exists():
+			desc = ya_test_runner.test.Description(
+				name=test_name,
+				needed_services=frozenset(needed_services),
+				tags=frozenset(tags),
+			)
+			ctx.add_case(
+				ya_test_runner.test.StepsCase(
+					description=desc,
+					steps=[IntegrationSkipStep(test_name)],
+				)
+			)
+			continue
+
+		# Parse jsonnet at collection time
+		jsonnet_result = _jsonnet.evaluate_file(
+			str(jsonnet_file), jpathdir=[str(TEMPLATES_DIR.parent)]
+		)
+		jsonnet_parsed = json.loads(jsonnet_result)
+		extra_tags = jsonnet_parsed.get('tags', [])
+		if extra_tags:
+			tags.update(extra_tags)
+
+		# Recompute needed_services after tags update
+		needed_services = {manager_service}
+		if 'stable' not in tags:
+			needed_services.add(modules_service)
+			needed_services.add(webdriver_service)
+
+		# Compute tmp_dir and unfold config
+		tmp_dir = local_ctx.shared.artifacts_dir.joinpath(
+			'integration', rel_path
+		).with_suffix('')
+
+		jsonnet_conf = _unfold_conf(
+			jsonnet_parsed,
+			{
+				'jsonnetDir': str(jsonnet_file.parent),
+				'fileBaseName': jsonnet_file.stem,
+				'tmpDir': str(tmp_dir),
+			},
 		)
 
-		case = IntegrationTestCase(
-			description=desc,
-			jsonnet_path=jsonnet_file,
-			manager_service=manager_service,
-			webdriver_service=webdriver_service,
-			jsonnet_parsed=jsonnet_parsed,
+		top_level_conf = {
+			k: v for k, v in jsonnet_conf.items() if k not in _TOP_LEVEL_METADATA_KEYS
+		}
+		entries = jsonnet_conf['entry']
+		flat_steps = _flatten_tree(entries)
+
+		is_unstable = 'unstable' in tags
+		max_attempts = 3 if is_unstable else 1
+
+		frozen_services = frozenset(needed_services)
+		frozen_tags = frozenset(tags)
+
+		# Create prepare case
+		prepare_name = f'{test_name}/prepare'
+		prepare_desc = ya_test_runner.test.Description(
+			name=prepare_name,
+			needed_services=frozen_services,
+			tags=frozen_tags,
+		)
+		ctx.add_case(
+			IntegrationPrepareCase(
+				description=prepare_desc,
+				jsonnet_path=jsonnet_file,
+				top_level_conf=top_level_conf,
+				tmp_dir=tmp_dir,
+			)
 		)
 
-		ctx.add_case(case)
+		# Build tree_path -> step name map
+		step_names: dict[str, str] = {}
+		for tree_path, _dep, single_conf in flat_steps:
+			step_names[tree_path] = f'{test_name}/{tree_path}'
+
+		# Create one test case per step
+		total_steps = len(flat_steps)
+		for tree_path, depends_on_tree_path, single_conf in flat_steps:
+			step_name = step_names[tree_path]
+			is_benchmark = single_conf.get('benchmark', False)
+
+			if depends_on_tree_path is None:
+				deps = frozenset([prepare_name])
+			else:
+				deps = frozenset([step_names[depends_on_tree_path]])
+
+			step_desc = ya_test_runner.test.Description(
+				name=step_name,
+				needed_services=frozen_services,
+				tags=frozen_tags,
+				depends_on=deps,
+			)
+
+			# parent_tree_path from step_conf (original jsonnet base path,
+			# e.g. "0") is needed for storage path resolution in _run_single_step
+			ctx.add_case(
+				IntegrationSingleCase(
+					description=step_desc,
+					jsonnet_path=jsonnet_file,
+					manager_service=manager_service,
+					tree_path=tree_path,
+					parent_tree_path=single_conf.get('parent_tree_path'),
+					single_conf=single_conf,
+					total_steps=total_steps,
+					tmp_dir=tmp_dir,
+					max_attempts=max_attempts,
+					is_benchmark=is_benchmark,
+				)
+			)
 
 
 local_ctx.plugins['integration_test'] = integration_test

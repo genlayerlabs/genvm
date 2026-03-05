@@ -140,8 +140,7 @@ pub struct ExtendedMessageFlat {
         deserialize_with = "entry_kind_from_int"
     )]
     pub entry_kind: EntryKind,
-    #[serde(with = "serde_bytes")]
-    pub entry_data: Vec<u8>,
+    pub entry_data: bytes::Bytes,
     pub entry_stage_data: Value,
 }
 
@@ -192,8 +191,7 @@ pub struct ExtendedMessage {
 
     #[serde(serialize_with = "entry_kind_as_int")]
     pub entry_kind: EntryKind,
-    #[serde(with = "serde_bytes")]
-    pub entry_data: Vec<u8>,
+    pub entry_data: bytes::Bytes,
 
     pub entry_stage_data: Value,
 }
@@ -267,14 +265,14 @@ pub mod contract_def {
         fn handle_main(
             &mut self,
             message: MessageData,
-            data: Vec<u8>,
+            data: bytes::Bytes,
         ) -> Result<calldata::Value, UserError>;
 
         /// Handle a Sandbox entry - contract decides how to handle the payload.
         fn handle_sandbox(
             &mut self,
             message: MessageData,
-            data: Vec<u8>,
+            data: bytes::Bytes,
         ) -> Result<Vec<u8>, UserError>;
 
         /// Handle a ConsensusStage entry - validator consensus functions.
@@ -283,7 +281,7 @@ pub mod contract_def {
         fn handle_consensus_stage(
             &mut self,
             message: MessageData,
-            data: Vec<u8>,
+            data: bytes::Bytes,
             stage_data: ConsensusStageData,
         ) -> Result<calldata::Value, UserError>;
     }
