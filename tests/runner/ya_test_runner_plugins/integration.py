@@ -56,16 +56,33 @@ default_env = {
 }
 
 
+class _SavedLog(typing.TypedDict):
+	level: str
+	msg: str
+	kwargs: dict
+
+
 def _make_log_adapter(formatter: ya_test_runner.Formatter) -> 'origin_logger.Logger':
 	class _FormatterLoggerAdapter(origin_logger.Logger):
 		"""Adapts ya_test_runner.formatter.Formatter to base_host.Logger interface."""
 
+		saved_logs: list[_SavedLog]
+
 		def __init__(self, formatter: ya_test_runner.Formatter):
 			self._formatter = formatter
+
+			self.saved_logs = []
 
 		def log(self, level: str, msg: str, **kwargs) -> None:
 			fmt_level = ya_test_runner.Formatter.Level.from_str(level)
 			self._formatter.log(fmt_level, msg, **kwargs)
+			self.saved_logs.append(
+				{
+					'level': level,
+					'msg': msg,
+					'kwargs': kwargs,
+				}
+			)
 
 	global make_adapter
 	make_adapter = _FormatterLoggerAdapter
@@ -307,7 +324,8 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		empty_storage = self._tmp_dir.joinpath('empty-storage.pickle')
 
 		for attempt in range(self._max_attempts):
-			result = await self._run_single_step(empty_storage)
+			sub_logger = _make_log_adapter(local_ctx.shared.logger)
+			result = await self._run_single_step(empty_storage, sub_logger)
 			if result['passed']:
 				return ya_test_runner.test.Result(
 					passed=True,
@@ -317,10 +335,12 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 
 			if local_ctx.shared.is_interrupted or attempt + 1 >= self._max_attempts:
 				# Raise FinishedEarlyException to stop subsequent steps
+				context = result.get('context', {})
+				context['logs'] = sub_logger.saved_logs
 				raise ya_test_runner.test.FinishedEarlyException(
 					result=ya_test_runner.test.Result(
 						passed=False,
-						context=result.get('context', {}),
+						context=context,
 						elapsed_seconds=0,
 					)
 				)
@@ -339,7 +359,9 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 			result=ya_test_runner.test.Result(passed=False, context={}, elapsed_seconds=0)
 		)
 
-	async def _run_single_step(self, empty_storage: Path) -> dict:
+	async def _run_single_step(
+		self, empty_storage: Path, logger: 'origin_logger.Logger'
+	) -> dict:
 		single_conf = pickle.loads(pickle.dumps(self._single_conf))  # Deep copy
 		jsonnet_path = self._test_case.jsonnet_path
 		tree_path = self._tree_path
@@ -475,7 +497,6 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		# Run the test
 		with host as mock_host:
 			try:
-				logger = _make_log_adapter(local_ctx.shared.logger)
 				host_data = json.dumps(
 					{
 						'node_address': FAKE_NODE_ADDRESS,
@@ -505,6 +526,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					calldata=calldata_bytes,
 					leader_nondet_results=leader_nondet,
 					request_extra=request_extra,
+					graceful_shutdown_wait_time_ms=0,
 				)
 				stdout_raw = res.stdout
 				return_part = ''
@@ -558,6 +580,18 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		result_path.parent.mkdir(exist_ok=True, parents=True)
 		with open(result_path, 'wb') as f:
 			pickle.dump(res, f)
+
+		if res.result_kind == public_abi.ResultCode.INTERNAL_ERROR:
+			return {
+				'passed': False,
+				'context': {
+					'reason': 'internal error',
+					'result_data': res.result_data,
+					'stderr': res.stderr,
+					'stdout': res.stdout,
+					'genvm_log': res.genvm_log,
+				},
+			}
 
 		result_events: list[list[bytes]] = []
 

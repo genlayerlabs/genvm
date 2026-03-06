@@ -18,22 +18,23 @@ class Level(enum.Enum):
 	WARNING = 30
 	ERROR = 40
 
+	_str_to_level: typing.ClassVar[dict[str, 'Level']]
+
 	@staticmethod
 	def from_str(level_str: str) -> 'Level':
 		level_str = level_str.lower()
-		if level_str == 'trace':
-			return Level.TRACE
-		elif level_str == 'debug':
-			return Level.DEBUG
-		elif level_str == 'info':
-			return Level.INFO
-		elif level_str == 'warning':
-			return Level.WARNING
-		elif level_str == 'error':
-			return Level.ERROR
-		else:
-			raise ValueError(f'Unknown logging level: {level_str}')
+		return Level._str_to_level.get(level_str, Level.WARNING)
 
+
+Level._str_to_level = {
+	'trace': Level.TRACE,
+	'debug': Level.DEBUG,
+	'info': Level.INFO,
+	'warn': Level.WARNING,
+	'warning': Level.WARNING,
+	'err': Level.ERROR,
+	'error': Level.ERROR,
+}
 
 FORMATTING_MUTEX = threading.Lock()
 
@@ -250,15 +251,21 @@ class TextFormatter(Formatter, Sink):
 			f.write(_to_safe_str(repr(data)))
 			f.write('\n')
 		elif isinstance(data, collections.abc.Iterable):
-			for item in data:
-				if _is_small(item):
-					f.write('  ' * ind + '- ')
-					f.write(_small_to_str(item))
-					f.write('\n')
-				else:
-					f.write('  ' * ind)
-					f.write('-\n')
-					self._do_dump(f, ind + 1, item)
+			items = list(data) if not isinstance(data, list) else data
+			if items and all(isinstance(x, (int, float)) for x in items):
+				f.write('  ' * ind)
+				f.write(json.dumps(items))
+				f.write('\n')
+			else:
+				for item in items:
+					if _is_small(item):
+						f.write('  ' * ind + '- ')
+						f.write(_small_to_str(item))
+						f.write('\n')
+					else:
+						f.write('  ' * ind)
+						f.write('-\n')
+						self._do_dump(f, ind + 1, item)
 		else:
 			f.write('  ' * ind)
 			f.write(_small_to_str(data))

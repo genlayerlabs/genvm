@@ -309,11 +309,17 @@ class RunHostAndProgramRes:
 	vm_error_description: str | None = None
 
 
-async def _send_timeout(manager_uri: str, genvm_id: str, logger: Logger):
+async def _send_timeout(
+	manager_uri: str,
+	genvm_id: str,
+	logger: Logger,
+	*,
+	graceful_shutdown_wait_time_ms: int,
+):
 	try:
 		async with aiohttp.request(
 			'DELETE',
-			f'{manager_uri}/genvm/{genvm_id}?wait_timeout_ms=20',
+			f'{manager_uri}/genvm/{genvm_id}?wait_timeout_ms={graceful_shutdown_wait_time_ms}',
 		) as resp:
 			logger.debug('delete /genvm', genvm_id=genvm_id, status=resp.status)
 			if resp.status != 200:
@@ -343,6 +349,7 @@ async def run_genvm(
 	calldata: bytes,
 	leader_nondet_results: list[bytes] | None = None,
 	request_extra: dict[str, gvm_calldata.Encodable] = {},
+	graceful_shutdown_wait_time_ms: int = 20,
 ) -> RunHostAndProgramRes:
 	if logger is None:
 		logger = NoLogger()
@@ -414,7 +421,12 @@ async def run_genvm(
 		await asyncio.sleep(timeout)
 		logger.debug('timeout reached', genvm_id=genvm_id)
 		timeout_fired.set()
-		await _send_timeout(manager_uri, genvm_id, logger)
+		await _send_timeout(
+			manager_uri,
+			genvm_id,
+			logger,
+			graceful_shutdown_wait_time_ms=graceful_shutdown_wait_time_ms,
+		)
 
 	poll_status_mutex = asyncio.Lock()
 
@@ -481,7 +493,12 @@ async def run_genvm(
 
 	genvm_id = genvm_id_cell[0]
 	if genvm_id is not None:
-		await _send_timeout(manager_uri, genvm_id, logger)
+		await _send_timeout(
+			manager_uri,
+			genvm_id,
+			logger,
+			graceful_shutdown_wait_time_ms=graceful_shutdown_wait_time_ms,
+		)
 
 		status = await poll_status(genvm_id)
 		if status is None:
