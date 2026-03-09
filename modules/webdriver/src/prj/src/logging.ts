@@ -1,4 +1,6 @@
-type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+import * as util from 'util';
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export let MIN_LEVEL: LogLevel = 'info';
 
@@ -14,9 +16,11 @@ export function log(level: LogLevel, message: string, data?: {[key: string]: any
 		return;
 	}
 
-	console.log({
+	const obj = {
 		level,
 		message,
 		...data
-	})
+	}
+
+	console.log(util.inspect(obj, { depth: Infinity, breakLength: Infinity }));
 }
