@@ -1,2 +1,2 @@
 executed with `Return(null)`
-{"calldata":{},"code":b#6e6f74207265616c6c79206120636f6e7472616374,"on":"finalized","salt_nonce":"0x0","type":"DeployContract","value":"0x0"}
+{"calldata":{},"code":b#6e6f74207265616c6c79206120636f6e7472616374,"on":"finalized","salt_nonce":0,"type":"DeployContract","value":0}

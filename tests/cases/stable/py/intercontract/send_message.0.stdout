@@ -1,2 +1,2 @@
 executed with `Return(null)`
-{"address":addr#3030303030303030303030303030303030303030,"calldata":{"args":[1,2],"method":"foo"},"on":"finalized","type":"PostMessage","value":"0x0"}
+{"address":addr#3030303030303030303030303030303030303030,"calldata":{"args":[1,2],"method":"foo"},"on":"finalized","type":"PostMessage","value":0}

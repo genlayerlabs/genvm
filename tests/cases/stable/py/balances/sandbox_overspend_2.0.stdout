@@ -3,4 +3,4 @@ sandbox result=Return(calldata=40) balance after sandbox=40
 transfer failed with error: 7: inbalance
 balance final=40
 executed with `Return(null)`
-{"address":addr#0200000000000000000000000000000000000000,"calldata":{},"on":"finalized","type":"PostMessage","value":"0x3c"}
+{"address":addr#0200000000000000000000000000000000000000,"calldata":{},"on":"finalized","type":"PostMessage","value":60}

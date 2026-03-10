@@ -435,6 +435,7 @@ dependencies = [
  "afl",
  "anyhow",
  "arbitrary",
+ "bytes",
  "chrono",
  "clap",
  "crossbeam",

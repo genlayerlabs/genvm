@@ -305,6 +305,29 @@ def _calldata_to_fancy_str(calldata: bytes) -> str:
 	return buf.getvalue()
 
 
+class Context(base_host.Context):
+	logger: base_host.Logger
+
+	def __init__(self, logger: base_host.Logger, graceful_shutdown_wait_time_ms: int):
+		self.logger = logger
+		self._graceful_shutdown_wait_time_ms = graceful_shutdown_wait_time_ms
+
+	def on_genvm_success(self): ...
+	def on_genvm_failure(self): ...
+
+	def add_stat(self, key: str, value: typing.Any):
+		self.logger.debug('stat', key=key, val=value)
+
+	def get_timeout(
+		self, action: base_host.TimeoutAction, type: base_host.TimeoutType
+	) -> float | None:
+		if type == base_host.TimeoutType.CONNECT_S:
+			return 5.0
+		if type == base_host.TimeoutType.DELETE_HTTP_GRACEFUL_TIMEOUT_MS:
+			return self._graceful_shutdown_wait_time_ms
+		return None
+
+
 class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 	"""Executes a single step of an integration test."""
 
@@ -511,6 +534,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				if not single_conf['message'].get('is_init', False):
 					code = None
 				mode = single_conf.get('mode', 'l')
+				ctx = Context(logger, 0)
 				res = await base_host.run_genvm(
 					mock_host,
 					manager_uri=manager_uri,
@@ -519,14 +543,13 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					capture_output=True,
 					is_sync=(mode == 's'),
 					host_data=host_data,
-					logger=logger,
+					ctx=ctx,
 					host='unix://' + mock_host.path,
 					extra_args=['--debug-mode'],
 					code=code,
 					calldata=calldata_bytes,
 					leader_nondet_results=leader_nondet,
 					request_extra=request_extra,
-					graceful_shutdown_wait_time_ms=0,
 				)
 				stdout_raw = res.stdout
 				return_part = ''

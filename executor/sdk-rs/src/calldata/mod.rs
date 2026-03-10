@@ -19,24 +19,10 @@ pub fn to_value<T>(value: &T) -> Result<Value, Error>
 where
     T: ?Sized + serde::ser::Serialize,
 {
-    let full_type_name = std::any::type_name::<T>();
-    match full_type_name {
-        "num_bigint::bigint::BigInt" => {
-            let as_ptr = std::ptr::from_ref(value) as *mut num_bigint::BigInt; // should be const but non-null...
-            Ok(Value::Number(
-                unsafe { std::ptr::NonNull::new_unchecked(as_ptr).as_ref() }.clone(),
-            ))
-        }
-        "genlayer_sdk::calldata::types::Value" => {
-            let as_ptr = std::ptr::from_ref(value) as *mut Value; // should be const but non-null...
-            Ok(unsafe { std::ptr::NonNull::new_unchecked(as_ptr).as_ref() }.clone())
-        }
-        "genlayer_sdk::calldata::types::Address" => {
-            let as_ptr = std::ptr::from_ref(value) as *const Address;
-            Ok(Value::Address(unsafe { as_ptr.read() }))
-        }
-        _ => value.serialize(se::Serializer),
+    if let Some(val) = se::try_serialize_value::<T>(value) {
+        return Ok(val);
     }
+    value.serialize(se::Serializer)
 }
 
 #[cfg(test)]

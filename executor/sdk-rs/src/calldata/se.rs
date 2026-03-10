@@ -3,7 +3,36 @@ use std::collections::BTreeMap;
 use super::error::*;
 use super::types::*;
 
-type Result<T> = core::result::Result<T, Error>;
+type Result<T, E = Error> = core::result::Result<T, E>;
+
+pub(super) fn try_serialize_value<V: ?Sized>(value: &V) -> Option<Value> {
+    let full_name = std::any::type_name::<V>();
+
+    match full_name {
+        "num_bigint::bigint::BigInt" => {
+            let as_num = value as *const V as *const num_bigint::BigInt;
+            unsafe { as_num.as_ref() }.cloned().map(Value::Number)
+        }
+        "primitive_types::U256" => {
+            let as_num = value as *const V as *const primitive_types::U256;
+            unsafe { as_num.as_ref() }.map(|x| {
+                Value::Number(num_bigint::BigInt::from_bytes_le(
+                    num_bigint::Sign::Plus,
+                    &x.to_little_endian(),
+                ))
+            })
+        }
+        "genlayer_sdk::calldata::types::Value" => {
+            let as_val = value as *const V as *const Value;
+            unsafe { as_val.as_ref() }.cloned()
+        }
+        "genlayer_sdk::calldata::types::Address" => {
+            let as_addr = value as *const V as *const Address;
+            unsafe { as_addr.as_ref() }.cloned().map(Value::Address)
+        }
+        _ => None,
+    }
+}
 
 impl serde::Serialize for Value {
     #[inline]
