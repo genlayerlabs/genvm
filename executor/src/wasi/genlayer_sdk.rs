@@ -134,6 +134,7 @@ pub struct VMDataAccumulator {
 
 pub struct SingleVMData {
     pub conf: base::Config,
+    pub depth: u32,
     pub message_data: ExtendedMessage,
     pub supervisor: Arc<rt::supervisor::Supervisor>,
     pub storage: rt::vm::storage::Storage<StorageHostHolder>,
@@ -513,6 +514,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let calldata_encoded = calldata::encode(&calldata);
 
                 let vm_data = SingleVMData {
+                    depth: self.context.data.depth + 1,
                     conf: base::Config {
                         needs_error_fingerprint: true,
                         is_deterministic: true,
@@ -1190,6 +1192,12 @@ impl ContextVFS<'_> {
             .nondet_call_no
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
+        if call_no >= public_abi::top_limits::NONDET_BLOCKS {
+            return Err(generated::types::Error::trap(
+                rt::errors::VMError(abi::consts::VmError::oom().ram().limit(), None).into(),
+            ));
+        }
+
         let leaders_res_bytes = self
             .context
             .data
@@ -1296,6 +1304,7 @@ impl ContextVFS<'_> {
             };
 
             let vm_data = SingleVMData {
+                depth: self.context.data.depth + 1,
                 conf: base::Config {
                     needs_error_fingerprint: false,
                     is_deterministic: false,
@@ -1375,6 +1384,7 @@ impl ContextVFS<'_> {
         let stolen_data = fake_my_data;
 
         let vm_data = SingleVMData {
+            depth: self.context.data.depth + 1,
             conf: base::Config {
                 needs_error_fingerprint: false,
                 is_deterministic: zelf_conf.is_deterministic,

@@ -326,7 +326,7 @@ generator.rule(:codegen) do
 	command RbConfig.ruby, Ninja::VAR_IN, Ninja::VAR_OUT
 end
 
-generator.build(:codegen, $source_dir.join('executor', 'sdk-rs', 'src', 'abi', 'consts.rs')) do
+generator.build(:codegen, $source_dir.join('executor', 'crates', 'sdk-rs', 'src', 'abi', 'consts.rs')) do
 	add_dependency($source_dir.join('executor', 'codegen', 'templates', 'rs.rb'))
 	add_dependency($source_dir.join('executor', 'codegen', 'data', 'public-abi.json'))
 end
@@ -357,7 +357,7 @@ generator.build(:codegen, $source_dir.join('doc', 'website', 'src', 'spec', 'app
 end
 
 generator.build(:phony, 'codegen') do
-	add_dependency $source_dir.join('executor', 'sdk-rs', 'src', 'abi', 'consts.rs')
+	add_dependency $source_dir.join('executor', 'crates', 'sdk-rs', 'src', 'abi', 'consts.rs')
 	add_dependency $source_dir.join('runners', 'genlayer-py-std', 'src', 'genlayer', 'py', 'public_abi.py')
 	add_dependency $source_dir.join('tests', 'runner', 'origin', 'host_fns.py')
 	add_dependency $source_dir.join('tests', 'runner', 'origin', 'public_abi.py')

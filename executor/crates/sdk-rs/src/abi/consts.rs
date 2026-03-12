@@ -187,6 +187,9 @@ pub mod __VmError {
         pub const fn memory(&self) -> VmError {
             VmError(Cow::Borrowed("OOM RAM memory"))
         }
+        pub const fn limit(&self) -> VmError {
+            VmError(Cow::Borrowed("OOM RAM limit"))
+        }
     }
 
     pub struct Oom;

@@ -61,6 +61,10 @@ class _VmErrorOomRam:
 	def memory() -> 'VmError':
 		return VmError('OOM RAM memory')
 
+	@staticmethod
+	def limit() -> 'VmError':
+		return VmError('OOM RAM limit')
+
 
 class _VmErrorOom:
 	@staticmethod

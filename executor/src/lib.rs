@@ -119,6 +119,7 @@ pub async fn run_with_impl(
     let data_fees_limit = supervisor.shared_data.gep(|x| &x.data_fees_limit);
 
     let essential_data = wasi::genlayer_sdk::SingleVMData {
+        depth: 0,
         conf: wasi::base::Config {
             needs_error_fingerprint: true,
             is_deterministic: true,

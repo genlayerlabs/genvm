@@ -81,7 +81,7 @@
           {
             "head": "RAM",
             "tail": [
-              [], "table", "memory"
+              [], "table", "memory", "limit"
             ]
           },
           "storage",

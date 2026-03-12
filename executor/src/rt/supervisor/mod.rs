@@ -288,6 +288,13 @@ pub async fn spawn(
     vm: wasi::genlayer_sdk::SingleVMData,
     limiter: rt::memlimiter::Limiter,
 ) -> std::result::Result<rt::vm::VM<()>, (anyhow::Error, wasi::genlayer_sdk::SingleVMData)> {
+    if vm.depth >= public_abi::top_limits::VM_RECURSION {
+        return Err((
+            rt::errors::VMError(public_abi::VmError::oom().ram().limit(), None).into(),
+            vm,
+        ));
+    }
+
     let config_copy = vm.conf;
 
     let engine = zelf.engines.get(vm.conf.is_deterministic);

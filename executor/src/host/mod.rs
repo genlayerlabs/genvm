@@ -267,6 +267,12 @@ impl Host {
         )?;
         let len = u32::from_le_bytes(len_buf);
 
+        if len > abi::consts::top_limits::LOCKED_SLOTS {
+            return Err(
+                rt::errors::VMError(abi::consts::VmError::oom().ram().limit(), None).into(),
+            );
+        }
+
         if !limiter.consume_mul(len, SlotID::SIZE) {
             return Err(rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into());
         }
@@ -310,6 +316,12 @@ impl Host {
             &mut len_buf,
         )?;
         let len = u32::from_le_bytes(len_buf);
+
+        if len > abi::consts::top_limits::UPGRADERS {
+            return Err(
+                rt::errors::VMError(abi::consts::VmError::oom().ram().limit(), None).into(),
+            );
+        }
 
         for i in 0..len {
             let mut read_sender = [0; ADDRESS_SIZE];
