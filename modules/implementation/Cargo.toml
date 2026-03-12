@@ -17,7 +17,7 @@ vendored-lua = ["mlua/vendored"]
 
 [dependencies]
 genvm-modules-interfaces = { path = "../interfaces" }
-genvm-common = { path = "../../executor/common" }
+genvm-common = { path = "../../executor/crates/common" }
 
 anyhow = { version = "1.0.98", features = [] }
 serde = { version = "1.0.219", features = ["rc"]}

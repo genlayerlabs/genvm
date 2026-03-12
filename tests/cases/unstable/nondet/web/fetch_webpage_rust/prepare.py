@@ -20,7 +20,7 @@ subprocess.run(
 		'--target-dir',
 		str(target_dir),
 	],
-	cwd=repo_root / 'executor' / 'sdk-rs',
+	cwd=repo_root / 'executor' / 'crates' / 'sdk-rs',
 	check=True,
 )
 
