@@ -176,6 +176,9 @@ pub const STATIC_MIN_LEVEL: Level = Level::Trace;
 #[cfg(not(debug_assertions))]
 pub const STATIC_MIN_LEVEL: Level = Level::Debug;
 
+pub const MAX_SERIALIZATION_DEPTH: usize = 64;
+pub const MAX_SERIALIZATION_SEQ_LENGTH: usize = 128;
+
 pub const fn statically_enabled(callsite: Callsite) -> bool {
     STATIC_MIN_LEVEL.filter_enables(callsite.level)
 }
@@ -208,7 +211,7 @@ macro_rules! __make_capture {
 
     (serde = $value:expr) => {
         $crate::logger::Capture::Serde(&|v| {
-            serde::Serialize::serialize(&$value, $crate::logger::Visitor(v))
+            serde::Serialize::serialize(&$value, $crate::logger::Visitor(v, 0))
         })
     };
 }
@@ -508,18 +511,22 @@ fn write_k_v_str_fast(
     Ok(())
 }
 
-pub struct Visitor<'a, 'w>(pub &'a mut std::io::Cursor<&'w mut Vec<u8>>);
+pub struct Visitor<'a, 'w>(pub &'a mut std::io::Cursor<&'w mut Vec<u8>>, pub usize);
 
 pub struct SerializeVec<'a, 'w> {
     cur: &'a mut std::io::Cursor<&'w mut Vec<u8>>,
     put_comma: bool,
     close_curly: bool,
+    depth: usize,
+    count: usize,
+    overflow: std::collections::VecDeque<Vec<u8>>,
 }
 
 pub struct SerializeMap<'a, 'w> {
     cur: &'a mut std::io::Cursor<&'w mut Vec<u8>>,
     put_comma: bool,
     close_curly: bool,
+    depth: usize,
 }
 
 impl Visitor<'_, '_> {
@@ -527,6 +534,11 @@ impl Visitor<'_, '_> {
     where
         T: ?Sized + Serialize,
     {
+        if self.1 >= MAX_SERIALIZATION_DEPTH {
+            self.0.write_all(b"\"$TooDeep\"")?;
+            return Ok(());
+        }
+
         let full_name = std::any::type_name_of_val(value);
 
         match full_name {
@@ -543,7 +555,7 @@ impl Visitor<'_, '_> {
                     calldata::Value::Address(addr) => {
                         self.serialize_with_special(addr)?;
                     }
-                    _ => value.serialize(Visitor(self.0))?,
+                    _ => value.serialize(Visitor(self.0, self.1))?,
                 }
                 Ok(())
             }
@@ -578,7 +590,7 @@ impl Visitor<'_, '_> {
 
                 Ok(())
             }
-            _ => value.serialize(Visitor(self.0)),
+            _ => value.serialize(Visitor(self.0, self.1)),
         }
     }
 }
@@ -592,15 +604,29 @@ impl serde::ser::SerializeSeq for SerializeVec<'_, '_> {
     where
         T: ?Sized + Serialize,
     {
-        if self.put_comma {
-            self.cur.write_all(b",")?;
+        const HALF: usize = MAX_SERIALIZATION_SEQ_LENGTH / 2;
+
+        if self.count < HALF {
+            if self.put_comma {
+                self.cur.write_all(b",")?;
+            } else {
+                self.cur.write_all(b"[")?;
+                self.put_comma = true;
+            }
+            Visitor(self.cur, self.depth).serialize_with_special(value)?;
         } else {
-            self.cur.write_all(b"[")?;
-            self.put_comma = true;
+            let mut buf = Vec::new();
+            {
+                let mut cursor = std::io::Cursor::new(&mut buf);
+                Visitor(&mut cursor, self.depth).serialize_with_special(value)?;
+            }
+            if self.overflow.len() >= HALF {
+                self.overflow.pop_front();
+            }
+            self.overflow.push_back(buf);
         }
 
-        Visitor(self.cur).serialize_with_special(value)?;
-
+        self.count += 1;
         Ok(())
     }
 
@@ -608,6 +634,17 @@ impl serde::ser::SerializeSeq for SerializeVec<'_, '_> {
         if !self.put_comma {
             self.cur.write_all(b"[")?;
         }
+
+        if !self.overflow.is_empty() {
+            if self.count > MAX_SERIALIZATION_SEQ_LENGTH {
+                self.cur.write_all(b",\"$TooMany\"")?;
+            }
+            for elem in &self.overflow {
+                self.cur.write_all(b",")?;
+                self.cur.write_all(elem)?;
+            }
+        }
+
         self.cur.write_all(b"]")?;
 
         if self.close_curly {
@@ -680,7 +717,7 @@ impl serde::ser::SerializeMap for SerializeMap<'_, '_> {
     where
         T: ?Sized + Serialize,
     {
-        Visitor(self.cur).serialize_with_special(value)
+        Visitor(self.cur, self.depth).serialize_with_special(value)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
@@ -729,7 +766,7 @@ impl serde::ser::SerializeStruct for SerializeMap<'_, '_> {
         }
         write_quoted_str_escaping(self.cur, key)?;
         self.cur.write_all(b":")?;
-        Visitor(self.cur).serialize_with_special(value)?;
+        Visitor(self.cur, self.depth).serialize_with_special(value)?;
 
         Ok(())
     }
@@ -898,7 +935,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
         self.0.write_all(b"{\"")?;
         write_str_part_escaping(self.0, name)?;
         self.0.write_all(b"\":")?;
-        Visitor(self.0).serialize_with_special(value)?;
+        Visitor(self.0, self.1 + 1).serialize_with_special(value)?;
         self.0.write_all(b"}")?;
 
         Ok(())
@@ -917,7 +954,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
         self.0.write_all(b"{\"")?;
         write_str_part_escaping(self.0, variant)?;
         self.0.write_all(b"\":")?;
-        Visitor(self.0).serialize_with_special(value)?;
+        Visitor(self.0, self.1 + 1).serialize_with_special(value)?;
         self.0.write_all(b"}")?;
         Ok(())
     }
@@ -927,6 +964,9 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
             cur: self.0,
             put_comma: false,
             close_curly: false,
+            depth: self.1 + 1,
+            count: 0,
+            overflow: std::collections::VecDeque::new(),
         })
     }
 
@@ -935,6 +975,9 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
             cur: self.0,
             put_comma: false,
             close_curly: false,
+            depth: self.1 + 1,
+            count: 0,
+            overflow: std::collections::VecDeque::new(),
         })
     }
 
@@ -951,6 +994,9 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
             cur: self.0,
             put_comma: false,
             close_curly: true,
+            depth: self.1 + 1,
+            count: 0,
+            overflow: std::collections::VecDeque::new(),
         })
     }
 
@@ -969,6 +1015,9 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
             cur: self.0,
             put_comma: false,
             close_curly: true,
+            depth: self.1 + 1,
+            count: 0,
+            overflow: std::collections::VecDeque::new(),
         })
     }
 
@@ -977,6 +1026,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
             cur: self.0,
             put_comma: false,
             close_curly: false,
+            depth: self.1 + 1,
         })
     }
 
@@ -989,6 +1039,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
             cur: self.0,
             put_comma: false,
             close_curly: false,
+            depth: self.1 + 1,
         })
     }
 
@@ -1007,6 +1058,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
             cur: self.0,
             put_comma: false,
             close_curly: true,
+            depth: self.1 + 1,
         })
     }
 }
@@ -1081,7 +1133,7 @@ pub fn log_into_buffer(buf: &mut Vec<u8>, record: Record<'_>) -> std::result::Re
         write_k_v_str_fast(&mut writer, "message", &record.args.to_string())?;
     }
 
-    let mut visitor = Visitor(&mut writer);
+    let mut visitor = Visitor(&mut writer, 0);
     for (k, v) in record.kv {
         write_comma(visitor.0)?;
         write_quoted_str_escaping(visitor.0, k)?;

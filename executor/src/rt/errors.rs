@@ -38,8 +38,16 @@ pub fn unwrap_vm_errors(err: anyhow::Error) -> anyhow::Result<rt::vm::RunOk> {
         |e: anyhow::Error| {
             e.downcast::<wasmtime::Trap>().map(|v| {
                 rt::vm::RunOk::VMError(
-                    abi::consts::VmError::wasm_trap().val_str(&v.to_string()),
+                    abi::consts::VmError::wasm_trap().val_str(&format!("{v:?}")),
                     Some(v.into()),
+                )
+            })
+        },
+        |e: anyhow::Error| {
+            e.downcast::<wiggle::GuestError>().map(|e| {
+                rt::vm::RunOk::VMError(
+                    abi::consts::VmError::wasm_trap().val_str("fault"),
+                    Some(e.into()),
                 )
             })
         },

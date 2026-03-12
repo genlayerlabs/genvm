@@ -299,6 +299,7 @@ impl From<GuestError> for generated::types::Error {
             SliceLengthsDiffer => generated::types::Errno::Fault.into(),
             BorrowCheckerOutOfHandles => generated::types::Errno::Fault.into(),
             InFunc { err, .. } => generated::types::Error::from(*err),
+            MemoryNotExported => generated::types::Errno::Fault.into(),
         }
     }
 }

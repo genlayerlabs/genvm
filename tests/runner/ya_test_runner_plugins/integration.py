@@ -654,6 +654,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 			'stdout': stdout_raw,
 			'return': return_part,
 			'nondet': nondet_part,
+			'kind': res.result_kind,
 			'messages': ''.join(messages_content),
 		}
 		semantics_components = single_conf['expected_semantics_components']
