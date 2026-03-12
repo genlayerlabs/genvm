@@ -894,12 +894,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "genlayer_calldata"
+version = "0.0.1"
+dependencies = [
+ "arbitrary",
+ "bytes",
+ "chrono",
+ "hex",
+ "num-bigint",
+ "primitive-types",
+ "serde",
+]
+
+[[package]]
 name = "genlayer_sdk"
 version = "0.0.1"
 dependencies = [
  "arbitrary",
  "bytes",
  "chrono",
+ "genlayer_calldata",
  "hex",
  "num-bigint",
  "primitive-types",

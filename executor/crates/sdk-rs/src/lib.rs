@@ -1,2 +1,2 @@
 pub mod abi;
-pub mod calldata;
+pub use genlayer_calldata as calldata;

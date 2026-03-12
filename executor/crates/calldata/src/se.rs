@@ -22,11 +22,11 @@ pub(super) fn try_serialize_value<V: ?Sized>(value: &V) -> Option<Value> {
                 ))
             })
         }
-        "genlayer_sdk::calldata::types::Value" => {
+        "genlayer_calldata::types::Value" => {
             let as_val = value as *const V as *const Value;
             unsafe { as_val.as_ref() }.cloned()
         }
-        "genlayer_sdk::calldata::types::Address" => {
+        "genlayer_calldata::types::Address" => {
             let as_addr = value as *const V as *const Address;
             unsafe { as_addr.as_ref() }.cloned().map(Value::Address)
         }

@@ -4,7 +4,9 @@ mod error;
 mod se;
 mod types;
 
-pub use bin::{Appender, DecodeError, decode, encode, encode_to};
+pub use bin::{
+    Appender, DecodeError, Options as DecodeOptions, decode, decode_with, encode, encode_to,
+};
 pub use error::*;
 pub use types::*;
 

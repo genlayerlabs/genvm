@@ -343,12 +343,12 @@ fn try_deserialize_value<V>(value: Value) -> Result<V, Value> {
             }
             _ => Err(value),
         },
-        "genlayer_sdk::calldata::types::Value" => {
+        "genlayer_calldata::types::Value" => {
             let value = std::mem::ManuallyDrop::new(value);
             let ptr = std::ptr::from_ref(&value) as *const std::mem::ManuallyDrop<V>;
             Ok(std::mem::ManuallyDrop::into_inner(unsafe { ptr.read() }))
         }
-        "genlayer_sdk::calldata::types::Address" => match value {
+        "genlayer_calldata::types::Address" => match value {
             Value::Address(addr) => {
                 let ptr = std::ptr::from_ref(&addr) as *const V;
                 Ok(unsafe { ptr.read() })

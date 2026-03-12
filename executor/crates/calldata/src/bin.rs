@@ -15,6 +15,7 @@ pub enum DecodeError {
     TrailingData { remaining: usize },
     InvalidUtf8(std::str::Utf8Error),
     Custom(String),
+    MaxDepthExceeded,
 }
 
 impl std::fmt::Display for DecodeError {
@@ -54,6 +55,7 @@ impl std::fmt::Display for DecodeError {
             }
             DecodeError::InvalidUtf8(e) => write!(f, "invalid utf8: {e}"),
             DecodeError::Custom(msg) => write!(f, "{msg}"),
+            DecodeError::MaxDepthExceeded => write!(f, "exceeded maximum container depth"),
         }
     }
 }
@@ -144,7 +146,7 @@ impl Parser<'_> {
         }
     }
 
-    fn fetch_val(&mut self) -> Result<Value, DecodeError> {
+    fn fetch_val(&mut self, opts: &Options) -> Result<Value, DecodeError> {
         enum Frame {
             Array {
                 collected: Vec<Value>,
@@ -217,6 +219,10 @@ impl Parser<'_> {
                     ))
                 }
                 TYPE_ARR => {
+                    if stack.len() >= opts.max_depth {
+                        return Err(DecodeError::MaxDepthExceeded);
+                    }
+
                     let full_size = Self::map_to_size(&val)?;
                     if self.0.len() < full_size {
                         return Err(DecodeError::UnexpectedEnd {
@@ -235,6 +241,10 @@ impl Parser<'_> {
                     }
                 }
                 TYPE_MAP => {
+                    if stack.len() >= opts.max_depth {
+                        return Err(DecodeError::MaxDepthExceeded);
+                    }
+
                     let full_size = Self::map_to_size(&val)?;
                     if self.0.len() < full_size.saturating_mul(2) {
                         return Err(DecodeError::UnexpectedEnd {
@@ -315,10 +325,26 @@ impl Parser<'_> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Options {
+    pub max_depth: usize,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self { max_depth: 128 }
+    }
+}
+
+pub fn decode_with(data: &[u8], opts: &Options) -> Result<Value, DecodeError> {
+    let mut parser = Parser(data);
+    parser.fetch_val(opts)
+}
+
 pub fn decode(data: &[u8]) -> Result<Value, DecodeError> {
     let mut parser = Parser(data);
 
-    let ret = parser.fetch_val()?;
+    let ret = parser.fetch_val(&Default::default())?;
 
     if !parser.0.is_empty() {
         return Err(DecodeError::TrailingData {

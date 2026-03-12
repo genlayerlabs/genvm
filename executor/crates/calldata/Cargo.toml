@@ -1,9 +1,9 @@
 [package]
-name = "genlayer_sdk"
+name = "genlayer_calldata"
 version = "0.0.1"
 edition = "2024"
 repository = "https://github.com/genlayerlabs/genvm"
-description = "Genlayer SDK for building smart contracts in rust"
+description = "Crate for handling GenLayer calldata encoding and decoding"
 readme = "README.md"
 license-file = "LICENSE.txt"
 homepage = "https://genlayer.com"
@@ -13,16 +13,9 @@ exclude = [
     "/tests/**",
 ]
 
-# Example contract that fetches a webpage
-# Build with: cargo build --example fetch_webpage --target wasm32-wasip1
-[[example]]
-name = "fetch_webpage"
-path = "examples/fetch_webpage.rs"
-
 [features]
-default = ["wasi"]
-wasi = []
-arbitrary = ["dep:arbitrary", "genlayer_calldata/arbitrary"]
+default = []
+arbitrary = ["dep:arbitrary"]
 
 [dependencies]
 hex = "0.4.3"
@@ -30,10 +23,5 @@ num-bigint = {version = "0.4.6", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 arbitrary = { version = "1.0", optional = true }
 primitive-types = { version = "0.13", features = ["impl-serde"] }
-serde_bytes = { version = "0.11.19"}
 bytes = {version = "1.11.0", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-genlayer_calldata = { path = "../calldata" }
-
-[dev-dependencies]
-primitive-types = { version = "0.13", features = ["impl-serde"] }
