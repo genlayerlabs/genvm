@@ -99,7 +99,7 @@ pub fn unwrap_vm_errors_fingerprint(
 }
 
 #[derive(Debug)]
-pub struct UserError(pub String);
+pub struct UserError(pub calldata::Value);
 
 impl std::error::Error for UserError {}
 

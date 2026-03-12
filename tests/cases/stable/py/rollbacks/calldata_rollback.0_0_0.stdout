@@ -1,0 +1,4 @@
+contract from.main
+contract to.foo
+handled {'code': 3, 'error': 'some_error'}
+executed with `Return(null)`

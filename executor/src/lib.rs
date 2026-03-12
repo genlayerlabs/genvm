@@ -13,7 +13,7 @@ use genvm_common::*;
 
 pub use host::{Host, SlotID};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use wasi::genlayer_sdk::ExtendedMessage;
 
 use std::sync::Arc;
@@ -156,7 +156,7 @@ pub async fn run_with_impl(
         },
         data: match run_result.run_ok {
             rt::vm::RunOk::Return(buf) => calldata::decode(&buf)?,
-            rt::vm::RunOk::UserError(buf) => calldata::Value::Str(buf),
+            rt::vm::RunOk::UserError(val) => val,
             rt::vm::RunOk::VMError(msg, _) => calldata::Value::Str(msg.0.into()),
         },
         fingerprint: run_result.fingerprint,
@@ -212,7 +212,8 @@ pub async fn run_with(
             .host
             .lock_for(host::host_fns::Methods::NotifyNondetDisagreement)
             .await;
-        host.notify_nondet_disagreement(*disag)?;
+        host.notify_nondet_disagreement(*disag)
+            .context("notify non-deterministic disagreement")?;
     }
 
     log_debug!("all executions done, collecting stats");
@@ -278,7 +279,7 @@ pub async fn run_with(
             .host
             .lock_for(host::host_fns::Methods::ConsumeResult)
             .await;
-        host.consume_result(&res)?;
+        host.consume_result(&res).context("consume result")?;
     }
 
     {
@@ -286,7 +287,7 @@ pub async fn run_with(
             .host
             .lock_for(host::host_fns::Methods::NotifyFinished)
             .await;
-        host.notify_finished()?;
+        host.notify_finished().context("notify finished")?;
     }
 
     host::all_useful_work_done();

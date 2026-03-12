@@ -673,9 +673,8 @@ async def run_genvm(
 	exceptions: list[BaseException] = []
 	cancelled_tasks: list[str] = []
 
-	execution_stats = {}
 	try:
-		execution_stats = fut_host.result()
+		fut_host.result()
 	except asyncio.CancelledError:
 		cancelled_tasks.append('host_loop')
 	except ConnectionResetError as e:
@@ -761,7 +760,7 @@ async def run_genvm(
 
 		if timeout_fired.is_set() and result_kind != public_abi.ResultCode.RETURN:
 			result_kind = public_abi.ResultCode.VM_ERROR
-			result_data = public_abi.VmError.TIMEOUT.value
+			result_data = str(public_abi.VmError.timeout())
 
 		vm_error_description: str | None = None
 		if result_kind == public_abi.ResultCode.VM_ERROR and isinstance(result_data, str):

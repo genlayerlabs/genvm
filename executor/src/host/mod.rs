@@ -1,4 +1,4 @@
-pub mod host_fns;
+pub use genvm_common::host_fns;
 pub mod message;
 
 use genlayer_sdk::abi;

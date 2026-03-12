@@ -35,23 +35,94 @@ def unfold_trie_entry(entry)
 	end
 end
 
-def gen_py_trie_node(entry, indent)
-	head = entry["head"]
-	tail = entry["tail"]
-	if tail.is_a?(String) && tail.start_with?('$')
-		param_type = tail[1..]
-		"#{indent}StrTrieNode(head=#{dump head}, is_terminal=False, param=#{dump param_type}, children=())"
-	elsif tail.is_a?(Array)
-		non_null = tail.compact
-		is_terminal = (tail.length != non_null.length) || non_null.empty?
-		py_terminal = is_terminal ? "True" : "False"
-		if non_null.empty?
-			"#{indent}StrTrieNode(head=#{dump head}, is_terminal=True, param=None, children=())"
-		else
-			children_code = non_null.map { |c| gen_py_trie_node(c, indent + "\t") }.join(",\n")
-			"#{indent}StrTrieNode(head=#{dump head}, is_terminal=#{py_terminal}, param=None, children=(\n#{children_code},\n#{indent}))"
+def gen_py_trie_inner(entries, struct_name, prefix_parts, buf, root_name, self_terminal_parts = nil)
+	leaves = []
+	methods = []
+	param_nodes = []
+
+	entries.each { |entry|
+		next if entry.nil?
+		head = entry["head"]
+		tail = entry["tail"]
+		current_parts = prefix_parts + [head]
+		child_struct_name = struct_name + to_camel(head)
+
+		if tail.is_a?(String) && tail.start_with?('$')
+			param_type = tail[1..]
+			methods << [head, child_struct_name]
+			param_nodes << [child_struct_name, param_type, current_parts]
+		elsif tail.is_a?(Array)
+			non_null = tail.compact
+			is_terminal = (tail.length != non_null.length) || non_null.empty?
+
+			if non_null.empty?
+				leaves << [head, current_parts]
+			else
+				methods << [head, child_struct_name]
+				child_terminal = is_terminal ? current_parts : nil
+				gen_py_trie_inner(non_null, child_struct_name, current_parts, buf, root_name, child_terminal)
+			end
 		end
+	}
+
+	unless struct_name.empty?
+		buf << "class _#{root_name}#{struct_name}:\n"
+		if self_terminal_parts
+			str_val = self_terminal_parts.join(" ")
+			buf << "\t@staticmethod\n"
+			buf << "\tdef val() -> '#{root_name}':\n"
+			buf << "\t\treturn #{root_name}('#{str_val}')\n"
+		end
+		leaves.each { |name, parts|
+			str_val = parts.join(" ")
+			buf << "\t@staticmethod\n"
+			buf << "\tdef #{name.downcase}() -> '#{root_name}':\n"
+			buf << "\t\treturn #{root_name}('#{str_val}')\n"
+		}
+		methods.each { |name, child_struct|
+			buf << "\t@staticmethod\n"
+			buf << "\tdef #{name.downcase}() -> '_#{root_name}#{child_struct}':\n"
+			buf << "\t\treturn _#{root_name}#{child_struct}()\n"
+		}
+		buf << "\n"
 	end
+
+	param_nodes.each { |cs_name, param, parts|
+		fmt_str = parts.join(" ")
+		buf << "class _#{root_name}#{cs_name}:\n"
+		buf << "\t@staticmethod\n"
+		buf << "\tdef val_#{param}(v: #{py_repr param}) -> '#{root_name}':\n"
+		buf << "\t\treturn #{root_name}(f'#{fmt_str} {v}')\n"
+		buf << "\n"
+	}
+
+	[leaves, methods]
+end
+
+def gen_py_trie_builder(entries, root_name, buf)
+	inner_buf = String.new
+	leaves, methods = gen_py_trie_inner(entries, "", [], inner_buf, root_name)
+
+	buf << inner_buf
+
+	buf << "class #{root_name}:\n"
+	buf << "\t__slots__ = ('value',)\n"
+	buf << "\tdef __init__(self, value: str):\n"
+	buf << "\t\tself.value = value\n"
+	buf << "\tdef __str__(self) -> str:\n"
+	buf << "\t\treturn self.value\n"
+	leaves.each { |name, parts|
+		str_val = parts.join(" ")
+		buf << "\t@staticmethod\n"
+		buf << "\tdef #{name.downcase}() -> '#{root_name}':\n"
+		buf << "\t\treturn #{root_name}('#{str_val}')\n"
+	}
+	methods.each { |name, child_struct|
+		buf << "\t@staticmethod\n"
+		buf << "\tdef #{name.downcase}() -> '_#{root_name}#{child_struct}':\n"
+		buf << "\t\treturn _#{root_name}#{child_struct}()\n"
+	}
+	buf << "\n"
 end
 
 # editorconfig-checker-disable
@@ -70,7 +141,6 @@ ENUM_TEMPLATE = ERB.new(ENUM_TEMPLATE_STR, trim_mode: "%")
 json_path, out_path = ARGV
 
 json_data = JSON.load_file(Pathname.new(json_path))
-has_str_trie = json_data.any? { |t| t["type"] == "str_trie" }
 
 buf = String.new
 
@@ -80,14 +150,6 @@ buf << <<-EOF
 from enum import IntEnum, StrEnum
 import typing
 EOF
-
-if has_str_trie
-	buf << "\n\nclass StrTrieNode(typing.NamedTuple):\n"
-	buf << "\thead: str\n"
-	buf << "\tis_terminal: bool\n"
-	buf << "\tparam: typing.Optional[str]\n"
-	buf << "\tchildren: tuple\n"
-end
 
 json_data.each { |t|
 	t_os = OpenStruct.new(t)
@@ -104,8 +166,8 @@ json_data.each { |t|
 		buf << "\n#{t_os.name}: typing.Final = _#{to_camel t_os.name}()\n"
 	when "str_trie"
 		entries = t_os.values.map { |e| unfold_trie_entry(e) }
-		nodes_code = entries.map { |e| gen_py_trie_node(e, "\t") }.join(",\n")
-		buf << "\n\n#{t_os.name.upcase}: typing.Final[tuple[StrTrieNode, ...]] = (\n#{nodes_code},\n)\n"
+		buf << "\n"
+		gen_py_trie_builder(entries, to_camel(t_os.name), buf)
 	else
 		raise "unknown type #{t_os.type}"
 	end

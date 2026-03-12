@@ -77,7 +77,7 @@ class UserError(Exception):
 	Represents an error that user contract rose during execution of their code in the VM.
 	"""
 
-	message: str
+	message: str | calldata.Decoded
 	"""
 	User-provided message. Be careful to use concise message, as by default they are checked for strict equality
 	by the validator
@@ -87,7 +87,7 @@ class UserError(Exception):
 		return repr(self)
 
 	@staticmethod
-	def immediate(reason: str) -> typing.NoReturn:
+	def immediate(reason: calldata.Encodable) -> typing.NoReturn:
 		"""
 		Performs an immediate error, current VM won't be able to handle it, stack unwind will not happen
 		"""
@@ -106,7 +106,11 @@ def _decode_sub_vm_result_retn(
 ) -> Result:
 	mem = memoryview(data)
 	if mem[0] == ResultCode.USER_ERROR:
-		return UserError(str(mem[1:], encoding='utf8'))
+		payload = mem[1:]
+		if len(payload) >= 4 and bytes(payload[:4]) == b'\x00\x00\x00\x00':
+			return UserError(calldata.decode(payload[4:]))
+		else:
+			return UserError(str(payload, encoding='utf8'))
 	if mem[0] == ResultCode.RETURN:
 		return Return(calldata.decode(mem[1:]))
 	if mem[0] == ResultCode.VM_ERROR:

@@ -36,8 +36,11 @@ async fn consume_receipt_words(
         .await
     {
         return Err(generated::types::Error::trap(
-            rt::errors::VMError::oos(Some(anyhow::anyhow!("consuming {words} receipt words")))
-                .into(),
+            rt::errors::VMError(
+                abi::consts::VmError::oom().receipt(),
+                Some(anyhow::anyhow!("consuming {words} receipt words")),
+            )
+            .into(),
         ));
     }
     Ok(())
@@ -68,7 +71,7 @@ impl ExtendedMessageExt for ExtendedMessage {
             None => default_entry_stage_data(),
             Some(entry_leader_data) => calldata::Value::Map(BTreeMap::from([(
                 "leaders_result".into(),
-                calldata::Value::Bytes(Vec::from_iter(entry_leader_data.as_bytes_iter())),
+                calldata::Value::Bytes(entry_leader_data.as_bytes()),
             )])),
         };
 
@@ -327,7 +330,7 @@ impl ContextVFS<'_> {
             }
             data => data,
         };
-        let data: Box<[u8]> = data.as_bytes_iter().collect();
+        let data: Vec<u8> = data.as_bytes();
         let len = data.len();
         Ok((
             generated::types::Fd::from(
@@ -1204,7 +1207,8 @@ impl ContextVFS<'_> {
             None if self.context.data.supervisor.is_leader() => None,
             None => {
                 return Err(generated::types::Error::trap(
-                    rt::errors::VMError("absent".into(), None).into(),
+                    rt::errors::VMError(abi::consts::VmError::absent_leader_nondet_output(), None)
+                        .into(),
                 ));
             }
             Some(data) => {
@@ -1213,18 +1217,26 @@ impl ContextVFS<'_> {
                 let res = match data[0] {
                     x if x == ResultCode::Return as u8 => rt::vm::RunOk::Return(rest.into()),
                     x if x == ResultCode::UserError as u8 => {
-                        rt::vm::RunOk::UserError(String::from(
-                            std::str::from_utf8(rest)
-                                .map_err(|e| generated::types::Error::trap(anyhow::anyhow!(e)))?,
-                        ))
+                        let val = if rest.len() >= 4 && rest[..4] == [0u8; 4] {
+                            calldata::decode(&rest[4..])
+                                .map_err(|e| generated::types::Error::trap(anyhow::anyhow!(e)))?
+                        } else {
+                            calldata::Value::Str(String::from(
+                                std::str::from_utf8(rest).map_err(|e| {
+                                    generated::types::Error::trap(anyhow::anyhow!(e))
+                                })?,
+                            ))
+                        };
+                        rt::vm::RunOk::UserError(val)
                     }
-                    x if x == ResultCode::VmError as u8 => rt::vm::RunOk::VMError(
-                        String::from(
-                            std::str::from_utf8(rest)
-                                .map_err(|e| generated::types::Error::trap(anyhow::anyhow!(e)))?,
-                        ),
-                        None,
-                    ),
+                    x if x == ResultCode::VmError as u8 => {
+                        let code = std::str::from_utf8(rest)
+                            .map_err(|e| generated::types::Error::trap(anyhow::anyhow!(e)))?;
+                        rt::vm::RunOk::VMError(
+                            public_abi::VmError(std::borrow::Cow::Owned(code.to_owned())),
+                            None,
+                        )
+                    }
                     x => {
                         return Err(generated::types::Error::trap(anyhow::anyhow!(
                             "invalid leader result code: {}",
@@ -1317,10 +1329,7 @@ impl ContextVFS<'_> {
                     self.context
                         .data
                         .supervisor
-                        .push_nondet_result(
-                            call_no,
-                            bytes::Bytes::from(Vec::from_iter(res.as_bytes_iter())),
-                        )
+                        .push_nondet_result(call_no, bytes::Bytes::from(res.as_bytes()))
                         .await;
 
                     res
@@ -1389,7 +1398,7 @@ impl ContextVFS<'_> {
         self.context.data.accumulator = my_res.vm_data.accumulator;
         self.context.data.storage = my_res.vm_data.storage;
 
-        let data: Box<[u8]> = my_res.run_ok.as_bytes_iter().collect();
+        let data: Vec<u8> = my_res.run_ok.as_bytes();
         Ok(generated::types::Fd::from(
             self.vfs
                 .place_content(vfs::FileContents {

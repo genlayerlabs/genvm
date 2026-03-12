@@ -4,13 +4,6 @@ from enum import IntEnum, StrEnum
 import typing
 
 
-class StrTrieNode(typing.NamedTuple):
-	head: str
-	is_terminal: bool
-	param: typing.Optional[str]
-	children: tuple
-
-
 class ResultCode(IntEnum):
 	RETURN = 0
 	USER_ERROR = 1
@@ -35,7 +28,19 @@ class _MemoryLimiterConsts(typing.NamedTuple):
 	FILE_MAPPING: int = 256
 	FD_ALLOCATION: int = 96
 
+
 memory_limiter_consts: typing.Final = _MemoryLimiterConsts()
+
+
+class _TopLimits(typing.NamedTuple):
+	NONDET_BLOCKS: int = 4096
+	LOCKED_SLOTS: int = 256
+	UPGRADERS: int = 32
+	VM_RECURSION: int = 512
+	FD_ALLOCATION: int = 96
+
+
+top_limits: typing.Final = _TopLimits()
 
 
 class SpecialMethod(StrEnum):
@@ -43,29 +48,124 @@ class SpecialMethod(StrEnum):
 	ERRORED_MESSAGE = '#error'
 
 
-VM_ERROR: typing.Final[tuple[StrTrieNode, ...]] = (
-	StrTrieNode(head='timeout', is_terminal=True, param=None, children=()),
-	StrTrieNode(head='exit_code', is_terminal=False, param='i32', children=()),
-	StrTrieNode(head='wasm_trap', is_terminal=False, param='str', children=()),
-	StrTrieNode(head='OOM', is_terminal=False, param=None, children=(
-		StrTrieNode(head='RAM', is_terminal=True, param=None, children=(
-			StrTrieNode(head='table', is_terminal=True, param=None, children=()),
-			StrTrieNode(head='memory', is_terminal=True, param=None, children=()),
-		)),
-		StrTrieNode(head='Storage', is_terminal=True, param=None, children=()),
-	)),
-	StrTrieNode(head='invalid_contract', is_terminal=True, param=None, children=(
-		StrTrieNode(head='absent_runner_comment', is_terminal=True, param=None, children=()),
-		StrTrieNode(head='not_utf8_text', is_terminal=True, param=None, children=()),
-		StrTrieNode(head='malformed_runner', is_terminal=True, param=None, children=()),
-		StrTrieNode(head='wasm', is_terminal=False, param=None, children=(
-			StrTrieNode(head='validating', is_terminal=True, param=None, children=()),
-			StrTrieNode(head='linking', is_terminal=True, param=None, children=()),
-			StrTrieNode(head='entrypoint', is_terminal=True, param=None, children=()),
-		)),
-	)),
-	StrTrieNode(head='host', is_terminal=False, param='str', children=()),
-)
+class _VmErrorOomRam:
+	@staticmethod
+	def val() -> 'VmError':
+		return VmError('OOM RAM')
+
+	@staticmethod
+	def table() -> 'VmError':
+		return VmError('OOM RAM table')
+
+	@staticmethod
+	def memory() -> 'VmError':
+		return VmError('OOM RAM memory')
+
+
+class _VmErrorOom:
+	@staticmethod
+	def storage() -> 'VmError':
+		return VmError('OOM storage')
+
+	@staticmethod
+	def receipt() -> 'VmError':
+		return VmError('OOM receipt')
+
+	@staticmethod
+	def ram() -> '_VmErrorOomRam':
+		return _VmErrorOomRam()
+
+
+class _VmErrorInvalidContractWasm:
+	@staticmethod
+	def validating() -> 'VmError':
+		return VmError('invalid_contract wasm validating')
+
+	@staticmethod
+	def linking() -> 'VmError':
+		return VmError('invalid_contract wasm linking')
+
+	@staticmethod
+	def entrypoint() -> 'VmError':
+		return VmError('invalid_contract wasm entrypoint')
+
+
+class _VmErrorInvalidContract:
+	@staticmethod
+	def val() -> 'VmError':
+		return VmError('invalid_contract')
+
+	@staticmethod
+	def absent_runner_comment() -> 'VmError':
+		return VmError('invalid_contract absent_runner_comment')
+
+	@staticmethod
+	def not_utf8_text() -> 'VmError':
+		return VmError('invalid_contract not_utf8_text')
+
+	@staticmethod
+	def malformed_runner() -> 'VmError':
+		return VmError('invalid_contract malformed_runner')
+
+	@staticmethod
+	def wasm() -> '_VmErrorInvalidContractWasm':
+		return _VmErrorInvalidContractWasm()
+
+
+class _VmErrorExitCode:
+	@staticmethod
+	def val_i32(v: int) -> 'VmError':
+		return VmError(f'exit_code {v}')
+
+
+class _VmErrorWasmTrap:
+	@staticmethod
+	def val_str(v: str) -> 'VmError':
+		return VmError(f'wasm_trap {v}')
+
+
+class _VmErrorHost:
+	@staticmethod
+	def val_str(v: str) -> 'VmError':
+		return VmError(f'host {v}')
+
+
+class VmError:
+	__slots__ = ('value',)
+
+	def __init__(self, value: str):
+		self.value = value
+
+	def __str__(self) -> str:
+		return self.value
+
+	@staticmethod
+	def timeout() -> 'VmError':
+		return VmError('timeout')
+
+	@staticmethod
+	def absent_leader_nondet_output() -> 'VmError':
+		return VmError('absent_leader_nondet_output')
+
+	@staticmethod
+	def exit_code() -> '_VmErrorExitCode':
+		return _VmErrorExitCode()
+
+	@staticmethod
+	def wasm_trap() -> '_VmErrorWasmTrap':
+		return _VmErrorWasmTrap()
+
+	@staticmethod
+	def oom() -> '_VmErrorOom':
+		return _VmErrorOom()
+
+	@staticmethod
+	def invalid_contract() -> '_VmErrorInvalidContract':
+		return _VmErrorInvalidContract()
+
+	@staticmethod
+	def host() -> '_VmErrorHost':
+		return _VmErrorHost()
 
 
 EVENT_MAX_TOPICS: typing.Final[int] = 4

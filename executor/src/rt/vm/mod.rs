@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use crate::{public_abi, rt, wasi};
 
 use genlayer_sdk::abi;
@@ -11,7 +9,7 @@ pub mod storage;
 #[derive(serde::Serialize, Debug)]
 pub enum RunOk {
     Return(Vec<u8>),
-    UserError(String),
+    UserError(calldata::Value),
     VMError(
         abi::consts::VmError,
         #[serde(skip_serializing)] Option<anyhow::Error>,
@@ -44,8 +42,8 @@ impl FullResult {
             },
             data: match run_ok {
                 RunOk::Return(buf) => calldata::Value::Bytes(buf),
-                RunOk::UserError(msg) => calldata::Value::Str(msg),
-                RunOk::VMError(msg, _) => calldata::Value::Str(msg),
+                RunOk::UserError(val) => val,
+                RunOk::VMError(msg, _) => calldata::Value::Str(msg.into()),
             },
             fingerprint: None,
             storage_changes: Vec::new(),
@@ -56,7 +54,7 @@ impl FullResult {
     pub fn timeout() -> Self {
         Self {
             kind: public_abi::ResultCode::VmError,
-            data: calldata::Value::Str(public_abi::VmError::Timeout.value().into()),
+            data: calldata::Value::Str(public_abi::VmError::timeout().into()),
             fingerprint: None,
             storage_changes: Vec::new(),
             emissions: Vec::new(),
@@ -69,18 +67,34 @@ impl RunOk {
         Self::Return([0].into())
     }
 
-    pub fn as_bytes_iter(&self) -> impl Iterator<Item = u8> + '_ {
+    pub fn as_bytes(&self) -> Vec<u8> {
         use crate::public_abi::ResultCode;
         match self {
-            RunOk::Return(buf) => [ResultCode::Return as u8]
-                .into_iter()
-                .chain(buf.iter().cloned()),
-            RunOk::UserError(buf) => [ResultCode::UserError as u8]
-                .into_iter()
-                .chain(buf.as_bytes().iter().cloned()),
-            RunOk::VMError(buf, _) => [ResultCode::VmError as u8]
-                .into_iter()
-                .chain(buf.0.as_bytes().iter().cloned()),
+            RunOk::Return(buf) => {
+                let mut res = Vec::with_capacity(1 + buf.len());
+                res.push(ResultCode::Return as u8);
+                res.extend_from_slice(buf);
+                res
+            }
+            RunOk::UserError(val) => {
+                let mut res = vec![ResultCode::UserError as u8];
+                match val {
+                    calldata::Value::Str(s) => {
+                        res.extend_from_slice(s.as_bytes());
+                    }
+                    other => {
+                        res.extend_from_slice(&0u32.to_le_bytes());
+                        res.extend_from_slice(&calldata::encode(other));
+                    }
+                }
+                res
+            }
+            RunOk::VMError(buf, _) => {
+                let mut res = Vec::with_capacity(1 + buf.0.len());
+                res.push(ResultCode::VmError as u8);
+                res.extend_from_slice(buf.0.as_bytes());
+                res
+            }
         }
     }
 }
@@ -107,7 +121,7 @@ impl std::fmt::Display for RunOk {
                     .join("");
                 f.write_fmt(format_args!("Return(\"{str}\")"))
             }
-            Self::UserError(r) => f.debug_tuple("UserError").field(r).finish(),
+            Self::UserError(r) => write!(f, "UserError({:?})", r),
             Self::VMError(r, _) => f.debug_tuple("VMError").field(r).finish(),
         }
     }
@@ -212,7 +226,7 @@ impl VM<wasmtime::Instance> {
                 log_debug!(result = "Return"; "execution result unwrapped")
             }
             Ok((rt::vm::RunOk::UserError(msg), _)) => {
-                log_debug!(result = "UserError", message = msg; "execution result unwrapped")
+                log_debug!(result = "UserError", message:serde = msg; "execution result unwrapped")
             }
             Ok((rt::vm::RunOk::VMError(e, cause), _)) => {
                 log_debug!(result = "VMError", message = e.0, cause:? = cause; "execution result unwrapped")

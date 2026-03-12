@@ -64,9 +64,10 @@ impl Limiter {
 
     pub async fn consume(&self, amount: u64) -> anyhow::Result<()> {
         if !self.0.consume_storage_pages(amount).await {
-            return Err(rt::errors::VMError::oos(Some(anyhow::anyhow!(
-                "consuming {amount} storage pages"
-            )))
+            return Err(rt::errors::VMError(
+                abi::consts::VmError::oom().ram().val(),
+                Some(anyhow::anyhow!("consuming {amount} storage pages")),
+            )
             .into());
         }
         Ok(())

@@ -492,9 +492,16 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 							bytes([public_abi.ResultCode.RETURN]) + gvm_calldata.encode(res['value'])
 						)
 					elif res['kind'] == 'rollback':
-						encoded_nondet.append(
-							bytes([public_abi.ResultCode.USER_ERROR]) + res['value'].encode('utf-8')
-						)
+						if isinstance(res['value'], str):
+							encoded_nondet.append(
+								bytes([public_abi.ResultCode.USER_ERROR]) + res['value'].encode('utf-8')
+							)
+						else:
+							encoded_nondet.append(
+								bytes([public_abi.ResultCode.USER_ERROR])
+								+ b'\x00\x00\x00\x00'
+								+ gvm_calldata.encode(res['value'])
+							)
 					elif res['kind'] == 'contract_error':
 						encoded_nondet.append(
 							bytes([public_abi.ResultCode.VM_ERROR]) + res['value'].encode('utf-8')
@@ -560,7 +567,12 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				elif res.result_kind == public_abi.ResultCode.VM_ERROR:
 					return_part += f'executed with `VMError("{res.result_data}")`\n'
 				elif res.result_kind == public_abi.ResultCode.USER_ERROR:
-					return_part += f'executed with `UserError("{res.result_data}")`\n'
+					if isinstance(res.result_data, str):
+						return_part += f'executed with `UserError("{res.result_data}")`\n'
+					else:
+						return_part += (
+							f'executed with `UserError({gvm_calldata.to_str(res.result_data)})`\n'
+						)
 				nondet_part = ''
 				if mock_host.nondet_disagreement_call_no is not None:
 					nondet_part = (

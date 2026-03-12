@@ -22,7 +22,7 @@ def contract_return(data: calldata.Encodable) -> typing.NoReturn:
 	assert False
 
 
-def rollback(data: str) -> typing.NoReturn:
+def rollback(data: calldata.Encodable) -> typing.NoReturn:
 	atexit._run_exitfuncs()
 	_imp({'Rollback': data})
 	assert False

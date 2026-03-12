@@ -41,6 +41,18 @@
     }
   },
   {
+    "type": "consts",
+    "name": "top_limits",
+    "repr": "u32",
+    "values": {
+      "nondet_blocks": 4096,
+      "locked_slots": 256,
+      "upgraders": 32,
+      "vm_recursion": 512,
+      "fd_allocation": 96
+    }
+  },
+  {
     "type": "enum",
     "name": "special_method",
     "repr": "str",
@@ -54,6 +66,7 @@
     "name": "vm_error",
     "values": [
       "timeout",
+      "absent_leader_nondet_output",
       {
         "head": "exit_code",
         "tail": "$i32"
@@ -71,7 +84,8 @@
               [], "table", "memory"
             ]
           },
-          "Storage"
+          "storage",
+          "receipt"
         ]
       },
       {

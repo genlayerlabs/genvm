@@ -13,6 +13,7 @@ pub mod sync;
 pub mod templater;
 pub mod version;
 
+pub mod host_fns;
 pub mod util;
 
 pub mod domain {

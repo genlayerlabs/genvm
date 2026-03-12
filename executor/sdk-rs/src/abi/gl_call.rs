@@ -345,7 +345,7 @@ pub enum Message {
     ExecPrompt(llm_iface::PromptPayload),
     ExecPromptTemplate(llm_iface::PromptTemplatePayload),
 
-    Rollback(String),
+    Rollback(calldata::Value),
     Return(calldata::Value),
 
     Trace(TracePayload),

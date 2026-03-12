@@ -129,6 +129,11 @@ def gen_rust_trie_builder(entries, root_name, buf)
 
 	buf << "#[derive(Debug, Clone, PartialEq, Eq, Serialize)]\n"
 	buf << "pub struct #{root_name}(pub Cow<'static, str>);\n\n"
+	buf << "impl Into<String> for #{root_name} {\n"
+	buf << "    fn into(self) -> String {\n"
+	buf << "        self.0.into()\n"
+	buf << "    }\n"
+	buf << "}\n"
 	buf << "impl #{root_name} {\n"
 	leaves.each { |name, parts|
 		str_val = parts.join(" ")
@@ -159,6 +164,9 @@ pub enum <%= to_camel name %> {
 % end
 
 impl <%= to_camel name %> {
+% if repr != "str" && values.values.all? { |v| v.is_a?(Integer) } && values.values.sort == (0...values.length).to_a
+    pub const SIZE: usize = <%= values.length %>;
+% end
     pub fn value(self) -> <%= rust_repr repr %> {
         match self {
 %   values.each { |k, v|

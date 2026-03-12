@@ -573,9 +573,6 @@ async fn pipe_read<P: tokio::io::AsyncReadExt + Unpin>(
     std::mem::drop(permit);
 }
 
-/// Handles the manager-side of the host protocol on a socketpair.
-/// Reads method bytes and responds according to the host protocol:
-/// - ConsumeResult (7): read length-prefixed result data, send ACK
 async fn read_manager_host_stream(
     parent_fd: FdWrapper,
     consumed_result: sync::DArc<tokio::sync::OnceCell<Vec<u8>>>,
@@ -605,34 +602,30 @@ async fn read_manager_host_stream(
             }
         }
 
-        match method_buf[0] {
-            // ConsumeResult
-            7 => {
-                // Read length-prefixed data
-                let mut len_buf = [0u8; 4];
-                if let Err(e) = file.read_exact(&mut len_buf).await {
-                    log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "failed to read result length");
-                    return;
-                }
-                let len = u32::from_le_bytes(len_buf) as usize;
-                let mut data = vec![0u8; len];
-                if let Err(e) = file.read_exact(&mut data).await {
-                    log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "failed to read result data");
-                    return;
-                }
-                log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0, len = len; "manager received consume_result");
-                let _ = consumed_result.set(data);
-                // Send ACK
-                if let Err(e) = file.write_all(&[0u8]).await {
-                    log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "failed to send ACK for consume_result");
-                    return;
-                }
-                let _ = file.flush().await;
-            }
-            other => {
-                log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, method = other; "unexpected method on manager host stream");
+        if method_buf[0] == host_fns::Methods::ConsumeResult as u8 {
+            // Read length-prefixed data
+            let mut len_buf = [0u8; 4];
+            if let Err(e) = file.read_exact(&mut len_buf).await {
+                log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "failed to read result length");
                 return;
             }
+            let len = u32::from_le_bytes(len_buf) as usize;
+            let mut data = vec![0u8; len];
+            if let Err(e) = file.read_exact(&mut data).await {
+                log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "failed to read result data");
+                return;
+            }
+            log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0, len = len; "manager received consume_result");
+            let _ = consumed_result.set(data);
+            // Send ACK
+            if let Err(e) = file.write_all(&[0u8]).await {
+                log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "failed to send ACK for consume_result");
+                return;
+            }
+            let _ = file.flush().await;
+        } else {
+            log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, method = method_buf[0]; "unexpected method on manager host stream");
+            return;
         }
     }
 }
@@ -943,11 +936,8 @@ pub async fn start_genvm(
         None
     };
 
-    // Encode execution data
-    // Map ConsumeResult(7) to host 1 (manager).
-    // Unlisted methods default to host 0 (original host).
-    let mut method_hosts: Vec<u8> = vec![0; 8];
-    method_hosts[7] = 1; // ConsumeResult -> manager
+    let mut method_hosts: Vec<u8> = vec![0; host_fns::Methods::SIZE];
+    method_hosts[host_fns::Methods::ConsumeResult as usize] = 1;
 
     let execution_data = genvm_common::domain::ExecutionData {
         calldata: req.calldata.clone(),
