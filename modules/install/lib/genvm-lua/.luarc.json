@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+  "runtime.builtin": {
+    "basic": "disable",
+    "bit": "disable",
+    "bit32": "disable",
+    "builtin": "disable",
+    "coroutine": "disable",
+    "debug": "disable",
+    "ffi": "disable",
+    "io": "disable",
+    "jit": "disable",
+    "math": "disable",
+    "os": "disable",
+    "package": "disable",
+    "string": "disable",
+    "table": "disable",
+    "utf8": "disable"
+  }
+}

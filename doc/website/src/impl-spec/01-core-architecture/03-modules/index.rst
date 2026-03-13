@@ -8,7 +8,6 @@ Overview of GenVM's core architectural components and design patterns.
 
    01-web
    02-llm
-   03-greyboxing
 
 Overview
 --------

@@ -17,11 +17,27 @@ local lib = require("lib-genvm")
 
 ---@alias Format "text" | "json" | "bool"
 
----@alias ModelConfig { enabled: boolean, supports_json: boolean, supports_image: boolean, use_max_completion_tokens: boolean, meta: any }
----@alias ProvidersDB { [string]: { models: { [string]: ModelConfig } } }
+---@class ModelConfig
+---@field enabled boolean
+---@field supports_json boolean
+---@field supports_image boolean
+---@field use_max_completion_tokens boolean
+---@field meta any
 
----@alias LLMExecPromptPayload { response_format: "text" | "json", prompt: string, images: userdata[] }
----@alias LLMExecPromptTemplatePayload { template: "EqComparative" | "EqNonComparativeValidator" | "EqNonComparativeLeader", [string]: string }
+---@class ProviderEntry
+---@field models table<string, ModelConfig>
+
+---@alias ProvidersDB table<string, ProviderEntry>
+
+---@class LLMExecPromptPayload
+---@field response_format "text" | "json"
+---@field prompt string
+---@field images userdata[]
+
+--- Additional string fields serve as template variable substitutions.
+---@class LLMExecPromptTemplatePayload
+---@field template "EqComparative" | "EqNonComparativeValidator" | "EqNonComparativeLeader"
+---@field [string] string
 
 ---@class LLM
 ---@field exec_prompt_in_provider fun(ctx, data: { prompt: Prompt, format: Format, model: string, provider: string }): any
@@ -33,6 +49,8 @@ local rs = __llm ---@diagnostic disable-line
 
 M.rs = rs
 
+--- HTTP status codes that indicate a provider is overloaded and the request may be retried.
+---@type table<integer, boolean>
 M.overloaded_statuses = {
 	[408] = true,
 	[503] = true,
@@ -41,12 +59,25 @@ M.overloaded_statuses = {
 	[529] = true,
 }
 
+--- Execute a prompt against a specific provider/model. Delegates to the runtime.
+---@type fun(ctx, data: { prompt: Prompt, format: Format, model: string, provider: string }): any
 M.exec_prompt_in_provider = rs.exec_prompt_in_provider
+
+--- Full provider database (all providers and models).
+---@type ProvidersDB
 M.providers = rs.providers
+
+--- Prompt templates keyed by equivalence-check type.
+---@type { eq_comparative: any, eq_non_comparative_leader: any, eq_non_comparative_validator: any }
 M.templates = rs.templates
 
----@alias MappedPrompt { prompt: Prompt, format: "json" | "text" | "bool" }
+---@class MappedPrompt
+---@field prompt Prompt
+---@field format "json" | "text" | "bool"
 
+--- Transform raw prompt arguments into a MappedPrompt suitable for provider execution.
+--- Sets default temperature (0.7) and max_tokens (8000). For JSON format, adds a system message.
+---@param args { prompt: string, images: userdata[], response_format: Format }
 ---@return MappedPrompt
 M.exec_prompt_transform = function(args)
 	local mapped_prompt = {
@@ -103,14 +134,19 @@ local function filter_providers_by(model_fn)
 	return ret
 end
 
+--- Providers whose models support JSON response format.
 ---@type ProvidersDB
 M.providers_with_json_support = filter_providers_by(function(m)
 	return m.supports_json
 end)
+
+--- Providers whose models support image inputs.
 ---@type ProvidersDB
 M.providers_with_image_support = filter_providers_by(function(m)
 	return m.supports_image
 end)
+
+--- Providers whose models support both image inputs and JSON response format.
 ---@type ProvidersDB
 M.providers_with_image_and_json_support = filter_providers_by(function(m)
 	return m.supports_image and m.supports_json
@@ -144,6 +180,11 @@ if lib.get_first_from_table(M.providers_with_image_and_json_support) == nil then
 	}
 end
 
+--- Select the appropriate provider subset for a given prompt and response format.
+--- Filters by JSON support, image support, or both depending on the format and whether the prompt contains images.
+---@param prompt Prompt
+---@param format Format
+---@return ProvidersDB
 M.select_providers_for = function(prompt, format)
 	---@cast prompt Prompt
 	---@cast format "text" | "json" | "bool"
@@ -162,6 +203,9 @@ M.select_providers_for = function(prompt, format)
 	end
 end
 
+--- Transform a template-based prompt into a MappedPrompt by substituting variables into the template text.
+--- Looks up the template by `args.template` and replaces `#{key}` placeholders with the remaining fields in `args`.
+---@param args LLMExecPromptTemplatePayload
 ---@return MappedPrompt
 M.exec_prompt_template_transform = function(args)
 	lib.log { level = "debug", message = "exec_prompt_template_transform", args = args }

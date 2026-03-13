@@ -5,4 +5,4 @@ source "$SCRIPT_DIR/_common.sh"
 
 python3 ./runners/support/match-tags.py doc/website/src/impl-spec/appendix/runners-versions.json
 
-nix develop -i .#py-test --command bash ./support/ci/pipelines/src/docs.sh
+nix develop -i .#gen-docs --command bash ./support/ci/pipelines/src/docs.sh

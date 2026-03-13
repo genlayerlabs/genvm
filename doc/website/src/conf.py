@@ -20,6 +20,7 @@ extensions = [
 	'sphinx.ext.intersphinx',
 	'sphinxcontrib.mermaid',
 	'sphinxcontrib.openapi',
+	'myst_parser',
 ]
 
 templates_path = ['_templates']

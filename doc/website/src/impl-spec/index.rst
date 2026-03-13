@@ -15,4 +15,5 @@ The specification has been split into multiple sections for better organization 
    glossary
    01-core-architecture/index
    02-vm/index
+   03-greyboxing/index
    appendix/index

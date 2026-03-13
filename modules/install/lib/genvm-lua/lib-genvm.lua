@@ -2,7 +2,10 @@ local M = {}
 
 local value2json = require("value2json")
 
----@alias ModuleError { causes: string[], fatal: boolean, ctx: table<string, any> }
+---@class ModuleError
+---@field causes string[]
+---@field fatal boolean
+---@field ctx table<string, any>
 
 ---@class RS
 ---@field log_json fun(val: any): nil
@@ -26,12 +29,15 @@ local value2json = require("value2json")
 ---@type RS
 M.rs = __dflt ---@diagnostic disable-line
 
--- supports "level" and "message"
+--- Log a message or structured data. The argument table may contain `level` and `message` fields.
+---@param arg any value to log; converted to JSON via `value2json` before sending
 M.log = function(arg)
 	M.rs.log_json(value2json(arg))
 end
 
--- for nil and empty table returns nil
+--- Return the first key-value pair from a table, or nil if the table is nil/empty.
+---@param t table|nil
+---@return { key: any, value: any }|nil
 M.get_first_from_table = function(t)
 	if t == nil then
 		return nil
@@ -43,6 +49,9 @@ M.get_first_from_table = function(t)
 	return nil
 end
 
+--- Return the first key-value pair from a table; errors if the table is nil or empty.
+---@param t table|nil
+---@return { key: any, value: any }
 M.get_first_from_table_assert = function(t)
 	local res = M.get_first_from_table(t)
 	if res == nil then
@@ -52,6 +61,9 @@ M.get_first_from_table_assert = function(t)
 	return res
 end
 
+--- Re-raise an error with a different fatality flag. Non-user errors are re-raised as-is.
+---@param e any the caught error value
+---@param new_fatality boolean new value for the `fatal` field
 M.reraise_with_fatality = function(e, new_fatality)
 	local err = M.rs.as_user_error(e)
 	if err == nil then
@@ -62,6 +74,11 @@ M.reraise_with_fatality = function(e, new_fatality)
 	M.rs.user_error(err)
 end
 
+--- Linearly map a value in [0, 1] to [range_min, range_max].
+---@param value_01 number normalized value in the 0..1 range
+---@param range_min number lower bound of the target range
+---@param range_max number upper bound of the target range
+---@return number
 M.map_01_to_range = function(value_01, range_min, range_max)
 	return range_min + (range_max - range_min) * value_01
 end

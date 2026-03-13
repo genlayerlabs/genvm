@@ -1,7 +1,18 @@
 local M = {}
 
----@alias WebRenderPayload { url: string, mode: "text" | "html" | "screenshot", wait_after_loaded: number, size_limit: integer? }
----@alias WebRequestPayload { url: string, method: "GET" | "POST" | "HEAD" | "DELETE" | "OPTIONS" | "PATCH", headers: table<string, string>, body: string?, sign: boolean?, size_limit: integer? }
+---@class WebRenderPayload
+---@field url string
+---@field mode "text" | "html" | "screenshot"
+---@field wait_after_loaded number
+---@field size_limit integer?
+
+---@class WebRequestPayload
+---@field url string
+---@field method "GET" | "POST" | "HEAD" | "DELETE" | "OPTIONS" | "PATCH"
+---@field headers table<string, string>
+---@field body string?
+---@field sign boolean?
+---@field size_limit integer?
 
 local lib = require("lib-genvm")
 
@@ -13,6 +24,8 @@ local lib = require("lib-genvm")
 ---@type WEB
 M.rs = __web ---@diagnostic disable-line
 
+--- Set of URL schemas permitted for web requests.
+---@type table<string, boolean>
 M.allowed_schemas = {
 	["http"] = true,
 	["https"] = true,
@@ -27,6 +40,10 @@ local function table_has_val(tab, val)
 	return false
 end
 
+--- Validate a URL against allowed schemas, ports, and TLDs.
+--- Raises a non-fatal `user_error` if any check fails (MALFORMED_URL, SCHEMA_FORBIDDEN, PORT_FORBIDDEN, TLD_FORBIDDEN).
+--- URLs whose host is in `config.always_allow_hosts` bypass port and TLD checks.
+---@param url string the URL to validate
 M.check_url = function(url)
 	local split_url = lib.rs.split_url(url)
 

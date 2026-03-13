@@ -77,6 +77,12 @@ local function transform(value, ctx, include_ids)
 	return dup_table
 end
 
+--- Transform a Lua value into a JSON-serializable representation.
+--- Handles circular table references (replaced with `{ ["$table"] = id }`) and
+--- userdata (replaced with `{ ["$userdata"] = id }`). Tables referenced more than
+--- once receive a `$id` field so that later occurrences can back-reference them.
+---@param value any the Lua value to convert
+---@return any json_safe a JSON-safe copy of the value
 local function impl(value)
 	local ctx = {
 		counts = {},

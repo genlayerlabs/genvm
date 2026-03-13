@@ -151,6 +151,9 @@
 									wabt
 									ya-test-runner
 								];
+								packages-gen-docs = with pkgs; [
+									lua-language-server
+								];
 								packages-py-test = with pkgs; [
 									# aflplusplus # currently we don't run fuzzing on CI
 									python312
@@ -169,6 +172,10 @@
 									packages = packages-py-test ++ [ pkgs.ruby ];
 									shellHook = shell-hook-base;
 								};
+								devShells.gen-docs = pkgs.mkShell {
+									packages = packages-py-test ++ packages-gen-docs ++ [ pkgs.ruby ];
+									shellHook = shell-hook-base;
+								};
 								devShells.initial-check = pkgs.mkShell {
 									packages = packages-0 ++ packages-rust ++ packages-lint;
 									shellHook = shell-hook-base;
@@ -182,7 +189,7 @@
 									shellHook = shell-hook-base;
 								};
 								devShells.full = pkgs.mkShell {
-									packages = packages-0 ++ packages-debug-test ++ packages-py-test ++ packages-rust ++ packages-lint;
+									packages = packages-0 ++ packages-debug-test ++ packages-py-test ++ packages-rust ++ packages-lint ++ packages-gen-docs;
 									shellHook = shell-hook-base;
 								};
 								devShells.check-qemu = pkgs.mkShell {
