@@ -39,6 +39,7 @@ class _TopLimits(typing.NamedTuple):
 	VM_RECURSION: int = 512
 	WEB_REQUEST_MIN_SPACE: int = 65536
 	WEB_RENDER_MIN_SPACE: int = 134217728
+	MAX_FDS: int = 1024
 
 
 top_limits: typing.Final = _TopLimits()

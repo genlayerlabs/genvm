@@ -305,7 +305,8 @@ pub async fn spawn(
         engine,
         rt::vm::WasmtimeStoreData {
             limits: limiter.clone(),
-            genlayer_ctx: wasi::Context::new(vm, limiter),
+            genlayer_ctx: wasi::Context::new(vm, limiter)
+                .map_err(|(a, b)| (anyhow::Error::from(a), b))?,
             supervisor: zelf.clone(),
         },
         wasmtime::GenVMCtx {

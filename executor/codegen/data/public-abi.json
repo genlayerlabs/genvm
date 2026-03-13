@@ -50,7 +50,8 @@
       "upgraders": 32,
       "vm_recursion": 512,
       "web_request_min_space": 65536,
-      "web_render_min_space": 134217728
+      "web_render_min_space": 134217728,
+      "max_fds": 1024
     }
   },
   {

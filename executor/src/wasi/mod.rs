@@ -14,14 +14,21 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(data: genlayer_sdk::SingleVMData, limiter: rt::memlimiter::Limiter) -> Self {
+    pub fn new(
+        data: genlayer_sdk::SingleVMData,
+        limiter: rt::memlimiter::Limiter,
+    ) -> std::result::Result<Self, (rt::errors::VMError, genlayer_sdk::SingleVMData)> {
         let as_value = calldata::to_value(&data.message_data).unwrap(); // can't fail
         let as_bytes = calldata::encode(&as_value);
-        Self {
-            vfs: vfs::VFS::new(as_bytes, limiter),
+        let vfs = match vfs::VFS::new(as_bytes, limiter) {
+            Ok(vfs) => vfs,
+            Err(e) => return Err((e, data)),
+        };
+        Ok(Self {
+            vfs,
             preview1: preview1::Context::new(data.message_data.message.datetime, data.conf),
             genlayer_sdk: genlayer_sdk::Context::new(data),
-        }
+        })
     }
 }
 

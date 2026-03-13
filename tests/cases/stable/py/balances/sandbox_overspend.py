@@ -1,14 +1,14 @@
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	def __init__(self):
 		balance_before = self.balance
 		target = gl.message.sender_address
 
 		# First transfer: spend 60 out of 100
-		gl.get_contract_at(target).emit_transfer(value=u256(60))
+		gl.contract.get_at(target).emit_transfer(value=60)
 		balance_after_first = self.balance
 		print(f'balance before={balance_before} after_first_send={balance_after_first}')
 
@@ -19,7 +19,7 @@ class Contract(gl.Contract):
 			# Second transfer: spend another 60 inside sandbox
 			# This should fail (total 120 > 100) but the sandbox
 			# doesn't know about the parent's 60 already spent.
-			gl.get_contract_at(target).emit_transfer(value=u256(60))
+			gl.contract.get_at(target).emit_transfer(value=60)
 			return self.balance
 
 		result = gl.vm.spawn_sandbox(sandbox_fn, allow_write_ops=True)

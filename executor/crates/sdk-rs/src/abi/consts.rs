@@ -137,6 +137,7 @@ pub mod top_limits {
     pub const VM_RECURSION: u32 = 512;
     pub const WEB_REQUEST_MIN_SPACE: u32 = 65536;
     pub const WEB_RENDER_MIN_SPACE: u32 = 134217728;
+    pub const MAX_FDS: u32 = 1024;
 }
 
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
@@ -269,9 +270,9 @@ pub mod __VmError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct VmError(pub Cow<'static, str>);
 
-impl From<VmError> for String {
-    fn from(val: VmError) -> Self {
-        val.0.into()
+impl Into<String> for VmError {
+    fn into(self) -> String {
+        self.0.into()
     }
 }
 impl VmError {

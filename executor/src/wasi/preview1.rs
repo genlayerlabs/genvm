@@ -1177,6 +1177,9 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         buf: GuestPtr<u8>,
         buf_len: generated::types::Size,
     ) -> Result<(), generated::types::Error> {
+        let buf = buf.as_array(buf_len);
+        memory.bounds_check(buf)?;
+
         let mut mem: Vec<u8> = std::iter::repeat_n(0, buf_len as usize).collect();
 
         if self.context.conf.is_deterministic {
@@ -1190,7 +1193,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
             }
         }
 
-        memory.copy_from_slice(&mem, buf.as_array(buf_len))?;
+        memory.copy_from_slice(&mem, buf)?;
         Ok(())
     }
 

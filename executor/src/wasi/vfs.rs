@@ -31,7 +31,17 @@ pub(crate) struct VFS {
 }
 
 impl VFS {
-    pub fn new(stdin: Vec<u8>, limiter: rt::memlimiter::Limiter) -> Self {
+    pub fn new(
+        stdin: Vec<u8>,
+        limiter: rt::memlimiter::Limiter,
+    ) -> std::result::Result<Self, rt::errors::VMError> {
+        if !limiter.consume(stdin.len() as u32) {
+            return Err(rt::errors::VMError(
+                abi::consts::VmError::oom().ram().val(),
+                None,
+            ));
+        }
+
         let stdin_data = bytes::Bytes::from(stdin);
 
         let fds = BTreeMap::from([
@@ -48,16 +58,21 @@ impl VFS {
             (3, FileDescriptor::Dir { path: Vec::new() }),
         ]);
         let next_free_descriptor = fds.last_key_value().map(|x| *x.0).unwrap_or(0);
-        Self {
+        Ok(Self {
             fds,
             next_free_descriptor,
             free_descriptors: Vec::new(),
             limiter,
-        }
+        })
     }
 
     /// gives vacant fd
     pub fn alloc_fd(&mut self) -> anyhow::Result<u32> {
+        if self.fds.len() >= public_abi::top_limits::MAX_FDS as usize {
+            return Err(
+                rt::errors::VMError(abi::consts::VmError::oom().ram().limit(), None).into(),
+            );
+        }
         match self.free_descriptors.pop() {
             Some(v) => Ok(v),
             None => {

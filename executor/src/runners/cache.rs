@@ -85,7 +85,7 @@ impl Reader {
                 let arch = arch_provider().await?;
                 if !limiter.consume(arch.total_size) {
                     return Err(anyhow::Error::from(rt::errors::VMError(
-                        abi::consts::VmError::oom().storage(),
+                        abi::consts::VmError::oom().ram().val(),
                         None,
                     )));
                 }
@@ -97,7 +97,7 @@ impl Reader {
             && !limiter.consume(res.files.total_size)
         {
             return Err(anyhow::Error::from(rt::errors::VMError(
-                abi::consts::VmError::oom().storage(),
+                abi::consts::VmError::oom().ram().val(),
                 None,
             )));
         }
