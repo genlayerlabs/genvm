@@ -11,7 +11,7 @@ local function just_in_backend(ctx, mapped_prompt, remaining_gen)
 
 	local search_in = llm.select_providers_for(mapped_prompt.prompt, mapped_prompt.format)
 
-	lib.log{
+	lib.log {
 		level = "debug",
 		message = "executing prompt in backend",
 		prompt = mapped_prompt,
@@ -34,24 +34,21 @@ local function just_in_backend(ctx, mapped_prompt, remaining_gen)
 			format = mapped_prompt.format,
 		}
 
-		lib.log{
+		lib.log {
 			level = "trace",
 			message = "calling exec_prompt_in_provider",
 			request = request,
 		}
-		local success, result = pcall(function ()
-			return llm.rs.exec_prompt_in_provider(
-				ctx,
-				request
-			)
+		local success, result = pcall(function()
+			return llm.rs.exec_prompt_in_provider(ctx, request)
 		end)
 
-		lib.log{
+		lib.log {
 			level = "debug",
 			message = "executed with",
 			type = type(result),
 			success = success,
-			result = result
+			result = result,
 		}
 
 		if success then
@@ -62,15 +59,15 @@ local function just_in_backend(ctx, mapped_prompt, remaining_gen)
 
 		local as_user_error = lib.rs.as_user_error(result)
 		if as_user_error == nil then
-			lib.log{level = "warning", message = "non-user-error", original = result}
+			lib.log { level = "warning", message = "non-user-error", original = result }
 
 			error(result)
 		end
 
 		if llm.overloaded_statuses[as_user_error.ctx.status] then
-			lib.log{level = "warning", message = "service is overloaded, looking for next", error = as_user_error}
+			lib.log { level = "warning", message = "service is overloaded, looking for next", error = as_user_error }
 		else
-			lib.log{level = "error", message = "provider failed", error = as_user_error, request = request}
+			lib.log { level = "error", message = "provider failed", error = as_user_error, request = request }
 			-- lets fall back to retry
 			-- as_user_error.fatal = true
 			-- lib.rs.user_error(as_user_error)
@@ -79,15 +76,15 @@ local function just_in_backend(ctx, mapped_prompt, remaining_gen)
 		::continue::
 	end
 
-	lib.log{level = "error", message = "no provider could handle prompt", search_in = search_in}
-	lib.rs.user_error({
-		causes = {"NO_PROVIDER_FOR_PROMPT"},
+	lib.log { level = "error", message = "no provider could handle prompt", search_in = search_in }
+	lib.rs.user_error {
+		causes = { "NO_PROVIDER_FOR_PROMPT" },
 		fatal = true,
 		ctx = {
 			prompt = mapped_prompt.prompt,
 			search_in = search_in,
-		}
-	})
+		},
+	}
 end
 
 function ExecPrompt(ctx, args, remaining_gen)
@@ -95,9 +92,9 @@ function ExecPrompt(ctx, args, remaining_gen)
 	---@cast remaining_gen number
 
 	args.prompt = lib.rs.filter_text(args.prompt, {
-		'NFKC',
-		'RmZeroWidth',
-		'NormalizeWS'
+		"NFKC",
+		"RmZeroWidth",
+		"NormalizeWS",
 	})
 
 	local mapped = llm.exec_prompt_transform(args)

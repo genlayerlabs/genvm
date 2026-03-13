@@ -1,6 +1,6 @@
 local M = {}
 
-local value2json = require('value2json')
+local value2json = require("value2json")
 
 ---@alias ModuleError { causes: string[], fatal: boolean, ctx: table<string, any> }
 
@@ -24,7 +24,7 @@ local value2json = require('value2json')
 ---@field random_float fun(): number
 
 ---@type RS
-M.rs = __dflt;  ---@diagnostic disable-line
+M.rs = __dflt ---@diagnostic disable-line
 
 -- supports "level" and "message"
 M.log = function(arg)

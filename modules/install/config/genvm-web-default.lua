@@ -1,5 +1,5 @@
-local lib = require('lib-genvm')
-local web = require('lib-web')
+local lib = require("lib-genvm")
+local web = require("lib-web")
 
 local function status_is_good(status)
 	return status >= 200 and status < 300 or status == 304
@@ -9,41 +9,44 @@ function Render(ctx, payload)
 	---@cast payload WebRenderPayload
 	web.check_url(payload.url)
 
-	local url_params = '?url=' .. lib.rs.url_encode(payload.url) ..
-		'&mode=' .. payload.mode ..
-		'&waitAfterLoaded=' .. tostring(payload.wait_after_loaded or 0)
+	local url_params = "?url="
+		.. lib.rs.url_encode(payload.url)
+		.. "&mode="
+		.. payload.mode
+		.. "&waitAfterLoaded="
+		.. tostring(payload.wait_after_loaded or 0)
 
 	local result = lib.rs.request(ctx, {
-		method = 'GET',
-		url = web.rs.config.webdriver_host .. '/render' .. url_params,
+		method = "GET",
+		url = web.rs.config.webdriver_host .. "/render" .. url_params,
 		headers = {},
 		error_on_status = true,
 		response_body_max_size = payload.size_limit,
 	})
 
-	lib.log({
+	lib.log {
 		level = "debug",
 		message = "web render result",
 		result = result,
-	})
+	}
 
-	local status = tonumber(result.headers['resulting-status'])
+	local status = tonumber(result.headers["resulting-status"])
 
 	if not status_is_good(status) then
-		lib.rs.user_error({
-			causes = {"WEBPAGE_LOAD_FAILED"},
+		lib.rs.user_error {
+			causes = { "WEBPAGE_LOAD_FAILED" },
 			fatal = false,
 			ctx = {
 				url = payload.url,
 				status = status,
 				body = result.body,
-			}
-		})
+			},
+		}
 	end
 
 	if payload.mode == "screenshot" then
 		return {
-			image = result.body
+			image = result.body,
 		}
 	else
 		return {

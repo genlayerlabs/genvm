@@ -36,7 +36,7 @@ local function transform(value, ctx, include_ids)
 			ctx.userdata_next_id = ctx.userdata_next_id + 1
 		end
 		return {
-			["$userdata"] = ctx.userdata_ids[value]
+			["$userdata"] = ctx.userdata_ids[value],
 		}
 	end
 

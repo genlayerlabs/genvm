@@ -43,6 +43,12 @@ repos:
       - id: editorconfig-checker
         exclude: (.git-third-party|runners/py-libs|runners/genlayer-py-std/src-emb/onnx|/fuzz/)
 
+  - repo: https://github.com/JohnnyMorganz/StyLua
+    rev: v2.4.0
+    hooks:
+      - id: stylua-github
+        files: \.lua$
+
   - repo: local
     hooks:
       - id: check-shebang

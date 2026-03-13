@@ -3,7 +3,7 @@ local M = {}
 ---@alias WebRenderPayload { url: string, mode: "text" | "html" | "screenshot", wait_after_loaded: number, size_limit: integer? }
 ---@alias WebRequestPayload { url: string, method: "GET" | "POST" | "HEAD" | "DELETE" | "OPTIONS" | "PATCH", headers: table<string, string>, body: string?, sign: boolean?, size_limit: integer? }
 
-local lib = require('lib-genvm')
+local lib = require("lib-genvm")
 
 ---@class WEB
 ---@field allowed_tld { [string]: boolean }
@@ -11,7 +11,7 @@ local lib = require('lib-genvm')
 ---@field get_webdriver_session fun(ctx): string
 
 ---@type WEB
-M.rs = __web; ---@diagnostic disable-line
+M.rs = __web ---@diagnostic disable-line
 
 M.allowed_schemas = {
 	["http"] = true,
@@ -31,25 +31,25 @@ M.check_url = function(url)
 	local split_url = lib.rs.split_url(url)
 
 	if split_url == nil then
-		lib.rs.user_error({
-			causes = {"MALFORMED_URL"},
+		lib.rs.user_error {
+			causes = { "MALFORMED_URL" },
 			fatal = false,
 			ctx = {
-				url = url
-			}
-		})
+				url = url,
+			},
+		}
 	end
 	---@cast split_url -nil
 
 	if not M.allowed_schemas[split_url.schema] then
-		lib.rs.user_error({
-			causes = {"SCHEMA_FORBIDDEN"},
+		lib.rs.user_error {
+			causes = { "SCHEMA_FORBIDDEN" },
 			fatal = false,
 			ctx = {
 				schema = split_url.schema,
 				url = url,
-			}
-		})
+			},
+		}
 	end
 
 	lib.log {
@@ -65,14 +65,14 @@ M.check_url = function(url)
 	end
 
 	if split_url.port ~= nil and split_url.port ~= 80 and split_url.port ~= 443 then
-		lib.rs.user_error({
-			causes = {"PORT_FORBIDDEN"},
+		lib.rs.user_error {
+			causes = { "PORT_FORBIDDEN" },
 			fatal = false,
 			ctx = {
 				port = split_url.port,
 				url = url,
-			}
-		})
+			},
+		}
 	end
 
 	local from = split_url.host:find("[.]([^.]*)$")
@@ -81,7 +81,7 @@ M.check_url = function(url)
 	end
 	local tld = string.sub(split_url.host, from + 1)
 
-	lib.log{
+	lib.log {
 		level = "debug",
 		message = "detected TLD",
 		detected_tld = tld,
@@ -90,14 +90,14 @@ M.check_url = function(url)
 	}
 
 	if not M.rs.allowed_tld[tld] then
-		lib.rs.user_error({
-			causes = {"TLD_FORBIDDEN"},
+		lib.rs.user_error {
+			causes = { "TLD_FORBIDDEN" },
 			fatal = false,
 			ctx = {
 				tld = tld,
 				url = url,
-			}
-		})
+			},
+		}
 	end
 end
 

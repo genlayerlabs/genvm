@@ -1,6 +1,6 @@
 local M = {}
 
-local lib = require('lib-genvm')
+local lib = require("lib-genvm")
 
 ---@alias MergeStrategy "none" | "replace" | "merge_left" | "merge_right" | table<string, MergeStrategy>
 
@@ -20,7 +20,6 @@ local lib = require('lib-genvm')
 ---@alias ModelConfig { enabled: boolean, supports_json: boolean, supports_image: boolean, use_max_completion_tokens: boolean, meta: any }
 ---@alias ProvidersDB { [string]: { models: { [string]: ModelConfig } } }
 
-
 ---@alias LLMExecPromptPayload { response_format: "text" | "json", prompt: string, images: userdata[] }
 ---@alias LLMExecPromptTemplatePayload { template: "EqComparative" | "EqNonComparativeValidator" | "EqNonComparativeLeader", [string]: string }
 
@@ -30,7 +29,7 @@ local lib = require('lib-genvm')
 ---@field templates { eq_comparative: any, eq_non_comparative_leader: any, eq_non_comparative_validator: any }
 
 ---@type LLM
-local rs = __llm; ---@diagnostic disable-line
+local rs = __llm ---@diagnostic disable-line
 
 M.rs = rs
 
@@ -41,7 +40,6 @@ M.overloaded_statuses = {
 	[504] = true,
 	[529] = true,
 }
-
 
 M.exec_prompt_in_provider = rs.exec_prompt_in_provider
 M.providers = rs.providers
@@ -64,13 +62,13 @@ M.exec_prompt_transform = function(args)
 
 	local format = args.response_format
 
-	if format == 'json' then
+	if format == "json" then
 		mapped_prompt.system_message = "respond with a valid json object"
 	end
 
 	return {
 		prompt = mapped_prompt,
-		format = format
+		format = format,
 	}
 end
 
@@ -106,13 +104,19 @@ local function filter_providers_by(model_fn)
 end
 
 ---@type ProvidersDB
-M.providers_with_json_support = filter_providers_by(function(m) return m.supports_json end)
+M.providers_with_json_support = filter_providers_by(function(m)
+	return m.supports_json
+end)
 ---@type ProvidersDB
-M.providers_with_image_support = filter_providers_by(function(m) return m.supports_image end)
+M.providers_with_image_support = filter_providers_by(function(m)
+	return m.supports_image
+end)
 ---@type ProvidersDB
-M.providers_with_image_and_json_support = filter_providers_by(function(m) return m.supports_image and m.supports_json end)
+M.providers_with_image_and_json_support = filter_providers_by(function(m)
+	return m.supports_image and m.supports_json
+end)
 
-lib.log{
+lib.log {
 	providers = M.providers,
 	providers_with_json_support = M.providers_with_json_support,
 	providers_with_image_support = M.providers_with_image_support,
@@ -120,23 +124,23 @@ lib.log{
 }
 
 if lib.get_first_from_table(M.providers_with_json_support) == nil then
-	lib.log{
+	lib.log {
 		level = "error",
-		message = "no provider with json support detected"
+		message = "no provider with json support detected",
 	}
 end
 
 if lib.get_first_from_table(M.providers_with_image_support) == nil then
-	lib.log{
+	lib.log {
 		level = "warning",
-		message = "no provider with image support detected"
+		message = "no provider with image support detected",
 	}
 end
 
 if lib.get_first_from_table(M.providers_with_image_and_json_support) == nil then
-	lib.log{
+	lib.log {
 		level = "warning",
-		message = "no provider with image AND json support detected"
+		message = "no provider with image AND json support detected",
 	}
 end
 
@@ -145,7 +149,7 @@ M.select_providers_for = function(prompt, format)
 	---@cast format "text" | "json" | "bool"
 
 	local has_image = lib.get_first_from_table(prompt.images) ~= nil
-	if format == 'json' or format == 'bool' then
+	if format == "json" or format == "bool" then
 		if has_image then
 			return M.providers_with_image_and_json_support
 		else
@@ -160,7 +164,7 @@ end
 
 ---@return MappedPrompt
 M.exec_prompt_template_transform = function(args)
-	lib.log{level = "debug", message = "exec_prompt_template_transform", args = args}
+	lib.log { level = "debug", message = "exec_prompt_template_transform", args = args }
 
 	my_data = {
 		EqComparative = { template_id = "eq_comparative", format = "bool" },
@@ -193,7 +197,7 @@ M.exec_prompt_template_transform = function(args)
 
 	return {
 		prompt = mapped_prompt,
-		format = format
+		format = format,
 	}
 end
 
