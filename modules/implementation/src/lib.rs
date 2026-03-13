@@ -1,5 +1,9 @@
 pub mod common;
+pub mod manager;
 pub mod scripting;
+
+pub mod llm;
+pub mod web;
 
 pub use scripting::filters;
 

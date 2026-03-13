@@ -8,8 +8,8 @@ local value2json = require('value2json')
 ---@field log_json fun(val: any): nil
 ---@field sleep_seconds fun(duration: number): nil
 ---@field request
----| fun(ctx, req: { body: nil | string, url: string, headers: table<string, string>, method: string, error_on_status: boolean | nil, json: false | nil }): { body: string, status: integer, headers: table<string, string> }
----| fun(ctx, req: { body: nil | string, url: string, headers: table<string, string>, method: string, error_on_status: boolean | nil, json: true }): { body: any, status: integer, headers: table<string, string> }
+---| fun(ctx, req: { body: nil | string, url: string, headers: table<string, string>, method: string, error_on_status: boolean | nil, json: false | nil, response_body_max_size: integer | nil }): { body: string, status: integer, headers: table<string, string> }
+---| fun(ctx, req: { body: nil | string, url: string, headers: table<string, string>, method: string, error_on_status: boolean | nil, json: true, response_body_max_size: integer | nil }): { body: any, status: integer, headers: table<string, string> }
 ---@field split_url fun(url: string): nil | { schema: string, port: number | nil, host: string }
 ---@field user_error fun(val: ModuleError): nil
 ---@field base64_decode fun(val: string): string
@@ -20,6 +20,8 @@ local value2json = require('value2json')
 ---@field url_encode fun(url: string): string
 ---@field filter_text fun(text: string, filters: string[]): string
 ---@field filter_image fun(image: string, filters: any[]): string
+---@field random_bytes fun(length: integer): string
+---@field random_float fun(): number
 
 ---@type RS
 M.rs = __dflt;  ---@diagnostic disable-line

@@ -18,6 +18,7 @@ function Render(ctx, payload)
 		url = web.rs.config.webdriver_host .. '/render' .. url_params,
 		headers = {},
 		error_on_status = true,
+		response_body_max_size = payload.size_limit,
 	})
 
 	lib.log({
@@ -62,6 +63,7 @@ function Request(ctx, payload)
 		headers = payload.headers,
 		body = payload.body,
 		sign = payload.sign,
+		response_body_max_size = payload.size_limit,
 	})
 
 	if success then

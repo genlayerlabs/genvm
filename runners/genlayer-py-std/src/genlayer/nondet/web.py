@@ -60,6 +60,17 @@ def post(
 
 
 @_lazy_api
+def put(
+	url: str,
+	*,
+	body: str | bytes | None = None,
+	headers: dict[str, str | bytes] = {},
+	sign: bool = False,
+) -> Lazy[Response]:
+	return request.lazy(url, method='PUT', body=body, headers=headers, sign=sign)
+
+
+@_lazy_api
 def delete(
 	url: str,
 	*,
@@ -96,7 +107,7 @@ def patch(
 def request(
 	url: str,
 	*,
-	method: typing.Literal['GET', 'POST', 'DELETE', 'HEAD', 'OPTIONS', 'PATCH'],
+	method: typing.Literal['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS', 'PATCH'],
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
 	sign: bool = False,

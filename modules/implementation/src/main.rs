@@ -1,9 +1,4 @@
-mod llm;
-mod web;
-
-pub mod common;
-pub mod manager;
-pub mod scripting;
+use genvm_modules::{common, llm, manager, scripting, web};
 
 use anyhow::Result;
 use clap::Parser;

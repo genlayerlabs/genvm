@@ -37,7 +37,8 @@ class _TopLimits(typing.NamedTuple):
 	LOCKED_SLOTS: int = 256
 	UPGRADERS: int = 32
 	VM_RECURSION: int = 512
-	FD_ALLOCATION: int = 96
+	WEB_REQUEST_MIN_SPACE: int = 65536
+	WEB_RENDER_MIN_SPACE: int = 134217728
 
 
 top_limits: typing.Final = _TopLimits()

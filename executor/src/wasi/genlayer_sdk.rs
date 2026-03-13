@@ -736,14 +736,35 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 Ok(file_fd_none())
             }
             gl_call::Message::WebRender(render_payload) => {
-                if self.context.data.conf.is_deterministic {
+                let is_det = self.context.data.conf.is_deterministic;
+                if is_det {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
+
+                let space_left = self
+                    .context
+                    .data
+                    .supervisor
+                    .limiter
+                    .get(is_det)
+                    .get_remaining_memory();
+
+                if space_left < abi::consts::top_limits::WEB_RENDER_MIN_SPACE {
+                    log_warn!(space_left = space_left; "not enough memory for web render");
+                    return Err(generated::types::Error::trap(
+                        rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into(),
+                    ));
+                }
+
+                let space_left_with_overhead = (space_left as u64 * 3 / 4) as u32;
 
                 let web = self.context.data.supervisor.modules.web.clone();
                 let task = taskify(async move {
                     web.send::<genvm_modules_interfaces::web::RenderAnswer, _>(
-                        genvm_modules_interfaces::web::Message::Render(render_payload),
+                        genvm_modules_interfaces::web::Message::Render(
+                            render_payload,
+                            space_left_with_overhead,
+                        ),
                     )
                     .await
                 })
@@ -761,14 +782,35 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 ))
             }
             gl_call::Message::WebRequest(request_payload) => {
-                if self.context.data.conf.is_deterministic {
+                let is_det = self.context.data.conf.is_deterministic;
+                if is_det {
                     return Err(generated::types::Errno::Forbidden.into());
                 }
+
+                let space_left = self
+                    .context
+                    .data
+                    .supervisor
+                    .limiter
+                    .get(is_det)
+                    .get_remaining_memory();
+
+                if space_left < abi::consts::top_limits::WEB_REQUEST_MIN_SPACE {
+                    log_warn!(space_left = space_left; "not enough memory for web request");
+                    return Err(generated::types::Error::trap(
+                        rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into(),
+                    ));
+                }
+
+                let space_left_with_overhead = (space_left as u64 * 3 / 4) as u32;
 
                 let web = self.context.data.supervisor.modules.web.clone();
                 let task = taskify(async move {
                     web.send::<genvm_modules_interfaces::web::RenderAnswer, _>(
-                        genvm_modules_interfaces::web::Message::Request(request_payload),
+                        genvm_modules_interfaces::web::Message::Request(
+                            request_payload,
+                            space_left_with_overhead,
+                        ),
                     )
                     .await
                 })

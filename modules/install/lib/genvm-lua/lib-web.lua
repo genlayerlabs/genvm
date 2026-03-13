@@ -1,7 +1,7 @@
 local M = {}
 
----@alias WebRenderPayload { url: string, mode: "text" | "html" | "screenshot", wait_after_loaded: number }
----@alias WebRequestPayload { url: string, method: "GET" | "POST" | "HEAD" | "DELETE" | "OPTIONS" | "PATCH", headers: table<string, string>, body: string?, sign: boolean? }
+---@alias WebRenderPayload { url: string, mode: "text" | "html" | "screenshot", wait_after_loaded: number, size_limit: integer? }
+---@alias WebRequestPayload { url: string, method: "GET" | "POST" | "HEAD" | "DELETE" | "OPTIONS" | "PATCH", headers: table<string, string>, body: string?, sign: boolean?, size_limit: integer? }
 
 local lib = require('lib-genvm')
 

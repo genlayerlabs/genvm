@@ -22,6 +22,7 @@ impl CtxPart {
         let error_on_status = req.error_on_status;
         let url = req.url.as_str().to_owned();
 
+        let body_size_limit = req.response_body_max_size.unwrap_or(usize::MAX);
         let request = req.into_reqwest(&self.client)?;
 
         if is_json {
@@ -30,6 +31,7 @@ impl CtxPart {
                 &url,
                 request,
                 error_on_status,
+                body_size_limit,
             )
             .await?;
             Ok(vm.to_value_with(&res, DEFAULT_LUA_SER_OPTIONS)?)
@@ -39,6 +41,7 @@ impl CtxPart {
                 &url,
                 request,
                 error_on_status,
+                body_size_limit,
             )
             .await?;
             Ok(vm.to_value_with(&res, DEFAULT_LUA_SER_OPTIONS)?)

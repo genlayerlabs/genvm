@@ -298,6 +298,7 @@ mod tests {
             json: false,
             error_on_status: true,
             sign: true,
+            response_body_max_size: None,
         };
 
         req.normalize_headers();
@@ -354,6 +355,7 @@ mod tests {
             json: false,
             error_on_status: true,
             sign: true,
+            response_body_max_size: None,
         };
 
         req.normalize_headers();
@@ -412,6 +414,7 @@ mod tests {
             json: false,
             error_on_status: true,
             sign: true,
+            response_body_max_size: None,
         };
 
         let part = CtxPart {

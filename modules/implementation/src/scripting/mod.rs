@@ -215,11 +215,29 @@ pub struct ResponseJSON {
     pub body: serde_json::Value,
 }
 
+async fn read_response_body_limited(
+    mut response: reqwest::Response,
+    limit: usize,
+) -> anyhow::Result<Vec<u8>> {
+    if limit == usize::MAX {
+        return Ok(response.bytes().await?.to_vec());
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if body.len() + chunk.len() > limit {
+            anyhow::bail!("response body size exceeds limit of {limit} bytes");
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
+
 pub async fn send_request_get_lua_compatible_response_bytes(
     metrics: &DArc<Metrics>,
     url: &str,
     request: reqwest::RequestBuilder,
     error_on_status: bool,
+    body_size_limit: usize,
 ) -> anyhow::Result<Response> {
     metrics.requests_count.increment();
     let lock = stats::tracker::Time::new(metrics.gep(|x| &x.requests_time));
@@ -238,7 +256,7 @@ pub async fn send_request_get_lua_compatible_response_bytes(
         );
     }
 
-    let body = response.bytes().await;
+    let body = read_response_body_limited(response, body_size_limit).await;
     std::mem::drop(lock);
 
     let body = match body {
@@ -300,6 +318,7 @@ pub async fn send_request_get_lua_compatible_response_json(
     url: &str,
     request: reqwest::RequestBuilder,
     error_on_status: bool,
+    body_size_limit: usize,
 ) -> anyhow::Result<ResponseJSON> {
     metrics.requests_count.increment();
     let lock = stats::tracker::Time::new(metrics.gep(|x| &x.requests_time));
@@ -318,15 +337,38 @@ pub async fn send_request_get_lua_compatible_response_json(
         );
     }
 
-    let body = response.json().await;
-
+    let body = read_response_body_limited(response, body_size_limit).await;
     std::mem::drop(lock);
 
-    let body: serde_json::Value = match body {
+    let body = match body {
         Ok(body) => body,
         Err(e) => {
             return Err(ModuleError {
                 causes: vec![common::ErrorKind::READING_BODY.into()],
+                fatal: true,
+                ctx: BTreeMap::from([
+                    ("url".to_owned(), GenericValue::Str(url.to_owned())),
+                    ("status".to_string(), GenericValue::Number(status.into())),
+                    ("rust_error".to_owned(), GenericValue::Str(e.to_string())),
+                    (
+                        "headers".to_owned(),
+                        GenericValue::Map(BTreeMap::from_iter(
+                            new_headers
+                                .into_iter()
+                                .map(|(k, v)| (k, GenericValue::Bytes(v.to_vec()))),
+                        )),
+                    ),
+                ]),
+            }
+            .into());
+        }
+    };
+
+    let body: serde_json::Value = match serde_json::from_slice(&body) {
+        Ok(body) => body,
+        Err(e) => {
+            return Err(ModuleError {
+                causes: vec![common::ErrorKind::DESERIALIZING.into()],
                 fatal: true,
                 ctx: BTreeMap::from([
                     ("url".to_owned(), GenericValue::Str(url.to_owned())),

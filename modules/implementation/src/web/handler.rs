@@ -24,10 +24,13 @@ struct Handler(Arc<Inner>);
 impl common::MessageHandler<web_iface::Message, FullResponse> for Handler {
     async fn handle(&self, message: web_iface::Message) -> common::ModuleResult<FullResponse> {
         match message {
-            web_iface::Message::Request(payload) => {
+            web_iface::Message::Request(payload, size_limit) => {
                 let vm = &self.0.user_vm.vm;
 
                 let payload_lua = vm.to_value(&payload)?;
+                if let Some(table) = payload_lua.as_table() {
+                    table.set("size_limit", size_limit)?;
+                }
 
                 let res: mlua::Value = self
                     .0
@@ -42,13 +45,14 @@ impl common::MessageHandler<web_iface::Message, FullResponse> for Handler {
 
                 Ok(FullResponse::Answer(RenderAnswer::Response(res)))
             }
-            web_iface::Message::Render(payload) => {
+            web_iface::Message::Render(payload, size_limit) => {
                 let vm = &self.0.user_vm.vm;
 
                 let payload_lua = vm.create_table()?;
                 payload_lua.set("mode", vm.to_value(&payload.mode)?)?;
                 payload_lua.set("url", payload.url)?;
                 payload_lua.set("wait_after_loaded", payload.wait_after_loaded.as_secs_f64())?;
+                payload_lua.set("size_limit", size_limit)?;
 
                 let res: mlua::Value = self
                     .0

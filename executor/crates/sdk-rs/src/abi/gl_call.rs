@@ -120,6 +120,7 @@ pub mod web_iface {
         GET,
         POST,
         HEAD,
+        PUT,
         DELETE,
         OPTIONS,
         PATCH,

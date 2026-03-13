@@ -2,7 +2,7 @@ use super::{ctx, prompt, scripting, UserVM};
 use crate::common::{MessageHandler, MessageHandlerProvider, ModuleError, ModuleResult};
 use genvm_common::*;
 
-use genvm_modules::common::LoggerWithId;
+use crate::common::LoggerWithId;
 use genvm_modules_interfaces::llm::{self as llm_iface};
 use mlua::LuaSerdeExt;
 

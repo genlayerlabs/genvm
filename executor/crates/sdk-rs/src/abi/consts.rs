@@ -135,7 +135,8 @@ pub mod top_limits {
     pub const LOCKED_SLOTS: u32 = 256;
     pub const UPGRADERS: u32 = 32;
     pub const VM_RECURSION: u32 = 512;
-    pub const FD_ALLOCATION: u32 = 96;
+    pub const WEB_REQUEST_MIN_SPACE: u32 = 65536;
+    pub const WEB_RENDER_MIN_SPACE: u32 = 134217728;
 }
 
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]

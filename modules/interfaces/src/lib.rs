@@ -160,8 +160,8 @@ pub mod web {
 
     #[derive(Serialize, Deserialize)]
     pub enum Message {
-        Render(RenderPayload),
-        Request(RequestPayload),
+        Render(RenderPayload, u32),
+        Request(RequestPayload, u32),
         GetStats,
     }
 

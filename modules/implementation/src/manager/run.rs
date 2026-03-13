@@ -7,12 +7,11 @@ use std::{
 
 use genvm_common::io::{set_fd_nonblocking, AsyncCustomFD, FdWrapper};
 use genvm_common::*;
-use genvm_modules::common::LoggerWithId;
 use tokio::io::AsyncBufReadExt;
 
 pub use genvm_modules_interfaces::GenVMId;
 
-use crate::common::{LogSink, LogSinkElement, GENVM_BY_ID_LOGGER};
+use crate::common::{LogSink, LogSinkElement, LoggerWithId, GENVM_BY_ID_LOGGER};
 
 /// Spawn relay that passes the stream to the module handler
 async fn spawn_module_relay(

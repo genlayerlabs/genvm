@@ -311,6 +311,7 @@ impl Provider for OpenAICompatible {
             &url,
             request,
             true,
+            usize::MAX,
         )
         .await?;
 
@@ -377,6 +378,7 @@ impl Provider for OpenAICompatible {
             &url,
             request,
             true,
+            usize::MAX,
         )
         .await?;
 
@@ -474,6 +476,7 @@ impl Provider for OLlama {
             &url,
             request,
             true,
+            usize::MAX,
         )
         .await?;
 
@@ -531,6 +534,7 @@ impl Provider for OLlama {
             &url,
             request,
             true,
+            usize::MAX,
         )
         .await?;
 
@@ -598,6 +602,7 @@ impl Provider for Gemini {
             &url,
             request,
             true,
+            usize::MAX,
         )
         .await?;
 
@@ -657,6 +662,7 @@ impl Provider for Gemini {
             &url,
             request,
             true,
+            usize::MAX,
         )
         .await?;
 
@@ -761,6 +767,7 @@ impl Provider for Anthropic {
             &url,
             request,
             true,
+            usize::MAX,
         )
         .await?;
 
@@ -832,6 +839,7 @@ impl Provider for Anthropic {
             &url,
             request,
             true,
+            usize::MAX,
         )
         .await?;
 
@@ -900,6 +908,7 @@ impl Provider for Anthropic {
             &url,
             request,
             true,
+            usize::MAX,
         )
         .await?;
 
@@ -924,7 +933,7 @@ fn sanitize_json_str(s: &str) -> String {
     let s = s.strip_suffix("```").unwrap_or(s);
     let s = s.trim();
 
-    genvm_modules::complete_json(s)
+    crate::complete_json(s)
 }
 
 #[cfg(test)]
