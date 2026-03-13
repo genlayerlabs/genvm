@@ -1,19 +1,14 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum MergeStrategy {
+    #[default]
     None,
     Replace,
     MergeLeft,
     MergeRight,
     Map(BTreeMap<String, MergeStrategy>),
-}
-
-impl Default for MergeStrategy {
-    fn default() -> Self {
-        MergeStrategy::None
-    }
 }
 
 impl Serialize for MergeStrategy {

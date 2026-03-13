@@ -1,6 +1,6 @@
-use std::{borrow::Cow, collections::BTreeMap};
+use std::collections::BTreeMap;
 
-use crate::{public_abi, rt};
+use crate::rt;
 use genlayer_sdk::abi;
 use genvm_common::*;
 

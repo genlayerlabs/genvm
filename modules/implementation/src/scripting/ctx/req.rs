@@ -106,7 +106,6 @@ mod tests {
     use crate::common;
     use genvm_common::*;
     use genvm_modules_interfaces::web as web_iface;
-    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_response_body_max_size_ok() {

@@ -467,7 +467,9 @@ if $options[:test_always_fail_module]
 end
 
 generator.register_cargo('executor', extra_args: executor_extra_args, build_to: 'out/executor/vTEST/bin/genvm')
-generator.register_cargo('executor/common')
+generator.register_cargo('executor/crates/calldata')
+generator.register_cargo('executor/crates/common')
+generator.register_cargo('executor/crates/sdk-rs')
 generator.register_cargo('modules/implementation', extra_args: ['--features', 'vendored-lua'], build_to: 'out/bin/genvm-modules')
 generator.register_cargo('modules/interfaces')
 

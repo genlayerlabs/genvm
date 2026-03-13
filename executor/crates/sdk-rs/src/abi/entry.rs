@@ -556,20 +556,20 @@ pub mod wasi_only {
             EntryKind::Sandbox => {
                 let sb_result = handler
                     .handle_sandbox(extended.message, extended.entry_data)
-                    .map_err(|e| ContractMainError::Custom(e))?;
+                    .map_err(ContractMainError::Custom)?;
 
                 return Ok(calldata::Value::Bytes(sb_result));
             }
             EntryKind::Main => handler
                 .handle_main(extended.message, extended.entry_data)
-                .map_err(|e| ContractMainError::Custom(e))?,
+                .map_err(ContractMainError::Custom)?,
             EntryKind::ConsensusStage => {
                 let stage_data = ConsensusStageData::parse(extended.entry_stage_data)
                     .map_err(ContractMainError::InvalidStageDataFormat)?;
 
                 handler
                     .handle_consensus_stage(extended.message, extended.entry_data, stage_data)
-                    .map_err(|e| ContractMainError::Custom(e))?
+                    .map_err(ContractMainError::Custom)?
             }
         };
 
@@ -580,7 +580,7 @@ pub mod wasi_only {
     ///
     /// Calls `contract_main_impl` and sends the result (or error) via gl_call.
     /// This function does not return.
-    pub fn contract_main<H>() -> ()
+    pub fn contract_main<H>()
     where
         H: contract_def::Contract + Default,
     {

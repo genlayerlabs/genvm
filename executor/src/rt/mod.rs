@@ -61,7 +61,7 @@ impl DataFeesLimit {
     async fn refuel(&self) -> bool {
         let mut rest = self.rest.lock().await;
         let cur = self.fast.load(std::sync::atomic::Ordering::SeqCst);
-        let to_add_max = std::u64::MAX - cur;
+        let to_add_max = u64::MAX - cur;
         let to_add_max = primitive_types::U256::from(to_add_max);
         let to_add = std::cmp::min(*rest, to_add_max);
 
@@ -162,9 +162,9 @@ async fn spawn_apply_run_inner(
 ) -> std::result::Result<vm::RunResult, (anyhow::Error, wasi::genlayer_sdk::SingleVMData)> {
     let limiter = supervisor.limiter.get(vm.conf.is_deterministic).derived();
 
-    let vm = supervisor::spawn(&supervisor, vm, limiter).await?;
+    let vm = supervisor::spawn(supervisor, vm, limiter).await?;
 
-    let vm = supervisor::apply_contract_actions(&supervisor, vm).await?;
+    let vm = supervisor::apply_contract_actions(supervisor, vm).await?;
 
     vm.run().await
 }

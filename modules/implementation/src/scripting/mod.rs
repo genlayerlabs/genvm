@@ -300,7 +300,7 @@ pub async fn send_request_get_lua_compatible_response_bytes(
                             .map(|(k, v)| (k, GenericValue::Bytes(v.to_vec()))),
                     )),
                 ),
-                ("body".to_owned(), GenericValue::Bytes(body.into())),
+                ("body".to_owned(), GenericValue::Bytes(body)),
             ]),
         }
         .into());
@@ -309,7 +309,7 @@ pub async fn send_request_get_lua_compatible_response_bytes(
     Ok(Response {
         status,
         headers: new_headers,
-        body: body.into(),
+        body,
     })
 }
 

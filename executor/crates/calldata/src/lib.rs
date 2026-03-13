@@ -31,7 +31,7 @@ where
 mod tests {
     use std::{collections::BTreeMap, str::FromStr};
 
-    use crate::calldata;
+    use crate as calldata;
 
     use super::*;
 

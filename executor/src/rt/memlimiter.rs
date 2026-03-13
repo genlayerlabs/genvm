@@ -2,7 +2,7 @@ use genlayer_sdk::abi;
 use genvm_common::*;
 use std::sync::{atomic::AtomicU32, Arc};
 
-use crate::{public_abi, rt};
+use crate::rt;
 
 struct LimiterInnerData {
     remaining_memory: Arc<AtomicU32>,

@@ -248,9 +248,9 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
             }
         }
 
-        for i in 0..put_to_cache_count {
+        for item in put_to_cache.iter().take(put_to_cache_count) {
             // SAFETY: elements 0..put_to_cache_count have been initialized above
-            let (page_id, page_data) = unsafe { put_to_cache[i].assume_init_ref() };
+            let (page_id, page_data) = unsafe { item.assume_init_ref() };
             self.cache.insert(*page_id, *page_data);
         }
 

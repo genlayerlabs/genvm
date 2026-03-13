@@ -248,17 +248,15 @@ impl VM<wasmtime::Instance> {
                     .genlayer_sdk
                     .data,
             }),
-            Err(e) => {
-                return Err((
-                    e,
-                    self.vm_base
-                        .store
-                        .into_data()
-                        .genlayer_ctx
-                        .genlayer_sdk
-                        .data,
-                ))
-            }
+            Err(e) => Err((
+                e,
+                self.vm_base
+                    .store
+                    .into_data()
+                    .genlayer_ctx
+                    .genlayer_sdk
+                    .data,
+            )),
         }
     }
 }

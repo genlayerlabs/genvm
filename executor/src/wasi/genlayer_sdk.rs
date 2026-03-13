@@ -1340,8 +1340,7 @@ impl ContextVFS<'_> {
                     .context
                     .data
                     .accumulator
-                    .messages_value_decremented
-                    .clone(),
+                    .messages_value_decremented,
                 emissions: Vec::new(),
             };
 
