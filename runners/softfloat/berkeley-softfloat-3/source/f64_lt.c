@@ -53,7 +53,7 @@ bool f64_lt( float64_t a, float64_t b )
     uiA = uA.ui;
     uB.f = b;
     uiB = uB.ui;
-    if ( isNaNF64UI( uiA ) || isNaNF64UI( uiB ) ) {
+    if ( f64_i_is_nan( uiA ) || f64_i_is_nan( uiB ) ) {
         softfloat_raiseFlags( softfloat_flag_invalid );
         return false;
     }

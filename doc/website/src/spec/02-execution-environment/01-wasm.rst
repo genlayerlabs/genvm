@@ -9,6 +9,8 @@ Enabled WASM Features and Proposals
 #. Sign Extension
 #. Mutable Globals
 #. Multi Value
+#. SIMD
+#. Saturating Float to Int Conversions
 
 :ref:`gvm-def-det-mode` Additional Limitations
 ------------------------------------------------

@@ -53,7 +53,7 @@ bool f32_le( float32_t a, float32_t b )
     uiA = uA.ui;
     uB.f = b;
     uiB = uB.ui;
-    if ( isNaNF32UI( uiA ) || isNaNF32UI( uiB ) ) {
+    if ( f32_i_is_nan( uiA ) || f32_i_is_nan( uiB ) ) {
         softfloat_raiseFlags( softfloat_flag_invalid );
         return false;
     }

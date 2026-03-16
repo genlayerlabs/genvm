@@ -77,11 +77,11 @@ float64_t f64_rem( float64_t a, float64_t b )
     /*------------------------------------------------------------------------
     *------------------------------------------------------------------------*/
     if ( expA == 0x7FF ) {
-        if ( sigA || ((expB == 0x7FF) && sigB) ) goto propagateNaN;
+        if ( f64_i_is_nan(uiA) || f64_i_is_nan(uiB) ) goto propagateNaN;
         goto invalid;
     }
     if ( expB == 0x7FF ) {
-        if ( sigB ) goto propagateNaN;
+        if ( f64_i_is_nan(uiB) ) goto propagateNaN;
         return a;
     }
     /*------------------------------------------------------------------------

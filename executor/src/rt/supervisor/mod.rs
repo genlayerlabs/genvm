@@ -96,7 +96,7 @@ pub fn create_engines(
     base_conf
         .wasm_tail_call(true)
         .wasm_bulk_memory(true)
-        .wasm_simd(false)
+        .wasm_simd(true)
         .relaxed_simd_deterministic(true)
         .wasm_relaxed_simd(false);
 
@@ -108,7 +108,8 @@ pub fn create_engines(
         .wasm_feature(WasmFeatures::MUTABLE_GLOBAL, true)
         .wasm_feature(WasmFeatures::MULTI_VALUE, true)
         .wasm_feature(WasmFeatures::SATURATING_FLOAT_TO_INT, false)
-        .wasm_feature(WasmFeatures::REFERENCE_TYPES, false);
+        .wasm_feature(WasmFeatures::REFERENCE_TYPES, false)
+        .wasm_feature(WasmFeatures::SATURATING_FLOAT_TO_INT, true);
 
     config_base(&mut base_conf)?;
 
@@ -230,12 +231,16 @@ impl Supervisor {
                             ]
                             .into_iter()
                             .collect(),
-                        ))?;
-                    base_conf.cache_config_set(cache_conf)?;
+                        ))
+                        .context("creating cache config")?;
+                    base_conf
+                        .cache_config_set(cache_conf)
+                        .context("setting cache config")?;
                 }
             }
             Ok(())
-        })?;
+        })
+        .context("creating wasmtime engines")?;
 
         let (sender, receiver) = tokio_mpmc::channel(100);
 
@@ -262,7 +267,8 @@ impl Supervisor {
                 std::path::Path::new(&config.runners_dir),
                 std::path::Path::new(&config.registry_dir),
                 debug_mode,
-            )?,
+            )
+            .context("creating runner cache reader")?,
             wasm_mod_cache: WasmModuleCache {
                 cache_dir: my_cache_dir,
                 wasm_modules_cache: sync::CacheMap::new(),

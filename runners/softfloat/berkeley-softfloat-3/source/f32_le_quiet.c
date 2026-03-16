@@ -54,7 +54,7 @@ bool f32_le_quiet( float32_t a, float32_t b )
     uiA = uA.ui;
     uB.f = b;
     uiB = uB.ui;
-    if ( isNaNF32UI( uiA ) || isNaNF32UI( uiB ) ) {
+    if ( f32_i_is_nan( uiA ) || f32_i_is_nan( uiB ) ) {
         if (
             softfloat_isSigNaNF32UI( uiA ) || softfloat_isSigNaNF32UI( uiB )
         ) {

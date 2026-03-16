@@ -173,10 +173,14 @@ let
 
 			cat <(find obj -name '*.o' | sort) <(find obj -name '*.a' | sort) <(echo -ldl -lwasi-emulated-signal -lwasi-emulated-getpid -lwasi-emulated-process-clocks -lc++ -lc++abi -lc-printscan-long-double) | \
 			xargs ${runnersLib.wasi-sdk.env.CC} ${runnersLib.wasi-sdk.env.CFLAGS} -o cpython.raw.wasm \
+				--no-wasm-opt \
 				-Wl,--stack-first -z stack-size=8388608 \
 				-v -Wl,--allow-undefined-file=undef-symbols.txt
 
-			${runnersLib.wasmPatchers.add-mod-name}/bin/genvm-wasm-add-mod-name cpython.raw.wasm cpython.wasm cpython
+			echo "running wasm-opt"
+			wasm-opt -g -O3 ${runnersLib.wasi-sdk.env.WASMOPTFLAGS} -o cpython.opt.wasm cpython.raw.wasm
+
+			${runnersLib.wasmPatchers.add-mod-name}/bin/genvm-wasm-add-mod-name cpython.opt.wasm cpython.wasm cpython
 			${runnersLib.wasmPatchers.floats-2-soft}/bin/genvm-floats-to-soft cpython.wasm cpython.det.wasm
 		'';
 

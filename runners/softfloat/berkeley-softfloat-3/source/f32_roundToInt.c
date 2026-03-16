@@ -58,7 +58,7 @@ float32_t f32_roundToInt( float32_t a, uint_fast8_t roundingMode, bool exact )
     /*------------------------------------------------------------------------
     *------------------------------------------------------------------------*/
     if ( exp <= 0x7E ) {
-        if ( !(uint32_t) (uiA<<1) ) return a;
+        if ( f32_i_is_zero(uiA) ) return a;
         if ( exact ) softfloat_exceptionFlags |= softfloat_flag_inexact;
         uiZ = uiA & packToF32UI( 1, 0, 0 );
         switch ( roundingMode ) {

@@ -58,7 +58,7 @@ float64_t f64_roundToInt( float64_t a, uint_fast8_t roundingMode, bool exact )
     /*------------------------------------------------------------------------
     *------------------------------------------------------------------------*/
     if ( exp <= 0x3FE ) {
-        if ( !(uiA & UINT64_C( 0x7FFFFFFFFFFFFFFF )) ) return a;
+        if ( f64_i_is_zero(uiA) ) return a;
         if ( exact ) softfloat_exceptionFlags |= softfloat_flag_inexact;
         uiZ = uiA & packToF64UI( 1, 0, 0 );
         switch ( roundingMode ) {

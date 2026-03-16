@@ -9,7 +9,7 @@ let
 	pkgs = import
 		(builtins.fetchGit {
 			url = "https://github.com/NixOS/nixpkgs";
-			rev = "8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296";
+			rev = "2ff43b1d533641116f1740158d121013036a7f74";
 			shallow = true;
 		})
 		{

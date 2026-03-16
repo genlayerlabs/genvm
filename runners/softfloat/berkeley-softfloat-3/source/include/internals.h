@@ -121,6 +121,22 @@ struct exp8_sig16 softfloat_normSubnormalBF16Sig( uint_fast16_t );
 
 #define isNaNF32UI( a ) (((~(a) & 0x7F800000) == 0) && ((a) & 0x007FFFFF))
 
+
+bool f32_is_nan(float32_t a);
+bool f32_i_is_nan(int32_t a);
+bool f64_is_nan(float64_t a);
+bool f64_i_is_nan(int64_t a);
+
+bool f32_is_zero(float32_t a);
+bool f32_i_is_zero(int32_t a);
+bool f64_is_zero(float64_t a);
+bool f64_i_is_zero(int64_t a);
+
+bool f32_not_zero(float32_t a);
+bool f32_i_not_zero(int32_t a);
+bool f64_not_zero(float64_t a);
+bool f64_i_not_zero(int64_t a);
+
 struct exp16_sig32 { int_fast16_t exp; uint_fast32_t sig; };
 struct exp16_sig32 softfloat_normSubnormalF32Sig( uint_fast32_t );
 

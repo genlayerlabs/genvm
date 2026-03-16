@@ -75,11 +75,11 @@ float32_t f32_rem( float32_t a, float32_t b )
     /*------------------------------------------------------------------------
     *------------------------------------------------------------------------*/
     if ( expA == 0xFF ) {
-        if ( sigA || ((expB == 0xFF) && sigB) ) goto propagateNaN;
+        if ( f32_i_is_nan(uiA) || f32_i_is_nan(uiB) ) goto propagateNaN;
         goto invalid;
     }
     if ( expB == 0xFF ) {
-        if ( sigB ) goto propagateNaN;
+        if ( f32_i_is_nan(uiB) ) goto propagateNaN;
         return a;
     }
     /*------------------------------------------------------------------------

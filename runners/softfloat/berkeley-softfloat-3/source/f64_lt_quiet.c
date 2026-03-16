@@ -54,7 +54,7 @@ bool f64_lt_quiet( float64_t a, float64_t b )
     uiA = uA.ui;
     uB.f = b;
     uiB = uB.ui;
-    if ( isNaNF64UI( uiA ) || isNaNF64UI( uiB ) ) {
+    if ( f64_i_is_nan( uiA ) || f64_i_is_nan( uiB ) ) {
         if (
             softfloat_isSigNaNF64UI( uiA ) || softfloat_isSigNaNF64UI( uiB )
         ) {

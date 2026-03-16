@@ -66,11 +66,13 @@ pub fn create_supervisor(
         0
     };
 
-    let locked_slots = hosts[storage_host_idx].get_locked_slots_for_sender(
-        calldata::Address::from(message.contract_address.raw()),
-        calldata::Address::from(message.sender_address.raw()),
-        &limiter_det,
-    )?;
+    let locked_slots = hosts[storage_host_idx]
+        .get_locked_slots_for_sender(
+            calldata::Address::from(message.contract_address.raw()),
+            calldata::Address::from(message.sender_address.raw()),
+            &limiter_det,
+        )
+        .context("reading locked slots")?;
 
     let multi_host = host::MultiHost::new(hosts, method_hosts);
 

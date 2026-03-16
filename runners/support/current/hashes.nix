@@ -42,14 +42,14 @@ let
 		};
 
 		cpython = {
-			hash = "sha256-NqlOrqhBNjw/7Iab8Rl4mSjlOiOoTJrazRlU//54aa4=";
+			hash = "test";
 			depends = [
 				softfloat
 			];
 		};
 
 		softfloat = {
-			hash = "sha256-rT6x5x8Nh5U5UusJ4oFa2AYz/Q35he7l3s9Ktyot6CE=";
+			hash = "test";
 		};
 
 		wrappers = {
