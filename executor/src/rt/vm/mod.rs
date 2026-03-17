@@ -163,7 +163,7 @@ impl VM<wasmtime::Instance> {
                 return Ok(RunResult {
                     run_ok: RunOk::VMError(
                         public_abi::VmError::invalid_contract().wasm().entrypoint(),
-                        Some(e),
+                        Some(crate::wasmtime_to_anyhow(e)),
                     ),
                     fingerprint: None,
                     vm_data: self
@@ -188,6 +188,7 @@ impl VM<wasmtime::Instance> {
         let res: anyhow::Result<(rt::vm::RunOk, Option<rt::errors::Fingerprint>)> = match res {
             Ok(()) => Ok((rt::vm::RunOk::empty_return(), None)),
             Err(e) => {
+                let e = rt::errors::UnwrapDynError::from(e);
                 if self.vm_base.config_copy.needs_error_fingerprint {
                     rt::errors::unwrap_vm_errors_fingerprint(e).map(|(a, b)| (a, Some(b)))
                 } else {

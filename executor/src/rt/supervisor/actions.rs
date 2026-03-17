@@ -2,10 +2,11 @@ use std::collections::{BTreeMap, HashSet};
 
 use crate::{caching, public_abi, rt, runners};
 
-use anyhow::Context;
+use anyhow::Context as _;
 use genlayer_sdk::abi;
 use genvm_common::*;
 use symbol_table::GlobalSymbol;
+use wiggle::error::Context as _;
 
 pub struct Ctx<'a, 'b> {
     pub env: BTreeMap<String, String>,

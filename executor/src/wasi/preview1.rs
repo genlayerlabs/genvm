@@ -1,4 +1,5 @@
 use anyhow::Context as _;
+use genlayer_sdk::abi;
 use std::{borrow::BorrowMut, io::Write};
 use tracing::instrument;
 use wiggle::{GuestError, GuestMemory, GuestPtr};
@@ -6,7 +7,10 @@ use wiggle::{GuestError, GuestMemory, GuestPtr};
 use genvm_common::*;
 
 use super::vfs;
-use crate::wasi::{base, common::align_slice};
+use crate::{
+    rt,
+    wasi::{base, common::align_slice},
+};
 use std::collections::BTreeMap;
 
 pub struct Context {
@@ -118,13 +122,11 @@ impl From<GuestError> for generated::types::Error {
             //
             // so this turns OOB and misalignment errors into traps.
             PtrOverflow | PtrOutOfBounds { .. } | PtrNotAligned { .. } => {
-                generated::types::Error::trap(err.into())
+                generated::types::Error::trap(wiggle::error::Error::from(err))
             }
-            PtrBorrowed { .. } => generated::types::Errno::Fault.into(),
             InvalidUtf8 { .. } => generated::types::Errno::Ilseq.into(),
             TryFromIntError { .. } => generated::types::Errno::Overflow.into(),
             SliceLengthsDiffer => generated::types::Errno::Fault.into(),
-            BorrowCheckerOutOfHandles => generated::types::Errno::Fault.into(),
             InFunc { err, .. } => generated::types::Error::from(*err),
             MemoryNotExported => generated::types::Errno::Fault.into(),
         }
@@ -151,7 +153,7 @@ impl Context {
             }
         )
     }
-    pub fn set_args(&mut self, args: &[String]) -> Result<(), anyhow::Error> {
+    pub fn set_args(&mut self, args: &[String]) -> anyhow::Result<()> {
         for c in args {
             let off: u32 = self
                 .args_buf
@@ -165,7 +167,7 @@ impl Context {
         Ok(())
     }
 
-    pub fn set_env(&mut self, env: &[(String, String)]) -> Result<(), anyhow::Error> {
+    pub fn set_env(&mut self, env: &[(String, String)]) -> anyhow::Result<()> {
         for (name, val) in env {
             let off: u32 = self
                 .env_buf
@@ -181,7 +183,7 @@ impl Context {
         Ok(())
     }
 
-    pub fn map_file(&mut self, location: &str, contents: bytes::Bytes) -> anyhow::Result<()> {
+    pub fn map_file(&mut self, location: &str, contents: bytes::Bytes) -> wasmtime::Result<()> {
         let mut location_patched = String::new();
         location_patched.reserve(location.len());
 
@@ -204,7 +206,7 @@ impl Context {
             cur_trie = match cur_trie.borrow_mut() {
                 FilesTrie::Dir { children } => match children.entry(String::from(*loc)) {
                     std::collections::btree_map::Entry::Occupied(entry) => {
-                        Ok::<&mut FilesTrie, anyhow::Error>(entry.into_mut())
+                        Ok::<&mut FilesTrie, wasmtime::Error>(entry.into_mut())
                     }
                     std::collections::btree_map::Entry::Vacant(entry) => {
                         Ok(&mut **entry.insert(Box::new(FilesTrie::Dir {
@@ -213,10 +215,12 @@ impl Context {
                     }
                 },
                 FilesTrie::File { data: _ } => {
-                    return Err(anyhow::anyhow!(
-                        "super path is already mapped as a file {}",
-                        location_patched
-                    ))
+                    // wanted a dir but found a file
+                    return Err(rt::errors::VMError(
+                        abi::consts::VmError::invalid_contract().val(),
+                        None,
+                    )
+                    .into());
                 }
             }?;
         }
@@ -225,19 +229,22 @@ impl Context {
 
         match cur_trie.borrow_mut() {
             FilesTrie::Dir { children } => match children.entry(String::from(fname)) {
-                std::collections::btree_map::Entry::Occupied(_entry) => Err(anyhow::anyhow!(
-                    "duplicate file mapping {}",
-                    location_patched
-                )),
+                std::collections::btree_map::Entry::Occupied(mut entry) => {
+                    *entry.get_mut() = Box::new(FilesTrie::File { data: contents });
+                }
                 std::collections::btree_map::Entry::Vacant(entry) => {
                     entry.insert(Box::new(FilesTrie::File { data: contents }));
-                    Ok(())
                 }
             },
             FilesTrie::File { data: _ } => {
-                return Err(anyhow::anyhow!("super path is already mapped as a file"))
+                // wanted a dir but found a file
+                return Err(rt::errors::VMError(
+                    abi::consts::VmError::invalid_contract().val(),
+                    None,
+                )
+                .into());
             }
-        }?;
+        };
 
         Ok(())
     }
@@ -315,7 +322,6 @@ fn args_env_get(
 }
 
 #[allow(unused_variables)]
-#[async_trait::async_trait]
 impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> {
     #[instrument(skip(self, memory))]
     fn args_get(
@@ -409,16 +415,18 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Close a file descriptor.
     /// NOTE: This is similar to `close` in POSIX.
-    async fn fd_close(
+    fn fd_close(
         &mut self,
         _memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
-    ) -> Result<(), generated::types::Error> {
+    ) -> impl std::future::Future<Output = Result<(), generated::types::Error>> + Send {
         let fdi: u32 = fd.into();
-        if self.vfs.pop_fd(fdi).is_none() {
-            return Err(generated::types::Errno::Badf.into());
-        }
-        Ok(())
+        let res = if self.vfs.pop_fd(fdi).is_none() {
+            Err(generated::types::Errno::Badf.into())
+        } else {
+            Ok(())
+        };
+        std::future::ready(res)
     }
 
     /// Synchronize the data of a file to disk.
@@ -515,45 +523,53 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     }
 
     /// Return the attributes of an open file.
-    async fn fd_filestat_get(
+    fn fd_filestat_get(
         &mut self,
         _memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
-    ) -> Result<generated::types::Filestat, generated::types::Error> {
-        match self.get_fd_desc_mut(fd)? {
-            vfs::FileDescriptor::Stdin
-            | vfs::FileDescriptor::Stdout
-            | vfs::FileDescriptor::Stderr => Ok(generated::types::Filestat {
-                dev: 0,
-                ino: 0,
-                filetype: generated::types::Filetype::CharacterDevice,
-                nlink: 1,
-                size: 0,
-                atim: 0,
-                mtim: 0,
-                ctim: 0,
-            }),
-            vfs::FileDescriptor::File(contents) => Ok(generated::types::Filestat {
-                dev: 0,
-                ino: 0,
-                filetype: generated::types::Filetype::RegularFile,
-                nlink: 1,
-                size: contents.contents.len().try_into()?,
-                atim: 0,
-                mtim: 0,
-                ctim: 0,
-            }),
-            vfs::FileDescriptor::Dir { .. } => Ok(generated::types::Filestat {
-                dev: 0,
-                ino: 0,
-                filetype: generated::types::Filetype::Directory,
-                nlink: 1,
-                size: 0,
-                atim: 0,
-                mtim: 0,
-                ctim: 0,
-            }),
-        }
+    ) -> impl std::future::Future<Output = Result<generated::types::Filestat, generated::types::Error>>
+           + Send {
+        let res = match self.get_fd_desc_mut(fd) {
+            Err(e) => Err(e),
+            Ok(desc) => match desc {
+                vfs::FileDescriptor::Stdin
+                | vfs::FileDescriptor::Stdout
+                | vfs::FileDescriptor::Stderr => Ok(generated::types::Filestat {
+                    dev: 0,
+                    ino: 0,
+                    filetype: generated::types::Filetype::CharacterDevice,
+                    nlink: 1,
+                    size: 0,
+                    atim: 0,
+                    mtim: 0,
+                    ctim: 0,
+                }),
+                vfs::FileDescriptor::File(contents) => match contents.contents.len().try_into() {
+                    Ok(size) => Ok(generated::types::Filestat {
+                        dev: 0,
+                        ino: 0,
+                        filetype: generated::types::Filetype::RegularFile,
+                        nlink: 1,
+                        size,
+                        atim: 0,
+                        mtim: 0,
+                        ctim: 0,
+                    }),
+                    Err(e) => Err(e.into()),
+                },
+                vfs::FileDescriptor::Dir { .. } => Ok(generated::types::Filestat {
+                    dev: 0,
+                    ino: 0,
+                    filetype: generated::types::Filetype::Directory,
+                    nlink: 1,
+                    size: 0,
+                    atim: 0,
+                    mtim: 0,
+                    ctim: 0,
+                }),
+            },
+        };
+        std::future::ready(res)
     }
 
     /// Adjust the size of an open file. If this increases the file's size, the extra bytes are filled with zeros.
@@ -585,69 +601,78 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
     /// Read from a file descriptor.
     /// NOTE: This is similar to `readv` in POSIX.
     #[instrument(skip(self, memory))]
-    async fn fd_read(
+    fn fd_read(
         &mut self,
         memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
         iovs: generated::types::IovecArray,
-    ) -> Result<generated::types::Size, generated::types::Error> {
-        match self.get_fd_desc_mut(fd)? {
-            vfs::FileDescriptor::Stdin => Ok(0),
-            vfs::FileDescriptor::Stdout | vfs::FileDescriptor::Stderr => {
-                Err(generated::types::Errno::Acces.into())
-            }
-            vfs::FileDescriptor::File(vfs::FileContents { contents, pos, .. }) => {
-                let mut written: u32 = 0;
-                for iov in iovs.iter() {
-                    let iov = iov?;
-                    let iov = memory.read(iov)?;
-                    let remaining_len = contents.len() as u32 - *pos;
-                    let len = iov.buf_len.min(remaining_len);
-                    let cont_slice: &[u8] =
-                        &contents.as_ref()[*pos as usize..(*pos + len) as usize];
-                    memory.copy_from_slice(cont_slice, iov.buf.as_array(len))?;
-                    *pos += len;
-                    written += len;
+    ) -> impl std::future::Future<Output = Result<generated::types::Size, generated::types::Error>> + Send
+    {
+        let res = (|| -> Result<generated::types::Size, generated::types::Error> {
+            match self.get_fd_desc_mut(fd)? {
+                vfs::FileDescriptor::Stdin => Ok(0),
+                vfs::FileDescriptor::Stdout | vfs::FileDescriptor::Stderr => {
+                    Err(generated::types::Errno::Acces.into())
                 }
-                Ok(written)
+                vfs::FileDescriptor::File(vfs::FileContents { contents, pos, .. }) => {
+                    let mut written: u32 = 0;
+                    for iov in iovs.iter() {
+                        let iov = iov?;
+                        let iov = memory.read(iov)?;
+                        let remaining_len = contents.len() as u32 - *pos;
+                        let len = iov.buf_len.min(remaining_len);
+                        let cont_slice: &[u8] =
+                            &contents.as_ref()[*pos as usize..(*pos + len) as usize];
+                        memory.copy_from_slice(cont_slice, iov.buf.as_array(len))?;
+                        *pos += len;
+                        written += len;
+                    }
+                    Ok(written)
+                }
+                vfs::FileDescriptor::Dir { .. } => Err(generated::types::Errno::Isdir.into()),
             }
-            vfs::FileDescriptor::Dir { .. } => Err(generated::types::Errno::Isdir.into()),
-        }
+        })();
+        std::future::ready(res)
     }
 
     /// Read from a file descriptor, without using and updating the file descriptor's offset.
     /// NOTE: This is similar to `preadv` in POSIX.
     #[instrument(skip(self, memory))]
-    async fn fd_pread(
+    fn fd_pread(
         &mut self,
         memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
         iovs: generated::types::IovecArray,
         offset: generated::types::Filesize,
-    ) -> Result<generated::types::Size, generated::types::Error> {
-        match self.get_fd_desc(fd)? {
-            vfs::FileDescriptor::Stdin => Ok(0),
-            vfs::FileDescriptor::Stdout | vfs::FileDescriptor::Stderr => {
-                Err(generated::types::Errno::Acces.into())
-            }
-            vfs::FileDescriptor::File(vfs::FileContents { contents, .. }) => {
-                let mut written: usize = 0;
-                let mut offset: usize = offset.try_into()?;
-                for iov in iovs.iter() {
-                    let iov = iov?;
-                    let iov = memory.read(iov)?;
-                    let remaining_len = contents.len().saturating_sub(offset);
-                    let mut buf_len: usize = iov.buf_len.try_into()?;
-                    buf_len = buf_len.min(remaining_len);
-                    let cont_slice: &[u8] = &contents.as_ref()[offset..(offset + buf_len)];
-                    memory.copy_from_slice(cont_slice, iov.buf.as_array(buf_len.try_into()?))?;
-                    offset += buf_len;
-                    written += buf_len;
+    ) -> impl std::future::Future<Output = Result<generated::types::Size, generated::types::Error>> + Send
+    {
+        let res = (|| -> Result<generated::types::Size, generated::types::Error> {
+            match self.get_fd_desc(fd)? {
+                vfs::FileDescriptor::Stdin => Ok(0),
+                vfs::FileDescriptor::Stdout | vfs::FileDescriptor::Stderr => {
+                    Err(generated::types::Errno::Acces.into())
                 }
-                Ok(written.try_into().unwrap_or(u32::MAX))
+                vfs::FileDescriptor::File(vfs::FileContents { contents, .. }) => {
+                    let mut written: usize = 0;
+                    let mut offset: usize = offset.try_into()?;
+                    for iov in iovs.iter() {
+                        let iov = iov?;
+                        let iov = memory.read(iov)?;
+                        let remaining_len = contents.len().saturating_sub(offset);
+                        let mut buf_len: usize = iov.buf_len.try_into()?;
+                        buf_len = buf_len.min(remaining_len);
+                        let cont_slice: &[u8] = &contents.as_ref()[offset..(offset + buf_len)];
+                        memory
+                            .copy_from_slice(cont_slice, iov.buf.as_array(buf_len.try_into()?))?;
+                        offset += buf_len;
+                        written += buf_len;
+                    }
+                    Ok(written.try_into().unwrap_or(u32::MAX))
+                }
+                vfs::FileDescriptor::Dir { .. } => Err(generated::types::Errno::Isdir.into()),
             }
-            vfs::FileDescriptor::Dir { .. } => Err(generated::types::Errno::Isdir.into()),
-        }
+        })();
+        std::future::ready(res)
     }
 
     /// Write to a file descriptor.
@@ -762,56 +787,60 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Move the offset of a file descriptor.
     /// NOTE: This is similar to `lseek` in POSIX.
-    async fn fd_seek(
+    fn fd_seek(
         &mut self,
         _memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
         offset: generated::types::Filedelta,
         whence: generated::types::Whence,
-    ) -> Result<generated::types::Filesize, generated::types::Error> {
-        match self.get_fd_desc_mut(fd)? {
-            vfs::FileDescriptor::Stdin
-            | vfs::FileDescriptor::Stderr
-            | vfs::FileDescriptor::Stdout => Err(generated::types::Errno::Spipe.into()),
-            vfs::FileDescriptor::File(vfs::FileContents { contents, pos, .. }) => {
-                const {
-                    assert!(std::mem::size_of::<usize>() <= std::mem::size_of::<u64>());
-                }
-                match whence {
-                    generated::types::Whence::Cur => {
-                        if offset < 0 {
-                            let offset = -offset as u64;
-                            if offset > *pos as u64 {
-                                *pos = 0;
+    ) -> impl std::future::Future<Output = Result<generated::types::Filesize, generated::types::Error>>
+           + Send {
+        let res = (|| -> Result<generated::types::Filesize, generated::types::Error> {
+            match self.get_fd_desc_mut(fd)? {
+                vfs::FileDescriptor::Stdin
+                | vfs::FileDescriptor::Stderr
+                | vfs::FileDescriptor::Stdout => Err(generated::types::Errno::Spipe.into()),
+                vfs::FileDescriptor::File(vfs::FileContents { contents, pos, .. }) => {
+                    const {
+                        assert!(std::mem::size_of::<usize>() <= std::mem::size_of::<u64>());
+                    }
+                    match whence {
+                        generated::types::Whence::Cur => {
+                            if offset < 0 {
+                                let offset = -offset as u64;
+                                if offset > *pos as u64 {
+                                    *pos = 0;
+                                } else {
+                                    *pos -= offset as u32;
+                                }
                             } else {
-                                *pos -= offset as u32;
+                                let offset = offset as u64;
+                                let rem = contents.len() as u32 - *pos;
+                                if offset > rem as u64 {
+                                    *pos = contents.len() as u32;
+                                } else {
+                                    *pos += offset as u32;
+                                }
                             }
-                        } else {
-                            let offset = offset as u64;
-                            let rem = contents.len() as u32 - *pos;
-                            if offset > rem as u64 {
+                        }
+                        generated::types::Whence::End => {
+                            return Err(generated::types::Errno::Notsup.into())
+                        }
+                        generated::types::Whence::Set => {
+                            let offset = if offset < 0 { 0 } else { offset as u64 };
+                            if offset > contents.len() as u32 as u64 {
                                 *pos = contents.len() as u32;
                             } else {
-                                *pos += offset as u32;
+                                *pos = offset as u32;
                             }
                         }
-                    }
-                    generated::types::Whence::End => {
-                        return Err(generated::types::Errno::Notsup.into())
-                    }
-                    generated::types::Whence::Set => {
-                        let offset = if offset < 0 { 0 } else { offset as u64 };
-                        if offset > contents.len() as u32 as u64 {
-                            *pos = contents.len() as u32;
-                        } else {
-                            *pos = offset as u32;
-                        }
-                    }
-                };
-                return Ok(u64::from(*pos));
+                    };
+                    Ok(u64::from(*pos))
+                }
+                vfs::FileDescriptor::Dir { .. } => Err(generated::types::Errno::Notsup.into()),
             }
-            vfs::FileDescriptor::Dir { .. } => Err(generated::types::Errno::Notsup.into()),
-        }
+        })();
+        std::future::ready(res)
     }
 
     /// Synchronize the data and metadata of a file to disk.
@@ -826,18 +855,23 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
 
     /// Return the current offset of a file descriptor.
     /// NOTE: This is similar to `lseek(fd, 0, SEEK_CUR)` in POSIX.
-    async fn fd_tell(
+    fn fd_tell(
         &mut self,
         _memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
-    ) -> Result<generated::types::Filesize, generated::types::Error> {
-        match self.get_fd_desc_mut(fd)? {
-            vfs::FileDescriptor::Stdin
-            | vfs::FileDescriptor::Stderr
-            | vfs::FileDescriptor::Stdout => Err(generated::types::Errno::Spipe.into()),
-            vfs::FileDescriptor::File(file) => Ok(file.pos.into()),
-            vfs::FileDescriptor::Dir { .. } => Err(generated::types::Errno::Notsup.into()),
-        }
+    ) -> impl std::future::Future<Output = Result<generated::types::Filesize, generated::types::Error>>
+           + Send {
+        let res = match self.get_fd_desc_mut(fd) {
+            Err(e) => Err(e),
+            Ok(desc) => match desc {
+                vfs::FileDescriptor::Stdin
+                | vfs::FileDescriptor::Stderr
+                | vfs::FileDescriptor::Stdout => Err(generated::types::Errno::Spipe.into()),
+                vfs::FileDescriptor::File(file) => Ok(file.pos.into()),
+                vfs::FileDescriptor::Dir { .. } => Err(generated::types::Errno::Notsup.into()),
+            },
+        };
+        std::future::ready(res)
     }
 
     #[instrument(skip(self, memory))]
@@ -1037,7 +1071,10 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         let file_path = super::common::read_string(memory, path)?;
         let fdi: u32 = dirfd.into();
         let fdi: u32 = dirfd.into();
-        let new_fd = self.vfs.alloc_fd().map_err(generated::types::Error::trap)?;
+        let new_fd = self
+            .vfs
+            .alloc_fd()
+            .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
         {
             let Some(vfs::FileDescriptor::Dir { path: dir_path }) = self.vfs.fds.get(&fdi) else {
                 return Err(generated::types::Errno::Badf.into());
@@ -1146,12 +1183,13 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         &mut self,
         _memory: &mut GuestMemory<'_>,
         status: generated::types::Exitcode,
-    ) -> anyhow::Error {
+    ) -> wasmtime::Error {
+        log_trace!(status = status; "proc_exit called");
         // Check that the status is within WASI's range.
         if status >= 126 {
-            I32Exit(125).into()
+            wasmtime::Error::new(I32Exit(125))
         } else {
-            I32Exit(status as i32).into()
+            wasmtime::Error::new(I32Exit(status as i32))
         }
     }
 

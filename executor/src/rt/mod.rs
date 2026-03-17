@@ -145,14 +145,16 @@ pub async fn spawn_apply_run(
 ) -> std::result::Result<vm::RunResult, anyhow::Error> {
     match spawn_apply_run_inner(supervisor, vm).await {
         Ok(res) => Ok(res),
-        Err((e, vm_data)) => match errors::unwrap_vm_errors_fingerprint(e) {
-            Ok((run_ok, fp)) => Ok(vm::RunResult {
-                run_ok,
-                fingerprint: Some(fp),
-                vm_data,
-            }),
-            Err(e) => Err(e),
-        },
+        Err((e, vm_data)) => {
+            match errors::unwrap_vm_errors_fingerprint(errors::UnwrapDynError::from(e)) {
+                Ok((run_ok, fp)) => Ok(vm::RunResult {
+                    run_ok,
+                    fingerprint: Some(fp),
+                    vm_data,
+                }),
+                Err(e) => Err(e),
+            }
+        }
     }
 }
 

@@ -3,7 +3,7 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
-use anyhow::Context;
+use anyhow::Context as _;
 use genvm_common::*;
 use symbol_table::GlobalSymbol;
 
@@ -89,7 +89,6 @@ pub fn create_engines(
     base_conf
         .debug_info(true)
         .wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable)
-        .async_support(true)
         .consume_fuel(false)
         .cranelift_opt_level(wasmtime::OptLevel::None);
 
@@ -103,13 +102,13 @@ pub fn create_engines(
     use wasmparser::WasmFeatures;
 
     base_conf
-        .wasm_feature(WasmFeatures::BULK_MEMORY, true)
-        .wasm_feature(WasmFeatures::SIGN_EXTENSION, true)
-        .wasm_feature(WasmFeatures::MUTABLE_GLOBAL, true)
-        .wasm_feature(WasmFeatures::MULTI_VALUE, true)
-        .wasm_feature(WasmFeatures::SATURATING_FLOAT_TO_INT, false)
-        .wasm_feature(WasmFeatures::REFERENCE_TYPES, false)
-        .wasm_feature(WasmFeatures::SATURATING_FLOAT_TO_INT, true);
+        .wasm_features(WasmFeatures::BULK_MEMORY, true)
+        .wasm_features(WasmFeatures::SIGN_EXTENSION, true)
+        .wasm_features(WasmFeatures::MUTABLE_GLOBAL, true)
+        .wasm_features(WasmFeatures::MULTI_VALUE, true)
+        .wasm_features(WasmFeatures::SATURATING_FLOAT_TO_INT, false)
+        //.wasm_features(WasmFeatures::REFERENCE_TYPES, false)
+        .wasm_features(WasmFeatures::SATURATING_FLOAT_TO_INT, true);
 
     config_base(&mut base_conf)?;
 
@@ -122,9 +121,11 @@ pub fn create_engines(
     let mut non_det_conf = base_conf.clone();
     non_det_conf.wasm_floats_enabled(true).wasm_backtrace(false);
 
-    let det_engine =
-        wasmtime::Engine::new(&det_conf).with_context(|| "creating deterministic wasm engine")?;
+    let det_engine = wasmtime::Engine::new(&det_conf)
+        .map_err(crate::wasmtime_to_anyhow)
+        .with_context(|| "creating deterministic wasm engine")?;
     let non_det_engine = wasmtime::Engine::new(&non_det_conf)
+        .map_err(crate::wasmtime_to_anyhow)
         .with_context(|| "creating non-deterministic wasm engine")?;
 
     Ok(rt::DetNondet {
@@ -214,7 +215,7 @@ impl Supervisor {
         let engines = create_engines(|base_conf| {
             match &my_cache_dir {
                 None => {
-                    base_conf.disable_cache();
+                    base_conf.cache(None);
                 }
                 Some(cache_dir) => {
                     let mut cache_dir = cache_dir.to_owned();
@@ -222,19 +223,17 @@ impl Supervisor {
 
                     let cache_conf: wasmtime_cache::CacheConfig =
                         serde_json::from_value(serde_json::Value::Object(
-                            [
-                                ("enabled".into(), serde_json::Value::Bool(true)),
-                                (
-                                    "directory".into(),
-                                    cache_dir.into_os_string().into_string().unwrap().into(),
-                                ),
-                            ]
+                            [(
+                                "directory".into(),
+                                cache_dir.into_os_string().into_string().unwrap().into(),
+                            )]
                             .into_iter()
                             .collect(),
                         ))
                         .context("creating cache config")?;
                     base_conf
                         .cache_config_set(cache_conf)
+                        .map_err(crate::wasmtime_to_anyhow)
                         .context("setting cache config")?;
                 }
             }
@@ -448,7 +447,7 @@ async fn run_single_nondet(
 ) -> anyhow::Result<rt::vm::RunOk> {
     match run_single_nondet_inner(zelf, task, limiter).await {
         Ok(v) => Ok(v.run_ok),
-        Err((e, _)) => rt::errors::unwrap_vm_errors(e),
+        Err((e, _)) => rt::errors::unwrap_vm_errors(rt::errors::UnwrapDynError::from(e)),
     }
 }
 

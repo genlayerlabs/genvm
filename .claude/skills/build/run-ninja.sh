@@ -1,1 +1,1 @@
-ninja "$@" 2>&1 > /dev/null || ninja "$@"
+ninja "$@" > /dev/null 2>&1 || ninja "$@"

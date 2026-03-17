@@ -20,6 +20,20 @@ use std::sync::Arc;
 
 use crate::wasi::genlayer_sdk::VMDataAccumulator;
 
+pub fn wasmtime_to_anyhow(e: wasmtime::Error) -> anyhow::Error {
+    match e.downcast() {
+        Ok(anyhow_e) => anyhow_e,
+        Err(e) => e.into(),
+    }
+}
+
+pub fn anyhow_to_wasmtime(e: anyhow::Error) -> wasmtime::Error {
+    match e.downcast() {
+        Ok(wasmtime_e) => wasmtime_e,
+        Err(e) => wasmtime::Error::from_anyhow(e),
+    }
+}
+
 #[derive(Default, Debug, serde::Serialize)]
 pub struct Metrics {
     pub supervisor: rt::Metrics,

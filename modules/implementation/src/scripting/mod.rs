@@ -2,7 +2,7 @@ pub mod pool;
 
 mod ctx;
 
-use anyhow::Context;
+use anyhow::Context as _;
 use genvm_common::{sync::DArc, *};
 use genvm_modules_interfaces::GenericValue;
 use mlua::LuaSerdeExt;

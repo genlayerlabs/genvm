@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result};
-use genvm::{caching, config, runners};
+use anyhow::Context as _;
+use genvm::{caching, config, runners, wasmtime_to_anyhow};
 
 use genvm_common::*;
 
@@ -22,10 +22,11 @@ fn compile_single_file_single_mode(
     engine_type: &str,
     runner_path: &std::path::Path,
     path_in_runner: &str,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let time_start = std::time::Instant::now();
     let precompiled = engine
         .precompile_module(wasm_data)
+        .map_err(wasmtime_to_anyhow)
         .with_context(|| "precompiling")?;
 
     log_info!(engine = engine_type, runner:? = runner_path, runner_path:? = path_in_runner, duration:? = time_start.elapsed();  "wasm compilation done");
@@ -48,7 +49,7 @@ fn compile_single_file(
     engines: &genvm::rt::DetNondet<wasmtime::Engine>,
     runners_dir: &std::path::Path,
     zip_path: &std::path::Path,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let base_path = zip_path
         .strip_prefix(runners_dir)
         .with_context(|| format!("stripping {runners_dir:?} from {runners_dir:?}"))?;
@@ -106,7 +107,7 @@ fn compile_single_file(
     Ok(())
 }
 
-pub fn handle(args: Args, config: config::Config) -> Result<()> {
+pub fn handle(args: Args, config: config::Config) -> anyhow::Result<()> {
     log_info!(version = genvm_common::version::CURRENT.clone(); "current version");
 
     let cache_dir = caching::get_cache_dir(&config.cache_dir)?;

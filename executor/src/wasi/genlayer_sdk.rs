@@ -35,13 +35,13 @@ async fn consume_receipt_words(
         .consume_receipt_words(words)
         .await
     {
-        return Err(generated::types::Error::trap(
+        return Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
             rt::errors::VMError(
                 abi::consts::VmError::oom().receipt(),
                 Some(anyhow::anyhow!("consuming {words} receipt words")),
             )
             .into(),
-        ));
+        )));
     }
     Ok(())
 }
@@ -292,13 +292,11 @@ impl From<GuestError> for generated::types::Error {
             //
             // so this turns OOB and misalignment errors into traps.
             PtrOverflow | PtrOutOfBounds { .. } | PtrNotAligned { .. } => {
-                generated::types::Error::trap(err.into())
+                generated::types::Error::trap(crate::anyhow_to_wasmtime(err.into()))
             }
-            PtrBorrowed { .. } => generated::types::Errno::Fault.into(),
             InvalidUtf8 { .. } => generated::types::Errno::Ilseq.into(),
             TryFromIntError { .. } => generated::types::Errno::Overflow.into(),
             SliceLengthsDiffer => generated::types::Errno::Fault.into(),
-            BorrowCheckerOutOfHandles => generated::types::Errno::Fault.into(),
             InFunc { err, .. } => generated::types::Error::from(*err),
             MemoryNotExported => generated::types::Errno::Fault.into(),
         }
@@ -326,9 +324,9 @@ impl ContextVFS<'_> {
     ) -> Result<(generated::types::Fd, usize), generated::types::Error> {
         let data = match data {
             rt::vm::RunOk::VMError(e, cause) => {
-                return Err(generated::types::Error::trap(
+                return Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
                     rt::errors::VMError(e, cause).into(),
-                ))
+                )))
             }
             data => data,
         };
@@ -342,7 +340,7 @@ impl ContextVFS<'_> {
                         pos: 0,
                         release_memory: true,
                     })
-                    .map_err(generated::types::Error::trap)?,
+                    .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
             ),
             len,
         ))
@@ -381,7 +379,6 @@ fn file_fd_none() -> generated::types::Fd {
 }
 
 #[allow(unused_variables)]
-#[async_trait::async_trait]
 impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
     async fn gl_call(
         &mut self,
@@ -471,7 +468,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .lock_for(host::host_fns::Methods::EthCall)
                     .await
                     .eth_call(address, &calldata)
-                    .map_err(generated::types::Error::trap)?;
+                    .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
                 Ok(generated::types::Fd::from(
                     self.vfs
                         .place_content(vfs::FileContents {
@@ -479,7 +476,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                             pos: 0,
                             release_memory: true,
                         })
-                        .map_err(generated::types::Error::trap)?,
+                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
                 ))
             }
             gl_call::Message::CallContract {
@@ -566,7 +563,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let res = rt::spawn_apply_run(&supervisor, vm_data)
                     .await
-                    .map_err(generated::types::Error::trap)?;
+                    .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
                 self.set_vm_run_result(res.run_ok).map(|x| x.0)
             }
@@ -622,7 +619,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .get_storage_limiter()
                     .consume(size)
                     .await
-                    .map_err(generated::types::Error::trap)?;
+                    .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
                 self.context
                     .data
@@ -668,10 +665,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     value,
                     on,
                 };
-                let encoded = calldata::encode(
-                    &calldata::to_value(&emission)
-                        .map_err(|e| generated::types::Error::trap(e.into()))?,
-                );
+                let encoded = calldata::encode(&calldata::to_value(&emission).map_err(|e| {
+                    generated::types::Error::trap(crate::anyhow_to_wasmtime(e.into()))
+                })?);
                 consume_receipt_words(
                     &self.context.data.supervisor.shared_data,
                     calc_receipt_size(encoded.len()),
@@ -719,10 +715,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     on,
                     salt_nonce,
                 };
-                let encoded = calldata::encode(
-                    &calldata::to_value(&emission)
-                        .map_err(|e| generated::types::Error::trap(e.into()))?,
-                );
+                let encoded = calldata::encode(&calldata::to_value(&emission).map_err(|e| {
+                    generated::types::Error::trap(crate::anyhow_to_wasmtime(e.into()))
+                })?);
                 consume_receipt_words(
                     &self.context.data.supervisor.shared_data,
                     calc_receipt_size(encoded.len()),
@@ -751,9 +746,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 if space_left < abi::consts::top_limits::WEB_RENDER_MIN_SPACE {
                     log_warn!(space_left = space_left; "not enough memory for web render");
-                    return Err(generated::types::Error::trap(
+                    return Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
                         rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into(),
-                    ));
+                    )));
                 }
 
                 let space_left_with_overhead = (space_left as u64 * 3 / 4) as u32;
@@ -769,7 +764,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .await
                 })
                 .await
-                .map_err(generated::types::Error::trap)?;
+                .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
                 Ok(generated::types::Fd::from(
                     self.vfs
@@ -778,7 +773,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                             pos: 0,
                             release_memory: true,
                         })
-                        .map_err(generated::types::Error::trap)?,
+                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
                 ))
             }
             gl_call::Message::WebRequest(request_payload) => {
@@ -797,9 +792,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 if space_left < abi::consts::top_limits::WEB_REQUEST_MIN_SPACE {
                     log_warn!(space_left = space_left; "not enough memory for web request");
-                    return Err(generated::types::Error::trap(
+                    return Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
                         rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into(),
-                    ));
+                    )));
                 }
 
                 let space_left_with_overhead = (space_left as u64 * 3 / 4) as u32;
@@ -815,7 +810,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .await
                 })
                 .await
-                .map_err(generated::types::Error::trap)?;
+                .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
                 Ok(generated::types::Fd::from(
                     self.vfs
@@ -824,7 +819,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                             pos: 0,
                             release_memory: true,
                         })
-                        .map_err(generated::types::Error::trap)?,
+                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
                 ))
             }
             gl_call::Message::ExecPrompt(prompt_payload) => {
@@ -844,7 +839,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .lock_for(host::host_fns::Methods::RemainingFuelAsGen)
                     .await
                     .remaining_fuel_as_gen()
-                    .map_err(generated::types::Error::trap)?;
+                    .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
                 let sup = self.context.data.supervisor.clone();
 
@@ -867,13 +862,15 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                             .lock_for(host::host_fns::Methods::ConsumeFuel)
                             .await
                             .consume_fuel(*consumed_gen)
-                            .map_err(generated::types::Error::trap)?;
+                            .map_err(|e| {
+                                generated::types::Error::trap(crate::anyhow_to_wasmtime(e))
+                            })?;
                     }
 
                     Ok(result.map(|r| r.data))
                 })
                 .await
-                .map_err(generated::types::Error::trap)?;
+                .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
                 Ok(generated::types::Fd::from(
                     self.vfs
@@ -882,7 +879,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                             pos: 0,
                             release_memory: true,
                         })
-                        .map_err(generated::types::Error::trap)?,
+                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
                 ))
             }
             gl_call::Message::ExecPromptTemplate(prompt_template_payload) => {
@@ -904,7 +901,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .lock_for(host::host_fns::Methods::RemainingFuelAsGen)
                     .await
                     .remaining_fuel_as_gen()
-                    .map_err(generated::types::Error::trap)?;
+                    .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
                 let sup = self.context.data.supervisor.clone();
                 let task = taskify(async move {
@@ -925,7 +922,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                             .lock_for(host::host_fns::Methods::ConsumeFuel)
                             .await
                             .consume_fuel(*consumed_gen)
-                            .map_err(generated::types::Error::trap)?;
+                            .map_err(|e| {
+                                generated::types::Error::trap(crate::anyhow_to_wasmtime(e))
+                            })?;
                     }
 
                     match (expect_bool, answer) {
@@ -948,7 +947,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                 })
                 .await
-                .map_err(generated::types::Error::trap)?;
+                .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
                 Ok(generated::types::Fd::from(
                     self.vfs
@@ -957,11 +956,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                             pos: 0,
                             release_memory: true,
                         })
-                        .map_err(generated::types::Error::trap)?,
+                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
                 ))
             }
             gl_call::Message::Rollback(msg) => Err(generated::types::Error::trap(
-                rt::errors::UserError(msg).into(),
+                crate::anyhow_to_wasmtime(rt::errors::UserError(msg).into()),
             )),
             gl_call::Message::Return(value) => {
                 let ret = calldata::encode(&value);
@@ -972,7 +971,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .should_capture_fp
                     .store(false, std::sync::atomic::Ordering::Relaxed);
 
-                Err(generated::types::Error::trap(ContractReturn(ret).into()))
+                Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
+                    ContractReturn(ret).into(),
+                )))
             }
             gl_call::Message::RunNondet {
                 data_leader,
@@ -1026,7 +1027,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 .storage
                 .read(slot, index, vec)
                 .await
-                .map_err(generated::types::Error::trap)?;
+                .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
         } else {
             self.context
                 .data
@@ -1035,7 +1036,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 .lock_for(host::host_fns::Methods::StorageRead)
                 .await
                 .storage_read(self.context.data.conf.state_mode, account, slot, index, vec)
-                .map_err(generated::types::Error::trap)?;
+                .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
         }
 
         if should_copy {
@@ -1081,7 +1082,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             .storage
             .write(slot, index, &ptr)
             .await
-            .map_err(generated::types::Error::trap)
+            .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))
     }
 
     async fn get_balance(
@@ -1154,7 +1155,7 @@ impl Context {
             .lock_for(host::host_fns::Methods::GetBalance)
             .await
             .get_balance(address)
-            .map_err(generated::types::Error::trap)?;
+            .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
         let _ = self.data.supervisor.balances.insert(address, res);
 
@@ -1212,7 +1213,7 @@ impl ContextVFS<'_> {
                             pos: 0,
                             release_memory: true,
                         })
-                        .map_err(generated::types::Error::trap)?,
+                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
                 ))
             }
         }
@@ -1235,9 +1236,9 @@ impl ContextVFS<'_> {
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
         if call_no >= public_abi::top_limits::NONDET_BLOCKS {
-            return Err(generated::types::Error::trap(
+            return Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
                 rt::errors::VMError(abi::consts::VmError::oom().ram().limit(), None).into(),
-            ));
+            )));
         }
 
         let leaders_res_bytes = self
@@ -1257,10 +1258,10 @@ impl ContextVFS<'_> {
         let leaders_res = match leaders_res_bytes {
             None if self.context.data.supervisor.is_leader() => None,
             None => {
-                return Err(generated::types::Error::trap(
+                return Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
                     rt::errors::VMError(abi::consts::VmError::absent_leader_nondet_output(), None)
                         .into(),
-                ));
+                )));
             }
             Some(data) => {
                 use crate::public_abi::ResultCode;
@@ -1269,29 +1270,36 @@ impl ContextVFS<'_> {
                     x if x == ResultCode::Return as u8 => rt::vm::RunOk::Return(rest.into()),
                     x if x == ResultCode::UserError as u8 => {
                         let val = if rest.len() >= 4 && rest[..4] == [0u8; 4] {
-                            calldata::decode(&rest[4..])
-                                .map_err(|e| generated::types::Error::trap(anyhow::anyhow!(e)))?
+                            calldata::decode(&rest[4..]).map_err(|e| {
+                                generated::types::Error::trap(crate::anyhow_to_wasmtime(
+                                    anyhow::anyhow!(e),
+                                ))
+                            })?
                         } else {
-                            calldata::Value::Str(String::from(
-                                std::str::from_utf8(rest).map_err(|e| {
-                                    generated::types::Error::trap(anyhow::anyhow!(e))
-                                })?,
-                            ))
+                            calldata::Value::Str(String::from(std::str::from_utf8(rest).map_err(
+                                |e| {
+                                    generated::types::Error::trap(crate::anyhow_to_wasmtime(
+                                        anyhow::anyhow!(e),
+                                    ))
+                                },
+                            )?))
                         };
                         rt::vm::RunOk::UserError(val)
                     }
                     x if x == ResultCode::VmError as u8 => {
-                        let code = std::str::from_utf8(rest)
-                            .map_err(|e| generated::types::Error::trap(anyhow::anyhow!(e)))?;
+                        let code = std::str::from_utf8(rest).map_err(|e| {
+                            generated::types::Error::trap(crate::anyhow_to_wasmtime(
+                                anyhow::anyhow!(e),
+                            ))
+                        })?;
                         rt::vm::RunOk::VMError(
                             public_abi::VmError(std::borrow::Cow::Owned(code.to_owned())),
                             None,
                         )
                     }
                     x => {
-                        return Err(generated::types::Error::trap(anyhow::anyhow!(
-                            "invalid leader result code: {}",
-                            x
+                        return Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
+                            anyhow::anyhow!("invalid leader result code: {}", x),
                         )));
                     }
                 };
@@ -1302,9 +1310,8 @@ impl ContextVFS<'_> {
         let result_to_return = if self.context.data.supervisor.shared_data.is_sync {
             match leaders_res {
                 None => {
-                    return Err(generated::types::Error::trap(anyhow::anyhow!(
-                        "absent leader result in sync mode, call_no: {}",
-                        call_no
+                    return Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
+                        anyhow::anyhow!("absent leader result in sync mode, call_no: {}", call_no),
                     )))
                 }
                 Some(v) => v,
@@ -1375,7 +1382,7 @@ impl ContextVFS<'_> {
                     let res = task
                         .run_now(&self.context.data.supervisor)
                         .await
-                        .map_err(generated::types::Error::trap)?;
+                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
                     self.context
                         .data
@@ -1445,7 +1452,7 @@ impl ContextVFS<'_> {
 
         let my_res = rt::spawn_apply_run(&supervisor, vm_data)
             .await
-            .map_err(generated::types::Error::trap)?;
+            .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
         self.context.data.accumulator = my_res.vm_data.accumulator;
         self.context.data.storage = my_res.vm_data.storage;
@@ -1458,7 +1465,7 @@ impl ContextVFS<'_> {
                     pos: 0,
                     release_memory: true,
                 })
-                .map_err(generated::types::Error::trap)?,
+                .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
         ))
     }
 }

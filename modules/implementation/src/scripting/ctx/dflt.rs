@@ -4,7 +4,7 @@ use crate::{
     common::{ErrorKind, LoggerWithId, MapUserError, ModuleError},
     scripting::{self, DEFAULT_LUA_SER_OPTIONS},
 };
-use anyhow::Context;
+use anyhow::Context as _;
 use base64::Engine;
 use genvm_common::*;
 use mlua::LuaSerdeExt;

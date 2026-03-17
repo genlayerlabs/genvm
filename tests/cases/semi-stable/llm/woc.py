@@ -41,7 +41,7 @@ This result should be perfectly parseable by a JSON parser without errors.
 """
 
 		def get_wizard_answer():
-			result = gl.nondet.exec_prompt(prompt)
+			result = gl.nondet.exec_prompt(prompt, response_format='text')
 			result = result.replace('```json', '').replace('```', '')
 			return result
 

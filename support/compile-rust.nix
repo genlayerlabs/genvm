@@ -58,8 +58,12 @@ in {
 
 	target,
 	installPhase ? null,
+
+	omitDefaultRustFlags ? false,
+	verbose ? "",
 	...
 }@args:
+assert builtins.any (x: verbose == x) ["" "--verbose" "-vv"];
 let
 	targetAsRust = {
 		amd64-linux = "x86_64-unknown-linux-musl";
@@ -84,7 +88,7 @@ stdenv.mkDerivation (
 		inherit buildAndTestSubdir;
 
 		RUSTFLAGS =
-			"-C target-feature=-crt-static -l dylib=c -L /build/libs -C link-arg=-dynamic "
+			(if omitDefaultRustFlags then "-C target-feature=-crt-static -l dylib=c -L /build/libs -C link-arg=-dynamic " else "")
 			+ (args.RUSTFLAGS or "");
 
 		hardeningDisable = ["all"];
@@ -144,8 +148,8 @@ stdenv.mkDerivation (
 
 			echo "PATH=$PATH"
 			echo "RUSTFLAGS=$RUSTFLAGS"
-			echo cargo build --target ${targetAsRust} -j $NIX_BUILD_CORES --offline --profile=${profile}
-			cargo build --target ${targetAsRust} -j $NIX_BUILD_CORES --offline --profile=${profile}
+			echo cargo build --target ${targetAsRust} -j $NIX_BUILD_CORES --offline --profile=${profile} ${verbose}
+			cargo build --target ${targetAsRust} -j $NIX_BUILD_CORES --offline --profile=${profile} ${verbose}
 			runHook postBuild
 
 			bins=$(find target/${targetAsRust}/${profile}/ \

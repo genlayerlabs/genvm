@@ -807,7 +807,7 @@ impl Value {
     }
 
     #[cold]
-    fn unexpected(&self) -> serde::de::Unexpected {
+    fn unexpected(&self) -> serde::de::Unexpected<'_> {
         use serde::de::Unexpected;
 
         match self {

@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::Context as _;
 use genvm_common::sync;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 

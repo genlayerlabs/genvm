@@ -1,7 +1,7 @@
 use genvm_modules_interfaces::llm::{self as llm_iface};
 use std::{collections::BTreeMap, sync::Arc};
 
-use anyhow::Context;
+use anyhow::Context as _;
 use genvm_common::*;
 use mlua::LuaSerdeExt;
 use serde::Deserialize;

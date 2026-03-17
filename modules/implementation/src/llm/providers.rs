@@ -1,5 +1,5 @@
 use crate::{common::ModuleResult, scripting};
-use anyhow::Context;
+use anyhow::Context as _;
 use base64::Engine;
 use genvm_common::*;
 
@@ -946,7 +946,7 @@ mod tests {
     use crate::scripting;
 
     use super::super::{config, prompt};
-    use anyhow::Context;
+    use anyhow::Context as _;
     use genvm_common::sync;
     use genvm_common::templater;
 

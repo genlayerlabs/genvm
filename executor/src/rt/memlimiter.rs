@@ -139,7 +139,7 @@ impl wasmtime::ResourceLimiter for Limiter {
         current: usize,
         desired: usize,
         _maximum: Option<usize>,
-    ) -> anyhow::Result<bool> {
+    ) -> wasmtime::Result<bool> {
         let delta = desired - current;
         if delta > u32::MAX as usize {
             return Ok(false);
@@ -160,7 +160,7 @@ impl wasmtime::ResourceLimiter for Limiter {
         current: usize,
         desired: usize,
         _maximum: Option<usize>,
-    ) -> anyhow::Result<bool> {
+    ) -> wasmtime::Result<bool> {
         let delta = desired - current;
 
         if delta > u32::MAX as usize {

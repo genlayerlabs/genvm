@@ -1,11 +1,11 @@
-use anyhow::Context;
 use genlayer_sdk::abi;
+use wiggle::error::Context as _;
 
 use crate::rt;
 use genvm_common::*;
 
 impl super::Supervisor {
-    pub fn validate_wasm(&self, wasm: &[u8]) -> anyhow::Result<()> {
+    pub fn validate_wasm(&self, wasm: &[u8]) -> wasmtime::Result<()> {
         use wasmparser::*;
 
         let add_features = WasmFeatures::REFERENCE_TYPES.bits() | WasmFeatures::FLOATS.bits();
@@ -40,7 +40,7 @@ impl super::Supervisor {
         &self,
         wasm: &[u8],
         debug_path: &str,
-    ) -> anyhow::Result<rt::DetNondet<wasmtime::Module>> {
+    ) -> wasmtime::Result<rt::DetNondet<wasmtime::Module>> {
         log_debug!(path = debug_path; "compilation");
         self.shared_data
             .metrics

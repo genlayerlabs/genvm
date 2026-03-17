@@ -16,14 +16,14 @@ let
 			__prefix = "py-lib-";
 
 			cloudpickle = {
-				hash = "sha256-DT6YulshSrNfvWQvVLNZHfHvfFVlmDTy+SAu5Ww1k7Y=";
+				hash = "test";
 			};
 			protobuf = {
-				hash = "sha256-gbbFLhPUVsefodopQthwDPhwDmlDU06rZUPVMLeJOWY=";
+				hash = "test";
 			};
 
 			word_piece_tokenizer = {
-				hash = "sha256-Wi1iFSYnBG4w/LweLuDfIiEETtS4UZXcfOtsjENPTG4=";
+				hash = "test";
 			};
 
 			genlayer-std = {

@@ -2,7 +2,7 @@ use genvm_common::io::Stream;
 use genvm_common::*;
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::Context as _;
 use genvm_common::calldata;
 use genvm_modules_interfaces::GenericValue;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

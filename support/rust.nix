@@ -21,8 +21,8 @@ let
 	}.${system};
 
 	manifest-src = builtins.fetchurl {
-		url = "https://static.rust-lang.org/dist/2025-03-18/channel-rust-stable.toml";
-		sha256 = "02brsran14qag13vy082cmya52blj424grlpb902fbni1ilswz8y";
+		url = "https://static.rust-lang.org/dist/2026-03-05/channel-rust-stable.toml";
+		sha256 = "1vlqg3lypl5qbn25f47qg3irq2r3jm9fkgg6pqwxa0bfygg7g8da";
 	};
 
 	manifest = builtins.fromTOML (builtins.readFile manifest-src);
@@ -69,7 +69,8 @@ in pkgs.stdenvNoCC.mkDerivation rec {
 		pkgs.glibc
 		pkgs.zlib
 		pkgs.bash
-		pkgs.gcc.cc.lib
+		pkgs.gcc-unwrapped.lib
+		pkgs.libgcc
 
 		zig
 	];
@@ -96,7 +97,7 @@ in pkgs.stdenvNoCC.mkDerivation rec {
 				echo "Patching $binary"
 				patchelf \
 					--set-interpreter ${pkgs.glibc}/lib/ld-linux-x86-64.so.2 \
-					--set-rpath "${pkgs.lib.makeLibraryPath buildInputs}:"'$ORIGIN/../lib' \
+					--set-rpath "${pkgs.lib.makeLibraryPath buildInputs}:$out/lib:"'$ORIGIN/../lib' \
 					"$binary"
 			fi
 		done
@@ -134,6 +135,8 @@ in pkgs.stdenvNoCC.mkDerivation rec {
 			--set CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER zig-cc-amd64-linux \
 			--set CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER zig-cc-arm64-linux \
 			--set CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER zig-cc-arm64-macos \
+			--set CC zig-cc-${systemAsGenVM} \
+			--set CARGO_LINKER zig-cc-${systemAsGenVM} \
 			--prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath buildInputs}"
 
 			#--set CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER zig-cc-arm64-linux-gnu \

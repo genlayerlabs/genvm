@@ -104,12 +104,12 @@
 
 								custom-cargo-afl = custom-rust-builder rec {
 									name = "cargo-afl";
-									version = "0.15.18";
+									version = "0.17.1";
 									src = pkgs.fetchzip {
-										url = "https://crates.io/api/v1/crates/cargo-afl/0.15.18/download";
-										hash = "sha256-6ti50bwE4bLwIyR76bMt/Vn6Nwqu9n0IKdVuDdYkiHg=";
+										url = "https://crates.io/api/v1/crates/cargo-afl/0.17.1/download";
+										hash = "sha256-F5rFoJBMCNxDMDCSE/La6I1jOhaf87dCl53RD3pHyhE=";
 										extension = ".tar.gz";
-										name = "cargo-afl-0.15.18.tar.gz";
+										name = "cargo-afl-0.17.1.tar.gz";
 									};
 
 									target = system;

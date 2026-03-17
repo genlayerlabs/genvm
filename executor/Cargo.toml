@@ -23,12 +23,22 @@ static_mut_refs = "allow"
 name = "fuzz-genvm-storage"
 path = "fuzz/genvm-storage.rs"
 
+[dependencies.wasmtime]
+path = "third-party/wasmtime/crates/wasmtime"
+default-features = false
+features = [
+    "anyhow",
+    "cranelift",
+    "std",
+    "parallel-compilation",
+    "cache",
+    "demangle"
+]
+
 [dependencies]
-# 432745aca5ee802255935768125810fcba38dae0
-wasmtime = { path = "third-party/wasmtime/crates/wasmtime", default-features = false, features = ["cranelift", "std", "parallel-compilation", "cache", "demangle"] }
-wasmtime-cache = { path = "third-party/wasmtime/crates/cache" }
+wasmtime-cache = { path = "third-party/wasmtime/crates/cache", package = "wasmtime-internal-cache" }
 wiggle = { path = "third-party/wasmtime/crates/wiggle", default-features = false, features = ["wasmtime_async"] }
-wasmparser = { path = "third-party/wasm-tools/crates/wasmparser" }
+wasmparser = { path = "third-party/wasm-tools/crates/wasmparser", default-features = false, features = ["simd"] }
 
 genvm-common = { path = "crates/common" }
 genvm-modules-interfaces = { path = "../modules/interfaces" }

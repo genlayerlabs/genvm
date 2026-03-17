@@ -2,13 +2,13 @@
 	"repos": {
 		"executor/third-party/wasmtime": {
 			"url": "https://github.com/bytecodealliance/wasmtime.git",
-			"commit": "110e70f30e34b9df5ed4aaf401c8818c23204ca2",
-			"patches": 7,
+			"commit": "6844a83b530f86ad13a65175282fe2dbcd33cad1",
+			"patches": 1,
 			"submodules": []
 		},
 		"executor/third-party/wasm-tools": {
 			"url": "https://github.com/bytecodealliance/wasm-tools.git",
-			"commit": "5a83828b7ff0e59db322de2a6466abca656de9a5",
+			"commit": "76927bf4bdbddf4b15f835c5eddfffbdfe3bdbd5",
 			"patches": 1
 		}
 	}
