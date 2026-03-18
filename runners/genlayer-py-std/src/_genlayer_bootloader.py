@@ -105,9 +105,6 @@ def _handle_main() -> typing.NoReturn:
 			return meth
 		# now it is not init
 		match ctx.cd.get('method', ''):
-			case ABI.SpecialMethod.ERRORED_MESSAGE:
-				# no checks
-				return ctx.contract_type.__on_errored_message__
 			case ABI.SpecialMethod.GET_SCHEMA:
 				_give_result(ctx.contract_type.__get_schema__)
 			case '':

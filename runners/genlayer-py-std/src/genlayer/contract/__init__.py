@@ -539,27 +539,6 @@ class Contract(BaseContract):
 		"""
 		raise NotImplementedError()
 
-	@glannots.public.write.payable
-	def __on_errored_message__(self):
-		"""
-		Handle failed messages that included value transfers.
-
-		This method is called when am emitted message with non-zero value fails during
-		execution. By default, it simply accepts the refunded value. Override
-		this method to implement custom error handling logic.
-
-		The method must be decorated with ``@gl.public.write.payable``.
-
-		Example:
-			>>> class MyContract(gl.Contract):
-			>>>     @gl.public.write.payable
-			>>>     def __on_errored_message__(self):
-			>>> # Log the failed transaction
-			>>>         failed_value = gl.message.value
-			>>>         self.failed_transfers.append((gl.message.sender, failed_value))
-		"""
-		pass
-
 	@classmethod
 	def __get_schema__(cls) -> str:
 		"""
