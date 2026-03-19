@@ -56,8 +56,8 @@ def vec_db(buf):
 
 		for i in range(cnt):
 			key = gen_vec()
-			db.insert(key, u32(i))
-			etalon.add(key, u32(i))
+			db.insert(key, i)
+			etalon.add(key, i)
 
 		query_around = gen_vec()
 

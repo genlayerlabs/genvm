@@ -9,13 +9,11 @@ from fuzz_common import do_fuzzing, StopFuzzingException, FuzzerBuilder
 import numpy as np
 import typing
 from genlayer_embeddings import VecDB, EuclideanDistanceSquared
+from genlayer_embeddings.vecdb import NO_PARENT, MIN_LEVEL, MAX_LEVEL
 from genlayer.types import u32
 
 from genlayer.storage import inmem_allocate
 import itertools
-
-
-NO_PARENT = 2**32 - 1
 
 
 def check_cover_tree_invariants(db: VecDB) -> None:
@@ -32,97 +30,130 @@ def check_cover_tree_invariants(db: VecDB) -> None:
 		int, list[tuple[int, int]]
 	] = {}  # level -> [(node_idx, element_id)]
 
+	# Check root is not freed
+	if db._root_idx in db._free_nodes:
+		print(f'STRUCTURAL VIOLATION: root node {db._root_idx} is in free nodes')
+		assert False
+
 	# Traverse all nodes
 	stack = [db._root_idx]
 	while stack:
 		node_idx = stack.pop()
-		if node_idx in db._free_nodes:
-			continue
 		node = db._nodes[node_idx]
 		level = int(node.level)
+		elem_id = int(node.element_id)
+
+		# Structural check: active node must not reference freed element
+		if elem_id in db._free_idx:
+			print(
+				f'STRUCTURAL VIOLATION: active node {node_idx} references freed element {elem_id}'
+			)
+			assert False
 
 		if level not in nodes_by_level:
 			nodes_by_level[level] = []
-		nodes_by_level[level].append((node_idx, int(node.element_id)))
+		nodes_by_level[level].append((node_idx, elem_id))
 
-		# Add children to stack
+		# Add children to stack, checking no freed children
 		for i in range(len(node.children)):
-			stack.append(node.children[i])
+			child_idx = node.children[i]
+			if child_idx in db._free_nodes:
+				print(
+					f'STRUCTURAL VIOLATION: node {node_idx} (element {elem_id}, level {level}) has freed child {child_idx}'
+				)
+				assert False
+			stack.append(child_idx)
 
 	def print_struct():
 		print(f'  Tree structure:')
 		for lvl, lvl_nodes in sorted(nodes_by_level.items()):
 			print(f'    Level {lvl}: {[elem_id for _, elem_id in lvl_nodes]}')
 
-	# Check separating invariant
-	for level, nodes in nodes_by_level.items():
-		min_distance = db._base**level
-		for i, (node_idx1, elem_id1) in enumerate(nodes):
-			for j, (node_idx2, elem_id2) in enumerate(nodes):
-				if i >= j:  # Skip self and duplicates
-					continue
-
-				if elem_id1 in db._free_nodes or elem_id2 in db._free_nodes:
-					continue
-
-				distance = db._dist_func(u32(elem_id1), u32(elem_id2))
-				if distance < min_distance:
-					print(f'SEPARATING INVARIANT VIOLATION at level {level}:')
-					print(f'  Nodes {elem_id1} and {elem_id2} are {distance:.6f} apart')
-					print(
-						f'  Should be >= {min_distance:.6f} (base^{level} = {db._base}^{level})'
-					)
-					print(f'  Node {elem_id1} key: {db._elems[elem_id1].node_id}')
-					print(f'  Node {elem_id2} key: {db._elems[elem_id2].node_id}')
-					print_struct()
-
-					for in_level in nodes_by_level.values():
-						for node_idx, elem_id in in_level:
-							print(
-								f'      Node {elem_id} at level {db._nodes[node_idx].level} with key {db._elems[elem_id].node_id}'
-							)
-
-					assert False
-
-	# Check covering invariant
-	sorted_levels = sorted(nodes_by_level.keys())
-	for i, level in enumerate(sorted_levels[:-1]):  # Skip highest level
-		next_level = sorted_levels[i + 1]
-		max_distance = db._base**next_level
-
-		lower_nodes = nodes_by_level[level]
-		higher_nodes = nodes_by_level[next_level]
-
-		for node_idx1, elem_id1 in lower_nodes:
-			if elem_id1 in db._free_nodes:
-				continue
-
-			# Find minimum distance to any node at higher level
-			min_dist_to_higher = float('inf')
-			covering_node = None
-			for node_idx2, elem_id2 in higher_nodes:
-				if elem_id2 in db._free_nodes:
-					continue
-				distance = db._dist_func(u32(elem_id1), u32(elem_id2))
-				if distance < min_dist_to_higher:
-					min_dist_to_higher = distance
-					covering_node = elem_id2
-
-			if min_dist_to_higher > max_distance:
-				print(f'COVERING INVARIANT VIOLATION:')
+	# Check children are strictly below their parent
+	stack2 = [db._root_idx]
+	while stack2:
+		parent_idx = stack2.pop()
+		parent_node = db._nodes[parent_idx]
+		for i in range(len(parent_node.children)):
+			cidx = parent_node.children[i]
+			stack2.append(cidx)
+			actual_level = int(db._nodes[cidx].level)
+			if actual_level >= int(parent_node.level):
+				eid = int(db._nodes[cidx].element_id)
+				print(f'LEVEL ORDER VIOLATION:')
 				print(
-					f'  Node {elem_id1} at level {level} is {min_dist_to_higher:.6f} from nearest higher node {covering_node}'
+					f'  Child {eid} at level {actual_level}, parent {parent_node.element_id} at level {parent_node.level}'
 				)
-				print(
-					f'  Should be <= {max_distance:.6f} (base^{next_level} = {db._base}^{next_level}), but is {min_dist_to_higher:.6f}'
-				)
-				print(f'  Node {elem_id1} key: {db._elems[elem_id1].node_id}')
-				print(
-					f'  Covering node {covering_node} key: {db._elems[covering_node].node_id}'
-				)
-
 				print_struct()
 				assert False
+
+	# Check local separating invariant: children of the same parent must be
+	# separated at the child level. With level gaps, the global separating
+	# invariant (all nodes in C_i) cannot be maintained without intermediate
+	# nodes, but local separation ensures bounded branching factor.
+	stack3 = [db._root_idx]
+	while stack3:
+		parent_idx = stack3.pop()
+		parent_node = db._nodes[parent_idx]
+		children = []
+		for i in range(len(parent_node.children)):
+			cidx = parent_node.children[i]
+			stack3.append(cidx)
+			children.append(cidx)
+		for i, cidx1 in enumerate(children):
+			child1 = db._nodes[cidx1]
+			eid1 = int(child1.element_id)
+			lvl1 = int(child1.level)
+			for j, cidx2 in enumerate(children):
+				if i >= j:
+					continue
+				child2 = db._nodes[cidx2]
+				eid2 = int(child2.element_id)
+				lvl2 = int(child2.level)
+				if eid1 == eid2:
+					continue
+				check_level = min(lvl1, lvl2)
+				if check_level <= MIN_LEVEL or check_level >= MAX_LEVEL:
+					continue
+				min_distance = db._base**check_level
+				distance = db._dist_func(db._keys[eid1], db._keys[eid2])
+				if distance < min_distance:
+					print(f'LOCAL SEPARATING INVARIANT VIOLATION:')
+					print(
+						f'  Siblings {eid1} (level {lvl1}) and {eid2} (level {lvl2}) under parent {parent_node.element_id} (level {parent_node.level})'
+					)
+					print(f'  Distance {distance:.6f} < {min_distance:.6f} (base^{check_level})')
+					print_struct()
+					assert False
+
+	# Check covering invariant (parent-child: d(parent, child) <= base^parent_level)
+	stack = [db._root_idx]
+	while stack:
+		node_idx = stack.pop()
+		node = db._nodes[node_idx]
+		for i in range(len(node.children)):
+			child_idx = node.children[i]
+			child_node = db._nodes[child_idx]
+			parent_key = db._keys[int(node.element_id)]
+			child_key = db._keys[int(child_node.element_id)]
+			distance = db._dist_func(parent_key, child_key)
+			if int(node.level) <= MIN_LEVEL or int(node.level) >= MAX_LEVEL:
+				stack.append(child_idx)
+				continue  # clamped sentinel levels; skip
+			max_distance = db._base ** int(node.level)
+			if distance > max_distance:
+				print(f'COVERING INVARIANT VIOLATION:')
+				print(
+					f'  Child {child_node.element_id} at level {child_node.level} is {distance:.6f} from parent {node.element_id} at level {node.level}'
+				)
+				print(
+					f'  Should be <= {max_distance:.6f} (base^{node.level} = {db._base}^{node.level})'
+				)
+				print(f'  Child key: {child_key}')
+				print(f'  Parent key: {parent_key}')
+				print_struct()
+				assert False
+			stack.append(child_idx)
 
 
 class Etalon:
@@ -191,10 +222,10 @@ def vec_db_2(buf):
 						raise
 				case 1:
 					key = gen_vec()
-					db_id = db.insert(key, u32(i))
-					etalon.add(key, u32(i))
+					db_id = db.insert(key, i)
+					etalon.add(key, i)
 
-					id_to_value[db_id] = u32(i)
+					id_to_value[db_id] = i
 
 					steps.append(f'Add element {key}')
 
