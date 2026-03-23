@@ -14,16 +14,23 @@ import ya_test_runner.stage
 import copy
 
 from . import formatter
+from .stage.pipeline import (
+	wrap,
+	pipe,
+	CollectionStage,
+	FilterStage,
+	SchedulingStage,
+	ExecutionStage,
+	ReportStage,
+)
 
 
-class ParserResult(typing.NamedTuple):
-	"""Result of create_parser containing main parser and subparsers."""
-
+class _ParserResult(typing.NamedTuple):
 	parser: argparse.ArgumentParser
 	run_parser: argparse.ArgumentParser
 
 
-def create_parser() -> ParserResult:
+def create_parser() -> _ParserResult:
 	"""Create the command-line argument parser."""
 	parser = argparse.ArgumentParser(
 		prog='ya-test-runner', description='A test runner utility'
@@ -77,7 +84,7 @@ def create_parser() -> ParserResult:
 	show_tags_parser = show_subparsers.add_parser('tags', help='show available tags')
 	show_tags_parser.set_defaults(func=workflow_tags)
 
-	return ParserResult(parser, run_parser)
+	return _ParserResult(parser, run_parser)
 
 
 from . import const
@@ -105,6 +112,14 @@ def _show_execution_plan(
 				if actions[i + 1].id == action.id:
 					immediate_await_batches.add(action.id)
 
+	def _case_info(case: ya_test_runner.test.Case) -> str | dict:
+		if case.description.depends_on:
+			return {
+				'name': case.description.name,
+				'depends_on': sorted(case.description.depends_on),
+			}
+		return case.description.name
+
 	plan_items = []
 	for action in actions:
 		if isinstance(action, StartService):
@@ -112,21 +127,21 @@ def _show_execution_plan(
 		elif isinstance(action, StopService):
 			plan_items.append(f'stop service: {action.service.name}')
 		elif isinstance(action, StartCases):
-			case_names = [c.description.name for c in action.cases]
+			case_infos = [_case_info(c) for c in action.cases]
 			if action.id in immediate_await_batches:
 				# Immediately awaited - use simple "run:" format
-				if len(case_names) == 1:
-					plan_items.append(f'run: {case_names[0]}')
+				if len(case_infos) == 1:
+					plan_items.append({'run': case_infos[0]})
 				else:
-					plan_items.append({f'run parallel ({len(case_names)} tests):': case_names})
+					plan_items.append({f'run parallel ({len(case_infos)} tests):': case_infos})
 			else:
 				# Deferred await - use "batch N := start" format
-				if len(case_names) == 1:
-					plan_items.append(f'batch {action.id} := start: {case_names[0]}')
+				if len(case_infos) == 1:
+					plan_items.append({f'batch {action.id} := start': case_infos[0]})
 				else:
 					plan_items.append(
 						{
-							f'batch {action.id} := start parallel ({len(case_names)} tests):': case_names
+							f'batch {action.id} := start parallel ({len(case_infos)} tests):': case_infos
 						}
 					)
 		elif isinstance(action, AwaitAllCases):
@@ -141,27 +156,15 @@ def _show_execution_plan(
 	)
 
 
-def workflow_plan(
+async def workflow_plan(
 	shared_context: ya_test_runner.SharedContext,
 	conf_env: ya_test_runner.stage.configuration.Env,
 ) -> None:
 	"""Show execution plan without running tests."""
-	collection_env = ya_test_runner.stage.collection.run(
-		shared_context,
-		conf_env,
+	to_scheduling = pipe(
+		wrap(CollectionStage()), pipe(wrap(FilterStage()), wrap(SchedulingStage()))
 	)
-	shared_context.logger.debug('stage completed', stage='collection')
-	collection_env = ya_test_runner.stage.filter.run(
-		shared_context,
-		collection_env,
-	)
-	shared_context.logger.debug('stage completed', stage='filter')
-	scheduling_env = ya_test_runner.stage.scheduling.run(
-		shared_context,
-		collection_env,
-	)
-	shared_context.logger.debug('stage completed', stage='scheduling')
-
+	scheduling_env = await to_scheduling(shared_context, conf_env)
 	_show_execution_plan(shared_context, scheduling_env)
 
 
@@ -187,7 +190,7 @@ def workflow_run(
 	original_handler = signal.signal(signal.SIGINT, signal_handler)
 
 	try:
-		_workflow_run_inner(shared_context, conf_env)
+		asyncio.run(_workflow_run_inner(shared_context, conf_env))
 	except KeyboardInterrupt:
 		shared_context.logger.warning('Interrupted')
 		sys.exit(130)
@@ -228,33 +231,15 @@ def _write_junit_xml(
 	tree.write(path, xml_declaration=True, encoding='unicode')
 
 
-def _workflow_run_inner(
+async def _workflow_run_inner(
 	shared_context: ya_test_runner.SharedContext,
 	conf_env: ya_test_runner.stage.configuration.Env,
 ) -> None:
-	collection_env = ya_test_runner.stage.collection.run(
-		shared_context,
-		conf_env,
+	to_execution = pipe(
+		wrap(CollectionStage()),
+		pipe(wrap(FilterStage()), pipe(wrap(SchedulingStage()), wrap(ExecutionStage()))),
 	)
-	shared_context.logger.debug('stage completed', stage='collection')
-	collection_env = ya_test_runner.stage.filter.run(
-		shared_context,
-		collection_env,
-	)
-	shared_context.logger.debug('stage completed', stage='filter')
-	scheduling_env = ya_test_runner.stage.scheduling.run(
-		shared_context,
-		collection_env,
-	)
-	shared_context.logger.debug('stage completed', stage='scheduling')
-
-	execution_env = asyncio.run(
-		ya_test_runner.stage.execution.run(
-			shared_context,
-			scheduling_env,
-		)
-	)
-	shared_context.logger.debug('stage completed', stage='execution')
+	execution_env = await to_execution(shared_context, conf_env)
 
 	junit_xml_path = conf_env.args.junit_xml
 	if junit_xml_path is None:
@@ -265,15 +250,7 @@ def _workflow_run_inner(
 		lambda shared, env: _write_junit_xml(junit_xml_path, shared, env)
 	)
 
-	success = ya_test_runner.stage.report.run(
-		shared_context,
-		execution_env,
-	)
-	shared_context.logger.debug(
-		'stage completed',
-		stage='report',
-		success=success,
-	)
+	success = await wrap(ReportStage())(shared_context, execution_env)
 
 	# Run plugin-registered post-run steps
 	for step in conf_env.post_run_steps:
@@ -281,7 +258,6 @@ def _workflow_run_inner(
 			step(shared_context, execution_env)
 		except Exception as e:
 			shared_context.logger.error('Post-run step failed', error=str(e))
-	shared_context.logger.debug('stage completed', stage='post-run')
 
 	if success:
 		sys.exit(0)
@@ -289,21 +265,12 @@ def _workflow_run_inner(
 		sys.exit(1)
 
 
-def workflow_list(
+async def workflow_list(
 	shared_context: ya_test_runner.SharedContext,
 	conf_env: ya_test_runner.stage.configuration.Env,
 ):
-	collection_env = ya_test_runner.stage.collection.run(
-		shared_context,
-		conf_env,
-	)
-	shared_context.logger.debug('stage completed', stage='collection')
-
-	collection_env = ya_test_runner.stage.filter.run(
-		shared_context,
-		collection_env,
-	)
-	shared_context.logger.debug('stage completed', stage='filter')
+	to_filter = pipe(wrap(CollectionStage()), wrap(FilterStage()))
+	collection_env = await to_filter(shared_context, conf_env)
 
 	shared_context.printer.put(
 		'util stats',
@@ -328,16 +295,12 @@ def workflow_list(
 	)
 
 
-def workflow_services(
+async def workflow_services(
 	shared_context: ya_test_runner.SharedContext,
 	conf_env: ya_test_runner.stage.configuration.Env,
 ) -> None:
 	"""Show service dependencies."""
-	collection_env = ya_test_runner.stage.collection.run(
-		shared_context,
-		conf_env,
-	)
-	shared_context.logger.debug('stage completed', stage='collection')
+	collection_env = await wrap(CollectionStage())(shared_context, conf_env)
 
 	# Collect all services from cases
 	all_services: set[ya_test_runner.stage.collection.Service] = set()
@@ -363,16 +326,12 @@ def workflow_services(
 	)
 
 
-def workflow_tags(
+async def workflow_tags(
 	shared_context: ya_test_runner.SharedContext,
 	conf_env: ya_test_runner.stage.configuration.Env,
 ) -> None:
 	"""Show available tags."""
-	collection_env = ya_test_runner.stage.collection.run(
-		shared_context,
-		conf_env,
-	)
-	shared_context.logger.debug('stage completed', stage='collection')
+	collection_env = await wrap(CollectionStage())(shared_context, conf_env)
 
 	# Collect all tags and count usage
 	tag_counts: dict[str, int] = {}
@@ -465,12 +424,18 @@ def main() -> None:
 
 	ya_test_runner.stage.filter.add_args(parser_result.parser)
 
-	conf_env = ya_test_runner.stage.configuration.run(
-		shared_context,
-		parser_result,
+	initial_env = ya_test_runner.stage.configuration.InitialEnv(
+		parser_result.parser,
+		parser_result.run_parser,
 		remaining_args,
 	)
-	shared_context.logger.debug('stage completed', stage='configuration')
+
+	conf_step = wrap(ya_test_runner.stage.pipeline.ConfigurationStage())
+
+	async def foo():
+		return await conf_step(shared_context, initial_env)
+
+	conf_env = asyncio.run(foo())
 
 	if 'func' not in conf_env.args:
 		logger.error('subcommand not given')
@@ -478,7 +443,11 @@ def main() -> None:
 		sys.exit(1)
 
 	try:
-		conf_env.args.func(shared_context, conf_env)
+		func = conf_env.args.func
+		if asyncio.iscoroutinefunction(func):
+			asyncio.run(func(shared_context, conf_env))
+		else:
+			func(shared_context, conf_env)
 	finally:
 		shared_context.watchdog.stop()
 

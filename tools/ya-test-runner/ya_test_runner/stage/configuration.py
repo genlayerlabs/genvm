@@ -6,9 +6,6 @@ import sys
 from types import SimpleNamespace
 import typing
 
-if typing.TYPE_CHECKING:
-	from ya_test_runner.__main__ import ParserResult
-
 import ya_test_runner
 
 from ya_test_runner import const
@@ -106,13 +103,17 @@ class Env(typing.NamedTuple):
 	post_run_steps: list[Reporter]
 
 
-def run(
-	shared: SharedContext, parser_result: 'ParserResult', remaining_args: list[str]
-) -> Env:
+class InitialEnv(typing.NamedTuple):
+	parser: argparse.ArgumentParser
+	run_parser: argparse.ArgumentParser
+	remaining_args: list[str]
+
+
+def run(shared: SharedContext, env: InitialEnv, /) -> Env:
 	ctx = Context()
 	ctx.shared = shared
-	ctx.parser = parser_result.parser
-	ctx.run_parser = parser_result.run_parser
+	ctx.parser = env.parser
+	ctx.run_parser = env.run_parser
 	ctx.plugins = {}
 	ctx._collectors = []
 	ctx._reporter = []
@@ -121,7 +122,7 @@ def run(
 		ctx.eval_file(const.ROOT_FILE_NAME)
 
 	return Env(
-		args=parser_result.parser.parse_args(remaining_args),
+		args=ctx.parser.parse_args(env.remaining_args),
 		plugins=SimpleNamespace(**ctx.plugins),
 		collectors=ctx._collectors,
 		post_run_steps=ctx._reporter,

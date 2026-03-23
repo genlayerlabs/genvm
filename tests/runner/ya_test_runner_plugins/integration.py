@@ -742,142 +742,171 @@ def integration_test(
 
 	Steps depend on /prepare, and child steps depend on their parent step.
 	"""
-	import _jsonnet
 
 	jsonnet_files = list(CASES_DIR.glob('**/*.jsonnet'))
 	jsonnet_files.sort()
 
-	for jsonnet_file in jsonnet_files:
-		rel_path = jsonnet_file.relative_to(CASES_DIR)
+	# pre-import
+	import _jsonnet
 
-		# Determine stability tag from path
-		tags: set[str] = {'integration'}
-		stability_tag = rel_path.parts[0] if rel_path.parts else 'unknown'
-		if stability_tag in ('stable', 'unstable', 'semi-stable'):
-			tags.add(stability_tag)
-		elif stability_tag.startswith('_'):
-			tags.add('stable')
-			stability_tag = 'stable'
+	from concurrent.futures import ThreadPoolExecutor, as_completed
 
-		needed_services: set[ya_test_runner.stage.collection.Service] = {manager_service}
-
-		if 'stable' not in tags:
-			needed_services.add(modules_service)
-			needed_services.add(webdriver_service)
-
-		test_name = str(jsonnet_file.relative_to(local_ctx.shared.root_dir))
-
-		# Handle skipped tests
-		if jsonnet_file.with_suffix('.skip').exists():
-			desc = ya_test_runner.test.Description(
-				name=test_name,
-				needed_services=frozenset(needed_services),
-				tags=frozenset(tags),
-			)
-			ctx.add_case(
-				ya_test_runner.test.StepsCase(
-					description=desc,
-					steps=[IntegrationSkipStep(test_name)],
-				)
-			)
-			continue
-
-		# Parse jsonnet at collection time
-		jsonnet_result = _jsonnet.evaluate_file(
-			str(jsonnet_file), jpathdir=[str(TEMPLATES_DIR.parent)]
-		)
-		jsonnet_parsed = json.loads(jsonnet_result)
-		extra_tags = jsonnet_parsed.get('tags', [])
-		if extra_tags:
-			tags.update(extra_tags)
-
-		# Recompute needed_services after tags update
-		needed_services = {manager_service}
-		if 'stable' not in tags:
-			needed_services.add(modules_service)
-			needed_services.add(webdriver_service)
-
-		# Compute tmp_dir and unfold config
-		tmp_dir = local_ctx.shared.artifacts_dir.joinpath(
-			'integration', rel_path
-		).with_suffix('')
-
-		jsonnet_conf = _unfold_conf(
-			jsonnet_parsed,
-			{
-				'jsonnetDir': str(jsonnet_file.parent),
-				'fileBaseName': jsonnet_file.stem,
-				'tmpDir': str(tmp_dir),
-			},
-		)
-
-		top_level_conf = {
-			k: v for k, v in jsonnet_conf.items() if k not in _TOP_LEVEL_METADATA_KEYS
+	with ThreadPoolExecutor(thread_name_prefix='integration-test-collector') as executor:
+		futures = {
+			executor.submit(
+				_single_integration_test,
+				ctx,
+				jsonnet_file,
+				manager_service=manager_service,
+				modules_service=modules_service,
+				webdriver_service=webdriver_service,
+			): jsonnet_file
+			for jsonnet_file in jsonnet_files
 		}
-		entries = jsonnet_conf['entry']
-		flat_steps = _flatten_tree(entries)
+		for future in as_completed(futures):
+			future.result()
 
-		is_unstable = 'unstable' in tags
-		max_attempts = 3 if is_unstable else 1
 
-		frozen_services = frozenset(needed_services)
-		frozen_tags = frozenset(tags)
+def _single_integration_test(
+	ctx: ya_test_runner.stage.collection.Context,
+	jsonnet_file: Path,
+	*,
+	manager_service: ya_test_runner.stage.collection.Service,
+	modules_service: ya_test_runner.stage.collection.Service,
+	webdriver_service: ya_test_runner.stage.collection.Service,
+) -> None:
+	import _jsonnet
 
-		# Create prepare case
-		prepare_name = f'{test_name}/prepare'
-		prepare_desc = ya_test_runner.test.Description(
-			name=prepare_name,
-			needed_services=frozen_services,
-			tags=frozen_tags,
+	rel_path = jsonnet_file.relative_to(CASES_DIR)
+
+	# Determine stability tag from path
+	tags: set[str] = {'integration'}
+	stability_tag = rel_path.parts[0] if rel_path.parts else 'unknown'
+	if stability_tag in ('stable', 'unstable', 'semi-stable'):
+		tags.add(stability_tag)
+	elif stability_tag.startswith('_'):
+		tags.add('stable')
+		stability_tag = 'stable'
+
+	needed_services: set[ya_test_runner.stage.collection.Service] = {manager_service}
+
+	if 'stable' not in tags:
+		needed_services.add(modules_service)
+		needed_services.add(webdriver_service)
+
+	test_name = str(jsonnet_file.relative_to(local_ctx.shared.root_dir))
+
+	# Handle skipped tests
+	if jsonnet_file.with_suffix('.skip').exists():
+		desc = ya_test_runner.test.Description(
+			name=test_name,
+			needed_services=frozenset(needed_services),
+			tags=frozenset(tags),
 		)
 		ctx.add_case(
-			IntegrationPrepareCase(
-				description=prepare_desc,
-				jsonnet_path=jsonnet_file,
-				top_level_conf=top_level_conf,
-				tmp_dir=tmp_dir,
+			ya_test_runner.test.StepsCase(
+				description=desc,
+				steps=[IntegrationSkipStep(test_name)],
 			)
 		)
+		return
 
-		# Build tree_path -> step name map
-		step_names: dict[str, str] = {}
-		for tree_path, _dep, single_conf in flat_steps:
-			step_names[tree_path] = f'{test_name}/{tree_path}'
+	# Parse jsonnet at collection time
+	jsonnet_result = _jsonnet.evaluate_file(
+		str(jsonnet_file), jpathdir=[str(TEMPLATES_DIR.parent)]
+	)
+	jsonnet_parsed = json.loads(jsonnet_result)
+	extra_tags = jsonnet_parsed.get('tags', [])
+	if extra_tags:
+		tags.update(extra_tags)
 
-		# Create one test case per step
-		total_steps = len(flat_steps)
-		for tree_path, depends_on_tree_path, single_conf in flat_steps:
-			step_name = step_names[tree_path]
-			is_benchmark = single_conf.get('benchmark', False)
+	# Recompute needed_services after tags update
+	needed_services = {manager_service}
+	if 'stable' not in tags:
+		needed_services.add(modules_service)
+		needed_services.add(webdriver_service)
 
-			if depends_on_tree_path is None:
-				deps = frozenset([prepare_name])
-			else:
-				deps = frozenset([step_names[depends_on_tree_path]])
+	# Compute tmp_dir and unfold config
+	tmp_dir = local_ctx.shared.artifacts_dir.joinpath(
+		'integration', rel_path
+	).with_suffix('')
 
-			step_desc = ya_test_runner.test.Description(
-				name=step_name,
-				needed_services=frozen_services,
-				tags=frozen_tags,
-				depends_on=deps,
+	jsonnet_conf = _unfold_conf(
+		jsonnet_parsed,
+		{
+			'jsonnetDir': str(jsonnet_file.parent),
+			'fileBaseName': jsonnet_file.stem,
+			'tmpDir': str(tmp_dir),
+		},
+	)
+
+	top_level_conf = {
+		k: v for k, v in jsonnet_conf.items() if k not in _TOP_LEVEL_METADATA_KEYS
+	}
+	entries = jsonnet_conf['entry']
+	flat_steps = _flatten_tree(entries)
+
+	is_unstable = 'unstable' in tags
+	max_attempts = 3 if is_unstable else 1
+
+	frozen_services = frozenset(needed_services)
+	frozen_tags = frozenset(tags)
+
+	# Create prepare case
+	prepare_name = f'{test_name}/prepare'
+	prepare_desc = ya_test_runner.test.Description(
+		name=prepare_name,
+		needed_services=frozen_services,
+		tags=frozen_tags,
+	)
+	ctx.add_case(
+		IntegrationPrepareCase(
+			description=prepare_desc,
+			jsonnet_path=jsonnet_file,
+			top_level_conf=top_level_conf,
+			tmp_dir=tmp_dir,
+		)
+	)
+
+	# Build tree_path -> step name map
+	step_names: dict[str, str] = {}
+	for tree_path, _dep, single_conf in flat_steps:
+		step_names[tree_path] = f'{test_name}/{tree_path}'
+
+	# Create one test case per step
+	total_steps = len(flat_steps)
+	for tree_path, depends_on_tree_path, single_conf in flat_steps:
+		step_name = step_names[tree_path]
+		is_benchmark = single_conf.get('benchmark', False)
+
+		if depends_on_tree_path is None:
+			deps = frozenset([prepare_name])
+		else:
+			deps = frozenset([step_names[depends_on_tree_path]])
+
+		step_desc = ya_test_runner.test.Description(
+			name=step_name,
+			needed_services=frozen_services,
+			tags=frozen_tags,
+			depends_on=deps,
+		)
+
+		# parent_tree_path from step_conf (original jsonnet base path,
+		# e.g. "0") is needed for storage path resolution in _run_single_step
+		ctx.add_case(
+			IntegrationSingleCase(
+				description=step_desc,
+				jsonnet_path=jsonnet_file,
+				manager_service=manager_service,
+				tree_path=tree_path,
+				parent_tree_path=single_conf.get('parent_tree_path'),
+				single_conf=single_conf,
+				total_steps=total_steps,
+				tmp_dir=tmp_dir,
+				max_attempts=max_attempts,
+				is_benchmark=is_benchmark,
 			)
-
-			# parent_tree_path from step_conf (original jsonnet base path,
-			# e.g. "0") is needed for storage path resolution in _run_single_step
-			ctx.add_case(
-				IntegrationSingleCase(
-					description=step_desc,
-					jsonnet_path=jsonnet_file,
-					manager_service=manager_service,
-					tree_path=tree_path,
-					parent_tree_path=single_conf.get('parent_tree_path'),
-					single_conf=single_conf,
-					total_steps=total_steps,
-					tmp_dir=tmp_dir,
-					max_attempts=max_attempts,
-					is_benchmark=is_benchmark,
-				)
-			)
+		)
 
 
 local_ctx.plugins['integration_test'] = integration_test
