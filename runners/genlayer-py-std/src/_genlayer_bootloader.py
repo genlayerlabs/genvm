@@ -42,7 +42,7 @@ if os.getenv('GENLAYER_ENABLE_PROFILER', 'false') == 'true':
 
 
 import genlayer.message as gl_message
-from genlayer._internal.public_abi import EntryKind
+from genlayer.vm.public_abi import EntryKind
 
 import genlayer.calldata as calldata
 
@@ -73,7 +73,7 @@ def _handle_main() -> typing.NoReturn:
 	from genlayer.contract import Contract
 
 	import genlayer._internal.get_schema as _get_schema
-	import genlayer._internal.public_abi as ABI
+	import genlayer.vm.public_abi as ABI
 
 	import genlayer as gl_std
 

@@ -534,6 +534,9 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				request_extra = {}
 				if 'stable' in self._test_case.description.tags:
 					request_extra['no_modules'] = True
+				for key in ('data_fees_limit', 'storage_page_cost', 'receipt_word_cost'):
+					if key in single_conf:
+						request_extra[key] = single_conf[key]
 
 				if not single_conf['message'].get('is_init', False):
 					code = None

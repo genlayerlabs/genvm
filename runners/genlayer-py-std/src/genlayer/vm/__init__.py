@@ -40,7 +40,7 @@ from genlayer._internal import _lazy_api
 import genlayer.calldata as calldata
 import genlayer._internal.gl_call as gl_call
 
-from genlayer._internal.public_abi import ResultCode
+from genlayer.vm.public_abi import ResultCode
 
 from genlayer.types.keccak import Keccak256
 
@@ -326,7 +326,7 @@ def trace_time_micro() -> int:
 
 
 # --- event ----
-import genlayer._internal.public_abi as ABI
+from . import public_abi as ABI
 from genlayer._internal import reflect
 import inspect
 
