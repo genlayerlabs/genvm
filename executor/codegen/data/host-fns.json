@@ -1,28 +1,40 @@
 [
+  {
+    "type": "enum",
+    "repr": "u8",
+    "name": "methods",
+    "values": {
+      "storage_read": 0,
+      "consume_fuel": 1,
+      "eth_call": 2,
+      "get_balance": 3,
+      "remaining_fuel_as_gen": 4,
+      "notify_nondet_disagreement": 5,
+      "consume_result": 6,
+      "notify_finished": 7
+    }
+  },
+  {
+    "type": "enum",
+    "repr": "u8",
+    "name": "errors",
+    "values": {
+      "ok": 0,
+      "absent": 1,
+      "forbidden": 2,
+      "out_of_storage_gas": 3
+    }
+  },
+  {
+    "type": "const",
+    "name": "current_major",
+    "repr": "u8",
+    "value": 0
+  },
     {
-        "type": "enum",
-        "repr": "u8",
-        "name": "methods",
-        "values": {
-            "storage_read": 0,
-            "consume_fuel": 1,
-            "eth_call": 2,
-            "get_balance": 3,
-            "remaining_fuel_as_gen": 4,
-            "notify_nondet_disagreement": 5,
-            "consume_result": 6,
-            "notify_finished": 7
-        }
-    },
-    {
-      "type": "enum",
-      "repr": "u8",
-      "name": "errors",
-      "values": {
-          "ok": 0,
-          "absent": 1,
-          "forbidden": 2,
-          "out_of_storage_gas": 3
-      }
+    "type": "const",
+    "name": "current_major_str",
+    "repr": "str",
+    "value": "v0.0.0"
   }
 ]

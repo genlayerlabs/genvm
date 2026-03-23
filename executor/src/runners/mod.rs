@@ -54,7 +54,7 @@ impl ArchiveCache {
             Ok(contents) => contents,
             Err(e) => {
                 log_warn!(error:ah = e, runner = self.id; "failed to read version file for runner, using default");
-                bytes::Bytes::copy_from_slice(public_abi::ABSENT_VERSION.as_bytes())
+                bytes::Bytes::copy_from_slice(host_fns::CURRENT_MAJOR_STR.as_bytes())
             }
         };
 

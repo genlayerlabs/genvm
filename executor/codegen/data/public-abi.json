@@ -126,11 +126,5 @@
     "name": "event_max_topics",
     "repr": "u32",
     "value": 4
-  },
-  {
-    "type": "const",
-    "name": "code_slot_offset",
-    "repr": "u32",
-    "value": 1
   }
 ]

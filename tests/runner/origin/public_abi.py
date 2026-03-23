@@ -32,6 +32,17 @@ class _MemoryLimiterConsts(typing.NamedTuple):
 memory_limiter_consts: typing.Final = _MemoryLimiterConsts()
 
 
+class _RootOffsets(typing.NamedTuple):
+	CONTRACT: int = 0
+	CODE: int = 1
+	LOCKED_SLOTS: int = 2
+	UPGRADERS: int = 3
+	MAJOR: int = 4
+
+
+root_offsets: typing.Final = _RootOffsets()
+
+
 class _TopLimits(typing.NamedTuple):
 	NONDET_BLOCKS: int = 4096
 	LOCKED_SLOTS: int = 256
@@ -175,9 +186,3 @@ class VmError:
 
 
 EVENT_MAX_TOPICS: typing.Final[int] = 4
-
-
-ABSENT_VERSION: typing.Final[str] = 'v0.1.0'
-
-
-CODE_SLOT_OFFSET: typing.Final[int] = 1

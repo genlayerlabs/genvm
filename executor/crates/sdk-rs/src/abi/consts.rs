@@ -130,6 +130,14 @@ pub mod memory_limiter_consts {
     pub const FD_ALLOCATION: u32 = 96;
 }
 
+pub mod root_offsets {
+    pub const CONTRACT: u32 = 0;
+    pub const CODE: u32 = 1;
+    pub const LOCKED_SLOTS: u32 = 2;
+    pub const UPGRADERS: u32 = 3;
+    pub const MAJOR: u32 = 4;
+}
+
 pub mod top_limits {
     pub const NONDET_BLOCKS: u32 = 4096;
     pub const LOCKED_SLOTS: u32 = 256;
@@ -300,5 +308,3 @@ impl VmError {
 }
 
 pub const EVENT_MAX_TOPICS: u32 = 4;
-pub const ABSENT_VERSION: &'static str = "v0.1.0";
-pub const CODE_SLOT_OFFSET: u32 = 1;

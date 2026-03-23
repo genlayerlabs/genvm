@@ -31,8 +31,8 @@ pub fn parse(code: bytes::Bytes) -> anyhow::Result<super::Archive> {
         let version = match detect_version_from_wasm(code.as_ref()) {
             Ok(v) => v,
             Err(e) => {
-                log_warn!(default = public_abi::ABSENT_VERSION, error = e; "could not detect version from wasm");
-                public_abi::ABSENT_VERSION.to_string()
+                log_warn!(default = host_fns::CURRENT_MAJOR_STR, error = e; "could not detect version from wasm");
+                host_fns::CURRENT_MAJOR_STR.to_string()
             }
         };
         return Ok(super::Archive::from_file_and_runner(
@@ -80,7 +80,7 @@ fn code_to_archive_from_text(code: bytes::Bytes) -> anyhow::Result<super::Archiv
             if l.trim().starts_with("v") {
                 version_string.push_str(l);
             } else {
-                version_string.push_str(public_abi::ABSENT_VERSION);
+                version_string.push_str(host_fns::CURRENT_MAJOR_STR);
 
                 code_comment.push_str(l)
             }

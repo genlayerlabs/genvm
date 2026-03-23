@@ -8,7 +8,7 @@ stdenvNoCC.mkDerivation {
 	pname = "genvm-ffi";
 	version = "3.4.6";
 
-	outputHash = "sha256-tURu/+frV0GzHiyi9erUfmT4H5Q/kWk1i60zbIkV0vI=";
+	outputHash = "sha256-lXcDY0HPo1EJNqH1EZuxks1gJkVXdrIWG3i7tTXBtYw=";
 	outputHashMode = "recursive";
 
 	srcs = [

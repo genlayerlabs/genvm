@@ -538,7 +538,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				if not single_conf['message'].get('is_init', False):
 					code = None
 				mode = single_conf.get('mode', 'l')
-				ctx = Context(logger, 0)
+				ctx = Context(logger)
 				res = await base_host.run_genvm(
 					mock_host,
 					manager_uri=manager_uri,

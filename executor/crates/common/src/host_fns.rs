@@ -104,3 +104,5 @@ impl TryFrom<u8> for Errors {
         }
     }
 }
+pub const CURRENT_MAJOR: u8 = 0;
+pub const CURRENT_MAJOR_STR: &'static str = "v0.0.0";

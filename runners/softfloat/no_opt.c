@@ -1,8 +1,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "internals.h"
 #include "platform.h"
+
+#include "internals.h"
 #include "softfloat.h"
 #include "specialize.h"
 

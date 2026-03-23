@@ -304,7 +304,7 @@ async fn gc_step(ctx: &sync::DArc<Ctx>) {
 
         if val.strict_deadline < now {
             log_warn_into!(&LoggerWithId, genvm_id:id = key.0; "genvm execution exceeded strict deadline, terminating");
-            let _ = ctx.graceful_shutdown(key, 0).await;
+            let _ = ctx.graceful_shutdown(key).await;
         }
         let _ = ctx.check_proc(val.clone()).await;
     }

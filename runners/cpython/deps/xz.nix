@@ -8,7 +8,7 @@ stdenvNoCC.mkDerivation {
 	pname = "genvm-xz";
 	version = "5.6.2";
 
-	outputHash = "sha256-QkCPAzngwhJJdoEzcL2JaxW6FenoYnMcRjcK2MlHALc=";
+	outputHash = "sha256-gGil/LMGNqbA+jQ/kya1AiEp8/ihgI99JshKKlz5vb0=";
 	outputHashMode = "recursive";
 
 	src = pkgs.fetchzip {

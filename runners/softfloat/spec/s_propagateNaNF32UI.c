@@ -35,6 +35,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =============================================================================*/
 
 #include "platform.h"
+
 #include "softfloat.h"
 #include "specialize.h"
 #include <stdint.h>

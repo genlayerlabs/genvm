@@ -20,3 +20,9 @@ class Errors(IntEnum):
 	ABSENT = 1
 	FORBIDDEN = 2
 	OUT_OF_STORAGE_GAS = 3
+
+
+CURRENT_MAJOR: typing.Final[int] = 0
+
+
+CURRENT_MAJOR_STR: typing.Final[str] = 'v0.0.0'
