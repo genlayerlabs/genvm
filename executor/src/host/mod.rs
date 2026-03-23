@@ -143,13 +143,9 @@ impl LockedSlotsSet {
     }
 }
 
-#[cfg(not(debug_assertions))]
 pub fn all_useful_work_done() {
     std::process::exit(0);
 }
-
-#[cfg(debug_assertions)]
-pub fn all_useful_work_done() {}
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct FullResult {

@@ -170,24 +170,14 @@ pub async fn handle_set_permits(
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct ShutdownRequest {
-    #[serde(default = "default_wait_timeout")]
-    wait_timeout_ms: u64,
-}
-
-fn default_wait_timeout() -> u64 {
-    30000
-}
+pub struct ShutdownRequest {}
 
 pub async fn handle_genvm_shutdown(
     ctx: sync::DArc<AppContext>,
     genvm_id: run::GenVMId,
     req: ShutdownRequest,
 ) -> Result<impl warp::Reply> {
-    let result = ctx
-        .run_ctx
-        .graceful_shutdown(genvm_id, req.wait_timeout_ms)
-        .await;
+    let result = ctx.run_ctx.graceful_shutdown(genvm_id).await;
 
     match result {
         Ok(()) => Ok(warp::reply::json(&serde_json::json!({

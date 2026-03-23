@@ -47,7 +47,6 @@ class TimeoutType(enum.StrEnum):
 	TOTAL_S = 'HTTP_TIMEOUT_TOTAL_S'
 	CONNECT_S = 'HTTP_TIMEOUT_CONNECT_S'
 	SOCK_READ_S = 'HTTP_TIMEOUT_SOCK_READ_S'
-	DELETE_HTTP_GRACEFUL_TIMEOUT_MS = 'DELETE_HTTP_GRACEFUL_TIMEOUT_MS'
 
 
 class Context(typing.Protocol):
@@ -384,16 +383,9 @@ async def _send_timeout(
 	ctx: Context,
 ):
 	try:
-		graceful_shutdown_wait_time_ms = ctx.get_timeout(
-			TimeoutAction.GenVMDelete, TimeoutType.DELETE_HTTP_GRACEFUL_TIMEOUT_MS
-		)
-		if graceful_shutdown_wait_time_ms is None:
-			graceful_shutdown_wait_time_ms = 20
-		else:
-			graceful_shutdown_wait_time_ms = int(graceful_shutdown_wait_time_ms)
 		async with aiohttp.request(
 			'DELETE',
-			f'{manager_uri}/genvm/{genvm_id}?wait_timeout_ms={graceful_shutdown_wait_time_ms}',
+			f'{manager_uri}/genvm/{genvm_id}',
 			timeout=_http_timeout(ctx, TimeoutAction.GenVMDelete),
 		) as resp:
 			ctx.add_stat('delete_genvm_status', resp.status)

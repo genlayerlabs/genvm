@@ -42,7 +42,14 @@ import ya_test_runner_plugins
 local_ctx.shared.logger.trace(
 	'import path', path=sys.path, plugins_path=ya_test_runner_plugins.__path__
 )
-from ya_test_runner_plugins import cargo, pytest, integration, genvm, parse_version
+from ya_test_runner_plugins import (
+	cargo,
+	pytest,
+	integration,
+	genvm,
+	parse_version,
+	permits,
+)
 
 
 def collect_rust(ctx: ya_test_runner.stage.collection.Context):
@@ -182,6 +189,11 @@ def collect_integration(ctx: ya_test_runner.stage.collection.Context):
 		manager_service=manager_service,
 		modules_service=modules_service,
 		webdriver_service=webdriver_service,
+	)
+
+	ctx.configuration.plugins.permits_test(
+		ctx,
+		manager_service=manager_service,
 	)
 
 

@@ -308,9 +308,8 @@ def _calldata_to_fancy_str(calldata: bytes) -> str:
 class Context(base_host.Context):
 	logger: base_host.Logger
 
-	def __init__(self, logger: base_host.Logger, graceful_shutdown_wait_time_ms: int):
+	def __init__(self, logger: base_host.Logger):
 		self.logger = logger
-		self._graceful_shutdown_wait_time_ms = graceful_shutdown_wait_time_ms
 
 	def on_genvm_success(self): ...
 	def on_genvm_failure(self): ...
@@ -323,8 +322,6 @@ class Context(base_host.Context):
 	) -> float | None:
 		if type == base_host.TimeoutType.CONNECT_S:
 			return 5.0
-		if type == base_host.TimeoutType.DELETE_HTTP_GRACEFUL_TIMEOUT_MS:
-			return self._graceful_shutdown_wait_time_ms
 		return None
 
 

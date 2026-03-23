@@ -42,6 +42,18 @@
   },
   {
     "type": "consts",
+    "name": "root_offsets",
+    "repr": "u32",
+    "values": {
+      "contract": 0,
+      "code": 1,
+      "locked_slots": 2,
+      "upgraders": 3,
+      "major": 4
+    }
+  },
+  {
+    "type": "consts",
     "name": "top_limits",
     "repr": "u32",
     "values": {
@@ -114,12 +126,6 @@
     "name": "event_max_topics",
     "repr": "u32",
     "value": 4
-  },
-  {
-    "type": "const",
-    "name": "absent_version",
-    "repr": "str",
-    "value": "v0.1.0"
   },
   {
     "type": "const",

@@ -188,13 +188,6 @@ paths:
           schema:
             type: integer
           description: Unique identifier of the GenVM instance
-        - name: wait_timeout_ms
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 30000
-          description: Timeout in milliseconds to wait for graceful shutdown
       responses:
         '200':
           description: Shutdown result

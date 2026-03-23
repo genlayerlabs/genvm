@@ -176,11 +176,7 @@ impl Ctx {
         permits_lock.max
     }
 
-    pub async fn graceful_shutdown(
-        &self,
-        genvm_id: GenVMId,
-        wait_timeout_ms: u64,
-    ) -> anyhow::Result<()> {
+    pub async fn graceful_shutdown(&self, genvm_id: GenVMId) -> anyhow::Result<()> {
         let Some(exec_ctx) = self.known_executions.pin().get(&genvm_id).cloned() else {
             anyhow::bail!("GenVM with id {} not found", genvm_id);
         };
@@ -194,42 +190,6 @@ impl Ctx {
         if let Ok(Some(_)) = child.try_wait() {
             log_trace_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "GenVM process already exited");
             return Ok(());
-        }
-
-        const WAIT_STEP_MS: u64 = 20;
-
-        if wait_timeout_ms > WAIT_STEP_MS / 2 {
-            log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "sending SIGTERM to GenVM process");
-
-            if let Some(pid) = child.id() {
-                unsafe {
-                    libc::kill(pid as libc::c_int, libc::SIGTERM);
-                }
-            }
-
-            let wait_duration = std::time::Duration::from_millis(wait_timeout_ms);
-            let wait_start = std::time::Instant::now();
-
-            loop {
-                match child.try_wait() {
-                    Ok(Some(_)) => {
-                        log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "GenVM process terminated gracefully");
-                        return Ok(());
-                    }
-                    Ok(None) => {
-                        if wait_start.elapsed() >= wait_duration {
-                            break;
-                        }
-                        tokio::time::sleep(std::time::Duration::from_millis(WAIT_STEP_MS)).await;
-                    }
-                    Err(e) => {
-                        log_error_into!(&LoggerWithId, genvm_id:id = genvm_id.0, error:err = e; "error checking process status");
-                        anyhow::bail!("failed to check process status: {}", e);
-                    }
-                }
-            }
-
-            log_debug_into!(&LoggerWithId, genvm_id:id = genvm_id.0; "GenVM process did not terminate gracefully, sending SIGKILL");
         }
 
         let _ = child.start_kill();
