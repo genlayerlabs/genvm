@@ -12,7 +12,7 @@ class Contract(gl.contract.Contract):
 
 			res = gl.eq_principle.strict_eq(run).get()
 		except gl.vm.UserError as r:
-			print('handled', r.message)
+			print('handled', r.data)
 		else:
 			print(res)
 			exit(1)

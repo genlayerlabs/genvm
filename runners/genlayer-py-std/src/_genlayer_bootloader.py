@@ -65,7 +65,7 @@ def _give_result(res_fn: typing.Callable[[], typing.Any]) -> typing.NoReturn:
 	try:
 		res = res_fn()
 	except _vm.UserError as r:
-		gl_call.rollback(r.message)
+		gl_call.rollback(r.data)
 	gl_call.contract_return(res)
 
 

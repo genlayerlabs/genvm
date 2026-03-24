@@ -76,17 +76,26 @@ class UserError(Exception):
 	Represents an error that user contract rose during execution of their code in the VM.
 	"""
 
-	message: calldata.Decoded
+	data: calldata.Decoded
 	"""
 	User-provided message. Be careful to use concise message, as by default they are checked for strict equality
 	by the validator
 	"""
 
-	def __init__(self, message: calldata.Decoded):
-		self.message = message
+	def __init__(self, data: calldata.Decoded, /):
+		super().__init__()
+		self.data = data
 
 	def __str__(self) -> str:
-		return repr(self)
+		return 'UserError(' + repr(self.data) + ')'
+
+	def __eq__(self, other) -> bool:
+		if not isinstance(other, UserError):
+			return False
+		return self.data == other.data
+
+	def __hash__(self) -> int:
+		return hash(self.data)
 
 	@staticmethod
 	def immediate(reason: calldata.Encodable) -> typing.NoReturn:

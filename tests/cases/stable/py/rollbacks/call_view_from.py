@@ -13,7 +13,7 @@ class Contract(gl.contract.Contract):
 		try:
 			res = gl.contract.get_at(addr).view().foo(1, 2).get()
 		except gl.vm.UserError as r:
-			print('handled', r.message)
+			print('handled', r.data)
 		else:
 			print(res)
 			exit(1)
