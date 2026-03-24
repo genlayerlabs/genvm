@@ -27,6 +27,7 @@ fn default_json_null() -> serde_json::Value {
     serde_json::Value::Null
 }
 
+/// NOTE: when changing fields, also update doc/schemas/default-config.json
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ModelConfig {
     #[serde(default = "enabled_true")]
@@ -42,6 +43,7 @@ pub struct ModelConfig {
     pub meta: serde_json::Value,
 }
 
+/// NOTE: when changing fields, also update doc/schemas/default-config.json
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ScriptBackendConfig {
     pub models: BTreeMap<String, ModelConfig>,
@@ -50,6 +52,7 @@ pub struct ScriptBackendConfig {
     pub meta: serde_json::Value,
 }
 
+/// NOTE: when changing fields, also update doc/schemas/default-config.json
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BackendConfig {
     #[serde(default = "enabled_true")]
@@ -69,6 +72,7 @@ pub struct PromptTemplates {
     pub eq_non_comparative_validator: serde_json::Value,
 }
 
+/// NOTE: when changing fields, also update doc/schemas/default-config.json
 #[derive(Deserialize)]
 pub struct Config {
     pub backends: BTreeMap<String, BackendConfig>,

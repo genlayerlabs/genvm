@@ -167,6 +167,17 @@ async fn run_http_server(
     );
 
     let ctx = app_ctx.clone();
+    let restart_route = unwrap_all_anyhow(
+        warp::path!("module" / "restart")
+            .and(warp::post())
+            .and(warp::body::json())
+            .then(move |calldata| {
+                let ctx = ctx.clone();
+                async move { handlers::handle_module_restart(ctx, calldata).await }
+            }),
+    );
+
+    let ctx = app_ctx.clone();
     let genvm_run_route = unwrap_all_anyhow(
         warp::path!("genvm" / "run")
             .and(warp::post())
@@ -289,9 +300,11 @@ async fn run_http_server(
             }),
     );
 
+    // NOTE: when changing routes, also update doc/website/src/impl-spec/appendix/manager-api.yaml
     let routes = status_route
         .or(start_route)
         .or(stop_route)
+        .or(restart_route)
         .or(genvm_run_route)
         .or(contract_detect_version_route)
         .or(set_log_level_route)

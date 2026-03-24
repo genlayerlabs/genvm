@@ -168,6 +168,14 @@ impl Ctx {
     }
 
     pub async fn start(&self, req: StartRequest) -> anyhow::Result<()> {
+        self.start_or_restart(req, false).await
+    }
+
+    pub async fn restart(&self, req: StartRequest) -> anyhow::Result<()> {
+        self.start_or_restart(req, true).await
+    }
+
+    async fn start_or_restart(&self, req: StartRequest, replace: bool) -> anyhow::Result<()> {
         let (module_cancel, canceller) = genvm_common::cancellation::make();
 
         // Set up cancellation that triggers when either parent cancels or we explicitly cancel
@@ -211,7 +219,7 @@ impl Ctx {
         )?;
 
         if req.user_error {
-            self.start_user_error(req.module_type, config, module_cancel, canceller)
+            self.start_user_error(req.module_type, config, module_cancel, canceller, replace)
                 .await
         } else {
             self.start_real(
@@ -221,6 +229,7 @@ impl Ctx {
                 nested_cancel,
                 module_cancel,
                 canceller,
+                replace,
             )
             .await
         }
@@ -232,6 +241,7 @@ impl Ctx {
         config: serde_json::Value,
         cancel_token: Arc<cancellation::Token>,
         canceller: impl Fn() + Send + Sync + 'static,
+        replace: bool,
     ) -> anyhow::Result<()> {
         let handler = create_user_error_stream_handler();
         let module_task = tokio::task::spawn(std::future::ready(Ok(())));
@@ -245,8 +255,12 @@ impl Ctx {
         match module_type {
             Type::Llm => {
                 let mut module_lock = self.llm_module.write().await;
-                if module_lock.is_some() {
-                    anyhow::bail!("module_already_running");
+                if let Some(old) = module_lock.take() {
+                    if !replace {
+                        *module_lock = Some(old);
+                        anyhow::bail!("module_already_running");
+                    }
+                    (old.base.canceller)();
                 }
 
                 let mut config: crate::llm::config::Config = serde_json::from_value(config)?;
@@ -268,8 +282,12 @@ impl Ctx {
             }
             Type::Web => {
                 let mut module_lock = self.web_module.write().await;
-                if module_lock.is_some() {
-                    anyhow::bail!("module_already_running");
+                if let Some(old) = module_lock.take() {
+                    if !replace {
+                        *module_lock = Some(old);
+                        anyhow::bail!("module_already_running");
+                    }
+                    (old.base.canceller)();
                 }
 
                 let config: crate::web::config::Config = serde_json::from_value(config)?;
@@ -290,12 +308,17 @@ impl Ctx {
         nested_cancel: Arc<cancellation::Token>,
         cancel_token: Arc<cancellation::Token>,
         canceller: impl Fn() + Send + Sync + 'static,
+        replace: bool,
     ) -> anyhow::Result<()> {
         match module_type {
             Type::Llm => {
                 let mut module_lock = self.llm_module.write().await;
-                if module_lock.is_some() {
-                    anyhow::bail!("module_already_running");
+                if let Some(old) = module_lock.take() {
+                    if !replace {
+                        *module_lock = Some(old);
+                        anyhow::bail!("module_already_running");
+                    }
+                    (old.base.canceller)();
                 }
 
                 let config = serde_json::from_value(config)?;
@@ -321,8 +344,12 @@ impl Ctx {
             }
             Type::Web => {
                 let mut module_lock = self.web_module.write().await;
-                if module_lock.is_some() {
-                    anyhow::bail!("module_already_running");
+                if let Some(old) = module_lock.take() {
+                    if !replace {
+                        *module_lock = Some(old);
+                        anyhow::bail!("module_already_running");
+                    }
+                    (old.base.canceller)();
                 }
 
                 let config = serde_json::from_value(config)?;

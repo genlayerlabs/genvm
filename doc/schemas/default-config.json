@@ -105,6 +105,10 @@
                         "additionalProperties": false
                       }
                     }
+                  },
+                  "meta": {
+                    "type": ["object", "null"],
+                    "default": null
                   }
                 },
                 "required": ["host", "key", "provider", "models"],
@@ -134,6 +138,10 @@
               "eq_non_comparative_validator"
             ],
             "additionalProperties": false
+          },
+          "meta": {
+            "type": ["object", "null"],
+            "default": null
           }
         }
       }
@@ -171,6 +179,10 @@
             "type": "array",
             "items": { "type": "string" },
             "description": "hosts for which all ports are allowed"
+          },
+          "meta": {
+            "type": ["object", "null"],
+            "default": null
           }
         }
       }

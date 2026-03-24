@@ -117,6 +117,49 @@ paths:
         '500':
           $ref: '#/components/responses/ErrorResponse'
 
+  /module/restart:
+    post:
+      summary: Restart a module
+      description: |
+        Atomically restart a module. Stops the currently running module (if any) and starts
+        a new one with the specified configuration, all under a single lock to prevent
+        concurrent access during the transition.
+      operationId: restartModule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - module_type
+              properties:
+                module_type:
+                  type: string
+                  enum: [llm, web]
+                  description: Type of module to restart
+                config:
+                  type: object
+                  description: Module-specific configuration (null to use default config file)
+              example:
+                module_type: llm
+                config:
+                  host: localhost
+                  port: 8080
+      responses:
+        '200':
+          description: Module restarted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    example: module_restarted
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
   /genvm/run:
     post:
       summary: Start a GenVM execution

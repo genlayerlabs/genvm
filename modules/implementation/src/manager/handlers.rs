@@ -59,6 +59,19 @@ pub async fn handle_module_start(
     ))
 }
 
+pub async fn handle_module_restart(
+    ctx: sync::DArc<AppContext>,
+    calldata: serde_json::Value,
+) -> Result<impl warp::Reply> {
+    let req = serde_json::from_value::<modules::StartRequest>(calldata)?;
+
+    ctx.mod_ctx.restart(req).await?;
+
+    Ok(warp::reply::json(
+        &serde_json::json!({"result": "module_restarted"}),
+    ))
+}
+
 pub async fn handle_genvm_run(
     ctx: sync::DArc<AppContext>,
     data: &[u8],
