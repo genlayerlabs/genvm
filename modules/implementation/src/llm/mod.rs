@@ -249,6 +249,7 @@ mod tests {
                         meta: serde_json::Value::Null,
                     },
                 )]),
+                meta: serde_json::Value::Null,
             },
             host: CONNECT_ADDR.to_owned(),
         };
@@ -268,6 +269,7 @@ mod tests {
                         meta: serde_json::Value::Null,
                     },
                 )]),
+                meta: serde_json::Value::Null,
             },
             host: "https://api.openai.com".to_owned(),
         };

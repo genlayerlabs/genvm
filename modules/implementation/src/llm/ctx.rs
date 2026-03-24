@@ -145,5 +145,7 @@ pub fn create_global(vm: &mlua::Lua, config: &Config) -> anyhow::Result<mlua::Va
 
     llm.set("templates", vm.to_value(&config.prompt_templates)?)?;
 
+    llm.set("meta", vm.to_value(&config.meta)?)?;
+
     Ok(mlua::Value::Table(llm))
 }

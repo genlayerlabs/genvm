@@ -45,6 +45,9 @@ pub struct ModelConfig {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ScriptBackendConfig {
     pub models: BTreeMap<String, ModelConfig>,
+
+    #[serde(default = "default_json_null")]
+    pub meta: serde_json::Value,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -70,6 +73,9 @@ pub struct PromptTemplates {
 pub struct Config {
     pub backends: BTreeMap<String, BackendConfig>,
     pub prompt_templates: PromptTemplates,
+
+    #[serde(default = "default_json_null")]
+    pub meta: serde_json::Value,
 
     #[serde(flatten)]
     pub base: genvm_common::BaseConfig,
