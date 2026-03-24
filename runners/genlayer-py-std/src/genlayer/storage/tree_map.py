@@ -324,7 +324,7 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 			lambda: v,
 		)
 
-	def compute_if_absent(self, k: K, supplier: typing.Callable[[], V]) -> V:
+	def compute_if_absent(self, k: K, supplier: typing.Callable[[], V], /) -> V:
 		"""
 		:returns: Value associated with `k` if it is present, otherwise get's new value from the supplier, stores it at `k` and returns
 		"""
@@ -340,7 +340,7 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 		)
 		return res[0] if res else ret
 
-	def get_or_insert_default(self, k: K) -> V:
+	def get_or_insert_default(self, k: K, /) -> V:
 		"""
 		Return value for key, inserting a default-initialized entry if absent.
 
@@ -464,7 +464,7 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 		"""
 		return self._get_fn(k, lambda n: n.value, lambda: default)
 
-	def assign(self, arr: typing.Mapping[K, V]) -> typing.Self:
+	def assign(self, arr: typing.Mapping[K, V], /) -> typing.Self:
 		"""
 		Clear the map and populate it from the given mapping.
 

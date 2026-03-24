@@ -20,22 +20,22 @@ from ._internal.codecs import EncodeState, DecoderState
 from .support import *
 
 
-def type_name_of(t: type) -> str:
+def type_name_of(t: type, /) -> str:
 	return build(t).name
 
 
-def signature_of[*T](name: str, params: typing.Type[tuple[*T]]) -> str:
+def signature_of[*T](name: str, params: typing.Type[tuple[*T]], /) -> str:
 	"""
 	calculates signature that is used for making method selector
 	"""
 	return name + build(params).name
 
 
-def selector_of[*T](name: str, params: typing.Type[tuple[*T]]) -> bytes:
+def selector_of[*T](name: str, params: typing.Type[tuple[*T]], /) -> bytes:
 	return Keccak256(signature_of(name, params).encode('utf-8')).digest()[:4]
 
 
-def encode[T](params: typing.Type[T], args: T) -> bytes:
+def encode[T](params: typing.Type[T], args: T, /) -> bytes:
 	encoder = build(params)
 	state = EncodeState(0, bytearray(), [])
 	encoder.encode(state, args)
@@ -43,7 +43,7 @@ def encode[T](params: typing.Type[T], args: T) -> bytes:
 	return bytes(state.result)
 
 
-def decode[T](expected: typing.Type[T], encoded: collections.abc.Buffer) -> T:
+def decode[T](expected: typing.Type[T], encoded: collections.abc.Buffer, /) -> T:
 	encoder = build(expected)
 	state = DecoderState(memoryview(encoded), 0, 0)
 	return encoder.decode(state)
@@ -62,13 +62,13 @@ class MethodEncoder:
 		selector_str = name + self._encoder.name
 		self._selector = Keccak256(selector_str.encode('utf-8')).digest()[:4]
 
-	def encode_call(self, args: tuple[typing.Any, ...]) -> bytes:
+	def encode_call(self, args: tuple[typing.Any, ...], /) -> bytes:
 		state = EncodeState(4, bytearray(self._selector), [])
 		self._encoder.encode(state, args)
 		state.run_tails()
 		return bytes(state.result)
 
-	def decode_ret(self, data: collections.abc.Buffer) -> typing.Any:
+	def decode_ret(self, data: collections.abc.Buffer, /) -> typing.Any:
 		state = DecoderState(memoryview(data), 0, 0)
 		if self._decoder is None:
 			return None

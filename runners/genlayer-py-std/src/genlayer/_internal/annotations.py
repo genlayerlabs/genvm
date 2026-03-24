@@ -9,7 +9,7 @@ from genlayer._internal.schema_attrs import (
 )
 
 
-def private(f):
+def private(f, /):
 	"""
 	Decorator that marks method as private. As all methods are private by default it does nothing.
 	"""
@@ -17,7 +17,7 @@ def private(f):
 
 
 class _payable(metaclass=abc.ABCMeta):
-	def payable[T](self, f: T) -> T:
+	def payable[T](self, f: T, /) -> T:
 		self(f)
 		setattr(f, _PAYABLE_ATTR, True)
 		return f
@@ -53,7 +53,7 @@ class _write(_payable):
 
 class public:
 	@staticmethod
-	def view(f):
+	def view(f, /):
 		"""
 		Decorator that marks a contract method as a public view
 		"""

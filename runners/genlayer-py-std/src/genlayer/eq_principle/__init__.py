@@ -27,7 +27,7 @@ from genlayer._internal import (
 
 
 @_lazy_api
-def strict_eq[T: calldata.Decoded](fn: typing.Callable[[], T]) -> Lazy[T]:
+def strict_eq[T: calldata.Decoded](fn: typing.Callable[[], T], /) -> Lazy[T]:
 	"""
 	Comparative equivalence principle that checks for strict equality
 
@@ -54,7 +54,7 @@ from genlayer.nondet import _decode_nondet
 
 @_lazy_api
 def prompt_comparative[T: calldata.Decoded](
-	fn: typing.Callable[[], T], principle: str
+	fn: typing.Callable[[], T], principle: str, /
 ) -> Lazy[T]:
 	"""
 	Comparative equivalence principle that utilizes NLP for verifying that results are equivalent
@@ -104,7 +104,7 @@ def prompt_comparative[T: calldata.Decoded](
 
 @_lazy_api
 def prompt_non_comparative(
-	fn: typing.Callable[[], str], *, task: str, criteria: str
+	fn: typing.Callable[[], str], /, *, task: str, criteria: str
 ) -> Lazy[str]:
 	"""
 	Non-comparative equivalence principle that must cover most common use cases

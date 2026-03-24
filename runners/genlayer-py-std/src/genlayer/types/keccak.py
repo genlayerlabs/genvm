@@ -380,7 +380,7 @@ class KeccakHash:
 	def copy(self):
 		return deepcopy(self)
 
-	def update(self, s: collections.abc.Buffer) -> None:
+	def update(self, s: collections.abc.Buffer, /) -> None:
 		self.sponge.absorb(s)
 
 	def digest(self) -> bytes:

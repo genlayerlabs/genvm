@@ -84,7 +84,7 @@ def exec_prompt(
 
 @_lazy_api
 def exec_prompt(
-	prompt: str, **config: typing.Unpack[ExecPromptKwArgs]
+	prompt: str, /, **config: typing.Unpack[ExecPromptKwArgs]
 ) -> Lazy[str | dict]:
 	"""
 	API to execute a prompt (perform NLP)

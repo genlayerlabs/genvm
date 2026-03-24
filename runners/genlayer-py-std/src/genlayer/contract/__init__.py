@@ -212,7 +212,7 @@ class _ContractAt(Proxy[ErasedMethods, ErasedMethods]):
 		return wasi.get_balance(self._address.as_bytes)
 
 
-def get_at(address: Address) -> Proxy:
+def get_at(address: Address, /) -> Proxy:
 	"""
 	Create a proxy object for interacting with a deployed GenVM contract.
 
@@ -291,6 +291,7 @@ class GenVMContractDeclaration[TView, TWrite](typing.Protocol):
 
 def interface[TView, TWrite](
 	_declaration: GenVMContractDeclaration[TView, TWrite],
+	/,
 ) -> typing.Callable[[Address], Proxy[TView, TWrite]]:
 	# editorconfig-checker-disable
 	"""

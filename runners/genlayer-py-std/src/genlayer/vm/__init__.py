@@ -370,6 +370,7 @@ class Event:
 	def emit_raw(
 		topics: list[bytes],
 		blob: calldata.Encodable,
+		/,
 	) -> None:
 		"""
 		Emits a raw event with the given name, indexed fields and blob of data.

@@ -113,6 +113,7 @@ def encode_default_parameter(b):
 
 def encode[T](
 	x: EncodableWithDefault[T],
+	/,
 	*,
 	default: typing.Callable[
 		[EncodableWithDefault[T]], Encodable
@@ -213,6 +214,7 @@ class DecodingError(ValueError):
 
 def decode(
 	mem0: collections.abc.Buffer,
+	/,
 	*,
 	memview2bytes: typing.Callable[[memoryview], typing.Any] = bytes,
 ) -> Decoded:
@@ -295,7 +297,7 @@ def decode(
 	return res
 
 
-def to_str(d: Encodable) -> str:
+def to_str(d: Encodable, /) -> str:
 	"""
 	Transforms calldata DSL into human readable json-like format, should be used for debug purposes only
 	"""

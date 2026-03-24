@@ -138,6 +138,7 @@ def actions_apply_copy(
 	to_off: int,
 	frm_stor: Slot,
 	frm_off: int,
+	/,
 ) -> int:
 	"""
 	Execute a list of copy actions, transferring data between slots.
@@ -159,7 +160,7 @@ def actions_apply_copy(
 	return cum_off
 
 
-def actions_append(l: list[CopyAction], r: list[CopyAction]):
+def actions_append(l: list[CopyAction], r: list[CopyAction], /):
 	"""
 	Append copy actions from ``r`` to ``l``, merging adjacent int (memcpy) actions.
 
@@ -277,7 +278,7 @@ class Indirection[T](_WithStorageSlotAndTD):
 		"""
 		return self._item_desc.get(self._storage_slot.indirect(self._off), 0)
 
-	def set(self, val: T) -> None:
+	def set(self, val: T, /) -> None:
 		"""
 		Write a value through the indirection.
 
@@ -373,7 +374,7 @@ class VLA[T](_WithStorageSlotAndTD, PseudoSequence[T]):
 		for i in range(l):
 			yield self[i]
 
-	def append(self, val: T):
+	def append(self, val: T, /):
 		"""
 		Append a value to the end of the array.
 
@@ -385,7 +386,7 @@ class VLA[T](_WithStorageSlotAndTD, PseudoSequence[T]):
 		)
 		self._storage_slot.write(self._off, (le + 1).to_bytes(4, 'little'))
 
-	def extend(self, val: PseudoSequence[T]):
+	def extend(self, val: PseudoSequence[T], /):
 		"""
 		Replace contents with elements from ``val``, truncating first.
 
@@ -412,7 +413,7 @@ class VLA[T](_WithStorageSlotAndTD, PseudoSequence[T]):
 		"""
 		return self._storage_slot
 
-	def truncate(self, to: int = 0):
+	def truncate(self, to: int = 0, /):
 		"""
 		Truncate the array to the given length.
 

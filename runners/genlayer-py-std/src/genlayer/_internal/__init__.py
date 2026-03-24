@@ -44,7 +44,7 @@ def _lazy_api[T, **R](fn: typing.Callable[R, Lazy[T]]) -> LazyApi[T, R]:
 
 
 def create2_address(
-	contract_address: Address, salt_nonce: u256, chain_id: u256
+	contract_address: Address, salt_nonce: u256, chain_id: u256, /
 ) -> Address:
 	hasher = Keccak256()
 	hasher.update(b'\x01')  # CREATE 2 code

@@ -24,10 +24,10 @@ def test_view_send():
 	generator = partial(generate_test, dump_to=tst)
 
 	@genvm_eth.contract_generator(
-		generate_view=generator,
-		generate_send=generator,
-		balance_getter=lambda x: 0,
-		transfer=lambda p, d: None,
+		generator,
+		generator,
+		lambda x: 0,
+		lambda p, d: None,
 	)
 	class MyContract:
 		class View:

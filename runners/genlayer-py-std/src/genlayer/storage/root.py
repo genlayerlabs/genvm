@@ -59,7 +59,7 @@ class Root:
 		"""
 		return self._storage_slot  # type: ignore
 
-	def get_contract_instance[T](self, typ: typing.Type[T]) -> T:
+	def get_contract_instance[T](self, typ: typing.Type[T], /) -> T:
 		"""
 		Return the contract instance deserialized as the given type.
 

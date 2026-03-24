@@ -46,7 +46,7 @@ from ._internal.generate import (
 )
 
 
-def inmem_allocate[T](t: typing.Type[T], *init_args, **init_kwargs) -> T:
+def inmem_allocate[T](t: typing.Type[T], /, *init_args, **init_kwargs) -> T:
 	"""
 	Allocate a storage type in memory (useful for testing).
 
@@ -73,7 +73,7 @@ def inmem_allocate[T](t: typing.Type[T], *init_args, **init_kwargs) -> T:
 	return instance
 
 
-def copy_to_memory[T](val: T) -> T:
+def copy_to_memory[T](val: T, /) -> T:
 	"""
 	Deep-copy a storage value into a new in-memory instance.
 
@@ -112,7 +112,7 @@ class Pickled[T]:
 		"""
 		return pickle.loads(self._data)
 
-	def store(self, val: T) -> None:
+	def store(self, val: T, /) -> None:
 		"""
 		Serialize and persist the given value.
 

@@ -119,6 +119,7 @@ def contract_generator(
 	generate_send: _EthGenerator,
 	balance_getter: typing.Callable[[ContractProxy], u256],
 	transfer: typing.Callable[['ContractProxy', TransactionDataKwArgs], None],
+	/,
 ):
 	def gen[TView, TWrite](
 		contr: ContractDeclaration[TView, TWrite],

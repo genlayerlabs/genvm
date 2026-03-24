@@ -167,7 +167,7 @@ class DynArray[T](_WithStorageSlotAndTD, collections.abc.MutableSequence[T]):
 			insert_idx += 1
 		_u32_desc.set(self._storage_slot, self._off, insert_idx)
 
-	def assign(self, arr: typing.Sequence[T]) -> typing.Self:
+	def assign(self, arr: typing.Sequence[T], /) -> typing.Self:
 		"""
 		Same as ``self[:] = arr`` but more efficient
 
@@ -183,7 +183,7 @@ class DynArray[T](_WithStorageSlotAndTD, collections.abc.MutableSequence[T]):
 		_u32_desc.set(self._storage_slot, self._off, len(arr))
 		return self
 
-	def insert(self, index: int, value: T) -> None:
+	def insert(self, index: int, value: T, /) -> None:
 		"""
 		Insert value before the given index.
 
@@ -202,7 +202,7 @@ class DynArray[T](_WithStorageSlotAndTD, collections.abc.MutableSequence[T]):
 		for i in range(len(self)):
 			yield self[i]
 
-	def append(self, value: T) -> None:
+	def append(self, value: T, /) -> None:
 		"""
 		Append value to the end of the array.
 

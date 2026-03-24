@@ -41,6 +41,7 @@ def str_or_bytes_to_bytes(
 @_lazy_api
 def get(
 	url: str,
+	/,
 	*,
 	headers: dict[str, str | bytes] = {},
 	sign: bool = False,
@@ -51,6 +52,7 @@ def get(
 @_lazy_api
 def post(
 	url: str,
+	/,
 	*,
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
@@ -62,6 +64,7 @@ def post(
 @_lazy_api
 def put(
 	url: str,
+	/,
 	*,
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
@@ -73,6 +76,7 @@ def put(
 @_lazy_api
 def delete(
 	url: str,
+	/,
 	*,
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
@@ -84,6 +88,7 @@ def delete(
 @_lazy_api
 def head(
 	url: str,
+	/,
 	*,
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
@@ -95,6 +100,7 @@ def head(
 @_lazy_api
 def patch(
 	url: str,
+	/,
 	*,
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
@@ -106,6 +112,7 @@ def patch(
 @_lazy_api
 def request(
 	url: str,
+	/,
 	*,
 	method: typing.Literal['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS', 'PATCH'],
 	body: str | bytes | None = None,
@@ -129,6 +136,7 @@ def request(
 @typing.overload
 def render(
 	url: str,
+	/,
 	*,
 	wait_after_loaded: str | None = None,
 	mode: typing.Literal['text', 'html'],
@@ -144,6 +152,7 @@ def render(
 @_lazy_api
 def render(
 	url: str,
+	/,
 	*,
 	mode: typing.Literal['html', 'text', 'screenshot'] = 'text',
 	wait_after_loaded: str | None = None,
