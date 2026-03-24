@@ -18,7 +18,7 @@ import genlayer.vm as vm
 import typing
 import genlayer.calldata as calldata
 
-import genlayer._internal.gl_call as gl_call
+import genlayer._internal.on_chain.gl_call as gl_call
 
 from genlayer.types import *
 from genlayer._internal import (

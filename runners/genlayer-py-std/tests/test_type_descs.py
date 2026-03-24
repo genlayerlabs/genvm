@@ -1,5 +1,5 @@
 import genlayer.storage._internal.desc_base_types as base
-from genlayer.storage.vec import _DynArrayDesc, DynArray
+from genlayer.storage.dyn_array import _DynArrayDesc, DynArray
 from genlayer.storage._internal.generate import _known_descs
 
 

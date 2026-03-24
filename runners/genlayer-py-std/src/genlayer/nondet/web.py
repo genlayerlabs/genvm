@@ -16,7 +16,7 @@ from genlayer.types import *
 import io
 import dataclasses
 
-import genlayer._internal.gl_call as gl_call
+import genlayer._internal.on_chain.gl_call as gl_call
 
 from . import _decode_nondet, Image
 

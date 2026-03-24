@@ -6,10 +6,10 @@ import json
 from genlayer.types import u256
 from genlayer.evm.generate import contract_generator
 from genlayer.evm.calldata import MethodEncoder, decode
-from . import _lazy_api
+from genlayer._internal import _lazy_api
 import _genlayer_wasi as wasi
 
-import genlayer._internal.gl_call as gl_call
+import genlayer._internal.on_chain.gl_call as gl_call
 
 
 def _generate_view(name: str, params: tuple[type], ret: type) -> typing.Any:
@@ -61,7 +61,8 @@ evm_contract_interface = contract_generator(
 		lambda _x: None,
 	).get(),
 )
-"""
+
+evm_contract_interface.__doc__ = """
 Decorator that is used to declare eth contract interface
 
 .. code:: python

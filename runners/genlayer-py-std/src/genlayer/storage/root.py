@@ -3,8 +3,8 @@ import typing
 from ._internal.generate import InmemManager
 from genlayer.types import u8, u256, Address
 from ._internal.generate import generate_storage, _known_descs
-from ._internal.core import ROOT_SLOT_ID, Slot, Manager, InmemManager
-from ._internal.core import Indirection, VLA
+from genlayer.storage.core import ROOT_SLOT_ID, Slot, Manager, InmemManager
+from genlayer.storage.core import Indirection, VLA
 
 
 @generate_storage
@@ -17,6 +17,11 @@ class Root:
 	"""
 
 	MANAGER: typing.ClassVar[Manager] = InmemManager()
+	"""
+	Manager instance for the storage.
+
+	It is set to an actual storage manager in the runtime, but can be overridden for testing purposes.
+	"""
 
 	contract_instance: Indirection[None]
 
@@ -32,20 +37,42 @@ class Root:
 	upgraders: Indirection[VLA[Address]]
 
 	major: u8
+	"""
+	Major version of the contract
+	"""
 
 	@staticmethod
 	def get() -> 'Root':
+		"""
+		Return the root storage instance.
+
+		:returns: singleton root object
+		"""
 		slot = Root.MANAGER.get_store_slot(ROOT_SLOT_ID)
 		return _known_descs[Root].get(slot, 0)
 
 	def slot(self) -> Slot:
+		"""
+		Return the storage slot backing this root.
+
+		:returns: underlying storage slot
+		"""
 		return self._storage_slot  # type: ignore
 
 	def get_contract_instance[T](self, typ: typing.Type[T]) -> T:
+		"""
+		Return the contract instance deserialized as the given type.
+
+		:param typ: storage-allowed type to deserialize into
+		:returns: contract instance
+		"""
 		slot: Slot = self.slot().indirect(0)
 		return _known_descs[typ].get(slot, 0)
 
 	def lock_default(self):
+		"""
+		Lock the default set of slots (root, code, locked_slots, upgraders) to prevent modification after deployment.
+		"""
 		frozen = self.locked_slots.get()
 
 		frozen.append(self.slot().as_int())

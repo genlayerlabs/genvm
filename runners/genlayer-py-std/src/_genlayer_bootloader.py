@@ -50,8 +50,8 @@ import typing
 import dataclasses
 import genlayer._internal.reflect as reflect
 
-import genlayer._internal.gl_call as gl_call
-import genlayer._internal.storage  # noqa: F401  # initialize Root.MANAGER
+import genlayer._internal.on_chain.gl_call as gl_call
+import genlayer._internal.on_chain.storage  # noqa: F401  # initialize Root.MANAGER
 import genlayer.vm as _vm
 
 

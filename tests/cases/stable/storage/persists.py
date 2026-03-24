@@ -9,8 +9,8 @@ class Contract(gl.contract.Contract):
 
 	def __init__(self):
 		print('first')
-		self.m['1'] = u32(12)
-		self.m['abc'] = u32(30)
+		self.m['1'] = 12
+		self.m['abc'] = 30
 
 	@gl.public.write
 	def second(self):

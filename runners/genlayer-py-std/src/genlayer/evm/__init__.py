@@ -67,7 +67,9 @@ def _contract_interface_stub[TView, TWrite](
 
 def __getattr__(name):
 	if name == 'contract_interface':
-		from genlayer._internal.eth import evm_contract_interface as contract_interface
+		from genlayer._internal.on_chain.eth import (
+			evm_contract_interface as contract_interface,
+		)
 
 		globals()['contract_interface'] = contract_interface
 		return contract_interface

@@ -18,7 +18,7 @@ class Contract(gl.contract.Contract):
 		print('main At(self)', EthContract(gl.message.contract_address).balance)
 		print('=== transfer ===')
 
-		EthContract(gl.message.sender_address).emit_transfer(value=u256(5))
+		EthContract(gl.message.sender_address).emit_transfer(value=5)
 		print('main self', self.balance)
 		print('main At(self)', EthContract(gl.message.contract_address).balance)
 

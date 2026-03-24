@@ -11,7 +11,7 @@ import typing
 import sys
 import struct
 
-from .core import *
+from genlayer.storage.core import *
 
 from .desc_base_types import (
 	AddrDesc,
@@ -23,7 +23,8 @@ from .desc_base_types import (
 	_BigIntDesc,
 )
 from .desc_record import _RecordDesc, RecordExtraFields
-from ..vec import DynArray, _DynArrayDesc, Array, _ArrayDesc
+from ..dyn_array import DynArray, _DynArrayDesc
+from ..array import Array, _ArrayDesc
 
 import genlayer._internal.reflect as reflect
 

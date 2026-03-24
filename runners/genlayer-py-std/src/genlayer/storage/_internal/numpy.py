@@ -5,7 +5,7 @@ __all__ = ('try_handle_np',)
 import sys
 import typing
 
-from .core import *
+from genlayer.storage.core import *
 
 _imp: typing.Callable[..., TypeDesc | None] | None = None
 

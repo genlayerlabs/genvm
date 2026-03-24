@@ -29,7 +29,7 @@ import genlayer.calldata as calldata
 
 import _genlayer_wasi as wasi
 
-from genlayer._internal.gl_call import gl_call_generic
+from genlayer._internal.on_chain.gl_call import gl_call_generic
 
 type ON = typing.Literal['accepted', 'finalized']
 

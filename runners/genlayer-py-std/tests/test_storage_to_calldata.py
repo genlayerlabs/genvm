@@ -74,5 +74,5 @@ def test_default():
 
 
 def test_u32():
-	assert calldata.decode(calldata.encode(u32(5))) == 5
-	assert calldata.decode(calldata.encode(bigint(5))) == 5
+	assert calldata.decode(calldata.encode(5)) == 5
+	assert calldata.decode(calldata.encode(5)) == 5

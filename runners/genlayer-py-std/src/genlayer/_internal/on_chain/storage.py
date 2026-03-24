@@ -1,7 +1,7 @@
 __all__ = ('STORAGE_MAN', 'ROOT_SLOT_ID')
 
-from ..storage._internal.core import Manager, Slot, ROOT_SLOT_ID
-from ..types import u256
+from genlayer.storage.core import Manager, Slot, ROOT_SLOT_ID
+from genlayer.types import u256
 
 import _genlayer_wasi as wasi
 import collections.abc
@@ -36,6 +36,6 @@ STORAGE_MAN = _ActualStorageMan()
 Storage slots manager that provides an access to the "Host" (node) state
 """
 
-from ..storage import Root
+from genlayer.storage import Root
 
 Root.MANAGER = STORAGE_MAN

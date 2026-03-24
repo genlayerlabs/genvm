@@ -26,10 +26,10 @@ tst = Composite()
 
 stor_man = tst._storage_slot.manager  # type: ignore
 
-tst.a.foo = i64(65535)
-tst.a.bar = i64(2**32)
+tst.a.foo = 65535
+tst.a.bar = 2**32
 tst.a.st = '123'
-tst.b.foo = i64(13)
+tst.b.foo = 13
 tst.b.st = '321'
 
 stor_man.debug()

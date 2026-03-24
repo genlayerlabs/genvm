@@ -301,7 +301,7 @@ def to_str(d: Encodable) -> str:
 	"""
 	buf: list[str] = []
 
-	def impl(d: Encodable) -> None:
+	def impl(d: Encodable, /) -> None:
 		if d is None:
 			buf.append('null')
 		elif d is True:

@@ -23,7 +23,7 @@ import _genlayer_wasi as wasi
 import io
 import dataclasses
 
-import genlayer._internal.gl_call as gl_call
+import genlayer._internal.on_chain.gl_call as gl_call
 
 
 class NondetException(Exception):

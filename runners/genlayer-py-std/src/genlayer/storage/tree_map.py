@@ -4,7 +4,7 @@ import abc
 import typing
 import collections.abc
 
-from .vec import DynArray
+from .dyn_array import DynArray
 from genlayer.types import u32, i8
 
 from ._internal.generate import allow
@@ -31,6 +31,10 @@ class _Node[K, V]:
 
 
 class Comparable(typing.Protocol):
+	"""
+	Protocol for types that support ``<`` comparison.
+	"""
+
 	@abc.abstractmethod
 	def __lt__(self, other: typing.Any, /) -> bool: ...
 
@@ -49,6 +53,9 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 	_free_slots: DynArray[u32]
 
 	def clear(self):
+		"""
+		Remove all entries from the map.
+		"""
 		self._root = 0
 		self._slots.clear()
 		self._free_slots.clear()
@@ -166,6 +173,12 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 		return (seq, is_less)
 
 	def __delitem__(self, k: K):
+		"""
+		Remove the entry with the given key.
+
+		:param k: key to remove
+		:raises KeyError: when key is not found
+		"""
 		seq, is_less = self._find_seq(k)
 		# not found
 		if seq[-1] == 0:
@@ -295,6 +308,13 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 			self._root = seq[0]
 
 	def __setitem__(self, k: K, v: V):
+		"""
+		Set value for the given key, inserting if absent.
+
+		:param k: key
+		:param v: value to associate with the key
+		"""
+
 		def setter(node: _Node[K, V]):
 			node.value = v
 
@@ -313,14 +333,20 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 		def existing(node: _Node[K, V]):
 			res.append(node.value)
 
-		self._get_set(
+		ret = self._get_set(
 			k,
 			existing,
 			supplier,
 		)
-		return res[0]
+		return res[0] if res else ret
 
 	def get_or_insert_default(self, k: K) -> V:
+		"""
+		Return value for key, inserting a default-initialized entry if absent.
+
+		:param k: key to look up or insert
+		:returns: value associated with the key
+		"""
 		return self._get_set(
 			k,
 			lambda _k: None,
@@ -438,7 +464,27 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 		"""
 		return self._get_fn(k, lambda n: n.value, lambda: default)
 
+	def assign(self, arr: typing.Mapping[K, V]) -> typing.Self:
+		"""
+		Clear the map and populate it from the given mapping.
+
+		:param arr: mapping to copy entries from
+		:returns: self
+		"""
+		self.clear()
+		for k, v in arr.items():
+			self[k] = v
+		return self
+
 	def __getitem__(self, k: K) -> V:
+		"""
+		Return value for the given key.
+
+		:param k: key to look up
+		:returns: value associated with the key
+		:raises KeyError: when key is not found
+		"""
+
 		def not_found() -> V:
 			raise KeyError()
 
@@ -480,6 +526,11 @@ class TreeMap[K: Comparable, V](collections.abc.MutableMapping[K, V]):
 		yield from self._visit(lambda n: n.key)
 
 	def items(self) -> collections.abc.ItemsView[K, V]:
+		"""
+		Return a view of all (key, value) pairs in sorted order.
+
+		:returns: items view
+		"""
 		return _ItemsView(self)
 
 

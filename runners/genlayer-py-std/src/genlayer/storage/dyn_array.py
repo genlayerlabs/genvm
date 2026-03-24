@@ -1,22 +1,18 @@
-__all__ = ('DynArray', 'Array')
+__all__ = ('DynArray',)
 
 import typing
 import collections.abc
 
-from ._internal.core import (
+from .core import (
 	_WithStorageSlotAndTD,
 	TypeDesc,
 	Slot,
-	CopyAction,
 	actions_apply_copy,
 	SpecialTypeDesc,
 	ComplexCopyAction,
-	actions_append,
 )
 
 from ._internal.desc_base_types import _u32_desc
-
-from ..types import SizedArray
 
 
 class DynArray[T](_WithStorageSlotAndTD, collections.abc.MutableSequence[T]):
@@ -53,6 +49,13 @@ class DynArray[T](_WithStorageSlotAndTD, collections.abc.MutableSequence[T]):
 	def __getitem__(self, idx: slice) -> list[T]: ...
 
 	def __getitem__(self, idx: int | slice) -> T | list[T]:
+		"""
+		Get element by index or sublist by slice.
+
+		:param idx: integer index or slice
+		:returns: single element for int index, list of elements for slice
+		:raises IndexError: when integer index is out of range
+		"""
 		if isinstance(idx, int):
 			idx = self._map_index(idx)
 			items_at = self._storage_slot.indirect(self._off)
@@ -74,6 +77,13 @@ class DynArray[T](_WithStorageSlotAndTD, collections.abc.MutableSequence[T]):
 	def __setitem__(
 		self, idx: typing.SupportsIndex | slice, val: T | collections.abc.Sequence[T]
 	) -> None:
+		"""
+		Set element by index or replace a range by slice.
+
+		:param idx: integer index or slice
+		:param val: value or sequence of values to assign
+		:raises IndexError: when integer index is out of range
+		"""
 		if not isinstance(idx, slice):
 			idx = self._map_index(idx.__index__())
 			items_at = self._storage_slot.indirect(self._off)
@@ -131,6 +141,12 @@ class DynArray[T](_WithStorageSlotAndTD, collections.abc.MutableSequence[T]):
 	def __delitem__(self, idx: slice) -> None: ...
 
 	def __delitem__(self, idx: int | slice) -> None:
+		"""
+		Delete element by index or range by slice.
+
+		:param idx: integer index or slice
+		:raises IndexError: when integer index is out of range
+		"""
 		if isinstance(idx, int):
 			start = self._map_index(idx)
 			stop = start + 1
@@ -151,7 +167,30 @@ class DynArray[T](_WithStorageSlotAndTD, collections.abc.MutableSequence[T]):
 			insert_idx += 1
 		_u32_desc.set(self._storage_slot, self._off, insert_idx)
 
+	def assign(self, arr: typing.Sequence[T]) -> typing.Self:
+		"""
+		Same as ``self[:] = arr`` but more efficient
+
+		.. admonition:: Exception safety
+			:class: note
+
+			On error list becomes empty
+		"""
+		_u32_desc.set(self._storage_slot, self._off, 0)
+		for idx in range(len(arr)):
+			items_at = self._storage_slot.indirect(self._off)
+			self._item_desc.set(items_at, idx * self._item_desc.size, arr[idx])
+		_u32_desc.set(self._storage_slot, self._off, len(arr))
+		return self
+
 	def insert(self, index: int, value: T) -> None:
+		"""
+		Insert value before the given index.
+
+		:param index: position to insert at
+		:param value: value to insert
+		:raises IndexError: when index is out of range
+		"""
 		index = self._map_index(index)
 		old_len = len(self)
 		_u32_desc.set(self._storage_slot, self._off, old_len + 1)
@@ -164,18 +203,33 @@ class DynArray[T](_WithStorageSlotAndTD, collections.abc.MutableSequence[T]):
 			yield self[i]
 
 	def append(self, value: T) -> None:
+		"""
+		Append value to the end of the array.
+
+		:param value: value to append
+		"""
 		le = len(self)
 		_u32_desc.set(self._storage_slot, self._off, le + 1)
 		items_at = self._storage_slot.indirect(self._off)
 		return self._item_desc.set(items_at, le * self._item_desc.size, value)
 
 	def append_new_get(self) -> T:
+		"""
+		Grow the array by one and return a reference to the new (uninitialized) element.
+
+		:returns: reference to the newly appended element
+		"""
 		le = len(self)
 		_u32_desc.set(self._storage_slot, self._off, le + 1)
 		items_at = self._storage_slot.indirect(self._off)
 		return self._item_desc.get(items_at, le * self._item_desc.size)
 
 	def pop(self) -> None:  # type: ignore
+		"""
+		Remove the last element.
+
+		:raises Exception: when the array is empty
+		"""
 		le = len(self)
 		if le == 0:
 			raise Exception("can't pop from empty array")
@@ -194,6 +248,9 @@ class DynArray[T](_WithStorageSlotAndTD, collections.abc.MutableSequence[T]):
 		return ''.join(ret)
 
 	def clear(self) -> None:
+		"""
+		Remove all elements from the array.
+		"""
 		_u32_desc.set(self._storage_slot, self._off, 0)
 
 
@@ -231,105 +288,3 @@ class _DynArrayDesc(SpecialTypeDesc, ComplexCopyAction):
 		for i in range(len(val)):
 			self.item_desc.set(indirect_slot, i * self.item_desc.size, val[i])
 		return
-
-
-class Array[T, S: int](
-	_WithStorageSlotAndTD, collections.abc.Sequence, SizedArray[T, S]
-):
-	"""
-	Constantly sized array that can be persisted on the blockchain
-	"""
-
-	_item_desc: TypeDesc
-	_len: int
-
-	__slots__ = ('_item_desc', '_len', '_off', '_storage_slot')
-
-	def __init__(self):
-		"""
-		This class can't be created with ``Array()``
-
-		:raises TypeError: always
-		"""
-		raise TypeError('this class can not be instantiated by user')
-
-	def __len__(self) -> int:
-		return self._len
-
-	@staticmethod
-	def _view_at(item_desc: TypeDesc, le: int, slot: Slot, off: int) -> 'Array':
-		slf = Array.__new__(Array)
-		slf._item_desc = item_desc
-		slf._len = le
-		slf._storage_slot = slot
-		slf._off = off
-		return slf
-
-	def _map_index(self, idx: int) -> int:
-		le = len(self)
-		if idx < 0:
-			idx += le
-		if idx < 0 or idx >= le:
-			raise IndexError(f'index out of range {idx} not in 0..<{le}')
-		return idx
-
-	@typing.overload
-	def __getitem__(self, idx: typing.SupportsIndex) -> T: ...
-	@typing.overload
-	def __getitem__(self, idx: slice) -> 'Array': ...
-
-	def __getitem__(self, idx: typing.SupportsIndex | slice) -> T | 'Array':
-		if not isinstance(idx, slice):
-			idx = self._map_index(idx.__index__())
-			return self._item_desc.get(
-				self._storage_slot, self._off + idx * self._item_desc.size
-			)
-		else:
-			start, stop, step = idx.indices(len(self))
-			if step != 1:
-				raise KeyError('negative step is not supported')
-			le = max(stop - start, 0)
-			return Array._view_at(
-				self._item_desc,
-				le,
-				self._storage_slot,
-				self._off + start * self._item_desc.size,
-			)
-
-	def __setitem__(self, idx: int, val: T) -> None:
-		idx = self._map_index(idx)
-		self._item_desc.set(self._storage_slot, self._off + idx * self._item_desc.size, val)
-
-	def __iter__(self):
-		for i in range(len(self)):
-			yield self[i]
-
-
-class _ArrayDesc(SpecialTypeDesc):
-	_len: int
-
-	__slots__ = ('item_desc', 'view_ctor', '_len')
-
-	def __init__(self, item_desc: TypeDesc, le: int):
-		self._len = le
-
-		def new_array():
-			ret = Array.__new__(Array)
-			ret._len = le
-			return ret
-
-		SpecialTypeDesc.__init__(self, item_desc, new_array)
-
-		cop: list[CopyAction] = []
-		for _i in range(le):
-			actions_append(cop, item_desc.copy_actions)
-
-		TypeDesc.__init__(self, le * item_desc.size, cop)
-
-	def set(self, slot: Slot, off: int, val: Array | list) -> None:
-		assert len(val) == self._len
-		if isinstance(val, list):
-			for i in range(self._len):
-				self.item_desc.set(slot, off + i * self.item_desc.size, val[i])
-		else:
-			actions_apply_copy(self.copy_actions, slot, off, val._storage_slot, val._off)

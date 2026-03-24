@@ -38,7 +38,7 @@ import collections.abc
 from genlayer.types import Lazy
 from genlayer._internal import _lazy_api
 import genlayer.calldata as calldata
-import genlayer._internal.gl_call as gl_call
+import genlayer._internal.on_chain.gl_call as gl_call
 
 from genlayer.vm.public_abi import ResultCode
 
@@ -71,17 +71,19 @@ class VMError:
 	"""
 
 
-@dataclasses.dataclass
 class UserError(Exception):
 	"""
 	Represents an error that user contract rose during execution of their code in the VM.
 	"""
 
-	message: str | calldata.Decoded
+	message: calldata.Decoded
 	"""
 	User-provided message. Be careful to use concise message, as by default they are checked for strict equality
 	by the validator
 	"""
+
+	def __init__(self, message: calldata.Decoded):
+		self.message = message
 
 	def __str__(self) -> str:
 		return repr(self)

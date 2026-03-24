@@ -24,13 +24,14 @@ __all__ = (
 	'VLA',
 )
 
-from .vec import DynArray, Array
+from .dyn_array import DynArray
+from .array import Array
 from .tree_map import TreeMap
 from .root import Root
 
-from ._internal.core import Indirection, VLA
+from .core import Indirection, VLA
 
-from ._internal.core import ROOT_SLOT_ID, Slot, Manager, InmemManager
+from .core import ROOT_SLOT_ID, Slot, Manager, InmemManager
 
 import typing
 
@@ -46,6 +47,14 @@ from ._internal.generate import (
 
 
 def inmem_allocate[T](t: typing.Type[T], *init_args, **init_kwargs) -> T:
+	"""
+	Allocate a storage type in memory (useful for testing).
+
+	:param t: storage-allowed type to allocate
+	:param init_args: positional arguments forwarded to ``__init__``
+	:param init_kwargs: keyword arguments forwarded to ``__init__``
+	:returns: new in-memory instance of the given type
+	"""
 	td = _storage_build(_BuilderCtx.empty(), t)
 	man = InmemManager()
 
@@ -65,6 +74,13 @@ def inmem_allocate[T](t: typing.Type[T], *init_args, **init_kwargs) -> T:
 
 
 def copy_to_memory[T](val: T) -> T:
+	"""
+	Deep-copy a storage value into a new in-memory instance.
+
+	:param val: storage-backed value to copy
+	:returns: independent in-memory copy
+	:raises AssertionError: when val is not a storage type
+	"""
 	# we know that val is a storage type
 	td = getattr(val, '__type_desc__', None)
 	assert td is not None
@@ -82,10 +98,24 @@ import pickle
 
 @allow
 class Pickled[T]:
+	"""
+	Storage wrapper that persists arbitrary Python objects via pickle serialization.
+	"""
+
 	_data: bytes
 
 	def load(self) -> T:
+		"""
+		Deserialize and return the stored value.
+
+		:returns: the unpickled object
+		"""
 		return pickle.loads(self._data)
 
 	def store(self, val: T) -> None:
+		"""
+		Serialize and persist the given value.
+
+		:param val: object to pickle and store
+		"""
 		self._data = pickle.dumps(val)

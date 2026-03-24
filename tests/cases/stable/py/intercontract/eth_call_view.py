@@ -15,6 +15,6 @@ class Ghost:
 class Contract(gl.contract.Contract):
 	def __init__(self):
 		try:
-			Ghost(Address(b'\x30' * 20)).view().test(u256(10))
+			Ghost(Address(b'\x30' * 20)).view().test(10)
 		except BaseException as e:
 			print(f'expected error: {e}')

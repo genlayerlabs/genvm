@@ -26,7 +26,7 @@ def test_view_send():
 	@genvm_eth.contract_generator(
 		generate_view=generator,
 		generate_send=generator,
-		balance_getter=lambda x: u256(0),
+		balance_getter=lambda x: 0,
 		transfer=lambda p, d: None,
 	)
 	class MyContract:
