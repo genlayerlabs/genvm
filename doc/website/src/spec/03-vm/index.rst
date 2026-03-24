@@ -8,3 +8,4 @@ VM Specification
     02-sandboxing
     03-ram-limiting
     04-determinism-mode-switching
+    05-permissions

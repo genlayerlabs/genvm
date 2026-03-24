@@ -22,8 +22,8 @@ Payload
 Requirements
 ~~~~~~~~~~~~
 
-#. :ref:`gvm-def-det-mode` execution
-#. ``can_send_messages`` permission
+#. :ref:`gvm-perm-deterministic`
+#. :ref:`gvm-perm-send-messages`
 #. Sufficient contract balance for value transfer
 
 ``EthCall`` Message
@@ -46,8 +46,8 @@ Payload
 Requirements
 ~~~~~~~~~~~~
 
-#. :ref:`gvm-def-det-mode` execution
-#. ``can_call_others`` permission
+#. :ref:`gvm-perm-deterministic`
+#. :ref:`gvm-perm-call-others`
 
 ``CallContract`` Message
 ------------------------
@@ -70,10 +70,10 @@ Payload
 Requirements
 ~~~~~~~~~~~~
 
-#. :ref:`gvm-def-det-mode` execution
-#. ``can_call_others`` permission
+#. :ref:`gvm-perm-deterministic`
+#. :ref:`gvm-perm-call-others`
 
-Creates new :term:`sub-VM` instance for contract execution. Inherits sender permissions but disables ``write_storage``.
+Creates new :term:`sub-VM` instance for contract execution. See :ref:`gvm-permissions` for permission inheritance details.
 
 ``PostMessage`` Message
 -----------------------
@@ -97,8 +97,8 @@ Payload
 Requirements
 ~~~~~~~~~~~~
 
-#. :ref:`gvm-def-det-mode` execution
-#. ``can_send_messages`` permission
+#. :ref:`gvm-perm-deterministic`
+#. :ref:`gvm-perm-send-messages`
 #. Sufficient contract balance for value transfer
 
 ``DeployContract`` Message
@@ -124,8 +124,8 @@ Payload
 Requirements
 ~~~~~~~~~~~~
 
-#. :ref:`gvm-def-det-mode` execution
-#. ``can_send_messages`` permission
+#. :ref:`gvm-perm-deterministic`
+#. :ref:`gvm-perm-send-messages`
 #. Sufficient contract balance for value transfer
 
 Supports CREATE2-style deployment with salt nonce for deterministic addressing.
@@ -135,7 +135,7 @@ Supports CREATE2-style deployment with salt nonce for deterministic addressing.
 
 Executes non-deterministic code with leader/validator consensus.
 Creates :ref:`gvm-def-non-det-mode` VM instance with restricted permissions.
-See :doc:`../../03-vm/04-determinism-mode-switching` for more details.
+See :doc:`../../03-vm/04-determinism-mode-switching` and :ref:`gvm-permissions` for more details.
 
 Payload
 ~~~~~~~
@@ -152,7 +152,7 @@ Payload
 Requirements
 ~~~~~~~~~~~~
 
-#. ``can_spawn_nondet`` permission
+#. :ref:`gvm-perm-spawn-nondet`
 
 ``Sandbox`` Message
 -------------------
@@ -171,7 +171,7 @@ Payload
      }
    }
 
-Creates isolated VM instance. Inherits :ref:`gvm-def-det-mode` from parent. Disables storage read access and ``spawn_nondet``/``call_others`` permissions.
+Creates isolated VM instance. See :ref:`gvm-permissions` for permission inheritance details.
 
 ``WebRender`` Message
 ---------------------
@@ -331,7 +331,7 @@ Payload
 Requirements
 ~~~~~~~~~~~~
 
-#. :ref:`gvm-def-det-mode` execution
+#. :ref:`gvm-perm-deterministic`
 #. GenVM version 0.1.5 or higher
 
 Topics must be exactly 32 bytes each.
