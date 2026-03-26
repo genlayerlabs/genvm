@@ -16,22 +16,22 @@ let
 			__prefix = "py-lib-";
 
 			cloudpickle = {
-				hash = "test";
+				hash = "sha256-X/SQxZDU/Ep9D5ptzccqMiewgUh6mtt3vMyA+ZnqrHA=";
 			};
 			protobuf = {
-				hash = "test";
+				hash = "sha256-i0mGEqZ5XvoYCK5EZLZe48BltX8UYDxsiBQ8wJDratE=";
 			};
 
 			word_piece_tokenizer = {
-				hash = "test";
+				hash = "sha256-3T57N4bs1eSBaudAg0Dwi87d7kbu+anEYlGFH4Q3ujA=";
 			};
 
 			genlayer-std = {
-				hash = "test";
+				hash = "sha256-5Gct3b7FvvmGMSst5ae6kwT/pk794DnfwLThhGWLaVE=";
 			};
 
 			genlayer-embeddings = {
-				hash = "test";
+				hash = "sha256-PqEUrrm3j46Z2GdKKzhAoFipy4/5TzatPyS3/MqIm3E=";
 
 				depends = [
 					models.all-MiniLM-L6-v2
@@ -42,20 +42,20 @@ let
 		};
 
 		cpython = {
-			hash = "test";
+			hash = "sha256-qYd0fAfKBdFwG9qR+AsXjS8gJFm11Z47vsnMEyf0SzM=";
 			depends = [
 				softfloat
 			];
 		};
 
 		softfloat = {
-			hash = "test";
+			hash = "sha256-aR7i/mGXm+x7ofoL7iJ1zUHsVyqkAsZG0mQ/Lj1+l4c=";
 		};
 
 		wrappers = {
 			__prefix = "";
 			py-genlayer = {
-				hash = "test";
+				hash = "sha256-t+JSMMN8BJ0BTRTv115qmH6UgP5+15O9p7dh7BIMKFg=";
 				depends = [
 					cpython
 					pyLibs.cloudpickle
@@ -63,7 +63,7 @@ let
 				];
 			};
 			py-genlayer-multi = {
-				hash = "test";
+				hash = "sha256-Ee7Nrh12IIxUnprE5l6zIfYd7VNPj6XCjOgC9QsrBYs=";
 				depends = [
 					cpython
 					pyLibs.cloudpickle
@@ -82,10 +82,10 @@ let
 		builtins.any (hashHasSpecial hsh) (if builtins.hasAttr "depends" val then val.depends else []);
 
 	deduceHash = val:
-		if hashHasSpecial "test" val
-		then (if dev-mode then "test" else "error")
-		else if val.hash == null
+		if val.hash == null
 		then null
+		else if hashHasSpecial null val
+		then (if dev-mode then null else "error")
 		else if hashHasSpecial null val
 		then "error"
 		else val.hash;
@@ -103,11 +103,11 @@ let
 						(name: name != "__prefix")
 						(builtins.attrNames val)))
 		else
-			if val.hash == null || val.hash == "test" then
+			if val.hash == null || val.hash == null then
 				""
 			else if hashHasSpecialDeps null val then
 				"set ${pref+name} hash to null\n"
-			else if hashHasSpecialDeps "test" val then
+			else if hashHasSpecialDeps null val then
 				"set ${pref+name} hash to 'test'\n"
 			else
 				""
@@ -132,7 +132,7 @@ let
 					if deducedHash == null
 					then fakeHash
 					else deducedHash;
-				hash32 = if deducedHash == "test" then "test" else builtins.convertHash { hash = hashSRI; toHashFormat = "nix32"; };
+				hash32 = if deducedHash == null then "test" else builtins.convertHash { hash = hashSRI; toHashFormat = "nix32"; };
 			in rec {
 				id = pref + name;
 
