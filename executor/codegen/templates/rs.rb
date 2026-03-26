@@ -118,6 +118,7 @@ def gen_rust_trie_builder(entries, root_name, buf)
 
 	unless mod_buf.empty?
 		buf << "#[allow(non_snake_case)]\n"
+		buf << "#[rustfmt::skip]\n"
 		buf << "pub mod #{mod_name} {\n"
 		buf << "    use std::borrow::Cow;\n"
 		buf << "    use super::#{root_name};\n\n"
@@ -134,6 +135,7 @@ def gen_rust_trie_builder(entries, root_name, buf)
 	buf << "        self.0.into()\n"
 	buf << "    }\n"
 	buf << "}\n"
+	buf << "#[rustfmt::skip]\n"
 	buf << "impl #{root_name} {\n"
 	leaves.each { |name, parts|
 		str_val = parts.join(" ")
@@ -208,7 +210,8 @@ has_str_trie = json_data.any? { |t| t["type"] == "str_trie" }
 buf = String.new
 
 buf << "// This file is auto-generated. Do not edit!\n\n"
-buf << "#![allow(dead_code, clippy::redundant_static_lifetimes)]\n\n";
+buf << "#![allow(dead_code, clippy::redundant_static_lifetimes)]\n";
+buf << "\n"
 buf << "use serde::{Deserialize, Serialize};\n\n"
 
 if has_str_trie
