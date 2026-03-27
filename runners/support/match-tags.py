@@ -39,7 +39,7 @@ import os
 cwd = Path(os.getcwd())
 
 # Ensure tags are available locally (CI may use shallow checkout)
-subprocess.run(['git', 'fetch', '--tags'], capture_output=True)
+subprocess.run(['git', 'fetch', '--tags'], capture_output=True, check=True, text=True)
 
 # Collect tag messages (one-line) for descriptions
 proc_tags = subprocess.run(
@@ -420,6 +420,11 @@ if extra_runners:
 
 runners_rst_path = json_path.with_name('runners-page_generated.rst')
 runners_rst_path.write_text('\n'.join(runners_rst) + '\n')
+
+# Backwards compatibility: old wrapper includes runners-versions_generated.rst
+runners_rst_path.with_name('runners-versions_generated.rst').write_text(
+	'\n'.join(runners_rst) + '\n'
+)
 
 # --- Generate changelog_generated.rst ---
 

@@ -103,10 +103,3 @@ details summary:hover {
 .navbar-icon-links .nav-link {
   padding: 0.25rem 0.35rem;
 }
-
-/* ── Dark-mode favicon swap ── */
-@media (prefers-color-scheme: dark) {
-  link[rel="icon"] {
-    content: url('favicon-dark.png');
-  }
-}

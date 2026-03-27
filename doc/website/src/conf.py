@@ -1,3 +1,4 @@
+import datetime
 import os
 import json
 from pathlib import Path
@@ -8,7 +9,6 @@ import enum
 import sphinx.ext.autodoc
 
 project = 'GenVM SDK'
-import datetime
 
 copyright = f'{datetime.date.today().year}, GenLayer Labs'
 author = 'GenLayer Labs'

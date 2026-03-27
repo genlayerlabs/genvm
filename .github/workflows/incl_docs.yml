@@ -86,6 +86,7 @@ jobs:
             # Add new version to versions.json (semver descending, latest released = preferred, "main" last)
             echo "$existing_versions" | jq --argjson newEntry "$new_entry" '
               map(select(.version != $newEntry.version)) + [$newEntry]
+              | map(. + {preferred: false})
               | map(. + {_is_main: (.version == "main")})
               | sort_by(
                   if .version == "main" then [1, 0, 0, 0]
