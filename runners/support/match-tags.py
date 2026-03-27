@@ -435,7 +435,11 @@ for entry in enriched_versions:
 		changelog_rst.append('.. raw:: html')
 		changelog_rst.append('')
 		changelog_rst.append(f'   <details>')
-		changelog_rst.append(f'   <summary><strong>Runner Changes</strong> ({len(changes)} runner{"s" if len(changes) != 1 else ""} updated)</summary>')
+		n = len(changes)
+		s = 's' if n != 1 else ''
+		changelog_rst.append(
+			f'   <summary><strong>Runner Changes</strong> ({n} runner{s} updated)</summary>'
+		)
 		changelog_rst.append('')
 		change_rows = []
 		for rid in sorted(changes.keys()):
