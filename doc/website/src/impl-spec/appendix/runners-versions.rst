@@ -1,5 +1,4 @@
 Runners Versions
 ================
 
-.. include:: runners-versions.json
-   :literal:
+.. include:: runners-versions_generated.rst

@@ -7,9 +7,10 @@ import enum
 
 import sphinx.ext.autodoc
 
-project = 'GenLayer'
-copyright = '2025, GenLayer'
-author = 'GenLayer team'
+project = 'GenVM SDK'
+import datetime
+copyright = f'{datetime.date.today().year}, GenLayer Labs'
+author = 'GenLayer Labs'
 release = os.environ.get('DOCS_VERSION', 'main')
 version = release
 
@@ -24,7 +25,7 @@ extensions = [
 ]
 
 templates_path = ['_templates']
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '*_generated.rst', 'api', 'impl-spec/appendix/runners-versions.rst']
 
 language = 'en'
 
@@ -35,15 +36,88 @@ mermaid_params = ['--theme', 'dark', '--backgroundColor', 'transparent']
 # html_theme = 'alabaster'
 html_theme = 'pydata_sphinx_theme'
 html_static_path = ['_static']
+
+_docs_domain = os.environ.get('DOCS_DOMAIN', 'sdk.genlayer.com')
+
+# Fetch remote versions and merge with local build, sorted by semver
+import re as _re, urllib.request
+_switcher_url = '/_static/versions.json'
+try:
+	_req = urllib.request.Request(f'https://{_docs_domain}/versions.json', headers={'User-Agent': 'sphinx-build'})
+	with urllib.request.urlopen(_req, timeout=5) as _resp:
+		_remote_versions = json.loads(_resp.read())
+except Exception:
+	_remote_versions = []
+
+# Add local build entry
+_local_entry = {'name': f'{version} (local)', 'version': version, 'url': '/', 'preferred': True}
+_versions = [v for v in _remote_versions if v.get('version') != version] + [_local_entry]
+
+# Sort by semver descending, non-semver (like "main") at end
+def _semver_sort_key(entry):
+	m = _re.match(r'^v?(\d+)\.(\d+)\.(\d+)', entry.get('version', ''))
+	if m:
+		return (0, -int(m.group(1)), -int(m.group(2)), -int(m.group(3)))
+	return (1, entry.get('version', ''))
+
+_versions.sort(key=_semver_sort_key)
+
+Path(__file__).parent.joinpath('_static', 'versions.json').write_text(json.dumps(_versions, indent=2))
+
 html_theme_options = {
+	'logo': {
+		'image_light': '_static/logo-light.svg',
+		'image_dark': '_static/logo-dark.svg',
+	},
 	'show_nav_level': 2,
 	'show_toc_level': 2,
 	'navbar_start': ['navbar-logo', 'version-switcher'],
+	'navbar_end': ['theme-switcher', 'navbar-icon-links'],
+	'icon_links': [
+		{
+			'name': 'Full docs for LLMs',
+			'url': '/_static/llms.txt',
+			'icon': 'fa-solid fa-robot',
+			'type': 'fontawesome',
+		},
+		{
+			'name': 'GitHub',
+			'url': 'https://github.com/genlayerlabs/genvm',
+			'icon': 'fa-brands fa-github',
+			'type': 'fontawesome',
+		},
+		{
+			'name': 'Discord',
+			'url': 'https://discord.gg/8Jm4v89VAu',
+			'icon': 'fa-brands fa-discord',
+			'type': 'fontawesome',
+		},
+		{
+			'name': 'Telegram',
+			'url': 'https://t.me/genlayer',
+			'icon': 'fa-brands fa-telegram',
+			'type': 'fontawesome',
+		},
+		{
+			'name': 'X (Twitter)',
+			'url': 'https://x.com/GenLayer',
+			'icon': 'fa-brands fa-x-twitter',
+			'type': 'fontawesome',
+		},
+	],
+	'primary_sidebar_end': ['version-switcher'],
+	'footer_start': ['copyright'],
+	'footer_end': [],
 	'switcher': {
-		'json_url': f'https://{os.environ.get("DOCS_DOMAIN", "sdk.genlayer.com")}/versions.json',
+		'json_url': _switcher_url,
 		'version_match': version,
 	},
 }
+
+html_show_sourcelink = False
+html_css_files = ['custom.css']
+html_js_files = ['favicon-swap.js']
+html_favicon = '_static/favicon.png'
 
 todo_include_todos = True
 
