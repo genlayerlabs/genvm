@@ -9,6 +9,7 @@ import sphinx.ext.autodoc
 
 project = 'GenVM SDK'
 import datetime
+
 copyright = f'{datetime.date.today().year}, GenLayer Labs'
 author = 'GenLayer Labs'
 release = os.environ.get('DOCS_VERSION', 'main')
@@ -25,7 +26,14 @@ extensions = [
 ]
 
 templates_path = ['_templates']
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '*_generated.rst', 'api', 'impl-spec/appendix/runners-versions.rst']
+exclude_patterns = [
+	'_build',
+	'Thumbs.db',
+	'.DS_Store',
+	'*_generated.rst',
+	'api',
+	'impl-spec/appendix/runners-versions.rst',
+]
 
 language = 'en'
 
@@ -41,17 +49,28 @@ _docs_domain = os.environ.get('DOCS_DOMAIN', 'sdk.genlayer.com')
 
 # Fetch remote versions and merge with local build, sorted by semver
 import re as _re, urllib.request
+
 _switcher_url = '/_static/versions.json'
 try:
-	_req = urllib.request.Request(f'https://{_docs_domain}/versions.json', headers={'User-Agent': 'sphinx-build'})
+	_req = urllib.request.Request(
+		f'https://{_docs_domain}/versions.json', headers={'User-Agent': 'sphinx-build'}
+	)
 	with urllib.request.urlopen(_req, timeout=5) as _resp:
 		_remote_versions = json.loads(_resp.read())
 except Exception:
 	_remote_versions = []
 
 # Add local build entry
-_local_entry = {'name': f'{version} (local)', 'version': version, 'url': '/', 'preferred': True}
-_versions = [v for v in _remote_versions if v.get('version') != version] + [_local_entry]
+_local_entry = {
+	'name': f'{version} (local)',
+	'version': version,
+	'url': '/',
+	'preferred': True,
+}
+_versions = [v for v in _remote_versions if v.get('version') != version] + [
+	_local_entry
+]
+
 
 # Sort by semver descending, non-semver (like "main") at end
 def _semver_sort_key(entry):
@@ -60,9 +79,12 @@ def _semver_sort_key(entry):
 		return (0, -int(m.group(1)), -int(m.group(2)), -int(m.group(3)))
 	return (1, entry.get('version', ''))
 
+
 _versions.sort(key=_semver_sort_key)
 
-Path(__file__).parent.joinpath('_static', 'versions.json').write_text(json.dumps(_versions, indent=2))
+Path(__file__).parent.joinpath('_static', 'versions.json').write_text(
+	json.dumps(_versions, indent=2)
+)
 
 html_theme_options = {
 	'logo': {

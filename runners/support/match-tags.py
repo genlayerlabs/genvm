@@ -105,12 +105,14 @@ res = json.loads(proc.stdout)
 
 SEMVER_RE = re.compile(r'^v?(\d+)\.(\d+)\.(\d+)(.*)$')
 
+
 def semver_key(version: str):
 	"""Return sort key: numeric semver ascending."""
 	m = SEMVER_RE.match(version)
 	if m:
 		return (0, int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4))
 	return (1, version)
+
 
 def semver_key_desc(version: str):
 	"""Return sort key: numeric semver descending."""
@@ -119,8 +121,10 @@ def semver_key_desc(version: str):
 		return (0, -int(m.group(1)), -int(m.group(2)), -int(m.group(3)), m.group(4))
 	return (1, version)
 
+
 def is_semver(version: str) -> bool:
 	return SEMVER_RE.match(version) is not None
+
 
 # Build tag2commit reverse mapping
 tag2commit = {tag: commit for commit, tag in commit2tag.items()}
@@ -143,7 +147,10 @@ for ver in semver_versions:
 			# Runner newly introduced
 			changes[rid] = {'old': None, 'new': hashes[0] if hashes else None}
 		elif set(hashes) != set(old_hashes):
-			changes[rid] = {'old': old_hashes[0] if old_hashes else None, 'new': hashes[0] if hashes else None}
+			changes[rid] = {
+				'old': old_hashes[0] if old_hashes else None,
+				'new': hashes[0] if hashes else None,
+			}
 	runner_changes_map[ver] = changes
 	prev_runners = runners
 
@@ -159,7 +166,14 @@ for i, ver in enumerate(semver_versions):
 	if prev_commit_hash and curr_commit_hash:
 		try:
 			log_proc = subprocess.run(
-				['git', 'log', '--oneline', f'{prev_commit_hash}..{curr_commit_hash}', '--', 'runners/'],
+				[
+					'git',
+					'log',
+					'--oneline',
+					f'{prev_commit_hash}..{curr_commit_hash}',
+					'--',
+					'runners/',
+				],
 				capture_output=True,
 				text=True,
 				check=True,
@@ -212,15 +226,19 @@ json_path.write_text(json.dumps(enriched_json, indent=2))
 
 # --- RST generation helpers ---
 
+
 def rst_heading(text, char):
 	return f'{text}\n{char * len(text)}'
+
 
 def make_table(rows, headers):
 	"""Build an RST grid table from headers + rows (list of lists)."""
 	col_widths = [len(h) for h in headers]
 	for row in rows:
 		for i, cell in enumerate(row):
-			col_widths[i] = max(col_widths[i], max((len(l) for l in cell.split('\n')), default=0))
+			col_widths[i] = max(
+				col_widths[i], max((len(l) for l in cell.split('\n')), default=0)
+			)
 
 	def sep(ch='-'):
 		return '+' + '+'.join(ch * (w + 2) for w in col_widths) + '+'
@@ -245,17 +263,24 @@ def make_table(rows, headers):
 		parts.append(sep('-'))
 	return '\n'.join(parts)
 
+
 def version_to_anchor(ver):
 	"""Convert version string to changelog anchor: v0.1.8 -> v0-1-8"""
 	return ver.replace('.', '-')
+
 
 # --- Runner tier definitions ---
 
 TIER_1 = ['py-genlayer', 'py-genlayer-multi']
 TIER_2 = ['py-lib-genlayer-embeddings']
 TIER_3 = [
-	'cpython', 'softfloat', 'py-lib-cloudpickle', 'py-lib-genlayer-std',
-	'py-lib-protobuf', 'py-lib-word_piece_tokenizer', 'models-all-MiniLM-L6-v2',
+	'cpython',
+	'softfloat',
+	'py-lib-cloudpickle',
+	'py-lib-genlayer-std',
+	'py-lib-protobuf',
+	'py-lib-word_piece_tokenizer',
+	'models-all-MiniLM-L6-v2',
 ]
 
 RUNNER_DESCRIPTIONS = {
@@ -276,6 +301,7 @@ RUNNER_DESCRIPTIONS = {
 latest_ver = semver_versions[-1] if semver_versions else None
 latest_runners = res.get(latest_ver, {}) if latest_ver else {}
 
+
 def build_runner_version_list(rid):
 	"""Build list of (hash, version_range_str) for previous versions of a runner.
 
@@ -288,6 +314,7 @@ def build_runner_version_list(rid):
 	# Skip the first entry (current hash)
 	prev = history[1:]
 	return prev
+
 
 def format_version_range(rid):
 	"""For each hash in the runner history (excluding current), compute the version range string."""
@@ -322,6 +349,7 @@ def format_version_range(rid):
 	prev_groups.reverse()
 	return prev_groups
 
+
 def render_runner_section(rid, rst_parts):
 	desc = RUNNER_DESCRIPTIONS.get(rid, '')
 	hashes = latest_runners.get(rid, [])
@@ -348,12 +376,15 @@ def render_runner_section(rid, rst_parts):
 				rst_parts.append(f'- ``{h}`` \u2014 `{start_v} <changelog.html#{anchor}>`_')
 			else:
 				anchor = version_to_anchor(end_v)
-				rst_parts.append(f'- ``{h}`` \u2014 {start_v} through `{end_v} <changelog.html#{anchor}>`_')
+				rst_parts.append(
+					f'- ``{h}`` \u2014 {start_v} through `{end_v} <changelog.html#{anchor}>`_'
+				)
 		rst_parts.append('')
 		rst_parts.append('.. raw:: html')
 		rst_parts.append('')
 		rst_parts.append('   </details>')
 		rst_parts.append('')
+
 
 runners_rst = []
 
