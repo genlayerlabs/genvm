@@ -95,7 +95,7 @@ def _repr_type(t: typing.Any, permissive: bool) -> typing.Any:
 			assert len(args) == 1
 			return [{'$rep': _repr_type(args[0], permissive)}]
 		if origin is typing.Literal:
-			return 'any'  # FIXME
+			return {'$enum': list(typing.get_args(t))}
 	raise TypeError(
 		f'type is not supported', {'type': t, 'kind': ttype, **reflect.try_get_lineno(t)}
 	)
