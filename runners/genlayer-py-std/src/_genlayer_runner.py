@@ -17,6 +17,7 @@ if os.getenv('GENLAYER_ENABLE_PROFILER', 'false') == 'true':
 	p.enable()
 
 	def exit_hook():
+		"""Dump compressed profiler statistics to stderr on exit."""
 		p.disable()
 		p.create_stats()
 		import marshal, io
@@ -61,6 +62,7 @@ class CalldataSchema(typing.TypedDict, total=False):
 
 
 def _give_result(res_fn: typing.Callable[[], typing.Any]) -> typing.NoReturn:
+	"""Execute a function and return its result to the VM, or rollback on UserError."""
 	try:
 		res = res_fn()
 	except _vm.UserError as r:
@@ -69,6 +71,7 @@ def _give_result(res_fn: typing.Callable[[], typing.Any]) -> typing.NoReturn:
 
 
 def _handle_main() -> typing.NoReturn:
+	"""Entry point for MAIN contract execution: resolve method, instantiate, and call."""
 	from genlayer.gl.genvm_contracts import Contract
 
 	import genlayer.py.get_schema as _get_schema
@@ -85,6 +88,13 @@ def _handle_main() -> typing.NoReturn:
 		contract_type: type[Contract]
 
 	def check_abstracts(ctx: MethodResolverInfo, meth: typing.Callable) -> str | None:
+		"""
+		Validate that a method can be called in the current context.
+
+		:param ctx: Method resolution context.
+		:param meth: The method to validate.
+		:returns: Error message string if the method cannot be called, or None if valid.
+		"""
 		if not _get_schema._is_public(meth):
 			return f'call to private method `{meth}`'
 		if getattr(meth, '__isabstractmethod__', False):
@@ -94,6 +104,14 @@ def _handle_main() -> typing.NoReturn:
 		return None
 
 	def resolve_method(ctx) -> typing.Callable:
+		"""
+		Determine which contract method to invoke based on calldata and message context.
+
+		:param ctx: Method resolution context.
+		:returns: The resolved method callable.
+		:raises TypeError: If __init__ is public or missing.
+		:raises ValueError: For forbidden method names or unknown special methods.
+		"""
 		if ctx.msg['is_init']:
 			meth = getattr(__known_contract__, '__init__')
 			if _get_schema._is_public(meth):
