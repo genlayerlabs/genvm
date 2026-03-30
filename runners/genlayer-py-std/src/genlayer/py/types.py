@@ -238,7 +238,7 @@ class Address:
 	def __str__(self) -> str:
 		return self.as_hex
 
-	def __format__(self, fmt: typing.Literal['x', 'b64', 'cd', '']) -> str:  # type: ignore
+	def __format__(self, fmt: typing.Literal['s', 'x', 'b64', 'cd', '']) -> str:  # type: ignore
 		match fmt:
 			case 's':
 				return self.__str__()

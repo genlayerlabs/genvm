@@ -90,7 +90,7 @@ def _handle_main() -> typing.NoReturn:
 		if getattr(meth, '__isabstractmethod__', False):
 			return f'method is abstract `{meth}`'
 		if ctx.msg['value'] > 0 and not getattr(meth, _get_schema.PAYABLE_ATTR, False):
-			return f'called non-payable method `{meth} with non-zero value`'
+			return f'called non-payable method `{meth}` with non-zero value'
 		return None
 
 	def resolve_method(ctx) -> typing.Callable:
