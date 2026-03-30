@@ -46,6 +46,14 @@ def _is_dict(t, permissive: bool) -> bool:
 
 
 def _repr_type(t: typing.Any, permissive: bool) -> typing.Any:
+	"""
+	Convert a Python type annotation to a GenLayer ABI schema representation.
+
+	:param t: The type annotation to convert.
+	:param permissive: If True, accept Sequence/Mapping subclasses as list/dict.
+	:returns: Schema string (e.g. 'int', 'string') or dict (e.g. {'$or': [...]}).
+	:raises TypeError: If the type is not supported.
+	"""
 	if t is inspect.Signature.empty:
 		return 'any'
 	if type(t) is typing.NewType:
@@ -95,7 +103,7 @@ def _repr_type(t: typing.Any, permissive: bool) -> typing.Any:
 			assert len(args) == 1
 			return [{'$rep': _repr_type(args[0], permissive)}]
 		if origin is typing.Literal:
-			return 'any'  # FIXME
+			return {'$enum': list(typing.get_args(t))}  # Literal['a','b'] becomes {'$enum': ['a','b']}
 	raise TypeError(
 		f'type is not supported', {'type': t, 'kind': ttype, **reflect.try_get_lineno(t)}
 	)
