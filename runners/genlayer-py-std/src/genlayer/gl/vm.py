@@ -76,9 +76,11 @@ def _decode_sub_vm_result_retn(
 
 	:param data: Raw buffer containing result code byte followed by payload
 	:return: Parsed :class:`Return`, :class:`VMError`, or :class:`UserError`
-	:raises ValueError: If the result code byte is unrecognized
+	:raises ValueError: If the result code byte is unrecognized or buffer is empty
 	"""
 	mem = memoryview(data)
+	if len(mem) == 0:
+		raise ValueError('empty result buffer')
 	if mem[0] == ResultCode.USER_ERROR:
 		return UserError(str(mem[1:], encoding='utf8'))
 	if mem[0] == ResultCode.RETURN:
