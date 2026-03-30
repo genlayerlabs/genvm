@@ -72,6 +72,12 @@ Union type representing all possible outcomes from a VM operation.
 def _decode_sub_vm_result_retn(
 	data: collections.abc.Buffer,
 ) -> Result:
+	"""Decode raw VM result bytes into a typed Result without unpacking.
+
+	:param data: Raw buffer containing result code byte followed by payload
+	:return: Parsed :class:`Return`, :class:`VMError`, or :class:`UserError`
+	:raises ValueError: If the result code byte is unrecognized
+	"""
 	mem = memoryview(data)
 	if mem[0] == ResultCode.USER_ERROR:
 		return UserError(str(mem[1:], encoding='utf8'))
@@ -79,7 +85,7 @@ def _decode_sub_vm_result_retn(
 		return Return(calldata.decode(mem[1:]))
 	if mem[0] == ResultCode.VM_ERROR:
 		return VMError(str(mem[1:], encoding='utf8'))
-	assert False, f'unknown type {mem[0]}'
+	raise ValueError(f'unknown result code {mem[0]}')
 
 
 def unpack_result[T: calldata.Decoded](res: Result[T], /) -> T:
@@ -105,6 +111,12 @@ def unpack_result[T: calldata.Decoded](res: Result[T], /) -> T:
 def _decode_sub_vm_result(
 	data: collections.abc.Buffer,
 ) -> calldata.Decoded:
+	"""Decode and unpack raw VM result bytes into the underlying value.
+
+	:param data: Raw buffer containing result code byte followed by payload
+	:return: Decoded calldata value on success
+	:raises UserError: If the VM returned a user or VM error
+	"""
 	return unpack_result(_decode_sub_vm_result_retn(data))
 
 
@@ -230,7 +242,8 @@ def run_nondet[T: calldata.Decoded](
 	import cloudpickle
 
 	def real_leader_fn(stage_data):
-		assert stage_data is None
+		if stage_data is not None:
+			raise ValueError(f'expected None stage_data for leader, got {stage_data!r}')
 		return leader_fn()
 
 	def real_validator_fn(stage_data) -> bool:
