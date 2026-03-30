@@ -18,6 +18,7 @@ pub struct DetNondet<T> {
 }
 
 impl<T> DetNondet<T> {
+    /// Get a reference to the inner value for the given determinism flag.
     pub fn get(&self, is_det: bool) -> &T {
         if is_det {
             &self.det
@@ -26,6 +27,7 @@ impl<T> DetNondet<T> {
         }
     }
 
+    /// Get a mutable reference to the inner value for the given determinism flag.
     pub fn get_mut(&mut self, is_det: bool) -> &mut T {
         if is_det {
             &mut self.det
@@ -45,6 +47,7 @@ pub struct DataFeesLimit {
 }
 
 impl DataFeesLimit {
+    /// Create a new data fees limit with storage and receipt costs.
     pub fn new(
         full: primitive_types::U256,
         storage_page_cost: u32,
@@ -87,6 +90,7 @@ impl DataFeesLimit {
             .is_ok()
     }
 
+    /// Consume raw gas units. Returns false if insufficient gas.
     pub async fn consume_raw(&self, amount: u64) -> bool {
         if self.consume_fast(amount) {
             return true;
@@ -105,20 +109,31 @@ impl DataFeesLimit {
         }
     }
 
+    /// Return remaining fast-path gas as u64.
     pub fn remaining_fast(&self) -> u64 {
         self.fast.load(std::sync::atomic::Ordering::SeqCst)
     }
 
+    /// Consume gas for storage page allocation.
+    ///
+    /// Uses `checked_mul` to prevent silent overflow.
     pub async fn consume_storage_pages(&self, pages: u64) -> bool {
-        // FIXME(claude): handle multiplication overflow correctly
-        self.consume_raw(pages * self.storage_page_cost as u64)
-            .await
+        let cost = match pages.checked_mul(self.storage_page_cost as u64) {
+            Some(c) => c,
+            None => return false,
+        };
+        self.consume_raw(cost).await
     }
 
+    /// Consume gas for receipt word usage.
+    ///
+    /// Uses `checked_mul` to prevent silent overflow.
     pub async fn consume_receipt_words(&self, words: u64) -> bool {
-        // FIXME(claude): handle multiplication overflow correctly
-        self.consume_raw(words * self.receipt_word_cost as u64)
-            .await
+        let cost = match words.checked_mul(self.receipt_word_cost as u64) {
+            Some(c) => c,
+            None => return false,
+        };
+        self.consume_raw(cost).await
     }
 }
 
@@ -132,6 +147,7 @@ pub struct SharedData {
     pub data_fees_limit: DataFeesLimit,
 }
 
+/// Parse host connection data from environment or command-line arguments.
 pub fn parse_host_data(
     zelf: &genvm_common::domain::ExecutionData,
 ) -> anyhow::Result<genvm_modules_interfaces::HostData> {
@@ -139,6 +155,7 @@ pub fn parse_host_data(
         .with_context(|| "parsing host_data from execution context")
 }
 
+/// Spawn a VM execution, apply results, and return the run outcome.
 pub async fn spawn_apply_run(
     supervisor: &Arc<supervisor::Supervisor>,
     vm: wasi::genlayer_sdk::SingleVMData,
