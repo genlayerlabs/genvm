@@ -110,15 +110,19 @@ impl DataFeesLimit {
     }
 
     pub async fn consume_storage_pages(&self, pages: u64) -> bool {
-        // FIXME(claude): handle multiplication overflow correctly
-        self.consume_raw(pages * self.storage_page_cost as u64)
-            .await
+        let cost = match pages.checked_mul(self.storage_page_cost as u64) {
+            Some(c) => c,
+            None => return false,
+        };
+        self.consume_raw(cost).await
     }
 
     pub async fn consume_receipt_words(&self, words: u64) -> bool {
-        // FIXME(claude): handle multiplication overflow correctly
-        self.consume_raw(words * self.receipt_word_cost as u64)
-            .await
+        let cost = match words.checked_mul(self.receipt_word_cost as u64) {
+            Some(c) => c,
+            None => return false,
+        };
+        self.consume_raw(cost).await
     }
 }
 
