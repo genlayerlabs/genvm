@@ -109,16 +109,28 @@ impl DataFeesLimit {
         self.fast.load(std::sync::atomic::Ordering::SeqCst)
     }
 
+    /// Consume gas for storage page allocation.
+    ///
+    /// Uses `checked_mul` to prevent silent overflow — if the multiplication
+    /// wraps, the operation is denied (returns `false`).
     pub async fn consume_storage_pages(&self, pages: u64) -> bool {
-        // FIXME(claude): handle multiplication overflow correctly
-        self.consume_raw(pages * self.storage_page_cost as u64)
-            .await
+        let cost = match pages.checked_mul(self.storage_page_cost as u64) {
+            Some(c) => c,
+            None => return false,
+        };
+        self.consume_raw(cost).await
     }
 
+    /// Consume gas for receipt word usage.
+    ///
+    /// Uses `checked_mul` to prevent silent overflow — if the multiplication
+    /// wraps, the operation is denied (returns `false`).
     pub async fn consume_receipt_words(&self, words: u64) -> bool {
-        // FIXME(claude): handle multiplication overflow correctly
-        self.consume_raw(words * self.receipt_word_cost as u64)
-            .await
+        let cost = match words.checked_mul(self.receipt_word_cost as u64) {
+            Some(c) => c,
+            None => return false,
+        };
+        self.consume_raw(cost).await
     }
 }
 
