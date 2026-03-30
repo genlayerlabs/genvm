@@ -202,6 +202,8 @@ def encode[T](
 
 
 class DecodingError(ValueError):
+	"""Raised when calldata bytes cannot be decoded into a valid Python object."""
+
 	pass
 
 

@@ -44,6 +44,13 @@ def get(
 	*,
 	headers: dict[str, str | bytes] = {},
 ) -> Lazy[Response]:
+	"""
+	Send an HTTP GET request.
+
+	:param url: Target URL.
+	:param headers: Optional request headers.
+	:returns: Lazy that resolves to a :py:class:`Response`.
+	"""
 	return request.lazy(url, method='GET', headers=headers)
 
 
@@ -54,6 +61,14 @@ def post(
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
 ) -> Lazy[Response]:
+	"""
+	Send an HTTP POST request.
+
+	:param url: Target URL.
+	:param body: Optional request body (str or bytes).
+	:param headers: Optional request headers.
+	:returns: Lazy that resolves to a :py:class:`Response`.
+	"""
 	return request.lazy(url, method='POST', body=body, headers=headers)
 
 
@@ -64,6 +79,14 @@ def delete(
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
 ) -> Lazy[Response]:
+	"""
+	Send an HTTP DELETE request.
+
+	:param url: Target URL.
+	:param body: Optional request body.
+	:param headers: Optional request headers.
+	:returns: Lazy that resolves to a :py:class:`Response`.
+	"""
 	return request.lazy(url, method='DELETE', body=body, headers=headers)
 
 
@@ -74,6 +97,14 @@ def head(
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
 ) -> Lazy[Response]:
+	"""
+	Send an HTTP HEAD request.
+
+	:param url: Target URL.
+	:param body: Optional request body.
+	:param headers: Optional request headers.
+	:returns: Lazy that resolves to a :py:class:`Response`.
+	"""
 	return request.lazy(url, method='HEAD', body=body, headers=headers)
 
 
@@ -84,6 +115,14 @@ def patch(
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
 ) -> Lazy[Response]:
+	"""
+	Send an HTTP PATCH request.
+
+	:param url: Target URL.
+	:param body: Optional request body.
+	:param headers: Optional request headers.
+	:returns: Lazy that resolves to a :py:class:`Response`.
+	"""
 	return request.lazy(url, method='PATCH', body=body, headers=headers)
 
 
@@ -95,6 +134,15 @@ def request(
 	body: str | bytes | None = None,
 	headers: dict[str, str | bytes] = {},
 ) -> Lazy[Response]:
+	"""
+	Send an HTTP request with full control over method and headers.
+
+	:param url: Target URL.
+	:param method: HTTP method.
+	:param body: Optional request body.
+	:param headers: Optional request headers.
+	:returns: Lazy that resolves to a :py:class:`Response`.
+	"""
 	return gl_call.gl_call_generic(
 		{
 			'WebRequest': {

@@ -72,6 +72,13 @@ Union type representing all possible outcomes from a VM operation.
 def _decode_sub_vm_result_retn(
 	data: collections.abc.Buffer,
 ) -> Result:
+	"""
+	Decode a sub-VM result from raw bytes.
+
+	:param data: Raw buffer containing result code byte followed by payload.
+	:returns: Parsed Result object (Return, UserError, or VMError).
+	:raises ValueError: If the result code byte is not a known ResultCode value.
+	"""
 	mem = memoryview(data)
 	if mem[0] == ResultCode.USER_ERROR:
 		return UserError(str(mem[1:], encoding='utf8'))
@@ -79,7 +86,7 @@ def _decode_sub_vm_result_retn(
 		return Return(calldata.decode(mem[1:]))
 	if mem[0] == ResultCode.VM_ERROR:
 		return VMError(str(mem[1:], encoding='utf8'))
-	assert False, f'unknown type {mem[0]}'
+	raise ValueError(f'unknown sub-VM result code {mem[0]}')
 
 
 def unpack_result[T: calldata.Decoded](res: Result[T], /) -> T:
