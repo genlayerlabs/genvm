@@ -11,6 +11,7 @@ use crate::{host::message::root_offsets, rt, SlotID};
 pub struct PageID(pub SlotID, pub u32);
 
 impl PageID {
+    /// to bytes.
     pub fn to_bytes(&self) -> [u8; 36] {
         let mut res = [0u8; 36];
         res[..32].copy_from_slice(&self.0.raw());
@@ -18,6 +19,7 @@ impl PageID {
         res
     }
 
+    /// from bytes.
     pub fn from_bytes(data: [u8; 36]) -> Self {
         let mut slot_bytes = [0u8; 32];
         slot_bytes.copy_from_slice(&data[..32]);
@@ -36,10 +38,12 @@ pub struct Delta(
 );
 
 pub trait HostStorage {
+    /// storage read.
     fn storage_read(&mut self, slot_id: SlotID, index: u32, buf: &mut [u8]) -> anyhow::Result<()>;
 }
 
 impl<HS: HostStorage, T: DerefMut<Target = HS>> HostStorage for T {
+    /// storage read.
     fn storage_read(&mut self, slot_id: SlotID, index: u32, buf: &mut [u8]) -> anyhow::Result<()> {
         self.deref_mut().storage_read(slot_id, index, buf)
     }
@@ -50,6 +54,7 @@ pub trait HostStorageLocking {
     where
         Self: 'a;
 
+    /// lock.
     fn lock(&self) -> impl std::future::Future<Output = Self::ReturnType<'_>> + Send;
 }
 
@@ -57,10 +62,12 @@ pub trait HostStorageLocking {
 pub struct Limiter(sync::DArc<rt::DataFeesLimit>);
 
 impl Limiter {
+    /// new.
     pub fn new(data_fees_limit: sync::DArc<rt::DataFeesLimit>) -> Self {
         Self(data_fees_limit)
     }
 
+    /// consume.
     pub async fn consume(&self, amount: u64) -> anyhow::Result<()> {
         if !self.0.consume_storage_pages(amount).await {
             return Err(rt::errors::VMError::oos(Some(anyhow::anyhow!(
@@ -79,18 +86,22 @@ struct StoragePagesOverride(
 );
 
 impl StoragePagesOverride {
+    /// new.
     fn new(storage_pages_limit: rt::vm::storage::Limiter) -> Self {
         Self(Default::default(), storage_pages_limit)
     }
 
+    /// read page override.
     fn read_page_override(&self, key: PageID) -> Option<[u8; 32]> {
         self.0.get(&key).cloned()
     }
 
+    /// get.
     fn get(&self, key: PageID) -> Option<[u8; 32]> {
         self.0.get(&key).cloned()
     }
 
+    /// write page.
     async fn write_page(&mut self, key: PageID, value: [u8; 32]) -> anyhow::Result<()> {
         if !self.0.contains_key(&key) {
             self.1.consume(1).await?;
@@ -112,6 +123,7 @@ pub struct Storage<HS: Send + Sync> {
 }
 
 impl<HS: Send + Sync> Storage<HS> {
+    /// new.
     pub fn new(address: calldata::Address, storage_pages_limit: Limiter, host: HS) -> Self {
         Self {
             address,
@@ -122,15 +134,18 @@ impl<HS: Send + Sync> Storage<HS> {
     }
 
     #[inline(always)]
+    /// read page override.
     pub fn read_page_override(&self, key: PageID) -> Option<[u8; 32]> {
         self.pages.read_page_override(key)
     }
 
     #[inline(always)]
+    /// write page.
     pub async fn write_page(&mut self, key: PageID, value: [u8; 32]) -> anyhow::Result<()> {
         self.pages.write_page(key, value).await
     }
 
+    /// make delta.
     pub fn make_delta(&self) -> Vec<Delta> {
         let mut res = Vec::<Delta>::new();
 
@@ -150,6 +165,7 @@ impl<HS: Send + Sync> Storage<HS> {
 }
 
 impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
+    /// read.
     pub async fn read(
         &mut self,
         slot_id: SlotID,
@@ -208,8 +224,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         }
 
         let mut put_to_cache: [MaybeUninit<(PageID, [u8; 32])>; STORAGE_CACHE_SIZE / 16] =
-            // SAFETY: MaybeUninit does not require initialization
-            unsafe { MaybeUninit::uninit().assume_init() };
+            std::array::from_fn(|_| MaybeUninit::uninit());
         let mut put_to_cache_count = 0;
 
         for page_idx in start_page..=end_page {
@@ -255,6 +270,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         Ok(())
     }
 
+    /// write single page.
     async fn write_single_page(
         &mut self,
         page_id: PageID,
@@ -288,6 +304,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         Ok(())
     }
 
+    /// write.
     pub async fn write(&mut self, slot_id: SlotID, index: u32, buf: &[u8]) -> anyhow::Result<()> {
         if buf.is_empty() {
             return Ok(());
@@ -375,6 +392,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         Ok(())
     }
 
+    /// write code.
     pub async fn write_code(&mut self, code: &[u8]) -> anyhow::Result<()> {
         let code_slot = SlotID::ZERO.indirection(root_offsets::CODE);
 
@@ -391,6 +409,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         Ok(())
     }
 
+    /// read code.
     pub async fn read_code(
         &mut self,
         limiter: &rt::memlimiter::Limiter,
@@ -405,8 +424,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
             return Err(rt::errors::VMError::oom(None).into());
         }
 
-        let res = Box::new_uninit_slice(code_size as usize);
-        let mut res = unsafe { res.assume_init() };
+        let mut res = vec![0u8; code_size as usize].into_boxed_slice();
 
         self.read(code_slot, 4, &mut res).await?;
 
@@ -419,6 +437,7 @@ mod tests {
     use super::*;
 
     #[test]
+    /// pages sorted correctly 1 byte.
     fn pages_sorted_correctly_1_byte() {
         let left = PageID(SlotID::from_bytes([1u8; 32]), 5);
         let right = PageID(SlotID::from_bytes([1u8; 32]), 10);
@@ -430,6 +449,7 @@ mod tests {
     }
 
     #[test]
+    /// pages sorted correctly 2 byte.
     fn pages_sorted_correctly_2_byte() {
         let left = PageID(SlotID::from_bytes([1u8; 32]), 5);
         let right = PageID(SlotID::from_bytes([1u8; 32]), 1024);

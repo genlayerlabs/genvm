@@ -34,9 +34,11 @@ pub struct Metrics {
 }
 
 impl Host {
+    /// new.
     pub fn new(sock: Box<dyn Sock>, metrics: sync::DArc<Metrics>) -> Host {
         Self { sock, metrics }
     }
+    /// connect.
     pub fn connect(addr: &str, metrics: sync::DArc<Metrics>) -> Result<Host> {
         const UNIX: &str = "unix://";
         let sock: Box<dyn Sock> = if let Some(addr_suff) = addr.strip_prefix(UNIX) {
@@ -60,6 +62,7 @@ impl Host {
     }
 }
 
+/// read u32.
 fn read_u32(sock: &mut dyn Sock, context: &str) -> Result<u32> {
     let mut int_buf = [0; 4];
     sock.read_exact(&mut int_buf)
@@ -67,16 +70,17 @@ fn read_u32(sock: &mut dyn Sock, context: &str) -> Result<u32> {
     Ok(u32::from_le_bytes(int_buf))
 }
 
+/// Read a length-prefixed byte array from the host socket.
 fn read_bytes(sock: &mut dyn Sock, context: &str) -> Result<Box<[u8]>> {
     let len = read_u32(sock, context)?;
 
-    let res = Box::new_uninit_slice(len as usize);
-    let mut res = unsafe { res.assume_init() };
+    let mut res = vec![0u8; len].into_boxed_slice();
     sock.read_exact(&mut res)
         .with_context(|| format!("reading {} bytes from host: {context}", len))?;
     Ok(res)
 }
 
+/// Write a length-prefixed byte slice to the host socket.
 fn write_slice(sock: &mut dyn Sock, data: &[u8]) -> Result<()> {
     let len = data.len() as u32;
 
@@ -86,6 +90,7 @@ fn write_slice(sock: &mut dyn Sock, data: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// read host error.
 fn read_host_error(sock: &mut dyn Sock, context: &str) -> Result<host_fns::Errors> {
     let mut has_some = [0; 1];
     sock.read_exact(&mut has_some)
@@ -95,6 +100,7 @@ fn read_host_error(sock: &mut dyn Sock, context: &str) -> Result<host_fns::Error
         .map_err(|_| anyhow::anyhow!("invalid host error code {} for: {}", has_some[0], context))
 }
 
+/// handle host error.
 fn handle_host_error(sock: &mut dyn Sock, context: &str) -> Result<()> {
     let e = read_host_error(sock, context)?;
 
@@ -105,6 +111,7 @@ fn handle_host_error(sock: &mut dyn Sock, context: &str) -> Result<()> {
     }
 }
 
+/// encode result.
 pub fn encode_result(res: &Result<FullResult>) -> Result<Vec<u8>> {
     match res {
         Ok(d) => {
@@ -123,6 +130,7 @@ pub fn encode_result(res: &Result<FullResult>) -> Result<Vec<u8>> {
     }
 }
 
+/// write result to sock.
 pub fn write_result_to_sock(sock: &mut dyn Sock, res: &Result<FullResult>) -> Result<()> {
     let data = encode_result(res)?;
     write_slice(sock, &data)?;
@@ -133,17 +141,20 @@ pub fn write_result_to_sock(sock: &mut dyn Sock, res: &Result<FullResult>) -> Re
 pub struct LockedSlotsSet(Box<[SlotID]>);
 
 impl LockedSlotsSet {
+    /// contains.
     pub fn contains(&self, slot: SlotID) -> bool {
         self.0.binary_search(&slot).is_ok()
     }
 }
 
 #[cfg(not(debug_assertions))]
+/// all useful work done.
 pub fn all_useful_work_done() {
     std::process::exit(0);
 }
 
 #[cfg(debug_assertions)]
+/// all useful work done.
 pub fn all_useful_work_done() {}
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -164,6 +175,7 @@ pub struct FullResult {
 }
 
 impl FullResult {
+    /// new internal error.
     pub fn new_internal_error(msg: String) -> Self {
         Self {
             execution_hash: bytes::Bytes::new(),
@@ -184,6 +196,7 @@ struct Sha3Appender(sha3::Sha3_256);
 impl calldata::Appender for Sha3Appender {
     type Error = std::convert::Infallible;
 
+    /// write all.
     fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
         sha3::Digest::update(&mut self.0, data);
         Ok(())
@@ -191,6 +204,7 @@ impl calldata::Appender for Sha3Appender {
 }
 
 impl FullResult {
+    /// new.
     pub fn new(
         rt_result: rt::vm::FullResult,
         nondet_results: Vec<bytes::Bytes>,
@@ -238,6 +252,7 @@ impl FullResult {
 }
 
 impl Host {
+    /// lock sock.
     fn lock_sock(&mut self) -> sync::Lock<&mut dyn Sock, stats::tracker::Time> {
         sync::Lock::new(
             &mut *self.sock,
@@ -245,6 +260,7 @@ impl Host {
         )
     }
 
+    /// get locked slots.
     fn get_locked_slots(
         &mut self,
         contract_address: calldata::Address,
@@ -266,8 +282,7 @@ impl Host {
             return Err(rt::errors::VMError::oom(None).into());
         }
 
-        let res = Box::new_uninit_slice(len as usize);
-        let mut res = unsafe { res.assume_init() };
+        let mut res = vec![0u8; (len as usize) * (SlotID::SIZE as usize)].into_boxed_slice();
 
         let read_to = unsafe {
             std::slice::from_raw_parts_mut(
@@ -288,6 +303,7 @@ impl Host {
         Ok(LockedSlotsSet(res))
     }
 
+    /// get locked slots for sender.
     pub fn get_locked_slots_for_sender(
         &mut self,
         contract_address: calldata::Address,
@@ -325,6 +341,7 @@ impl Host {
         self.get_locked_slots(contract_address, limiter)
     }
 
+    /// storage read.
     pub fn storage_read(
         &mut self,
         mode: StorageType,
@@ -352,6 +369,7 @@ impl Host {
         Ok(())
     }
 
+    /// consume result.
     pub fn consume_result(&mut self, res: &Result<FullResult>) -> Result<()> {
         log_trace!("consume_result");
 
@@ -372,6 +390,7 @@ impl Host {
         Ok(())
     }
 
+    /// notify finished.
     pub fn notify_finished(&mut self) -> Result<()> {
         log_trace!("notify_finished");
 
@@ -387,6 +406,7 @@ impl Host {
         Ok(())
     }
 
+    /// consume fuel.
     pub fn consume_fuel(&mut self, gas: u64) -> Result<()> {
         log_trace!("consume_fuel");
 
@@ -398,6 +418,7 @@ impl Host {
         Ok(())
     }
 
+    /// eth call.
     pub fn eth_call(&mut self, address: calldata::Address, calldata: &[u8]) -> Result<Box<[u8]>> {
         log_trace!("eth_call");
 
@@ -414,6 +435,7 @@ impl Host {
         read_bytes(&mut **sock, "eth_call result")
     }
 
+    /// get balance.
     pub fn get_balance(&mut self, address: calldata::Address) -> Result<primitive_types::U256> {
         log_trace!("get_balance");
 
@@ -430,6 +452,7 @@ impl Host {
         Ok(primitive_types::U256::from_little_endian(&buf))
     }
 
+    /// remaining fuel as gen.
     pub fn remaining_fuel_as_gen(&mut self) -> Result<u64> {
         log_trace!("remaining_fuel_as_gen");
 
@@ -444,6 +467,7 @@ impl Host {
         Ok(u64::from_le_bytes(buf))
     }
 
+    /// notify nondet disagreement.
     pub fn notify_nondet_disagreement(&mut self, call_no: u32) -> Result<()> {
         log_trace!(call_no = call_no; "notify_nondet_disagreement");
 
@@ -463,6 +487,7 @@ pub struct MultiHost {
 }
 
 impl MultiHost {
+    /// new.
     pub fn new(hosts: Vec<Host>, method_hosts: Vec<u8>) -> Self {
         Self {
             hosts: hosts.into_iter().map(tokio::sync::Mutex::new).collect(),
@@ -470,6 +495,7 @@ impl MultiHost {
         }
     }
 
+    /// lock for.
     pub async fn lock_for(&self, method: host_fns::Methods) -> tokio::sync::MutexGuard<'_, Host> {
         let idx = if (method as usize) < self.method_hosts.len() {
             self.method_hosts[method as usize] as usize

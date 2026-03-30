@@ -967,8 +967,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let (should_copy, vec) = if let Some(buf) = mem.as_slice_mut(buf)? {
             (false, buf)
         } else {
-            vec_buf.reserve(mem_size);
-            unsafe { vec_buf.set_len(mem_size) };
+            vec_buf.resize(mem_size, 0);
             (true, vec_buf.as_mut_slice())
         };
 
