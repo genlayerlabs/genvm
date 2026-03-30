@@ -100,8 +100,9 @@ Type that can be encoded into calldata, provided ``default`` function ``T -> Enc
 def encode_default_parameter(b):
 	"""Convert a dataclass instance to a calldata-encodable dict.
 
-	:param b: Object to convert (must be a dataclass instance, not the class itself)
-	:return: Dict of field names to values
+	:param b: Object to convert; non-dataclass values pass through unchanged
+	:return: Dict of field names to values for dataclass instances, or the
+		input unchanged for other values
 	:raises TypeError: If ``b`` is a class type rather than a dataclass instance
 	"""
 	if not dataclasses.is_dataclass(b):
@@ -290,7 +291,7 @@ def decode(
 				le = read_uleb128()
 				key = str(fetch_mem(le), encoding='utf-8')
 				if prev is not None:
-					if prev >= key:
+					if prev > key:
 						raise DecodingError(f'unordered calldata keys: `{prev}` >= `{key}`')
 				prev = key
 				if key in ret_dict:
