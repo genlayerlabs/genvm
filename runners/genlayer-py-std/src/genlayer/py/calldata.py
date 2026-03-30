@@ -5,13 +5,13 @@ Calldata natively supports following types:
 
 #. Primitive types:
 
-	#. python built-in: :py:class:`bool`, :py:obj:`None`, :py:class:`int`, :py:class:`str`, :py:class:`bytes`
-	#. :py:meth:`~genlayer.py.types.Address` type
+   #. python built-in: :py:class:`bool`, :py:obj:`None`, :py:class:`int`, :py:class:`str`, :py:class:`bytes`
+   #. :py:meth:`~genlayer.py.types.Address` type
 
 #. Composite types:
 
-	#. :py:class:`list` (and any other :py:class:`collections.abc.Sequence`)
-	#. :py:class:`dict` with :py:class:`str` keys (and any other :py:class:`collections.abc.Mapping` with :py:class:`str` keys)
+   #. :py:class:`list` (and any other :py:class:`collections.abc.Sequence`)
+   #. :py:class:`dict` with :py:class:`str` keys (and any other :py:class:`collections.abc.Mapping` with :py:class:`str` keys)
 
 For full calldata specification see `genvm repo <https://github.com/yeagerai/genvm/blob/main/doc/calldata.md>`_
 """
@@ -98,9 +98,16 @@ Type that can be encoded into calldata, provided ``default`` function ``T -> Enc
 
 
 def encode_default_parameter(b):
+	"""Convert a dataclass instance to a calldata-encodable dict.
+
+	:param b: Object to convert (must be a dataclass instance, not the class itself)
+	:return: Dict of field names to values
+	:raises TypeError: If ``b`` is a class type rather than a dataclass instance
+	"""
 	if not dataclasses.is_dataclass(b):
 		return b
-	assert not isinstance(b, type)
+	if isinstance(b, type):
+		raise TypeError(f'expected dataclass instance, got type {b!r}')
 
 	return {field.name: getattr(b, field.name) for field in dataclasses.fields(b)}
 
@@ -116,6 +123,8 @@ def encode[T](
 	Encodes python object into calldata bytes
 
 	:param default: function to be applied to each object recursively, it must return object encodable to calldata
+	:raises TypeError: If ``b`` is a class type rather than an instance in default encoder
+	:raises ValueError: If uLEB128 encoding receives a negative integer
 
 	.. warning::
 		All composite types in the end are coerced to :py:class:`dict` and :py:class:`list`, so custom type information is *not* be preserved.
@@ -127,7 +136,8 @@ def encode[T](
 	mem = bytearray()
 
 	def append_uleb128(i):
-		assert i >= 0
+		if i < 0:
+			raise ValueError(f'uleb128 requires non-negative integer, got {i}')
 		if i == 0:
 			mem.append(0)
 		while i > 0:
@@ -210,10 +220,15 @@ def decode(
 	*,
 	memview2bytes: typing.Callable[[memoryview], typing.Any] = bytes,
 ) -> Decoded:
-	"""
-	Decodes calldata encoded bytes into python DSL
+	"""Decodes calldata-encoded bytes into Python objects.
 
-	Out of composite types it will contain only :py:class:`dict` and :py:class:`list`
+	:param mem0: Raw calldata buffer to decode
+	:param memview2bytes: Optional converter for memoryview output (default: bytes)
+	:return: Decoded Python object (dict, list, int, str, bytes, etc.)
+	:raises DecodingError: If the buffer is malformed, contains unexpected end,
+		or has duplicate map keys.
+
+	Out of composite types it will contain only :py:class:`dict` and :py:class:`list`.
 	"""
 	mem: memoryview = memoryview(mem0)
 
@@ -247,10 +262,10 @@ def decode(
 		if typ == TYPE_SPECIAL:
 			if code == SPECIAL_NULL:
 				return None
-			if code == SPECIAL_FALSE:
-				return False
 			if code == SPECIAL_TRUE:
 				return True
+			if code == SPECIAL_FALSE:
+				return False
 			if code == SPECIAL_ADDR:
 				return Address(fetch_mem(Address.SIZE))
 			raise DecodingError(f'Unknown special {bin(code)} {hex(code)}')
@@ -278,7 +293,8 @@ def decode(
 					if prev >= key:
 						raise DecodingError(f'unordered calldata keys: `{prev}` >= `{key}`')
 				prev = key
-				assert key not in ret_dict
+				if key in ret_dict:
+					raise DecodingError(f'duplicate calldata map key `{key}`')
 				ret_dict[key] = impl()
 			return ret_dict
 		raise DecodingError(f'invalid type {typ}')
