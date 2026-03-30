@@ -4,6 +4,9 @@ use crate::rt;
 use genvm_common::*;
 
 impl super::Supervisor {
+    /// Validate a wasm module against deterministic and non-deterministic feature sets.
+    ///
+    /// Returns an error if the module uses features not enabled in the engine config.
     pub fn validate_wasm(&self, wasm: &[u8]) -> anyhow::Result<()> {
         use wasmparser::*;
 
@@ -14,10 +17,10 @@ impl super::Supervisor {
         let non_det_features = self.engines.non_det.config().get_features().bits() | add_features;
 
         let mut det_validator = wasmparser::Validator::new_with_features(
-            WasmFeatures::from_bits(det_features).unwrap(),
+            WasmFeatures::from_bits(det_features).expect("invalid deterministic wasm feature bits"),
         );
         let mut non_det_validator = wasmparser::Validator::new_with_features(
-            WasmFeatures::from_bits(non_det_features).unwrap(),
+            WasmFeatures::from_bits(non_det_features).expect("invalid non-deterministic wasm feature bits"),
         );
         det_validator.validate_all(wasm).with_context(|| {
             format!(

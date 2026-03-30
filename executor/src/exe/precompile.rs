@@ -30,7 +30,7 @@ fn compile_single_file_single_mode(
 
     log_info!(engine = engine_type, runner:? = runner_path, runner_path:? = path_in_runner, duration:? = time_start.elapsed();  "wasm compilation done");
 
-    std::fs::create_dir_all(result_path.parent().unwrap())
+    std::fs::create_dir_all(result_path.parent().expect("precompiled wasm path has no parent directory"))
         .with_context(|| format!("creating directory for {result_path:?}"))?;
 
     let sz = precompiled.len();

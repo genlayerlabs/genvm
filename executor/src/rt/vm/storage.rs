@@ -131,6 +131,9 @@ impl<HS: Send + Sync> Storage<HS> {
         self.pages.write_page(key, value).await
     }
 
+    /// Produce a sorted list of page deltas from the storage map.
+    ///
+    /// Adjacent pages with matching base are merged into a single delta entry.
     pub fn make_delta(&self) -> Vec<Delta> {
         let mut res = Vec::<Delta>::new();
 
@@ -138,7 +141,10 @@ impl<HS: Send + Sync> Storage<HS> {
             if k.1 != 0 {
                 let prev_page_id = PageID(k.0, k.1 - 1);
                 if self.pages.0.get(&prev_page_id).is_some() {
-                    res.last_mut().unwrap().deref_mut().1.extend_from_slice(v);
+                    // Safe: res is non-empty because the first page (index 0)
+                    // must have been pushed on a prior iteration.
+                    let last = res.last_mut().expect("res must be non-empty when prev page exists");
+                    last.deref_mut().1.extend_from_slice(v);
                     continue;
                 }
             }

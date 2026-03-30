@@ -882,7 +882,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         ];
 
         let dirent_actual_iter = direntries.iter().zip(3u64..).map(|(x, idx)| {
-            let name_len: u32 = x.0.len().try_into().unwrap();
+            let name_len: u32 = x.0.len().try_into().expect("directory entry name too long for u32");
             (
                 generated::types::Dirent {
                     d_next: idx,

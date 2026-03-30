@@ -138,7 +138,7 @@ pub async fn await_nondet_vms(zelf: &Arc<Supervisor>) -> anyhow::Result<Option<u
     zelf.queue.vm_countdown.decrement();
 
     if !zelf.queue.receiver.is_empty() {
-        let read_permit = zelf.queue.tasks_loop_done.clone().try_read_owned().unwrap();
+        let read_permit = zelf.queue.tasks_loop_done.clone().try_read_owned().expect("tasks_loop_done already held by writer");
         let limiter = memlimiter::Limiter::new("nondet-secondary");
         nondet_vm_processor(zelf.clone(), read_permit, limiter).await;
     }
@@ -271,7 +271,7 @@ impl Supervisor {
             engines,
         });
 
-        let read_permit = zelf.queue.tasks_loop_done.clone().try_read_owned().unwrap();
+        let read_permit = zelf.queue.tasks_loop_done.clone().try_read_owned().expect("tasks_loop_done already held by writer");
         let main_nondet_limiter = zelf.limiter.get(false).derived();
         tokio::spawn(nondet_vm_processor(
             zelf.clone(),
