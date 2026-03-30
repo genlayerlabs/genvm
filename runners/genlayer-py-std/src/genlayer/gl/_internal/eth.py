@@ -59,7 +59,7 @@ def _generate_send(name: str, params: tuple[type], ret: type) -> typing.Any:
 		calldata = encoder.encode_call(args)
 		if len(self._proxy_args) != 1:
 			raise TypeError(
-				f'expected exactly 1 proxy arg (address), got {len(self._proxy_args)}'
+				f'expected exactly 1 proxy arg (JSON-serialized transaction data), got {len(self._proxy_args)}'
 			)
 		if len(self._proxy_kwargs) != 0:
 			raise TypeError(
