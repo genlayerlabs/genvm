@@ -71,6 +71,15 @@ def _generate_methods(
 	proxy_name,
 	factory: typing.Callable[[str, tuple, typing.Any], typing.Callable[..., typing.Any]],
 ) -> typing.Callable[typing.Concatenate[ContractProxy, _generate_spec], typing.Any]:
+	"""
+	Generate proxy methods for an EVM contract interface class (View or Write).
+
+	:param f_type: The inner class (View/Write) containing method signatures.
+	:param proxy_name: Name used for error context.
+	:param factory: Callable that produces the actual proxy method from (name, params, ret_type).
+	:returns: A callable bound to the generated methods dict.
+	:raises TypeError: If methods don't have ``self`` or use non-positional-only params.
+	"""
 	props: dict[str, typing.Any] = {}
 	for name, val in inspect.getmembers_static(f_type):
 		if not inspect.isfunction(val):

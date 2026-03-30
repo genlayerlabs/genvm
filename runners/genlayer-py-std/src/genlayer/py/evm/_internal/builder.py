@@ -5,6 +5,13 @@ import genlayer.py._internal.reflect as reflect
 
 
 def build[T](typ: typing.Type[T]) -> Codec[T]:
+	"""
+	Build a :py:class:`Codec` for the given EVM type.
+
+	:param typ: Python type to build a codec for.
+	:returns: Codec instance that can encode/decode values of this type.
+	:raises TypeError: If the type is not supported by the EVM codec system.
+	"""
 	assert not isinstance(typ, tuple)
 
 	if (val := primitive_types_dict.get(typ)) is not None:
