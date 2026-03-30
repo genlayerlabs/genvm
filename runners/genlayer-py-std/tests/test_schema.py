@@ -85,7 +85,7 @@ def test_dataclass():
 				'params': [],
 				'kwparams': {},
 				'readonly': True,
-				'ret': {'x': 'int', 'y': 'int', 'z': 'any'},
+				'ret': {'x': 'int', 'y': 'int', 'z': {'$enum': ['str']}},
 			}
 		},
 	}

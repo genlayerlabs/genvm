@@ -85,7 +85,7 @@ impl Archive {
                 if !(b'0'..=b'7').contains(&c) {
                     anyhow::bail!("invalid octal ascii {}", c)
                 }
-                file_size = file_size * 8 + (c - b'0') as usize;
+                file_size = file_size.checked_mul(8).and_then(|v| v.checked_add((c - b'0') as usize)).ok_or_else(|| anyhow::anyhow!("tar file size overflow"))?;
             }
 
             begin += file_size;

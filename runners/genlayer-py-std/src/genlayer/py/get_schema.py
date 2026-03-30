@@ -82,20 +82,27 @@ def _repr_type(t: typing.Any, permissive: bool) -> typing.Any:
 	if origin != None:
 		args = typing.get_args(t)
 		if _is_dict(origin, permissive):
-			assert len(args) == 2
-			assert (
-				args[0] is str
-			), f'dictionary can have only string keys, got {type(args[0])}'
+			if len(args) != 2:
+				raise TypeError(f'dict type must have 2 args, got {len(args)}')
+			if args[0] is not str:
+				raise TypeError(f'dictionary keys must be str, got {args[0]!r}')
 			return {'$dict': _repr_type(args[1], permissive)}
 		if origin is tuple:
 			if len(args) == 2 and args[1] == ...:
 				return [{'$rep': _repr_type(args[0], permissive)}]
 			return [_repr_type(a, permissive) for a in args]
 		if _is_list(origin, permissive):
-			assert len(args) == 1
+			if len(args) != 1:
+				raise TypeError(f'list type must have 1 arg, got {len(args)}')
 			return [{'$rep': _repr_type(args[0], permissive)}]
 		if origin is typing.Literal:
-			return 'any'  # FIXME
+			enum_values = list(typing.get_args(t))
+			try:
+				import json as _json
+				_json.dumps(enum_values)
+			except TypeError as e:
+				raise TypeError(f'Literal values must be JSON-serializable: {enum_values}') from e
+			return {'$enum': enum_values}
 	raise TypeError(
 		f'type is not supported', {'type': t, 'kind': ttype, **reflect.try_get_lineno(t)}
 	)
