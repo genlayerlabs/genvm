@@ -29,6 +29,7 @@ pub struct NonDetVMTask {
 }
 
 impl NonDetVMTask {
+    /// Execute this VM task immediately using the given supervisor.
     pub async fn run_now(self, sup: &Arc<Supervisor>) -> anyhow::Result<rt::vm::RunOk> {
         run_single_nondet(sup, self, sup.limiter.get(false).derived()).await
     }
@@ -81,6 +82,7 @@ pub struct Supervisor {
     pub(crate) host: Arc<host::MultiHost>,
 }
 
+/// Create Wasmtime engines for deterministic and non-deterministic execution.
 pub fn create_engines(
     config_base: impl FnOnce(&mut wasmtime::Config) -> anyhow::Result<()>,
 ) -> anyhow::Result<rt::DetNondet<wasmtime::Engine>> {
@@ -132,6 +134,9 @@ pub fn create_engines(
     })
 }
 
+/// Wait for all non-deterministic VM tasks to complete.
+///
+/// Returns `Some(error_code)` if any task failed, or `None` on success.
 pub async fn await_nondet_vms(zelf: &Arc<Supervisor>) -> anyhow::Result<Option<u32>> {
     zelf.queue.sender.close(); // no more tasks can be submitted after this point
 
@@ -162,6 +167,7 @@ pub async fn await_nondet_vms(zelf: &Arc<Supervisor>) -> anyhow::Result<Option<u
     Ok(Some(disagree_call))
 }
 
+/// Submit a non-deterministic VM task for async execution.
 pub async fn submit_nondet_vm_task(zelf: &Arc<Supervisor>, task: NonDetVMTask) {
     let call_no = task.call_no;
 
@@ -180,7 +186,8 @@ pub async fn submit_nondet_vm_task(zelf: &Arc<Supervisor>, task: NonDetVMTask) {
 }
 
 impl Supervisor {
-    pub async fn push_nondet_result(&self, call_no: u32, result: bytes::Bytes) {
+    /// Store the result of a non-deterministic call indexed by call number.
+pub async fn push_nondet_result(&self, call_no: u32, result: bytes::Bytes) {
         let mut vec = self.nondet_results.lock().await;
         let idx = call_no as usize;
         while vec.len() <= idx {
@@ -189,24 +196,31 @@ impl Supervisor {
         vec[idx] = result;
     }
 
-    pub async fn take_nondet_results(&self) -> Vec<bytes::Bytes> {
+    /// Drain and return all accumulated non-deterministic results.
+pub async fn take_nondet_results(&self) -> Vec<bytes::Bytes> {
         self.nondet_results.lock().await.clone()
     }
 
-    pub fn get_leader_nondet_result(&self, call_no: u32) -> Option<bytes::Bytes> {
+    /// Retrieve the leader's result for a specific non-deterministic call.
+pub fn get_leader_nondet_result(&self, call_no: u32) -> Option<bytes::Bytes> {
         self.leader_nondet_results
             .as_ref()
             .and_then(|v| v.get(call_no as usize).cloned())
     }
 
-    pub fn is_leader(&self) -> bool {
+    /// Returns `true` if this node is the consensus leader.
+pub fn is_leader(&self) -> bool {
         self.leader_nondet_results.is_none()
     }
 
-    pub fn get_storage_limiter(&self) -> rt::vm::storage::Limiter {
+    /// Get a gas limiter scoped to storage operations.
+pub fn get_storage_limiter(&self) -> rt::vm::storage::Limiter {
         rt::vm::storage::Limiter::new(self.shared_data.gep(|x| &x.data_fees_limit))
     }
 
+    /// Initialize the supervisor with engines, storage caching, and WASM compilation.
+    ///
+    /// Returns an `Arc<Supervisor>` ready for VM task submission.
     pub fn start(config: &config::Config, ctor: Ctor) -> anyhow::Result<Arc<Self>> {
         let my_cache_dir = runners::cache::get_cache_dir(&config.cache_dir).ok();
 
@@ -225,7 +239,11 @@ impl Supervisor {
                                 ("enabled".into(), serde_json::Value::Bool(true)),
                                 (
                                     "directory".into(),
-                                    cache_dir.into_os_string().into_string().unwrap().into(),
+                                    cache_dir
+                                        .to_str()
+                                        .context("cache directory path contains non-UTF8 characters")?
+                                        .to_owned()
+                                        .into(),
                                 ),
                             ]
                             .into_iter()
@@ -283,6 +301,7 @@ impl Supervisor {
     }
 }
 
+/// Spawn a new VM execution under the given supervisor.
 pub async fn spawn(
     zelf: &Arc<Supervisor>,
     vm: wasi::genlayer_sdk::SingleVMData,
@@ -330,6 +349,8 @@ pub async fn spawn(
     })
 }
 
+/// Apply storage changes, emissions, and balance updates from a VM execution.
+/// Apply storage changes, emissions, and balance updates from a VM execution.
 pub async fn apply_contract_actions(
     zelf: &std::sync::Arc<Supervisor>,
     mut vm: rt::vm::VM<()>,
