@@ -23,6 +23,13 @@ import genlayer.py.calldata as calldata
 
 
 def _decode_nondet(buf):
+	"""
+	Decode a nondeterministic operation result from raw calldata bytes.
+
+	:param buf: Raw buffer from a nondet VM call.
+	:returns: The ``'ok'`` value from the decoded dict.
+	:raises NondetException: If the decoded result contains an ``'error'`` key.
+	"""
 	ret = typing.cast(dict, calldata.decode(buf))
 	if err := ret.get('error'):
 		raise NondetException(err)

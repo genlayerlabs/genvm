@@ -98,6 +98,12 @@ Type that can be encoded into calldata, provided ``default`` function ``T -> Enc
 
 
 def encode_default_parameter(b):
+	"""
+	Default transform for :py:func:`encode`: converts dataclass instances to dicts.
+
+	:param b: Any Python object.
+	:returns: If ``b`` is a dataclass, returns a dict of its fields. Otherwise returns ``b`` unchanged.
+	"""
 	if not dataclasses.is_dataclass(b):
 		return b
 	assert not isinstance(b, type)

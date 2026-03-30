@@ -31,6 +31,7 @@ class Response:
 def str_or_bytes_to_bytes(
 	data: str | bytes | None,
 ) -> bytes | None:
+	"""Convert str to UTF-8 bytes, pass bytes/None through unchanged."""
 	if data is None:
 		return None
 	if isinstance(data, str):
