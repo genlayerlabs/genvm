@@ -13,6 +13,16 @@ import genlayer.gl._internal.gl_call as gl_call
 
 
 def _generate_view(name: str, params: tuple[type], ret: type) -> typing.Any:
+	"""Generate a lazy view-call function for an EVM contract method.
+
+	Creates a closure that encodes the method call and dispatches it via
+	``EthCall`` (read-only, no state changes).
+
+	:param name: EVM method name
+	:param params: Tuple of parameter types for encoding
+	:param ret: Return type for decoding the response
+	:return: A callable that performs the view call when invoked
+	"""
 	encoder = MethodEncoder(name, params, ret)
 
 	def result_fn(self, *args):
@@ -31,12 +41,30 @@ def _generate_view(name: str, params: tuple[type], ret: type) -> typing.Any:
 
 
 def _generate_send(name: str, params: tuple[type], ret: type) -> typing.Any:
+	"""Generate a lazy send-call function for an EVM contract method.
+
+	Creates a closure that encodes the method call and dispatches it via
+	``EthSend`` (write operation, modifies state). Validates proxy arguments
+	before execution.
+
+	:param name: EVM method name
+	:param params: Tuple of parameter types for encoding
+	:param ret: Return type (typically ``None`` for write operations)
+	:return: A callable that performs the send call when invoked
+	:raises TypeError: If proxy args or kwargs are in unexpected state
+	"""
 	encoder = MethodEncoder(name, params, ret)
 
 	def result_fn(self, *args):
 		calldata = encoder.encode_call(args)
-		assert len(self._proxy_args) == 1
-		assert len(self._proxy_kwargs) == 0
+		if len(self._proxy_args) != 1:
+			raise TypeError(
+				f'expected exactly 1 proxy arg (address), got {len(self._proxy_args)}'
+			)
+		if len(self._proxy_kwargs) != 0:
+			raise TypeError(
+				f'expected no proxy kwargs, got {sorted(self._proxy_kwargs.keys())}'
+			)
 		data = json.dumps(self._proxy_args[0])
 		gl_call.gl_call_generic(
 			{
