@@ -123,8 +123,8 @@ def encode[T](
 	"""
 	Encodes python object into calldata bytes
 
-	:param default: function to be applied to each object recursively, it must return object encodable to calldata
-	:raises TypeError: If ``b`` is a class type rather than an instance in default encoder
+	:param default: function to be applied to each object recursively; must return a calldata-encodable value
+	:raises TypeError: If a class type (rather than instance) is passed to the default encoder
 	:raises ValueError: If uLEB128 encoding receives a negative integer
 
 	.. warning::
@@ -292,7 +292,7 @@ def decode(
 				key = str(fetch_mem(le), encoding='utf-8')
 				if prev is not None:
 					if prev > key:
-						raise DecodingError(f'unordered calldata keys: `{prev}` >= `{key}`')
+						raise DecodingError(f'unordered calldata keys: `{prev}` > `{key}`')
 				prev = key
 				if key in ret_dict:
 					raise DecodingError(f'duplicate calldata map key `{key}`')
