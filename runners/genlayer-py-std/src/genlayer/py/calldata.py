@@ -228,6 +228,7 @@ def decode(
 	:return: Decoded Python object (dict, list, int, str, bytes, etc.)
 	:raises DecodingError: If the buffer is malformed, contains unexpected end,
 		or has duplicate map keys.
+	:raises UnicodeDecodeError: If string/map key bytes are invalid UTF-8.
 
 	Out of composite types it will contain only :py:class:`dict` and :py:class:`list`.
 	"""
