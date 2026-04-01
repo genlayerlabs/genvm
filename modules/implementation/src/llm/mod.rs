@@ -18,8 +18,8 @@ type UserVM = scripting::UserVM<ctx::VMData, sync::DArc<ctx::CtxPart>, LlmSubCon
 
 #[derive(serde::Serialize, Debug, Default)]
 pub(crate) struct Metrics {
-    pub scripting: scripting::Metrics,
-    pub tokens: stats::metric::TokenMetricsMap,
+    pub(crate) scripting: scripting::Metrics,
+    pub(crate) tokens: stats::metric::TokenMetricsMap,
 }
 
 #[derive(clap::Args, Debug)]
@@ -309,6 +309,7 @@ mod tests {
                 ("1".to_owned(), backend_test),
                 ("2".to_owned(), backend_real),
             ]),
+            meta: serde_json::Value::Null,
         });
 
         let providers = std::sync::Arc::new(BTreeMap::from([

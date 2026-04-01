@@ -18,7 +18,26 @@ local function just_in_backend(ctx, mapped_prompt, remaining_gen)
 		search_in = search_in,
 	}
 
-	for provider_name, provider_data in pairs(search_in) do
+	local provider_keys = {}
+	for provider_name, _ in pairs(search_in) do
+		table.insert(provider_keys, provider_name)
+	end
+
+	table.sort(provider_keys, function(a, b)
+		local a_data = search_in[a]
+		local b_data = search_in[b]
+
+		local a_priority = a_data.meta and a_data.meta.priority or 0
+		local b_priority = b_data.meta and b_data.meta.priority or 0
+
+		if a_priority ~= b_priority then
+			return a_priority > b_priority
+		end
+		return a > b -- just compare names
+	end)
+
+	for _, provider_name in ipairs(provider_keys) do
+		local provider_data = search_in[provider_name]
 		local model = lib.get_first_from_table(provider_data.models)
 
 		if model == nil then

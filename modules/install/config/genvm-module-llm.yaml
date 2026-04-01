@@ -24,6 +24,8 @@ backends:
         supports_json: true
         supports_image: true # works
         meta: {} # <- you can put anything here to read it from lua
+    meta:
+      priority: -1 # <- this is used in lua to sort providers, higher is better
 
   heurist:
     host: https://llm-gateway.heurist.xyz
@@ -52,6 +54,7 @@ backends:
       grok-3:
         supports_json: true
         supports_image: false # hallucinates
+    priority: -5 # <- this is used in lua to sort providers, higher is better
 
   google:
     host: https://generativelanguage.googleapis.com

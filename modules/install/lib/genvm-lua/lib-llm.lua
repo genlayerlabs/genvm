@@ -26,6 +26,7 @@ local lib = require("lib-genvm")
 
 ---@class ProviderEntry
 ---@field models table<string, ModelConfig>
+---@field meta any
 
 ---@alias ProvidersDB table<string, ProviderEntry>
 
