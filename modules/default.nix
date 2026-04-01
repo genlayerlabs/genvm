@@ -6,6 +6,8 @@
 , build-config
 , patch-yaml-schema
 , patch-manifest
+, patch-llm-config
+, patch-web-config
 , ...
 }:
 let
@@ -50,7 +52,7 @@ let
 			dontConfigure = true;
 			dontBuild = true;
 
-			nativeBuildInputs = [ pkgs.makeWrapper patch-yaml-schema patch-manifest ];
+			nativeBuildInputs = [ pkgs.makeWrapper patch-yaml-schema patch-manifest patch-llm-config patch-web-config ];
 
 			installPhase = ''
 				mkdir -p $out/bin
@@ -66,6 +68,8 @@ let
 				patch-yaml-schema --tag ${build-config.executor-version} "$out"
 
 				patch-manifest --tag ${build-config.executor-version} "$out/data/manifest.yaml"
+				patch-llm-config --tag ${build-config.executor-version} "$out/config/genvm-module-llm.yaml"
+				patch-web-config --tag ${build-config.executor-version} "$out/config/genvm-module-web.yaml"
 			'';
 		};
 in {

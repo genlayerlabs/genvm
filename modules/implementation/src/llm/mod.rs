@@ -36,6 +36,8 @@ pub struct CliArgsRun {
 
 pub(crate) mod ctx;
 
+pub const TEST_PROMPT_FOR_OK: &str = "I am testing that your API works and you are capable for understanding the simplest request. For it I need you to respond with two letters \"ok\" (without quotes) and nothing else. Lowercase, no repetition or punctuation";
+
 async fn create_vm(config: &sync::DArc<config::Config>) -> anyhow::Result<UserVM> {
     let user_vm = crate::scripting::UserVM::create(
         &config.mod_base,
@@ -260,7 +262,7 @@ mod tests {
             key: std::env::var("OPENAIKEY").unwrap(),
             script_config: ScriptBackendConfig {
                 models: BTreeMap::from([(
-                    "gpt-4o".to_owned(),
+                    "openrouter/auto".to_owned(),
                     config::ModelConfig {
                         enabled: true,
                         supports_json: true,
@@ -269,9 +271,11 @@ mod tests {
                         meta: serde_json::Value::Null,
                     },
                 )]),
-                meta: serde_json::Value::Null,
+                meta: serde_json::json!({
+                    "priority": -10,
+                }),
             },
-            host: "https://api.openai.com".to_owned(),
+            host: "https://openrouter.ai/api".to_owned(),
         };
 
         let provider_test = backend_test.to_provider();
@@ -372,11 +376,17 @@ mod tests {
         let payload = llm_iface::PromptPayload {
             images: Vec::new(),
             response_format: llm_iface::OutputFormat::Text,
-            prompt: "I am testing that your API works and you are capable for understanding the simplest request. For it I need you to respond with two letters \"ok\" (without quotes) and nothing else. Lowercase, no repetition or punctuation".to_owned(),
+            prompt: TEST_PROMPT_FOR_OK.to_owned(),
         };
 
-        let payload = user_vm.vm.to_value(&payload).unwrap();
-        let fuel = user_vm.vm.to_value(&0u64).unwrap(); // Mock fuel value
+        let payload = user_vm
+            .vm
+            .to_value_with(&payload, scripting::DEFAULT_LUA_SER_OPTIONS)
+            .unwrap();
+        let fuel = user_vm
+            .vm
+            .to_value_with(&0u64, scripting::DEFAULT_LUA_SER_OPTIONS)
+            .unwrap(); // Mock fuel value
 
         let res = user_vm
             .call_fn(&user_vm.data.exec_prompt, (ctx_lua, payload, fuel))

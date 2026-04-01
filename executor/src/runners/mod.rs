@@ -15,7 +15,7 @@ pub use actions::*;
 use anyhow::Context as _;
 use std::{str::FromStr as _, sync::Arc};
 
-use crate::{public_abi, rt};
+use crate::rt;
 
 pub fn append_runner_subpath(id: &str, hash: &str, path: &mut std::path::PathBuf) {
     path.push(id);

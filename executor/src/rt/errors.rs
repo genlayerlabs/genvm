@@ -125,7 +125,7 @@ impl UnwrapDynError {
 pub fn unwrap_vm_errors_fingerprint(
     err: UnwrapDynError,
 ) -> anyhow::Result<(rt::vm::RunOk, Fingerprint)> {
-    let err = UnwrapDynError::from(err);
+    let err = err;
 
     let mut fingerprint = Fingerprint {
         frames: Vec::new(),

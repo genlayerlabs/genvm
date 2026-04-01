@@ -502,7 +502,10 @@ paths:
                   key: ${ENV[OPENAIKEY]}
               test_prompts:
                 - system_message: null
-                  user_message: Respond with exactly two letters 'OK' and nothing else
+                  user_message: |
+                    I am testing that your API works and you are capable for understanding the simplest request.
+                    For it I need you to respond with two letters "ok" (without quotes) and nothing else.
+                    Lowercase, no repetition or punctuation
                   temperature: 0.2
                   images: []
                   max_tokens: 200

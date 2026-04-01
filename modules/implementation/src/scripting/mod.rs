@@ -83,7 +83,7 @@ pub fn setup_lua_default_ctx(
     vm: &mlua::Lua,
     table: &mlua::Table,
 ) -> anyhow::Result<()> {
-    let hello_value = vm.to_value(&ctx.hello)?;
+    let hello_value = vm.to_value_with(&ctx.hello, DEFAULT_LUA_SER_OPTIONS)?;
     let my_ctx = vm.create_userdata(LuaDArc(ctx))?;
     table.set("__ctx_dflt", my_ctx)?;
     let hello_value = hello_value
@@ -382,6 +382,7 @@ pub async fn send_request_get_lua_compatible_response_json(
                                 .map(|(k, v)| (k, GenericValue::Bytes(v.to_vec()))),
                         )),
                     ),
+                    ("body".to_owned(), GenericValue::Bytes(body)),
                 ]),
             }
             .into());

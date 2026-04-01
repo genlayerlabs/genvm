@@ -19,8 +19,6 @@ if 'ORIGINAL_PATH' in ORIGINAL_ENV:
 	os.environ['PATH'] = ORIGINAL_ENV['ORIGINAL_PATH']
 if 'ORIGINAL_LD_LIBRARY_PATH' in ORIGINAL_ENV:
 	os.environ['LD_LIBRARY_PATH'] = ORIGINAL_ENV['ORIGINAL_LD_LIBRARY_PATH']
-else:
-	os.environ['LD_LIBRARY_PATH'] = '/usr/local/lib:/usr/lib:/lib'
 
 
 def digest_to_hash_id(got_hash: bytes) -> str:
@@ -201,17 +199,49 @@ def _upload_single(name: str, hash: str, contents: bytes, *, token: str):
 		resp.read()
 
 
-def run_upload(args):
+def run_subprocess_get_stdout(*args, **kwargs) -> str:
 	import subprocess
 
-	proc = subprocess.run(
-		['gcloud', 'auth', 'print-access-token'],
-		check=True,
-		text=True,
-		capture_output=True,
-		env=ORIGINAL_ENV,
+	try:
+		proc = subprocess.run(
+			*args,
+			check=True,
+			**kwargs,
+		)
+	except subprocess.CalledProcessError as e:
+		e.add_note(f'stdout: {e.stdout}')
+		e.add_note(f'stderr: {e.stderr}')
+		e.add_note(f'exit code: {e.returncode}')
+		e.add_note(f'output: {e.output}')
+		raise
+	return proc.stdout.strip()
+
+
+def run_many_get_first[T](fns: typing.Iterable[typing.Callable[[], T]]) -> T:
+	import traceback
+
+	last_exc: Exception | None = None
+	for fn in fns:
+		try:
+			return fn()
+		except Exception as e:
+			if last_exc is not None:
+				traceback.print_exception(last_exc)
+			last_exc = e
+	if last_exc is not None:
+		raise last_exc
+	raise RuntimeError('no functions given')
+
+
+def run_upload(args):
+	env_with_default_ld_lib_path = os.environ.copy()
+	env_with_default_ld_lib_path['LD_LIBRARY_PATH'] = '/usr/local/lib:/usr/lib:/lib'
+	token = run_many_get_first(
+		lambda: run_subprocess_get_stdout(
+			['gcloud', 'auth', 'print-access-token'], text=True, env=env
+		)
+		for env in [ORIGINAL_ENV, env_with_default_ld_lib_path, None]
 	)
-	token = proc.stdout.strip()
 
 	registry = _load_registry(args.registry)
 

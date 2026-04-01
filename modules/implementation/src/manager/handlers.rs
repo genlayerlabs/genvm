@@ -188,7 +188,7 @@ pub struct ShutdownRequest {}
 pub async fn handle_genvm_shutdown(
     ctx: sync::DArc<AppContext>,
     genvm_id: run::GenVMId,
-    req: ShutdownRequest,
+    _req: ShutdownRequest,
 ) -> Result<impl warp::Reply> {
     let result = ctx.run_ctx.graceful_shutdown(genvm_id).await;
 

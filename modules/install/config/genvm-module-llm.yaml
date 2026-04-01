@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=../../../doc/schemas/default-config.json#llm
-# yaml-language-server: $schema=https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/default-config.json#llm
+# yaml-language-server: $schema=https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/@GENVM_TAG@/doc/schemas/default-config.json#llm
 
 bind_address: 127.0.0.1:3031
 
@@ -15,7 +15,20 @@ log_disable: tracing*,polling*,tungstenite*,tokio_tungstenite*
 #log_level: info
 
 backends:
+  dev:
+    host: https://openrouter.ai/api
+    provider: openai-compatible
+    key: ${ENV[OPENAIKEY]}
+    models:
+      openrouter/auto:
+        supports_json: true
+        supports_image: true
+        meta: {}
+    meta:
+      priority: 100
+
   openai:
+    enabled: false
     host: https://api.openai.com
     provider: openai-compatible
     key: ${ENV[OPENAIKEY]}
@@ -23,9 +36,9 @@ backends:
       gpt-4o:
         supports_json: true
         supports_image: true # works
-        meta: {} # <- you can put anything here to read it from lua
+        meta: {}  # <- you can put anything here to read it from lua
     meta:
-      priority: -1 # <- this is used in lua to sort providers, higher is better
+      priority: -1  # <- this is used in lua to sort providers, higher is better
 
   heurist:
     host: https://llm-gateway.heurist.xyz

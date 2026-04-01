@@ -304,13 +304,13 @@ impl Parser<'_> {
                             let slice = self.fetch_slice(str_size)?;
                             let new_key = std::str::from_utf8(slice)?.to_owned();
 
-                            if let Some((k, _)) = collected.last_key_value() {
-                                if k >= &new_key {
-                                    return Err(DecodeError::InvalidMapOrdering {
-                                        prev: k.clone(),
-                                        current: new_key,
-                                    });
-                                }
+                            if let Some((k, _)) = collected.last_key_value()
+                                && k >= &new_key
+                            {
+                                return Err(DecodeError::InvalidMapOrdering {
+                                    prev: k.clone(),
+                                    current: new_key,
+                                });
                             }
 
                             *current_key = new_key;

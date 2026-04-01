@@ -230,7 +230,7 @@ impl Context {
         match cur_trie.borrow_mut() {
             FilesTrie::Dir { children } => match children.entry(String::from(fname)) {
                 std::collections::btree_map::Entry::Occupied(mut entry) => {
-                    *entry.get_mut() = Box::new(FilesTrie::File { data: contents });
+                    **entry.get_mut() = FilesTrie::File { data: contents };
                 }
                 std::collections::btree_map::Entry::Vacant(entry) => {
                     entry.insert(Box::new(FilesTrie::File { data: contents }));

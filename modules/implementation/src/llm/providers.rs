@@ -298,8 +298,10 @@ impl Provider for OpenAICompatible {
             prompt.extra_merge_strategy.clone(),
         )?;
 
-        let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/chat/completions", self.config.host);
+        log_trace!(request:serde = request, url = url; "final request body after merging extra");
+
+        let request = serde_json::to_vec(&request)?;
         let request = ctx
             .client
             .post(&url)
@@ -365,8 +367,10 @@ impl Provider for OpenAICompatible {
             prompt.extra_merge_strategy.clone(),
         )?;
 
-        let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/chat/completions", self.config.host);
+        log_trace!(request:serde = request, url = url; "final request body after merging extra");
+
+        let request = serde_json::to_vec(&request)?;
         let request = ctx
             .client
             .post(&url)
@@ -467,9 +471,9 @@ impl Provider for OLlama {
             log_warn!(extra:serde = prompt.extra; "ollama provider ignores extra body fields");
         }
         let request = prompt.to_ollama_no_format(model);
-
+        let url = format!("{}/api/ generate", self.config.host);
+        log_trace!(request:serde = request, url = url; "final request body after merging extra");
         let request = serde_json::to_vec(&request)?;
-        let url = format!("{}/api/generate", self.config.host);
         let request = ctx.client.post(&url).body(request.clone());
         let res = scripting::send_request_get_lua_compatible_response_json(
             &ctx.metrics,
@@ -526,8 +530,9 @@ impl Provider for OLlama {
                 .insert("system".into(), sys.to_owned().into());
         }
 
-        let request = serde_json::to_vec(&request)?;
         let url = format!("{}/api/generate", self.config.host);
+        log_trace!(request:serde = request, url = url; "final request body after merging extra");
+        let request = serde_json::to_vec(&request)?;
         let request = ctx.client.post(&url).body(request.clone());
         let res = scripting::send_request_get_lua_compatible_response_json(
             &ctx.metrics,
@@ -592,6 +597,8 @@ impl Provider for Gemini {
             "{}/v1beta/models/{}:generateContent?key={}",
             self.config.host, model, self.config.key
         );
+        log_trace!(request:serde = request, url = url; "final request body");
+
         let request = ctx
             .client
             .post(&url)
@@ -647,11 +654,12 @@ impl Provider for Gemini {
 
         prompt.add_gemini_messages(request.as_object_mut().unwrap())?;
 
-        let request = serde_json::to_vec(&request)?;
         let url = format!(
             "{}/v1beta/models/{}:generateContent?key={}",
             self.config.host, model, self.config.key
         );
+        log_trace!(request:serde = request, url = url; "final request body after merging extra");
+        let request = serde_json::to_vec(&request)?;
         let request = ctx
             .client
             .post(&url)
@@ -752,9 +760,9 @@ impl Provider for Anthropic {
             log_warn!(extra:serde = prompt.extra; "anthropic provider ignores extra body fields");
         }
         let request = prompt.to_anthropic_no_format(model)?;
-
-        let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/messages", self.config.host);
+        log_trace!(request:serde = request, url = url; "final request body");
+        let request = serde_json::to_vec(&request)?;
         let request = ctx
             .client
             .post(&url)
@@ -827,6 +835,7 @@ impl Provider for Anthropic {
 
         let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/messages", self.config.host);
+        log_trace!(request:serde = request, url = url; "final request body");
         let request = ctx
             .client
             .post(&url)
@@ -894,8 +903,9 @@ impl Provider for Anthropic {
                 .insert("system".into(), sys.to_owned().into());
         }
 
-        let request = serde_json::to_vec(&request)?;
         let url = format!("{}/v1/messages", self.config.host);
+        log_trace!(request:serde = request, url = url; "final request body after merging extra");
+        let request = serde_json::to_vec(&request)?;
         let request = ctx
             .client
             .post(&url)
@@ -972,10 +982,10 @@ mod tests {
 
     mod conf {
         pub const openai: &str = r#"{
-            "host": "https://api.openai.com",
+            "host": "https://openrouter.ai/api",
             "provider": "openai-compatible",
             "models": {
-                "gpt-4o-mini": { "supports_json": true }
+                "mistralai/mistral-small-3.1-24b-instruct": { "supports_json": true }
             },
             "key": "${ENV[OPENAIKEY]}"
         }"#;
@@ -1066,7 +1076,7 @@ mod tests {
                 &prompt::Internal {
                     system_message: None,
                     temperature: 0.7,
-                    user_message: "Respond with a single word \"yes\" (without quotes) and only this word, lowercase".to_owned(),
+                    user_message: crate::llm::TEST_PROMPT_FOR_OK.to_owned(),
                     images: Vec::new(),
                     max_tokens: 500,
                     use_max_completion_tokens: true,
@@ -1074,7 +1084,12 @@ mod tests {
                     extra: Default::default(),
                     extra_merge_strategy: Default::default(),
                 },
-                backend.script_config.models.first_key_value().context("no models configured")?.0,
+                backend
+                    .script_config
+                    .models
+                    .first_key_value()
+                    .context("no models configured")?
+                    .0,
             )
             .await;
 
@@ -1091,7 +1106,7 @@ mod tests {
 
         let text = res.result.trim().to_lowercase();
 
-        anyhow::ensure!(text == "yes", "expected 'yes', got '{text}'");
+        anyhow::ensure!(text == "ok", "expected 'ok', got '{text}'");
         Ok(())
     }
 
