@@ -513,11 +513,11 @@ pub mod wasi_only {
 
     /// Immediately trigger a user error and terminate the contract.
     ///
-    /// This function does not return - it sends a Rollback message via gl_call
+    /// This function does not return - it sends a UserError message via gl_call
     /// and the process terminates.
     pub fn user_error_immediately(msg: String) -> ! {
         let last_gl_call_data = calldata::Value::Map(std::collections::BTreeMap::from([(
-            "Rollback".to_owned(),
+            "UserError".to_owned(),
             crate::calldata::Value::Str(msg),
         )]));
 
@@ -590,7 +590,7 @@ pub mod wasi_only {
                 value,
             )])),
             Err(e) => calldata::Value::Map(std::collections::BTreeMap::from([(
-                "Rollback".to_owned(),
+                "UserError".to_owned(),
                 crate::calldata::Value::Str(e.to_string()),
             )])),
         };

@@ -103,7 +103,7 @@ class UserError(Exception):
 		Performs an immediate error, current VM won't be able to handle it, stack unwind will not happen
 		"""
 
-		gl_call.rollback(reason)
+		gl_call.user_error(reason)
 
 
 type Result[T: calldata.Decoded] = Return[T] | VMError | UserError
@@ -242,7 +242,7 @@ def run_nondet[T: calldata.Decoded](
 	/,
 	*,
 	compare_user_errors: typing.Callable[[UserError, UserError], bool] = lambda a,
-	b: a.message == b.message,
+	b: a.data == b.data,
 	compare_vm_errors: typing.Callable[[VMError, VMError], bool] = lambda a, b: a.message
 	== b.message,
 ) -> Lazy[T]:

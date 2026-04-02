@@ -962,6 +962,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             gl_call::Message::Rollback(msg) => Err(generated::types::Error::trap(
                 crate::anyhow_to_wasmtime(rt::errors::UserError(msg).into()),
             )),
+            gl_call::Message::UserError(msg) => Err(generated::types::Error::trap(
+                crate::anyhow_to_wasmtime(rt::errors::UserError(msg).into()),
+            )),
             gl_call::Message::Return(value) => {
                 let ret = calldata::encode(&value);
 

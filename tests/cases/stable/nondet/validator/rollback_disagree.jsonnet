@@ -5,7 +5,7 @@ local util = import 'templates/util.jsonnet';
 		modes: 'vs',
 		leader_nondet: [
 			{
-				"kind": "rollback",
+				"kind": "user_error",
 				"value": "other rollback"
 			}
 		]
