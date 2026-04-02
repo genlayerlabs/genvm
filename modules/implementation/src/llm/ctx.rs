@@ -141,11 +141,20 @@ pub fn create_global(vm: &mlua::Lua, config: &Config) -> anyhow::Result<mlua::Va
 
     let all_providers =
         BTreeMap::from_iter(config.backends.iter().map(|(k, v)| (k, &v.script_config)));
-    llm.set("providers", vm.to_value(&all_providers)?)?;
+    llm.set(
+        "providers",
+        vm.to_value_with(&all_providers, scripting::DEFAULT_LUA_SER_OPTIONS)?,
+    )?;
 
-    llm.set("templates", vm.to_value(&config.prompt_templates)?)?;
+    llm.set(
+        "templates",
+        vm.to_value_with(&config.prompt_templates, scripting::DEFAULT_LUA_SER_OPTIONS)?,
+    )?;
 
-    llm.set("meta", vm.to_value(&config.meta)?)?;
+    llm.set(
+        "meta",
+        vm.to_value_with(&config.meta, scripting::DEFAULT_LUA_SER_OPTIONS)?,
+    )?;
 
     Ok(mlua::Value::Table(llm))
 }

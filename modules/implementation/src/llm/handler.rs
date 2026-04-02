@@ -157,8 +157,14 @@ impl Inner {
     ) -> ModuleResult<llm_iface::PromptAnswer> {
         log_debug_into!(&LoggerWithId, payload:serde = payload, remaining_fuel_as_gen = remaining_fuel_as_gen, genvm_id:id = self.genvm_id.0; "exec_prompt start");
 
-        let payload = self.user_vm.vm.to_value(&payload)?;
-        let fuel = self.user_vm.vm.to_value(&remaining_fuel_as_gen)?;
+        let payload = self
+            .user_vm
+            .vm
+            .to_value_with(&payload, scripting::DEFAULT_LUA_SER_OPTIONS)?;
+        let fuel = self
+            .user_vm
+            .vm
+            .to_value_with(&remaining_fuel_as_gen, scripting::DEFAULT_LUA_SER_OPTIONS)?;
 
         let res: mlua::Value = self
             .user_vm
@@ -182,8 +188,14 @@ impl Inner {
     ) -> ModuleResult<llm_iface::PromptAnswer> {
         log_debug_into!(&LoggerWithId, payload:serde = payload, remaining_fuel_as_gen = remaining_fuel_as_gen, genvm_id:id = self.genvm_id.0; "exec_prompt_template start");
 
-        let payload = self.user_vm.vm.to_value(&payload)?;
-        let fuel = self.user_vm.vm.to_value(&remaining_fuel_as_gen)?;
+        let payload = self
+            .user_vm
+            .vm
+            .to_value_with(&payload, scripting::DEFAULT_LUA_SER_OPTIONS)?;
+        let fuel = self
+            .user_vm
+            .vm
+            .to_value_with(&remaining_fuel_as_gen, scripting::DEFAULT_LUA_SER_OPTIONS)?;
 
         let res: mlua::Value = self
             .user_vm

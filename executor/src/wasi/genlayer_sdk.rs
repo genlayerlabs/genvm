@@ -20,7 +20,7 @@ fn default_entry_stage_data() -> calldata::Value {
 }
 
 fn calc_receipt_size(len: usize) -> u64 {
-    ((len + 255) / 256) as u64
+    len.div_ceil(256) as u64
 }
 
 async fn consume_receipt_words(
@@ -613,7 +613,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let supervisor = self.context.data.supervisor.clone();
 
-                let size = topics.len() + (blob_data_len.0 + 31) / 32;
+                let size = topics.len() + blob_data_len.0.div_ceil(32);
                 let size = size as u64;
                 supervisor
                     .get_storage_limiter()
@@ -630,7 +630,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         blob,
                     });
 
-                return Ok(file_fd_none());
+                Ok(file_fd_none())
             }
             gl_call::Message::PostMessage {
                 address,

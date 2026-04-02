@@ -106,5 +106,15 @@ in rec {
 		libraries = [ pkgs.python312Packages.ruamel-yaml ];
 	} (builtins.readFile ./scripts/patch-and-check-manifest.py);
 
+	patch-llm-config = pkgs.writers.writePython3Bin "patch-llm-config" {
+		doCheck = false;
+		libraries = [ pkgs.python312Packages.ruamel-yaml ];
+	} (builtins.readFile ./scripts/patch-llm-config.py);
+
+	patch-web-config = pkgs.writers.writePython3Bin "patch-web-config" {
+		doCheck = false;
+		libraries = [ pkgs.python312Packages.ruamel-yaml ];
+	} (builtins.readFile ./scripts/patch-web-config.py);
+
 	merge-components = builtins.foldl' mergeDoubleDepthAttrs {};
 }

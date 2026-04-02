@@ -760,10 +760,7 @@ fn spawn_stdin_writer(
         use tokio::io::AsyncWriteExt;
 
         let owned_fd = stdin.into_owned_fd().map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("failed to get owned fd from stdin: {e}"),
-            )
+            std::io::Error::other(format!("failed to get owned fd from stdin: {e}"))
         })?;
         set_fd_nonblocking(owned_fd.as_raw_fd())?;
 

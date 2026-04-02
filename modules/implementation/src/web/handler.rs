@@ -27,7 +27,7 @@ impl common::MessageHandler<web_iface::Message, FullResponse> for Handler {
             web_iface::Message::Request(payload, size_limit) => {
                 let vm = &self.0.user_vm.vm;
 
-                let payload_lua = vm.to_value(&payload)?;
+                let payload_lua = vm.to_value_with(&payload, scripting::DEFAULT_LUA_SER_OPTIONS)?;
                 if let Some(table) = payload_lua.as_table() {
                     table.set("size_limit", size_limit)?;
                 }
@@ -49,7 +49,10 @@ impl common::MessageHandler<web_iface::Message, FullResponse> for Handler {
                 let vm = &self.0.user_vm.vm;
 
                 let payload_lua = vm.create_table()?;
-                payload_lua.set("mode", vm.to_value(&payload.mode)?)?;
+                payload_lua.set(
+                    "mode",
+                    vm.to_value_with(&payload.mode, scripting::DEFAULT_LUA_SER_OPTIONS)?,
+                )?;
                 payload_lua.set("url", payload.url)?;
                 payload_lua.set("wait_after_loaded", payload.wait_after_loaded.as_secs_f64())?;
                 payload_lua.set("size_limit", size_limit)?;

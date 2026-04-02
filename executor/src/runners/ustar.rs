@@ -34,7 +34,7 @@ impl Archive {
             anyhow::bail!("archive is too short for tar")
         }
 
-        if original_data.len() % BLOCK_SIZE != 0 {
+        if !original_data.len().is_multiple_of(BLOCK_SIZE) {
             anyhow::bail!("tar len % 512 != 0")
         }
 

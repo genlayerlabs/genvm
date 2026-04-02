@@ -205,7 +205,7 @@ pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
 
             if let Some(err) = super::try_unwrap_err(err) {
                 log_trace!(error:? = err; "casting to user error (3)");
-                return vm.to_value(&err);
+                return vm.to_value_with(&err, DEFAULT_LUA_SER_OPTIONS);
             }
 
             Ok(mlua::Value::Nil)

@@ -35,7 +35,7 @@ let
 	pythonObjs = stdenvNoCC.mkDerivation {
 		name = "genvm-cpython-objs";
 
-		outputHash = "sha256-kTPfgBmU7Uir5iwcv4OG5v0bfxzz93hYYkATxsFSq+s="; # this should not change unless new c native module is added
+		outputHash = "sha256-tHCzbvx5/PfOn6KKRCBWVH7HgtRMDNn7aCg+wyxu0KI="; # this should not change unless new c native module is added
 		outputHashMode = "recursive";
 
 		nativeBuildInputs = with pkgs; [
