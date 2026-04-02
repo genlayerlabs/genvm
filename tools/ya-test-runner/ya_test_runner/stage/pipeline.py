@@ -91,6 +91,10 @@ class ExecutionStage(Stage[scheduling.Env, execution.Env]):
 	def name(self) -> str:
 		return 'execution'
 
+	@property
+	def is_slow(self) -> bool:
+		return True
+
 	async def run(self, ctx: SharedContext, arg: scheduling.Env) -> execution.Env:
 		return await execution.run(ctx, arg)
 

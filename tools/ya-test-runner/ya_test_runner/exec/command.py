@@ -77,11 +77,15 @@ class Command:
 		return ret
 
 	async def run(self, ctx: SharedContext, *, mode: RunMode) -> Result:
+		import uuid
+
+		uid = str(uuid.uuid1())
 		ctx.logger.debug(
 			'running command',
 			env=self.env,
 			args=self.args,
 			cwd=self.cwd,
+			id=uid,
 		)
 
 		if mode != RunMode.SILENT:
@@ -140,10 +144,10 @@ class Command:
 		if stderr_writer != sys.stderr.fileno():
 			os.close(stderr_writer)
 
-		ctx.logger.debug('process started', pid=process.pid)
+		ctx.logger.debug('process started', pid=process.pid, id=uid)
 		res = await process.wait()
 		end = time.monotonic()
-		ctx.logger.debug('process ended', pid=process.pid, exit_code=res)
+		ctx.logger.debug('process ended', pid=process.pid, exit_code=res, id=uid)
 
 		stdout_text = _ANSI_ESCAPE_RE.sub(b'', await stdout_fut).decode('utf-8')
 		stderr_text = _ANSI_ESCAPE_RE.sub(b'', await stderr_fut).decode('utf-8')
@@ -154,6 +158,7 @@ class Command:
 			exit_code=res,
 			stdout=stdout_text,
 			stderr=stderr_text,
+			id=uid,
 		)
 
 		return Result(

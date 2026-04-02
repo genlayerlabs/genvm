@@ -430,6 +430,7 @@ async def run_genvm(
 	calldata: bytes,
 	leader_nondet_results: list[bytes] | None = None,
 	request_extra: dict[str, gvm_calldata.Encodable] = {},
+	shutdown_early: asyncio.Event | None = None,
 ) -> RunHostAndProgramRes:
 	logger = ctx.logger
 
@@ -553,10 +554,24 @@ async def run_genvm(
 	timeout_fired = asyncio.Event()
 
 	async def wrap_timeout(genvm_id: str):
+		reason = 'unknown'
 		if timeout is None:
-			return
-		await asyncio.sleep(timeout)
-		logger.debug('timeout reached', genvm_id=genvm_id)
+			if shutdown_early is None:
+				return  # nothing to do
+			else:
+				await shutdown_early.wait()
+				reason = 'shutdown_early event set'
+		else:
+			if shutdown_early is None:
+				await asyncio.sleep(timeout)
+				reason = 'timeout reached'
+			else:
+				try:
+					await asyncio.wait_for(shutdown_early.wait(), timeout=timeout)
+					reason = 'shutdown_early event set'
+				except asyncio.TimeoutError:
+					reason = 'timeout reached'
+		logger.debug('timeout reached', genvm_id=genvm_id, reason=reason)
 		timeout_fired.set()
 		await _send_timeout(
 			manager_uri,
