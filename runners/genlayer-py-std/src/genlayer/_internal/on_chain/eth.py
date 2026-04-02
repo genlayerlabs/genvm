@@ -35,8 +35,12 @@ def _generate_send(name: str, params: tuple[type], ret: type) -> typing.Any:
 
 	def result_fn(self, *args):
 		calldata = encoder.encode_call(args)
-		assert len(self._proxy_args) == 1
-		assert len(self._proxy_kwargs) == 0
+		if len(self._proxy_args) != 1:
+			raise TypeError(f'expected exactly 1 proxy arg, got {len(self._proxy_args)}')
+		if len(self._proxy_kwargs) != 0:
+			raise TypeError(
+				f'expected no proxy kwargs, got {sorted(self._proxy_kwargs.keys())}'
+			)
 		data = json.dumps(self._proxy_args[0])
 		gl_call.gl_call_generic(
 			{

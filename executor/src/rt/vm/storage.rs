@@ -140,7 +140,11 @@ impl<HS: Send + Sync> Storage<HS> {
             if k.1 != 0 {
                 let prev_page_id = PageID(k.0, k.1 - 1);
                 if self.pages.0.get(&prev_page_id).is_some() {
-                    res.last_mut().unwrap().deref_mut().1.extend_from_slice(v);
+                    res.last_mut()
+                        .expect("res must be non-empty when prev page exists")
+                        .deref_mut()
+                        .1
+                        .extend_from_slice(v);
                     continue;
                 }
             }

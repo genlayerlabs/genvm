@@ -18,7 +18,8 @@ impl Context {
         data: genlayer_sdk::SingleVMData,
         limiter: rt::memlimiter::Limiter,
     ) -> std::result::Result<Self, (rt::errors::VMError, genlayer_sdk::SingleVMData)> {
-        let as_value = calldata::to_value(&data.message_data).unwrap(); // can't fail
+        let as_value =
+            calldata::to_value(&data.message_data).expect("failed to serialize message_data"); // can't fail
         let as_bytes = calldata::encode(&as_value);
         let vfs = match vfs::VFS::new(as_bytes, limiter) {
             Ok(vfs) => vfs,
@@ -91,7 +92,7 @@ fn add_to_linker_sync_dlsym<T: Send + 'static>(
 
             let linker_shared = linker_shared.clone();
             let Ok(ref mut linker) = linker_shared.lock() else {
-                panic!();
+                panic!("dlsym: linker mutex poisoned");
             };
 
             let fn_exported = linker
@@ -102,7 +103,7 @@ fn add_to_linker_sync_dlsym<T: Send + 'static>(
 
             let table = caller
                 .get_export("__indirect_function_table")
-                .unwrap()
+                .ok_or_else(|| anyhow::anyhow!("__indirect_function_table not found"))?
                 .into_table()
                 .ok_or_else(|| anyhow::anyhow!("no __indirect_function_table"))?;
             let res = table.grow(&mut caller, 1, fn_exported.into())?;

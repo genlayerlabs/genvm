@@ -191,7 +191,13 @@ fn read_addr_from_mem(
     mem: &mut wiggle::GuestMemory<'_>,
     addr: wiggle::GuestPtr<u8>,
 ) -> Result<calldata::Address, generated::types::Error> {
-    let cow = mem.as_cow(addr.as_array(calldata::ADDRESS_SIZE.try_into().unwrap()))?;
+    let cow = mem.as_cow(
+        addr.as_array(
+            calldata::ADDRESS_SIZE
+                .try_into()
+                .expect("ADDRESS_SIZE exceeds target type"),
+        ),
+    )?;
     let mut ret = calldata::Address::zero();
     for (x, y) in ret.ref_mut().iter_mut().zip(cow.iter()) {
         *x = *y;
@@ -204,7 +210,13 @@ impl SlotID {
         mem: &mut wiggle::GuestMemory<'_>,
         addr: wiggle::GuestPtr<u8>,
     ) -> Result<Self, generated::types::Error> {
-        let cow = mem.as_cow(addr.as_array(SlotID::len().try_into().unwrap()))?;
+        let cow = mem.as_cow(
+            addr.as_array(
+                SlotID::len()
+                    .try_into()
+                    .expect("SlotID::len exceeds target type"),
+            ),
+        )?;
         let mut ret = SlotID::zero();
         for (x, y) in ret.0.iter_mut().zip(cow.iter()) {
             *x = *y;
@@ -1019,8 +1031,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
         let (should_copy, vec) = if let Some(buf) = mem.as_slice_mut(buf)? {
             (false, buf)
         } else {
-            vec_buf.reserve(mem_size);
-            unsafe { vec_buf.set_len(mem_size) };
+            vec_buf.resize(mem_size, 0);
             (true, vec_buf.as_mut_slice())
         };
 
@@ -1166,8 +1177,9 @@ impl Context {
     }
 
     pub fn log(&self) -> calldata::Value {
-        let msg = calldata::to_value(&self.data.message_data).unwrap();
-        let conf = calldata::to_value(&self.data.conf).unwrap();
+        let msg =
+            calldata::to_value(&self.data.message_data).expect("failed to serialize message_data");
+        let conf = calldata::to_value(&self.data.conf).expect("failed to serialize conf");
 
         calldata::Value::Map(BTreeMap::from([
             ("config".to_owned(), conf),
