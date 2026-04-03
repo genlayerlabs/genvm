@@ -45,6 +45,7 @@ from ._internal.annotations import public, private
 __all__ = (
 	# Submodules (accessible via gl.X when using `import genlayer as gl`)
 	'contract',
+	'chain',
 	'message',
 	'vm',
 	'evm',
@@ -149,6 +150,7 @@ if typing.TYPE_CHECKING or _gen_docs:
 		types,
 		calldata,
 		storage,
+		chain,
 	)
 	import _genlayer_wasi as wasi
 else:
@@ -163,6 +165,7 @@ else:
 		'types': 'genlayer.types',
 		'calldata': 'genlayer.calldata',
 		'storage': 'genlayer.storage',
+		'chain': 'genlayer.chain',
 	}
 
 	def __getattr__(name: str):
