@@ -35,4 +35,4 @@ For the full runner specification, see :doc:`/spec/02-execution-environment/04-r
 
 For version history and what changed, see the :doc:`Changelog </python-sdk/changelog>`.
 
-.. include:: ../../impl-spec/appendix/runners-page_generated.rst
+For list of available runners and their hashes, see the :doc:`Available Runners </impl-spec/appendix/available-runners>` in the appendix.

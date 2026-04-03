@@ -5,5 +5,5 @@ The GenVM Manager is an HTTP server that provides an API for managing GenVM inst
 
 .. openapi:: manager-api.yaml
 
-.. include:: runners-versions.json
+.. include:: manager-api.yaml
    :literal:

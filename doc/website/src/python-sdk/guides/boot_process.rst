@@ -6,12 +6,12 @@ Startup Process
 Standard library provides a built-in bootloader that bridges :ref:`internal ABI <contract-execution-flow>`
 to a more Pythonic interface.
 
-Bootloader is located in module ``_genlayer_runner`` and is executed on import.
+Bootloader is located in module ``_genlayer_bootloader`` and is executed on import.
 
 Bootloader Module
 -----------------
 
-``_genlayer_runner`` handles contract execution in three distinct modes:
+``_genlayer_bootloader`` handles contract execution in three distinct modes:
 
 Entry Points
 ~~~~~~~~~~~~
@@ -24,7 +24,7 @@ Handles standard contract method calls and initialization.
 
 * Loads user ``contract`` module and resolves the target method of a declared ``Contract`` class
 * Validates method access permissions (public/private, payable)
-* Handles special methods: ``__receive__``, ``__handle_undefined_method__``, ``__on_errored_message__``
+* Handles special methods: ``__receive__``, ``__handle_undefined_method__``
 * Routes initialization calls to ``__init__`` method
 * Enforces security restrictions on dunder methods
 

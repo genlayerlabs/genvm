@@ -11,102 +11,116 @@ Top level
    :undoc-members:
    :show-inheritance:
 
-    .. autodata:: gl
-        :no-value:
-
-        Proxy to :py:mod:`genlayer.gl` module.
-
 Integer aliases
 ^^^^^^^^^^^^^^^
 
-It also has aliases for signed and unsigned integer types (such as :py:obj:`~genlayer.py.types.u256`) and a :py:obj:`~genlayer.py.types.bigint` alias that can be used in storage unlike regular :py:class:`int`
+It also has aliases for signed and unsigned integer types (such as :py:obj:`~genlayer.types.u256`) and a :py:obj:`~genlayer.types.bigint` alias that can be used in storage unlike regular :py:class:`int`
 
+########
+contract
+########
 
-###
-gl
-###
+.. automodule:: genlayer.contract
+   :members:
+   :imported-members:
+   :undoc-members:
+   :show-inheritance:
 
-.. automodule:: genlayer.gl
+#######
+message
+#######
+
+.. automodule:: genlayer.message
    :members:
    :imported-members:
    :undoc-members:
    :show-inheritance:
 
 #####
-gl.vm
+chain
 #####
 
-.. automodule:: genlayer.gl.vm
+.. automodule:: genlayer.chain
    :members:
    :imported-members:
    :undoc-members:
    :show-inheritance:
 
-###########
-gl.advanced
-###########
+##
+vm
+##
 
-.. automodule:: genlayer.gl.advanced
+.. automodule:: genlayer.vm
    :members:
    :imported-members:
    :undoc-members:
    :show-inheritance:
 
-###########
-gl.calldata
-###########
+###
+evm
+###
 
-.. automodule:: genlayer.py.calldata
-   :members:
-   :imported-members:
-   :undoc-members:
-   :show-inheritance:
-
-##########
-gl.storage
-##########
-
-.. automodule:: genlayer.py.storage
+.. automodule:: genlayer.evm
    :members:
    :imported-members:
    :undoc-members:
    :show-inheritance:
 
 ######
-gl.evm
+nondet
 ######
 
-.. automodule:: genlayer.py.evm
+.. automodule:: genlayer.nondet
    :members:
    :imported-members:
    :undoc-members:
    :show-inheritance:
 
-###############
-gl.eq_principle
-###############
+##########
+nondet.web
+##########
 
-.. automodule:: genlayer.gl.eq_principle
+.. automodule:: genlayer.nondet.web
    :members:
    :imported-members:
    :undoc-members:
    :show-inheritance:
 
-#########
-gl.nondet
-#########
+############
+eq_principle
+############
 
-.. automodule:: genlayer.gl.nondet
+.. automodule:: genlayer.eq_principle
    :members:
    :imported-members:
    :undoc-members:
    :show-inheritance:
 
-#############
-gl.nondet.web
-#############
+########
+calldata
+########
 
-.. automodule:: genlayer.gl.nondet.web
+.. automodule:: genlayer.calldata
+   :members:
+   :imported-members:
+   :undoc-members:
+   :show-inheritance:
+
+#######
+storage
+#######
+
+.. automodule:: genlayer.storage
+   :members:
+   :imported-members:
+   :undoc-members:
+   :show-inheritance:
+
+#####
+types
+#####
+
+.. automodule:: genlayer.types
    :members:
    :imported-members:
    :undoc-members:

@@ -173,7 +173,7 @@ Example
 
 Creating a single file mapping implies :ref:`gvm-def-ram-consumption` of
 
-#. :ref:`gvm-def-enum-value-memory-limiter-consts-file-mapping`\.
+#. :ref:`gvm-def-consts-value-memory-limiter-consts-file-mapping`\.
 #. file name length in octets
 
 SetArgs

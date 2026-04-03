@@ -3,6 +3,7 @@ import os
 import json
 from pathlib import Path
 import sys
+from types import ModuleType
 import typing
 import enum
 
@@ -144,6 +145,12 @@ html_favicon = '_static/favicon.png'
 todo_include_todos = True
 
 autodoc_mock_imports = ['_genlayer_wasi', 'google', 'onnx', 'word_piece_tokenizer']
+
+fake_genlayer_wasi = ModuleType(
+	'_genlayer_wasi',
+)
+fake_genlayer_wasi.__dict__['FAKE_VM'] = True
+sys.modules['_genlayer_wasi'] = fake_genlayer_wasi
 
 MONO_REPO_ROOT_FILE = '.genvm-monorepo-root'
 script_dir = Path(__file__).parent

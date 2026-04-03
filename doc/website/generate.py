@@ -3,6 +3,13 @@
 import subprocess, json, sys, re
 from pathlib import Path
 
+script_dir = Path('__file__').parent.absolute()
+genvm_root_dir = script_dir
+while not genvm_root_dir.joinpath('.genvm-monorepo-root').exists():
+	genvm_root_dir = genvm_root_dir.parent
+
+docs_src_root_dir = genvm_root_dir.joinpath('doc', 'website', 'src')
+
 proc = subprocess.run(
 	['git', 'remote', 'get-url', 'origin'],
 	check=True,
@@ -65,11 +72,9 @@ current_commit = subprocess.run(
 
 current_commit = current_commit.stdout.strip()
 
-eval_file = Path(__file__).parent.parent.joinpath('docs.nix')
+eval_file = genvm_root_dir.joinpath('runners', 'docs.nix')
 
-build_config = json.loads(
-	Path(__file__).parent.parent.parent.joinpath('flake-config.json').read_text()
-)
+build_config = json.loads(genvm_root_dir.joinpath('flake-config.json').read_text())
 build_config['head-revision'] = current_commit
 commit2tag[current_commit] = build_config['executor-version']
 
@@ -266,7 +271,10 @@ def make_table(rows, headers):
 
 def version_to_anchor(ver):
 	"""Convert version string to changelog anchor: v0.1.8 -> v0-1-8"""
-	return ver.replace('.', '-')
+	res = 'gvm_ver_' + ver.replace('.', '-')
+	while res[-1] in ['_', '-']:
+		res = res[:-1]
+	return res
 
 
 # --- Runner tier definitions ---
@@ -296,7 +304,7 @@ RUNNER_DESCRIPTIONS = {
 	'models-all-MiniLM-L6-v2': 'Pre-trained sentence embedding model (ONNX).',
 }
 
-# --- Generate runners-page_generated.rst ---
+# --- Generate runners page ---
 
 latest_ver = semver_versions[-1] if semver_versions else None
 latest_runners = res.get(latest_ver, {}) if latest_ver else {}
@@ -365,11 +373,6 @@ def render_runner_section(rid, rst_parts):
 
 	prev_groups = format_version_range(rid)
 	if prev_groups:
-		rst_parts.append('.. raw:: html')
-		rst_parts.append('')
-		rst_parts.append('   <details>')
-		rst_parts.append('   <summary>Previous versions</summary>')
-		rst_parts.append('')
 		for h, start_v, end_v in prev_groups:
 			if start_v == end_v:
 				anchor = version_to_anchor(start_v)
@@ -380,13 +383,14 @@ def render_runner_section(rid, rst_parts):
 					f'- ``{h}`` \u2014 {start_v} through `{end_v} <changelog.html#{anchor}>`_'
 				)
 		rst_parts.append('')
-		rst_parts.append('.. raw:: html')
-		rst_parts.append('')
-		rst_parts.append('   </details>')
-		rst_parts.append('')
 
 
-runners_rst = []
+runners_rst = [
+	"""\
+Available Runners
+=================
+"""
+]
 
 # Tier 1
 runners_rst.append(rst_heading('Contract runners', '-'))
@@ -418,23 +422,28 @@ if extra_runners:
 	for rid in extra_runners:
 		render_runner_section(rid, runners_rst)
 
-runners_rst_path = json_path.with_name('runners-page_generated.rst')
+runners_rst_path = json_path.with_name('available-runners.rst')
 runners_rst_path.write_text('\n'.join(runners_rst) + '\n')
 
-# Backwards compatibility: old wrapper includes runners-versions_generated.rst
-runners_rst_path.with_name('runners-versions_generated.rst').write_text(
-	'\n'.join(runners_rst) + '\n'
-)
+# --- Generate changelog ---
 
-# --- Generate changelog_generated.rst ---
-
-# Notes dir is python-sdk/changelog-notes/.
 # Sphinx resolves include paths relative to the top-level source file,
-# which is python-sdk/changelog.rst (the file that includes our generated RST).
-changelog_notes_dir = json_path.parent.parent.parent / 'python-sdk' / 'changelog-notes'
-changelog_notes_include_prefix = 'changelog-notes'
+changelog_notes_dir = docs_src_root_dir / 'python-sdk' / 'changelog-notes'
+changelog_rst_path = docs_src_root_dir / 'python-sdk' / 'changelog.rst'
+changelog_notes_include_prefix = changelog_notes_dir.relative_to(
+	changelog_rst_path.parent
+).as_posix()
 
 changelog_rst = []
+
+changelog_rst = [
+	"""\
+Changelog
+=========
+
+Release history for the Python SDK, including API changes and runner version updates.
+"""
+]
 
 for entry in enriched_versions:
 	ver = entry['version']
@@ -468,14 +477,8 @@ for entry in enriched_versions:
 		changelog_rst.append('')
 
 	if changes:
-		changelog_rst.append('.. raw:: html')
-		changelog_rst.append('')
-		changelog_rst.append(f'   <details>')
 		n = len(changes)
 		s = 's' if n != 1 else ''
-		changelog_rst.append(
-			f'   <summary><strong>Runner Changes</strong> ({n} runner{s} updated)</summary>'
-		)
 		changelog_rst.append('')
 		change_rows = []
 		for rid in sorted(changes.keys()):
@@ -497,11 +500,6 @@ for entry in enriched_versions:
 			changelog_rst.append('')
 
 		# Full runner hashes table
-		changelog_rst.append('.. raw:: html')
-		changelog_rst.append('')
-		changelog_rst.append('   <details>')
-		changelog_rst.append('   <summary>Full runner hashes</summary>')
-		changelog_rst.append('')
 		rows = []
 		for rid in sorted(runners.keys()):
 			hashes = runners[rid]
@@ -510,15 +508,6 @@ for entry in enriched_versions:
 		if rows:
 			changelog_rst.append(make_table(rows, ['Runner', 'Hash']))
 			changelog_rst.append('')
-		changelog_rst.append('.. raw:: html')
-		changelog_rst.append('')
-		changelog_rst.append('   </details>')
-		changelog_rst.append('')
-
-		changelog_rst.append('.. raw:: html')
-		changelog_rst.append('')
-		changelog_rst.append('   </details>')
-		changelog_rst.append('')
 	else:
 		if prev_ver:
 			changelog_rst.append(f'No runner changes from {prev_ver}.')
@@ -526,5 +515,4 @@ for entry in enriched_versions:
 			changelog_rst.append('Initial release.')
 		changelog_rst.append('')
 
-changelog_rst_path = json_path.with_name('changelog_generated.rst')
 changelog_rst_path.write_text('\n'.join(changelog_rst) + '\n')
