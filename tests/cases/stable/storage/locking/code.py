@@ -42,5 +42,5 @@ class Contract(gl.contract.Contract):
 		except BaseException as e:
 			print(e)
 		else:
-			code.extend(new_code)
+			code.assign(new_code)
 		print(len(code) == len(new_code))

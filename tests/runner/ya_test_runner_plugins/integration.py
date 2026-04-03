@@ -581,10 +581,17 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				res.stdout = stdout_raw + return_part + nondet_part
 
 				for k, v in res.result_storage_changes:
+					assert len(k) == 36
+					index = int.from_bytes(k[32:], byteorder='big')
+					index *= 32
+					if index >= 4096:
+						logger.warning(
+							'suspicious storage writing', index=index, key=k.hex(), value=v.hex()
+						)
 					mock_host.storage.write(
 						mock_host.running_address,
 						k[:32],
-						int.from_bytes(k[32:], byteorder='little'),
+						index,
 						v,
 					)
 			except Exception as e:

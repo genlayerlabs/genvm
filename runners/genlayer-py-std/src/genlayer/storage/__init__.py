@@ -73,6 +73,17 @@ def inmem_allocate[T](t: typing.Type[T], /, *init_args, **init_kwargs) -> T:
 	return instance
 
 
+def cast_slot[T](t: typing.Type[T], manager: Manager, slot: bytes, offset: int, /) -> T:
+	"""
+	Unsafely casts a storage slot to the given type. Use with caution.
+	"""
+	td = _storage_build(_BuilderCtx.empty(), t)
+
+	instance = td.get(manager.get_store_slot(slot), offset)
+
+	return instance
+
+
 def copy_to_memory[T](val: T, /) -> T:
 	"""
 	Deep-copy a storage value into a new in-memory instance.

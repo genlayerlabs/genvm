@@ -86,10 +86,10 @@ def _handle_main() -> typing.NoReturn:
 		contract_type: type[Contract]
 
 	def check_abstracts(ctx: MethodResolverInfo, meth: typing.Callable) -> str | None:
-		if not _get_schema._is_public(meth):
-			return f'call to private method `{meth}`'
 		if getattr(meth, '__isabstractmethod__', False):
 			return f'method is abstract `{meth}`'
+		if not _get_schema._is_public(meth):
+			return f'call to private method `{meth}`'
 		if ctx.msg['value'] > 0 and not getattr(meth, _get_schema.PAYABLE_ATTR, False):
 			return f'called non-payable method `{meth}` with non-zero value'
 		return None

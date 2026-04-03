@@ -103,7 +103,7 @@ let
 						(name: name != "__prefix")
 						(builtins.attrNames val)))
 		else
-			if val.hash == null || val.hash == null then
+			if val.hash == null || val.hash == "test" then
 				""
 			else if hashHasSpecialDeps null val then
 				"set ${pref+name} hash to null\n"
@@ -132,7 +132,7 @@ let
 					if deducedHash == null
 					then fakeHash
 					else deducedHash;
-				hash32 = if deducedHash == null then "test" else builtins.convertHash { hash = hashSRI; toHashFormat = "nix32"; };
+				hash32 = if deducedHash == "test" then "test" else builtins.convertHash { hash = hashSRI; toHashFormat = "nix32"; };
 			in rec {
 				id = pref + name;
 

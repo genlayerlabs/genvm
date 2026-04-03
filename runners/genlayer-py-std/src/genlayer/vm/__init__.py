@@ -20,6 +20,7 @@ __all__ = (
 	'Result',
 	'trace',
 	'trace_time_micro',
+	'ABI',
 )
 
 from genlayer import IS_IN_VM
@@ -39,7 +40,9 @@ from genlayer._internal import _lazy_api
 import genlayer.calldata as calldata
 import genlayer._internal.on_chain.gl_call as gl_call
 
-from genlayer.vm.public_abi import ResultCode
+from . import public_abi as ABI
+
+from .public_abi import ResultCode
 
 
 @dataclasses.dataclass

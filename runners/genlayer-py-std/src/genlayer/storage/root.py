@@ -1,3 +1,5 @@
+__all__ = ('Root',)
+
 import typing
 
 from ._internal.generate import InmemManager
@@ -5,6 +7,7 @@ from genlayer.types import u8, u256, Address
 from ._internal.generate import generate_storage, _known_descs
 from genlayer.storage.core import ROOT_SLOT_ID, Slot, Manager, InmemManager
 from genlayer.storage.core import Indirection, VLA
+from genlayer.vm import public_abi
 
 
 @generate_storage
@@ -38,7 +41,7 @@ class Root:
 
 	major: u8
 	"""
-	Major version of the contract
+	Major version of the GenVM contract expects
 	"""
 
 	@staticmethod
@@ -59,6 +62,13 @@ class Root:
 		"""
 		return self._storage_slot  # type: ignore
 
+	def get_vacant_slot(self) -> Slot:
+		"""
+		This slot can be used to store data without worrying about overwriting contract data.
+		Useful for bootstrapping contract storage
+		"""
+		return self.slot().indirect(public_abi.root_offsets.MAJOR)
+
 	def get_contract_instance[T](self, typ: typing.Type[T], /) -> T:
 		"""
 		Return the contract instance deserialized as the given type.
@@ -66,7 +76,7 @@ class Root:
 		:param typ: storage-allowed type to deserialize into
 		:returns: contract instance
 		"""
-		slot: Slot = self.slot().indirect(0)
+		slot: Slot = self.slot().indirect(public_abi.root_offsets.CONTRACT)
 		return _known_descs[typ].get(slot, 0)
 
 	def lock_default(self):
