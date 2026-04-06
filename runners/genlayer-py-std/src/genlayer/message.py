@@ -98,7 +98,7 @@ entry_data: bytes = ...  # type: ignore
 
 entry_stage_data: calldata.Decoded = ...  # type: ignore
 
-if typing.TYPE_CHECKING or _IS_IN_VM:
+if typing.TYPE_CHECKING or not _IS_IN_VM:
 	raw: MessageRawType = ...  # type: ignore
 else:
 	raw = typing.cast(

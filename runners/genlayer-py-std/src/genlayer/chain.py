@@ -25,15 +25,19 @@ import inspect
 
 
 class Event:
+	# editorconfig-checker-disable
 	"""
 	.. code-block:: python
 
-		class TransferOccurredEvent(gl.Event):
-			def __init__(self, from: Address, to: Address, /): ...
+	        class TransferOccurredEvent(gl.Event):
+	          def __init__(self, sender: Address, to: Address, /): ...
 
-		class TransferOccurredEvent(gl.Event):
-			def __init__(self, from: Address, to: Address, /, **blob): ...
+
+	        class TransferOccurredEvent(gl.Event):
+	          def __init__(self, sender: Address, to: Address, /, **blob): ...
 	"""
+
+	# editorconfig-checker-enable
 
 	def __init__(self):
 		"""

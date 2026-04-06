@@ -108,6 +108,8 @@ def _repr_type(t: typing.Any, permissive: bool) -> typing.Any:
 			args = typing.get_args(t)
 			if all(isinstance(a, str) for a in args):
 				return 'string'
+			if all(isinstance(a, bool) for a in args):
+				return 'bool'
 			if all(isinstance(a, int) for a in args):
 				return 'int'
 			return 'any'

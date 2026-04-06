@@ -971,6 +971,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
                 ))
             }
+            #[allow(deprecated)]
             gl_call::Message::Rollback(msg) => Err(generated::types::Error::trap(
                 crate::anyhow_to_wasmtime(rt::errors::UserError(msg).into()),
             )),

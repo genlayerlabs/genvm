@@ -79,7 +79,7 @@ class Command:
 	async def run(self, ctx: SharedContext, *, mode: RunMode) -> Result:
 		import uuid
 
-		uid = str(uuid.uuid1())
+		uid = str(uuid.uuid4())
 		ctx.logger.debug(
 			'running command',
 			env=self.env,

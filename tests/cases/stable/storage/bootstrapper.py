@@ -58,7 +58,7 @@ class Contract(gl.contract.Contract):
 
 			locked_slots_dst_vla = get_twin_vla(twin_slot_id)
 			locked_slots_dst_vla.set_length(
-				len(locked_slots_dst) * 8 + locked_slots_dst.data_offset()
+				len(locked_slots_dst) * 32 + locked_slots_dst.data_offset()
 			)
 
 		root.locked_slots.get().truncate()
