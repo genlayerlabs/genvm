@@ -1,14 +1,25 @@
 __all__ = (
 	'MessageRawType',
 	'raw',
+	'contract_address',
+	'sender_address',
+	'origin_address',
+	'stack',
+	'value',
+	'chain_id',
+	'is_init',
+	'entry_kind',
+	'entry_data',
+	'entry_stage_data',
 )
 
 import io
-import os
 import typing
 
 import genlayer.calldata as calldata
 from genlayer.types import u256, Address
+
+from genlayer import IS_IN_VM as _IS_IN_VM
 
 
 class MessageRawType(typing.TypedDict):
@@ -87,7 +98,7 @@ entry_data: bytes = ...  # type: ignore
 
 entry_stage_data: calldata.Decoded = ...  # type: ignore
 
-if os.getenv('GENERATING_DOCS', 'false') == 'true':
+if typing.TYPE_CHECKING or _IS_IN_VM:
 	raw: MessageRawType = ...  # type: ignore
 else:
 	raw = typing.cast(

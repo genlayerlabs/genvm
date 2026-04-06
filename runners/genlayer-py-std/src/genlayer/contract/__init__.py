@@ -26,8 +26,10 @@ import collections.abc
 
 from genlayer.types import Address, Lazy, u256
 import genlayer.calldata as calldata
+from genlayer import IS_IN_VM
 
-import _genlayer_wasi as wasi
+if typing.TYPE_CHECKING or IS_IN_VM:
+	import _genlayer_wasi as wasi
 
 from genlayer._internal.on_chain.gl_call import gl_call_generic
 

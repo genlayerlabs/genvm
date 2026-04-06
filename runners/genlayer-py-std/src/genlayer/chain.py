@@ -165,7 +165,7 @@ class Event:
 		Event.emit_raw(topics, self._blob)
 
 
-if typing.TYPE_CHECKING or IS_IN_VM:
+if typing.TYPE_CHECKING or not IS_IN_VM:
 	id: u256 = ...  # type: ignore
 	"""
 	Chain ID. It is the same as in the message

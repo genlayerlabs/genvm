@@ -20,17 +20,21 @@ This provides access to:
 - Method decorators via ``gl.public`` and ``gl.private``
 """
 
-IS_IN_VM = False
+import typing
+
+IS_IN_VM: typing.Final[bool] = False
+"""
+Indicates whether the code is running inside the GenVM.
+"""
 
 try:
 	import _genlayer_wasi
 
-	IS_IN_VM = True
+	IS_IN_VM = True  # type: ignore
 except ImportError:
 	pass
 
 import os
-import typing
 
 # Pre-load storage to resolve circular dependency: reflect <-> storage
 import genlayer.storage  # noqa: F401
