@@ -68,8 +68,8 @@ def test_vla_extend():
 	v2.append(20)
 	v2.append(30)
 	v.extend(v2)
-	assert len(v) == 3
-	assert list(v) == [10, 20, 30]
+	assert len(v) == 5
+	assert list(v) == [1, 2, 10, 20, 30]
 
 
 def test_vla_truncate():

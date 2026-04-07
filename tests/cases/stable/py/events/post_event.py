@@ -4,7 +4,7 @@ import genlayer as gl
 from genlayer.types import *
 
 
-class TestEvent(gl.vm.Event):
+class TestEvent(gl.chain.Event):
 	def __init__(self, user_id: int, action: str, /, **blob): ...
 
 

@@ -27,7 +27,7 @@ let
 			};
 
 			genlayer-std = {
-				hash = "sha256-yo19YJRA46FY0O4ATJQ/VShyrb8NFYCMts0ZOXs7YUw=";
+				hash = "sha256-QSNZ30OeOxe7KFP+s7YASGeDg5Plk2qcpAi4NyFSGio=";
 			};
 
 			genlayer-embeddings = {
@@ -55,7 +55,7 @@ let
 		wrappers = {
 			__prefix = "";
 			py-genlayer = {
-				hash = "sha256-P46xrOxO/sMcBu/dnlhL/fPqJGGjTtErTxvuGjSvwKU=";
+				hash = "sha256-z94b2Ih9lsLyLvjtSx+Mo/a3tQQK3UOvXTd2Lk+DtpA=";
 				depends = [
 					cpython
 					pyLibs.cloudpickle
@@ -63,7 +63,7 @@ let
 				];
 			};
 			py-genlayer-multi = {
-				hash = "sha256-j9GVay2RuBNWHNXLmpkaSS1Dw9bNhnwvsSBgFui9ypU=";
+				hash = "sha256-EsIvq6kRWCPvNYVTCCBPJSNLdOZzXkSYNlooAMjcOlA=";
 				depends = [
 					cpython
 					pyLibs.cloudpickle
@@ -103,7 +103,7 @@ let
 						(name: name != "__prefix")
 						(builtins.attrNames val)))
 		else
-			if val.hash == null || val.hash == null then
+			if val.hash == null || val.hash == "test" then
 				""
 			else if hashHasSpecialDeps null val then
 				"set ${pref+name} hash to null\n"
@@ -132,7 +132,7 @@ let
 					if deducedHash == null
 					then fakeHash
 					else deducedHash;
-				hash32 = if deducedHash == null then "test" else builtins.convertHash { hash = hashSRI; toHashFormat = "nix32"; };
+				hash32 = if deducedHash == "test" then "test" else builtins.convertHash { hash = hashSRI; toHashFormat = "nix32"; };
 			in rec {
 				id = pref + name;
 

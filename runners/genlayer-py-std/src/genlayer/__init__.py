@@ -20,17 +20,21 @@ This provides access to:
 - Method decorators via ``gl.public`` and ``gl.private``
 """
 
-IS_IN_VM = False
+import typing
+
+IS_IN_VM: typing.Final[bool] = False
+"""
+Indicates whether the code is running inside the GenVM.
+"""
 
 try:
 	import _genlayer_wasi
 
-	IS_IN_VM = True
+	IS_IN_VM = True  # type: ignore
 except ImportError:
 	pass
 
 import os
-import typing
 
 # Pre-load storage to resolve circular dependency: reflect <-> storage
 import genlayer.storage  # noqa: F401
@@ -45,6 +49,7 @@ from ._internal.annotations import public, private
 __all__ = (
 	# Submodules (accessible via gl.X when using `import genlayer as gl`)
 	'contract',
+	'chain',
 	'message',
 	'vm',
 	'evm',
@@ -149,6 +154,7 @@ if typing.TYPE_CHECKING or _gen_docs:
 		types,
 		calldata,
 		storage,
+		chain,
 	)
 	import _genlayer_wasi as wasi
 else:
@@ -163,6 +169,7 @@ else:
 		'types': 'genlayer.types',
 		'calldata': 'genlayer.calldata',
 		'storage': 'genlayer.storage',
+		'chain': 'genlayer.chain',
 	}
 
 	def __getattr__(name: str):

@@ -238,7 +238,7 @@ def run_upload(args):
 	env_with_default_ld_lib_path['LD_LIBRARY_PATH'] = '/usr/local/lib:/usr/lib:/lib'
 	token = run_many_get_first(
 		lambda: run_subprocess_get_stdout(
-			['gcloud', 'auth', 'print-access-token'], text=True, env=env
+			['gcloud', 'auth', 'print-access-token'], text=True, env=env, capture_output=True
 		)
 		for env in [ORIGINAL_ENV, env_with_default_ld_lib_path, None]
 	)

@@ -65,7 +65,7 @@ def _give_result(res_fn: typing.Callable[[], typing.Any]) -> typing.NoReturn:
 	try:
 		res = res_fn()
 	except _vm.UserError as r:
-		gl_call.rollback(r.data)
+		gl_call.user_error(r.data)
 	gl_call.contract_return(res)
 
 
@@ -86,12 +86,12 @@ def _handle_main() -> typing.NoReturn:
 		contract_type: type[Contract]
 
 	def check_abstracts(ctx: MethodResolverInfo, meth: typing.Callable) -> str | None:
-		if not _get_schema._is_public(meth):
-			return f'call to private method `{meth}`'
 		if getattr(meth, '__isabstractmethod__', False):
 			return f'method is abstract `{meth}`'
+		if not _get_schema._is_public(meth):
+			return f'call to private method `{meth}`'
 		if ctx.msg['value'] > 0 and not getattr(meth, _get_schema.PAYABLE_ATTR, False):
-			return f'called non-payable method `{meth} with non-zero value`'
+			return f'called non-payable method `{meth}` with non-zero value'
 		return None
 
 	def resolve_method(ctx) -> typing.Callable:

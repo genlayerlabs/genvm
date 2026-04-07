@@ -558,6 +558,7 @@ where
 pub fn create_client() -> anyhow::Result<reqwest::Client> {
     reqwest::ClientBuilder::new()
         .user_agent("reqwest")
+        .timeout(std::time::Duration::from_secs(300))
         .build()
         .map_err(Into::into)
 }
@@ -716,6 +717,14 @@ pub mod tests {
             };
             base_conf.setup_logging(std::io::stdout()).unwrap();
         });
+    }
+
+    pub fn create_test_client() -> reqwest::Client {
+        reqwest::ClientBuilder::new()
+            .user_agent("reqwest")
+            .timeout(std::time::Duration::from_secs(40))
+            .build()
+            .unwrap()
     }
 
     pub fn get_hello() -> Arc<genvm_modules_interfaces::GenVMHello> {

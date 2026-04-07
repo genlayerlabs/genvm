@@ -346,7 +346,9 @@ pub enum Message {
     ExecPrompt(llm_iface::PromptPayload),
     ExecPromptTemplate(llm_iface::PromptTemplatePayload),
 
+    #[deprecated(note = "Use UserError. Will be removed before 1.0 release")]
     Rollback(calldata::Value),
+    UserError(calldata::Value),
     Return(calldata::Value),
 
     Trace(TracePayload),

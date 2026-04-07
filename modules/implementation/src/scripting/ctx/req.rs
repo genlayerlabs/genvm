@@ -111,7 +111,7 @@ mod tests {
     async fn test_response_body_max_size_ok() {
         common::tests::setup();
 
-        let client = reqwest::Client::new();
+        let client = common::tests::create_test_client();
         let metrics = sync::DArc::new(crate::scripting::ctx::Metrics::default());
         let url = "https://test-server.genlayer.com/body/echo";
 
@@ -149,7 +149,7 @@ mod tests {
     async fn test_response_body_max_size_exceeded() {
         common::tests::setup();
 
-        let client = reqwest::Client::new();
+        let client = common::tests::create_test_client();
         let metrics = sync::DArc::new(crate::scripting::ctx::Metrics::default());
         let url = "https://test-server.genlayer.com/body/echo";
 

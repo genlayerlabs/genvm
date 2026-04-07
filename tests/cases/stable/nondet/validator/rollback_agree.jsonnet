@@ -4,7 +4,7 @@ local util = import 'templates/util.jsonnet';
 	next: [super.next[0] {
 		leader_nondet: [
 			{
-				"kind": "rollback",
+				"kind": "user_error",
 				"value": "rollback"
 			}
 		]

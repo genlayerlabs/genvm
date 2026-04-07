@@ -488,7 +488,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 						encoded_nondet.append(
 							bytes([public_abi.ResultCode.RETURN]) + gvm_calldata.encode(res['value'])
 						)
-					elif res['kind'] == 'rollback':
+					elif res['kind'] == 'user_error':
 						if isinstance(res['value'], str):
 							encoded_nondet.append(
 								bytes([public_abi.ResultCode.USER_ERROR]) + res['value'].encode('utf-8')
@@ -499,7 +499,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 								+ b'\x00\x00\x00\x00'
 								+ gvm_calldata.encode(res['value'])
 							)
-					elif res['kind'] == 'contract_error':
+					elif res['kind'] == 'vm_error':
 						encoded_nondet.append(
 							bytes([public_abi.ResultCode.VM_ERROR]) + res['value'].encode('utf-8')
 						)
@@ -581,10 +581,17 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				res.stdout = stdout_raw + return_part + nondet_part
 
 				for k, v in res.result_storage_changes:
+					assert len(k) == 36
+					index = int.from_bytes(k[32:], byteorder='big')
+					index *= 32
+					if index >= 4096:
+						logger.warning(
+							'suspicious storage writing', index=index, key=k.hex(), value=v.hex()
+						)
 					mock_host.storage.write(
 						mock_host.running_address,
 						k[:32],
-						int.from_bytes(k[32:], byteorder='little'),
+						index,
 						v,
 					)
 			except Exception as e:

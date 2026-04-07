@@ -4,7 +4,7 @@ local util = import 'templates/util.jsonnet';
 	next: [super.next[0] {
 		leader_nondet: [
 			{
-				"kind": "contract_error",
+				"kind": "vm_error",
 				"value": "exit_code 1"
 			}
 		],

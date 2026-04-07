@@ -106,7 +106,8 @@ Type that can be encoded into calldata, provided ``default`` function ``T -> Enc
 def encode_default_parameter(b):
 	if not dataclasses.is_dataclass(b):
 		return b
-	assert not isinstance(b, type)
+	if isinstance(b, type):
+		raise TypeError(f'expected dataclass instance, got type {b!r}')
 
 	return {field.name: getattr(b, field.name) for field in dataclasses.fields(b)}
 
@@ -134,7 +135,8 @@ def encode[T](
 	mem = bytearray()
 
 	def append_uleb128(i):
-		assert i >= 0
+		if i < 0:
+			raise ValueError(f'uleb128 requires non-negative integer, got {i}')
 		if i == 0:
 			mem.append(0)
 		while i > 0:
@@ -286,7 +288,8 @@ def decode(
 					if prev >= key:
 						raise DecodingError(f'unordered calldata keys: `{prev}` >= `{key}`')
 				prev = key
-				assert key not in ret_dict
+				if key in ret_dict:
+					raise DecodingError(f'duplicate calldata map key `{key}`')
 				ret_dict[key] = impl()
 			return ret_dict
 		raise DecodingError(f'invalid type {typ}')

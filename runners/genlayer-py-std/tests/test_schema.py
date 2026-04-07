@@ -85,7 +85,19 @@ def test_dataclass():
 				'params': [],
 				'kwparams': {},
 				'readonly': True,
-				'ret': {'x': 'int', 'y': 'int', 'z': 'any'},
+				'ret': {'x': 'int', 'y': 'int', 'z': 'string'},
 			}
 		},
 	}
+
+
+def test_literal_bool():
+	import genlayer._internal.get_schema as gs
+
+	# typing.Literal[True, False] must be 'bool', not 'int'
+	assert gs._repr_type(typing.Literal[True, False], False) == 'bool'
+	assert gs._repr_type(typing.Literal[True], False) == 'bool'
+	assert gs._repr_type(typing.Literal[False], False) == 'bool'
+
+	# sanity-check: plain int literals still resolve to 'int'
+	assert gs._repr_type(typing.Literal[0, 1], False) == 'int'

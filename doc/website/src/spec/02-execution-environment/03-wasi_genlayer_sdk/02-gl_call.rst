@@ -339,7 +339,12 @@ Topics must be exactly 32 bytes each.
 ``Rollback`` Message
 --------------------
 
-Triggers contract rollback with custom error message.
+Deprecated. Use ``UserError`` instead.
+
+``UserError`` Message
+---------------------
+
+Triggers contract UserError with custom error message.
 
 Payload
 ~~~~~~~
@@ -347,7 +352,7 @@ Payload
 .. code-block::
 
    {
-     "Rollback": String           // Error message
+     "UserError": Any           // Error message
    }
 
 Causes VM to exit with ``UserError``. Terminates contract execution immediately.

@@ -1,6 +1,6 @@
 import pytest
 
-from genlayer.vm import Event
+from genlayer.chain import Event
 
 
 def test_invalid_sig():

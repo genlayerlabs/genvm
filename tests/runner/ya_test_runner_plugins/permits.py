@@ -80,6 +80,8 @@ class PermitsTestStep(ya_test_runner.exec.step.Python):
 		genvm_ids: list[str] = []
 		bg_tasks: list[asyncio.Task] = []
 
+		shut_downer = asyncio.Event()
+
 		try:
 			# Set permits to N * 2
 			await self._set_permits(manager_uri, num_permits)
@@ -109,7 +111,9 @@ class PermitsTestStep(ya_test_runner.exec.step.Python):
 
 				ctx = _TestContext(logger)
 				task = asyncio.create_task(
-					self._run_background_genvm(host, manager_uri, ctx, code, sock_path, genvm_ids)
+					self._run_background_genvm(
+						host, manager_uri, ctx, code, sock_path, genvm_ids, shut_downer
+					)
 				)
 				bg_tasks.append(task)
 
@@ -143,6 +147,7 @@ class PermitsTestStep(ya_test_runner.exec.step.Python):
 			return ya_test_runner.test.Result(passed=True, context={}, elapsed_seconds=0)
 
 		finally:
+			shut_downer.set()
 			# Shut down running genvms
 			for gid in genvm_ids:
 				try:
@@ -152,12 +157,10 @@ class PermitsTestStep(ya_test_runner.exec.step.Python):
 						timeout=aiohttp.ClientTimeout(total=10),
 					):
 						pass
-				except Exception:
+				except Exception as e:
+					logger.warning('failed to delete genvm', genvm_id=gid, error=e)
 					pass
 
-			# Cancel background tasks
-			for task in bg_tasks:
-				task.cancel()
 			for task in bg_tasks:
 				try:
 					await task
@@ -176,6 +179,7 @@ class PermitsTestStep(ya_test_runner.exec.step.Python):
 		code: bytes,
 		sock_path: str,
 		genvm_ids: list[str],
+		shut_downer: asyncio.Event | None = None,
 	) -> None:
 		with host as mock_host:
 			# We wrap run_genvm but intercept the genvm_id.
@@ -195,6 +199,7 @@ class PermitsTestStep(ya_test_runner.exec.step.Python):
 					timeout=300,
 					extra_args=['--debug-mode'],
 					request_extra={'no_modules': True},
+					shutdown_early=shut_downer,
 				)
 			except Exception:
 				pass  # expected when cancelled or contract crashes

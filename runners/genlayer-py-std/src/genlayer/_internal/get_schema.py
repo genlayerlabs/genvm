@@ -89,10 +89,10 @@ def _repr_type(t: typing.Any, permissive: bool) -> typing.Any:
 	if origin != None:
 		args = typing.get_args(t)
 		if _is_dict(origin, permissive):
-			assert len(args) == 2
-			assert (
-				args[0] is str
-			), f'dictionary can have only string keys, got {type(args[0])}'
+			if len(args) != 2:
+				raise TypeError(f'dict type must have 2 args, got {len(args)}')
+			if args[0] is not str:
+				raise TypeError(f'dictionary keys must be str, got {args[0]!r}')
 			return {'$dict': _repr_type(args[1], permissive)}
 		if origin is typing.Annotated:
 			return _repr_type(t.__origin__, permissive)
@@ -101,10 +101,18 @@ def _repr_type(t: typing.Any, permissive: bool) -> typing.Any:
 				return [{'$rep': _repr_type(args[0], permissive)}]
 			return [_repr_type(a, permissive) for a in args]
 		if _is_list(origin, permissive):
-			assert len(args) == 1
+			if len(args) != 1:
+				raise TypeError(f'list type must have 1 arg, got {len(args)}')
 			return [{'$rep': _repr_type(args[0], permissive)}]
 		if origin is typing.Literal:
-			return 'any'  # FIXME
+			args = typing.get_args(t)
+			if all(isinstance(a, str) for a in args):
+				return 'string'
+			if all(isinstance(a, bool) for a in args):
+				return 'bool'
+			if all(isinstance(a, int) for a in args):
+				return 'int'
+			return 'any'
 	raise TypeError(
 		f'type is not supported', {'type': t, 'kind': ttype, **reflect.try_get_lineno(t)}
 	)

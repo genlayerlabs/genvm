@@ -86,8 +86,12 @@ impl Ctx<'_, '_> {
         let runner_hash = if runner_hash == "test" || runner_hash == "latest" {
             if !self.supervisor.shared_data.debug_mode {
                 log_warn!(":test/ :latest runner used in non-debug mode, this is not allowed");
+                None
+            } else {
+                let new_latest = self.supervisor.runner_cache.get_latest(runner_id);
+                log_info!(runner_id = runner_id.as_str(), new_latest:? = new_latest; "resolving :latest runner");
+                new_latest
             }
-            self.supervisor.runner_cache.get_latest(runner_id)
         } else {
             Some(GlobalSymbol::new(runner_hash))
         };

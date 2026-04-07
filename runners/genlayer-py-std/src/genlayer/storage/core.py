@@ -50,6 +50,7 @@ class Slot:
 	"""
 
 	manager: Manager
+	id: bytes
 
 	__slots__ = ('manager', 'id', '_indir_cache')
 
@@ -60,7 +61,7 @@ class Slot:
 		self.manager, self.id = state
 		self._indir_cache = hashlib.sha3_256(self.id)
 
-	def __init__(self, addr: bytes, manager: Manager):
+	def __init__(self, addr: bytes, manager: Manager, /):
 		self.id = addr
 		self.manager = manager
 
@@ -388,6 +389,24 @@ class VLA[T](_WithStorageSlotAndTD, PseudoSequence[T]):
 
 	def extend(self, val: PseudoSequence[T], /):
 		"""
+		Add all elements from ``val``, truncating first.
+
+		:param val: sequence of values (or raw bytes for ``VLA[u8]``)
+		"""
+		if isinstance(val, bytes):
+			from ._internal.desc_base_types import _u8_desc
+
+			assert self._item_desc == _u8_desc
+			old_len = int.from_bytes(self._storage_slot.read(self._off, 4), 'little')
+			self._storage_slot.write(self._off + 4 + old_len, val)
+			self._storage_slot.write(self._off, (old_len + len(val)).to_bytes(4, 'little'))
+			return
+
+		for v in val:
+			self.append(v)
+
+	def assign(self, val: PseudoSequence[T], /):
+		"""
 		Replace contents with elements from ``val``, truncating first.
 
 		:param val: sequence of values (or raw bytes for ``VLA[u8]``)
@@ -405,6 +424,12 @@ class VLA[T](_WithStorageSlotAndTD, PseudoSequence[T]):
 		for v in val:
 			self.append(v)
 
+	def set_length(self, length: int, /):
+		"""
+		Set the array length
+		"""
+		self._storage_slot.write(self._off, length.to_bytes(4, 'little'))
+
 	def slot(self) -> Slot:
 		"""
 		Return the underlying storage slot.
@@ -412,6 +437,9 @@ class VLA[T](_WithStorageSlotAndTD, PseudoSequence[T]):
 		:returns: storage slot
 		"""
 		return self._storage_slot
+
+	def data_offset(self) -> int:
+		return self._off + 4
 
 	def truncate(self, to: int = 0, /):
 		"""
@@ -439,8 +467,7 @@ class VLATypeDesc[T](SpecialTypeDesc, TypeDesc[VLA[T]], ComplexCopyAction):
 		src: VLA[T] = self.get(frm, frm_off)
 		dst: VLA[T] = self.get(to, to_off)
 
-		dst.truncate()
-		dst.extend(src)
+		dst.assign(src)
 
 		return VLATypeDesc.SIZE
 

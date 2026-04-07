@@ -426,7 +426,7 @@ mod tests {
                 },
                 genvm_id: genvm_modules_interfaces::GenVMId(999),
             }),
-            client: reqwest::Client::new(),
+            client: common::tests::create_test_client(),
             sign_url: Arc::from("https://test-server.genlayer.com/genvm/sign"),
             sign_headers: Arc::new(BTreeMap::new()),
             sign_vars: BTreeMap::new(),
