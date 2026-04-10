@@ -22,7 +22,7 @@ This provides access to:
 
 import typing
 
-IS_IN_VM: typing.Final[bool] = False
+IS_IN_VM: bool = False
 """
 Indicates whether the code is running inside the GenVM.
 """
@@ -30,7 +30,8 @@ Indicates whether the code is running inside the GenVM.
 try:
 	import _genlayer_wasi
 
-	IS_IN_VM = True  # type: ignore
+	if not getattr(_genlayer_wasi, 'FAKE_VM', False):
+		IS_IN_VM = True  # type: ignore
 except ImportError:
 	pass
 

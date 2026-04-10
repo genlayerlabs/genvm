@@ -14,4 +14,5 @@ class Ghost:
 
 class Contract(gl.contract.Contract):
 	def __init__(self):
-		Ghost(Address(b'\x30' * 20)).emit().test(10)
+		print(self.balance)
+		Ghost(Address(b'\x30' * 20)).emit(value=30).test(10)

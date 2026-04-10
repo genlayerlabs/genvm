@@ -27,7 +27,7 @@ let
 			};
 
 			genlayer-std = {
-				hash = "sha256-QSNZ30OeOxe7KFP+s7YASGeDg5Plk2qcpAi4NyFSGio=";
+				hash = "sha256-hVb+1vVqEcpp5x/LFr11VAvG/XTEEeIpBVcT7TKo00Q=";
 			};
 
 			genlayer-embeddings = {
@@ -55,7 +55,7 @@ let
 		wrappers = {
 			__prefix = "";
 			py-genlayer = {
-				hash = "sha256-z94b2Ih9lsLyLvjtSx+Mo/a3tQQK3UOvXTd2Lk+DtpA=";
+				hash = "sha256-Ka+26Ixnc81eVK/HRLongJ3PNko+oYGV1NLyM/Doa28=";
 				depends = [
 					cpython
 					pyLibs.cloudpickle
@@ -63,7 +63,7 @@ let
 				];
 			};
 			py-genlayer-multi = {
-				hash = "sha256-EsIvq6kRWCPvNYVTCCBPJSNLdOZzXkSYNlooAMjcOlA=";
+				hash = "sha256-ZKz1k0Tyqxq6kn1y3zMAcJrCzpN+U295Tk+1DsA4b+U=";
 				depends = [
 					cpython
 					pyLibs.cloudpickle
@@ -82,12 +82,10 @@ let
 		builtins.any (hashHasSpecial hsh) (if builtins.hasAttr "depends" val then val.depends else []);
 
 	deduceHash = val:
-		if val.hash == null
+		if hashHasSpecial null val
 		then null
-		else if hashHasSpecial null val
-		then (if dev-mode then null else "error")
-		else if hashHasSpecial null val
-		then "error"
+		else if hashHasSpecial "test" val
+		then "test"
 		else val.hash;
 
 	fakeHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";

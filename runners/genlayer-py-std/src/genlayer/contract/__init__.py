@@ -13,7 +13,6 @@ __all__ = (
 	'deploy',
 	'Contract',
 	'get_at',
-	'BaseContract',
 	'Proxy',
 	'interface',
 	'deploy',
@@ -26,6 +25,7 @@ import collections.abc
 
 from genlayer.types import Address, Lazy, u256
 import genlayer.calldata as calldata
+from genlayer.chain import IAccount
 from genlayer import IS_IN_VM
 
 if typing.TYPE_CHECKING or IS_IN_VM:
@@ -34,25 +34,6 @@ if typing.TYPE_CHECKING or IS_IN_VM:
 from genlayer._internal.on_chain.gl_call import gl_call_generic
 
 type ON = typing.Literal['accepted', 'finalized']
-
-
-class BaseContract(typing.Protocol):
-	"""
-	Base protocol for all GenVM contracts providing common properties.
-
-	This protocol defines the minimal interface that all contract objects must implement,
-	including access to balance and address information.
-	"""
-
-	@property
-	def balance(self) -> u256:
-		"""Current balance of the contract in native tokens."""
-		...
-
-	@property
-	def address(self) -> Address:
-		"""The contract's address on the blockchain."""
-		...
 
 
 def _make_calldata_obj(method, args, kwargs) -> calldata.Encodable:
@@ -121,7 +102,7 @@ class _ContractAtEmitMethod:
 		)
 
 
-class Proxy[TView, TSend](BaseContract, typing.Protocol):
+class Proxy[TView, TSend](IAccount, typing.Protocol):
 	"""
 	Generic proxy interface for interacting with deployed GenVM contracts.
 
@@ -155,7 +136,7 @@ class Proxy[TView, TSend](BaseContract, typing.Protocol):
 		"""
 		...
 
-	def emit_transfer(self, *, value: u256, on: ON = 'finalized') -> None:
+	def emit_transfer(self, value: u256, *, on: ON = 'finalized') -> None:
 		"""
 		Emit a simple value transfer without calling any method. Receiver may catch it with
 		py:func:`genlayer.gl.Contract.__receive__` method, so users may need to supply non-zero gas
@@ -204,7 +185,7 @@ class _ContractAt(Proxy[ErasedMethods, ErasedMethods]):
 	def emit(self, *, value: u256 = 0, on: ON = 'finalized') -> ErasedMethods:
 		return _ContractAtGetter(_ContractAtEmitMethod, self._address, value, on)
 
-	def emit_transfer(self, *, value: u256, on: ON = 'finalized') -> None:
+	def emit_transfer(self, value: u256, *, on: ON = 'finalized') -> None:
 		if value <= 0:
 			raise ValueError('value must be greater than 0 for emit_transfer')
 		_ContractAtEmitMethod(None, self._address, value, on)()
@@ -436,7 +417,7 @@ def deploy(
 import genlayer._internal.annotations as glannots
 
 
-class Contract(BaseContract):
+class Contract(IAccount):
 	"""
 	Class for declaring main GenVM contract.
 
@@ -494,6 +475,14 @@ class Contract(BaseContract):
 		import genlayer.message as message
 
 		return message.contract_address
+
+	def emit_transfer(self, value: u256, *, on: ON = 'finalized') -> None:
+		import warnings
+
+		warnings.warn('Emitting transfer to self without data makes little sense')
+		from genlayer.contract import get_at
+
+		get_at(self.address).emit_transfer(value, on=on)
 
 	def __handle_undefined_method__(
 		self, method_name: str, args: list[typing.Any], kwargs: dict[str, typing.Any]

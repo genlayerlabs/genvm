@@ -508,13 +508,17 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				leader_nondet = encoded_nondet
 
 		# Create mock host
+		running_address = single_conf['message']['contract_address']
 		host = MockHost(
 			path=str(mock_sock_path),
 			storage_path_post=post_storage,
 			storage_path_pre=pre_storage,
 			balances={Address(k): v for k, v in single_conf.get('balances', {}).items()},
-			running_address=single_conf['message']['contract_address'],
+			running_address=running_address,
 		)
+
+		host.balances.setdefault(running_address, 0)
+		host.balances[running_address] += single_conf['message'].get('value', 0)
 
 		# Get manager URI from the service
 		manager_svc = self._test_case.manager_service

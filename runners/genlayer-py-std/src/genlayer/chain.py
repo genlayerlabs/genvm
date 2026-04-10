@@ -1,21 +1,93 @@
-__all__ = ('emit_transfer', 'Event', 'id')
+__all__ = ('Account', 'Event', 'id')
 
+from abc import ABCMeta, abstractmethod
 import typing
 
 from genlayer.types import Address, u256
-from genlayer.contract import ON
 import genlayer.calldata as calldata
 import genlayer._internal.on_chain.gl_call as gl_call
 from genlayer import IS_IN_VM
 
+type ON = typing.Literal['accepted', 'finalized']
 
-def emit_transfer(to: Address, /, amount: u256, *, on: ON = 'finalized') -> None:
-	"""
-	Emit transfer message to given address
-	"""
-	from genlayer.contract import get_at
 
-	get_at(to).emit_transfer(value=amount, on=on)
+class IAccount(typing.Protocol):
+	"""
+	Protocol defining the interface for on-chain accounts.
+	Be that a contract or an EoA.
+	"""
+
+	@property
+	def address(self) -> Address:
+		"""
+		Return the address of this account.
+		"""
+		...
+
+	@property
+	def balance(self) -> u256:
+		"""
+		Returns current balance of this account.
+		"""
+		...
+
+	def emit_transfer(self, value: u256, *, on: ON = 'finalized') -> None:
+		"""
+		Emit a transfer message to this account's address.
+
+		:param value: amount to transfer
+		:param on: transaction stage at which the transfer is applied
+		"""
+		...
+
+
+class Account(IAccount):
+	"""
+	Class for on-chain accounts.
+	"""
+
+	__slots__ = ('_address',)
+
+	def __init__(self, address: Address, /):
+		"""
+		Get account at given address.
+
+		Can be used to emit transfer messages to any address, even if there is no contract deployed at it.
+
+		:param address: target account address
+		:returns: account instance for the given address
+		"""
+		self._address = address
+
+	@property
+	@abstractmethod
+	def address(self) -> Address:
+		"""
+		Return the address of this account.
+		"""
+		return self._address
+
+	@property
+	@abstractmethod
+	def balance(self) -> u256:
+		"""
+		Return current balance of this account.
+		"""
+		from genlayer.contract import get_at
+
+		return get_at(self.address).balance
+
+	@abstractmethod
+	def emit_transfer(self, value: u256, *, on: ON = 'finalized') -> None:
+		"""
+		Emit a transfer message to this account's address.
+
+		:param value: amount to transfer
+		:param on: transaction stage at which the transfer is applied
+		"""
+		from genlayer.contract import get_at
+
+		get_at(self.address).emit_transfer(value, on=on)
 
 
 from genlayer.types.keccak import Keccak256
@@ -71,7 +143,10 @@ class Event:
 		/,
 	) -> None:
 		"""
-		Emits a raw event with the given name, indexed fields and blob of data.
+		Emit a raw event with the given topics and blob of data.
+
+		:param topics: list of topic byte strings (first is typically the event signature hash)
+		:param blob: calldata-encodable payload
 		"""
 		gl_call.gl_call_generic(
 			{

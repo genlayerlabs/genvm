@@ -3,8 +3,8 @@ __all__ = ('evm_contract_interface',)
 import typing
 import json
 
-from genlayer.types import u256
-from genlayer.evm.generate import contract_generator
+from genlayer.types import Address, u256
+from genlayer.evm.generate import TransactionDataKwArgs, contract_generator
 from genlayer.evm.calldata import MethodEncoder, decode
 from genlayer._internal import _lazy_api
 import _genlayer_wasi as wasi
@@ -30,6 +30,19 @@ def _generate_view(name: str, params: tuple[type], ret: type) -> typing.Any:
 	return _lazy_api(result_fn)
 
 
+def perform_send(address: Address, calldata: bytes, value: u256) -> None:
+	gl_call.gl_call_generic(
+		{
+			'EthSend': {
+				'address': address,
+				'calldata': calldata,
+				'value': value,
+			}
+		},
+		lambda _x: None,
+	).get()
+
+
 def _generate_send(name: str, params: tuple[type], ret: type) -> typing.Any:
 	encoder = MethodEncoder(name, params, ret)
 
@@ -41,17 +54,8 @@ def _generate_send(name: str, params: tuple[type], ret: type) -> typing.Any:
 			raise TypeError(
 				f'expected no proxy kwargs, got {sorted(self._proxy_kwargs.keys())}'
 			)
-		data = json.dumps(self._proxy_args[0])
-		gl_call.gl_call_generic(
-			{
-				'EthSend': {
-					'address': self._proxy_parent.address,
-					'calldata': calldata,
-					'value': self._proxy_kwargs.get('value', 0),
-				}
-			},
-			lambda _x: None,
-		).get()
+		a = typing.cast(TransactionDataKwArgs, self._proxy_args[0])
+		perform_send(self._proxy_parent.address, calldata, a.get('value', 0))
 
 	return result_fn
 

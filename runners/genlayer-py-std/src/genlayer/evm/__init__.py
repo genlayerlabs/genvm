@@ -57,12 +57,12 @@ from .support import *
 from .generate import contract_generator, ContractProxy, ContractDeclaration
 
 import typing
-from ..types import Address
+from ..types import Address, u256
 
-
-def _contract_interface_stub[TView, TWrite](
-	contr: ContractDeclaration[TView, TWrite],
-) -> typing.Callable[[Address], ContractProxy[TView, TWrite]]: ...
+if typing.TYPE_CHECKING:
+	from genlayer._internal.on_chain.eth import (
+		evm_contract_interface as contract_interface,
+	)
 
 
 def __getattr__(name):
@@ -74,3 +74,17 @@ def __getattr__(name):
 		globals()['contract_interface'] = contract_interface
 		return contract_interface
 	raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
+
+import genlayer.chain
+
+
+class IAccount(genlayer.chain.IAccount, typing.Protocol):
+	def emit_call(self, value: u256, data: bytes) -> None: ...
+
+
+class Account(IAccount, genlayer.chain.Account):
+	def emit_value(self, value: u256, data: bytes, /) -> None:
+		from genlayer._internal.on_chain.eth import perform_send
+
+		perform_send(self.address, data, value)
