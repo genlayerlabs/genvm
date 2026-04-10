@@ -1,5 +1,5 @@
 import puppeteer, * as pup from 'puppeteer-core';
-import * as logger from './logging.js'
+import * as logger from './logging.js';
 import * as util from 'util';
 
 export interface BrowserHandle {
@@ -18,13 +18,13 @@ class BrowserHolder {
 		this.browser = browser;
 		this.counter = 1;
 		this.id = BrowserHolder.nextId++;
-		logger.log('info', 'created browser', {id: this.id});
+		logger.log('info', 'created browser', { id: this.id });
 	}
 
 	async close(): Promise<void> {
 		this.counter--;
 		if (this.counter === 0) {
-			logger.log('info', 'closing browser instance', {id: this.id});
+			logger.log('info', 'closing browser instance', { id: this.id });
 			await this.browser.close();
 		}
 	}
@@ -46,16 +46,18 @@ async function newBrowser(): Promise<BrowserHolder> {
 			'--no-first-run',
 			'--single-process',
 			'--no-zygote',
-			'--disable-gpu'
+			'--disable-gpu',
 		],
 		executablePath: '/usr/bin/chromium',
 	});
 
-	logger.log('info', 'created new raw browser', {'pid': realBrowser.process()?.pid});
+	logger.log('info', 'created new raw browser', {
+		pid: realBrowser.process()?.pid,
+	});
 
 	realBrowser.on('disconnected', () => {
 		logger.log('info', 'browser disconnected');
-	})
+	});
 
 	let pid = realBrowser.process()?.pid;
 	if (!initialMemoryMB && pid) {
@@ -72,7 +74,9 @@ import * as child_process from 'child_process';
 
 async function getRssMBByPid(pid: number): Promise<number> {
 	try {
-		const output = await util.promisify(child_process.exec)(`ps -o rss= -p ${pid}`);
+		const output = await util.promisify(child_process.exec)(
+			`ps -o rss= -p ${pid}`,
+		);
 		return parseInt(output.stdout.trim(), 10) / 1024;
 	} catch (error) {
 		logger.log('error', 'Failed to get RSS memory usage', { pid, error });
@@ -90,7 +94,7 @@ async function getSelfRssMB(): Promise<number> {
 }
 
 async function getTotalRssMB(pid: number): Promise<number> {
-	return await getSelfRssMB() + await getRssMBByPid(pid);
+	return (await getSelfRssMB()) + (await getRssMBByPid(pid));
 }
 
 export class BrowserManager {
@@ -101,38 +105,48 @@ export class BrowserManager {
 	private constructor(holder: BrowserHolder) {
 		this.holder = holder;
 		this.used = false;
-		setInterval(async () => {
-			const used = this.used;
-			const lastMemoryMB = this.lastMemoryMB;
-			const old = this.holder;
-			const proc = old.browser.process();
-			const pid = proc?.pid;
-			let usedRAMMB = pid ? await getTotalRssMB(pid) : await getSelfRssMB();
-			this.lastMemoryMB = usedRAMMB;
+		setInterval(
+			async () => {
+				const used = this.used;
+				const lastMemoryMB = this.lastMemoryMB;
+				const old = this.holder;
+				const proc = old.browser.process();
+				const pid = proc?.pid;
+				let usedRAMMB = pid ? await getTotalRssMB(pid) : await getSelfRssMB();
+				this.lastMemoryMB = usedRAMMB;
 
-			let memoryDeltaMB = lastMemoryMB !== null ? usedRAMMB - lastMemoryMB : 0;
+				let memoryDeltaMB =
+					lastMemoryMB !== null ? usedRAMMB - lastMemoryMB : 0;
 
-			let shouldRotate = false;
+				let shouldRotate = false;
 
-			if (initialMemoryMB && usedRAMMB > initialMemoryMB + 2048) {
-				shouldRotate = true;
-			}
+				if (initialMemoryMB && usedRAMMB > initialMemoryMB + 2048) {
+					shouldRotate = true;
+				}
 
-			if (!used && memoryDeltaMB > 256) {
-				shouldRotate = true;
-			}
+				if (!used && memoryDeltaMB > 256) {
+					shouldRotate = true;
+				}
 
-			logger.log('info', 'browser rotation check', { shouldRotate, used, usedRAMMB, memoryDeltaMB, initialMemoryMB });
+				logger.log('info', 'browser rotation check', {
+					shouldRotate,
+					used,
+					usedRAMMB,
+					memoryDeltaMB,
+					initialMemoryMB,
+				});
 
-			if (!shouldRotate) {
-				return;
-			}
+				if (!shouldRotate) {
+					return;
+				}
 
-			const newB = await newBrowser();
-			this.holder = newB;
-			this.lastMemoryMB = null;
-			await old.close();
-		}, 10 * 60 * 1000) // Rotate every 10 minutes
+				const newB = await newBrowser();
+				this.holder = newB;
+				this.lastMemoryMB = null;
+				await old.close();
+			},
+			10 * 60 * 1000,
+		); // Rotate every 10 minutes
 	}
 
 	getBrowser(): BrowserHandle {

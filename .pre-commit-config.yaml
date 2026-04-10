@@ -49,6 +49,13 @@ repos:
       - id: stylua-github
         files: \.lua$
 
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        types_or: [ts, tsx]
+        exclude: ^\.git-third-party
+
   - repo: local
     hooks:
       - id: check-shebang
