@@ -7,6 +7,10 @@ on:
         description: 'Version to deploy (e.g., main, v1.0, v2.0)'
         required: true
         type: string
+      revision:
+        description: 'Git revision to build from (defaults to trigger ref)'
+        required: false
+        type: string
     secrets:
       DEPLOY_TOKEN:
         description: 'GitHub token with access to target repository'
