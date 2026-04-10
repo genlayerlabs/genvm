@@ -12,9 +12,28 @@ defaults:
     shell: bash -x {0}
 
 jobs:
-  deploy-nightly-docs:
+  deploy-docs-main:
     uses: ./.github/workflows/incl_docs.yml
     with:
       version: main
+      revision: main
+    secrets:
+      DEPLOY_TOKEN: ${{ secrets.SDK_GENLAYER_COM_RW }}
+
+  deploy-docs-v0-2-x:
+    needs: deploy-docs-main
+    uses: ./.github/workflows/incl_docs.yml
+    with:
+      version: v0.2.x
+      revision: v0.2.x
+    secrets:
+      DEPLOY_TOKEN: ${{ secrets.SDK_GENLAYER_COM_RW }}
+
+  deploy-docs-v0-3-x:
+    needs: deploy-docs-v0-2-x
+    uses: ./.github/workflows/incl_docs.yml
+    with:
+      version: v0.3.x
+      revision: v0.3.x
     secrets:
       DEPLOY_TOKEN: ${{ secrets.SDK_GENLAYER_COM_RW }}
