@@ -8,16 +8,17 @@ The recommended import pattern is:
 	import genlayer as gl
 
 This provides access to:
-- Type aliases: ``gl.u8``, ``gl.u16``, ..., ``gl.u256``, ``gl.Address``, etc.
-- Storage types: ``gl.TreeMap``, ``gl.DynArray``, ``gl.Array``
-- Contract declaration via ``gl.contract.Contract``
-- Contract interaction via ``gl.contract.interface``, ``gl.contract.deploy``, ``gl.contract.get_at``
-- Message context via ``gl.message.contract_address``, ``gl.message.sender_address``, etc.
-- VM operations via ``gl.vm``
-- Non-deterministic operations via ``gl.nondet``
-- Equivalence principles via ``gl.eq_principle``
-- EVM interaction via ``gl.evm``
-- Method decorators via ``gl.public`` and ``gl.private``
+
+* Type aliases: ``gl.u8``, ``gl.u16``, ..., ``gl.u256``, ``gl.Address``, etc.
+* Storage types: ``gl.TreeMap``, ``gl.DynArray``, ``gl.Array``
+* Contract declaration via ``gl.contract.Contract``
+* Contract interaction via ``gl.contract.interface``, ``gl.contract.deploy``, ``gl.contract.get_at``
+* Message context via ``gl.message.contract_address``, ``gl.message.sender_address``, etc.
+* VM operations via ``gl.vm``
+* Non-deterministic operations via ``gl.nondet``
+* Equivalence principles via ``gl.eq_principle``
+* EVM interaction via ``gl.evm``
+* Method decorators via ``gl.public`` and ``gl.private``
 """
 
 import typing

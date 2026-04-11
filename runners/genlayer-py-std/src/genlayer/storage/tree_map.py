@@ -30,6 +30,7 @@ class _Node[K, V]:
 		self.balance = 0
 
 
+@typing.runtime_checkable
 class Comparable(typing.Protocol):
 	"""
 	Protocol for types that support ``<`` comparison.

@@ -1,5 +1,6 @@
 import datetime
 import os
+import inspect
 import json
 from pathlib import Path
 import sys
@@ -8,6 +9,13 @@ import typing
 import enum
 
 import sphinx.ext.autodoc
+import sphinx.util.inspect as _sphinx_inspect
+
+# Patch stringify_annotation to replace Annotated[int, StaticIntMeta(...)] with u8..u256/i8..i256
+_orig_stringify_annotation = _sphinx_inspect.stringify_annotation
+
+_annotated_type_aliases: dict[typing.Any, str] = {}
+
 
 project = 'GenVM SDK'
 
@@ -236,75 +244,46 @@ def setup(app):
 			bases.append(object)
 
 	def handle_skip_member(app, what, name, obj, skip, options):
+		import types
+
+		if 'what' == 'class' and isinstance(obj, types.MethodType):
+			if obj.__self__.__class__ is typing.NewType:
+				return True
 		if what == 'module' and isinstance(obj, type):
 			if any(base in obj.mro() for base in [dict, tuple, bytes, enum.Enum]):
 				options['special-members'] = []
 				options['inherited-members'] = False
 				return
 		if what == 'module':
-			if type(obj) is typing.NewType:
+			if isinstance(obj, typing.NewType):
 				options['special-members'] = []
 				options['inherited-members'] = False
 				return
-		options['special-members'] = PsuedoAll()
-		options['inherited-members'] = PsuedoAll()
+		# options['special-members'] = PsuedoAll()
+		# options['inherited-members'] = PsuedoAll()
+
+	# Build u8..u256, i8..i256 display aliases for Annotated[int, StaticIntMeta(...)]
+	_type_display_aliases = {}
+	for _prefix, _signed in [('u', False), ('i', True)]:
+		for _sz in range(1, 33):
+			_bits = _sz * 8
+			_type_display_aliases[
+				f'typing.Annotated[int, StaticIntMeta(size={_sz}, signed={_signed})]'
+			] = f'genlayer.types.{_prefix}{_bits}'
+			_type_display_aliases[
+				f'Annotated[int, StaticIntMeta(size={_sz}, signed={_signed})]'
+			] = f'genlayer.types.{_prefix}{_bits}'
 
 	def autodoc_process_signature(
 		app, what, name, obj, options, signature, return_annotation
 	):
+		for old, new in _type_display_aliases.items():
+			if signature:
+				signature = signature.replace(old, new)
+			if return_annotation:
+				return_annotation = return_annotation.replace(old, new)
 		return (signature, return_annotation)
 
 	app.connect('autodoc-process-bases', handle_bases)
 	app.connect('autodoc-skip-member', handle_skip_member)
 	app.connect('autodoc-process-signature', autodoc_process_signature)
-
-
-mod_names_map = {
-	'genlayer.py.evm': 'genlayer.gl.evm',
-	'genlayer.py.calldata': 'genlayer.gl.calldata',
-	'genlayer.py.storage': 'genlayer.gl.storage',
-	'genlayer.std.advanced': 'genlayer.gl.advanced',
-}
-
-
-def map_name(name: str) -> str:
-	for k, v in mod_names_map.items():
-		if name.startswith(k + '.') and len(k.split('.')) + 1 == len(name.split('.')):
-			print(f'REMAP! {name}')
-			return v + '.' + name[len(k) :]
-	return name
-
-
-from sphinx.domains.python._object import PyObject
-from sphinx.domains.python import PyXRefRole
-
-old_process_link = PyXRefRole.process_link
-
-
-def new_process_link(*args, **kwargs):
-	title, target = old_process_link(*args, **kwargs)
-
-	title = map_name(title)
-
-	return title, target
-
-
-PyXRefRole.process_link = new_process_link
-
-old_handle_signature = PyObject.handle_signature
-
-
-def new_handle_signature(self, sig: str, signode) -> tuple[str, str]:
-	old_modname = self.options.get('module', self.env.ref_context.get('py:module'))
-	new_modname = mod_names_map.get(old_modname, old_modname)
-	self.options['module'] = new_modname
-
-	a, b = old_handle_signature(self, sig, signode)
-
-	signode['module'] = old_modname
-	self.options['module'] = old_modname
-
-	return a, b
-
-
-PyObject.handle_signature = new_handle_signature

@@ -17,7 +17,7 @@ import genlayer._internal.reflect as reflect
 
 from ._internal.builder import build
 from ._internal.codecs import EncodeState, DecoderState
-from .support import *
+from . import InplaceTuple
 
 
 def type_name_of(t: type, /) -> str:

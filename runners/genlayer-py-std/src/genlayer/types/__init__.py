@@ -75,13 +75,14 @@ __all__ = (
 	'Address',
 	'SizedArray',
 	'Keccak256',
+	'KeccakHash',
 )
 
 import base64
 import typing
 import collections.abc
 
-from .keccak import Keccak256
+from .keccak import Keccak256, KeccakHash
 
 
 class StaticIntMeta(typing.NamedTuple):
@@ -90,70 +91,262 @@ class StaticIntMeta(typing.NamedTuple):
 
 
 u8 = typing.Annotated[int, StaticIntMeta(1, False)]
+"""
+Fixed size integer alias for storage
+"""
 u16 = typing.Annotated[int, StaticIntMeta(2, False)]
+"""
+Fixed size integer alias for storage
+"""
 u24 = typing.Annotated[int, StaticIntMeta(3, False)]
+"""
+Fixed size integer alias for storage
+"""
 u32 = typing.Annotated[int, StaticIntMeta(4, False)]
+"""
+Fixed size integer alias for storage
+"""
 u40 = typing.Annotated[int, StaticIntMeta(5, False)]
+"""
+Fixed size integer alias for storage
+"""
 u48 = typing.Annotated[int, StaticIntMeta(6, False)]
+"""
+Fixed size integer alias for storage
+"""
 u56 = typing.Annotated[int, StaticIntMeta(7, False)]
+"""
+Fixed size integer alias for storage
+"""
 u64 = typing.Annotated[int, StaticIntMeta(8, False)]
+"""
+Fixed size integer alias for storage
+"""
 u72 = typing.Annotated[int, StaticIntMeta(9, False)]
+"""
+Fixed size integer alias for storage
+"""
 u80 = typing.Annotated[int, StaticIntMeta(10, False)]
+"""
+Fixed size integer alias for storage
+"""
 u88 = typing.Annotated[int, StaticIntMeta(11, False)]
+"""
+Fixed size integer alias for storage
+"""
 u96 = typing.Annotated[int, StaticIntMeta(12, False)]
+"""
+Fixed size integer alias for storage
+"""
 u104 = typing.Annotated[int, StaticIntMeta(13, False)]
+"""
+Fixed size integer alias for storage
+"""
 u112 = typing.Annotated[int, StaticIntMeta(14, False)]
+"""
+Fixed size integer alias for storage
+"""
 u120 = typing.Annotated[int, StaticIntMeta(15, False)]
+"""
+Fixed size integer alias for storage
+"""
 u128 = typing.Annotated[int, StaticIntMeta(16, False)]
+"""
+Fixed size integer alias for storage
+"""
 u136 = typing.Annotated[int, StaticIntMeta(17, False)]
+"""
+Fixed size integer alias for storage
+"""
 u144 = typing.Annotated[int, StaticIntMeta(18, False)]
+"""
+Fixed size integer alias for storage
+"""
 u152 = typing.Annotated[int, StaticIntMeta(19, False)]
+"""
+Fixed size integer alias for storage
+"""
 u160 = typing.Annotated[int, StaticIntMeta(20, False)]
+"""
+Fixed size integer alias for storage
+"""
 u168 = typing.Annotated[int, StaticIntMeta(21, False)]
+"""
+Fixed size integer alias for storage
+"""
 u176 = typing.Annotated[int, StaticIntMeta(22, False)]
+"""
+Fixed size integer alias for storage
+"""
 u184 = typing.Annotated[int, StaticIntMeta(23, False)]
+"""
+Fixed size integer alias for storage
+"""
 u192 = typing.Annotated[int, StaticIntMeta(24, False)]
+"""
+Fixed size integer alias for storage
+"""
 u200 = typing.Annotated[int, StaticIntMeta(25, False)]
+"""
+Fixed size integer alias for storage
+"""
 u208 = typing.Annotated[int, StaticIntMeta(26, False)]
+"""
+Fixed size integer alias for storage
+"""
 u216 = typing.Annotated[int, StaticIntMeta(27, False)]
+"""
+Fixed size integer alias for storage
+"""
 u224 = typing.Annotated[int, StaticIntMeta(28, False)]
+"""
+Fixed size integer alias for storage
+"""
 u232 = typing.Annotated[int, StaticIntMeta(29, False)]
+"""
+Fixed size integer alias for storage
+"""
 u240 = typing.Annotated[int, StaticIntMeta(30, False)]
+"""
+Fixed size integer alias for storage
+"""
 u248 = typing.Annotated[int, StaticIntMeta(31, False)]
+"""
+Fixed size integer alias for storage
+"""
 u256 = typing.Annotated[int, StaticIntMeta(32, False)]
+"""
+Fixed size integer alias for storage
+"""
 
 i8 = typing.Annotated[int, StaticIntMeta(1, True)]
+"""
+Fixed size integer alias for storage
+"""
 i16 = typing.Annotated[int, StaticIntMeta(2, True)]
+"""
+Fixed size integer alias for storage
+"""
 i24 = typing.Annotated[int, StaticIntMeta(3, True)]
+"""
+Fixed size integer alias for storage
+"""
 i32 = typing.Annotated[int, StaticIntMeta(4, True)]
+"""
+Fixed size integer alias for storage
+"""
 i40 = typing.Annotated[int, StaticIntMeta(5, True)]
+"""
+Fixed size integer alias for storage
+"""
 i48 = typing.Annotated[int, StaticIntMeta(6, True)]
+"""
+Fixed size integer alias for storage
+"""
 i56 = typing.Annotated[int, StaticIntMeta(7, True)]
+"""
+Fixed size integer alias for storage
+"""
 i64 = typing.Annotated[int, StaticIntMeta(8, True)]
+"""
+Fixed size integer alias for storage
+"""
 i72 = typing.Annotated[int, StaticIntMeta(9, True)]
+"""
+Fixed size integer alias for storage
+"""
 i80 = typing.Annotated[int, StaticIntMeta(10, True)]
+"""
+Fixed size integer alias for storage
+"""
 i88 = typing.Annotated[int, StaticIntMeta(11, True)]
+"""
+Fixed size integer alias for storage
+"""
 i96 = typing.Annotated[int, StaticIntMeta(12, True)]
+"""
+Fixed size integer alias for storage
+"""
 i104 = typing.Annotated[int, StaticIntMeta(13, True)]
+"""
+Fixed size integer alias for storage
+"""
 i112 = typing.Annotated[int, StaticIntMeta(14, True)]
+"""
+Fixed size integer alias for storage
+"""
 i120 = typing.Annotated[int, StaticIntMeta(15, True)]
+"""
+Fixed size integer alias for storage
+"""
 i128 = typing.Annotated[int, StaticIntMeta(16, True)]
+"""
+Fixed size integer alias for storage
+"""
 i136 = typing.Annotated[int, StaticIntMeta(17, True)]
+"""
+Fixed size integer alias for storage
+"""
 i144 = typing.Annotated[int, StaticIntMeta(18, True)]
+"""
+Fixed size integer alias for storage
+"""
 i152 = typing.Annotated[int, StaticIntMeta(19, True)]
+"""
+Fixed size integer alias for storage
+"""
 i160 = typing.Annotated[int, StaticIntMeta(20, True)]
+"""
+Fixed size integer alias for storage
+"""
 i168 = typing.Annotated[int, StaticIntMeta(21, True)]
+"""
+Fixed size integer alias for storage
+"""
 i176 = typing.Annotated[int, StaticIntMeta(22, True)]
+"""
+Fixed size integer alias for storage
+"""
 i184 = typing.Annotated[int, StaticIntMeta(23, True)]
+"""
+Fixed size integer alias for storage
+"""
 i192 = typing.Annotated[int, StaticIntMeta(24, True)]
+"""
+Fixed size integer alias for storage
+"""
 i200 = typing.Annotated[int, StaticIntMeta(25, True)]
+"""
+Fixed size integer alias for storage
+"""
 i208 = typing.Annotated[int, StaticIntMeta(26, True)]
+"""
+Fixed size integer alias for storage
+"""
 i216 = typing.Annotated[int, StaticIntMeta(27, True)]
+"""
+Fixed size integer alias for storage
+"""
 i224 = typing.Annotated[int, StaticIntMeta(28, True)]
+"""
+Fixed size integer alias for storage
+"""
 i232 = typing.Annotated[int, StaticIntMeta(29, True)]
+"""
+Fixed size integer alias for storage
+"""
 i240 = typing.Annotated[int, StaticIntMeta(30, True)]
+"""
+Fixed size integer alias for storage
+"""
 i248 = typing.Annotated[int, StaticIntMeta(31, True)]
+"""
+Fixed size integer alias for storage
+"""
 i256 = typing.Annotated[int, StaticIntMeta(32, True)]
+"""
+Fixed size integer alias for storage
+"""
 
 bigint = typing.Annotated[int, 'bigint']
 """
@@ -343,6 +536,7 @@ class Address:
 Address.ZERO = Address(b'\x00' * 20)
 
 
+@typing.runtime_checkable
 class SizedArray[T, S: int](typing.Protocol):
 	def __len__(self) -> int: ...
 	def __getitem__(self, index: typing.SupportsIndex, /) -> T: ...

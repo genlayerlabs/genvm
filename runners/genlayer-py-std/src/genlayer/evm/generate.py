@@ -43,17 +43,18 @@ class ContractProxy[TView, TWrite]:
 	def view(self) -> TView:
 		return self._view(self)
 
-	def emit(self, **data: typing.Unpack[TransactionDataKwArgs]) -> TWrite:
-		return self._send(self, data)
+	def emit(self, *, value: u256 = 0) -> TWrite:
+		return self._send(self, {'value': value})
 
-	def emit_transfer(self, **data: typing.Unpack[TransactionDataKwArgs]) -> None:
-		self._transfer(self, data)
+	def emit_transfer(self, *, value: u256 = 0) -> None:
+		self._transfer(self, {'value': value})
 
 	@property
 	def balance(self) -> u256:
 		return self._balance(self)
 
 
+@typing.runtime_checkable
 class ContractDeclaration[TView, TWrite](typing.Protocol):
 	"""
 	Interface for declaring interfaces of external contracts

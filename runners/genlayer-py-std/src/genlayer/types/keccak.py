@@ -357,7 +357,14 @@ class KeccakHash:
 
 	__slots__ = ('sponge', 'digest_size', 'block_size')
 
-	def __init__(self, bitrate_bits, capacity_bits, output_bits):
+	def __init__(self, bitrate_bits: int, capacity_bits: int, output_bits: int):
+		"""
+		Create a new Keccak hash instance.
+
+		:param bitrate_bits: bitrate in bits
+		:param capacity_bits: capacity in bits
+		:param output_bits: output length in bits (must be divisible by 8)
+		"""
 		# our in-absorption sponge. this is never given padding
 		assert bitrate_bits + capacity_bits in (25, 50, 100, 200, 400, 800, 1600)
 		self.sponge = KeccakSponge(
@@ -377,19 +384,35 @@ class KeccakHash:
 		)
 		return '<KeccakHash with r=%d, c=%d, image=%d>' % inf
 
-	def copy(self):
+	def copy(self) -> 'KeccakHash':
+		"""Return a copy of this hash object."""
 		return deepcopy(self)
 
 	def update(self, s: collections.abc.Buffer, /) -> None:
+		"""
+		Feed data into the hash.
+
+		:param s: bytes-like data to absorb
+		"""
 		self.sponge.absorb(s)
 
 	def digest(self) -> bytes:
+		"""
+		Return the digest of the data fed so far.
+
+		:returns: hash digest as bytes
+		"""
 		finalised = self.sponge.copy()
 		finalised.absorb_final()
 		digest = finalised.squeeze(self.digest_size)
 		return KeccakState.ilist2bytes(digest)
 
 	def hexdigest(self) -> str:
+		"""
+		Return the hex-encoded digest of the data fed so far.
+
+		:returns: hash digest as hex string
+		"""
 		return self.digest().hex()
 
 	@staticmethod

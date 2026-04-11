@@ -305,4 +305,4 @@ If it was not reached, it will result in a :ref:`gvm-def-vm-error` with ``error_
 
 Loading a :term:`runner` implies :ref:`gvm-def-ram-consumption` of its size in octets.
 Each loading in a single contract, but different :term:`sub-VM` instances, leads to additional RAM consumption.
-:def:`gvm-def-det-mode` and :def:`gvm-def-non-det-mode` have separate RAM limits.
+:ref:`gvm-def-det-mode` and :ref:`gvm-def-non-det-mode` have separate RAM limits.
