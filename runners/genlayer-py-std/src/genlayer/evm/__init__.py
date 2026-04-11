@@ -52,8 +52,157 @@ __all__ = (
 	'bytes32',
 )
 
+import typing
+
+
+class InplaceTuple:
+	# editorconfig-checker-disable
+	"""
+	This class indicates that tuple should be encoded/decoded in-place.
+	Which means that even if it is dynamically sized, it is ignored.
+	It is useful for encoding/decoding arguments and returns
+
+	.. code-block:: python
+
+	        tuple[InplaceTuple, str, u256]
+	"""
+
+	# editorconfig-checker-enable
+
+	__slots__ = ()
+
+
+bytes1 = typing.NewType('bytes1', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes2 = typing.NewType('bytes2', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes3 = typing.NewType('bytes3', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes4 = typing.NewType('bytes4', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes5 = typing.NewType('bytes5', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes6 = typing.NewType('bytes6', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes7 = typing.NewType('bytes7', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes8 = typing.NewType('bytes8', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes9 = typing.NewType('bytes9', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes10 = typing.NewType('bytes10', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes11 = typing.NewType('bytes11', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes12 = typing.NewType('bytes12', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes13 = typing.NewType('bytes13', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes14 = typing.NewType('bytes14', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes15 = typing.NewType('bytes15', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes16 = typing.NewType('bytes16', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes17 = typing.NewType('bytes17', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes18 = typing.NewType('bytes18', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes19 = typing.NewType('bytes19', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes20 = typing.NewType('bytes20', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes21 = typing.NewType('bytes21', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes22 = typing.NewType('bytes22', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes23 = typing.NewType('bytes23', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes24 = typing.NewType('bytes24', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes25 = typing.NewType('bytes25', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes26 = typing.NewType('bytes26', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes27 = typing.NewType('bytes27', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes28 = typing.NewType('bytes28', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes29 = typing.NewType('bytes29', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes30 = typing.NewType('bytes30', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes31 = typing.NewType('bytes31', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+bytes32 = typing.NewType('bytes32', bytes)
+"""
+Fixed-size byte array. These types are used for encoding/decoding fixed-size byte arrays in EVM contracts
+"""
+
+
 from .calldata import *
-from .support import *
 from .generate import contract_generator, ContractProxy, ContractDeclaration
 
 import typing

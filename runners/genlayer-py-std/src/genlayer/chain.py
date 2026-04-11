@@ -1,4 +1,4 @@
-__all__ = ('Account', 'Event', 'id')
+__all__ = ('ON', 'IAccount', 'Account', 'Event', 'id')
 
 from abc import ABCMeta, abstractmethod
 import typing
@@ -9,8 +9,10 @@ import genlayer._internal.on_chain.gl_call as gl_call
 from genlayer import IS_IN_VM
 
 type ON = typing.Literal['accepted', 'finalized']
+"""When the transaction message should be applied: ``'accepted'`` or ``'finalized'``"""
 
 
+@typing.runtime_checkable
 class IAccount(typing.Protocol):
 	"""
 	Protocol defining the interface for on-chain accounts.
@@ -60,7 +62,6 @@ class Account(IAccount):
 		self._address = address
 
 	@property
-	@abstractmethod
 	def address(self) -> Address:
 		"""
 		Return the address of this account.
@@ -68,7 +69,6 @@ class Account(IAccount):
 		return self._address
 
 	@property
-	@abstractmethod
 	def balance(self) -> u256:
 		"""
 		Return current balance of this account.
@@ -77,7 +77,6 @@ class Account(IAccount):
 
 		return get_at(self.address).balance
 
-	@abstractmethod
 	def emit_transfer(self, value: u256, *, on: ON = 'finalized') -> None:
 		"""
 		Emit a transfer message to this account's address.

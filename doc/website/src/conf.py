@@ -1,15 +1,26 @@
+import datetime
 import os
+import inspect
 import json
 from pathlib import Path
 import sys
+from types import ModuleType
 import typing
 import enum
 
 import sphinx.ext.autodoc
+import sphinx.util.inspect as _sphinx_inspect
 
-project = 'GenLayer'
-copyright = '2025, GenLayer'
-author = 'GenLayer team'
+# Patch stringify_annotation to replace Annotated[int, StaticIntMeta(...)] with u8..u256/i8..i256
+_orig_stringify_annotation = _sphinx_inspect.stringify_annotation
+
+_annotated_type_aliases: dict[typing.Any, str] = {}
+
+
+project = 'GenVM SDK'
+
+copyright = f'{datetime.date.today().year}, GenLayer Labs'
+author = 'GenLayer Labs'
 release = os.environ.get('DOCS_VERSION', 'main')
 version = release
 
@@ -24,7 +35,14 @@ extensions = [
 ]
 
 templates_path = ['_templates']
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = [
+	'_build',
+	'Thumbs.db',
+	'.DS_Store',
+	'*_generated.rst',
+	'api',
+	'impl-spec/appendix/runners-versions.rst',
+]
 
 language = 'en'
 
@@ -35,19 +53,112 @@ mermaid_params = ['--theme', 'dark', '--backgroundColor', 'transparent']
 # html_theme = 'alabaster'
 html_theme = 'pydata_sphinx_theme'
 html_static_path = ['_static']
+
+_docs_domain = os.environ.get('DOCS_DOMAIN', 'sdk.genlayer.com')
+
+# Fetch remote versions and merge with local build, sorted by semver
+import re as _re, urllib.request
+
+_switcher_url = '/_static/versions.json'
+try:
+	_req = urllib.request.Request(
+		f'https://{_docs_domain}/versions.json', headers={'User-Agent': 'sphinx-build'}
+	)
+	with urllib.request.urlopen(_req, timeout=5) as _resp:
+		_remote_versions = json.loads(_resp.read())
+except Exception:
+	_remote_versions = []
+
+# Add local build entry
+_local_entry = {
+	'name': f'{version} (local)',
+	'version': version,
+	'url': '/',
+	'preferred': True,
+}
+_versions = [v for v in _remote_versions if v.get('version') != version] + [
+	_local_entry
+]
+
+
+# Sort by semver descending, non-semver (like "main") at end
+def _semver_sort_key(entry):
+	m = _re.match(r'^v?(\d+)\.(\d+)\.(\d+)', entry.get('version', ''))
+	if m:
+		return (0, -int(m.group(1)), -int(m.group(2)), -int(m.group(3)))
+	return (1, entry.get('version', ''))
+
+
+_versions.sort(key=_semver_sort_key)
+
+Path(__file__).parent.joinpath('_static', 'versions.json').write_text(
+	json.dumps(_versions, indent=2)
+)
+
 html_theme_options = {
+	'logo': {
+		'image_light': '_static/logo-light.svg',
+		'image_dark': '_static/logo-dark.svg',
+	},
 	'show_nav_level': 2,
 	'show_toc_level': 2,
 	'navbar_start': ['navbar-logo', 'version-switcher'],
+	'navbar_end': ['theme-switcher', 'navbar-icon-links'],
+	'icon_links': [
+		{
+			'name': 'Full docs for LLMs',
+			'url': '/_static/llms.txt',
+			'icon': 'fa-solid fa-robot',
+			'type': 'fontawesome',
+		},
+		{
+			'name': 'GitHub',
+			'url': 'https://github.com/genlayerlabs/genvm',
+			'icon': 'fa-brands fa-github',
+			'type': 'fontawesome',
+		},
+		{
+			'name': 'Discord',
+			'url': 'https://discord.gg/8Jm4v89VAu',
+			'icon': 'fa-brands fa-discord',
+			'type': 'fontawesome',
+		},
+		{
+			'name': 'Telegram',
+			'url': 'https://t.me/genlayer',
+			'icon': 'fa-brands fa-telegram',
+			'type': 'fontawesome',
+		},
+		{
+			'name': 'X (Twitter)',
+			'url': 'https://x.com/GenLayer',
+			'icon': 'fa-brands fa-x-twitter',
+			'type': 'fontawesome',
+		},
+	],
+	'primary_sidebar_end': ['version-switcher'],
+	'footer_start': ['copyright'],
+	'footer_end': [],
 	'switcher': {
-		'json_url': f'https://{os.environ.get("DOCS_DOMAIN", "sdk.genlayer.com")}/versions.json',
+		'json_url': _switcher_url,
 		'version_match': version,
 	},
 }
 
+html_show_sourcelink = False
+html_css_files = ['custom.css']
+html_js_files = ['favicon-swap.js']
+html_favicon = '_static/favicon.png'
+
 todo_include_todos = True
 
 autodoc_mock_imports = ['_genlayer_wasi', 'google', 'onnx', 'word_piece_tokenizer']
+
+fake_genlayer_wasi = ModuleType(
+	'_genlayer_wasi',
+)
+fake_genlayer_wasi.__dict__['FAKE_VM'] = True
+sys.modules['_genlayer_wasi'] = fake_genlayer_wasi
 
 MONO_REPO_ROOT_FILE = '.genvm-monorepo-root'
 script_dir = Path(__file__).parent
@@ -133,75 +244,46 @@ def setup(app):
 			bases.append(object)
 
 	def handle_skip_member(app, what, name, obj, skip, options):
+		import types
+
+		if 'what' == 'class' and isinstance(obj, types.MethodType):
+			if obj.__self__.__class__ is typing.NewType:
+				return True
 		if what == 'module' and isinstance(obj, type):
 			if any(base in obj.mro() for base in [dict, tuple, bytes, enum.Enum]):
 				options['special-members'] = []
 				options['inherited-members'] = False
 				return
 		if what == 'module':
-			if type(obj) is typing.NewType:
+			if isinstance(obj, typing.NewType):
 				options['special-members'] = []
 				options['inherited-members'] = False
 				return
-		options['special-members'] = PsuedoAll()
-		options['inherited-members'] = PsuedoAll()
+		# options['special-members'] = PsuedoAll()
+		# options['inherited-members'] = PsuedoAll()
+
+	# Build u8..u256, i8..i256 display aliases for Annotated[int, StaticIntMeta(...)]
+	_type_display_aliases = {}
+	for _prefix, _signed in [('u', False), ('i', True)]:
+		for _sz in range(1, 33):
+			_bits = _sz * 8
+			_type_display_aliases[
+				f'typing.Annotated[int, StaticIntMeta(size={_sz}, signed={_signed})]'
+			] = f'genlayer.types.{_prefix}{_bits}'
+			_type_display_aliases[
+				f'Annotated[int, StaticIntMeta(size={_sz}, signed={_signed})]'
+			] = f'genlayer.types.{_prefix}{_bits}'
 
 	def autodoc_process_signature(
 		app, what, name, obj, options, signature, return_annotation
 	):
+		for old, new in _type_display_aliases.items():
+			if signature:
+				signature = signature.replace(old, new)
+			if return_annotation:
+				return_annotation = return_annotation.replace(old, new)
 		return (signature, return_annotation)
 
 	app.connect('autodoc-process-bases', handle_bases)
 	app.connect('autodoc-skip-member', handle_skip_member)
 	app.connect('autodoc-process-signature', autodoc_process_signature)
-
-
-mod_names_map = {
-	'genlayer.py.evm': 'genlayer.gl.evm',
-	'genlayer.py.calldata': 'genlayer.gl.calldata',
-	'genlayer.py.storage': 'genlayer.gl.storage',
-	'genlayer.std.advanced': 'genlayer.gl.advanced',
-}
-
-
-def map_name(name: str) -> str:
-	for k, v in mod_names_map.items():
-		if name.startswith(k + '.') and len(k.split('.')) + 1 == len(name.split('.')):
-			print(f'REMAP! {name}')
-			return v + '.' + name[len(k) :]
-	return name
-
-
-from sphinx.domains.python._object import PyObject
-from sphinx.domains.python import PyXRefRole
-
-old_process_link = PyXRefRole.process_link
-
-
-def new_process_link(*args, **kwargs):
-	title, target = old_process_link(*args, **kwargs)
-
-	title = map_name(title)
-
-	return title, target
-
-
-PyXRefRole.process_link = new_process_link
-
-old_handle_signature = PyObject.handle_signature
-
-
-def new_handle_signature(self, sig: str, signode) -> tuple[str, str]:
-	old_modname = self.options.get('module', self.env.ref_context.get('py:module'))
-	new_modname = mod_names_map.get(old_modname, old_modname)
-	self.options['module'] = new_modname
-
-	a, b = old_handle_signature(self, sig, signode)
-
-	signode['module'] = old_modname
-	self.options['module'] = old_modname
-
-	return a, b
-
-
-PyObject.handle_signature = new_handle_signature

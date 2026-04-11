@@ -30,6 +30,6 @@ Any other floating point operation is considered non-deterministic and is not al
 RAM Consumption
 ---------------
 
-Each WASM table element imposes :ref:`gvm-def-enum-value-memory-limiter-consts-table-entry` :ref:`gvm-def-ram-consumption`\.
+Each WASM table element imposes :ref:`gvm-def-consts-value-memory-limiter-consts-table-entry` :ref:`gvm-def-ram-consumption`\.
 
 Each WASM Memory costs length of bytes it has. WASM ``memory.grow`` instruction which would exceed limit returns :math:`-1`

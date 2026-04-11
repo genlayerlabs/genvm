@@ -153,6 +153,7 @@
 								];
 								packages-gen-docs = with pkgs; [
 									lua-language-server
+									mermaid-cli
 								];
 								packages-py-test = with pkgs; [
 									# aflplusplus # currently we don't run fuzzing on CI

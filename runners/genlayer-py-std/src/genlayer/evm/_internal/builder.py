@@ -1,6 +1,6 @@
 from .type_dicts import *
 from .codecs import ArrayCodec, DynArrayCodec, TupleCodec, Codec
-from ..support import InplaceTuple
+from .. import InplaceTuple
 import genlayer._internal.reflect as reflect
 
 

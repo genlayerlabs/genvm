@@ -1,0 +1,14 @@
+# GenVM SDK Documentation
+
+> GenVM is a WebAssembly-based execution environment for GenLayer intelligent contracts.
+
+## Documentation (plain text for LLMs)
+
+- [Python SDK API Reference](/_static/ai/api.txt)
+- [GenVM Specification](/_static/ai/spec.txt)
+- [GenVM Internals](/_static/ai/impl-spec.txt)
+
+## Source
+
+- [GitHub Repository](https://github.com/genlayerlabs/genvm)
+- [Main Documentation](https://docs.genlayer.com/)

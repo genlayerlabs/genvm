@@ -14,9 +14,9 @@ __all__ = (
 	'Contract',
 	'get_at',
 	'Proxy',
-	'interface',
-	'deploy',
-	'get_at',
+	'GenVMContractDeclaration',
+	'StorageType',
+	'ON',
 )
 
 import typing
@@ -34,6 +34,7 @@ if typing.TYPE_CHECKING or IS_IN_VM:
 from genlayer._internal.on_chain.gl_call import gl_call_generic
 
 type ON = typing.Literal['accepted', 'finalized']
+"""When the transaction message should be applied: ``'accepted'`` or ``'finalized'``"""
 
 
 def _make_calldata_obj(method, args, kwargs) -> calldata.Encodable:
@@ -102,6 +103,7 @@ class _ContractAtEmitMethod:
 		)
 
 
+@typing.runtime_checkable
 class Proxy[TView, TSend](IAccount, typing.Protocol):
 	"""
 	Generic proxy interface for interacting with deployed GenVM contracts.
@@ -235,6 +237,7 @@ class _ContractAtGetter[T]:
 		return self._ctor(name, *self._args, **self._kwargs)
 
 
+@typing.runtime_checkable
 class GenVMContractDeclaration[TView, TWrite](typing.Protocol):
 	"""
 	Protocol for defining contract interface declarations.

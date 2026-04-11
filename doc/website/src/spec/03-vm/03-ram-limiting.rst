@@ -12,7 +12,7 @@ RAM Consumption
 
 Every resource allocation subtracts from the RAM budget of the current :ref:`gvm-def-vm-mode`.
 When an allocation would cause the remaining budget to become negative,
-the :term:`sub-VM` exits with :ref:`gvm-def-vm-error` with :ref:`gvm-def-enum-value-vm-error-oom` message.
+the :term:`sub-VM` exits with :ref:`gvm-def-vm-error` with :ref:`gvm-def-str-trie-value-vm-error-OOM-RAM` message.
 
 The following operations consume RAM:
 

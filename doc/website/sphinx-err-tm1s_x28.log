@@ -1,0 +1,34 @@
+Versions
+========
+
+* Platform:         linux; (Linux-6.12.76-x86_64-with-glibc2.40)
+* Python version:   3.12.8 (CPython)
+* Sphinx version:   8.2.3
+* Docutils version: 0.21.2
+* Jinja2 version:   3.1.6
+* Pygments version: 2.19.2
+
+Last Messages
+=============
+
+None.
+
+Loaded Extensions
+=================
+
+None.
+
+Traceback
+=========
+
+    Traceback (most recent call last):
+      File "/home/kp2pml30/.cache/pypoetry/virtualenvs/genvm-docstypesgen-tCkolNvS-py3.12/lib/python3.12/site-packages/sphinx/cmd/build.py", line 414, in build_main
+        app = Sphinx(
+              ^^^^^^^
+      File "/home/kp2pml30/.cache/pypoetry/virtualenvs/genvm-docstypesgen-tCkolNvS-py3.12/lib/python3.12/site-packages/sphinx/application.py", line 298, in __init__
+        ensuredir(self.outdir)
+      File "/home/kp2pml30/.cache/pypoetry/virtualenvs/genvm-docstypesgen-tCkolNvS-py3.12/lib/python3.12/site-packages/sphinx/util/osutil.py", line 71, in ensuredir
+        os.makedirs(file, exist_ok=True)
+      File "<frozen os>", line 215, in makedirs
+      File "<frozen os>", line 225, in makedirs
+    OSError: [Errno 30] Read-only file system: '/tmp/claude'

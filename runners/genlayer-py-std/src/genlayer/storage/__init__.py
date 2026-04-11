@@ -14,8 +14,10 @@ __all__ = (
 	'DynArray',
 	'Array',
 	'TreeMap',
+	'Comparable',
 	'allow',
 	'inmem_allocate',
+	'Pickled',
 	'Root',
 	'ROOT_SLOT_ID',
 	'Slot',
@@ -26,7 +28,7 @@ __all__ = (
 
 from .dyn_array import DynArray
 from .array import Array
-from .tree_map import TreeMap
+from .tree_map import TreeMap, Comparable
 from .root import Root
 
 from .core import Indirection, VLA

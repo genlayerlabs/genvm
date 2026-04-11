@@ -83,6 +83,7 @@ origin_address: Address = ...  # type: ignore
 """Entire transaction initiator"""
 
 stack: list[Address] = ...  # type: ignore
+"""Stack of view method calls, excluding last (``contract_address``)"""
 
 value: u256 = ...  # type: ignore
 """Value sent with the transaction"""
@@ -91,15 +92,28 @@ chain_id: u256 = ...  # type: ignore
 """Current chain ID"""
 
 is_init: bool = ...  # type: ignore
+"""``True`` *iff* it is a deployment"""
 
 entry_kind: int = ...  # type: ignore
+"""
+One of:
+
+- ``0`` for ``MAIN``
+- ``1`` for ``SANDBOX``
+- ``2`` for ``CONSENSUS_STAGE``
+
+See :ref:`startup-process-reference` for more details.
+"""
 
 entry_data: bytes = ...  # type: ignore
+"""Raw entry data bytes from the VM message"""
 
 entry_stage_data: calldata.Decoded = ...  # type: ignore
+"""Decoded stage data (leader non-deterministic blocks outputs or ``None``)"""
 
 if typing.TYPE_CHECKING or not _IS_IN_VM:
 	raw: MessageRawType = ...  # type: ignore
+	"""The raw message dictionary as received from the VM"""
 else:
 	raw = typing.cast(
 		MessageRawType, calldata.decode(io.FileIO(0, closefd=False).readall())

@@ -2,11 +2,12 @@
 GenVM calldata encoding and decoding module.
 
 This module provides:
-- ``encode``: Encode Python objects to calldata bytes
-- ``decode``: Decode calldata bytes to Python objects
-- ``to_str``: Human-readable string representation
-- ``CalldataEncodable``: ABC for custom encoding
-- Type aliases: ``Encodable``, ``Decoded``, ``EncodableWithDefault``
+
+* ``encode``: Encode Python objects to calldata bytes
+* ``decode``: Decode calldata bytes to Python objects
+* ``to_str``: Human-readable string representation
+* ``CalldataEncodable``: ABC for custom encoding
+* Type aliases: ``Encodable``, ``Decoded``, ``EncodableWithDefault``
 
 Calldata natively supports following types:
 

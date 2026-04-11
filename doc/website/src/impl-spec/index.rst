@@ -1,5 +1,5 @@
-GenVM Implementation Specification
-==================================
+GenVM Internals
+===============
 
 .. note::
     `Single text file docs for AI <../_static/ai/impl-spec.txt>`_

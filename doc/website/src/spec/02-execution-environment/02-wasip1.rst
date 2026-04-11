@@ -265,7 +265,7 @@ Pseudocode
       allocated.remove(fd)
       free_pool.push(fd)
 
-Allocating a new :term:`FD` implies :ref:`gvm-def-ram-consumption` of :ref:`gvm-def-enum-value-memory-limiter-consts-fd-allocation`\.
+Allocating a new :term:`FD` implies :ref:`gvm-def-ram-consumption` of :ref:`gvm-def-consts-value-memory-limiter-consts-fd-allocation`\.
 
 Invariants
 ~~~~~~~~~~

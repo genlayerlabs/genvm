@@ -26,7 +26,7 @@ The ``data`` portion depends on the result code:
 
 - **return**: :ref:`Calldata Encoded <gvm-def-calldata-encoding>` return value
 - **user_error**: UTF-8 encoded error message string (from ``Rollback`` message)
-- **vm_error**: UTF-8 encoded :ref:`gvm-def-enum-vm-error` string
+- **vm_error**: UTF-8 encoded :ref:`gvm-def-str-trie-vm-error` string
 
 .. _gvm-def-module-result-encoding:
 
