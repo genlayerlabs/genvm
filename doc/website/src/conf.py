@@ -59,7 +59,6 @@ _docs_domain = os.environ.get('DOCS_DOMAIN', 'sdk.genlayer.com')
 # Fetch remote versions and merge with local build, sorted by semver
 import re as _re, urllib.request
 
-_switcher_url = '/_static/versions.json'
 try:
 	_req = urllib.request.Request(
 		f'https://{_docs_domain}/versions.json', headers={'User-Agent': 'sphinx-build'}
@@ -97,8 +96,8 @@ Path(__file__).parent.joinpath('_static', 'versions.json').write_text(
 
 html_theme_options = {
 	'logo': {
-		'image_light': '_static/logo-light.svg',
-		'image_dark': '_static/logo-dark.svg',
+		'image_light': f'/{release}/_static/logo-light.svg',
+		'image_dark': f'/{release}/_static/logo-dark.svg',
 	},
 	'show_nav_level': 2,
 	'show_toc_level': 2,
@@ -107,7 +106,7 @@ html_theme_options = {
 	'icon_links': [
 		{
 			'name': 'Full docs for LLMs',
-			'url': '/_static/llms.txt',
+			'url': f'/{release}/_static/llms.txt',
 			'icon': 'fa-solid fa-robot',
 			'type': 'fontawesome',
 		},
@@ -140,7 +139,7 @@ html_theme_options = {
 	'footer_start': ['copyright'],
 	'footer_end': [],
 	'switcher': {
-		'json_url': _switcher_url,
+		'json_url': f'https://{_docs_domain}/versions.json',
 		'version_match': version,
 	},
 }
@@ -148,7 +147,7 @@ html_theme_options = {
 html_show_sourcelink = False
 html_css_files = ['custom.css']
 html_js_files = ['favicon-swap.js']
-html_favicon = '_static/favicon.png'
+html_favicon = f'/{release}/_static/favicon.png'
 
 todo_include_todos = True
 
