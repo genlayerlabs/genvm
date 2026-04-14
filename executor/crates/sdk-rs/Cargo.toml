@@ -19,9 +19,14 @@ exclude = [
 name = "fetch_webpage"
 path = "examples/fetch_webpage.rs"
 
+[[example]]
+name = "storage_dyn_array"
+path = "examples/storage_dyn_array.rs"
+
 [features]
-default = ["wasi"]
+default = ["wasi", "storage"]
 wasi = []
+storage = ["dep:sha3", "wasi"]
 arbitrary = ["dep:arbitrary", "genlayer_calldata/arbitrary"]
 
 [dependencies]
@@ -34,6 +39,7 @@ serde_bytes = { version = "0.11.19"}
 bytes = {version = "1.11.0", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 genlayer_calldata = { path = "../calldata" }
+sha3 = { version = "0.10", optional = true }
 
 [dev-dependencies]
 primitive-types = { version = "0.13", features = ["impl-serde"] }
