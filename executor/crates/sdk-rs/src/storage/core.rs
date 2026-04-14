@@ -286,6 +286,70 @@ impl StorageType for Vec<u8> {
     }
 }
 
+// ===== Unit (None) =====
+
+impl StorageType for () {
+    const SIZE: u32 = 0;
+    type Handle = ();
+    fn handle_at(_slot: Slot, _offset: u32) -> Self::Handle {}
+}
+
+// ===== Address =====
+
+#[derive(Clone, Copy)]
+pub struct StorageAddress {
+    pub slot: Slot,
+    pub offset: u32,
+}
+
+impl StorageAddress {
+    pub fn get(&self) -> crate::calldata::Address {
+        let mut buf = [0u8; 20];
+        self.slot.read(self.offset, &mut buf);
+        crate::calldata::Address::from(buf)
+    }
+
+    pub fn set(&self, val: crate::calldata::Address) {
+        self.slot.write(self.offset, &val.raw());
+    }
+}
+
+impl StorageType for crate::calldata::Address {
+    const SIZE: u32 = 20;
+    type Handle = StorageAddress;
+    fn handle_at(slot: Slot, offset: u32) -> Self::Handle {
+        StorageAddress { slot, offset }
+    }
+}
+
+// ===== U256 =====
+
+#[derive(Clone, Copy)]
+pub struct StorageU256 {
+    pub slot: Slot,
+    pub offset: u32,
+}
+
+impl StorageU256 {
+    pub fn get(&self) -> primitive_types::U256 {
+        let mut buf = [0u8; 32];
+        self.slot.read(self.offset, &mut buf);
+        primitive_types::U256::from_little_endian(&buf)
+    }
+
+    pub fn set(&self, val: primitive_types::U256) {
+        self.slot.write(self.offset, &val.to_little_endian());
+    }
+}
+
+impl StorageType for primitive_types::U256 {
+    const SIZE: u32 = 32;
+    type Handle = StorageU256;
+    fn handle_at(slot: Slot, offset: u32) -> Self::Handle {
+        StorageU256 { slot, offset }
+    }
+}
+
 // ===== Indirection =====
 // Data lives at a derived slot. Occupies 1 byte in the parent to prevent collisions.
 

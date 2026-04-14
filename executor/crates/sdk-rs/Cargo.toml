@@ -23,6 +23,10 @@ path = "examples/fetch_webpage.rs"
 name = "storage_dyn_array"
 path = "examples/storage_dyn_array.rs"
 
+[[example]]
+name = "storage_root"
+path = "examples/storage_root.rs"
+
 [features]
 default = ["wasi", "storage"]
 wasi = []
