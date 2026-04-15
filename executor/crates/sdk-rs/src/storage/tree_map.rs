@@ -269,7 +269,7 @@ where
             let new_b = par_n.balance().get() + delta;
 
             if new_b == -2 {
-                let gp_depth = if seq.len() == 2 { 0 } else { seq.len() - 3 };
+                let gp_depth = seq.len() - 2;
                 let cur_n = self.node(cur);
                 if cur_n.balance().get() > 0 {
                     let right_child = cur_n.right().get();
@@ -285,7 +285,7 @@ where
                 self.replace_child(&seq, gp_depth, par, *seq.last().unwrap());
                 break;
             } else if new_b == 2 {
-                let gp_depth = if seq.len() == 2 { 0 } else { seq.len() - 3 };
+                let gp_depth = seq.len() - 2;
                 let cur_n = self.node(cur);
                 if cur_n.balance().get() < 0 {
                     let left_child = cur_n.left().get();
@@ -405,7 +405,7 @@ where
             let new_b = par_n.balance().get() + delta;
 
             if new_b == -2 {
-                let gp_depth = if seq.len() == 2 { 0 } else { seq.len() - 3 };
+                let gp_depth = seq.len() - 2;
                 let sib = par_n.left().get();
                 let sib_n = self.node(sib);
                 let sib_bal = sib_n.balance().get();
@@ -427,7 +427,7 @@ where
                     break;
                 }
             } else if new_b == 2 {
-                let gp_depth = if seq.len() == 2 { 0 } else { seq.len() - 3 };
+                let gp_depth = seq.len() - 2;
                 let sib = par_n.right().get();
                 let sib_n = self.node(sib);
                 let sib_bal = sib_n.balance().get();

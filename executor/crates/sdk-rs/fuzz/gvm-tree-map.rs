@@ -1,12 +1,12 @@
 use arbitrary::Arbitrary;
 use genlayer_sdk::storage::{Slot, StorageType, TreeMap};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 // Global paged storage backing the SDK's __genvm_storage_read / __genvm_storage_write.
 
 thread_local! {
-    static STORAGE: RefCell<HashMap<[u8; 32], Vec<u8>>> = RefCell::new(HashMap::new());
+    static STORAGE: RefCell<BTreeMap<[u8; 32], Vec<u8>>> = RefCell::new(BTreeMap::new());
 }
 
 fn storage_clear() {
