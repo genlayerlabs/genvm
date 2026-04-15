@@ -1,6 +1,6 @@
 [package]
 name = "genlayer_calldata"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 repository = "https://github.com/genlayerlabs/genvm"
 description = "Crate for handling GenLayer calldata encoding and decoding"
@@ -8,9 +8,9 @@ readme = "README.md"
 license-file = "LICENSE.txt"
 homepage = "https://genlayer.com"
 keywords = ["genlayer", "blockchain", "smart-contracts", "wasm", "wasi"]
-categories = ["api-bindings", "wasm"]
+categories = ["encoding", "parser-implementations"]
 exclude = [
-    "/tests/**",
+    "/tests/**", "/fuzz/**"
 ]
 
 [features]

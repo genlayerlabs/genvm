@@ -5,6 +5,7 @@
 
 .idea
 .envrc
+*.log
 
 # non git-controlled code and tools
 /tools/downloaded
