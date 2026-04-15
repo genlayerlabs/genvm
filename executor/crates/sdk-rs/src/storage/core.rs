@@ -1,6 +1,28 @@
 //! Core storage primitives: Slot, StorageType trait, and built-in scalar types.
 
-use crate::abi::wasi;
+#[cfg(not(all(feature = "wasi", not(feature = "dont_define_wasi_storage"))))]
+mod underlying_abi {
+    unsafe extern "Rust" {
+        pub fn __genvm_storage_read(slot: &[u8; 32], offset: u32, buf: &mut [u8]) -> u32;
+        pub fn __genvm_storage_write(slot: &[u8; 32], offset: u32, buf: &[u8]) -> u32;
+    }
+}
+
+#[cfg(all(feature = "wasi", not(feature = "dont_define_wasi_storage")))]
+mod underlying_abi {
+    use crate::abi::wasi;
+
+    #[inline(always)]
+    pub unsafe fn __genvm_storage_read(slot: &[u8; 32], offset: u32, buf: &mut [u8]) -> u32 {
+        unsafe {
+            wasi::raw::storage_read(slot.as_ptr(), offset, buf.as_mut_ptr(), buf.len() as u32)
+        }
+    }
+    #[inline(always)]
+    pub unsafe fn __genvm_storage_write(slot: &[u8; 32], offset: u32, buf: &[u8]) -> u32 {
+        unsafe { wasi::raw::storage_write(slot.as_ptr(), offset, buf.as_ptr(), buf.len() as u32) }
+    }
+}
 
 // ===== Slot =====
 
@@ -10,11 +32,15 @@ pub struct Slot(pub [u8; 32]);
 
 impl Slot {
     pub fn read(&self, offset: u32, buf: &mut [u8]) {
-        wasi::storage_read(&self.0, offset, buf).expect("storage read failed");
+        if unsafe { underlying_abi::__genvm_storage_read(&self.0, offset, buf) } != 0 {
+            panic!("storage read failed");
+        }
     }
 
     pub fn write(&self, offset: u32, buf: &[u8]) {
-        wasi::storage_write(&self.0, offset as i32, buf).expect("storage write failed");
+        if unsafe { underlying_abi::__genvm_storage_write(&self.0, offset, buf) } != 0 {
+            panic!("storage write failed");
+        }
     }
 
     /// Derive a child slot via `sha3_256(slot_id || offset_le_bytes)`.
@@ -37,6 +63,16 @@ pub trait StorageType {
     const SIZE: u32;
     type Handle;
     fn handle_at(slot: Slot, offset: u32) -> Self::Handle;
+}
+
+/// Trait for storage types with a simple get/set value pattern.
+///
+/// Maps a `StorageType` to an owned Rust `Value` that can be read from
+/// and written to the handle.
+pub trait StorageValue: StorageType {
+    type Value;
+    fn storage_get(handle: &Self::Handle) -> Self::Value;
+    fn storage_set(handle: &Self::Handle, val: &Self::Value);
 }
 
 // ===== Integer types =====
@@ -67,6 +103,12 @@ macro_rules! impl_int_storage {
             fn handle_at(slot: Slot, offset: u32) -> Self::Handle {
                 $handle_name { slot, offset }
             }
+        }
+
+        impl StorageValue for $rust_ty {
+            type Value = $rust_ty;
+            fn storage_get(handle: &$handle_name) -> $rust_ty { handle.get() }
+            fn storage_set(handle: &$handle_name, val: &$rust_ty) { handle.set(*val) }
         }
     )* };
 }
@@ -113,6 +155,12 @@ macro_rules! impl_float_storage {
                 $handle_name { slot, offset }
             }
         }
+
+        impl StorageValue for $rust_ty {
+            type Value = $rust_ty;
+            fn storage_get(handle: &$handle_name) -> $rust_ty { handle.get() }
+            fn storage_set(handle: &$handle_name, val: &$rust_ty) { handle.set(*val) }
+        }
     )* };
 }
 
@@ -146,6 +194,16 @@ impl StorageType for bool {
     type Handle = StorageBool;
     fn handle_at(slot: Slot, offset: u32) -> Self::Handle {
         StorageBool { slot, offset }
+    }
+}
+
+impl StorageValue for bool {
+    type Value = bool;
+    fn storage_get(handle: &StorageBool) -> bool {
+        handle.get()
+    }
+    fn storage_set(handle: &StorageBool, val: &bool) {
+        handle.set(*val)
     }
 }
 
@@ -218,6 +276,16 @@ impl StorageType for String {
     }
 }
 
+impl StorageValue for String {
+    type Value = String;
+    fn storage_get(handle: &StorageStr) -> String {
+        handle.load()
+    }
+    fn storage_set(handle: &StorageStr, val: &String) {
+        handle.store(val)
+    }
+}
+
 // ===== Bytes =====
 // Layout: [u32 length] at (slot, offset), raw data at slot.indirect(offset).
 
@@ -286,6 +354,16 @@ impl StorageType for Vec<u8> {
     }
 }
 
+impl StorageValue for Vec<u8> {
+    type Value = Vec<u8>;
+    fn storage_get(handle: &StorageBytes) -> Vec<u8> {
+        handle.load()
+    }
+    fn storage_set(handle: &StorageBytes, val: &Vec<u8>) {
+        handle.store(val)
+    }
+}
+
 // ===== Unit (None) =====
 
 impl StorageType for () {
@@ -322,6 +400,16 @@ impl StorageType for crate::calldata::Address {
     }
 }
 
+impl StorageValue for crate::calldata::Address {
+    type Value = crate::calldata::Address;
+    fn storage_get(handle: &StorageAddress) -> crate::calldata::Address {
+        handle.get()
+    }
+    fn storage_set(handle: &StorageAddress, val: &crate::calldata::Address) {
+        handle.set(*val)
+    }
+}
+
 // ===== U256 =====
 
 #[derive(Clone, Copy)]
@@ -347,6 +435,16 @@ impl StorageType for primitive_types::U256 {
     type Handle = StorageU256;
     fn handle_at(slot: Slot, offset: u32) -> Self::Handle {
         StorageU256 { slot, offset }
+    }
+}
+
+impl StorageValue for primitive_types::U256 {
+    type Value = primitive_types::U256;
+    fn storage_get(handle: &StorageU256) -> primitive_types::U256 {
+        handle.get()
+    }
+    fn storage_set(handle: &StorageU256, val: &primitive_types::U256) {
+        handle.set(*val)
     }
 }
 

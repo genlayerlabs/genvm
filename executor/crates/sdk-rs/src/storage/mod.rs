@@ -3,9 +3,11 @@
 pub mod array;
 pub mod core;
 pub mod record;
+pub mod tree_map;
 
 pub use self::array::*;
 pub use self::core::*;
+pub use self::tree_map::*;
 
 use crate::calldata::Address;
 
