@@ -162,16 +162,21 @@ stdenv.mkDerivation (
 
 			if [[ "${target}" != arm64-macos ]]
 			then
-				patchelf --set-rpath '$ORIGIN/../lib:$ORIGIN/../../../lib:' target/__out
-
-				for i in $(patchelf --print-needed target/__out)
-				do
-					if [[ "$i" == /build/libs/* ]]
-					then
-						echo "Replacing $i with $(basename $i)"
-						patchelf --replace-needed "$i" "$(basename $i)" target/__out
-					fi
-				done
+				# Static musl binaries have no .dynamic section; patchelf is a no-op
+				if patchelf --print-rpath target/__out >/dev/null 2>&1
+				then
+					patchelf --set-rpath '$ORIGIN/../lib:$ORIGIN/../../../lib:' target/__out
+					for i in $(patchelf --print-needed target/__out)
+					do
+						if [[ "$i" == /build/libs/* ]]
+						then
+							echo "Replacing $i with $(basename $i)"
+							patchelf --replace-needed "$i" "$(basename $i)" target/__out
+						fi
+					done
+				else
+					echo "Binary is statically linked, skipping patchelf"
+				fi
 			fi
 		'';
 

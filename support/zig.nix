@@ -29,6 +29,15 @@ let
 				skip_next=false
 				continue
 			fi
+			# Filter Rust self-contained CRT objects — Zig provides its own.
+			# Without this, both rcrt1.o (Rust) and crt1.o (Zig) define _start.
+			if [[ "$arg" == */self-contained/rcrt1.o ]] || \
+				[[ "$arg" == */self-contained/crti.o ]] || \
+				[[ "$arg" == */self-contained/crtn.o ]] || \
+				[[ "$arg" == */self-contained/crtbeginS.o ]] || \
+				[[ "$arg" == */self-contained/crtendS.o ]]; then
+				continue
+			fi
 			if [[ "$arg" != --target=* ]] && \
 				[[ "$arg" != -framework ]] && \
 				[[ "$arg" != CoreFoundation ]] && \
