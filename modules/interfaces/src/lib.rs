@@ -133,7 +133,6 @@ pub mod llm {
     pub enum PromptAnswerData {
         Text(String),
         Bool(bool),
-        Object(serde_json::Map<String, serde_json::Value>),
     }
 
     #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]

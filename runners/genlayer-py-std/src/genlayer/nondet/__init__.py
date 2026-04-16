@@ -20,7 +20,7 @@ import collections.abc
 from genlayer._internal import _lazy_api
 from genlayer.types import *
 import _genlayer_wasi as wasi
-import io
+import json
 import dataclasses
 
 import genlayer._internal.on_chain.gl_call as gl_call
@@ -38,6 +38,10 @@ def _decode_nondet(buf):
 	if err := ret.get('error'):
 		raise NondetException(err)
 	return ret['ok']
+
+
+def _decode_nondet_json(buf):
+	return json.loads(_decode_nondet(buf))
 
 
 if typing.TYPE_CHECKING:
@@ -105,15 +109,17 @@ def exec_prompt(
 		else:
 			images.append(im)
 
+	format = config.get('response_format', 'text')
+
 	return gl_call.gl_call_generic(
 		{
 			'ExecPrompt': {
 				'prompt': prompt,
-				'response_format': config.get('response_format', 'text'),
+				'response_format': format,
 				'images': images,
 			}
 		},
-		_decode_nondet,
+		_decode_nondet_json if format == 'json' else _decode_nondet,
 	)
 
 
