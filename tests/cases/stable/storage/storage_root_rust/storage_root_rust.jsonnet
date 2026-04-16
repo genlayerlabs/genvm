@@ -7,5 +7,6 @@ local util = import 'templates/util.jsonnet';
 			"calldata": |||
 				{}
 			|||,
+			stable_hash: false,
 		}])
 }
