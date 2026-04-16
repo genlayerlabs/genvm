@@ -19,7 +19,12 @@ _annotated_type_aliases: dict[typing.Any, str] = {}
 
 project = 'GenVM SDK'
 
-copyright = f'{datetime.date.today().year}, GenLayer Labs'
+copyright_year = str(datetime.date.today().year)
+if 'COPYRIGHT_YEAR' in os.environ:
+	copyright_year = os.environ['COPYRIGHT_YEAR']
+
+
+copyright = f'{copyright_year}, GenLayer Labs'
 author = 'GenLayer Labs'
 release = os.environ.get('DOCS_VERSION', 'main')
 version = release
