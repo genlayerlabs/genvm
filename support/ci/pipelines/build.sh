@@ -74,7 +74,7 @@ cat <<EOF > flake-config.json
 }
 EOF
 
-python3 "$SCRIPT_DIR/../../runner-script.py" dependencies prefetch-needed --all --target "$TARGET" --target universal
+python3 "$SCRIPT_DIR/../../runner-script.py" dependencies prefetch-needed --all --target "$TARGET"
 
 mkdir -p build
 nix build -o build/out-$TARGET -v -L .#all-for-platform.$TARGET --show-trace

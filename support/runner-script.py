@@ -346,6 +346,7 @@ def run_mirror_to_gcs(args):
 			for env in [ORIGINAL_ENV, env_with_default_ld_lib_path, None]
 		)
 
+	had_failure = False
 	for dep in deps:
 		if dep.get('alternative_urls'):
 			continue
@@ -390,7 +391,10 @@ def run_mirror_to_gcs(args):
 			print(f'info: done {name}')
 		except Exception as e:
 			print(f'err: failed to mirror {name}: {e}', file=sys.stderr)
-			_sys_exit(1)
+			had_failure = True
+
+	if had_failure:
+		_sys_exit(1)
 
 
 if __name__ == '__main__':

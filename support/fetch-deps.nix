@@ -4,26 +4,21 @@ let
 
 	fetch-dep = entry:
 		let
-			has-alt = entry.alternative_urls != [];
-			urls = if has-alt then [entry.original_url] ++ entry.alternative_urls else null;
-			hash-is-sri = builtins.substring 0 7 entry.hash == "sha256-";
-			hash-attr = if hash-is-sri then { hash = entry.hash; } else { sha256 = entry.hash; };
+			urls = [entry.original_url] ++ entry.alternative_urls;
+			hash = entry.hash;
 		in
 			if entry.fetcher == "fetchurl" then
-				builtins.fetchurl {
-					url = entry.original_url;
-					sha256 = entry.hash;
-				}
-			else if entry.fetcher == "fetchTarball" then
-				builtins.fetchTarball {
-					url = entry.original_url;
-					sha256 = entry.hash;
-				}
-			else
-				pkgs.fetchzip (hash-attr // {
+				pkgs.fetchurl {
 					name = entry.name;
-				} // (if has-alt then { inherit urls; } else { url = entry.original_url; })
-				// (if entry ? extension then { extension = entry.extension; } else {}));
+					inherit urls hash;
+				}
+			else if entry.fetcher == "fetchzip" then
+				pkgs.fetchzip ({
+					name = entry.name;
+					inherit urls hash;
+				} // (if entry ? extension then { extension = entry.extension; } else {}))
+			else
+				throw "unknown fetcher: ${entry.fetcher} for ${entry.name}";
 	dep-name = entry:
 		if entry ? alternative_name && entry.alternative_name != null then entry.alternative_name
 		else entry.name;
