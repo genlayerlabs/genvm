@@ -2,6 +2,7 @@
 , lib
 , stdenvNoCC
 , runnersLib
+, deps
 , ...
 }:
 stdenvNoCC.mkDerivation {
@@ -11,14 +12,7 @@ stdenvNoCC.mkDerivation {
 	outputHash = "sha256-+v15QTVc9fl1+3Bn9jVEadEaZw5CjaPa0fmJO/eTGZ4=";
 	outputHashMode = "recursive";
 
-	src = pkgs.fetchzip {
-		urls = [
-			"https://www.zlib.net/zlib-1.3.1.tar.gz"
-			"https://storage.googleapis.com/genvm-artifacts/zlib-1.3.1.tar.gz"
-		];
-		sha256 = "acY8yFzIRYbrZ2CGODoxLnZuppsP6KZy19I9Yy77pfc=";
-		name = "genvm-zlib-src";
-	};
+	src = deps."genvm-zlib-src";
 
 	nativeBuildInputs = [runnersLib.wasi-sdk.package];
 

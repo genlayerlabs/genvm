@@ -2,6 +2,7 @@
 , lib
 , stdenvNoCC
 , runnersLib
+, deps
 , ...
 }:
 stdenvNoCC.mkDerivation {
@@ -11,11 +12,7 @@ stdenvNoCC.mkDerivation {
 	outputHash = "sha256-NQdALM+p13cAlPKMBY8E2vH6/qEZJ6R+ktLgDZuEXxo=";
 	outputHashMode = "recursive";
 
-	src = pkgs.fetchzip {
-		url = "https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz";
-		sha256 = "Uvi4JZPPERK3gym4yoaeTEJwKXF5brBAEN7GgF+iF6g=";
-		name = "genvm-bz2-src";
-	};
+	src = deps."genvm-bz2-src";
 
 	nativeBuildInputs = [ runnersLib.wasi-sdk.package ];
 

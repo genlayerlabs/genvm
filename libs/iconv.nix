@@ -1,11 +1,9 @@
 { pkgs
 , zig
+, deps
 }:
 let
-	iconv-src = builtins.fetchTarball {
-		url = "https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz";
-		sha256 = "0n6v0n0xiwgglmrbzlxxhdi7lf6iwdbbmi4m2dz44mqv0v6khbq5";
-	};
+	iconv-src = deps."libiconv";
 in pkgs.stdenvNoCC.mkDerivation {
 	name = "libiconv";
 

@@ -1,4 +1,5 @@
 { pkgs
+, deps
 , system ? "x86_64-linux"
 , withLinters ? false
 , withZig ? true
@@ -20,10 +21,7 @@ let
 		aarch64-darwin = "arm64-macos";
 	}.${system};
 
-	manifest-src = builtins.fetchurl {
-		url = "https://static.rust-lang.org/dist/2026-03-05/channel-rust-stable.toml";
-		sha256 = "1vlqg3lypl5qbn25f47qg3irq2r3jm9fkgg6pqwxa0bfygg7g8da";
-	};
+	manifest-src = deps."rust-channel-stable";
 
 	manifest = builtins.fromTOML (builtins.readFile manifest-src);
 
