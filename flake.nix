@@ -100,7 +100,7 @@
 
 								custom-rust = import ./support/rust.nix { inherit pkgs deps system; withLinters = true; withZig = false; withWasi = true; };
 								custom-rust-builder = import ./support/compile-rust.nix {
-									inherit pkgs system;
+									inherit pkgs system deps;
 									zig = import ./support/zig.nix { inherit pkgs deps system; };
 								};
 
