@@ -176,11 +176,127 @@ impl From<String> for Value {
     }
 }
 
+impl From<bool> for Value {
+    fn from(v: bool) -> Self {
+        Value::Bool(v)
+    }
+}
+
+impl From<Address> for Value {
+    fn from(v: Address) -> Self {
+        Value::Address(v)
+    }
+}
+
+impl From<Vec<u8>> for Value {
+    fn from(v: Vec<u8>) -> Self {
+        Value::Bytes(v)
+    }
+}
+
+impl From<num_bigint::BigInt> for Value {
+    fn from(v: num_bigint::BigInt) -> Self {
+        Value::Number(v)
+    }
+}
+
+impl From<i64> for Value {
+    fn from(v: i64) -> Self {
+        Value::Number(num_bigint::BigInt::from(v))
+    }
+}
+
+impl From<u64> for Value {
+    fn from(v: u64) -> Self {
+        Value::Number(num_bigint::BigInt::from(v))
+    }
+}
+
+impl From<i32> for Value {
+    fn from(v: i32) -> Self {
+        Value::Number(num_bigint::BigInt::from(v))
+    }
+}
+
+impl From<u32> for Value {
+    fn from(v: u32) -> Self {
+        Value::Number(num_bigint::BigInt::from(v))
+    }
+}
+
+impl From<Vec<Value>> for Value {
+    fn from(v: Vec<Value>) -> Self {
+        Value::Array(v)
+    }
+}
+
+impl From<BTreeMap<String, Value>> for Value {
+    fn from(v: BTreeMap<String, Value>) -> Self {
+        Value::Map(v)
+    }
+}
+
+impl From<primitive_types::U256> for Value {
+    fn from(v: primitive_types::U256) -> Self {
+        let bytes = v.to_little_endian();
+        Value::Number(num_bigint::BigInt::from_bytes_le(
+            num_bigint::Sign::Plus,
+            &bytes,
+        ))
+    }
+}
+
 impl Value {
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Value::Str(s) => Some(s),
             _ => None,
         }
+    }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Value::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    pub fn as_number(&self) -> Option<&num_bigint::BigInt> {
+        match self {
+            Value::Number(n) => Some(n),
+            _ => None,
+        }
+    }
+
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        match self {
+            Value::Bytes(b) => Some(b),
+            _ => None,
+        }
+    }
+
+    pub fn as_address(&self) -> Option<&Address> {
+        match self {
+            Value::Address(a) => Some(a),
+            _ => None,
+        }
+    }
+
+    pub fn as_array(&self) -> Option<&[Value]> {
+        match self {
+            Value::Array(a) => Some(a),
+            _ => None,
+        }
+    }
+
+    pub fn as_map(&self) -> Option<&BTreeMap<String, Value>> {
+        match self {
+            Value::Map(m) => Some(m),
+            _ => None,
+        }
+    }
+
+    pub fn is_null(&self) -> bool {
+        matches!(self, Value::Null)
     }
 }

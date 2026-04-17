@@ -1,12 +1,17 @@
+extern crate self as genlayer_calldata;
+
 mod bin;
+pub mod codec;
 mod de;
+mod encoder;
 mod error;
 mod se;
 mod types;
 
-pub use bin::{
-    Appender, DecodeError, Options as DecodeOptions, decode, decode_with, encode, encode_to,
-};
+pub use encoder::{Encoder, StdWriter, Writer};
+pub use genlayer_calldata_derive::*;
+
+pub use bin::{DecodeError, Options as DecodeOptions, decode, decode_with, encode, encode_to};
 pub use error::*;
 pub use types::*;
 

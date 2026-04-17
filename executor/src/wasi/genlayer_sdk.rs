@@ -604,8 +604,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     real_topics.push(t.clone());
                 }
 
-                struct CountingAppender(usize);
-                impl calldata::Appender for CountingAppender {
+                struct CountingWriter(usize);
+                impl calldata::Writer for CountingWriter {
                     type Error = std::convert::Infallible;
 
                     fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
@@ -614,10 +614,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                 }
 
-                let mut blob_data_len = CountingAppender(0);
+                let mut enc = calldata::Encoder::new(CountingWriter(0));
 
                 let val = calldata::Value::Map(blob);
-                calldata::encode_to(&mut blob_data_len, &val).unwrap_or_else(|e| match e {});
+                calldata::encode_to(&mut enc, &val).unwrap_or_else(|e| match e {});
                 let blob = match val {
                     calldata::Value::Map(m) => m,
                     _ => unreachable!(),
@@ -625,7 +625,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let supervisor = self.context.data.supervisor.clone();
 
-                let size = topics.len() + blob_data_len.0.div_ceil(32);
+                let size = topics.len() + enc.into_inner().0.div_ceil(32);
                 let size = size as u64;
                 supervisor
                     .get_storage_limiter()

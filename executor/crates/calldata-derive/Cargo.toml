@@ -1,0 +1,15 @@
+[package]
+name = "genlayer_calldata_derive"
+version = "0.0.1"
+edition = "2024"
+repository = "https://github.com/genlayerlabs/genvm"
+description = "Derive macros for genlayer_calldata Encode/Decode traits"
+license-file = "../calldata/LICENSE.txt"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2", features = ["full", "extra-traits"] }
+quote = "1"
+proc-macro2 = "1"

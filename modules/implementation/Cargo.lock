@@ -914,10 +914,20 @@ dependencies = [
  "arbitrary",
  "bytes",
  "chrono",
+ "genlayer_calldata_derive",
  "hex",
  "num-bigint",
  "primitive-types",
  "serde",
+]
+
+[[package]]
+name = "genlayer_calldata_derive"
+version = "0.0.1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

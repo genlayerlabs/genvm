@@ -115,14 +115,14 @@ pub fn encode_result(res: &Result<FullResult>) -> Result<Vec<u8>> {
         Ok(d) => {
             let mut encoded = Vec::from([d.kind as u8]);
             let as_value = calldata::to_value(d)?;
-            calldata::encode_to(&mut encoded, &as_value)?;
+            calldata::encode_to(&mut calldata::Encoder::new(&mut encoded), &as_value)?;
             Ok(encoded)
         }
         Err(e) => {
             let mut encoded = Vec::from([ResultCode::InternalError as u8]);
             let fake_res = FullResult::new_internal_error(format!("{e:?}"));
             let as_value = calldata::to_value(&fake_res)?;
-            calldata::encode_to(&mut encoded, &as_value)?;
+            calldata::encode_to(&mut calldata::Encoder::new(&mut encoded), &as_value)?;
             Ok(encoded)
         }
     }
@@ -180,9 +180,9 @@ impl FullResult {
     }
 }
 
-struct Sha3Appender(sha3::Sha3_256);
+struct Sha3Writer(sha3::Sha3_256);
 
-impl calldata::Appender for Sha3Appender {
+impl calldata::Writer for Sha3Writer {
     type Error = std::convert::Infallible;
 
     fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
@@ -216,12 +216,13 @@ impl FullResult {
         };
 
         let as_value = calldata::to_value(&hashable).expect("failed to serialize hashable");
-        let mut hasher = Sha3Appender(sha3::Digest::new());
-        match calldata::encode_to(&mut hasher, &as_value) {
+        let mut enc = calldata::Encoder::new(Sha3Writer(sha3::Digest::new()));
+        match calldata::encode_to(&mut enc, &as_value) {
             Ok(()) => {}
             Err(e) => match e {},
         }
-        let execution_hash = bytes::Bytes::from(sha3::Digest::finalize(hasher.0).to_vec());
+        let execution_hash =
+            bytes::Bytes::from(sha3::Digest::finalize(enc.into_inner().0).to_vec());
 
         Self {
             execution_hash,

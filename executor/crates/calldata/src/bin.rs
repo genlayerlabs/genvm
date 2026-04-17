@@ -355,43 +355,9 @@ pub fn decode(data: &[u8]) -> Result<Value, DecodeError> {
     Ok(ret)
 }
 
-fn append_uleb<A: Appender>(
-    to: &mut A,
-    mut num: num_bigint::BigUint,
-) -> core::result::Result<(), A::Error> {
-    if num == num_bigint::BigUint::ZERO {
-        to.write_all(&[0])?;
-        return Ok(());
-    }
+pub use super::encoder::{Encoder, Writer};
 
-    loop {
-        let mut cur = (num.iter_u32_digits().next().unwrap_or(0) & 0xff) as u8;
-        num >>= 7;
-        let has_next = num != num_bigint::BigUint::ZERO;
-
-        if has_next {
-            cur |= 0x80;
-        }
-
-        to.write_all(&[cur])?;
-
-        if !has_next {
-            return Ok(());
-        }
-    }
-}
-
-pub trait Appender {
-    type Error;
-
-    fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error>;
-
-    fn write_one(&mut self, byte: u8) -> Result<(), Self::Error> {
-        self.write_all(&[byte])
-    }
-}
-
-pub fn encode_to<A: Appender>(to: &mut A, value: &Value) -> Result<(), A::Error> {
+pub fn encode_to<W: Writer>(enc: &mut Encoder<W>, value: &Value) -> Result<(), W::Error> {
     enum Item<'a> {
         Value(&'a Value),
         MapKey(&'a str),
@@ -402,58 +368,17 @@ pub fn encode_to<A: Appender>(to: &mut A, value: &Value) -> Result<(), A::Error>
     while let Some(item) = stack.pop() {
         match item {
             Item::MapKey(key) => {
-                append_uleb(to, num_bigint::BigUint::from(key.len()))?;
-                to.write_all(key.as_bytes())?;
+                enc.push_map_k(key)?;
             }
             Item::Value(value) => match value {
-                Value::Null => to.write_one(SPECIAL_NULL)?,
-                Value::Bool(false) => to.write_one(SPECIAL_FALSE)?,
-                Value::Bool(true) => to.write_one(SPECIAL_TRUE)?,
-                Value::Address(address) => {
-                    to.write_one(SPECIAL_ADDR)?;
-                    to.write_all(&address.0)?;
-                }
-                Value::Str(data) => {
-                    let mut size = num_bigint::BigUint::from(data.len());
-                    size <<= BITS_IN_TYPE;
-                    size += TYPE_STR; // same as |
-
-                    append_uleb(to, size)?;
-
-                    to.write_all(data.as_bytes())?;
-                }
-                Value::Bytes(data) => {
-                    let mut size = num_bigint::BigUint::from(data.len());
-                    size <<= BITS_IN_TYPE;
-                    size += TYPE_BYTES; // same as |
-
-                    append_uleb(to, size)?;
-
-                    to.write_all(data)?;
-                }
-                Value::Number(big_int) => {
-                    if big_int.sign() == num_bigint::Sign::Minus {
-                        let mut mag = big_int.magnitude().clone();
-                        mag -= 1u32;
-
-                        mag <<= BITS_IN_TYPE;
-                        mag += TYPE_NINT; // same as |
-
-                        append_uleb(to, mag)?;
-                    } else {
-                        let mut mag = big_int.magnitude().clone();
-                        mag <<= BITS_IN_TYPE;
-                        mag += TYPE_PINT; // same as |
-
-                        append_uleb(to, mag)?;
-                    }
-                }
+                Value::Null => enc.push_null()?,
+                Value::Bool(v) => enc.push_bool(*v)?,
+                Value::Address(address) => enc.push_address(address)?,
+                Value::Str(data) => enc.push_str(data)?,
+                Value::Bytes(data) => enc.push_bytes(data)?,
+                Value::Number(big_int) => enc.push_bigint(big_int)?,
                 Value::Map(values) => {
-                    let mut size = num_bigint::BigUint::from(values.len());
-                    size <<= BITS_IN_TYPE;
-                    size += TYPE_MAP; // same as |
-
-                    append_uleb(to, size)?;
+                    enc.start_map(values.len() as u64)?;
 
                     for (k, v) in values.iter().rev() {
                         stack.push(Item::Value(v));
@@ -461,11 +386,7 @@ pub fn encode_to<A: Appender>(to: &mut A, value: &Value) -> Result<(), A::Error>
                     }
                 }
                 Value::Array(values) => {
-                    let mut size = num_bigint::BigUint::from(values.len());
-                    size <<= BITS_IN_TYPE;
-                    size += TYPE_ARR; // same as |
-
-                    append_uleb(to, size)?;
+                    enc.start_array(values.len() as u64)?;
 
                     for x in values.iter().rev() {
                         stack.push(Item::Value(x));
@@ -478,7 +399,16 @@ pub fn encode_to<A: Appender>(to: &mut A, value: &Value) -> Result<(), A::Error>
     Ok(())
 }
 
-impl Appender for Vec<u8> {
+impl Writer for Vec<u8> {
+    type Error = std::convert::Infallible;
+
+    fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+        self.extend_from_slice(data);
+        Ok(())
+    }
+}
+
+impl Writer for &mut Vec<u8> {
     type Error = std::convert::Infallible;
 
     fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
@@ -489,9 +419,12 @@ impl Appender for Vec<u8> {
 
 pub fn encode(value: &Value) -> Vec<u8> {
     let mut ret = Vec::new();
+    let mut enc = Encoder::new(&mut ret);
 
-    match encode_to(&mut ret, value) {
-        Ok(()) => ret,
+    match encode_to(&mut enc, value) {
+        Ok(()) => {}
         Err(e) => match e {},
     }
+
+    ret
 }

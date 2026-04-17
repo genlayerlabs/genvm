@@ -18,6 +18,7 @@ default = []
 arbitrary = ["dep:arbitrary"]
 
 [dependencies]
+genlayer_calldata_derive = { path = "../calldata-derive" }
 hex = "0.4.3"
 num-bigint = {version = "0.4.6", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
