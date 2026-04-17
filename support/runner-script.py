@@ -271,6 +271,128 @@ def run_merge(args):
 	print(json.dumps(all_regs_list, sort_keys=True))
 
 
+def run_prefetch_needed(args):
+	import subprocess
+
+	script_dir = Path(__file__).parent
+	deps_file = script_dir / 'dependencies' / 'dependency-urls.json'
+
+	with open(deps_file, 'r') as f:
+		deps = json.load(f)
+
+	targets = set(args.target) if args.target else None
+
+	for dep in deps:
+		if not args.all and not dep.get('must_preload', False):
+			continue
+
+		needed_for = dep.get('needed-for', [])
+		if targets is not None and not any(t in targets for t in needed_for):
+			continue
+
+		name = dep['name']
+		fetcher = dep.get('fetcher', 'fetchTarball')
+		unpack = fetcher in ('fetchTarball', 'fetchzip')
+
+		urls = [dep['original_url']]
+		if dep.get('alternative_urls'):
+			urls.extend(dep['alternative_urls'])
+
+		success = False
+		for url in urls:
+			try:
+				print(f'info: prefetching {name} from {url}')
+				cmd = ['nix-prefetch-url', '--name', name]
+				if unpack:
+					cmd.append('--unpack')
+				cmd.append(url)
+				subprocess.run(
+					cmd,
+					check=True,
+					env=ORIGINAL_ENV,
+				)
+				success = True
+				break
+			except subprocess.CalledProcessError:
+				print(f'warn: failed to prefetch {name} from {url}', file=sys.stderr)
+				continue
+
+		if not success:
+			print(f'err: failed to prefetch {name} from all urls', file=sys.stderr)
+			_sys_exit(1)
+
+
+def run_mirror_to_gcs(args):
+	script_dir = Path(__file__).parent
+	deps_file = script_dir / 'dependencies' / 'dependency-urls.json'
+
+	with open(deps_file, 'r') as f:
+		deps = json.load(f)
+
+	upload_template: str = args.upload_template
+	dry_run: bool = args.dry_run
+
+	token = None
+	if not dry_run:
+		env_with_default_ld_lib_path = os.environ.copy()
+		env_with_default_ld_lib_path['LD_LIBRARY_PATH'] = '/usr/local/lib:/usr/lib:/lib'
+		token = run_many_get_first(
+			lambda: run_subprocess_get_stdout(
+				['gcloud', 'auth', 'print-access-token'],
+				text=True,
+				env=env,
+				capture_output=True,
+			)
+			for env in [ORIGINAL_ENV, env_with_default_ld_lib_path, None]
+		)
+
+	for dep in deps:
+		if dep.get('alternative_urls'):
+			continue
+
+		name = dep['name']
+		original_url = dep['original_url']
+
+		if 'upload_as' in dep:
+			filename = dep['upload_as']
+		else:
+			url_path = urllib.parse.urlparse(original_url).path
+			filename = url_path.rsplit('/', 1)[-1]
+
+		upload_object = upload_template.format(name=name, filename=filename)
+
+		if dry_run:
+			print(
+				f'dry-run: would mirror {name}: {original_url} -> gs://{args.bucket}/{upload_object}'
+			)
+			continue
+
+		upload_url_api = f'https://storage.googleapis.com/upload/storage/v1/b/{urllib.parse.quote(args.bucket, safe="")}/o?uploadType=media&name={urllib.parse.quote_plus(upload_object)}'
+
+		try:
+			print(f'info: downloading {name} from {original_url}')
+			with urllib.request.urlopen(original_url) as resp:
+				data = resp.read()
+
+			print(f'info: uploading {name} to gs://{args.bucket}/{upload_object}')
+			req = urllib.request.Request(
+				url=upload_url_api,
+				data=data,
+				method='POST',
+				headers={
+					'Authorization': f'Bearer {token}',
+					'Content-Type': 'application/octet-stream',
+				},
+			)
+			with urllib.request.urlopen(req) as resp:
+				resp.read()
+
+			print(f'info: done {name}')
+		except Exception as e:
+			print(f'err: failed to mirror {name}: {e}', file=sys.stderr)
+			_sys_exit(1)
+
+
 if __name__ == '__main__':
 	import argparse
 
@@ -298,6 +420,24 @@ if __name__ == '__main__':
 	merge_parser = subparsers.add_parser('merge-registries')
 	merge_parser.add_argument('file', nargs='+')
 	merge_parser.set_defaults(func=run_merge)
+
+	dependencies_parser = subparsers.add_parser('dependencies')
+	dep_subparsers = dependencies_parser.add_subparsers()
+
+	prefetch_parser = dep_subparsers.add_parser('prefetch-needed')
+	prefetch_parser.add_argument('--target', action='append', default=None)
+	prefetch_parser.add_argument('--all', action='store_true', default=False)
+	prefetch_parser.set_defaults(func=run_prefetch_needed)
+
+	mirror_parser = dep_subparsers.add_parser('mirror-to-gcs')
+	mirror_parser.add_argument('--bucket', default='genvm-artifacts')
+	mirror_parser.add_argument(
+		'--upload-template',
+		default='{filename}',
+		help='object name template, available vars: {name}, {filename}',
+	)
+	mirror_parser.add_argument('--dry-run', action='store_true', default=False)
+	mirror_parser.set_defaults(func=run_mirror_to_gcs)
 
 	args = parser.parse_args()
 	if 'func' not in args:

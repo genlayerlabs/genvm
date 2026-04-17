@@ -1,18 +1,11 @@
 { pkgs
 , lib
+, deps
 , ...
 }:
 let
-	binaryen-raw = (pkgs.fetchzip {
-		name = "binaryen-raw";
-		url = "https://github.com/WebAssembly/binaryen/releases/download/version_128/binaryen-version_128-x86_64-linux.tar.gz";
-		hash = "sha256-0AKDcwjrOLiC5roAsTb9dZqqrxDs2+E5e+2usQwrQgA=";
-	});
-	wasi-sdk-raw = (pkgs.fetchzip {
-		name = "wasi-sdk-raw";
-		url = "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-31/wasi-sdk-31.0-x86_64-linux.tar.gz";
-		hash = "sha256-ZSI7b1wc1D3hqx3IqT8dlFVKldUFjQUZ7u48Cn8wbnE=";
-	});
+	binaryen-raw = deps."binaryen-raw";
+	wasi-sdk-raw = deps."wasi-sdk-raw";
 	wasi-sdk = pkgs.stdenvNoCC.mkDerivation {
 		name = "wasi-sdk";
 		version = "31.0";

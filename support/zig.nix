@@ -1,21 +1,13 @@
 { pkgs
+, deps
 , system ? "x86_64-linux"
 , ...
 }:
 let
 	zig = {
-		x86_64-linux = builtins.fetchTarball {
-			url = "https://ziglang.org/download/0.15.1/zig-x86_64-linux-0.15.1.tar.xz";
-			sha256 = "0yar24a1qjg503czwnkdipky1cfb08k0mm9c8gwv827d33df1070";
-		};
-		aarch64-linux = builtins.fetchTarball {
-			url = "https://ziglang.org/download/0.15.1/zig-aarch64-linux-0.15.1.tar.xz";
-			sha256 = "19vcv7a1scm4wpj5cgv3dmzajz37fdyx5x1inxfgxzsavbmvq3zy";
-		};
-		aarch64-macos = builtins.fetchTarball {
-			url = "https://ziglang.org/download/0.15.1/zig-aarch64-macos-0.15.1.tar.xz";
-			sha256 = "0gsvr1cl5xpqh8an97hw1zqdbsr3ymw7hvlrqykxi25kp1jc3jvf";
-		};
+		x86_64-linux = deps."zig-x86_64-linux";
+		aarch64-linux = deps."zig-aarch64-linux";
+		aarch64-macos = deps."zig-aarch64-macos";
 	}.${system};
 
 	make-cc-wrapper = trg: pkgs.writeShellScript "zig-cc-${trg}" ''

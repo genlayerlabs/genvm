@@ -88,7 +88,7 @@ stdenv.mkDerivation (
 		inherit buildAndTestSubdir;
 
 		RUSTFLAGS =
-			(if omitDefaultRustFlags then "-C target-feature=-crt-static -l dylib=c -L /build/libs -C link-arg=-dynamic " else "")
+			(if omitDefaultRustFlags then "" else "-C target-feature=-crt-static -l dylib=c -L /build/libs -C link-arg=-dynamic ")
 			+ (args.RUSTFLAGS or "");
 
 		hardeningDisable = ["all"];

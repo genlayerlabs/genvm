@@ -15,10 +15,11 @@ let
 		{
 			system = "x86_64-linux";
 		};
+	deps = import ../support/fetch-deps.nix { inherit pkgs; };
 	runnersLib = import ./support args;
 
 	args = {
-		inherit pkgs runnersLib;
+		inherit pkgs runnersLib deps;
 		inherit (pkgs) lib stdenvNoCC;
 	};
 in

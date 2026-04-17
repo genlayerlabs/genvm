@@ -68,12 +68,13 @@ let
 
 		dontFixup = true;
 	};
+	deps = import ./fetch-deps.nix { inherit pkgs; };
 in rec {
-	inherit pkgs;
+	inherit pkgs deps;
 
 	root-src = full-src;
 
-	zig = import ./zig.nix { inherit pkgs; };
+	zig = import ./zig.nix { inherit pkgs deps; };
 
 	get-root-subtree = paths:
 		let

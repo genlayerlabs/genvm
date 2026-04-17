@@ -21,10 +21,6 @@ let
 
 				profile = "release-with-debug";
 
-				# Modules link dynamically against liblua.so, so disable
-				# musl static CRT linking to allow dynamic library search.
-				omitDefaultRustFlags = true;
-
 				cargoLock.lockFile = ./implementation/Cargo.lock;
 
 				src = get-root-subtree [
