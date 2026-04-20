@@ -246,6 +246,56 @@ impl From<primitive_types::U256> for Value {
     }
 }
 
+#[cfg(feature = "arbitrary")]
+impl arbitrary::Arbitrary<'_> for Value {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
+        Self::arbitrary_depth(u, 3)
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl Value {
+    fn arbitrary_depth(u: &mut arbitrary::Unstructured<'_>, depth: u8) -> arbitrary::Result<Self> {
+        if depth == 0 {
+            return match u.int_in_range(0..=5u8)? {
+                0 => Ok(Value::Null),
+                1 => Ok(Value::Bool(u.arbitrary()?)),
+                2 => Ok(Value::Str(u.arbitrary()?)),
+                3 => Ok(Value::Number(num_bigint::BigInt::from(
+                    u.arbitrary::<i64>()?,
+                ))),
+                4 => Ok(Value::Bytes(u.arbitrary()?)),
+                _ => Ok(Value::Address(u.arbitrary()?)),
+            };
+        }
+        match u.int_in_range(0..=7u8)? {
+            0 => Ok(Value::Null),
+            1 => Ok(Value::Bool(u.arbitrary()?)),
+            2 => Ok(Value::Str(u.arbitrary()?)),
+            3 => Ok(Value::Number(num_bigint::BigInt::from(
+                u.arbitrary::<i64>()?,
+            ))),
+            4 => Ok(Value::Bytes(u.arbitrary()?)),
+            5 => Ok(Value::Address(u.arbitrary()?)),
+            6 => {
+                let len = u.int_in_range(0..=4u8)?;
+                (0..len)
+                    .map(|_| Self::arbitrary_depth(u, depth - 1))
+                    .collect::<arbitrary::Result<Vec<_>>>()
+                    .map(Value::Array)
+            }
+            _ => {
+                let len = u.int_in_range(0..=4u8)?;
+                let mut map = BTreeMap::new();
+                for _ in 0..len {
+                    map.insert(u.arbitrary()?, Self::arbitrary_depth(u, depth - 1)?);
+                }
+                Ok(Value::Map(map))
+            }
+        }
+    }
+}
+
 impl Value {
     pub fn as_str(&self) -> Option<&str> {
         match self {

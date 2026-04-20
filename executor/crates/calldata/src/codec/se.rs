@@ -149,11 +149,41 @@ impl<W: Writer> Encode<W> for bytes::Bytes {
     }
 }
 
-impl<W: Writer> Encode<W> for Vec<u8> {
+impl<W: Writer, T: Encode<W, Error = W::Error>> Encode<W> for Vec<T> {
     type Error = W::Error;
 
     fn encode(&self, enc: &mut Encoder<W>) -> Result<(), Self::Error> {
-        enc.push_bytes(self)
+        enc.start_array(self.len() as u64)?;
+        for item in self {
+            item.encode(enc)?;
+        }
+        Ok(())
+    }
+}
+
+impl<W: Writer, T: Encode<W, Error = W::Error>> Encode<W>
+    for std::collections::BTreeMap<String, T>
+{
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut Encoder<W>) -> Result<(), Self::Error> {
+        enc.start_map(self.len() as u64)?;
+        for (k, v) in self {
+            enc.push_map_k(k)?;
+            v.encode(enc)?;
+        }
+        Ok(())
+    }
+}
+
+impl<W: Writer, T: Encode<W, Error = W::Error>> Encode<W> for Option<T> {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut Encoder<W>) -> Result<(), Self::Error> {
+        match self {
+            Some(value) => value.encode(enc),
+            None => enc.push_null(),
+        }
     }
 }
 
@@ -178,17 +208,6 @@ impl<W: Writer> Encode<W> for () {
 
     fn encode(&self, enc: &mut Encoder<W>) -> Result<(), Self::Error> {
         enc.push_null()
-    }
-}
-
-impl<W: Writer> Encode<W> for Option<Value> {
-    type Error = W::Error;
-
-    fn encode(&self, enc: &mut Encoder<W>) -> Result<(), Self::Error> {
-        match self {
-            Some(value) => value.encode(enc),
-            None => enc.push_null(),
-        }
     }
 }
 

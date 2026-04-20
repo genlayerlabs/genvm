@@ -14,6 +14,9 @@ use bytes::Bytes;
 
 use crate::calldata;
 
+#[cfg(feature = "arbitrary")]
+pub(crate) mod arb;
+
 pub mod consts;
 pub mod entry;
 pub mod gl_call;

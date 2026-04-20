@@ -32,6 +32,11 @@ name = "fuzz-gvm-tree-map"
 path = "fuzz/gvm-tree-map.rs"
 required-features = ["arbitrary", "storage", "dont_define_wasi_storage"]
 
+[[example]]
+name = "fuzz-gvm-gl-call-roundtrip"
+path = "fuzz/gvm-gl-call-roundtrip.rs"
+required-features = ["arbitrary"]
+
 [features]
 default = ["wasi", "storage"]
 wasi = []
