@@ -16,22 +16,22 @@ let
 			__prefix = "py-lib-";
 
 			cloudpickle = {
-				hash = "sha256-DT6YulshSrNfvWQvVLNZHfHvfFVlmDTy+SAu5Ww1k7Y=";
+				hash = "sha256-X/SQxZDU/Ep9D5ptzccqMiewgUh6mtt3vMyA+ZnqrHA=";
 			};
 			protobuf = {
-				hash = "sha256-gbbFLhPUVsefodopQthwDPhwDmlDU06rZUPVMLeJOWY=";
+				hash = "sha256-i0mGEqZ5XvoYCK5EZLZe48BltX8UYDxsiBQ8wJDratE=";
 			};
 
 			word_piece_tokenizer = {
-				hash = "sha256-Wi1iFSYnBG4w/LweLuDfIiEETtS4UZXcfOtsjENPTG4=";
+				hash = "sha256-3T57N4bs1eSBaudAg0Dwi87d7kbu+anEYlGFH4Q3ujA=";
 			};
 
 			genlayer-std = {
-				hash = "sha256-e3iIRWICVVbk1DEkanSffdk/fTVRufM1V1I5LwCwMIc=";
+				hash = "sha256-9V4wfSdihldRIRVvZ4rYKwoR53DZbr6w8VO2CFiYJLk=";
 			};
 
 			genlayer-embeddings = {
-				hash = "sha256-09sWp5hGkUdwuJhVfbD4/BAncd+jfFII9Lpz59moqy4=";
+				hash = "sha256-PqEUrrm3j46Z2GdKKzhAoFipy4/5TzatPyS3/MqIm3E=";
 
 				depends = [
 					models.all-MiniLM-L6-v2
@@ -42,20 +42,20 @@ let
 		};
 
 		cpython = {
-			hash = "sha256-NqlOrqhBNjw/7Iab8Rl4mSjlOiOoTJrazRlU//54aa4=";
+			hash = "sha256-qYd0fAfKBdFwG9qR+AsXjS8gJFm11Z47vsnMEyf0SzM=";
 			depends = [
 				softfloat
 			];
 		};
 
 		softfloat = {
-			hash = "sha256-rT6x5x8Nh5U5UusJ4oFa2AYz/Q35he7l3s9Ktyot6CE=";
+			hash = "sha256-aR7i/mGXm+x7ofoL7iJ1zUHsVyqkAsZG0mQ/Lj1+l4c=";
 		};
 
 		wrappers = {
 			__prefix = "";
 			py-genlayer = {
-				hash = "sha256-Bibwr0QQOs0rluc6DkfCpWoEMT5r2J5YUgJaj5QqZMk=";
+				hash = "sha256-/6xtA3mlPQNhvJzqzoX9dm+FwN8bwAM6gmX1Tapr/Iw=";
 				depends = [
 					cpython
 					pyLibs.cloudpickle
@@ -63,7 +63,7 @@ let
 				];
 			};
 			py-genlayer-multi = {
-				hash = "sha256-0xe4RSg0YAiERnd3Sqs06gKmZ76rXSpLA+rJHWne/hs=";
+				hash = "sha256-z9kgsnJnaATfLhUJi8UtTxyhnkAZ6I1Wo2mkAkGcow8=";
 				depends = [
 					cpython
 					pyLibs.cloudpickle
@@ -82,15 +82,34 @@ let
 		builtins.any (hashHasSpecial hsh) (if builtins.hasAttr "depends" val then val.depends else []);
 
 	deduceHash = val:
-		if hashHasSpecial "test" val
-		then (if dev-mode then "test" else "error")
-		else if val.hash == null
+		if hashHasSpecial null val
 		then null
-		else if hashHasSpecial null val
-		then "error"
+		else if hashHasSpecial "test" val
+		then "test"
 		else val.hash;
 
 	fakeHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
+	checkHashes =  (pref: name: val:
+		if builtins.hasAttr "__prefix" val then
+			builtins.foldl'
+				(acc: item: acc + item)
+				""
+				(builtins.map
+					(name: checkHashes (pref + val.__prefix) name val.${name})
+					(builtins.filter
+						(name: name != "__prefix")
+						(builtins.attrNames val)))
+		else
+			if val.hash == null || val.hash == "test" then
+				""
+			else if hashHasSpecialDeps null val then
+				"set ${pref+name} hash to null\n"
+			else if hashHasSpecialDeps null val then
+				"set ${pref+name} hash to 'test'\n"
+			else
+				""
+	);
 
 	transform = (pref: name: val:
 		if builtins.hasAttr "__prefix" val then
@@ -123,4 +142,7 @@ let
 			}
 	);
 in
-	transform "" "" src
+	builtins.seq (
+		let errs = checkHashes "" "" src; in
+		if errs != "" then builtins.throw errs else null
+	) (transform "" "" src)
