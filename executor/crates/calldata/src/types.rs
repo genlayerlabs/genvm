@@ -261,9 +261,22 @@ impl Value {
                 0 => Ok(Value::Null),
                 1 => Ok(Value::Bool(u.arbitrary()?)),
                 2 => Ok(Value::Str(u.arbitrary()?)),
-                3 => Ok(Value::Number(num_bigint::BigInt::from(
-                    u.arbitrary::<i64>()?,
-                ))),
+                3 => {
+                    if u.arbitrary()? {
+                        let bytes: [u8; 32] = u.arbitrary()?;
+                        let sign = if u.arbitrary()? {
+                            num_bigint::Sign::Plus
+                        } else {
+                            num_bigint::Sign::Minus
+                        };
+                        let big = num_bigint::BigInt::from_bytes_le(sign, &bytes);
+                        Ok(Value::Number(big))
+                    } else {
+                        Ok(Value::Number(num_bigint::BigInt::from(
+                            u.arbitrary::<i64>()?,
+                        )))
+                    }
+                }
                 4 => Ok(Value::Bytes(u.arbitrary()?)),
                 _ => Ok(Value::Address(u.arbitrary()?)),
             };

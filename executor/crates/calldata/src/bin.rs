@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use super::consts::*;
 use super::types::*;
 
 #[derive(Debug)]
@@ -77,21 +78,6 @@ impl From<std::str::Utf8Error> for DecodeError {
 
 #[derive(Clone, Copy)]
 struct Parser<'a>(&'a [u8]);
-
-const BITS_IN_TYPE: usize = 3;
-
-const TYPE_SPECIAL: u8 = 0;
-const TYPE_PINT: u8 = 1;
-const TYPE_NINT: u8 = 2;
-const TYPE_BYTES: u8 = 3;
-const TYPE_STR: u8 = 4;
-const TYPE_ARR: u8 = 5;
-const TYPE_MAP: u8 = 6;
-
-const SPECIAL_NULL: u8 = (0 << BITS_IN_TYPE) | TYPE_SPECIAL;
-const SPECIAL_FALSE: u8 = (1 << BITS_IN_TYPE) | TYPE_SPECIAL;
-const SPECIAL_TRUE: u8 = (2 << BITS_IN_TYPE) | TYPE_SPECIAL;
-const SPECIAL_ADDR: u8 = (3 << BITS_IN_TYPE) | TYPE_SPECIAL;
 
 impl Parser<'_> {
     fn fetch_uleb(&mut self) -> Result<num_bigint::BigUint, DecodeError> {

@@ -117,6 +117,9 @@ name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
+dependencies = [
+ "derive_arbitrary",
+]
 
 [[package]]
 name = "arrayvec"
@@ -369,6 +372,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive_arbitrary"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e567bd82dcff979e4b03460c307b3cdc9e96fde3d73bed1496d2bc75d9dd62a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -416,11 +430,12 @@ checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
 name = "genlayer_calldata"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "arbitrary",
  "bytes",
  "chrono",
+ "genlayer_calldata_derive",
  "hex",
  "num-bigint",
  "primitive-types",
@@ -428,8 +443,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "genlayer_sdk"
+name = "genlayer_calldata_derive"
 version = "0.0.1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "genlayer_sdk"
+version = "0.0.2"
 dependencies = [
  "arbitrary",
  "bytes",

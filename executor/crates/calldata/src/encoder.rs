@@ -1,19 +1,5 @@
 use crate::Address;
-
-const BITS_IN_TYPE: usize = 3;
-
-const TYPE_SPECIAL: u8 = 0;
-const TYPE_PINT: u8 = 1;
-const TYPE_NINT: u8 = 2;
-const TYPE_BYTES: u8 = 3;
-const TYPE_STR: u8 = 4;
-const TYPE_ARR: u8 = 5;
-const TYPE_MAP: u8 = 6;
-
-const SPECIAL_NULL: u8 = (0 << BITS_IN_TYPE) | TYPE_SPECIAL;
-const SPECIAL_FALSE: u8 = (1 << BITS_IN_TYPE) | TYPE_SPECIAL;
-const SPECIAL_TRUE: u8 = (2 << BITS_IN_TYPE) | TYPE_SPECIAL;
-const SPECIAL_ADDR: u8 = (3 << BITS_IN_TYPE) | TYPE_SPECIAL;
+use crate::consts::*;
 
 fn write_uleb<W: Writer>(w: &mut W, mut num: num_bigint::BigUint) -> Result<(), W::Error> {
     if num == num_bigint::BigUint::ZERO {

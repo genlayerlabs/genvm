@@ -32,7 +32,7 @@ fn main() {
         assert_eq!(msg, msg_decoded, "Message roundtrip mismatch: value");
 
         let msg_decoded_from_binary: Message =
-            codec::Decode::decode(codec::ValueDeserializer(&buf)).unwrap();
+            codec::Decode::decode(codec::BinaryDeserializer::new(&buf)).unwrap();
 
         assert_eq!(
             msg, msg_decoded_from_binary,

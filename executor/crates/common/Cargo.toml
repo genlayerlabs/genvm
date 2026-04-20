@@ -3,14 +3,6 @@ name = "genvm-common"
 version = "0.1.0"
 edition = "2021"
 
-[[example]]
-name = "fuzz-genvm-common-decode"
-path = "fuzz/genvm-common-decode.rs"
-
-[[example]]
-name = "fuzz-genvm-common-encode"
-path = "fuzz/genvm-common-encode.rs"
-
 [profile.release]
 debug = true
 
@@ -35,6 +27,3 @@ clap = { version = "4.5.35", features = ["derive"] }
 arbitrary = "1.4.2"
 chrono = { version = "0.4.42", features = ["serde"] }
 bytes = {version = "1.11.0", features = ["serde"] }
-
-[dev-dependencies]
-afl = { version = "0.15.18", features = ["no_cfg_fuzzing"] }
