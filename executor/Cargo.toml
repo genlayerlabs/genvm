@@ -1,6 +1,6 @@
 [package]
 name = "genvm"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 
 [profile.dev.package.wasmtime]
@@ -14,10 +14,6 @@ panic = "abort"
 [profile.release]
 debug = true
 panic = "abort"
-
-[lints.rust]
-# this is needed for wasmtime :(
-static_mut_refs = "allow"
 
 [[example]]
 name = "fuzz-genvm-storage"

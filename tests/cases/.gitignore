@@ -1,3 +1,4 @@
 /temp
 /stable/claude/temp
 /stable/claude/agent
+*.wasm

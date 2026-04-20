@@ -254,7 +254,7 @@ def cargo_fuzz(
 	extra_config = rust_root_dir.joinpath('.ya-test-config.json')
 	if extra_config.exists():
 		extra_conf = json.loads(extra_config.read_text())
-		extra_flags.extend(extra_conf.get('cargo_test_flags', []))
+		extra_flags.extend(extra_conf.get('cargo_afl_build_flags', []))
 
 	# Track fuzz binary for coverage
 	if _is_coverage_enabled():
@@ -268,10 +268,11 @@ def cargo_fuzz(
 			ya_test_runner.exec.step.SetCwd(path=rust_root_dir),
 		]
 		+ [ya_test_runner.exec.step.SetEnv(key=k, value=v) for k, v in test_env.items()]
+		+ [ya_test_runner.exec.step.SetEnv(key='CARGO', value='cargo')]
 		+ [
 			ya_test_runner.exec.step.Run(
 				args=[
-					'cargo',
+					'cargo-afl',
 					'afl',
 					'build',
 					'--target-dir',
@@ -290,7 +291,7 @@ def cargo_fuzz(
 			),
 			ya_test_runner.exec.step.Run(
 				args=[
-					'cargo',
+					'cargo-afl',
 					'afl',
 					'fuzz',
 					'-c',
@@ -333,7 +334,7 @@ def cargo_fuzz(
 		steps.append(
 			ya_test_runner.exec.step.Run(
 				args=[
-					'cargo',
+					'cargo-afl',
 					'afl',
 					'cmin',
 					'-T',

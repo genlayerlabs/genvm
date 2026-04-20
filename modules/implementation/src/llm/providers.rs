@@ -116,7 +116,9 @@ pub trait Provider {
         prompt: &prompt::Internal,
         model: &str,
     ) -> ModuleResult<ProviderResponse<String>> {
-        self.exec_prompt_text(ctx, prompt, model).await
+        let res = self.exec_prompt_json(ctx, prompt, model).await?;
+        let serialized = serde_json::to_string(&res.result)?;
+        Ok(ProviderResponse::new(serialized, res.tokens))
     }
 
     async fn exec_prompt_json(
@@ -328,12 +330,12 @@ impl Provider for OpenAICompatible {
         Ok(ProviderResponse::new(response.to_owned(), tokens))
     }
 
-    async fn exec_prompt_json(
+    async fn exec_prompt_json_as_text(
         &self,
         ctx: &scripting::CtxPart,
         prompt: &prompt::Internal,
         model: &str,
-    ) -> ModuleResult<ProviderResponse<serde_json::Map<String, serde_json::Value>>> {
+    ) -> ModuleResult<ProviderResponse<String>> {
         let mut request = serde_json::json!({
             "model": model,
             "messages": prompt.to_openai_messages()?,
@@ -394,11 +396,7 @@ impl Provider for OpenAICompatible {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
 
-        let response = sanitize_json_str(response);
-        let parsed =
-            serde_json::from_str(&response).with_context(|| format!("parsing {response:?}"))?;
-
-        Ok(ProviderResponse::new(parsed, tokens))
+        Ok(ProviderResponse::new(response.to_owned(), tokens))
     }
 }
 

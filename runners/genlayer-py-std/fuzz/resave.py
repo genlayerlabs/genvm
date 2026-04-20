@@ -10,6 +10,8 @@ out = sys.argv[2]
 in_dir = Path(inp)
 
 for path in in_dir.iterdir():
+	if path.is_dir():
+		continue
 	data = path.read_bytes()
 	name = hashlib.sha3_256(data).digest().hex()
 	Path(out).joinpath(name).write_bytes(data)

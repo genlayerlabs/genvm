@@ -16,7 +16,7 @@ pub mod raw {
     unsafe extern "C" {
         pub fn storage_read(slot: *const u8, index: u32, buf: *mut u8, buf_len: u32) -> u32;
 
-        pub fn storage_write(slot: *const u8, index: i32, buf: *const u8, buf_len: u32) -> u32;
+        pub fn storage_write(slot: *const u8, index: u32, buf: *const u8, buf_len: u32) -> u32;
 
         pub fn get_balance(address: *const u8, result: *mut u8) -> u32;
 
@@ -96,6 +96,7 @@ impl std::error::Error for WasiError {}
 /// # Requirements
 /// * Sub-VM must have read storage permission
 /// * `index + buf.len()` must not overflow
+#[inline(always)]
 pub fn storage_read(slot: &[u8; 32], index: u32, buf: &mut [u8]) -> Result<(), WasiError> {
     let ret =
         unsafe { raw::storage_read(slot.as_ptr(), index, buf.as_mut_ptr(), buf.len() as u32) };
@@ -114,7 +115,8 @@ pub fn storage_read(slot: &[u8; 32], index: u32, buf: &mut [u8]) -> Result<(), W
 /// * Sub-VM must have write storage permission
 /// * `index + buf.len()` must not overflow
 /// * Storage slot must not be locked (unless sender is in upgraders list)
-pub fn storage_write(slot: &[u8; 32], index: i32, buf: &[u8]) -> Result<(), WasiError> {
+#[inline(always)]
+pub fn storage_write(slot: &[u8; 32], index: u32, buf: &[u8]) -> Result<(), WasiError> {
     let ret = unsafe { raw::storage_write(slot.as_ptr(), index, buf.as_ptr(), buf.len() as u32) };
 
     WasiError::from_code(ret)

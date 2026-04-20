@@ -948,7 +948,7 @@ dependencies = [
 
 [[package]]
 name = "genlayer_calldata"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "arbitrary",
  "bytes",
@@ -961,7 +961,7 @@ dependencies = [
 
 [[package]]
 name = "genlayer_sdk"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "arbitrary",
  "bytes",
@@ -976,7 +976,7 @@ dependencies = [
 
 [[package]]
 name = "genvm"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "afl",
  "anyhow",

@@ -50,9 +50,9 @@ impl CtxPart {
                 .await
                 .map(|resp| resp.map(llm_iface::PromptAnswerData::Text)),
             prompt::ExtendedOutputFormat::JSON => provider
-                .exec_prompt_json(dflt, prompt, model)
+                .exec_prompt_json_as_text(dflt, prompt, model)
                 .await
-                .map(|resp| resp.map(llm_iface::PromptAnswerData::Object)),
+                .map(|resp| resp.map(llm_iface::PromptAnswerData::Text)),
             prompt::ExtendedOutputFormat::Bool => provider
                 .exec_prompt_bool_reason(dflt, prompt, model)
                 .await
