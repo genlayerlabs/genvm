@@ -1,5 +1,7 @@
 { pkgs
-, system ? "x86_64-linux"
+# Default to the current build host so the rust toolchain matches —
+# otherwise darwin hosts would try to exec an x86_64-linux cargo binary.
+, system ? pkgs.stdenv.hostPlatform.system
 , withLinters ? false
 , withZig ? true
 , ...
@@ -63,17 +65,21 @@ in pkgs.stdenvNoCC.mkDerivation rec {
 	nativeBuildInputs = [ pkgs.makeWrapper ];
 
 	buildInputs = [
-		pkgs.glibc
 		pkgs.zlib
 		pkgs.bash
 		pkgs.gcc.cc.lib
 
 		zig
-	];
+	] ++ pkgs.lib.optional pkgs.stdenv.isLinux pkgs.glibc;
 
 	dontAutoPatchelf = true;
 
-	fixupPhase = ''
+	# ELF-patching is Linux-only: the rust toolchain binaries on darwin
+	# are Mach-O and resolve dylibs via install names, not rpath. String
+	# interpolations like `${pkgs.glibc}/lib/ld-linux-x86-64.so.2` also
+	# force nix to realize glibc which doesn't exist on darwin, so we gate
+	# the whole block behind `isLinux`.
+	fixupPhase = if pkgs.stdenv.isLinux then ''
 		SEARCH_DIRS="$out/bin"
 		if [[ "${system}" == "x86_64-linux" ]]
 		then
@@ -82,10 +88,6 @@ in pkgs.stdenvNoCC.mkDerivation rec {
 		if [[ "${system}" == "aarch64-linux" ]]
 		then
 			SEARCH_DIRS="$SEARCH_DIRS $out/lib/rustlib/aarch64-unknown-linux-gnu/bin"
-		fi
-		if [[ "${system}" == "aarch64-darwin" ]]
-		then
-			SEARCH_DIRS="$SEARCH_DIRS $out/lib/rustlib/aarch64-apple-darwin/bin"
 		fi
 		find $SEARCH_DIRS -type f -executable | while read binary; do
 			if file "$binary" | grep -q "ELF"
@@ -108,6 +110,9 @@ in pkgs.stdenvNoCC.mkDerivation rec {
 			fi
 		done
 
+		runHook postInstall
+	'' else ''
+		# darwin: rust toolchain ships Mach-O binaries; no patching needed.
 		runHook postInstall
 	'';
 

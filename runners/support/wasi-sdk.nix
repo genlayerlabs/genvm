@@ -3,20 +3,51 @@
 , ...
 }:
 let
-	wasi-sdk-raw = (pkgs.fetchzip {
+	# wasi-sdk ships binaries per host platform — linux x86_64/arm64 and
+	# macOS arm64/x86_64. The WASM output is platform-agnostic, but the
+	# toolchain itself is native to the build host.
+	tarballs = {
+		"x86_64-linux" = {
+			url = "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-linux.tar.gz";
+			hash = "sha256-/cyLxhFsfBBQxn4NrhLdbgHjU3YUjYhPnvquWJodcO8=";
+		};
+		"aarch64-linux" = {
+			url = "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-arm64-linux.tar.gz";
+			# Populate on first arm64-linux build: nix will report the correct
+			# sha256 and swap this placeholder in.
+			hash = lib.fakeHash;
+		};
+		"aarch64-darwin" = {
+			url = "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-arm64-macos.tar.gz";
+			hash = lib.fakeHash;
+		};
+		"x86_64-darwin" = {
+			url = "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-macos.tar.gz";
+			hash = lib.fakeHash;
+		};
+	};
+	system = pkgs.stdenv.hostPlatform.system;
+	artifact = tarballs.${system} or
+		(throw "wasi-sdk: no packaged tarball for ${system}");
+
+	wasi-sdk-raw = pkgs.fetchzip {
 		name = "wasi-sdk-raw";
-		url = "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-linux.tar.gz";
-		hash = "sha256-/cyLxhFsfBBQxn4NrhLdbgHjU3YUjYhPnvquWJodcO8=";
-	});
+		url = artifact.url;
+		hash = artifact.hash;
+	};
 	wasi-sdk = pkgs.stdenvNoCC.mkDerivation {
 		name = "wasi-sdk";
 		version = "24.0";
 
 		src = wasi-sdk-raw;
 
-		buildInputs = [pkgs.libgcc pkgs.texinfo];
+		# autoPatchelf is Linux-only; on darwin the toolchain ships as
+		# Mach-O binaries that don't need ELF patching.
+		buildInputs =
+			lib.optionals pkgs.stdenv.isLinux [ pkgs.libgcc pkgs.texinfo ];
 
-		nativeBuildInputs = [pkgs.autoPatchelfHook];
+		nativeBuildInputs =
+			lib.optional pkgs.stdenv.isLinux pkgs.autoPatchelfHook;
 
 		dontConfigure = true;
 		dontBuild = true;
@@ -24,7 +55,9 @@ let
 		installPhase = ''
 			mkdir -p "$out"
 			cp -r * "$out/"
-			autoPatchelf "$out"
+			${lib.optionalString pkgs.stdenv.isLinux ''
+				autoPatchelf "$out"
+			''}
 
 			"$out/bin/clang" --version
 		'';

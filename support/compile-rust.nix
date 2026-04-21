@@ -83,8 +83,11 @@ stdenv.mkDerivation (
 		cargoDeps = importCargoLock cargoLock;
 		inherit buildAndTestSubdir;
 
+		# `/build` is hardcoded in the Linux sandbox layout; on darwin the
+		# equivalent write-root is set by the builder as TMPDIR. We resolve
+		# it at build time via a placeholder and substitute before cargo runs.
 		RUSTFLAGS =
-			"-C target-feature=-crt-static -l dylib=c -L /build/libs -C link-arg=-dynamic "
+			"-C target-feature=-crt-static -l dylib=c -L @LIBS_DIR@ -C link-arg=-dynamic "
 			+ (args.RUSTFLAGS or "");
 
 		hardeningDisable = ["all"];
@@ -99,9 +102,11 @@ stdenv.mkDerivation (
 				cargoSetupHook
 				rust-pkg
 				zig
-				pkgs.glibc
 				pkgs.libllvm
-			];
+			]
+			# glibc on the host is Linux-only — zig vendors its own libc for
+			# cross-compiling to linux targets, so darwin hosts don't need it.
+			++ lib.optional pkgs.stdenv.isLinux pkgs.glibc;
 
 		buildInputs =
 			buildInputs
@@ -111,18 +116,23 @@ stdenv.mkDerivation (
 
 		PKG_CONFIG_ALLOW_CROSS = 1;
 
+		# `/build/libs` was the Linux-sandbox-specific staging dir for
+		# extraLibs. On darwin that path isn't writable — use TMPDIR and
+		# rewrite RUSTFLAGS's @LIBS_DIR@ placeholder at build time.
 		postUnpack =
 			''
 				eval "$cargoDepsHook"
 
-				mkdir -p /build/libs
+				LIBS_DIR="$TMPDIR/__libs"
+				mkdir -p "$LIBS_DIR"
+				export RUSTFLAGS="''${RUSTFLAGS//@LIBS_DIR@/$LIBS_DIR}"
 
 				export RUST_LOG=${logLevel}
 			''
 			+ (args.postUnpack or "")
 			+ "\n"
 			+ builtins.concatStringsSep "\n" (
-				builtins.map (x: "cp ${x}/lib/* /build/libs/") extraLibs
+				builtins.map (x: ''cp ${x}/lib/* "$LIBS_DIR/"'') extraLibs
 			);
 
 		configurePhase =
@@ -140,7 +150,7 @@ stdenv.mkDerivation (
 		buildPhase = ''
 			runHook preBuild
 
-			ls -l /build/libs/
+			ls -l "$LIBS_DIR/"
 
 			echo "PATH=$PATH"
 			echo "RUSTFLAGS=$RUSTFLAGS"
@@ -162,7 +172,7 @@ stdenv.mkDerivation (
 
 				for i in $(patchelf --print-needed target/__out)
 				do
-					if [[ "$i" == /build/libs/* ]]
+					if [[ "$i" == "$LIBS_DIR"/* ]]
 					then
 						echo "Replacing $i with $(basename $i)"
 						patchelf --replace-needed "$i" "$(basename $i)" target/__out
