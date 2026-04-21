@@ -116,6 +116,17 @@ in pkgs.stdenvNoCC.mkDerivation rec {
 		runHook postInstall
 	'';
 
+	# zig-cc wrappers are only needed for cross-compilation. When host ==
+	# target (e.g. aarch64-darwin → aarch64-apple-darwin) the native
+	# rustc + stdenv cc handles linking directly and accepts darwin-
+	# specific flags (`-Wl,-exported_symbols_list`, `-framework`, ...)
+	# that our zig-cc wrapper currently strips. Only route aarch64-darwin
+	# through zig-cc when we're cross-compiling to it.
+	darwinCrossCargoFlags = pkgs.lib.optionalString (!pkgs.stdenv.isDarwin) ''
+		--set CC_aarch64_apple_darwin zig-cc-arm64-macos \
+		--set CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER zig-cc-arm64-macos \
+	'';
+
 	installPhase = ''
 		mkdir -p $out
 		for i in $(find . -type d -maxdepth 2 -mindepth 1) ;
@@ -132,11 +143,9 @@ in pkgs.stdenvNoCC.mkDerivation rec {
 			--set CC_x86_64_unknown_linux_gnu zig-cc-amd64-linux-gnu \
 			--set CC_aarch64_unknown_linux_musl zig-cc-arm64-linux \
 			--set CC_aarch64_unknown_linux_gnu zig-cc-arm64-linux-gnu \
-			--set CC_aarch64_apple_darwin zig-cc-arm64-macos \
 			--set CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER zig-cc-amd64-linux \
 			--set CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER zig-cc-arm64-linux \
-			--set CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER zig-cc-arm64-macos \
-			--prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath buildInputs}"
+			${darwinCrossCargoFlags}--prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath buildInputs}"
 
 			#--set CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER zig-cc-arm64-linux-gnu \
 			#--set CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER zig-cc-amd64-linux-gnu \
