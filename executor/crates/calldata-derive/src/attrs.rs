@@ -5,6 +5,9 @@ pub struct ContainerAttrs {
     /// For enums: internally tagged with this field name.
     /// `#[calldata(tag = "type")]`
     pub tag: Option<String>,
+    /// For enums: untagged representation.
+    /// `#[calldata(untagged)]`
+    pub untagged: bool,
 }
 
 /// Field/variant-level attributes (`#[calldata(...)]` on fields or enum variants).
@@ -22,6 +25,7 @@ pub struct FieldAttrs {
 impl ContainerAttrs {
     pub fn from_ast(attrs: &[syn::Attribute]) -> syn::Result<Self> {
         let mut tag = None;
+        let mut untagged = false;
 
         for attr in attrs {
             if !attr.path().is_ident("calldata") {
@@ -38,11 +42,22 @@ impl ContainerAttrs {
                     }
                     return Ok(());
                 }
+                if meta.path.is_ident("untagged") {
+                    untagged = true;
+                    return Ok(());
+                }
                 Err(meta.error("unknown calldata container attribute"))
             })?;
         }
 
-        Ok(ContainerAttrs { tag })
+        if tag.is_some() && untagged {
+            return Err(syn::Error::new_spanned(
+                &attrs[0],
+                "`tag` and `untagged` are mutually exclusive",
+            ));
+        }
+
+        Ok(ContainerAttrs { tag, untagged })
     }
 }
 

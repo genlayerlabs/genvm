@@ -296,9 +296,7 @@ pub mod llm {
 
     pub use genlayer_sdk::abi::gl_call::llm_iface::{
         OutputFormat, PromptEqComparativePayload, PromptEqNonComparativeLeaderPayload,
-        PromptEqNonComparativeValidatorPayload, PromptIDVarsComparative,
-        PromptIDVarsNonComparativeLeader, PromptIDVarsNonComparativeValidator, PromptPayload,
-        PromptTemplatePayload,
+        PromptEqNonComparativeValidatorPayload, PromptPayload, PromptTemplatePayload,
     };
 
     #[derive(Serialize, Deserialize, genlayer_calldata::Encode, genlayer_calldata::Decode)]
@@ -325,6 +323,7 @@ pub mod llm {
         genlayer_calldata::Decode,
     )]
     #[serde(untagged)]
+    #[calldata(untagged)]
     pub enum PromptAnswerData {
         Text(String),
         Bool(bool),
@@ -376,7 +375,11 @@ pub mod web {
         #[calldata(rename = "text")]
         Text(String),
         #[serde(rename = "image", with = "serde_bytes")]
-        #[calldata(rename = "image")]
+        #[calldata(
+            rename = "image",
+            serialize_with = ::genlayer_calldata::codec::as_bytes::serialize,
+            deserialize_with = ::genlayer_calldata::codec::as_bytes::deserialize,
+        )]
         Image(Vec<u8>),
     }
 }

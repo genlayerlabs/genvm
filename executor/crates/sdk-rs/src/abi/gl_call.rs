@@ -192,6 +192,10 @@ pub mod web_iface {
         pub headers: BTreeMap<String, bytes::Bytes>,
 
         #[serde(with = "serde_bytes")]
+        #[calldata(
+            serialize_with = genlayer_calldata::codec::as_bytes::serialize,
+            deserialize_with = genlayer_calldata::codec::as_bytes::deserialize,
+        )]
         pub body: Vec<u8>,
     }
 
@@ -205,7 +209,11 @@ pub mod web_iface {
         pub headers: BTreeMap<String, bytes::Bytes>,
 
         #[serde(with = "serde_bytes", default = "default_none")]
-        #[calldata(default = default_none)]
+        #[calldata(
+            default = default_none,
+            serialize_with = genlayer_calldata::codec::as_bytes::serialize,
+            deserialize_with = genlayer_calldata::codec::as_bytes::deserialize,
+        )]
         pub body: Option<Vec<u8>>,
         #[serde(default = "default_false")]
         #[calldata(default = default_false)]
@@ -230,34 +238,6 @@ pub mod llm_iface {
         JSON,
     }
 
-    /// Variables for EqComparative prompt template.
-    #[derive(Clone, PartialEq, Serialize, Deserialize, Encode, Decode, Debug)]
-    #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-    pub struct PromptIDVarsComparative {
-        pub leader_answer: String,
-        pub validator_answer: String,
-        pub principle: String,
-    }
-
-    /// Variables for EqNonComparativeValidator prompt template.
-    #[derive(Clone, PartialEq, Serialize, Deserialize, Encode, Decode, Debug)]
-    #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-    pub struct PromptIDVarsNonComparativeValidator {
-        pub task: String,
-        pub criteria: String,
-        pub input: String,
-        pub output: String,
-    }
-
-    /// Variables for EqNonComparativeLeader prompt template.
-    #[derive(Clone, PartialEq, Serialize, Deserialize, Encode, Decode, Debug)]
-    #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-    pub struct PromptIDVarsNonComparativeLeader {
-        pub task: String,
-        pub criteria: String,
-        pub input: String,
-    }
-
     fn default_text() -> OutputFormat {
         OutputFormat::Text
     }
@@ -277,32 +257,199 @@ pub mod llm_iface {
     #[derive(Clone, PartialEq, Serialize, Deserialize, Encode, Decode, Debug)]
     #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
     pub struct PromptEqComparativePayload {
-        #[serde(flatten)]
-        pub vars: PromptIDVarsComparative,
+        pub leader_answer: String,
+        pub validator_answer: String,
+        pub principle: String,
     }
 
     #[derive(Clone, PartialEq, Serialize, Deserialize, Encode, Decode, Debug)]
     #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
     pub struct PromptEqNonComparativeValidatorPayload {
-        #[serde(flatten)]
-        pub vars: PromptIDVarsNonComparativeValidator,
+        pub task: String,
+        pub criteria: String,
+        pub input: String,
+        pub output: String,
     }
 
     #[derive(Clone, PartialEq, Serialize, Deserialize, Encode, Decode, Debug)]
     #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
     pub struct PromptEqNonComparativeLeaderPayload {
-        #[serde(flatten)]
-        pub vars: PromptIDVarsNonComparativeLeader,
+        pub task: String,
+        pub criteria: String,
+        pub input: String,
     }
 
     /// Payload for ExecPromptTemplate operations.
-    #[derive(Clone, PartialEq, Serialize, Deserialize, Encode, Decode, Debug)]
+    #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
     #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
     #[serde(tag = "template")]
     pub enum PromptTemplatePayload {
         EqComparative(PromptEqComparativePayload),
         EqNonComparativeValidator(PromptEqNonComparativeValidatorPayload),
         EqNonComparativeLeader(PromptEqNonComparativeLeaderPayload),
+    }
+
+    const TEMPLATE_TAG: &str = "template";
+
+    impl<W: genlayer_calldata::Writer> genlayer_calldata::codec::Encode<W> for PromptTemplatePayload {
+        type Error = W::Error;
+
+        fn encode(&self, enc: &mut genlayer_calldata::Encoder<W>) -> Result<(), W::Error> {
+            match self {
+                // fields sorted: leader_answer, principle, template, validator_answer
+                PromptTemplatePayload::EqComparative(p) => {
+                    enc.start_map(4)?;
+                    enc.push_map_k("leader_answer")?;
+                    p.leader_answer.encode(enc)?;
+                    enc.push_map_k("principle")?;
+                    p.principle.encode(enc)?;
+                    enc.push_map_k(TEMPLATE_TAG)?;
+                    enc.push_str("EqComparative")?;
+                    enc.push_map_k("validator_answer")?;
+                    p.validator_answer.encode(enc)?;
+                }
+                // fields sorted: criteria, input, output, task, template
+                PromptTemplatePayload::EqNonComparativeValidator(p) => {
+                    enc.start_map(5)?;
+                    enc.push_map_k("criteria")?;
+                    p.criteria.encode(enc)?;
+                    enc.push_map_k("input")?;
+                    p.input.encode(enc)?;
+                    enc.push_map_k("output")?;
+                    p.output.encode(enc)?;
+                    enc.push_map_k("task")?;
+                    p.task.encode(enc)?;
+                    enc.push_map_k(TEMPLATE_TAG)?;
+                    enc.push_str("EqNonComparativeValidator")?;
+                }
+                // fields sorted: criteria, input, task, template
+                PromptTemplatePayload::EqNonComparativeLeader(p) => {
+                    enc.start_map(4)?;
+                    enc.push_map_k("criteria")?;
+                    p.criteria.encode(enc)?;
+                    enc.push_map_k("input")?;
+                    p.input.encode(enc)?;
+                    enc.push_map_k("task")?;
+                    p.task.encode(enc)?;
+                    enc.push_map_k(TEMPLATE_TAG)?;
+                    enc.push_str("EqNonComparativeLeader")?;
+                }
+            }
+            Ok(())
+        }
+    }
+
+    impl genlayer_calldata::codec::Decode for PromptTemplatePayload {
+        fn decode<D: genlayer_calldata::codec::Deserializer>(
+            deserializer: D,
+        ) -> Result<Self, genlayer_calldata::codec::Error> {
+            use genlayer_calldata::Value;
+            use genlayer_calldata::codec::{Error, MapAccess, ValueDeserializer, Visitor};
+            use std::collections::BTreeMap;
+
+            struct V;
+            impl Visitor for V {
+                type Value = PromptTemplatePayload;
+
+                fn visit_map<A: MapAccess>(
+                    self,
+                    _len: u64,
+                    mut map: A,
+                ) -> Result<PromptTemplatePayload, Error> {
+                    let mut entries = BTreeMap::<String, Value>::new();
+                    while let Some((key, val)) = map.next_element::<Value>()? {
+                        entries.insert(key.to_owned(), val);
+                    }
+
+                    let tag_val = entries
+                        .remove(TEMPLATE_TAG)
+                        .ok_or(Error::FieldMissing(TEMPLATE_TAG))?;
+                    let Value::Str(tag_str) = tag_val else {
+                        return Err(Error::Unexpected("expected string for template tag"));
+                    };
+
+                    match tag_str.as_str() {
+                        "EqComparative" => {
+                            let leader_answer = entries
+                                .remove("leader_answer")
+                                .ok_or(Error::FieldMissing("leader_answer"))?;
+                            let validator_answer = entries
+                                .remove("validator_answer")
+                                .ok_or(Error::FieldMissing("validator_answer"))?;
+                            let principle = entries
+                                .remove("principle")
+                                .ok_or(Error::FieldMissing("principle"))?;
+                            Ok(PromptTemplatePayload::EqComparative(
+                                PromptEqComparativePayload {
+                                    leader_answer: genlayer_calldata::codec::Decode::decode(
+                                        ValueDeserializer(leader_answer),
+                                    )?,
+                                    validator_answer: genlayer_calldata::codec::Decode::decode(
+                                        ValueDeserializer(validator_answer),
+                                    )?,
+                                    principle: genlayer_calldata::codec::Decode::decode(
+                                        ValueDeserializer(principle),
+                                    )?,
+                                },
+                            ))
+                        }
+                        "EqNonComparativeValidator" => {
+                            let task = entries.remove("task").ok_or(Error::FieldMissing("task"))?;
+                            let criteria = entries
+                                .remove("criteria")
+                                .ok_or(Error::FieldMissing("criteria"))?;
+                            let input = entries
+                                .remove("input")
+                                .ok_or(Error::FieldMissing("input"))?;
+                            let output = entries
+                                .remove("output")
+                                .ok_or(Error::FieldMissing("output"))?;
+                            Ok(PromptTemplatePayload::EqNonComparativeValidator(
+                                PromptEqNonComparativeValidatorPayload {
+                                    task: genlayer_calldata::codec::Decode::decode(
+                                        ValueDeserializer(task),
+                                    )?,
+                                    criteria: genlayer_calldata::codec::Decode::decode(
+                                        ValueDeserializer(criteria),
+                                    )?,
+                                    input: genlayer_calldata::codec::Decode::decode(
+                                        ValueDeserializer(input),
+                                    )?,
+                                    output: genlayer_calldata::codec::Decode::decode(
+                                        ValueDeserializer(output),
+                                    )?,
+                                },
+                            ))
+                        }
+                        "EqNonComparativeLeader" => {
+                            let task = entries.remove("task").ok_or(Error::FieldMissing("task"))?;
+                            let criteria = entries
+                                .remove("criteria")
+                                .ok_or(Error::FieldMissing("criteria"))?;
+                            let input = entries
+                                .remove("input")
+                                .ok_or(Error::FieldMissing("input"))?;
+                            Ok(PromptTemplatePayload::EqNonComparativeLeader(
+                                PromptEqNonComparativeLeaderPayload {
+                                    task: genlayer_calldata::codec::Decode::decode(
+                                        ValueDeserializer(task),
+                                    )?,
+                                    criteria: genlayer_calldata::codec::Decode::decode(
+                                        ValueDeserializer(criteria),
+                                    )?,
+                                    input: genlayer_calldata::codec::Decode::decode(
+                                        ValueDeserializer(input),
+                                    )?,
+                                },
+                            ))
+                        }
+                        other => Err(Error::Custom(format!("unknown template variant: {other}"))),
+                    }
+                }
+            }
+
+            deserializer.deserialize(V)
+        }
     }
 }
 

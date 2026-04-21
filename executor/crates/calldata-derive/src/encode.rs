@@ -155,7 +155,9 @@ fn encode_named_fields(
 // ── Enums ────────────────────────────────────────────────────────────
 
 fn encode_enum(data: &syn::DataEnum, container: &ContainerAttrs) -> syn::Result<TokenStream> {
-    if let Some(tag_field) = &container.tag {
+    if container.untagged {
+        encode_enum_untagged(data)
+    } else if let Some(tag_field) = &container.tag {
         encode_enum_tagged(data, tag_field)
     } else {
         encode_enum_external(data)
@@ -182,7 +184,11 @@ fn encode_enum_external(data: &syn::DataEnum) -> syn::Result<TokenStream> {
 
                 Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
                     let fattrs = FieldAttrs::from_ast(&fields.unnamed[0].attrs)?;
-                    let inner_encode = if let Some(func) = &fattrs.serialize_with {
+                    let ser_fn = fattrs
+                        .serialize_with
+                        .as_ref()
+                        .or(vattrs.serialize_with.as_ref());
+                    let inner_encode = if let Some(func) = ser_fn {
                         quote! { #func(__inner, __enc)?; }
                     } else {
                         quote! { genlayer_calldata::codec::Encode::encode(__inner, __enc)?; }
@@ -263,6 +269,119 @@ fn encode_enum_external(data: &syn::DataEnum) -> syn::Result<TokenStream> {
                         Self::#variant_ident { #(#all_idents),* } => {
                             __enc.start_map(1)?;
                             __enc.push_map_k(#wire)?;
+                            __enc.start_map(#inner_len)?;
+                            #(#field_encodes)*
+                            Ok(())
+                        }
+                    })
+                }
+            }
+        })
+        .collect::<syn::Result<Vec<_>>>()?;
+
+    Ok(quote! {
+        match self {
+            #(#arms)*
+        }
+    })
+}
+
+/// Untagged: each variant is encoded as its bare payload.
+fn encode_enum_untagged(data: &syn::DataEnum) -> syn::Result<TokenStream> {
+    let arms = data
+        .variants
+        .iter()
+        .map(|v| {
+            let variant_ident = &v.ident;
+            let vattrs = FieldAttrs::from_ast(&v.attrs)?;
+
+            match &v.fields {
+                Fields::Unit => Ok(quote! {
+                    Self::#variant_ident => {
+                        __enc.push_null()?;
+                        Ok(())
+                    }
+                }),
+
+                Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
+                    let fattrs = FieldAttrs::from_ast(&fields.unnamed[0].attrs)?;
+                    let ser_fn = fattrs
+                        .serialize_with
+                        .as_ref()
+                        .or(vattrs.serialize_with.as_ref());
+                    let inner_encode = if let Some(func) = ser_fn {
+                        quote! { #func(__inner, __enc) }
+                    } else {
+                        quote! { genlayer_calldata::codec::Encode::encode(__inner, __enc) }
+                    };
+                    Ok(quote! {
+                        Self::#variant_ident(__inner) => {
+                            #inner_encode
+                        }
+                    })
+                }
+
+                Fields::Unnamed(fields) => {
+                    let n = fields.unnamed.len();
+                    let bindings: Vec<_> = (0..n)
+                        .map(|i| {
+                            syn::Ident::new(&format!("__f{i}"), proc_macro2::Span::call_site())
+                        })
+                        .collect();
+                    let field_encodes = fields
+                        .unnamed
+                        .iter()
+                        .zip(&bindings)
+                        .map(|(f, b)| {
+                            let fattrs = FieldAttrs::from_ast(&f.attrs)?;
+                            if let Some(func) = &fattrs.serialize_with {
+                                Ok(quote! { #func(#b, __enc)?; })
+                            } else {
+                                Ok(quote! { genlayer_calldata::codec::Encode::encode(#b, __enc)?; })
+                            }
+                        })
+                        .collect::<syn::Result<Vec<_>>>()?;
+                    let len = n as u64;
+                    Ok(quote! {
+                        Self::#variant_ident(#(#bindings),*) => {
+                            __enc.start_array(#len)?;
+                            #(#field_encodes)*
+                            Ok(())
+                        }
+                    })
+                }
+
+                Fields::Named(fields) => {
+                    let mut entries: Vec<(String, &syn::Ident, FieldAttrs)> = Vec::new();
+                    for f in &fields.named {
+                        let ident = f.ident.as_ref().unwrap();
+                        let attrs = FieldAttrs::from_ast(&f.attrs)?;
+                        let w = attrs.wire_name(ident);
+                        entries.push((w, ident, attrs));
+                    }
+                    entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+                    let inner_len = entries.len() as u64;
+                    let all_idents: Vec<_> = fields
+                        .named
+                        .iter()
+                        .map(|f| f.ident.as_ref().unwrap())
+                        .collect();
+
+                    let field_encodes = entries.iter().map(|(w, ident, attrs)| {
+                        let val = if let Some(func) = &attrs.serialize_with {
+                            quote! { #func(#ident, __enc)?; }
+                        } else {
+                            quote! { genlayer_calldata::codec::Encode::encode(#ident, __enc)?; }
+                        };
+                        quote! {
+                            __enc.push_map_k(#w)?;
+                            #val
+                        }
+                    });
+
+                    Ok(quote! {
+                        Self::#variant_ident { #(#all_idents),* } => {
                             __enc.start_map(#inner_len)?;
                             #(#field_encodes)*
                             Ok(())

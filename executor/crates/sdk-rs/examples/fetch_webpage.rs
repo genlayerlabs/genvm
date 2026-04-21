@@ -18,16 +18,26 @@ use serde::{Deserialize, Serialize};
 const TARGET_URL: &str = "https://test-server.genlayer.com/static/genvm/hello.html";
 
 /// Request to run a non-deterministic operation with leader/validator consensus
-#[derive(Serialize)]
+#[derive(Serialize, genlayer_calldata::Decode, genlayer_calldata::Encode, Debug, Clone)]
 struct RunNondet {
     #[serde(with = "serde_bytes")]
+    #[calldata(
+        serialize_with = genlayer_calldata::codec::as_bytes::serialize,
+        deserialize_with = genlayer_calldata::codec::as_bytes::deserialize,
+    )]
     data_leader: Vec<u8>,
     #[serde(with = "serde_bytes")]
+    #[calldata(
+        serialize_with = genlayer_calldata::codec::as_bytes::serialize,
+        deserialize_with = genlayer_calldata::codec::as_bytes::deserialize,
+    )]
     data_validator: Vec<u8>,
 }
 
 /// Operations that can be performed in consensus stage
-#[derive(Serialize, Deserialize)]
+#[derive(
+    Serialize, Deserialize, genlayer_calldata::Decode, genlayer_calldata::Encode, Debug, Clone,
+)]
 enum NondetOp {
     FetchWebpage,
 }
@@ -96,7 +106,7 @@ fn gl_call_with_response(message: &Value) -> Result<Value, ContractError> {
 }
 
 /// Response from WebRender
-#[derive(Deserialize)]
+#[derive(genlayer_calldata::Decode)]
 struct WebRenderResponse {
     text: String,
 }
@@ -131,8 +141,7 @@ fn run_nondet(entry_data: &[u8]) -> Result<Value, ContractError> {
         data_validator: entry_data.to_vec(),
     };
 
-    let message =
-        calldata::to_value(&request).map_err(|e| ContractError::DecodeError(e.to_string()))?;
+    let message = calldata::to_value(&request);
     let wrapped = Value::Map(std::collections::BTreeMap::from([(
         "RunNondet".to_owned(),
         message,
@@ -174,7 +183,7 @@ pub struct FetchWebpageHandler;
 impl Contract for FetchWebpageHandler {
     fn handle_main(&mut self, _message: MessageData, _data: bytes::Bytes) -> Result<Value, String> {
         let op = NondetOp::FetchWebpage;
-        let entry_data = calldata::encode(&calldata::to_value(&op).map_err(|e| e.to_string())?);
+        let entry_data = calldata::encode(&calldata::to_value(&op));
 
         run_nondet(&entry_data).map_err(|e| e.to_string())
     }

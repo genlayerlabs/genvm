@@ -48,10 +48,18 @@ fn decode_struct(name: &syn::Ident, fields: &Fields) -> syn::Result<TokenStream>
         Fields::Unnamed(fields) => {
             if fields.unnamed.len() == 1 {
                 let ty = &fields.unnamed[0].ty;
-                Ok(quote! {
-                    <#ty as genlayer_calldata::codec::Decode>::decode(__deserializer)
-                        .map(#name)
-                })
+                let attrs = FieldAttrs::from_ast(&fields.unnamed[0].attrs)?;
+                if let Some(func) = &attrs.deserialize_with {
+                    Ok(quote! {
+                        let __val = <genlayer_calldata::Value as genlayer_calldata::codec::Decode>::decode(__deserializer)?;
+                        #func(__val).map(#name)
+                    })
+                } else {
+                    Ok(quote! {
+                        <#ty as genlayer_calldata::codec::Decode>::decode(__deserializer)
+                            .map(#name)
+                    })
+                }
             } else {
                 let len = fields.unnamed.len();
                 let field_tys: Vec<_> = fields.unnamed.iter().map(|f| &f.ty).collect();
@@ -186,7 +194,9 @@ fn decode_enum(
     data: &syn::DataEnum,
     container: &ContainerAttrs,
 ) -> syn::Result<TokenStream> {
-    if let Some(tag_field) = &container.tag {
+    if container.untagged {
+        decode_enum_untagged(name, data)
+    } else if let Some(tag_field) = &container.tag {
         decode_enum_tagged(name, data, tag_field)
     } else {
         decode_enum_external(name, data)
@@ -201,6 +211,182 @@ fn variant_names_list(data: &syn::DataEnum) -> Vec<String> {
             attrs.variant_wire_name(&v.ident)
         })
         .collect()
+}
+
+/// Untagged: try each variant in order; first successful decode wins.
+fn decode_enum_untagged(name: &syn::Ident, data: &syn::DataEnum) -> syn::Result<TokenStream> {
+    let variant_attempts: Vec<_> = data
+        .variants
+        .iter()
+        .map(|v| {
+            let variant_ident = &v.ident;
+            let vattrs = FieldAttrs::from_ast(&v.attrs)?;
+            decode_untagged_variant_attempt(name, variant_ident, &v.fields, &vattrs)
+        })
+        .collect::<syn::Result<Vec<_>>>()?;
+
+    let all_names = variant_names_list(data);
+    let names_joined = all_names.join(", ");
+
+    Ok(quote! {
+        // Decode into a Value first, then try each variant.
+        let __val = <genlayer_calldata::Value as genlayer_calldata::codec::Decode>::decode(__deserializer)?;
+        #(#variant_attempts)*
+        ::core::result::Result::Err(genlayer_calldata::codec::Error::Custom(
+            ::std::format!("data did not match any variant of untagged enum, expected one of: {}", #names_joined)
+        ))
+    })
+}
+
+/// Generate a single attempt to decode a Value into a specific untagged variant.
+fn decode_untagged_variant_attempt(
+    enum_name: &syn::Ident,
+    variant_ident: &syn::Ident,
+    fields: &Fields,
+    vattrs: &FieldAttrs,
+) -> syn::Result<TokenStream> {
+    match fields {
+        Fields::Unit => Ok(quote! {
+            if matches!(&__val, genlayer_calldata::Value::Null) {
+                return ::core::result::Result::Ok(#enum_name::#variant_ident);
+            }
+        }),
+
+        Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
+            let ty = &fields.unnamed[0].ty;
+            let fattrs = FieldAttrs::from_ast(&fields.unnamed[0].attrs)?;
+            let de_fn = fattrs
+                .deserialize_with
+                .as_ref()
+                .or(vattrs.deserialize_with.as_ref());
+            let attempt = if let Some(func) = de_fn {
+                quote! {
+                    if let ::core::result::Result::Ok(__v) = #func(__val.clone()) {
+                        return ::core::result::Result::Ok(#enum_name::#variant_ident(__v));
+                    }
+                }
+            } else {
+                quote! {
+                    if let ::core::result::Result::Ok(__v) =
+                        <#ty as genlayer_calldata::codec::Decode>::decode(
+                            genlayer_calldata::codec::ValueDeserializer(__val.clone())
+                        )
+                    {
+                        return ::core::result::Result::Ok(#enum_name::#variant_ident(__v));
+                    }
+                }
+            };
+            Ok(attempt)
+        }
+
+        Fields::Unnamed(fields) => {
+            let n = fields.unnamed.len();
+            let tys: Vec<_> = fields.unnamed.iter().map(|f| &f.ty).collect();
+            let vars: Vec<_> = (0..n)
+                .map(|i| syn::Ident::new(&format!("__f{i}"), proc_macro2::Span::call_site()))
+                .collect();
+            Ok(quote! {
+                if let ::core::result::Result::Ok(__v) = (|| -> ::core::result::Result<#enum_name, genlayer_calldata::codec::Error> {
+                    let genlayer_calldata::Value::Array(__arr) = __val.clone() else {
+                        return ::core::result::Result::Err(
+                            genlayer_calldata::codec::Error::Unexpected("expected array for tuple variant")
+                        );
+                    };
+                    if __arr.len() != #n {
+                        return ::core::result::Result::Err(
+                            genlayer_calldata::codec::Error::Custom(
+                                ::std::format!("expected {} elements, got {}", #n, __arr.len())
+                            )
+                        );
+                    }
+                    let mut __iter = __arr.into_iter();
+                    #(
+                        let #vars = <#tys as genlayer_calldata::codec::Decode>::decode(
+                            genlayer_calldata::codec::ValueDeserializer(__iter.next().unwrap())
+                        )?;
+                    )*
+                    ::core::result::Result::Ok(#enum_name::#variant_ident(#(#vars),*))
+                })() {
+                    return ::core::result::Result::Ok(__v);
+                }
+            })
+        }
+
+        Fields::Named(fields) => {
+            let mut entries: Vec<(String, &syn::Ident, &syn::Type, FieldAttrs)> = Vec::new();
+            for f in &fields.named {
+                let ident = f.ident.as_ref().unwrap();
+                let attrs = FieldAttrs::from_ast(&f.attrs)?;
+                let wire = attrs.wire_name(ident);
+                entries.push((wire, ident, &f.ty, attrs));
+            }
+
+            let option_vars: Vec<_> = entries
+                .iter()
+                .map(|(_, ident, _, _)| {
+                    syn::Ident::new(&format!("__f_{ident}"), proc_macro2::Span::call_site())
+                })
+                .collect();
+
+            let field_tys: Vec<_> = entries.iter().map(|(_, _, ty, _)| *ty).collect();
+
+            let match_arms = entries
+                .iter()
+                .zip(&option_vars)
+                .map(|((wire, _, ty, attrs), var)| {
+                    let decode_expr = if let Some(func) = &attrs.deserialize_with {
+                        quote! { #func(__v)? }
+                    } else {
+                        quote! {
+                            <#ty as genlayer_calldata::codec::Decode>::decode(
+                                genlayer_calldata::codec::ValueDeserializer(__v)
+                            )?
+                        }
+                    };
+                    quote! { #wire => { #var = ::core::option::Option::Some(#decode_expr); } }
+                });
+
+            let field_constructions =
+                entries
+                    .iter()
+                    .zip(&option_vars)
+                    .map(|((wire, ident, _, attrs), var)| {
+                        if let Some(default_fn) = &attrs.default {
+                            quote! { #ident: #var.unwrap_or_else(#default_fn) }
+                        } else {
+                            quote! {
+                                #ident: #var.ok_or(
+                                    genlayer_calldata::codec::Error::FieldMissing(#wire)
+                                )?
+                            }
+                        }
+                    });
+
+            Ok(quote! {
+                if let ::core::result::Result::Ok(__v) = (|| -> ::core::result::Result<#enum_name, genlayer_calldata::codec::Error> {
+                    let genlayer_calldata::Value::Map(__inner_map) = __val.clone() else {
+                        return ::core::result::Result::Err(
+                            genlayer_calldata::codec::Error::Unexpected("expected map for struct variant")
+                        );
+                    };
+                    #(
+                        let mut #option_vars: ::core::option::Option<#field_tys> = ::core::option::Option::None;
+                    )*
+                    for (__k, __v) in __inner_map {
+                        match __k.as_str() {
+                            #(#match_arms)*
+                            _ => {}
+                        }
+                    }
+                    ::core::result::Result::Ok(#enum_name::#variant_ident {
+                        #(#field_constructions),*
+                    })
+                })() {
+                    return ::core::result::Result::Ok(__v);
+                }
+            })
+        }
+    }
 }
 
 /// Externally tagged: `"Variant"` or `{"Variant": <payload>}`.
@@ -232,7 +418,7 @@ fn decode_enum_external(name: &syn::Ident, data: &syn::DataEnum) -> syn::Result<
             let vattrs = FieldAttrs::from_ast(&v.attrs)?;
             let wire = vattrs.variant_wire_name(&v.ident);
             let ident = &v.ident;
-            let decode_body = decode_variant_payload(name, ident, &v.fields)?;
+            let decode_body = decode_variant_payload(name, ident, &v.fields, &vattrs)?;
             Ok(quote! { #wire => { #decode_body } })
         })
         .collect::<syn::Result<Vec<_>>>()?;
@@ -294,16 +480,29 @@ fn decode_variant_payload(
     enum_name: &syn::Ident,
     variant_ident: &syn::Ident,
     fields: &Fields,
+    vattrs: &FieldAttrs,
 ) -> syn::Result<TokenStream> {
     match fields {
         Fields::Unit => unreachable!(),
 
         Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
             let ty = &fields.unnamed[0].ty;
+            let fattrs = FieldAttrs::from_ast(&fields.unnamed[0].attrs)?;
+            let de_fn = fattrs
+                .deserialize_with
+                .as_ref()
+                .or(vattrs.deserialize_with.as_ref());
+            let decode_inner = if let Some(func) = de_fn {
+                quote! { #func(__val)? }
+            } else {
+                quote! {
+                    <#ty as genlayer_calldata::codec::Decode>::decode(
+                        genlayer_calldata::codec::ValueDeserializer(__val)
+                    )?
+                }
+            };
             Ok(quote! {
-                let __inner = <#ty as genlayer_calldata::codec::Decode>::decode(
-                    genlayer_calldata::codec::ValueDeserializer(__val)
-                )?;
+                let __inner = #decode_inner;
                 ::core::result::Result::Ok(#enum_name::#variant_ident(__inner))
             })
         }
