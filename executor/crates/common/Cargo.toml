@@ -8,6 +8,7 @@ debug = true
 
 [dependencies]
 genlayer_sdk = { path = "../sdk-rs", default-features = false, features = ["arbitrary"] }
+genlayer_calldata = { path = "../calldata" }
 
 anyhow = { version = "1.0.97", features = ["backtrace"] }
 libc = "0.2"

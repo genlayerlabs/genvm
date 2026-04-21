@@ -125,10 +125,7 @@ fn create_user_error_stream_handler() -> StreamHandler {
                     ])),
                 );
 
-                let Ok(answer) = genvm_common::calldata::to_value(&response) else {
-                    return;
-                };
-                let message = genvm_common::calldata::encode(&answer);
+                let message = genvm_common::calldata::encode_obj(&response);
 
                 if crate::common::write_message(&mut stream, &message)
                     .await

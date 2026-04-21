@@ -1003,6 +1003,7 @@ dependencies = [
  "crossbeam",
  "dashmap",
  "futures-util",
+ "genlayer_calldata",
  "genlayer_sdk",
  "genvm-common",
  "genvm-modules-interfaces",
@@ -1050,6 +1051,7 @@ dependencies = [
  "clap",
  "crossbeam",
  "dashmap",
+ "genlayer_calldata",
  "genlayer_sdk",
  "hex",
  "libc",
@@ -1069,7 +1071,10 @@ name = "genvm-modules-interfaces"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "genlayer_calldata",
  "genlayer_sdk",
+ "num-bigint",
+ "num-traits",
  "regex",
  "serde",
  "serde_bytes",

@@ -42,6 +42,26 @@ pub struct Metrics {
     pub hosts: Box<[host::Metrics]>,
 }
 
+impl<W: calldata::Writer> calldata::codec::Encode<W> for Metrics {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
+        enc.start_map(4)?;
+        enc.push_map_k("hosts")?;
+        enc.start_array(self.hosts.len() as u64)?;
+        for h in self.hosts.iter() {
+            calldata::codec::Encode::encode(h, enc)?;
+        }
+        enc.push_map_k("llm_module")?;
+        calldata::codec::Encode::encode(&self.llm_module, enc)?;
+        enc.push_map_k("supervisor")?;
+        calldata::codec::Encode::encode(&self.supervisor, enc)?;
+        enc.push_map_k("web_module")?;
+        calldata::codec::Encode::encode(&self.web_module, enc)?;
+        Ok(())
+    }
+}
+
 pub fn create_supervisor(
     config: &config::Config,
     mut hosts: Vec<Host>,
@@ -265,15 +285,32 @@ pub async fn run_with(
         gvm: &'a crate::Metrics,
     }
 
+    impl<W: calldata::Writer> calldata::codec::Encode<W> for AllMetrics<'_> {
+        type Error = W::Error;
+
+        fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
+            enc.start_map(3)?;
+
+            enc.push_map_k("gvm")?;
+            calldata::codec::Encode::encode(self.gvm, enc)?;
+
+            enc.push_map_k("llm")?;
+            calldata::codec::Encode::encode(&self.llm, enc)?;
+
+            enc.push_map_k("web")?;
+            calldata::codec::Encode::encode(&self.web, enc)?;
+
+            Ok(())
+        }
+    }
+
     let all_metrics = AllMetrics {
         web: web_metrics,
         llm: llm_metrics,
         gvm: &supervisor.shared_data.metrics,
     };
 
-    let all_metrics = calldata::to_value(&all_metrics)
-        .ok()
-        .unwrap_or(calldata::Value::Null);
+    let all_metrics = calldata::to_value(&all_metrics);
 
     log_info!(metrics:serde = all_metrics; "metrics");
 

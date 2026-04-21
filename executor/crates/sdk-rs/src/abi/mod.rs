@@ -25,8 +25,9 @@ pub mod gl_call;
 pub mod wasi;
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, calldata::Encode)]
 #[serde(deny_unknown_fields, tag = "type")]
+#[calldata(tag = "type")]
 pub enum ExecutionEmission {
     EthSend {
         address: calldata::Address,

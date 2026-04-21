@@ -2,6 +2,11 @@ use std::collections::BTreeMap;
 
 use serde_derive::{Deserialize, Serialize};
 
+use genlayer_calldata::codec::{
+    Decode, Deserializer, Encode, Error as CalldataError, MapAccess, SeqAccess, Visitor,
+};
+use genlayer_calldata::{Encoder, Writer};
+
 pub trait Web {
     fn get_webpage(
         &self,
@@ -97,11 +102,193 @@ impl GenericValue {
     }
 }
 
+// ── Manual Encode for GenericValue ──────────────────────────────────
+
+impl<W: Writer> Encode<W> for GenericValue {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut Encoder<W>) -> std::result::Result<(), Self::Error> {
+        match self {
+            GenericValue::Null => enc.push_null(),
+            GenericValue::Bool(v) => enc.push_bool(*v),
+            GenericValue::Str(s) => enc.push_str(s),
+            GenericValue::Bytes(b) => enc.push_bytes(b),
+            GenericValue::Number(f) => {
+                let i = *f as i64;
+                assert!(
+                    i as f64 == *f,
+                    "GenericValue::Number({f}) is not an exact integer, cannot encode as bigint"
+                );
+                enc.push_i64(i)
+            }
+            GenericValue::Map(map) => {
+                enc.start_map(map.len() as u64)?;
+                for (k, v) in map {
+                    enc.push_map_k(k)?;
+                    v.encode(enc)?;
+                }
+                Ok(())
+            }
+            GenericValue::Array(arr) => {
+                enc.start_array(arr.len() as u64)?;
+                for item in arr {
+                    item.encode(enc)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+// ── Manual Decode for GenericValue ──────────────────────────────────
+
+impl Decode for GenericValue {
+    fn decode<D: Deserializer>(deserializer: D) -> std::result::Result<Self, CalldataError> {
+        struct V;
+        impl Visitor for V {
+            type Value = GenericValue;
+
+            fn visit_null(self) -> std::result::Result<GenericValue, CalldataError> {
+                Ok(GenericValue::Null)
+            }
+
+            fn visit_bool(self, value: bool) -> std::result::Result<GenericValue, CalldataError> {
+                Ok(GenericValue::Bool(value))
+            }
+
+            fn visit_str(self, value: &str) -> std::result::Result<GenericValue, CalldataError> {
+                Ok(GenericValue::Str(value.to_owned()))
+            }
+
+            fn visit_bytes(self, value: &[u8]) -> std::result::Result<GenericValue, CalldataError> {
+                Ok(GenericValue::Bytes(value.to_vec()))
+            }
+
+            fn visit_bigint(
+                self,
+                value: &num_bigint::BigInt,
+            ) -> std::result::Result<GenericValue, CalldataError> {
+                use num_traits::ToPrimitive;
+                let f = value.to_f64().ok_or_else(|| {
+                    CalldataError::Custom(format!("bigint {value} cannot be represented as f64"))
+                })?;
+                Ok(GenericValue::Number(f))
+            }
+
+            fn visit_bigint_owned(
+                self,
+                value: num_bigint::BigInt,
+            ) -> std::result::Result<GenericValue, CalldataError> {
+                self.visit_bigint(&value)
+            }
+
+            fn visit_i64(self, value: i64) -> std::result::Result<GenericValue, CalldataError> {
+                Ok(GenericValue::Number(value as f64))
+            }
+
+            fn visit_u64(self, value: u64) -> std::result::Result<GenericValue, CalldataError> {
+                Ok(GenericValue::Number(value as f64))
+            }
+
+            fn visit_seq<A: SeqAccess>(
+                self,
+                len: u64,
+                mut seq: A,
+            ) -> std::result::Result<GenericValue, CalldataError> {
+                let mut result = Vec::with_capacity(len as usize);
+                while let Some(elem) = seq.next_element::<GenericValue>()? {
+                    result.push(elem);
+                }
+                Ok(GenericValue::Array(result))
+            }
+
+            fn visit_map<A: MapAccess>(
+                self,
+                _len: u64,
+                mut map: A,
+            ) -> std::result::Result<GenericValue, CalldataError> {
+                let mut result = BTreeMap::new();
+                while let Some((key, value)) = map.next_element::<GenericValue>()? {
+                    result.insert(key.to_owned(), value);
+                }
+                Ok(GenericValue::Map(result))
+            }
+        }
+        deserializer.deserialize(V)
+    }
+}
+
+// ── Encode / Decode for Result<T> ─────────────────────────────────
+
 #[derive(Clone, Deserialize, Serialize)]
 pub enum Result<T> {
     Ok(T),
     UserError(GenericValue),
     FatalError(String),
+}
+
+// Externally tagged enum: {"Ok": T} | {"UserError": GenericValue} | {"FatalError": String}
+impl<W: Writer, T: Encode<W, Error = W::Error>> Encode<W> for Result<T> {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut Encoder<W>) -> std::result::Result<(), Self::Error> {
+        enc.start_map(1)?;
+        match self {
+            Result::Ok(v) => {
+                enc.push_map_k("Ok")?;
+                v.encode(enc)?;
+            }
+            Result::UserError(v) => {
+                enc.push_map_k("UserError")?;
+                v.encode(enc)?;
+            }
+            Result::FatalError(s) => {
+                enc.push_map_k("FatalError")?;
+                enc.push_str(s)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+// Externally tagged enum: "Ok" or {"Ok": T}, {"UserError": GenericValue}, {"FatalError": String}
+impl<T: Decode> Decode for Result<T> {
+    fn decode<D: Deserializer>(deserializer: D) -> std::result::Result<Self, CalldataError> {
+        struct V<T>(std::marker::PhantomData<T>);
+        impl<T: Decode> Visitor for V<T> {
+            type Value = Result<T>;
+
+            fn visit_map<A: MapAccess>(
+                self,
+                _len: u64,
+                mut map: A,
+            ) -> std::result::Result<Result<T>, CalldataError> {
+                let (key, val) = map.next_element::<genlayer_calldata::Value>()?.ok_or(
+                    CalldataError::Custom("expected single-key map for Result enum variant".into()),
+                )?;
+                match key {
+                    "FatalError" => {
+                        let inner =
+                            String::decode(genlayer_calldata::codec::ValueDeserializer(val))?;
+                        Ok(Result::FatalError(inner))
+                    }
+                    "Ok" => {
+                        let inner = T::decode(genlayer_calldata::codec::ValueDeserializer(val))?;
+                        Ok(Result::Ok(inner))
+                    }
+                    "UserError" => {
+                        let inner =
+                            GenericValue::decode(genlayer_calldata::codec::ValueDeserializer(val))?;
+                        Ok(Result::UserError(inner))
+                    }
+                    _ => Err(CalldataError::Custom(format!(
+                        "unknown variant `{key}`, expected one of: FatalError, Ok, UserError"
+                    ))),
+                }
+            }
+        }
+        deserializer.deserialize(V(std::marker::PhantomData))
+    }
 }
 
 pub mod llm {
@@ -114,7 +301,7 @@ pub mod llm {
         PromptTemplatePayload,
     };
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Serialize, Deserialize, genlayer_calldata::Encode, genlayer_calldata::Decode)]
     pub enum Message {
         Prompt {
             payload: PromptPayload,
@@ -128,14 +315,30 @@ pub mod llm {
         GetStats,
     }
 
-    #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[derive(
+        Serialize,
+        Deserialize,
+        Debug,
+        PartialEq,
+        Eq,
+        genlayer_calldata::Encode,
+        genlayer_calldata::Decode,
+    )]
     #[serde(untagged)]
     pub enum PromptAnswerData {
         Text(String),
         Bool(bool),
     }
 
-    #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[derive(
+        Serialize,
+        Deserialize,
+        Debug,
+        PartialEq,
+        Eq,
+        genlayer_calldata::Encode,
+        genlayer_calldata::Decode,
+    )]
     pub struct PromptAnswer {
         pub data: PromptAnswerData,
         pub consumed_gen: u64,
@@ -157,20 +360,23 @@ pub mod web {
         RenderPayload, RequestMethod, RequestPayload, Response,
     };
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Serialize, Deserialize, genlayer_calldata::Encode, genlayer_calldata::Decode)]
     pub enum Message {
         Render(RenderPayload, u32),
         Request(RequestPayload, u32),
         GetStats,
     }
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Serialize, Deserialize, genlayer_calldata::Encode, genlayer_calldata::Decode)]
     pub enum RenderAnswer {
         #[serde(rename = "response")]
+        #[calldata(rename = "response")]
         Response(Response),
         #[serde(rename = "text")]
+        #[calldata(rename = "text")]
         Text(String),
         #[serde(rename = "image", with = "serde_bytes")]
+        #[calldata(rename = "image")]
         Image(Vec<u8>),
     }
 }
@@ -184,7 +390,18 @@ pub struct HostData {
 }
 
 #[derive(
-    Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Copy, PartialOrd, Ord,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    Copy,
+    PartialOrd,
+    Ord,
+    genlayer_calldata::Encode,
+    genlayer_calldata::Decode,
 )]
 pub struct GenVMId(pub u64);
 
@@ -194,8 +411,160 @@ impl std::fmt::Display for GenVMId {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, genlayer_calldata::Encode, genlayer_calldata::Decode)]
 pub struct GenVMHello {
     pub genvm_id: GenVMId,
+    #[calldata(deserialize_with = decode_host_data)]
     pub host_data: HostData,
+}
+
+/// Decode a `serde_json::Value` from a calldata `Value`.
+fn calldata_to_json(
+    val: genlayer_calldata::Value,
+) -> std::result::Result<serde_json::Value, CalldataError> {
+    match val {
+        genlayer_calldata::Value::Null => Ok(serde_json::Value::Null),
+        genlayer_calldata::Value::Bool(b) => Ok(serde_json::Value::Bool(b)),
+        genlayer_calldata::Value::Number(n) => {
+            use num_traits::ToPrimitive;
+            let i = n.to_i64().ok_or_else(|| {
+                CalldataError::Custom(format!("bigint {n} cannot be represented as i64"))
+            })?;
+            Ok(serde_json::Value::Number(serde_json::Number::from(i)))
+        }
+        genlayer_calldata::Value::Str(s) => Ok(serde_json::Value::String(s)),
+        genlayer_calldata::Value::Bytes(_) => Err(CalldataError::Custom(
+            "cannot convert calldata bytes to serde_json::Value".into(),
+        )),
+        genlayer_calldata::Value::Address(_) => Err(CalldataError::Custom(
+            "cannot convert calldata address to serde_json::Value".into(),
+        )),
+        genlayer_calldata::Value::Array(arr) => {
+            let mut out = Vec::with_capacity(arr.len());
+            for v in arr {
+                out.push(calldata_to_json(v)?);
+            }
+            Ok(serde_json::Value::Array(out))
+        }
+        genlayer_calldata::Value::Map(map) => {
+            let mut out = serde_json::Map::new();
+            for (k, v) in map {
+                out.insert(k, calldata_to_json(v)?);
+            }
+            Ok(serde_json::Value::Object(out))
+        }
+    }
+}
+
+/// Custom deserializer for HostData from calldata. HostData is encoded as a map
+/// with known fields `node_address` and `tx_id`; everything else goes into `rest`.
+fn decode_host_data(val: genlayer_calldata::Value) -> std::result::Result<HostData, CalldataError> {
+    let genlayer_calldata::Value::Map(mut map) = val else {
+        return Err(CalldataError::Unexpected("expected map for HostData"));
+    };
+
+    let node_address = map
+        .remove("node_address")
+        .ok_or(CalldataError::Custom("missing field `node_address`".into()))
+        .and_then(|v| match v {
+            genlayer_calldata::Value::Str(s) => Ok(s),
+            _ => Err(CalldataError::Unexpected(
+                "expected string for node_address",
+            )),
+        })?;
+
+    let tx_id = map
+        .remove("tx_id")
+        .ok_or(CalldataError::Custom("missing field `tx_id`".into()))
+        .and_then(|v| match v {
+            genlayer_calldata::Value::Str(s) => Ok(s),
+            _ => Err(CalldataError::Unexpected("expected string for tx_id")),
+        })?;
+
+    let mut rest = serde_json::Map::new();
+    for (k, v) in map {
+        rest.insert(k, calldata_to_json(v)?);
+    }
+
+    Ok(HostData {
+        node_address,
+        tx_id,
+        rest,
+    })
+}
+
+// ── Manual Encode for HostData (flattened serde_json fields) ───────
+
+/// Helper: encode a serde_json::Value into calldata format.
+fn encode_json_value<W: Writer>(
+    value: &serde_json::Value,
+    enc: &mut Encoder<W>,
+) -> std::result::Result<(), W::Error> {
+    match value {
+        serde_json::Value::Null => enc.push_null(),
+        serde_json::Value::Bool(b) => enc.push_bool(*b),
+        serde_json::Value::Number(n) => {
+            // JSON numbers: try i64, then u64, then error (no f64 in calldata)
+            if let Some(i) = n.as_i64() {
+                enc.push_i64(i)
+            } else if let Some(u) = n.as_u64() {
+                enc.push_u64(u)
+            } else {
+                panic!(
+                    "serde_json::Number({n}) cannot be represented as integer for calldata encoding"
+                );
+            }
+        }
+        serde_json::Value::String(s) => enc.push_str(s),
+        serde_json::Value::Array(arr) => {
+            enc.start_array(arr.len() as u64)?;
+            for item in arr {
+                encode_json_value(item, enc)?;
+            }
+            Ok(())
+        }
+        serde_json::Value::Object(map) => {
+            // serde_json::Map iteration order may not be sorted; collect and sort
+            let mut entries: Vec<_> = map.iter().collect();
+            entries.sort_by_key(|(k, _)| k.as_str());
+            enc.start_map(entries.len() as u64)?;
+            for (k, v) in entries {
+                enc.push_map_k(k)?;
+                encode_json_value(v, enc)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+impl<W: Writer> Encode<W> for HostData {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut Encoder<W>) -> std::result::Result<(), Self::Error> {
+        // Collect all keys: the two named fields + all keys from `rest`.
+        // Must be emitted in sorted order for the calldata map format.
+        let mut entries: Vec<(&str, Option<&serde_json::Value>)> = Vec::new();
+
+        // Sentinel: None means it's one of the named fields
+        entries.push(("node_address", None));
+        entries.push(("tx_id", None));
+
+        for (k, v) in &self.rest {
+            entries.push((k.as_str(), Some(v)));
+        }
+
+        entries.sort_by_key(|(k, _)| *k);
+
+        enc.start_map(entries.len() as u64)?;
+        for (key, json_val) in &entries {
+            enc.push_map_k(key)?;
+            match (key, json_val) {
+                (&"node_address", None) => enc.push_str(&self.node_address)?,
+                (&"tx_id", None) => enc.push_str(&self.tx_id)?,
+                (_, Some(v)) => encode_json_value(v, enc)?,
+                _ => unreachable!(),
+            }
+        }
+        Ok(())
+    }
 }

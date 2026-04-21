@@ -24,7 +24,7 @@ pub struct Module {
     metrics: sync::DArc<Metrics>,
 }
 
-#[derive(Default, Debug, serde::Serialize)]
+#[derive(Default, Debug, serde::Serialize, genlayer_calldata::Encode)]
 pub struct Metrics {
     pub calls: genvm_common::stats::metric::Count,
     pub time: stats::metric::Time,
@@ -118,8 +118,8 @@ impl Module {
 
     async fn send_impl<R, V>(&self, val: V) -> anyhow::Result<std::result::Result<R, GenericValue>>
     where
-        V: serde::Serialize,
-        R: serde::Serialize + serde::de::DeserializeOwned,
+        V: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible>,
+        R: calldata::codec::Decode,
     {
         self.metrics.calls.increment();
 
@@ -137,12 +137,14 @@ impl Module {
                 .await
                 .with_context(|| format!("connecting to {}", zelf.url))?;
 
-            let msg = calldata::to_value(&genvm_modules_interfaces::GenVMHello {
-                genvm_id: self.genvm_id,
-                host_data: self.host_data.clone(),
-            })?;
-
-            write_message(&mut stream, &calldata::encode(&msg)).await?;
+            write_message(
+                &mut stream,
+                &calldata::encode_obj(&genvm_modules_interfaces::GenVMHello {
+                    genvm_id: self.genvm_id,
+                    host_data: self.host_data.clone(),
+                }),
+            )
+            .await?;
 
             log_debug!(name = self.name; "connection to module initialized");
 
@@ -152,7 +154,7 @@ impl Module {
         match &mut zelf.stream {
             None => unreachable!(),
             Some(stream) => {
-                let val = calldata::to_value(&val)?;
+                let val = calldata::to_value(&val);
                 let payload = calldata::encode(&val);
                 write_message(stream, &payload).await?;
                 let response = read_message(stream).await?;
@@ -178,7 +180,7 @@ impl Module {
 
     pub async fn get_stats<V>(&self, val: V) -> anyhow::Result<calldata::Value>
     where
-        V: serde::Serialize,
+        V: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible>,
     {
         let zelf = self.imp.lock().await;
         let mut zelf = sync::Lock::new(zelf, self.metrics.gep(|x| &x.time));
@@ -186,9 +188,7 @@ impl Module {
         match &mut zelf.stream {
             None => Ok(calldata::Value::Null),
             Some(stream) => {
-                let val = calldata::to_value(&val)?;
-                let payload = calldata::encode(&val);
-                write_message(stream, &payload).await?;
+                write_message(stream, &calldata::encode_obj(&val)).await?;
                 let response = read_message(stream).await?;
 
                 let response = calldata::decode(&response)?;
@@ -200,8 +200,8 @@ impl Module {
 
     pub async fn send<R, V>(&self, val: V) -> anyhow::Result<std::result::Result<R, GenericValue>>
     where
-        V: serde::Serialize,
-        R: serde::Serialize + serde::de::DeserializeOwned,
+        V: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible>,
+        R: calldata::codec::Decode,
     {
         tokio::select! {
             _ = self.cancellation.chan.closed() => {

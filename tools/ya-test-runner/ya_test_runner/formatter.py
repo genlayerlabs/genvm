@@ -238,10 +238,15 @@ class TextFormatter(Formatter, Sink):
 					self._do_dump(f, ind + 1, v)
 		elif isinstance(data, str):
 			if '\n' in data:
-				for line in data.splitlines():
+				if data.startswith('$Bytes('):
 					f.write('  ' * ind)
-					f.write(_to_safe_str(line.rstrip()))
+					f.write(_to_safe_str(data))
 					f.write('\n')
+				else:
+					for line in data.splitlines():
+						f.write('  ' * ind)
+						f.write(_to_safe_str(line.rstrip()))
+						f.write('\n')
 			else:
 				f.write('  ' * ind)
 				f.write(_to_safe_str(repr(data)))

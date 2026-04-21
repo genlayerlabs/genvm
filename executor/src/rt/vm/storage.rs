@@ -36,6 +36,16 @@ pub struct Delta(
     #[serde(with = "serde_bytes")] Vec<u8>,
 );
 
+impl<W: calldata::Writer> calldata::codec::Encode<W> for Delta {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
+        enc.start_array(2)?;
+        enc.push_bytes(&self.0)?;
+        enc.push_bytes(&self.1)
+    }
+}
+
 pub trait HostStorage {
     fn storage_read(&mut self, slot_id: SlotID, index: u32, buf: &mut [u8]) -> anyhow::Result<()>;
 }

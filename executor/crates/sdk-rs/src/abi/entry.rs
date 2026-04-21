@@ -9,6 +9,46 @@ use crate::abi::consts::{EntryKind, ResultCode};
 use crate::calldata::{self, Address, Map, Value};
 use serde::{Deserialize, Serialize};
 
+fn decode_datetime_rfc3339(
+    val: calldata::Value,
+) -> Result<chrono::DateTime<chrono::Utc>, calldata::codec::Error> {
+    let calldata::Value::Str(s) = val else {
+        return Err(calldata::codec::Error::Unexpected(
+            "expected string for datetime",
+        ));
+    };
+    chrono::DateTime::parse_from_rfc3339(&s)
+        .map(|dt| dt.to_utc())
+        .map_err(|e| calldata::codec::Error::Custom(e.to_string()))
+}
+
+fn encode_entry_kind<W: calldata::Writer>(
+    ek: &EntryKind,
+    enc: &mut calldata::Encoder<W>,
+) -> Result<(), W::Error> {
+    enc.push_u64(*ek as u64)
+}
+
+fn decode_entry_kind(val: calldata::Value) -> Result<EntryKind, calldata::codec::Error> {
+    let calldata::Value::Number(n) = val else {
+        return Err(calldata::codec::Error::Unexpected(
+            "expected number for EntryKind",
+        ));
+    };
+    let v: u8 = <u8 as TryFrom<&num_bigint::BigInt>>::try_from(&n)
+        .map_err(|_| calldata::codec::Error::Custom("EntryKind out of range".into()))?;
+    EntryKind::try_from(v).map_err(|_| calldata::codec::Error::Custom("invalid EntryKind".into()))
+}
+
+fn encode_datetime_rfc3339<W: calldata::Writer>(
+    dt: &chrono::DateTime<chrono::Utc>,
+    enc: &mut calldata::Encoder<W>,
+) -> Result<(), W::Error> {
+    use chrono::SecondsFormat;
+    let s = dt.to_rfc3339_opts(SecondsFormat::AutoSi, true);
+    enc.push_str(&s)
+}
+
 fn entry_kind_as_int<S>(data: &EntryKind, s: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
@@ -55,6 +95,14 @@ where
     deserializer.deserialize_any(Visitor)
 }
 
+fn default_stack() -> Vec<Address> {
+    Vec::new()
+}
+
+fn default_bigint() -> num_bigint::BigInt {
+    num_bigint::BigInt::default()
+}
+
 fn default_datetime() -> chrono::DateTime<chrono::Utc> {
     chrono::DateTime::parse_from_rfc3339("2024-11-26T06:42:42.424242Z")
         .unwrap()
@@ -63,7 +111,7 @@ fn default_datetime() -> chrono::DateTime<chrono::Utc> {
 
 /// Core message data that represents the transaction context.
 /// This is the minimal set of information needed to process a contract call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, calldata::Encode, calldata::Decode)]
 pub struct MessageData {
     pub contract_address: Address,
     pub sender_address: Address,
@@ -71,14 +119,21 @@ pub struct MessageData {
     /// View methods call chain.
     /// It is empty for entrypoint (refer to [`contract_address`])
     #[serde(default)]
+    #[calldata(default = default_stack)]
     pub stack: Vec<Address>,
 
     pub chain_id: num_bigint::BigInt,
     #[serde(default)]
+    #[calldata(default = default_bigint)]
     pub value: num_bigint::BigInt,
     pub is_init: bool,
     /// Transaction timestamp
     #[serde(default = "default_datetime")]
+    #[calldata(
+        serialize_with = encode_datetime_rfc3339,
+        deserialize_with = decode_datetime_rfc3339
+    )]
+    #[calldata(default = default_datetime)]
     pub datetime: chrono::DateTime<chrono::Utc>,
 }
 
@@ -119,25 +174,36 @@ impl<'a> arbitrary::Arbitrary<'a> for MessageData {
 
 /// Flat struct with all fields manually listed (no flatten) to avoid serde's Content buffering
 /// which breaks type-name-based Address handling during deserialization.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, calldata::Encode, calldata::Decode)]
 pub struct ExtendedMessageFlat {
     // MessageData fields
     pub contract_address: Address,
     pub sender_address: Address,
     pub origin_address: Address,
     #[serde(default)]
+    #[calldata(default = default_stack)]
     pub stack: Vec<Address>,
     pub chain_id: num_bigint::BigInt,
     #[serde(default)]
+    #[calldata(default = default_bigint)]
     pub value: num_bigint::BigInt,
     pub is_init: bool,
     #[serde(default = "default_datetime")]
+    #[calldata(
+        serialize_with = encode_datetime_rfc3339,
+        deserialize_with = decode_datetime_rfc3339
+    )]
+    #[calldata(default = default_datetime)]
     pub datetime: chrono::DateTime<chrono::Utc>,
 
     // ExtendedMessage-specific fields
     #[serde(
         serialize_with = "entry_kind_as_int",
         deserialize_with = "entry_kind_from_int"
+    )]
+    #[calldata(
+        serialize_with = encode_entry_kind,
+        deserialize_with = decode_entry_kind
     )]
     pub entry_kind: EntryKind,
     pub entry_data: bytes::Bytes,
@@ -184,12 +250,12 @@ impl From<ExtendedMessage> for ExtendedMessageFlat {
 
 /// Extended message that includes entry point information.
 /// This is the full message passed to WebAssembly contracts via stdin.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, calldata::Encode)]
 pub struct ExtendedMessage {
-    #[serde(flatten)]
     pub message: MessageData,
 
     #[serde(serialize_with = "entry_kind_as_int")]
+    #[calldata(serialize_with = encode_entry_kind)]
     pub entry_kind: EntryKind,
     pub entry_data: bytes::Bytes,
 
@@ -546,9 +612,11 @@ pub mod wasi_only {
         let value = calldata::decode(&input).map_err(ContractMainError::MessageDecode)?;
         std::mem::drop(input);
 
-        let extended: ExtendedMessage = calldata::from_value(value).map_err(|e| {
+        let extended: ExtendedMessageFlat = calldata::from_value(value).map_err(|e| {
             ContractMainError::MessageDecode(calldata::DecodeError::Custom(e.to_string()))
         })?;
+
+        let extended: ExtendedMessage = extended.into();
 
         let mut handler = H::default();
 

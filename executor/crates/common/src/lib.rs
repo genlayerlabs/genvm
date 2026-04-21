@@ -20,7 +20,14 @@ pub mod domain {
     use bytes::Bytes;
     pub use genlayer_sdk::abi::entry::MessageData;
 
-    #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+    #[derive(
+        Debug,
+        Clone,
+        serde::Serialize,
+        serde::Deserialize,
+        genlayer_calldata::Encode,
+        genlayer_calldata::Decode,
+    )]
     pub struct ExecutionData {
         pub calldata: Bytes,
         pub message: MessageData,

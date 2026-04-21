@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use std::borrow::Cow;
 
+use crate::calldata;
+
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum ResultCode {
@@ -48,6 +50,14 @@ impl TryFrom<u8> for ResultCode {
         }
     }
 }
+
+impl<W: calldata::Writer> calldata::codec::Encode<W> for ResultCode {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
+        enc.push_u64(*self as u64)
+    }
+}
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum StorageType {
@@ -86,6 +96,14 @@ impl TryFrom<u8> for StorageType {
         }
     }
 }
+
+impl<W: calldata::Writer> calldata::codec::Encode<W> for StorageType {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
+        enc.push_u64(*self as u64)
+    }
+}
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum EntryKind {
@@ -122,6 +140,14 @@ impl TryFrom<u8> for EntryKind {
             2 => Ok(EntryKind::ConsensusStage),
             _ => Err(()),
         }
+    }
+}
+
+impl<W: calldata::Writer> calldata::codec::Encode<W> for EntryKind {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
+        enc.push_u64(*self as u64)
     }
 }
 pub mod memory_limiter_consts {

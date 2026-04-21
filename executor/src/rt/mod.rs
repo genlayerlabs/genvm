@@ -5,7 +5,7 @@ pub mod vm;
 
 use std::sync::Arc;
 
-#[derive(Default, Debug, serde::Serialize)]
+#[derive(Default, Debug, serde::Serialize, genlayer_calldata::Encode)]
 pub struct Metrics {
     precompile_hits: genvm_common::stats::metric::Count,
     compiled_modules: genvm_common::stats::metric::Count,

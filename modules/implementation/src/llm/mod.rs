@@ -22,6 +22,19 @@ pub(crate) struct Metrics {
     pub(crate) tokens: stats::metric::TokenMetricsMap,
 }
 
+impl<W: calldata::Writer> calldata::codec::Encode<W> for Metrics {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut calldata::Encoder<W>) -> std::result::Result<(), Self::Error> {
+        enc.start_map(2)?;
+        enc.push_map_k("scripting")?;
+        calldata::codec::Encode::encode(&self.scripting, enc)?;
+        enc.push_map_k("tokens")?;
+        calldata::codec::Encode::encode(&self.tokens, enc)?;
+        Ok(())
+    }
+}
+
 #[derive(clap::Args, Debug)]
 pub struct CliArgsRun {
     #[arg(long, default_value_t = String::from("${exeDir}/../config/genvm-module-llm.yaml"))]

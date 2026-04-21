@@ -346,29 +346,66 @@ pub async fn start_service(
 
 use serde_with::serde_as;
 
+fn decode_datetime_rfc3339(
+    val: calldata::Value,
+) -> std::result::Result<chrono::DateTime<chrono::Utc>, calldata::codec::Error> {
+    let calldata::Value::Str(s) = val else {
+        return Err(calldata::codec::Error::Unexpected(
+            "expected string for datetime",
+        ));
+    };
+    chrono::DateTime::parse_from_rfc3339(&s)
+        .map(|dt| dt.to_utc())
+        .map_err(|e| calldata::codec::Error::Custom(e.to_string()))
+}
+
+fn encode_datetime_rfc3339<W: calldata::Writer>(
+    dt: &chrono::DateTime<chrono::Utc>,
+    enc: &mut calldata::Encoder<W>,
+) -> std::result::Result<(), W::Error> {
+    use chrono::SecondsFormat;
+    let s = dt.to_rfc3339_opts(SecondsFormat::AutoSi, true);
+    enc.push_str(&s)
+}
+
+fn default_extra_args() -> Vec<String> {
+    Vec::new()
+}
+
+fn default_no_modules() -> bool {
+    false
+}
+
 #[serde_as]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, genlayer_calldata::Decode, genlayer_calldata::Encode,
+)]
 pub struct Request {
     pub major: u32,
     pub message: genvm_common::domain::MessageData,
     pub is_sync: bool,
     pub capture_output: bool,
     #[serde(default = "default_max_execution_minutes")]
+    #[calldata(default = default_max_execution_minutes)]
     pub max_execution_minutes: u64,
     pub data_fees_limit: num_bigint::BigInt,
     pub storage_page_cost: u32,
     pub receipt_word_cost: u32,
     pub host_data: String,
+    #[calldata(serialize_with = encode_datetime_rfc3339, deserialize_with = decode_datetime_rfc3339)]
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub host: String,
     #[serde(default)]
+    #[calldata(default = default_extra_args)]
     pub extra_args: Vec<String>,
     pub calldata: bytes::Bytes,
     pub code: Option<bytes::Bytes>,
     #[serde(default = "default_permissions")]
+    #[calldata(default = default_permissions)]
     pub permissions: String,
     /// If true, don't require modules even if permissions suggest they're needed
     #[serde(default)]
+    #[calldata(default = default_no_modules)]
     pub no_modules: bool,
     pub leader_nondet_results: Option<Vec<bytes::Bytes>>,
 }
@@ -906,8 +943,7 @@ pub async fn start_genvm(
         storage_page_cost: req.storage_page_cost,
         receipt_word_cost: req.receipt_word_cost,
     };
-    let execution_data_bytes =
-        genvm_common::calldata::encode(&genvm_common::calldata::to_value(&execution_data)?);
+    let execution_data_bytes = genvm_common::calldata::encode_obj(&execution_data);
 
     let execution_data_bytes = bytes::Bytes::from(execution_data_bytes);
 

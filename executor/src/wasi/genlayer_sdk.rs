@@ -365,17 +365,17 @@ async fn taskify<T>(
         + 'static,
 ) -> anyhow::Result<Box<[u8]>>
 where
-    T: serde::Serialize + Send,
+    T: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible> + Send,
 {
     match fut.await? {
         Ok(r) => {
-            let r = calldata::to_value(&r)?;
+            let r = calldata::to_value(&r);
             let data = calldata::Value::Map(BTreeMap::from([("ok".to_owned(), r)]));
 
             Ok(Box::from(calldata::encode(&data)))
         }
         Err(e) => {
-            let e = calldata::to_value(&e)?;
+            let e = calldata::to_value(&e);
             let data = calldata::Value::Map(BTreeMap::from([("error".to_owned(), e)]));
 
             Ok(Box::from(calldata::encode(&data)))
@@ -451,10 +451,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     calldata,
                     value,
                 };
-                let encoded = calldata::encode(
-                    &calldata::to_value(&emission)
-                        .map_err(|e| generated::types::Error::trap(e.into()))?,
-                );
+                let encoded = calldata::encode_obj(&emission);
                 consume_receipt_words(
                     &self.context.data.supervisor.shared_data,
                     calc_receipt_size(encoded.len()),
@@ -677,9 +674,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     value,
                     on,
                 };
-                let encoded = calldata::encode(&calldata::to_value(&emission).map_err(|e| {
-                    generated::types::Error::trap(crate::anyhow_to_wasmtime(e.into()))
-                })?);
+                let encoded = calldata::encode_obj(&emission);
                 consume_receipt_words(
                     &self.context.data.supervisor.shared_data,
                     calc_receipt_size(encoded.len()),
@@ -727,9 +722,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     on,
                     salt_nonce,
                 };
-                let encoded = calldata::encode(&calldata::to_value(&emission).map_err(|e| {
-                    generated::types::Error::trap(crate::anyhow_to_wasmtime(e.into()))
-                })?);
+                let encoded = calldata::encode_obj(&emission);
                 consume_receipt_words(
                     &self.context.data.supervisor.shared_data,
                     calc_receipt_size(encoded.len()),
@@ -1178,9 +1171,8 @@ impl Context {
     }
 
     pub fn log(&self) -> calldata::Value {
-        let msg =
-            calldata::to_value(&self.data.message_data).expect("failed to serialize message_data");
-        let conf = calldata::to_value(&self.data.conf).expect("failed to serialize conf");
+        let msg = calldata::to_value(&self.data.message_data);
+        let conf = calldata::to_value(&self.data.conf);
 
         calldata::Value::Map(BTreeMap::from([
             ("config".to_owned(), conf),

@@ -363,3 +363,149 @@ impl Value {
         matches!(self, Value::Null)
     }
 }
+
+impl serde::Serialize for Value {
+    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Value::Null => serializer.serialize_unit(),
+            Value::Bool(b) => serializer.serialize_bool(*b),
+            Value::Bytes(b) => serializer.serialize_bytes(b),
+            Value::Str(s) => serializer.serialize_str(s),
+            Value::Array(v) => v.serialize(serializer),
+            Value::Map(m) => {
+                use serde::ser::SerializeMap;
+                let mut map = serializer.serialize_map(Some(m.len()))?;
+                for (k, v) in m {
+                    map.serialize_entry(k, v)?;
+                }
+                map.end()
+            }
+            Value::Address(addr) => addr.serialize(serializer),
+            Value::Number(num) => {
+                if let Ok(num) = num.try_into() {
+                    let num: i64 = num;
+                    serializer.serialize_i64(num)
+                } else {
+                    num.serialize(serializer)
+                }
+            }
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Value {
+    fn deserialize<D>(deserializer: D) -> Result<Value, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct ValueVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for ValueVisitor {
+            type Value = Value;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("any valid calldata value")
+            }
+
+            fn visit_bool<E>(self, value: bool) -> Result<Value, E> {
+                Ok(Value::Bool(value))
+            }
+
+            fn visit_i64<E>(self, value: i64) -> Result<Value, E> {
+                Ok(Value::Number(num_bigint::BigInt::from(value)))
+            }
+
+            fn visit_i128<E>(self, value: i128) -> Result<Value, E> {
+                Ok(Value::Number(num_bigint::BigInt::from(value)))
+            }
+
+            fn visit_u64<E>(self, value: u64) -> Result<Value, E> {
+                Ok(Value::Number(num_bigint::BigInt::from(value)))
+            }
+
+            fn visit_u128<E>(self, value: u128) -> Result<Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Value::Number(num_bigint::BigInt::from(value)))
+            }
+
+            fn visit_f64<E>(self, value: f64) -> Result<Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Err(serde::de::Error::invalid_type(
+                    serde::de::Unexpected::Float(value),
+                    &self,
+                ))
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Value, E>
+            where
+                E: serde::de::Error,
+            {
+                self.visit_string(String::from(value))
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Value, E> {
+                Ok(Value::Str(value))
+            }
+
+            fn visit_none<E>(self) -> Result<Value, E> {
+                Ok(Value::Null)
+            }
+
+            fn visit_some<D>(self, deserializer: D) -> Result<Value, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                serde::Deserialize::deserialize(deserializer)
+            }
+
+            fn visit_unit<E>(self) -> Result<Value, E> {
+                Ok(Value::Null)
+            }
+
+            fn visit_seq<V>(self, mut visitor: V) -> Result<Value, V::Error>
+            where
+                V: serde::de::SeqAccess<'de>,
+            {
+                let mut vec = Vec::new();
+                while let Some(elem) = visitor.next_element()? {
+                    vec.push(elem);
+                }
+                Ok(Value::Array(vec))
+            }
+
+            fn visit_map<V>(self, mut visitor: V) -> Result<Value, V::Error>
+            where
+                V: serde::de::MapAccess<'de>,
+            {
+                let mut map = BTreeMap::new();
+                while let Some((k, v)) = visitor.next_entry()? {
+                    map.insert(k, v);
+                }
+                Ok(Value::Map(map))
+            }
+
+            fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Value::Bytes(v))
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Value::Bytes(v.to_owned()))
+            }
+        }
+
+        deserializer.deserialize_any(ValueVisitor)
+    }
+}

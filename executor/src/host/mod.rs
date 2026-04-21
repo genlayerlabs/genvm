@@ -29,7 +29,7 @@ pub struct Host {
     metrics: sync::DArc<Metrics>,
 }
 
-#[derive(Default, serde::Serialize, Debug)]
+#[derive(Default, serde::Serialize, Debug, genlayer_calldata::Encode)]
 pub struct Metrics {
     pub time: stats::metric::Time,
 }
@@ -114,14 +114,14 @@ pub fn encode_result(res: &Result<FullResult>) -> Result<Vec<u8>> {
     match res {
         Ok(d) => {
             let mut encoded = Vec::from([d.kind as u8]);
-            let as_value = calldata::to_value(d)?;
+            let as_value = calldata::to_value(d);
             calldata::encode_to(&mut calldata::Encoder::new(&mut encoded), &as_value)?;
             Ok(encoded)
         }
         Err(e) => {
             let mut encoded = Vec::from([ResultCode::InternalError as u8]);
             let fake_res = FullResult::new_internal_error(format!("{e:?}"));
-            let as_value = calldata::to_value(&fake_res)?;
+            let as_value = calldata::to_value(&fake_res);
             calldata::encode_to(&mut calldata::Encoder::new(&mut encoded), &as_value)?;
             Ok(encoded)
         }
@@ -147,7 +147,7 @@ pub fn all_useful_work_done() {
     std::process::exit(0);
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, genlayer_calldata::Encode)]
 pub struct FullResult {
     pub execution_hash: bytes::Bytes,
 
@@ -207,6 +207,31 @@ impl FullResult {
             data_fees_remaining: u64,
         }
 
+        impl<W: calldata::Writer> calldata::codec::Encode<W> for Hashable<'_> {
+            type Error = W::Error;
+
+            fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
+                enc.start_map(5)?;
+
+                enc.push_map_k("data")?;
+                calldata::codec::Encode::encode(self.data, enc)?;
+
+                enc.push_map_k("data_fees_remaining")?;
+                calldata::codec::Encode::encode(&self.data_fees_remaining, enc)?;
+
+                enc.push_map_k("fingerprint")?;
+                calldata::codec::Encode::encode(self.fingerprint, enc)?;
+
+                enc.push_map_k("kind")?;
+                calldata::codec::Encode::encode(self.kind, enc)?;
+
+                enc.push_map_k("storage_changes")?;
+                calldata::codec::Encode::encode(self.storage_changes, enc)?;
+
+                Ok(())
+            }
+        }
+
         let hashable = Hashable {
             kind: &rt_result.kind,
             data: &rt_result.data,
@@ -215,7 +240,7 @@ impl FullResult {
             data_fees_remaining,
         };
 
-        let as_value = calldata::to_value(&hashable).expect("failed to serialize hashable");
+        let as_value = calldata::to_value(&hashable);
         let mut enc = calldata::Encoder::new(Sha3Writer(sha3::Digest::new()));
         match calldata::encode_to(&mut enc, &as_value) {
             Ok(()) => {}

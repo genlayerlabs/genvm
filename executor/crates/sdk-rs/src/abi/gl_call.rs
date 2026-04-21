@@ -318,39 +318,6 @@ pub enum On {
     Accepted,
 }
 
-fn storage_type_from_bigint<'de, D>(deserializer: D) -> Result<public_abi::StorageType, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    struct Visitor;
-
-    impl serde::de::Visitor<'_> for Visitor {
-        type Value = public_abi::StorageType;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("a number")
-        }
-
-        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
-        where
-            E: serde::de::Error,
-        {
-            let as_u8: u8 = v.try_into().map_err(|_e| E::custom("out of range"))?;
-            public_abi::StorageType::try_from(as_u8).map_err(|_e| E::custom("out of range"))
-        }
-
-        fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
-        where
-            E: serde::de::Error,
-        {
-            let as_u8: u8 = v.try_into().map_err(|_e| E::custom("out of range"))?;
-            public_abi::StorageType::try_from(as_u8).map_err(|_e| E::custom("out of range"))
-        }
-    }
-
-    deserializer.deserialize_any(Visitor)
-}
-
 fn encode_storage_type<W: calldata::Writer>(
     st: &public_abi::StorageType,
     enc: &mut calldata::Encoder<W>,
@@ -385,9 +352,8 @@ pub enum TracePayload {
 /// Each variant corresponds to a specific blockchain operation that can be
 /// invoked via the [`super::wasi::gl_call`] function.
 #[allow(clippy::enum_variant_names)]
-#[derive(PartialEq, Debug, Deserialize, calldata::Encode, calldata::Decode)]
+#[derive(PartialEq, Debug, calldata::Encode, calldata::Decode)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[serde(deny_unknown_fields)]
 pub enum Message {
     EthCall {
         address: calldata::Address,
@@ -397,7 +363,6 @@ pub enum Message {
     CallContract {
         address: calldata::Address,
         calldata: calldata::Value,
-        #[serde(deserialize_with = "storage_type_from_bigint")]
         #[calldata(
             serialize_with = encode_storage_type,
             deserialize_with = decode_storage_type
@@ -455,6 +420,7 @@ pub enum Message {
     ExecPromptTemplate(llm_iface::PromptTemplatePayload),
 
     #[deprecated(note = "Use UserError. Will be removed before 1.0 release")]
+    #[allow(deprecated)]
     Rollback(calldata::Value),
     UserError(calldata::Value),
     Return(calldata::Value),

@@ -99,6 +99,7 @@ enum FieldAccess {
     /// `self.field_name`
     SelfDot,
     /// bare binding (used inside enum match arms)
+    #[allow(dead_code)]
     Binding,
 }
 

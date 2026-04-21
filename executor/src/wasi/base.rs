@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use crate::public_abi;
 
-#[derive(Clone, Copy, Serialize)]
+#[derive(Clone, Copy, Serialize, genlayer_calldata::Encode)]
 pub struct Config {
     pub needs_error_fingerprint: bool,
     pub is_deterministic: bool,

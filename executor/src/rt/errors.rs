@@ -168,7 +168,7 @@ impl std::fmt::Display for UserError {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq, genlayer_calldata::Encode)]
 pub struct Frame {
     pub module_name: String,
     pub func: u32,
@@ -177,9 +177,58 @@ pub struct Frame {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SingleMemoryFP(#[serde(with = "serde_bytes")] pub [u8; 32]);
 
+impl<W: calldata::Writer> calldata::codec::Encode<W> for SingleMemoryFP {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
+        enc.push_bytes(&self.0)
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 pub struct Fingerprint {
     pub frames: Vec<Frame>,
 
     pub module_instances: BTreeMap<String, wasmtime::ModuleFingerprint>,
+}
+
+fn encode_memory_fingerprint<W: calldata::Writer>(
+    mf: &wasmtime::MemoryFingerprint,
+    enc: &mut calldata::Encoder<W>,
+) -> Result<(), W::Error> {
+    enc.push_bytes(&mf.0)
+}
+
+fn encode_module_fingerprint<W: calldata::Writer>(
+    mfp: &wasmtime::ModuleFingerprint,
+    enc: &mut calldata::Encoder<W>,
+) -> Result<(), W::Error> {
+    // ModuleFingerprint has a single field: memories: Vec<MemoryFingerprint>
+    enc.start_map(1)?;
+    enc.push_map_k("memories")?;
+    enc.start_array(mfp.memories.len() as u64)?;
+    for mem in &mfp.memories {
+        encode_memory_fingerprint(mem, enc)?;
+    }
+    Ok(())
+}
+
+impl<W: calldata::Writer> calldata::codec::Encode<W> for Fingerprint {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
+        enc.start_map(2)?;
+
+        enc.push_map_k("frames")?;
+        calldata::codec::Encode::encode(&self.frames, enc)?;
+
+        enc.push_map_k("module_instances")?;
+        enc.start_map(self.module_instances.len() as u64)?;
+        for (k, v) in &self.module_instances {
+            enc.push_map_k(k)?;
+            encode_module_fingerprint(v, enc)?;
+        }
+
+        Ok(())
+    }
 }

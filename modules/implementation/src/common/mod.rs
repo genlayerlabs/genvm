@@ -214,12 +214,10 @@ async fn loop_one_inner_handle<T, R>(
     text: &[u8],
 ) -> ModuleResult<R>
 where
-    T: serde::de::DeserializeOwned + 'static,
+    T: calldata::codec::Decode + 'static,
 {
-    let payload = genvm_common::calldata::decode(text)
+    let payload = genvm_common::calldata::decode_obj(text)
         .with_context(|| format!("parsing calldata format {text:?}"))?;
-    let payload =
-        genvm_common::calldata::from_value(payload).with_context(|| "parsing calldata value")?;
     handler
         .handle(payload)
         .await
@@ -232,8 +230,8 @@ async fn loop_one_inner<T, R, S>(
     genvm_id: genvm_modules_interfaces::GenVMId,
 ) -> anyhow::Result<()>
 where
-    T: serde::de::DeserializeOwned + 'static,
-    R: serde::Serialize + Send + 'static,
+    T: calldata::codec::Decode + 'static,
+    R: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible> + Send + 'static,
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     loop {
@@ -272,9 +270,7 @@ where
             },
         };
 
-        let answer =
-            genvm_common::calldata::to_value(&res).context("encoding response to value")?;
-        let message = genvm_common::calldata::encode(&answer);
+        let message = genvm_common::calldata::encode_obj(&res);
 
         write_message(stream, &message)
             .await
@@ -295,9 +291,8 @@ where
         return Ok(None);
     };
 
-    let genvm_hello = genvm_common::calldata::decode(&data).context("decoding GenVMHello")?;
     let genvm_hello: genvm_modules_interfaces::GenVMHello =
-        genvm_common::calldata::from_value(genvm_hello).context("parsing GenVMHello")?;
+        genvm_common::calldata::decode_obj(&data).context("decoding GenVMHello")?;
 
     Ok(Some(genvm_hello))
 }
@@ -308,8 +303,8 @@ async fn loop_one_impl<T, R, S, P: MessageHandlerProvider<T, R>>(
     exec_ctx: sync::DArc<P::Ctx>,
 ) -> anyhow::Result<()>
 where
-    T: serde::de::DeserializeOwned + 'static,
-    R: serde::Serialize + Send + 'static,
+    T: calldata::codec::Decode + 'static,
+    R: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible> + Send + 'static,
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     let genvm_id = exec_ctx.genvm_id();
@@ -336,8 +331,8 @@ pub async fn handle_stream<T, R, S, P: MessageHandlerProvider<T, R>>(
     stream_type: &str,
     exec_ctx: Option<sync::DArc<P::Ctx>>,
 ) where
-    T: serde::de::DeserializeOwned + 'static,
-    R: serde::Serialize + Send + 'static,
+    T: calldata::codec::Decode + 'static,
+    R: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible> + Send + 'static,
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     log_trace!(stream_type = stream_type; "new connection");
@@ -382,8 +377,8 @@ async fn loop_one<T, R, P: MessageHandlerProvider<T, R>>(
     handler_provider: Arc<P>,
     stream: tokio::net::TcpStream,
 ) where
-    T: serde::de::DeserializeOwned + 'static,
-    R: serde::Serialize + Send + 'static,
+    T: calldata::codec::Decode + 'static,
+    R: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible> + Send + 'static,
 {
     handle_stream(handler_provider, stream, "tcp", None).await;
 }
@@ -392,8 +387,8 @@ async fn loop_one_unix<T, R, P: MessageHandlerProvider<T, R>>(
     handler_provider: Arc<P>,
     stream: tokio::net::UnixStream,
 ) where
-    T: serde::de::DeserializeOwned + 'static,
-    R: serde::Serialize + Send + 'static,
+    T: calldata::codec::Decode + 'static,
+    R: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible> + Send + 'static,
 {
     handle_stream(handler_provider, stream, "unix", None).await;
 }
@@ -406,8 +401,8 @@ pub async fn run_loop<T, R, P: MessageHandlerProvider<T, R> + 'static>(
     handler_provider: Arc<P>,
 ) -> anyhow::Result<()>
 where
-    T: serde::de::DeserializeOwned + 'static,
-    R: serde::Serialize + Send + 'static,
+    T: calldata::codec::Decode + 'static,
+    R: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible> + Send + 'static,
 {
     let Some(bind_address) = bind_address else {
         // No bind address - just wait for cancellation
@@ -429,8 +424,8 @@ async fn run_loop_tcp<T, R, P: MessageHandlerProvider<T, R> + 'static>(
     handler_provider: Arc<P>,
 ) -> anyhow::Result<()>
 where
-    T: serde::de::DeserializeOwned + 'static,
-    R: serde::Serialize + Send + 'static,
+    T: calldata::codec::Decode + 'static,
+    R: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible> + Send + 'static,
 {
     log_info!(address = bind_address; "trying to bind TCP");
 
@@ -462,8 +457,8 @@ async fn run_loop_unix<T, R, P: MessageHandlerProvider<T, R> + 'static>(
     handler_provider: Arc<P>,
 ) -> anyhow::Result<()>
 where
-    T: serde::de::DeserializeOwned + 'static,
-    R: serde::Serialize + Send + 'static,
+    T: calldata::codec::Decode + 'static,
+    R: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible> + Send + 'static,
 {
     let path = std::path::Path::new(socket_path);
     log_info!(socket_path = socket_path; "trying to bind Unix socket");
@@ -683,7 +678,7 @@ impl genvm_common::logger::ILogger for LoggerWithId {
         };
 
         let mut buf = Vec::new();
-        genvm_common::logger::log_into_buffer(&mut buf, record)?;
+        genvm_common::logger::log_into_buffer(&mut buf, record, Default::default())?;
 
         sink.push(LogSinkElement::Raw(buf));
 

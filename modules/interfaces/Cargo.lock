@@ -201,10 +201,11 @@ checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
 name = "genlayer_calldata"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "bytes",
  "chrono",
+ "genlayer_calldata_derive",
  "hex",
  "num-bigint",
  "primitive-types",
@@ -212,8 +213,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "genlayer_sdk"
+name = "genlayer_calldata_derive"
 version = "0.0.1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "genlayer_sdk"
+version = "0.0.2"
 dependencies = [
  "bytes",
  "chrono",
@@ -230,7 +240,10 @@ name = "genvm-modules-interfaces"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "genlayer_calldata",
  "genlayer_sdk",
+ "num-bigint",
+ "num-traits",
  "regex",
  "serde",
  "serde_bytes",
