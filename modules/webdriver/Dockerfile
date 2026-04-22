@@ -42,7 +42,12 @@ RUN \
     rm -rf /var/lib/apt/lists/* ; \
     true
 
-HEALTHCHECK --interval=5s --timeout=5s --retries=10 --start-period=3s CMD curl -sf 'http://localhost:'"${PORT:-4444}"'/healthcheck?mode=text&url=https%3A%2F%2Ftest-server.genlayer.com%2Fstatic%2Fgenvm%2Fhello.html' || exit 1
+HEALTHCHECK \
+    --interval=30s \
+    --timeout=10s \
+    --retries=10 \
+    --start-period=10s \
+    CMD curl -sf 'http://localhost:'"${PORT:-4444}"'/healthcheck?mode=text&url=https%3A%2F%2Ftest-server.genlayer.com%2Fstatic%2Fgenvm%2Fhello.html' || exit 1
 
 ENV TINI_VERSION=v0.19.0
 RUN \

@@ -5,6 +5,7 @@ import { Command } from 'commander';
 
 import * as logger from './logging.js';
 import * as browser from './browser.js';
+import { envDurationMs, formatDurationMs } from './duration.js';
 
 interface NavigationOptions {
 	waitUntil?: pup.PuppeteerLifeCycleEvent;
@@ -29,8 +30,15 @@ const options = program.opts();
 
 const STATUS_I_AM_A_TEAPOT = 418;
 
-const HEALTHCHECK_CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+const HEALTHCHECK_CACHE_DURATION_MS = envDurationMs(
+	'GVM_WEBDRIVER_HEALTHCHECK_CACHE_DURATION',
+	'5m',
+);
 let lastSuccessfulRenderTime: number = 0;
+
+function updateLastSuccessfulRenderTime() {
+	lastSuccessfulRenderTime = Date.now();
+}
 
 function normalizeWhitespace(contents: string): string {
 	return contents
@@ -234,7 +242,7 @@ async function handleRenderRequest(
 		const result = await renderPage(targetUrl, mode, options);
 
 		if (statusIsGood(result.status)) {
-			lastSuccessfulRenderTime = Date.now();
+			updateLastSuccessfulRenderTime();
 		}
 
 		res.setHeader('Resulting-Status', result.status.toString());
@@ -261,9 +269,10 @@ async function handleHealthcheck(
 	res: http.ServerResponse,
 ) {
 	const now = Date.now();
-	if (now - lastSuccessfulRenderTime < HEALTHCHECK_CACHE_DURATION_MS) {
+	const sinceLastSuccessMs = now - lastSuccessfulRenderTime;
+	if (sinceLastSuccessMs < HEALTHCHECK_CACHE_DURATION_MS) {
 		logger.log('debug', 'healthcheck cached ok', {
-			lastSuccessAgoMs: now - lastSuccessfulRenderTime,
+			lastSuccessAgo: formatDurationMs(sinceLastSuccessMs),
 		});
 		res.writeHead(200, { 'Content-Type': 'text/plain' });
 		res.end('ok');
@@ -284,11 +293,16 @@ async function handleHealthcheck(
 		return;
 	}
 
-	logger.log('info', 'healthcheck performing render', { url: targetUrl, mode });
+	logger.log('info', 'healthcheck performing render', {
+		url: targetUrl,
+		mode,
+		sinceLast: formatDurationMs(sinceLastSuccessMs),
+		cacheDuration: formatDurationMs(HEALTHCHECK_CACHE_DURATION_MS),
+	});
 	try {
 		const result = await renderPage(targetUrl, mode, {});
 		if (statusIsGood(result.status)) {
-			lastSuccessfulRenderTime = Date.now();
+			updateLastSuccessfulRenderTime();
 			logger.log('info', 'healthcheck ok', { status: result.status });
 			res.writeHead(200, { 'Content-Type': 'text/plain' });
 			res.end('ok');
