@@ -1,5 +1,5 @@
 {
-  "executor-version": "v0.2.11",
+  "executor-version": "vTEST",
   "repo-url": "https://github.com/genlayerlabs/genvm.git",
-  "head-revision": "a605f30"
+  "head-revision": "fake"
 }
