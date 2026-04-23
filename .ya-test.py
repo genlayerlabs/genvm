@@ -56,16 +56,11 @@ def collect_rust(ctx: ya_test_runner.stage.collection.Context):
 	for t in filter(lambda x: x.name == 'Cargo.toml', ctx.shared.git_files):
 		ctx.shared.logger.debug('discovered Cargo.toml', path=t)
 		rust_root_dir = t.parent
-		test_dir = rust_root_dir.joinpath('tests')
-		if test_dir.exists():
-			ctx.configuration.plugins.cargo_test(
-				ctx,
-				ya_test_runner.test.Description(
-					str(test_dir.relative_to(ctx.shared.root_dir)),
-					console_pool=True,
-				),
-				rust_root_dir=rust_root_dir,
-			)
+
+		ctx.configuration.plugins.cargo_test(
+			ctx,
+			rust_root_dir=rust_root_dir,
+		)
 
 		fuzz_files = list(rust_root_dir.glob('fuzz/*.rs'))
 		fuzz_files.sort()

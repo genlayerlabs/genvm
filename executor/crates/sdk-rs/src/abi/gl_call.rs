@@ -126,26 +126,26 @@ pub mod web_iface {
 
     pub(crate) fn decode_wait_after_loaded(
         val: genlayer_calldata::Value,
-    ) -> Result<WaitAfterLoaded, genlayer_calldata::codec::Error> {
+    ) -> Result<WaitAfterLoaded, genlayer_calldata::codec::DecodeError> {
         let genlayer_calldata::Value::Str(s) = val else {
-            return Err(genlayer_calldata::codec::Error::Unexpected(
+            return Err(genlayer_calldata::codec::DecodeError::Unexpected(
                 "expected string",
             ));
         };
         if let Some(ms_str) = s.strip_suffix("ms") {
             let millis = ms_str
                 .parse::<u64>()
-                .map_err(|e| genlayer_calldata::codec::Error::Custom(e.to_string()))?;
+                .map_err(|e| genlayer_calldata::codec::DecodeError::UserError(Box::new(e)))?;
             Ok(WaitAfterLoaded::Millis(millis))
         } else if let Some(secs_str) = s.strip_suffix("s") {
             let seconds = secs_str
                 .parse::<u64>()
-                .map_err(|e| genlayer_calldata::codec::Error::Custom(e.to_string()))?;
+                .map_err(|e| genlayer_calldata::codec::DecodeError::UserError(Box::new(e)))?;
             Ok(WaitAfterLoaded::Seconds(seconds))
         } else {
-            Err(genlayer_calldata::codec::Error::Custom(format!(
-                "expected string ending with 's' or 'ms', got '{s}'"
-            )))
+            Err(genlayer_calldata::codec::DecodeError::Unexpected(
+                "expected string ending with 's' or 'ms'",
+            ))
         }
     }
 
@@ -342,9 +342,9 @@ pub mod llm_iface {
     impl genlayer_calldata::codec::Decode for PromptTemplatePayload {
         fn decode<D: genlayer_calldata::codec::Deserializer>(
             deserializer: D,
-        ) -> Result<Self, genlayer_calldata::codec::Error> {
+        ) -> Result<Self, genlayer_calldata::codec::DecodeError> {
             use genlayer_calldata::Value;
-            use genlayer_calldata::codec::{Error, MapAccess, ValueDeserializer, Visitor};
+            use genlayer_calldata::codec::{DecodeError, MapAccess, ValueDeserializer, Visitor};
             use std::collections::BTreeMap;
 
             struct V;
@@ -355,7 +355,7 @@ pub mod llm_iface {
                     self,
                     _len: u64,
                     mut map: A,
-                ) -> Result<PromptTemplatePayload, Error> {
+                ) -> Result<PromptTemplatePayload, DecodeError> {
                     let mut entries = BTreeMap::<String, Value>::new();
                     while let Some((key, val)) = map.next_element::<Value>()? {
                         entries.insert(key.to_owned(), val);
@@ -363,22 +363,22 @@ pub mod llm_iface {
 
                     let tag_val = entries
                         .remove(TEMPLATE_TAG)
-                        .ok_or(Error::FieldMissing(TEMPLATE_TAG))?;
+                        .ok_or(DecodeError::FieldMissing(TEMPLATE_TAG))?;
                     let Value::Str(tag_str) = tag_val else {
-                        return Err(Error::Unexpected("expected string for template tag"));
+                        return Err(DecodeError::Unexpected("expected string for template tag"));
                     };
 
                     match tag_str.as_str() {
                         "EqComparative" => {
                             let leader_answer = entries
                                 .remove("leader_answer")
-                                .ok_or(Error::FieldMissing("leader_answer"))?;
+                                .ok_or(DecodeError::FieldMissing("leader_answer"))?;
                             let validator_answer = entries
                                 .remove("validator_answer")
-                                .ok_or(Error::FieldMissing("validator_answer"))?;
+                                .ok_or(DecodeError::FieldMissing("validator_answer"))?;
                             let principle = entries
                                 .remove("principle")
-                                .ok_or(Error::FieldMissing("principle"))?;
+                                .ok_or(DecodeError::FieldMissing("principle"))?;
                             Ok(PromptTemplatePayload::EqComparative(
                                 PromptEqComparativePayload {
                                     leader_answer: genlayer_calldata::codec::Decode::decode(
@@ -394,16 +394,18 @@ pub mod llm_iface {
                             ))
                         }
                         "EqNonComparativeValidator" => {
-                            let task = entries.remove("task").ok_or(Error::FieldMissing("task"))?;
+                            let task = entries
+                                .remove("task")
+                                .ok_or(DecodeError::FieldMissing("task"))?;
                             let criteria = entries
                                 .remove("criteria")
-                                .ok_or(Error::FieldMissing("criteria"))?;
+                                .ok_or(DecodeError::FieldMissing("criteria"))?;
                             let input = entries
                                 .remove("input")
-                                .ok_or(Error::FieldMissing("input"))?;
+                                .ok_or(DecodeError::FieldMissing("input"))?;
                             let output = entries
                                 .remove("output")
-                                .ok_or(Error::FieldMissing("output"))?;
+                                .ok_or(DecodeError::FieldMissing("output"))?;
                             Ok(PromptTemplatePayload::EqNonComparativeValidator(
                                 PromptEqNonComparativeValidatorPayload {
                                     task: genlayer_calldata::codec::Decode::decode(
@@ -422,13 +424,15 @@ pub mod llm_iface {
                             ))
                         }
                         "EqNonComparativeLeader" => {
-                            let task = entries.remove("task").ok_or(Error::FieldMissing("task"))?;
+                            let task = entries
+                                .remove("task")
+                                .ok_or(DecodeError::FieldMissing("task"))?;
                             let criteria = entries
                                 .remove("criteria")
-                                .ok_or(Error::FieldMissing("criteria"))?;
+                                .ok_or(DecodeError::FieldMissing("criteria"))?;
                             let input = entries
                                 .remove("input")
-                                .ok_or(Error::FieldMissing("input"))?;
+                                .ok_or(DecodeError::FieldMissing("input"))?;
                             Ok(PromptTemplatePayload::EqNonComparativeLeader(
                                 PromptEqNonComparativeLeaderPayload {
                                     task: genlayer_calldata::codec::Decode::decode(
@@ -443,7 +447,10 @@ pub mod llm_iface {
                                 },
                             ))
                         }
-                        other => Err(Error::Custom(format!("unknown template variant: {other}"))),
+                        other => Err(DecodeError::UnknownVariant {
+                            got: other.to_owned(),
+                            expected: "EqComparative, EqNonComparativeValidator, EqNonComparativeLeader",
+                        }),
                     }
                 }
             }
@@ -474,14 +481,20 @@ fn encode_storage_type<W: calldata::Writer>(
 
 fn decode_storage_type(
     val: calldata::Value,
-) -> Result<public_abi::StorageType, calldata::codec::Error> {
+) -> Result<public_abi::StorageType, calldata::codec::DecodeError> {
     let calldata::Value::Number(n) = val else {
-        return Err(calldata::codec::Error::Unexpected("expected number"));
+        return Err(calldata::codec::DecodeError::Unexpected("expected number"));
     };
-    let v: u8 = <u8 as TryFrom<&num_bigint::BigInt>>::try_from(&n)
-        .map_err(|_| calldata::codec::Error::Custom("StorageType out of range".into()))?;
-    public_abi::StorageType::try_from(v)
-        .map_err(|_| calldata::codec::Error::Custom("invalid StorageType".into()))
+    let v: u8 = <u8 as TryFrom<&num_bigint::BigInt>>::try_from(&n).map_err(|_| {
+        calldata::codec::DecodeError::OutOfRange {
+            value: n.to_string(),
+            target: "StorageType",
+        }
+    })?;
+    public_abi::StorageType::try_from(v).map_err(|_| calldata::codec::DecodeError::OutOfRange {
+        value: v.to_string(),
+        target: "StorageType",
+    })
 }
 
 /// Payload for Trace operations.
@@ -498,7 +511,7 @@ pub enum TracePayload {
 ///
 /// Each variant corresponds to a specific blockchain operation that can be
 /// invoked via the [`super::wasi::gl_call`] function.
-#[allow(clippy::enum_variant_names)]
+#[allow(clippy::enum_variant_names, deprecated)]
 #[derive(PartialEq, Debug, calldata::Encode, calldata::Decode)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub enum Message {
@@ -567,7 +580,6 @@ pub enum Message {
     ExecPromptTemplate(llm_iface::PromptTemplatePayload),
 
     #[deprecated(note = "Use UserError. Will be removed before 1.0 release")]
-    #[allow(deprecated)]
     Rollback(calldata::Value),
     UserError(calldata::Value),
     Return(calldata::Value),

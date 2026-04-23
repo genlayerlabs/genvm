@@ -348,15 +348,15 @@ use serde_with::serde_as;
 
 fn decode_datetime_rfc3339(
     val: calldata::Value,
-) -> std::result::Result<chrono::DateTime<chrono::Utc>, calldata::codec::Error> {
-    let calldata::Value::Str(s) = val else {
-        return Err(calldata::codec::Error::Unexpected(
-            "expected string for datetime",
-        ));
+) -> std::result::Result<chrono::DateTime<chrono::Utc>, calldata::codec::DecodeError> {
+    let s = match val {
+        calldata::Value::Str(s) => s,
+        _ => return Err(calldata::codec::DecodeError::UnexpectedKind(val.kind())),
     };
-    chrono::DateTime::parse_from_rfc3339(&s)
-        .map(|dt| dt.to_utc())
-        .map_err(|e| calldata::codec::Error::Custom(e.to_string()))
+    match chrono::DateTime::parse_from_rfc3339(&s) {
+        Ok(dt) => Ok(dt.to_utc()),
+        Err(e) => Err(calldata::codec::DecodeError::UserError(Box::new(e))),
+    }
 }
 
 fn encode_datetime_rfc3339<W: calldata::Writer>(

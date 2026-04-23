@@ -4,7 +4,7 @@ use super::consts::*;
 use super::types::*;
 
 #[derive(Debug)]
-pub enum DecodeError {
+pub enum BinDecodeError {
     UnterminatedUleb,
     InvalidUlebEncoding,
     NumberTooBig,
@@ -12,22 +12,20 @@ pub enum DecodeError {
     ContainerSizeTooLarge { bits: u64 },
     InvalidSpecialValue { value: u8 },
     InvalidMapOrdering { prev: String, current: String },
-    InvalidType { type_tag: u8 },
-    TrailingData { remaining: usize },
+    InvalidTag(u8),
     InvalidUtf8(std::str::Utf8Error),
-    Custom(String),
     MaxDepthExceeded,
 }
 
-impl std::fmt::Display for DecodeError {
+impl std::fmt::Display for BinDecodeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DecodeError::UnterminatedUleb => write!(f, "unterminated uleb"),
-            DecodeError::InvalidUlebEncoding => {
+            BinDecodeError::UnterminatedUleb => write!(f, "unterminated uleb"),
+            BinDecodeError::InvalidUlebEncoding => {
                 write!(f, "most significant octet cannot be zero")
             }
-            DecodeError::NumberTooBig => write!(f, "number is too big"),
-            DecodeError::UnexpectedEnd {
+            BinDecodeError::NumberTooBig => write!(f, "number is too big"),
+            BinDecodeError::UnexpectedEnd {
                 expected,
                 available,
             } => {
@@ -36,43 +34,36 @@ impl std::fmt::Display for DecodeError {
                     "unexpected end: expected {expected} bytes, got {available}"
                 )
             }
-            DecodeError::ContainerSizeTooLarge { bits } => {
+            BinDecodeError::ContainerSizeTooLarge { bits } => {
                 write!(f, "container size is too large: {bits} > 32 bits")
             }
-            DecodeError::InvalidSpecialValue { value } => {
+            BinDecodeError::InvalidSpecialValue { value } => {
                 write!(f, "invalid special value: {value}")
             }
-            DecodeError::InvalidMapOrdering { prev, current } => {
+            BinDecodeError::InvalidMapOrdering { prev, current } => {
                 write!(f, "invalid calldata map ordering: `{prev}` >= `{current}`")
             }
-            DecodeError::InvalidType { type_tag } => {
+            BinDecodeError::InvalidTag(type_tag) => {
                 write!(f, "invalid type tag: {type_tag}")
             }
-            DecodeError::TrailingData { remaining } => {
-                write!(
-                    f,
-                    "input is partially unparsed: {remaining} bytes remaining"
-                )
-            }
-            DecodeError::InvalidUtf8(e) => write!(f, "invalid utf8: {e}"),
-            DecodeError::Custom(msg) => write!(f, "{msg}"),
-            DecodeError::MaxDepthExceeded => write!(f, "exceeded maximum container depth"),
+            BinDecodeError::InvalidUtf8(e) => write!(f, "invalid utf8: {e}"),
+            BinDecodeError::MaxDepthExceeded => write!(f, "exceeded maximum container depth"),
         }
     }
 }
 
-impl std::error::Error for DecodeError {
+impl std::error::Error for BinDecodeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            DecodeError::InvalidUtf8(e) => Some(e),
+            BinDecodeError::InvalidUtf8(e) => Some(e),
             _ => None,
         }
     }
 }
 
-impl From<std::str::Utf8Error> for DecodeError {
+impl From<std::str::Utf8Error> for BinDecodeError {
     fn from(e: std::str::Utf8Error) -> Self {
-        DecodeError::InvalidUtf8(e)
+        BinDecodeError::InvalidUtf8(e)
     }
 }
 
@@ -80,12 +71,12 @@ impl From<std::str::Utf8Error> for DecodeError {
 struct Parser<'a>(&'a [u8]);
 
 impl Parser<'_> {
-    fn fetch_uleb(&mut self) -> Result<num_bigint::BigUint, DecodeError> {
+    fn fetch_uleb(&mut self) -> Result<num_bigint::BigUint, BinDecodeError> {
         let mut res = num_bigint::BigUint::ZERO;
         let mut off = 0u64;
         loop {
             if self.0.is_empty() {
-                return Err(DecodeError::UnterminatedUleb);
+                return Err(BinDecodeError::UnterminatedUleb);
             }
 
             let byte = self.0[0];
@@ -95,7 +86,7 @@ impl Parser<'_> {
 
             if byte & 0x80 == 0 {
                 if byte == 0 && off != 0 {
-                    return Err(DecodeError::InvalidUlebEncoding);
+                    return Err(BinDecodeError::InvalidUlebEncoding);
                 }
                 return Ok(res);
             }
@@ -103,15 +94,15 @@ impl Parser<'_> {
             off = match off.checked_add(7) {
                 Some(off) => off,
                 None => {
-                    return Err(DecodeError::NumberTooBig);
+                    return Err(BinDecodeError::NumberTooBig);
                 }
             };
         }
     }
 
-    fn fetch_slice(&mut self, expected: usize) -> Result<&[u8], DecodeError> {
+    fn fetch_slice(&mut self, expected: usize) -> Result<&[u8], BinDecodeError> {
         if self.0.len() < expected {
-            return Err(DecodeError::UnexpectedEnd {
+            return Err(BinDecodeError::UnexpectedEnd {
                 expected,
                 available: self.0.len(),
             });
@@ -124,15 +115,15 @@ impl Parser<'_> {
         Ok(ret)
     }
 
-    fn map_to_size(size: &num_bigint::BigUint) -> Result<usize, DecodeError> {
+    fn map_to_size(size: &num_bigint::BigUint) -> Result<usize, BinDecodeError> {
         if size.bits() > 32 {
-            Err(DecodeError::ContainerSizeTooLarge { bits: size.bits() })
+            Err(BinDecodeError::ContainerSizeTooLarge { bits: size.bits() })
         } else {
             Ok(size.to_u32_digits().first().cloned().unwrap_or(0) as usize)
         }
     }
 
-    fn fetch_val(&mut self, opts: &Options) -> Result<Value, DecodeError> {
+    fn fetch_val(&mut self, opts: &Options) -> Result<Value, BinDecodeError> {
         enum Frame {
             Array {
                 collected: Vec<Value>,
@@ -159,7 +150,7 @@ impl Parser<'_> {
             let mut completed = match typ {
                 TYPE_SPECIAL => {
                     if val.bits() > 8 - BITS_IN_TYPE as u64 {
-                        return Err(DecodeError::InvalidSpecialValue {
+                        return Err(BinDecodeError::InvalidSpecialValue {
                             value: val_least_byte,
                         });
                     }
@@ -175,7 +166,7 @@ impl Parser<'_> {
 
                             Value::Address(Address(addr))
                         }
-                        x => return Err(DecodeError::InvalidSpecialValue { value: x }),
+                        x => return Err(BinDecodeError::InvalidSpecialValue { value: x }),
                     }
                 }
                 TYPE_BYTES => {
@@ -206,12 +197,12 @@ impl Parser<'_> {
                 }
                 TYPE_ARR => {
                     if stack.len() >= opts.max_depth {
-                        return Err(DecodeError::MaxDepthExceeded);
+                        return Err(BinDecodeError::MaxDepthExceeded);
                     }
 
                     let full_size = Self::map_to_size(&val)?;
                     if self.0.len() < full_size {
-                        return Err(DecodeError::UnexpectedEnd {
+                        return Err(BinDecodeError::UnexpectedEnd {
                             expected: full_size,
                             available: self.0.len(),
                         });
@@ -228,12 +219,12 @@ impl Parser<'_> {
                 }
                 TYPE_MAP => {
                     if stack.len() >= opts.max_depth {
-                        return Err(DecodeError::MaxDepthExceeded);
+                        return Err(BinDecodeError::MaxDepthExceeded);
                     }
 
                     let full_size = Self::map_to_size(&val)?;
                     if self.0.len() < full_size.saturating_mul(2) {
-                        return Err(DecodeError::UnexpectedEnd {
+                        return Err(BinDecodeError::UnexpectedEnd {
                             expected: full_size.saturating_mul(2),
                             available: self.0.len(),
                         });
@@ -254,7 +245,7 @@ impl Parser<'_> {
                         continue 'parse;
                     }
                 }
-                v => return Err(DecodeError::InvalidType { type_tag: v }),
+                v => return Err(BinDecodeError::InvalidTag(v)),
             };
 
             loop {
@@ -293,7 +284,7 @@ impl Parser<'_> {
                             if let Some((k, _)) = collected.last_key_value()
                                 && k >= &new_key
                             {
-                                return Err(DecodeError::InvalidMapOrdering {
+                                return Err(BinDecodeError::InvalidMapOrdering {
                                     prev: k.clone(),
                                     current: new_key,
                                 });
@@ -322,19 +313,20 @@ impl Default for Options {
     }
 }
 
-pub fn decode_with(data: &[u8], opts: &Options) -> Result<Value, DecodeError> {
+pub fn decode_with(data: &[u8], opts: &Options) -> Result<Value, BinDecodeError> {
     let mut parser = Parser(data);
     parser.fetch_val(opts)
 }
 
-pub fn decode(data: &[u8]) -> Result<Value, DecodeError> {
+pub fn decode(data: &[u8]) -> Result<Value, BinDecodeError> {
     let mut parser = Parser(data);
 
     let ret = parser.fetch_val(&Default::default())?;
 
     if !parser.0.is_empty() {
-        return Err(DecodeError::TrailingData {
-            remaining: parser.0.len(),
+        return Err(BinDecodeError::UnexpectedEnd {
+            expected: 0,
+            available: parser.0.len(),
         });
     }
 

@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import tomllib
 from pathlib import Path
 import subprocess
 import sys
@@ -189,21 +190,13 @@ if _is_coverage_enabled():
 	_profile_objects.append(BUILD_DIR / 'out' / 'bin' / 'genvm-modules')
 
 
-def cargo_test(
-	ctx: ya_test_runner.stage.collection.Context,
-	desc: ya_test_runner.test.Description,
-	*,
-	rust_root_dir: Path,
-):
-	desc = desc.with_tags(['rust', 'unit'])._replace(
-		console_pool=True,
-	)
-
+def _load_cargo_config(rust_root_dir: Path) -> tuple[dict, dict[str, str], list[str]]:
+	"""Load .ya-test-config.json and return (config, env, extra_flags)."""
 	test_env = _get_default_env()
-
-	extra_flags = []
+	extra_flags: list[str] = []
 
 	extra_config = rust_root_dir.joinpath('.ya-test-config.json')
+	extra_conf: dict = {}
 	if extra_config.exists():
 		extra_conf = json.loads(extra_config.read_text())
 		extra_flags.extend(extra_conf.get('cargo_test_flags', []))
@@ -211,29 +204,153 @@ def cargo_test(
 			if name in os.environ:
 				test_env[name] = os.environ[name]
 
+	return extra_conf, test_env, extra_flags
+
+
+def _add_cargo_case(
+	ctx: ya_test_runner.stage.collection.Context,
+	*,
+	name: str,
+	command: list,
+	rust_root_dir: Path,
+	test_env: dict[str, str],
+	tags: list[str],
+):
+	desc = (
+		ya_test_runner.test.Description(name)
+		.with_tags(tags)
+		._replace(
+			console_pool=True,
+		)
+	)
+	case = ya_test_runner.test.SimpleCommandCase(
+		description=desc,
+		command=command,
+		cwd=rust_root_dir,
+		env=test_env,
+		mode=ya_test_runner.exec.command.RunMode.INTERACTIVE,
+	)
+	ctx.add_case(case)
+
+
+def _is_skipped(skip_conf, key: str, name: str | None = None) -> bool:
+	"""Check if a test category or specific name is skipped.
+
+	skip_conf[key] can be:
+		- true: skip all
+		- list of strings: skip only those names
+	"""
+	val = skip_conf.get(key)
+	if val is True:
+		return True
+	if isinstance(val, list) and name is not None:
+		return name in val
+	return False
+
+
+def cargo_test(
+	ctx: ya_test_runner.stage.collection.Context,
+	*,
+	rust_root_dir: Path,
+):
+	extra_conf, test_env, extra_flags = _load_cargo_config(rust_root_dir)
+	skip_conf = extra_conf.get('skip', {})
+
+	rel_dir = rust_root_dir.relative_to(local_ctx.shared.root_dir)
+
+	cargo_toml = tomllib.loads(rust_root_dir.joinpath('Cargo.toml').read_text())
+
 	# Track deps directory for coverage
 	if _is_coverage_enabled():
 		deps_dir = TARGET_DIR / 'debug' / 'deps'
 		if deps_dir not in _profile_objects:
 			_profile_objects.append(deps_dir)
 
-	case = ya_test_runner.test.SimpleCommandCase(
-		description=desc,
-		command=[
-			'cargo',
-			'test',
-			'--color=always',
-			'--target-dir',
-			TARGET_DIR,
-			'--tests',
-		]
-		+ extra_flags,
-		cwd=rust_root_dir,
-		env=test_env,
-		mode=ya_test_runner.exec.command.RunMode.INTERACTIVE,
-	)
+	base_cmd = [
+		'cargo',
+		'test',
+		'--color=always',
+		'--target-dir',
+		str(TARGET_DIR),
+	] + extra_flags
 
-	ctx.add_case(case)
+	# 1. Examples - verify compilation
+	if not _is_skipped(skip_conf, 'examples'):
+		for ex in cargo_toml.get('example', []):
+			ex_name = ex['name']
+			if _is_skipped(skip_conf, 'examples', ex_name):
+				continue
+			ex_path = ex.get('path', f'examples/{ex_name}.rs')
+			if ex_path.startswith('fuzz/'):
+				continue
+			_add_cargo_case(
+				ctx,
+				name=str(rel_dir / ex_path),
+				command=[
+					'cargo',
+					'check',
+					'--color=always',
+					'--target-dir',
+					str(TARGET_DIR),
+					'--example',
+					ex_name,
+				]
+				+ extra_flags,
+				rust_root_dir=rust_root_dir,
+				test_env=test_env,
+				tags=['rust', 'example'],
+			)
+
+	# 2. Test files in tests/
+	test_dir = rust_root_dir / 'tests'
+	if test_dir.exists() and not _is_skipped(skip_conf, 'tests'):
+		for test_file in sorted(test_dir.glob('*.rs')):
+			test_name = test_file.stem
+			if _is_skipped(skip_conf, 'tests', test_name):
+				continue
+			_add_cargo_case(
+				ctx,
+				name=str(rel_dir / 'tests' / test_file.name),
+				command=base_cmd + ['--test', test_name],
+				rust_root_dir=rust_root_dir,
+				test_env=test_env,
+				tags=['rust', 'unit'],
+			)
+
+	# 3. --lib test
+	has_lib = 'lib' in cargo_toml or rust_root_dir.joinpath('src', 'lib.rs').exists()
+	if has_lib and not _is_skipped(skip_conf, 'lib'):
+		_add_cargo_case(
+			ctx,
+			name=str(rel_dir / 'lib'),
+			command=base_cmd + ['--lib'],
+			rust_root_dir=rust_root_dir,
+			test_env=test_env,
+			tags=['rust', 'unit'],
+		)
+
+	# 4. --bin tests for every binary
+	if not _is_skipped(skip_conf, 'bins'):
+		bins: list[dict] = list(cargo_toml.get('bin', []))
+
+		# Implicit binary from src/main.rs
+		if rust_root_dir.joinpath('src', 'main.rs').exists():
+			pkg_name = cargo_toml.get('package', {}).get('name', rust_root_dir.name)
+			if not any(b.get('name') == pkg_name for b in bins):
+				bins.append({'name': pkg_name, 'path': 'src/main.rs'})
+
+		for bin_entry in bins:
+			bin_name = bin_entry['name']
+			if _is_skipped(skip_conf, 'bins', bin_name):
+				continue
+			_add_cargo_case(
+				ctx,
+				name=str(rel_dir / 'bin' / bin_name),
+				command=base_cmd + ['--bin', bin_name],
+				rust_root_dir=rust_root_dir,
+				test_env=test_env,
+				tags=['rust', 'unit'],
+			)
 
 
 def cargo_fuzz(

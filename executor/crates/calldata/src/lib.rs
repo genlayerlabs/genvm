@@ -10,11 +10,11 @@ mod types;
 pub use encoder::{Encoder, StdWriter, Writer};
 pub use genlayer_calldata_derive::*;
 
-pub use bin::{DecodeError, Options as DecodeOptions, decode, decode_with, encode, encode_to};
+pub use bin::{BinDecodeError, Options as DecodeOptions, decode, decode_with, encode, encode_to};
 pub use error::*;
 pub use types::*;
 
-pub fn from_value<T>(value: Value) -> core::result::Result<T, codec::Error>
+pub fn from_value<T>(value: Value) -> core::result::Result<T, codec::DecodeError>
 where
     T: codec::Decode,
 {
@@ -46,8 +46,17 @@ pub fn encode_obj(
 }
 
 /// Decode a value directly from bytes, skipping the intermediate `Value` representation.
-pub fn decode_obj<T: codec::Decode>(data: &[u8]) -> core::result::Result<T, codec::Error> {
-    T::decode(codec::BinaryDeserializer::new(data))
+pub fn decode_obj<T: codec::Decode>(data: &[u8]) -> core::result::Result<T, codec::DecodeError> {
+    let mut de = codec::BinaryDeserializer::new(data);
+    let result = T::decode(&mut de)?;
+    if !de.is_empty() {
+        return Err(BinDecodeError::UnexpectedEnd {
+            expected: 0,
+            available: de.remaining(),
+        }
+        .into());
+    }
+    Ok(result)
 }
 
 #[cfg(test)]

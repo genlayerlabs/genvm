@@ -44,6 +44,33 @@ impl Address {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValueKind {
+    Null,
+    Bool,
+    Address,
+    Number,
+    Str,
+    Bytes,
+    Array,
+    Map,
+}
+
+impl std::fmt::Display for ValueKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ValueKind::Null => "null",
+            ValueKind::Bool => "bool",
+            ValueKind::Address => "address",
+            ValueKind::Number => "number",
+            ValueKind::Str => "str",
+            ValueKind::Bytes => "bytes",
+            ValueKind::Array => "array",
+            ValueKind::Map => "map",
+        })
+    }
+}
+
 pub type Map = BTreeMap<String, Value>;
 
 #[derive(Clone, PartialEq, Eq)]
@@ -361,6 +388,19 @@ impl Value {
 
     pub fn is_null(&self) -> bool {
         matches!(self, Value::Null)
+    }
+
+    pub fn kind(&self) -> ValueKind {
+        match self {
+            Value::Null => ValueKind::Null,
+            Value::Bool(_) => ValueKind::Bool,
+            Value::Address(_) => ValueKind::Address,
+            Value::Number(_) => ValueKind::Number,
+            Value::Str(_) => ValueKind::Str,
+            Value::Bytes(_) => ValueKind::Bytes,
+            Value::Array(_) => ValueKind::Array,
+            Value::Map(_) => ValueKind::Map,
+        }
     }
 }
 

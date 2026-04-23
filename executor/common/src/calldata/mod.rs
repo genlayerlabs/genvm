@@ -15,7 +15,7 @@ pub use bin::{DecodeError, Options as DecodeOptions, decode, decode_with, encode
 pub use error::*;
 pub use types::*;
 
-pub fn from_value<T>(value: Value) -> core::result::Result<T, codec::Error>
+pub fn from_value<T>(value: Value) -> core::result::Result<T, codec::DecodeError>
 where
     T: codec::Decode,
 {
@@ -47,8 +47,13 @@ pub fn encode_obj(
 }
 
 /// Decode a value directly from bytes, skipping the intermediate `Value` representation.
-pub fn decode_obj<T: codec::Decode>(data: &[u8]) -> core::result::Result<T, codec::Error> {
-    T::decode(codec::BinaryDeserializer::new(data))
+pub fn decode_obj<T: codec::Decode>(data: &[u8]) -> core::result::Result<T, codec::DecodeError> {
+    let mut de = codec::BinaryDeserializer::new(data);
+    let result = T::decode(&mut de)?;
+    if !de.is_empty() {
+        return Err(codec::DecodeError::TrailingData(de.remaining()));
+    }
+    Ok(result)
 }
 
 #[cfg(test)]

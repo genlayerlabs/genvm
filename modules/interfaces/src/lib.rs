@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde_derive::{Deserialize, Serialize};
 
 use genlayer_calldata::codec::{
-    Decode, Deserializer, Encode, Error as CalldataError, MapAccess, SeqAccess, Visitor,
+    Decode, DecodeError as CalldataError, Deserializer, Encode, MapAccess, SeqAccess, Visitor,
 };
 use genlayer_calldata::{Encoder, Writer};
 

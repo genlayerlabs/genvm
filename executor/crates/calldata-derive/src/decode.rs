@@ -30,10 +30,11 @@ pub fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
     };
 
     Ok(quote! {
+        #[allow(deprecated)]
         impl #impl_generics genlayer_calldata::codec::Decode for #name #ty_generics #where_clause {
             fn decode<__D: genlayer_calldata::codec::Deserializer>(
                 __deserializer: __D,
-            ) -> ::core::result::Result<Self, genlayer_calldata::codec::Error> {
+            ) -> ::core::result::Result<Self, genlayer_calldata::codec::DecodeError> {
                 #body
             }
         }
@@ -74,12 +75,21 @@ fn decode_struct(name: &syn::Ident, fields: &Fields) -> syn::Result<TokenStream>
                             self,
                             _len: u64,
                             mut __seq: __A,
-                        ) -> ::core::result::Result<#name, genlayer_calldata::codec::Error> {
+                        ) -> ::core::result::Result<#name, genlayer_calldata::codec::DecodeError> {
+                            if _len != #len as u64 {
+                                return ::core::result::Result::Err(
+                                    genlayer_calldata::codec::DecodeError::LengthMismatch {
+                                        expected: #len,
+                                        got: _len as usize,
+                                    }
+                                );
+                            }
                             #(
                                 let #vars = __seq.next_element::<#field_tys>()?
-                                    .ok_or(genlayer_calldata::codec::Error::Custom(
-                                        ::std::format!("expected {} tuple elements", #len)
-                                    ))?;
+                                    .ok_or(genlayer_calldata::codec::DecodeError::LengthMismatch {
+                                        expected: #len,
+                                        got: 0,
+                                    })?;
                             )*
                             Ok(#name(#(#vars),*))
                         }
@@ -92,7 +102,7 @@ fn decode_struct(name: &syn::Ident, fields: &Fields) -> syn::Result<TokenStream>
             struct __V;
             impl genlayer_calldata::codec::Visitor for __V {
                 type Value = #name;
-                fn visit_null(self) -> ::core::result::Result<#name, genlayer_calldata::codec::Error> {
+                fn visit_null(self) -> ::core::result::Result<#name, genlayer_calldata::codec::DecodeError> {
                     Ok(#name)
                 }
             }
@@ -148,7 +158,7 @@ fn decode_named_fields(
                 } else {
                     quote! {
                         #ident: #var.ok_or(
-                            genlayer_calldata::codec::Error::FieldMissing(#wire)
+                            genlayer_calldata::codec::DecodeError::FieldMissing(#wire)
                         )?
                     }
                 }
@@ -166,7 +176,7 @@ fn decode_named_fields(
                 self,
                 _len: u64,
                 mut __map: __A,
-            ) -> ::core::result::Result<#name, genlayer_calldata::codec::Error> {
+            ) -> ::core::result::Result<#name, genlayer_calldata::codec::DecodeError> {
                 #(
                     let mut #option_vars: ::core::option::Option<#field_tys> = ::core::option::Option::None;
                 )*
@@ -175,7 +185,13 @@ fn decode_named_fields(
                 {
                     match __key {
                         #(#match_arms)*
-                        _ => {}
+                        __other => {
+                            return ::core::result::Result::Err(
+                                genlayer_calldata::codec::DecodeError::UnknownField(
+                                    __other.to_owned()
+                                )
+                            );
+                        }
                     }
                 }
                 Ok(#name {
@@ -232,9 +248,10 @@ fn decode_enum_untagged(name: &syn::Ident, data: &syn::DataEnum) -> syn::Result<
         // Decode into a Value first, then try each variant.
         let __val = <genlayer_calldata::Value as genlayer_calldata::codec::Decode>::decode(__deserializer)?;
         #(#variant_attempts)*
-        ::core::result::Result::Err(genlayer_calldata::codec::Error::Custom(
-            ::std::format!("data did not match any variant of untagged enum, expected one of: {}", #names_joined)
-        ))
+        ::core::result::Result::Err(genlayer_calldata::codec::DecodeError::UnknownVariant {
+            got: ::std::format!("{:?}", __val),
+            expected: #names_joined,
+        })
     })
 }
 
@@ -286,17 +303,18 @@ fn decode_untagged_variant_attempt(
                 .map(|i| syn::Ident::new(&format!("__f{i}"), proc_macro2::Span::call_site()))
                 .collect();
             Ok(quote! {
-                if let ::core::result::Result::Ok(__v) = (|| -> ::core::result::Result<#enum_name, genlayer_calldata::codec::Error> {
+                if let ::core::result::Result::Ok(__v) = (|| -> ::core::result::Result<#enum_name, genlayer_calldata::codec::DecodeError> {
                     let genlayer_calldata::Value::Array(__arr) = __val.clone() else {
                         return ::core::result::Result::Err(
-                            genlayer_calldata::codec::Error::Unexpected("expected array for tuple variant")
+                            genlayer_calldata::codec::DecodeError::Unexpected("expected array for tuple variant")
                         );
                     };
                     if __arr.len() != #n {
                         return ::core::result::Result::Err(
-                            genlayer_calldata::codec::Error::Custom(
-                                ::std::format!("expected {} elements, got {}", #n, __arr.len())
-                            )
+                            genlayer_calldata::codec::DecodeError::LengthMismatch {
+                                expected: #n,
+                                got: __arr.len(),
+                            }
                         );
                     }
                     let mut __iter = __arr.into_iter();
@@ -356,17 +374,17 @@ fn decode_untagged_variant_attempt(
                         } else {
                             quote! {
                                 #ident: #var.ok_or(
-                                    genlayer_calldata::codec::Error::FieldMissing(#wire)
+                                    genlayer_calldata::codec::DecodeError::FieldMissing(#wire)
                                 )?
                             }
                         }
                     });
 
             Ok(quote! {
-                if let ::core::result::Result::Ok(__v) = (|| -> ::core::result::Result<#enum_name, genlayer_calldata::codec::Error> {
+                if let ::core::result::Result::Ok(__v) = (|| -> ::core::result::Result<#enum_name, genlayer_calldata::codec::DecodeError> {
                     let genlayer_calldata::Value::Map(__inner_map) = __val.clone() else {
                         return ::core::result::Result::Err(
-                            genlayer_calldata::codec::Error::Unexpected("expected map for struct variant")
+                            genlayer_calldata::codec::DecodeError::Unexpected("expected map for struct variant")
                         );
                     };
                     #(
@@ -375,7 +393,13 @@ fn decode_untagged_variant_attempt(
                     for (__k, __v) in __inner_map {
                         match __k.as_str() {
                             #(#match_arms)*
-                            _ => {}
+                            __other => {
+                                return ::core::result::Result::Err(
+                                    genlayer_calldata::codec::DecodeError::UnknownField(
+                                        __other.to_owned()
+                                    )
+                                );
+                            }
                         }
                     }
                     ::core::result::Result::Ok(#enum_name::#variant_ident {
@@ -427,12 +451,13 @@ fn decode_enum_external(name: &syn::Ident, data: &syn::DataEnum) -> syn::Result<
 
     let visit_str_impl = if has_unit {
         quote! {
-            fn visit_str(self, __val: &str) -> ::core::result::Result<#name, genlayer_calldata::codec::Error> {
+            fn visit_str(self, __val: &str) -> ::core::result::Result<#name, genlayer_calldata::codec::DecodeError> {
                 match __val {
                     #(#unit_arms)*
-                    _ => ::core::result::Result::Err(genlayer_calldata::codec::Error::Custom(
-                        ::std::format!("unknown variant `{}`, expected one of: {}", __val, #names_joined)
-                    )),
+                    _ => ::core::result::Result::Err(genlayer_calldata::codec::DecodeError::UnknownVariant {
+                        got: __val.to_owned(),
+                        expected: #names_joined,
+                    }),
                 }
             }
         }
@@ -446,17 +471,18 @@ fn decode_enum_external(name: &syn::Ident, data: &syn::DataEnum) -> syn::Result<
                 self,
                 _len: u64,
                 mut __map: __A,
-            ) -> ::core::result::Result<#name, genlayer_calldata::codec::Error> {
+            ) -> ::core::result::Result<#name, genlayer_calldata::codec::DecodeError> {
                 let (__key, __val) = __map
                     .next_element::<genlayer_calldata::Value>()?
-                    .ok_or(genlayer_calldata::codec::Error::Custom(
-                        "expected single-key map for enum variant".into(),
+                    .ok_or(genlayer_calldata::codec::DecodeError::Unexpected(
+                        "expected single-key map for enum variant",
                     ))?;
                 match __key {
                     #(#map_arms)*
-                    _ => ::core::result::Result::Err(genlayer_calldata::codec::Error::Custom(
-                        ::std::format!("unknown variant `{}`, expected one of: {}", __key, #names_joined)
-                    )),
+                    _ => ::core::result::Result::Err(genlayer_calldata::codec::DecodeError::UnknownVariant {
+                        got: __key.to_owned(),
+                        expected: #names_joined,
+                    }),
                 }
             }
         }
@@ -516,14 +542,15 @@ fn decode_variant_payload(
             Ok(quote! {
                 let genlayer_calldata::Value::Array(__arr) = __val else {
                     return ::core::result::Result::Err(
-                        genlayer_calldata::codec::Error::Unexpected("expected array for tuple variant")
+                        genlayer_calldata::codec::DecodeError::Unexpected("expected array for tuple variant")
                     );
                 };
                 if __arr.len() != #n {
                     return ::core::result::Result::Err(
-                        genlayer_calldata::codec::Error::Custom(
-                            ::std::format!("expected {} elements, got {}", #n, __arr.len())
-                        )
+                        genlayer_calldata::codec::DecodeError::LengthMismatch {
+                            expected: #n,
+                            got: __arr.len(),
+                        }
                     );
                 }
                 let mut __iter = __arr.into_iter();
@@ -580,7 +607,7 @@ fn decode_variant_payload(
                         } else {
                             quote! {
                                 #ident: #var.ok_or(
-                                    genlayer_calldata::codec::Error::FieldMissing(#wire)
+                                    genlayer_calldata::codec::DecodeError::FieldMissing(#wire)
                                 )?
                             }
                         }
@@ -589,7 +616,7 @@ fn decode_variant_payload(
             Ok(quote! {
                 let genlayer_calldata::Value::Map(__inner_map) = __val else {
                     return ::core::result::Result::Err(
-                        genlayer_calldata::codec::Error::Unexpected("expected map for struct variant")
+                        genlayer_calldata::codec::DecodeError::Unexpected("expected map for struct variant")
                     );
                 };
                 #(
@@ -598,7 +625,13 @@ fn decode_variant_payload(
                 for (__k, __v) in __inner_map {
                     match __k.as_str() {
                         #(#match_arms)*
-                        _ => {}
+                        __other => {
+                            return ::core::result::Result::Err(
+                                genlayer_calldata::codec::DecodeError::UnknownField(
+                                    __other.to_owned()
+                                )
+                            );
+                        }
                     }
                 }
                 ::core::result::Result::Ok(#enum_name::#variant_ident {
@@ -680,7 +713,7 @@ fn decode_enum_tagged(
                             } else {
                                 quote! {
                                     #fi: #var.ok_or(
-                                        genlayer_calldata::codec::Error::FieldMissing(#w)
+                                        genlayer_calldata::codec::DecodeError::FieldMissing(#w)
                                     )?
                                 }
                             }
@@ -695,7 +728,13 @@ fn decode_enum_tagged(
                             for (__k, __v) in __entries {
                                 match __k.as_str() {
                                     #(#match_arms)*
-                                    _ => {}
+                                    __other => {
+                                        return ::core::result::Result::Err(
+                                            genlayer_calldata::codec::DecodeError::UnknownField(
+                                                __other.to_owned()
+                                            )
+                                        );
+                                    }
                                 }
                             }
                             ::core::result::Result::Ok(#name::#ident {
@@ -716,7 +755,7 @@ fn decode_enum_tagged(
                 self,
                 _len: u64,
                 mut __map: __A,
-            ) -> ::core::result::Result<#name, genlayer_calldata::codec::Error> {
+            ) -> ::core::result::Result<#name, genlayer_calldata::codec::DecodeError> {
                 // Collect all entries; extract tag.
                 let mut __entries = ::std::collections::BTreeMap::<::std::string::String, genlayer_calldata::Value>::new();
                 while let ::core::option::Option::Some((__key, __val)) =
@@ -727,19 +766,20 @@ fn decode_enum_tagged(
 
                 let __tag_val = __entries
                     .remove(#tag_field)
-                    .ok_or(genlayer_calldata::codec::Error::FieldMissing(#tag_field))?;
+                    .ok_or(genlayer_calldata::codec::DecodeError::FieldMissing(#tag_field))?;
 
                 let genlayer_calldata::Value::Str(__tag_str) = __tag_val else {
                     return ::core::result::Result::Err(
-                        genlayer_calldata::codec::Error::Unexpected("expected string for tag field")
+                        genlayer_calldata::codec::DecodeError::Unexpected("expected string for tag field")
                     );
                 };
 
                 match __tag_str.as_str() {
                     #(#variant_arms)*
-                    _ => ::core::result::Result::Err(genlayer_calldata::codec::Error::Custom(
-                        ::std::format!("unknown variant `{}`, expected one of: {}", __tag_str, #names_joined)
-                    )),
+                    _ => ::core::result::Result::Err(genlayer_calldata::codec::DecodeError::UnknownVariant {
+                        got: __tag_str.to_owned(),
+                        expected: #names_joined,
+                    }),
                 }
             }
         }

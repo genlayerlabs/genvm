@@ -11,15 +11,15 @@ use serde::{Deserialize, Serialize};
 
 fn decode_datetime_rfc3339(
     val: calldata::Value,
-) -> Result<chrono::DateTime<chrono::Utc>, calldata::codec::Error> {
+) -> Result<chrono::DateTime<chrono::Utc>, calldata::codec::DecodeError> {
     let calldata::Value::Str(s) = val else {
-        return Err(calldata::codec::Error::Unexpected(
+        return Err(calldata::codec::DecodeError::Unexpected(
             "expected string for datetime",
         ));
     };
     chrono::DateTime::parse_from_rfc3339(&s)
         .map(|dt| dt.to_utc())
-        .map_err(|e| calldata::codec::Error::Custom(e.to_string()))
+        .map_err(|e| calldata::codec::DecodeError::UserError(Box::new(e)))
 }
 
 fn encode_entry_kind<W: calldata::Writer>(
@@ -29,15 +29,22 @@ fn encode_entry_kind<W: calldata::Writer>(
     enc.push_u64(*ek as u64)
 }
 
-fn decode_entry_kind(val: calldata::Value) -> Result<EntryKind, calldata::codec::Error> {
+fn decode_entry_kind(val: calldata::Value) -> Result<EntryKind, calldata::codec::DecodeError> {
     let calldata::Value::Number(n) = val else {
-        return Err(calldata::codec::Error::Unexpected(
+        return Err(calldata::codec::DecodeError::Unexpected(
             "expected number for EntryKind",
         ));
     };
-    let v: u8 = <u8 as TryFrom<&num_bigint::BigInt>>::try_from(&n)
-        .map_err(|_| calldata::codec::Error::Custom("EntryKind out of range".into()))?;
-    EntryKind::try_from(v).map_err(|_| calldata::codec::Error::Custom("invalid EntryKind".into()))
+    let v: u8 = <u8 as TryFrom<&num_bigint::BigInt>>::try_from(&n).map_err(|_| {
+        calldata::codec::DecodeError::OutOfRange {
+            value: n.to_string(),
+            target: "EntryKind",
+        }
+    })?;
+    EntryKind::try_from(v).map_err(|_| calldata::codec::DecodeError::OutOfRange {
+        value: v.to_string(),
+        target: "EntryKind",
+    })
 }
 
 fn encode_datetime_rfc3339<W: calldata::Writer>(
@@ -292,7 +299,7 @@ pub mod contract_def {
 
     impl MainCalldata {
         /// Parse calldata bytes into MainCalldata
-        pub fn parse(data: &[u8]) -> Result<Self, calldata::DecodeError> {
+        pub fn parse(data: &[u8]) -> Result<Self, calldata::BinDecodeError> {
             let value = calldata::decode(data)?;
 
             let Value::Map(map) = value else {
@@ -498,7 +505,7 @@ pub mod contract_def {
             data: Vec<u8>,
         ) -> Result<calldata::Value, UserError> {
             let calldata =
-                MainCalldata::parse(&data).map_err(|e| calldata::DecodeError::to_string(&e))?;
+                MainCalldata::parse(&data).map_err(|e| calldata::BinDecodeError::to_string(&e))?;
 
             if message.is_init {
                 self.handle_deploy(message, calldata.args, calldata.kwargs)
@@ -523,14 +530,36 @@ pub mod contract_def {
         /// Failed to read stdin
         StdinRead(std::io::Error),
         /// Failed to decode extended message
-        MessageDecode(calldata::DecodeError),
-        /// Failed to parse main calldata
-        CalldataParse(calldata::DecodeError),
+        MessageDecode(calldata::codec::DecodeError),
         /// Invalid entry kind value
         InvalidEntryKind(u8),
         /// Failed to parse stage data
         InvalidStageDataFormat(ConsensusStageParseError),
         Custom(String),
+    }
+
+    impl From<calldata::codec::DecodeError> for ContractMainError {
+        fn from(e: calldata::codec::DecodeError) -> Self {
+            ContractMainError::MessageDecode(e)
+        }
+    }
+
+    impl From<std::io::Error> for ContractMainError {
+        fn from(e: std::io::Error) -> Self {
+            ContractMainError::StdinRead(e)
+        }
+    }
+
+    impl std::error::Error for ContractMainError {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            match self {
+                ContractMainError::StdinRead(e) => Some(e),
+                ContractMainError::MessageDecode(e) => Some(e),
+                ContractMainError::InvalidEntryKind(_) => None,
+                ContractMainError::InvalidStageDataFormat(e) => Some(e),
+                ContractMainError::Custom(_) => None,
+            }
+        }
     }
 
     impl std::fmt::Display for ContractMainError {
@@ -540,9 +569,6 @@ pub mod contract_def {
                 ContractMainError::MessageDecode(e) => {
                     write!(f, "failed to decode message: {:?}", e)
                 }
-                ContractMainError::CalldataParse(e) => {
-                    write!(f, "failed to parse calldata: {:?}", e)
-                }
                 ContractMainError::InvalidEntryKind(k) => write!(f, "invalid entry kind: {}", k),
                 ContractMainError::InvalidStageDataFormat(e) => {
                     write!(f, "invalid stage data format: {}", e)
@@ -551,8 +577,6 @@ pub mod contract_def {
             }
         }
     }
-
-    impl std::error::Error for ContractMainError {}
 }
 
 /// WASI-specific functions for contract execution.
@@ -609,12 +633,13 @@ pub mod wasi_only {
             .read_to_end(&mut input)
             .map_err(ContractMainError::StdinRead)?;
 
-        let value = calldata::decode(&input).map_err(ContractMainError::MessageDecode)?;
+        let value = calldata::decode(&input).map_err(|e| {
+            ContractMainError::MessageDecode(calldata::codec::DecodeError::BinDecodeError(e))
+        })?;
         std::mem::drop(input);
 
-        let extended: ExtendedMessageFlat = calldata::from_value(value).map_err(|e| {
-            ContractMainError::MessageDecode(calldata::DecodeError::Custom(e.to_string()))
-        })?;
+        let extended: ExtendedMessageFlat =
+            calldata::from_value(value).map_err(|e| ContractMainError::MessageDecode(e))?;
 
         let extended: ExtendedMessage = extended.into();
 

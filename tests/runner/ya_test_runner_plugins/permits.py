@@ -223,6 +223,7 @@ class PermitsTestStep(ya_test_runner.exec.step.Python):
 				'storage_page_cost': 1,
 				'receipt_word_cost': 1,
 				'no_modules': True,
+				'leader_nondet_results': [],
 			}
 		)
 
