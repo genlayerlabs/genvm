@@ -156,10 +156,14 @@ impl Inner {
     async fn exec_prompt(
         &self,
         _zelf: Arc<Inner>,
-        payload: llm_iface::PromptPayload,
+        mut payload: llm_iface::PromptPayload,
         remaining_fuel_as_gen: u64,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
         log_debug_into!(&LoggerWithId, payload:serde = payload, remaining_fuel_as_gen = remaining_fuel_as_gen, genvm_id:id = self.genvm_id.0; "exec_prompt start");
+
+        if payload.response_format == genvm_modules_interfaces::llm::OutputFormat::JSON2 {
+            payload.response_format = genvm_modules_interfaces::llm::OutputFormat::JSON;
+        }
 
         let payload = self
             .user_vm

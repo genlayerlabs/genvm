@@ -236,6 +236,9 @@ pub mod llm_iface {
         #[serde(rename = "json")]
         #[calldata(rename = "json")]
         JSON,
+        #[serde(rename = "json2")]
+        #[calldata(rename = "json2")]
+        JSON2,
     }
 
     fn default_text() -> OutputFormat {

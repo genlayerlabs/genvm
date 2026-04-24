@@ -292,6 +292,8 @@ impl<T: Decode> Decode for Result<T> {
 }
 
 pub mod llm {
+    use std::collections::BTreeMap;
+
     use serde_derive::{Deserialize, Serialize};
 
     pub use genlayer_sdk::abi::gl_call::llm_iface::{
@@ -326,6 +328,7 @@ pub mod llm {
     #[calldata(untagged)]
     pub enum PromptAnswerData {
         Text(String),
+        Object(BTreeMap<String, genlayer_calldata::Value>),
         Bool(bool),
     }
 

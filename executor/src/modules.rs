@@ -161,7 +161,7 @@ impl Module {
 
                 let response = calldata::decode(&response)?;
 
-                log_info!(name = self.name, question:serde = val, response:? = response; "answer from module");
+                log_info!(name = self.name, question:serde = val, response:serde = response; "answer from module");
 
                 let res: genvm_modules_interfaces::Result<R> =
                     calldata::from_value(response).with_context(|| "parsing result of module")?;

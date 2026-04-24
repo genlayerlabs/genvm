@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use genlayer_sdk::abi::gl_call::llm_iface;
 use genvm_common::sync::DArc;
 use genvm_common::*;
 
@@ -8,6 +9,7 @@ use genvm_modules_interfaces::GenericValue;
 use wiggle::GuestError;
 
 use crate::host::{self, SlotID};
+use crate::wasi::json_to_calldata::json_map_to_calldata;
 use crate::{calldata, public_abi, rt};
 
 pub use genlayer_sdk::abi::entry::ExtendedMessage;
@@ -849,6 +851,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let sup = self.context.data.supervisor.clone();
 
                 let task = taskify(async move {
+                    let format = prompt_payload.response_format.clone();
                     let result = sup
                         .modules
                         .llm
@@ -860,19 +863,44 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         )
                         .await?;
 
-                    use genvm_modules_interfaces::llm::PromptAnswer;
+                    let result = match result {
+                        Ok(r) => r,
+                        Err(e) => {
+                            return Ok(Err(e));
+                        }
+                    };
 
-                    if let Ok(PromptAnswer { consumed_gen, .. }) = &result {
-                        sup.host
-                            .lock_for(host::host_fns::Methods::ConsumeFuel)
-                            .await
-                            .consume_fuel(*consumed_gen)
-                            .map_err(|e| {
-                                generated::types::Error::trap(crate::anyhow_to_wasmtime(e))
+                    sup.host
+                        .lock_for(host::host_fns::Methods::ConsumeFuel)
+                        .await
+                        .consume_fuel(result.consumed_gen)
+                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
+                    let mut result = result.data;
+
+                    if format == llm_iface::OutputFormat::JSON {
+                        let genvm_modules_interfaces::llm::PromptAnswerData::Text(t) = result
+                        else {
+                            return Err(anyhow::anyhow!("expected text response for json format"));
+                        };
+
+                        let val: serde_json::Map<String, serde_json::Value> =
+                            serde_json::from_str(&t).map_err(|e| {
+                                generated::types::Error::trap(crate::anyhow_to_wasmtime(e.into()))
                             })?;
+
+                        log_debug!(text = t; "for backwards compatibility we convert text to object for JSON 1");
+
+                        std::mem::drop(t);
+
+                        let val = json_map_to_calldata(val);
+
+                        log_debug!(converted:serde = val; "for backwards compatibility we convert text to object for JSON 1");
+
+                        result = genvm_modules_interfaces::llm::PromptAnswerData::Object(val);
                     }
 
-                    Ok(result.map(|r| r.data))
+                    Ok(Ok(result))
                 })
                 .await
                 .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
