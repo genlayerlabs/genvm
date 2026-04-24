@@ -983,7 +983,7 @@ mod tests {
             "host": "https://openrouter.ai/api",
             "provider": "openai-compatible",
             "models": {
-                "mistralai/mistral-small-3.1-24b-instruct": { "supports_json": true }
+                "openrouter/auto": { "supports_json": true }
             },
             "key": "${ENV[OPENAIKEY]}"
         }"#;
