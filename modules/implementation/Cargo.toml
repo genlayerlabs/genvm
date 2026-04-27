@@ -39,7 +39,7 @@ futures-util = "0.3.31"
 base64 = "0.22.1"
 serde_bytes = "0.11.17"
 serde_with = { version = "3.12.0", features = ["base64", "macros"] }
-rand = { version = "0.9.1", features = ["std_rng"] }
+rand = { version = "0.10.0", features = ["std_rng"] }
 chrono = { version = "0.4.41", default-features = false, features = ["clock", "std", "serde"] }
 ring = { version = "0.17.14", features = ["std"] }
 url = { version = "2.5.4", features = ["serde"] }
