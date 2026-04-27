@@ -3,7 +3,7 @@ import http from 'http';
 import { Command } from 'commander';
 
 import * as logger from './logging.js';
-import * as browser from './browser.js';
+import * as chromeBrowser from './browser/chrome.js';
 import { envDurationMs, formatDurationMs } from './duration.js';
 
 interface NavigationOptions {
@@ -133,7 +133,7 @@ async function renderPage(
 	mode: 'text' | 'html' | 'screenshot',
 	options: RenderOptions = {},
 ): Promise<{ status: number; body: any }> {
-	const browserManager = await browser.BrowserManager.INSTANCE;
+	const browserManager = await chromeBrowser.INSTANCE;
 	const browserInstance = browserManager.getBrowser();
 	try {
 		return renderPageWithBrowser(
