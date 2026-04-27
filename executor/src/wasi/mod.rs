@@ -1,7 +1,10 @@
 use crate::{calldata, rt};
 
+use ::genlayer_sdk as original_genlayer_sdk;
+
 pub mod base;
 pub mod genlayer_sdk;
+pub mod json_to_calldata;
 pub mod preview1;
 pub mod vfs;
 
@@ -15,12 +18,13 @@ pub struct Context {
 
 impl Context {
     pub fn new(
-        data: genlayer_sdk::SingleVMData,
+        mut data: genlayer_sdk::SingleVMData,
         limiter: rt::memlimiter::Limiter,
     ) -> std::result::Result<Self, (rt::errors::VMError, genlayer_sdk::SingleVMData)> {
-        let as_value =
-            calldata::to_value(&data.message_data).expect("failed to serialize message_data"); // can't fail
-        let as_bytes = calldata::encode(&as_value);
+        let msg_data: original_genlayer_sdk::abi::entry::ExtendedMessageFlat =
+            data.message_data.into();
+        let as_bytes = calldata::encode_obj(&msg_data);
+        data.message_data = msg_data.into();
         let vfs = match vfs::VFS::new(as_bytes, limiter) {
             Ok(vfs) => vfs,
             Err(e) => return Err((e, data)),

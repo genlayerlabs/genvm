@@ -149,7 +149,16 @@ end
 
 # editorconfig-checker-disable
 ENUM_TEMPLATE_STR = <<-EOF
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    PartialEq,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    ::genlayer_calldata::Encode,
+    ::genlayer_calldata::Decode,
+)]
 % if repr != "str"
 #[repr(<%= repr %>)]
 pub enum <%= to_camel name %> {

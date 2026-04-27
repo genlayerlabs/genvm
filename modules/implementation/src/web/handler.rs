@@ -72,14 +72,7 @@ impl common::MessageHandler<web_iface::Message, FullResponse> for Handler {
             }
 
             web_iface::Message::GetStats => {
-                let res = match calldata::to_value(&self.0.metrics) {
-                    Ok(stats) => stats,
-                    Err(e) => {
-                        log_error!(error:err = e; "Failed to serialize metrics");
-                        calldata::Value::Null
-                    }
-                };
-
+                let res = calldata::to_value(&self.0.metrics);
                 Ok(FullResponse::GetStats(res))
             }
         }
@@ -95,6 +88,17 @@ impl common::MessageHandler<web_iface::Message, FullResponse> for Handler {
 pub enum FullResponse {
     Answer(web_iface::RenderAnswer),
     GetStats(calldata::Value),
+}
+
+impl<W: calldata::Writer> calldata::codec::Encode<W> for FullResponse {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut calldata::Encoder<W>) -> std::result::Result<(), Self::Error> {
+        match self {
+            FullResponse::Answer(v) => calldata::codec::Encode::encode(v, enc),
+            FullResponse::GetStats(v) => calldata::codec::Encode::encode(v, enc),
+        }
+    }
 }
 
 pub struct HandlerProvider {

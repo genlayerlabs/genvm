@@ -396,7 +396,7 @@ impl Provider for OpenAICompatible {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
 
-        Ok(ProviderResponse::new(response.to_owned(), tokens))
+        Ok(ProviderResponse::new(sanitize_json_str(response), tokens))
     }
 }
 
@@ -549,7 +549,7 @@ impl Provider for OLlama {
             .and_then(|v| v.get("response"))
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
-        Ok(ProviderResponse::new(response.to_owned(), tokens))
+        Ok(ProviderResponse::new(sanitize_json_str(response), tokens))
     }
 }
 
@@ -692,7 +692,7 @@ impl Provider for Gemini {
         let res =
             res.ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res_json.body))?;
 
-        Ok(ProviderResponse::new(res.to_owned(), tokens))
+        Ok(ProviderResponse::new(sanitize_json_str(res), tokens))
     }
 }
 
@@ -983,7 +983,7 @@ mod tests {
             "host": "https://openrouter.ai/api",
             "provider": "openai-compatible",
             "models": {
-                "mistralai/mistral-small-3.1-24b-instruct": { "supports_json": true }
+                "openrouter/auto": { "supports_json": true }
             },
             "key": "${ENV[OPENAIKEY]}"
         }"#;

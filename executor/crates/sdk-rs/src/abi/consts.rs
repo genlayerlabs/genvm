@@ -6,7 +6,16 @@ use serde::{Deserialize, Serialize};
 
 use std::borrow::Cow;
 
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    PartialEq,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    ::genlayer_calldata::Encode,
+    ::genlayer_calldata::Decode,
+)]
 #[repr(u8)]
 pub enum ResultCode {
     Return = 0,
@@ -48,7 +57,16 @@ impl TryFrom<u8> for ResultCode {
         }
     }
 }
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    PartialEq,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    ::genlayer_calldata::Encode,
+    ::genlayer_calldata::Decode,
+)]
 #[repr(u8)]
 pub enum StorageType {
     Default = 0,
@@ -86,7 +104,16 @@ impl TryFrom<u8> for StorageType {
         }
     }
 }
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    PartialEq,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    ::genlayer_calldata::Encode,
+    ::genlayer_calldata::Decode,
+)]
 #[repr(u8)]
 pub enum EntryKind {
     Main = 0,
@@ -148,7 +175,16 @@ pub mod top_limits {
     pub const MAX_FDS: u32 = 1024;
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    PartialEq,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    ::genlayer_calldata::Encode,
+    ::genlayer_calldata::Decode,
+)]
 pub enum SpecialMethod {
     GetSchema,
     ErroredMessage,

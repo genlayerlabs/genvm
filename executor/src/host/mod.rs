@@ -29,7 +29,7 @@ pub struct Host {
     metrics: sync::DArc<Metrics>,
 }
 
-#[derive(Default, serde::Serialize, Debug)]
+#[derive(Default, serde::Serialize, Debug, genlayer_calldata::Encode)]
 pub struct Metrics {
     pub time: stats::metric::Time,
 }
@@ -114,15 +114,15 @@ pub fn encode_result(res: &Result<FullResult>) -> Result<Vec<u8>> {
     match res {
         Ok(d) => {
             let mut encoded = Vec::from([d.kind as u8]);
-            let as_value = calldata::to_value(d)?;
-            calldata::encode_to(&mut encoded, &as_value)?;
+            let as_value = calldata::to_value(d);
+            calldata::encode_to(&mut calldata::Encoder::new(&mut encoded), &as_value)?;
             Ok(encoded)
         }
         Err(e) => {
             let mut encoded = Vec::from([ResultCode::InternalError as u8]);
             let fake_res = FullResult::new_internal_error(format!("{e:?}"));
-            let as_value = calldata::to_value(&fake_res)?;
-            calldata::encode_to(&mut encoded, &as_value)?;
+            let as_value = calldata::to_value(&fake_res);
+            calldata::encode_to(&mut calldata::Encoder::new(&mut encoded), &as_value)?;
             Ok(encoded)
         }
     }
@@ -147,7 +147,7 @@ pub fn all_useful_work_done() {
     std::process::exit(0);
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, genlayer_calldata::Encode)]
 pub struct FullResult {
     pub execution_hash: bytes::Bytes,
 
@@ -180,9 +180,9 @@ impl FullResult {
     }
 }
 
-struct Sha3Appender(sha3::Sha3_256);
+struct Sha3Writer(sha3::Sha3_256);
 
-impl calldata::Appender for Sha3Appender {
+impl calldata::Writer for Sha3Writer {
     type Error = std::convert::Infallible;
 
     fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
@@ -207,6 +207,31 @@ impl FullResult {
             data_fees_remaining: u64,
         }
 
+        impl<W: calldata::Writer> calldata::codec::Encode<W> for Hashable<'_> {
+            type Error = W::Error;
+
+            fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
+                enc.start_map(5)?;
+
+                enc.push_map_k("data")?;
+                calldata::codec::Encode::encode(self.data, enc)?;
+
+                enc.push_map_k("data_fees_remaining")?;
+                calldata::codec::Encode::encode(&self.data_fees_remaining, enc)?;
+
+                enc.push_map_k("fingerprint")?;
+                calldata::codec::Encode::encode(self.fingerprint, enc)?;
+
+                enc.push_map_k("kind")?;
+                calldata::codec::Encode::encode(self.kind, enc)?;
+
+                enc.push_map_k("storage_changes")?;
+                calldata::codec::Encode::encode(self.storage_changes, enc)?;
+
+                Ok(())
+            }
+        }
+
         let hashable = Hashable {
             kind: &rt_result.kind,
             data: &rt_result.data,
@@ -215,13 +240,14 @@ impl FullResult {
             data_fees_remaining,
         };
 
-        let as_value = calldata::to_value(&hashable).expect("failed to serialize hashable");
-        let mut hasher = Sha3Appender(sha3::Digest::new());
-        match calldata::encode_to(&mut hasher, &as_value) {
+        let as_value = calldata::to_value(&hashable);
+        let mut enc = calldata::Encoder::new(Sha3Writer(sha3::Digest::new()));
+        match calldata::encode_to(&mut enc, &as_value) {
             Ok(()) => {}
             Err(e) => match e {},
         }
-        let execution_hash = bytes::Bytes::from(sha3::Digest::finalize(hasher.0).to_vec());
+        let execution_hash =
+            bytes::Bytes::from(sha3::Digest::finalize(enc.into_inner().0).to_vec());
 
         Self {
             execution_hash,

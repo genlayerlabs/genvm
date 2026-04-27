@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use genlayer_sdk::abi::gl_call::llm_iface;
 use genvm_common::sync::DArc;
 use genvm_common::*;
 
@@ -8,6 +9,7 @@ use genvm_modules_interfaces::GenericValue;
 use wiggle::GuestError;
 
 use crate::host::{self, SlotID};
+use crate::wasi::json_to_calldata::json_map_to_calldata;
 use crate::{calldata, public_abi, rt};
 
 pub use genlayer_sdk::abi::entry::ExtendedMessage;
@@ -365,17 +367,17 @@ async fn taskify<T>(
         + 'static,
 ) -> anyhow::Result<Box<[u8]>>
 where
-    T: serde::Serialize + Send,
+    T: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible> + Send,
 {
     match fut.await? {
         Ok(r) => {
-            let r = calldata::to_value(&r)?;
+            let r = calldata::to_value(&r);
             let data = calldata::Value::Map(BTreeMap::from([("ok".to_owned(), r)]));
 
             Ok(Box::from(calldata::encode(&data)))
         }
         Err(e) => {
-            let e = calldata::to_value(&e)?;
+            let e = calldata::to_value(&e);
             let data = calldata::Value::Map(BTreeMap::from([("error".to_owned(), e)]));
 
             Ok(Box::from(calldata::encode(&data)))
@@ -451,10 +453,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     calldata,
                     value,
                 };
-                let encoded = calldata::encode(
-                    &calldata::to_value(&emission)
-                        .map_err(|e| generated::types::Error::trap(e.into()))?,
-                );
+                let encoded = calldata::encode_obj(&emission);
                 consume_receipt_words(
                     &self.context.data.supervisor.shared_data,
                     calc_receipt_size(encoded.len()),
@@ -604,8 +603,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     real_topics.push(t.clone());
                 }
 
-                struct CountingAppender(usize);
-                impl calldata::Appender for CountingAppender {
+                struct CountingWriter(usize);
+                impl calldata::Writer for CountingWriter {
                     type Error = std::convert::Infallible;
 
                     fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
@@ -614,10 +613,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                 }
 
-                let mut blob_data_len = CountingAppender(0);
+                let mut enc = calldata::Encoder::new(CountingWriter(0));
 
                 let val = calldata::Value::Map(blob);
-                calldata::encode_to(&mut blob_data_len, &val).unwrap_or_else(|e| match e {});
+                calldata::encode_to(&mut enc, &val).unwrap_or_else(|e| match e {});
                 let blob = match val {
                     calldata::Value::Map(m) => m,
                     _ => unreachable!(),
@@ -625,7 +624,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let supervisor = self.context.data.supervisor.clone();
 
-                let size = topics.len() + blob_data_len.0.div_ceil(32);
+                let size = topics.len() + enc.into_inner().0.div_ceil(32);
                 let size = size as u64;
                 supervisor
                     .get_storage_limiter()
@@ -677,9 +676,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     value,
                     on,
                 };
-                let encoded = calldata::encode(&calldata::to_value(&emission).map_err(|e| {
-                    generated::types::Error::trap(crate::anyhow_to_wasmtime(e.into()))
-                })?);
+                let encoded = calldata::encode_obj(&emission);
                 consume_receipt_words(
                     &self.context.data.supervisor.shared_data,
                     calc_receipt_size(encoded.len()),
@@ -727,9 +724,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     on,
                     salt_nonce,
                 };
-                let encoded = calldata::encode(&calldata::to_value(&emission).map_err(|e| {
-                    generated::types::Error::trap(crate::anyhow_to_wasmtime(e.into()))
-                })?);
+                let encoded = calldata::encode_obj(&emission);
                 consume_receipt_words(
                     &self.context.data.supervisor.shared_data,
                     calc_receipt_size(encoded.len()),
@@ -856,6 +851,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let sup = self.context.data.supervisor.clone();
 
                 let task = taskify(async move {
+                    let format = prompt_payload.response_format.clone();
                     let result = sup
                         .modules
                         .llm
@@ -867,19 +863,44 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         )
                         .await?;
 
-                    use genvm_modules_interfaces::llm::PromptAnswer;
+                    let result = match result {
+                        Ok(r) => r,
+                        Err(e) => {
+                            return Ok(Err(e));
+                        }
+                    };
 
-                    if let Ok(PromptAnswer { consumed_gen, .. }) = &result {
-                        sup.host
-                            .lock_for(host::host_fns::Methods::ConsumeFuel)
-                            .await
-                            .consume_fuel(*consumed_gen)
-                            .map_err(|e| {
-                                generated::types::Error::trap(crate::anyhow_to_wasmtime(e))
+                    sup.host
+                        .lock_for(host::host_fns::Methods::ConsumeFuel)
+                        .await
+                        .consume_fuel(result.consumed_gen)
+                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
+                    let mut result = result.data;
+
+                    if format == llm_iface::OutputFormat::JSON {
+                        let genvm_modules_interfaces::llm::PromptAnswerData::Text(t) = result
+                        else {
+                            return Err(anyhow::anyhow!("expected text response for json format"));
+                        };
+
+                        let val: serde_json::Map<String, serde_json::Value> =
+                            serde_json::from_str(&t).map_err(|e| {
+                                generated::types::Error::trap(crate::anyhow_to_wasmtime(e.into()))
                             })?;
+
+                        log_debug!(text = t; "for backwards compatibility we convert text to object for JSON 1");
+
+                        std::mem::drop(t);
+
+                        let val = json_map_to_calldata(val);
+
+                        log_debug!(converted:serde = val; "for backwards compatibility we convert text to object for JSON 1");
+
+                        result = genvm_modules_interfaces::llm::PromptAnswerData::Object(val);
                     }
 
-                    Ok(result.map(|r| r.data))
+                    Ok(Ok(result))
                 })
                 .await
                 .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
@@ -1178,9 +1199,8 @@ impl Context {
     }
 
     pub fn log(&self) -> calldata::Value {
-        let msg =
-            calldata::to_value(&self.data.message_data).expect("failed to serialize message_data");
-        let conf = calldata::to_value(&self.data.conf).expect("failed to serialize conf");
+        let msg = calldata::to_value(&self.data.message_data);
+        let conf = calldata::to_value(&self.data.conf);
 
         calldata::Value::Map(BTreeMap::from([
             ("config".to_owned(), conf),

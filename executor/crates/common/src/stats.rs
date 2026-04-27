@@ -1,7 +1,7 @@
 pub mod metric {
-    #[derive(serde::Serialize)]
+    #[derive(serde::Serialize, genlayer_calldata::Encode)]
     pub struct Time(std::sync::atomic::AtomicU64);
-    #[derive(serde::Serialize)]
+    #[derive(serde::Serialize, genlayer_calldata::Encode)]
     pub struct Count(std::sync::atomic::AtomicU64);
 
     impl std::fmt::Debug for Time {
@@ -111,6 +111,37 @@ pub mod metric {
         fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
             let map = self.0.lock().unwrap();
             map.serialize(serializer)
+        }
+    }
+
+    use crate::calldata;
+
+    impl<W: calldata::Writer> calldata::codec::Encode<W> for TokenMetrics {
+        type Error = W::Error;
+
+        fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
+            enc.start_map(3)?;
+            enc.push_map_k("input")?;
+            calldata::codec::Encode::encode(&self.input, enc)?;
+            enc.push_map_k("output")?;
+            calldata::codec::Encode::encode(&self.output, enc)?;
+            enc.push_map_k("total")?;
+            calldata::codec::Encode::encode(&self.total, enc)?;
+            Ok(())
+        }
+    }
+
+    impl<W: calldata::Writer> calldata::codec::Encode<W> for TokenMetricsMap {
+        type Error = W::Error;
+
+        fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
+            let map = self.0.lock().unwrap();
+            enc.start_map(map.len() as u64)?;
+            for (k, v) in map.iter() {
+                enc.push_map_k(k)?;
+                calldata::codec::Encode::encode(v, enc)?;
+            }
+            Ok(())
         }
     }
 }

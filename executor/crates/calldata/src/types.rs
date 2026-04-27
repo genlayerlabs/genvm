@@ -44,6 +44,33 @@ impl Address {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValueKind {
+    Null,
+    Bool,
+    Address,
+    Number,
+    Str,
+    Bytes,
+    Array,
+    Map,
+}
+
+impl std::fmt::Display for ValueKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ValueKind::Null => "null",
+            ValueKind::Bool => "bool",
+            ValueKind::Address => "address",
+            ValueKind::Number => "number",
+            ValueKind::Str => "str",
+            ValueKind::Bytes => "bytes",
+            ValueKind::Array => "array",
+            ValueKind::Map => "map",
+        })
+    }
+}
+
 pub type Map = BTreeMap<String, Value>;
 
 #[derive(Clone, PartialEq, Eq)]
@@ -176,11 +203,349 @@ impl From<String> for Value {
     }
 }
 
+impl From<bool> for Value {
+    fn from(v: bool) -> Self {
+        Value::Bool(v)
+    }
+}
+
+impl From<Address> for Value {
+    fn from(v: Address) -> Self {
+        Value::Address(v)
+    }
+}
+
+impl From<Vec<u8>> for Value {
+    fn from(v: Vec<u8>) -> Self {
+        Value::Bytes(v)
+    }
+}
+
+impl From<num_bigint::BigInt> for Value {
+    fn from(v: num_bigint::BigInt) -> Self {
+        Value::Number(v)
+    }
+}
+
+impl From<i64> for Value {
+    fn from(v: i64) -> Self {
+        Value::Number(num_bigint::BigInt::from(v))
+    }
+}
+
+impl From<u64> for Value {
+    fn from(v: u64) -> Self {
+        Value::Number(num_bigint::BigInt::from(v))
+    }
+}
+
+impl From<i32> for Value {
+    fn from(v: i32) -> Self {
+        Value::Number(num_bigint::BigInt::from(v))
+    }
+}
+
+impl From<u32> for Value {
+    fn from(v: u32) -> Self {
+        Value::Number(num_bigint::BigInt::from(v))
+    }
+}
+
+impl From<Vec<Value>> for Value {
+    fn from(v: Vec<Value>) -> Self {
+        Value::Array(v)
+    }
+}
+
+impl From<BTreeMap<String, Value>> for Value {
+    fn from(v: BTreeMap<String, Value>) -> Self {
+        Value::Map(v)
+    }
+}
+
+impl From<primitive_types::U256> for Value {
+    fn from(v: primitive_types::U256) -> Self {
+        let bytes = v.to_little_endian();
+        Value::Number(num_bigint::BigInt::from_bytes_le(
+            num_bigint::Sign::Plus,
+            &bytes,
+        ))
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl arbitrary::Arbitrary<'_> for Value {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
+        Self::arbitrary_depth(u, 3)
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl Value {
+    fn arbitrary_depth(u: &mut arbitrary::Unstructured<'_>, depth: u8) -> arbitrary::Result<Self> {
+        if depth == 0 {
+            return match u.int_in_range(0..=5u8)? {
+                0 => Ok(Value::Null),
+                1 => Ok(Value::Bool(u.arbitrary()?)),
+                2 => Ok(Value::Str(u.arbitrary()?)),
+                3 => {
+                    if u.arbitrary()? {
+                        let bytes: [u8; 32] = u.arbitrary()?;
+                        let sign = if u.arbitrary()? {
+                            num_bigint::Sign::Plus
+                        } else {
+                            num_bigint::Sign::Minus
+                        };
+                        let big = num_bigint::BigInt::from_bytes_le(sign, &bytes);
+                        Ok(Value::Number(big))
+                    } else {
+                        Ok(Value::Number(num_bigint::BigInt::from(
+                            u.arbitrary::<i64>()?,
+                        )))
+                    }
+                }
+                4 => Ok(Value::Bytes(u.arbitrary()?)),
+                _ => Ok(Value::Address(u.arbitrary()?)),
+            };
+        }
+        match u.int_in_range(0..=7u8)? {
+            0 => Ok(Value::Null),
+            1 => Ok(Value::Bool(u.arbitrary()?)),
+            2 => Ok(Value::Str(u.arbitrary()?)),
+            3 => Ok(Value::Number(num_bigint::BigInt::from(
+                u.arbitrary::<i64>()?,
+            ))),
+            4 => Ok(Value::Bytes(u.arbitrary()?)),
+            5 => Ok(Value::Address(u.arbitrary()?)),
+            6 => {
+                let len = u.int_in_range(0..=4u8)?;
+                (0..len)
+                    .map(|_| Self::arbitrary_depth(u, depth - 1))
+                    .collect::<arbitrary::Result<Vec<_>>>()
+                    .map(Value::Array)
+            }
+            _ => {
+                let len = u.int_in_range(0..=4u8)?;
+                let mut map = BTreeMap::new();
+                for _ in 0..len {
+                    map.insert(u.arbitrary()?, Self::arbitrary_depth(u, depth - 1)?);
+                }
+                Ok(Value::Map(map))
+            }
+        }
+    }
+}
+
 impl Value {
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Value::Str(s) => Some(s),
             _ => None,
         }
+    }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Value::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    pub fn as_number(&self) -> Option<&num_bigint::BigInt> {
+        match self {
+            Value::Number(n) => Some(n),
+            _ => None,
+        }
+    }
+
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        match self {
+            Value::Bytes(b) => Some(b),
+            _ => None,
+        }
+    }
+
+    pub fn as_address(&self) -> Option<&Address> {
+        match self {
+            Value::Address(a) => Some(a),
+            _ => None,
+        }
+    }
+
+    pub fn as_array(&self) -> Option<&[Value]> {
+        match self {
+            Value::Array(a) => Some(a),
+            _ => None,
+        }
+    }
+
+    pub fn as_map(&self) -> Option<&BTreeMap<String, Value>> {
+        match self {
+            Value::Map(m) => Some(m),
+            _ => None,
+        }
+    }
+
+    pub fn is_null(&self) -> bool {
+        matches!(self, Value::Null)
+    }
+
+    pub fn kind(&self) -> ValueKind {
+        match self {
+            Value::Null => ValueKind::Null,
+            Value::Bool(_) => ValueKind::Bool,
+            Value::Address(_) => ValueKind::Address,
+            Value::Number(_) => ValueKind::Number,
+            Value::Str(_) => ValueKind::Str,
+            Value::Bytes(_) => ValueKind::Bytes,
+            Value::Array(_) => ValueKind::Array,
+            Value::Map(_) => ValueKind::Map,
+        }
+    }
+}
+
+impl serde::Serialize for Value {
+    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Value::Null => serializer.serialize_unit(),
+            Value::Bool(b) => serializer.serialize_bool(*b),
+            Value::Bytes(b) => serializer.serialize_bytes(b),
+            Value::Str(s) => serializer.serialize_str(s),
+            Value::Array(v) => v.serialize(serializer),
+            Value::Map(m) => {
+                use serde::ser::SerializeMap;
+                let mut map = serializer.serialize_map(Some(m.len()))?;
+                for (k, v) in m {
+                    map.serialize_entry(k, v)?;
+                }
+                map.end()
+            }
+            Value::Address(addr) => addr.serialize(serializer),
+            Value::Number(num) => {
+                if let Ok(num) = num.try_into() {
+                    let num: i64 = num;
+                    serializer.serialize_i64(num)
+                } else {
+                    num.serialize(serializer)
+                }
+            }
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Value {
+    fn deserialize<D>(deserializer: D) -> Result<Value, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct ValueVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for ValueVisitor {
+            type Value = Value;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("any valid calldata value")
+            }
+
+            fn visit_bool<E>(self, value: bool) -> Result<Value, E> {
+                Ok(Value::Bool(value))
+            }
+
+            fn visit_i64<E>(self, value: i64) -> Result<Value, E> {
+                Ok(Value::Number(num_bigint::BigInt::from(value)))
+            }
+
+            fn visit_i128<E>(self, value: i128) -> Result<Value, E> {
+                Ok(Value::Number(num_bigint::BigInt::from(value)))
+            }
+
+            fn visit_u64<E>(self, value: u64) -> Result<Value, E> {
+                Ok(Value::Number(num_bigint::BigInt::from(value)))
+            }
+
+            fn visit_u128<E>(self, value: u128) -> Result<Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Value::Number(num_bigint::BigInt::from(value)))
+            }
+
+            fn visit_f64<E>(self, value: f64) -> Result<Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Err(serde::de::Error::invalid_type(
+                    serde::de::Unexpected::Float(value),
+                    &self,
+                ))
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Value, E>
+            where
+                E: serde::de::Error,
+            {
+                self.visit_string(String::from(value))
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Value, E> {
+                Ok(Value::Str(value))
+            }
+
+            fn visit_none<E>(self) -> Result<Value, E> {
+                Ok(Value::Null)
+            }
+
+            fn visit_some<D>(self, deserializer: D) -> Result<Value, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                serde::Deserialize::deserialize(deserializer)
+            }
+
+            fn visit_unit<E>(self) -> Result<Value, E> {
+                Ok(Value::Null)
+            }
+
+            fn visit_seq<V>(self, mut visitor: V) -> Result<Value, V::Error>
+            where
+                V: serde::de::SeqAccess<'de>,
+            {
+                let mut vec = Vec::new();
+                while let Some(elem) = visitor.next_element()? {
+                    vec.push(elem);
+                }
+                Ok(Value::Array(vec))
+            }
+
+            fn visit_map<V>(self, mut visitor: V) -> Result<Value, V::Error>
+            where
+                V: serde::de::MapAccess<'de>,
+            {
+                let mut map = BTreeMap::new();
+                while let Some((k, v)) = visitor.next_entry()? {
+                    map.insert(k, v);
+                }
+                Ok(Value::Map(map))
+            }
+
+            fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Value::Bytes(v))
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Value::Bytes(v.to_owned()))
+            }
+        }
+
+        deserializer.deserialize_any(ValueVisitor)
     }
 }

@@ -4,7 +4,16 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    PartialEq,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    ::genlayer_calldata::Encode,
+    ::genlayer_calldata::Decode,
+)]
 #[repr(u8)]
 pub enum Methods {
     StorageRead = 0,
@@ -62,7 +71,16 @@ impl TryFrom<u8> for Methods {
         }
     }
 }
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    PartialEq,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    ::genlayer_calldata::Encode,
+    ::genlayer_calldata::Decode,
+)]
 #[repr(u8)]
 pub enum Errors {
     Ok = 0,

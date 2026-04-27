@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use genlayer_sdk::abi;
+use genvm_common::log_trace;
 
 use crate::{public_abi, rt};
 
@@ -35,6 +36,8 @@ impl VFS {
         stdin: Vec<u8>,
         limiter: rt::memlimiter::Limiter,
     ) -> std::result::Result<Self, rt::errors::VMError> {
+        log_trace!(stdin:bytes = stdin; "creating VFS");
+
         if !limiter.consume(stdin.len() as u32) {
             return Err(rt::errors::VMError(
                 abi::consts::VmError::oom().ram().val(),

@@ -39,6 +39,7 @@ wasmparser = { path = "third-party/wasm-tools/crates/wasmparser", default-featur
 genvm-common = { path = "crates/common" }
 genvm-modules-interfaces = { path = "../modules/interfaces" }
 genlayer_sdk = { path = "crates/sdk-rs", default-features = false }
+genlayer_calldata = { path = "crates/calldata" }
 
 anyhow = { version = "1.0.97", default-features = false }
 tracing = "0.1.41"

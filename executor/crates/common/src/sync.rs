@@ -371,6 +371,16 @@ mod darc {
 
 pub use darc::{DArc, DArcStruct};
 
+impl<W: crate::calldata::Writer, T: crate::calldata::codec::Encode<W> + 'static>
+    crate::calldata::codec::Encode<W> for DArc<T>
+{
+    type Error = <T as crate::calldata::codec::Encode<W>>::Error;
+
+    fn encode(&self, enc: &mut crate::calldata::Encoder<W>) -> Result<(), Self::Error> {
+        (**self).encode(enc)
+    }
+}
+
 struct WaiterInner {
     counter: std::sync::atomic::AtomicUsize,
     reached_zero: tokio::sync::Notify,

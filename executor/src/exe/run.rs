@@ -75,10 +75,8 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
             .with_context(|| format!("reading execution data from {}", args.execution_data))?
     };
 
-    let execution_data =
-        calldata::decode(&execution_data_bytes).with_context(|| "decoding execution data")?;
-    let execution_data = calldata::from_value::<domain::ExecutionData>(execution_data)
-        .with_context(|| "deserializing execution data")?;
+    let execution_data = calldata::decode_obj::<domain::ExecutionData>(&execution_data_bytes)
+        .with_context(|| "decoding execution data")?;
     let message = &execution_data.message;
     let host_data = rt::parse_host_data(&execution_data)?;
 

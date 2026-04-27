@@ -1,30 +1,62 @@
+extern crate self as genlayer_calldata;
+
 mod bin;
-mod de;
+pub mod codec;
+pub mod consts;
+mod encoder;
 mod error;
-mod se;
 mod types;
 
-pub use bin::{
-    Appender, DecodeError, Options as DecodeOptions, decode, decode_with, encode, encode_to,
-};
+pub use encoder::{Encoder, StdWriter, Writer};
+pub use genlayer_calldata_derive::*;
+
+pub use bin::{BinDecodeError, Options as DecodeOptions, decode, decode_with, encode, encode_to};
 pub use error::*;
 pub use types::*;
 
-pub fn from_value<T>(value: Value) -> core::result::Result<T, Error>
+pub fn from_value<T>(value: Value) -> core::result::Result<T, codec::DecodeError>
 where
-    T: serde::de::DeserializeOwned,
+    T: codec::Decode,
 {
-    T::deserialize(value)
+    T::decode(codec::ValueDeserializer(value))
 }
 
-pub fn to_value<T>(value: &T) -> Result<Value, Error>
-where
-    T: ?Sized + serde::ser::Serialize,
-{
-    if let Some(val) = se::try_serialize_value::<T>(value) {
-        return Ok(val);
+pub fn to_value(value: &impl codec::Encode<Vec<u8>, Error = std::convert::Infallible>) -> Value {
+    let buf = Vec::new();
+    let mut enc = Encoder::new(buf);
+    match value.encode(&mut enc) {
+        Ok(()) => {}
+        Err(e) => match e {},
     }
-    value.serialize(se::Serializer)
+    let buf = enc.into_inner();
+    decode(&buf).expect("encode-decode roundtrip failed")
+}
+
+/// Encode a value directly to bytes, skipping the intermediate `Value` representation.
+pub fn encode_obj(
+    value: &impl codec::Encode<Vec<u8>, Error = std::convert::Infallible>,
+) -> Vec<u8> {
+    let buf = Vec::new();
+    let mut enc = Encoder::new(buf);
+    match value.encode(&mut enc) {
+        Ok(()) => {}
+        Err(e) => match e {},
+    }
+    enc.into_inner()
+}
+
+/// Decode a value directly from bytes, skipping the intermediate `Value` representation.
+pub fn decode_obj<T: codec::Decode>(data: &[u8]) -> core::result::Result<T, codec::DecodeError> {
+    let mut de = codec::BinaryDeserializer::new(data);
+    let result = T::decode(&mut de)?;
+    if !de.is_empty() {
+        return Err(BinDecodeError::UnexpectedEnd {
+            expected: 0,
+            available: de.remaining(),
+        }
+        .into());
+    }
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -35,7 +67,7 @@ mod tests {
 
     use super::*;
 
-    #[derive(serde::Deserialize)]
+    #[derive(Decode)]
     struct Foo {
         a: calldata::Value,
     }
@@ -84,7 +116,7 @@ mod tests {
         }
     }
 
-    #[derive(serde::Deserialize)]
+    #[derive(Decode)]
     struct FooArr {
         a: Vec<calldata::Value>,
     }
@@ -117,7 +149,7 @@ mod tests {
         }
     }
 
-    #[derive(serde::Deserialize)]
+    #[derive(Decode)]
     struct FooMap {
         a: BTreeMap<String, calldata::Value>,
     }
@@ -151,7 +183,7 @@ mod tests {
         }
     }
 
-    #[derive(serde::Deserialize)]
+    #[derive(Decode)]
     struct Bar {
         a: primitive_types::U256,
     }

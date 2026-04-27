@@ -12,3 +12,6 @@ serde_json = "1.0.140"
 serde_derive = "1.0.219"
 regex = { version = "1.11.1", default-features = false, features = ["std"] }
 serde_bytes = "0.11.17"
+genlayer_calldata = { path = "../../executor/crates/calldata" }
+num-bigint = "0.4"
+num-traits = "0.2"

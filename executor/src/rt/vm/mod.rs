@@ -147,7 +147,11 @@ impl VM<wasmtime::Instance> {
     pub async fn run(
         mut self,
     ) -> Result<RunResult, (anyhow::Error, wasi::genlayer_sdk::SingleVMData)> {
-        log_debug!(wasi_preview1: serde = self.vm_base.store.data().genlayer_ctx.preview1.log(), genlayer_sdk: serde = self.vm_base.store.data().genlayer_ctx.genlayer_sdk.log(); "run");
+        log_debug!(
+            wasi_preview1: serde = self.vm_base.store.data().genlayer_ctx.preview1.log(),
+            genlayer_sdk: serde = self.vm_base.store.data().genlayer_ctx.genlayer_sdk.log();
+            "run"
+        );
 
         let func = self
             .data

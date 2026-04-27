@@ -64,6 +64,7 @@ impl<'d> serde::Deserialize<'d> for Level {
 
 pub struct Logger {
     filter: DefaultFilterer,
+    conf: LogIntoBufferConfig,
     default_writer: Box<std::sync::Mutex<dyn std::io::Write + Send + Sync>>,
 }
 
@@ -139,7 +140,21 @@ pub enum Capture<'a> {
     Debug(&'a (dyn std::fmt::Debug + 'a)),
     Anyhow(&'a anyhow::Error),
     #[allow(clippy::type_complexity)]
-    Serde(&'a (dyn Fn(&mut std::io::Cursor<&mut Vec<u8>>) -> Result<(), error::Error> + 'a)),
+    Serde(
+        &'a (dyn Fn(
+            &mut std::io::Cursor<&mut Vec<u8>>,
+            &LogIntoBufferConfig,
+        ) -> Result<(), error::Error>
+                 + 'a),
+    ),
+    #[allow(clippy::type_complexity)]
+    Cd(
+        &'a (dyn Fn(
+            &mut std::io::Cursor<&mut Vec<u8>>,
+            &LogIntoBufferConfig,
+        ) -> Result<(), error::Error>
+                 + 'a),
+    ),
     Id(u64),
     Bytes(&'a [u8]),
 }
@@ -210,8 +225,15 @@ macro_rules! __make_capture {
     };
 
     (serde = $value:expr) => {
-        $crate::logger::Capture::Serde(&|v| {
-            serde::Serialize::serialize(&$value, $crate::logger::Visitor(v, 0))
+        $crate::logger::Capture::Serde(&|v, conf| {
+            serde::Serialize::serialize(&$value, $crate::logger::Visitor(v, 0, *conf))
+        })
+    };
+
+    (cd = $value:expr) => {
+        $crate::logger::Capture::Cd(&|v, conf| {
+            let val = $crate::calldata::to_value(&$value);
+            serde::Serialize::serialize(&val, $crate::logger::Visitor(v, 0, *conf))
         })
     };
 }
@@ -455,13 +477,17 @@ fn write_bytes_inner(buf: &mut std::io::Cursor<&mut Vec<u8>>, s: &[u8]) -> std::
     Ok(())
 }
 
-fn write_bytes(buf: &mut std::io::Cursor<&mut Vec<u8>>, s: &[u8]) -> std::io::Result<()> {
+fn write_bytes(
+    conf: &LogIntoBufferConfig,
+    buf: &mut std::io::Cursor<&mut Vec<u8>>,
+    s: &[u8],
+) -> std::io::Result<()> {
     buf.write_all(b"\"$Bytes(")?;
 
-    if s.len() > 128 {
-        write_bytes_inner(buf, &s[..64])?;
+    if s.len() > conf.bytes_limit {
+        write_bytes_inner(buf, &s[..conf.bytes_limit / 2])?;
         buf.write_all(b"...")?;
-        write_bytes_inner(buf, &s[s.len() - 64..])?;
+        write_bytes_inner(buf, &s[s.len() - conf.bytes_limit / 2..])?;
     } else {
         write_bytes_inner(buf, s)?;
     }
@@ -511,7 +537,11 @@ fn write_k_v_str_fast(
     Ok(())
 }
 
-pub struct Visitor<'a, 'w>(pub &'a mut std::io::Cursor<&'w mut Vec<u8>>, pub usize);
+pub struct Visitor<'a, 'w>(
+    pub &'a mut std::io::Cursor<&'w mut Vec<u8>>,
+    pub usize,
+    pub LogIntoBufferConfig,
+);
 
 pub struct SerializeVec<'a, 'w> {
     cur: &'a mut std::io::Cursor<&'w mut Vec<u8>>,
@@ -520,6 +550,7 @@ pub struct SerializeVec<'a, 'w> {
     depth: usize,
     count: usize,
     overflow: std::collections::VecDeque<Vec<u8>>,
+    conf: LogIntoBufferConfig,
 }
 
 pub struct SerializeMap<'a, 'w> {
@@ -527,6 +558,7 @@ pub struct SerializeMap<'a, 'w> {
     put_comma: bool,
     close_curly: bool,
     depth: usize,
+    conf: LogIntoBufferConfig,
 }
 
 impl Visitor<'_, '_> {
@@ -555,7 +587,7 @@ impl Visitor<'_, '_> {
                     calldata::Value::Address(addr) => {
                         self.serialize_with_special(addr)?;
                     }
-                    _ => value.serialize(Visitor(self.0, self.1))?,
+                    _ => value.serialize(Visitor(self.0, self.1, self.2))?,
                 }
                 Ok(())
             }
@@ -590,7 +622,7 @@ impl Visitor<'_, '_> {
 
                 Ok(())
             }
-            _ => value.serialize(Visitor(self.0, self.1)),
+            _ => value.serialize(Visitor(self.0, self.1, self.2)),
         }
     }
 }
@@ -613,12 +645,12 @@ impl serde::ser::SerializeSeq for SerializeVec<'_, '_> {
                 self.cur.write_all(b"[")?;
                 self.put_comma = true;
             }
-            Visitor(self.cur, self.depth).serialize_with_special(value)?;
+            Visitor(self.cur, self.depth, self.conf).serialize_with_special(value)?;
         } else {
             let mut buf = Vec::new();
             {
                 let mut cursor = std::io::Cursor::new(&mut buf);
-                Visitor(&mut cursor, self.depth).serialize_with_special(value)?;
+                Visitor(&mut cursor, self.depth, self.conf).serialize_with_special(value)?;
             }
             if self.overflow.len() >= HALF {
                 self.overflow.pop_front();
@@ -717,7 +749,7 @@ impl serde::ser::SerializeMap for SerializeMap<'_, '_> {
     where
         T: ?Sized + Serialize,
     {
-        Visitor(self.cur, self.depth).serialize_with_special(value)
+        Visitor(self.cur, self.depth, self.conf).serialize_with_special(value)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
@@ -766,7 +798,7 @@ impl serde::ser::SerializeStruct for SerializeMap<'_, '_> {
         }
         write_quoted_str_escaping(self.cur, key)?;
         self.cur.write_all(b":")?;
-        Visitor(self.cur, self.depth).serialize_with_special(value)?;
+        Visitor(self.cur, self.depth, self.conf).serialize_with_special(value)?;
 
         Ok(())
     }
@@ -887,7 +919,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
     }
 
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        write_bytes(self.0, v)?;
+        write_bytes(&self.2, self.0, v)?;
 
         Ok(())
     }
@@ -935,7 +967,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
         self.0.write_all(b"{\"")?;
         write_str_part_escaping(self.0, name)?;
         self.0.write_all(b"\":")?;
-        Visitor(self.0, self.1 + 1).serialize_with_special(value)?;
+        Visitor(self.0, self.1 + 1, self.2).serialize_with_special(value)?;
         self.0.write_all(b"}")?;
 
         Ok(())
@@ -954,7 +986,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
         self.0.write_all(b"{\"")?;
         write_str_part_escaping(self.0, variant)?;
         self.0.write_all(b"\":")?;
-        Visitor(self.0, self.1 + 1).serialize_with_special(value)?;
+        Visitor(self.0, self.1 + 1, self.2).serialize_with_special(value)?;
         self.0.write_all(b"}")?;
         Ok(())
     }
@@ -967,6 +999,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
             depth: self.1 + 1,
             count: 0,
             overflow: std::collections::VecDeque::new(),
+            conf: self.2,
         })
     }
 
@@ -978,6 +1011,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
             depth: self.1 + 1,
             count: 0,
             overflow: std::collections::VecDeque::new(),
+            conf: self.2,
         })
     }
 
@@ -997,6 +1031,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
             depth: self.1 + 1,
             count: 0,
             overflow: std::collections::VecDeque::new(),
+            conf: self.2,
         })
     }
 
@@ -1018,6 +1053,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
             depth: self.1 + 1,
             count: 0,
             overflow: std::collections::VecDeque::new(),
+            conf: self.2,
         })
     }
 
@@ -1027,6 +1063,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
             put_comma: false,
             close_curly: false,
             depth: self.1 + 1,
+            conf: self.2,
         })
     }
 
@@ -1040,6 +1077,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
             put_comma: false,
             close_curly: false,
             depth: self.1 + 1,
+            conf: self.2,
         })
     }
 
@@ -1059,6 +1097,7 @@ impl<'a, 'w> serde::Serializer for Visitor<'a, 'w> {
             put_comma: false,
             close_curly: true,
             depth: self.1 + 1,
+            conf: self.2,
         })
     }
 }
@@ -1117,7 +1156,22 @@ impl<'a> Visitor<'a, '_> {
     }
 }
 
-pub fn log_into_buffer(buf: &mut Vec<u8>, record: Record<'_>) -> std::result::Result<(), Error> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LogIntoBufferConfig {
+    pub bytes_limit: usize,
+}
+
+impl Default for LogIntoBufferConfig {
+    fn default() -> Self {
+        Self { bytes_limit: 128 }
+    }
+}
+
+pub fn log_into_buffer(
+    buf: &mut Vec<u8>,
+    record: Record<'_>,
+    conf: LogIntoBufferConfig,
+) -> std::result::Result<(), Error> {
     buf.clear();
     let mut writer = std::io::Cursor::new(buf);
     writer.write_all(b"{")?;
@@ -1133,7 +1187,7 @@ pub fn log_into_buffer(buf: &mut Vec<u8>, record: Record<'_>) -> std::result::Re
         write_k_v_str_fast(&mut writer, "message", &record.args.to_string())?;
     }
 
-    let mut visitor = Visitor(&mut writer, 0);
+    let mut visitor = Visitor(&mut writer, 0, conf);
     for (k, v) in record.kv {
         write_comma(visitor.0)?;
         write_quoted_str_escaping(visitor.0, k)?;
@@ -1148,10 +1202,13 @@ pub fn log_into_buffer(buf: &mut Vec<u8>, record: Record<'_>) -> std::result::Re
                 write_quoted_str_escaping(visitor.0, &format!("{d:?}"))?;
             }
             Capture::Serde(serde_fn) => {
-                serde_fn(visitor.0)?;
+                serde_fn(visitor.0, &conf)?;
+            }
+            Capture::Cd(cd_fn) => {
+                cd_fn(visitor.0, &conf)?;
             }
             Capture::Bytes(b) => {
-                write_bytes(visitor.0, b)?;
+                write_bytes(&conf, visitor.0, b)?;
             }
             Capture::Id(id) => {
                 write!(visitor.0, "{}", id)?;
@@ -1190,7 +1247,7 @@ impl ILogger for Logger {
 
         buf.clear();
 
-        let res = log_into_buffer(&mut buf, record);
+        let res = log_into_buffer(&mut buf, record, self.conf);
 
         let mut writer = self.default_writer.lock().unwrap();
 
@@ -1262,6 +1319,13 @@ where
             disabled_buffer: all_buffer,
         },
         default_writer,
+        conf: LogIntoBufferConfig {
+            bytes_limit: if filter == Level::Trace {
+                usize::MAX
+            } else {
+                128
+            },
+        },
     };
 
     if let Err(logger) = __LOGGER.set(logger) {

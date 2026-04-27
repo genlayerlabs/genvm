@@ -33,6 +33,17 @@ pub enum FullResponse {
     GetStats(calldata::Value),
 }
 
+impl<W: calldata::Writer> calldata::codec::Encode<W> for FullResponse {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut calldata::Encoder<W>) -> std::result::Result<(), Self::Error> {
+        match self {
+            FullResponse::Answer(v) => calldata::codec::Encode::encode(v, enc),
+            FullResponse::GetStats(v) => calldata::codec::Encode::encode(v, enc),
+        }
+    }
+}
+
 impl MessageHandlerProvider<genvm_modules_interfaces::llm::Message, FullResponse> for Provider {
     type Ctx = LlmSubContext;
 
@@ -130,14 +141,7 @@ impl crate::common::MessageHandler<llm_iface::Message, FullResponse> for Handler
                 .map(FullResponse::Answer),
 
             llm_iface::Message::GetStats => {
-                let res = match calldata::to_value(&self.0.metrics) {
-                    Ok(stats) => stats,
-                    Err(e) => {
-                        log_error!(error:err = e; "Failed to serialize metrics");
-                        calldata::Value::Null
-                    }
-                };
-
+                let res = calldata::to_value(&self.0.metrics);
                 Ok(FullResponse::GetStats(res))
             }
         }
@@ -152,10 +156,14 @@ impl Inner {
     async fn exec_prompt(
         &self,
         _zelf: Arc<Inner>,
-        payload: llm_iface::PromptPayload,
+        mut payload: llm_iface::PromptPayload,
         remaining_fuel_as_gen: u64,
     ) -> ModuleResult<llm_iface::PromptAnswer> {
         log_debug_into!(&LoggerWithId, payload:serde = payload, remaining_fuel_as_gen = remaining_fuel_as_gen, genvm_id:id = self.genvm_id.0; "exec_prompt start");
+
+        if payload.response_format == genvm_modules_interfaces::llm::OutputFormat::JSON2 {
+            payload.response_format = genvm_modules_interfaces::llm::OutputFormat::JSON;
+        }
 
         let payload = self
             .user_vm
