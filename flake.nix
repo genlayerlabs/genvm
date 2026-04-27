@@ -187,7 +187,14 @@
 									shellHook = shell-hook-base;
 								};
 								devShells.full = pkgs.mkShell {
-									packages = packages-0 ++ packages-debug-test ++ packages-py-test ++ packages-rust ++ packages-lint ++ packages-gen-docs;
+									packages =
+										packages-0 ++
+										packages-debug-test ++
+										packages-py-test ++
+										packages-rust ++
+										packages-lint ++
+										packages-gen-docs ++
+										[ pkgs.nodejs ];
 									shellHook = shell-hook-base;
 								};
 								devShells.check-qemu = pkgs.mkShell {
