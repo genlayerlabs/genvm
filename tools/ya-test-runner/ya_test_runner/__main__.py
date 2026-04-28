@@ -28,17 +28,43 @@ from .stage.pipeline import (
 class _ParserResult(typing.NamedTuple):
 	parser: argparse.ArgumentParser
 	run_parser: argparse.ArgumentParser
+	shared_parser: argparse.ArgumentParser
+	filter_parser: argparse.ArgumentParser
 
 
-def create_parser() -> _ParserResult:
+def _create_shared_parser() -> argparse.ArgumentParser:
+	shared = argparse.ArgumentParser(add_help=False)
+	shared.add_argument(
+		'-C', '--chdir', type=str, help='Change working directory before doing anything'
+	)
+	shared.add_argument(
+		'--log-format', choices=['text', 'json'], default='text', help='Log format'
+	)
+	shared.add_argument(
+		'--log-level',
+		choices=['trace', 'debug', 'info', 'warning', 'error'],
+		default='info',
+		help='Logging level',
+	)
+	return shared
+
+
+def create_parser(shared: argparse.ArgumentParser) -> _ParserResult:
 	"""Create the command-line argument parser."""
+	filter_parser = argparse.ArgumentParser(add_help=False)
+	ya_test_runner.stage.filter.add_args(filter_parser)
+
 	parser = argparse.ArgumentParser(
-		prog='ya-test-runner', description='A test runner utility'
+		prog='ya-test-runner',
+		description='A test runner utility',
+		parents=[shared],
 	)
 
 	subparsers = parser.add_subparsers()
 
-	run_parser = subparsers.add_parser('run', help='run tests')
+	run_parser = subparsers.add_parser(
+		'run', parents=[shared, filter_parser], help='run tests'
+	)
 	run_parser.set_defaults(func=workflow_run)
 
 	run_parser.add_argument(
@@ -67,24 +93,32 @@ def create_parser() -> _ParserResult:
 	)
 
 	# 'show' subcommand with nested subcommands
-	show_parser = subparsers.add_parser('show', help='show information without running')
+	show_parser = subparsers.add_parser(
+		'show', parents=[shared], help='show information without running'
+	)
 	show_subparsers = show_parser.add_subparsers()
 
-	show_plan_parser = show_subparsers.add_parser('plan', help='show execution plan')
+	show_plan_parser = show_subparsers.add_parser(
+		'plan', parents=[shared, filter_parser], help='show execution plan'
+	)
 	show_plan_parser.set_defaults(func=workflow_plan)
 
-	show_test_parser = show_subparsers.add_parser('test', help='show available tests')
+	show_test_parser = show_subparsers.add_parser(
+		'test', parents=[shared, filter_parser], help='show available tests'
+	)
 	show_test_parser.set_defaults(func=workflow_list)
 
 	show_services_parser = show_subparsers.add_parser(
-		'services', help='show service dependencies'
+		'services', parents=[shared], help='show service dependencies'
 	)
 	show_services_parser.set_defaults(func=workflow_services)
 
-	show_tags_parser = show_subparsers.add_parser('tags', help='show available tags')
+	show_tags_parser = show_subparsers.add_parser(
+		'tags', parents=[shared], help='show available tags'
+	)
 	show_tags_parser.set_defaults(func=workflow_tags)
 
-	return _ParserResult(parser, run_parser)
+	return _ParserResult(parser, run_parser, shared, filter_parser)
 
 
 from . import const
@@ -357,21 +391,9 @@ def main() -> None:
 	because they may add extra args to the parser
 	"""
 
-	base_parser = argparse.ArgumentParser(add_help=False)
-	base_parser.add_argument(
-		'-C', '--chdir', type=str, help='Change working directory before doing anything'
-	)
-	base_parser.add_argument(
-		'--log-format', choices=['text', 'json'], default='text', help='Log format'
-	)
-	base_parser.add_argument(
-		'--log-level',
-		choices=['trace', 'debug', 'info', 'warning', 'error'],
-		default='info',
-		help='Logging level',
-	)
+	shared_parser = _create_shared_parser()
 
-	base_args, remaining_args = base_parser.parse_known_args()
+	base_args, remaining_args = shared_parser.parse_known_args()
 
 	stdoutWithLock = formatter.DefaultLockableTextIO(sys.stdout)
 	stderrWithLock = formatter.DefaultLockableTextIO(sys.stderr)
@@ -420,14 +442,14 @@ def main() -> None:
 			logger.debug('adding extra python path', path=extra_path)
 			sys.path.append(extra_path_str)
 
-	parser_result = create_parser()
-
-	ya_test_runner.stage.filter.add_args(parser_result.parser)
+	parser_result = create_parser(shared_parser)
 
 	initial_env = ya_test_runner.stage.configuration.InitialEnv(
-		parser_result.parser,
-		parser_result.run_parser,
-		remaining_args,
+		parser=parser_result.parser,
+		run_parser=parser_result.run_parser,
+		shared_parser=parser_result.shared_parser,
+		filter_parser=parser_result.filter_parser,
+		remaining_args=remaining_args,
 	)
 
 	conf_step = wrap(ya_test_runner.stage.pipeline.ConfigurationStage())
