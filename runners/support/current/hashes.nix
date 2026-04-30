@@ -82,15 +82,36 @@ let
 		builtins.any (hashHasSpecial hsh) (if builtins.hasAttr "depends" val then val.depends else []);
 
 	deduceHash = val:
-		if hashHasSpecial "test" val
-		then (if dev-mode then "test" else "error")
-		else if val.hash == null
+		if hashHasSpecial null val
 		then null
-		else if hashHasSpecial null val
-		then "error"
+		else if hashHasSpecial "test" val
+		then "test"
 		else val.hash;
 
 	fakeHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
+	checkHashes =  (pref: name: val:
+		if builtins.hasAttr "__prefix" val then
+			builtins.foldl'
+				(acc: item: acc + item)
+				""
+				(builtins.map
+					(name: checkHashes (pref + val.__prefix) name val.${name})
+					(builtins.filter
+						(name: name != "__prefix")
+						(builtins.attrNames val)))
+		else
+			if val.hash == null
+			then ""
+			else if val.hash == "test" then
+				(if dev-mode then "" else "set ${pref+name} hash to 'null'\n")
+			else if hashHasSpecialDeps null val then
+				"set ${pref+name} hash to null\n"
+			else if hashHasSpecialDeps null val then
+				"set ${pref+name} hash to 'test'\n"
+			else
+				""
+	);
 
 	transform = (pref: name: val:
 		if builtins.hasAttr "__prefix" val then
@@ -123,4 +144,7 @@ let
 			}
 	);
 in
-	transform "" "" src
+	builtins.seq (
+		let errs = checkHashes "" "" src; in
+		if errs != "" then builtins.throw errs else null
+	) (transform "" "" src)

@@ -26,9 +26,13 @@ in rec {
 			srcs = [ baseDerivation ./build-scripts ];
 			sourceRoot = ".";
 
-			phases = ["unpackPhase" "installPhase"];
+			phases = ["unpackPhase" "buildPhase" "installPhase"];
 
 			nativeBuildInputs = with pkgs; [ python313 ];
+
+			buildPhase = ''
+				out="$(readlink -f ./build-scripts)/debug-out.tar" ${pkgs.python313}/bin/python3 ./build-scripts/make-tar.py
+			'';
 
 			installPhase = ''
 				${pkgs.python313}/bin/python3 ./build-scripts/make-tar.py
