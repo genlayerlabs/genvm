@@ -1,0 +1,12 @@
+reviews:
+  path_filters:
+    - "!**/*.onnx"
+    - "!**/*.txt"
+    - "!**/*.stdout"
+    - "!**/*.hash"
+    - "!**/*.lock"
+    - "!doc/website/src/_static/**"
+    - "!runners/py-libs/pure-py/**"
+    - "!runners/models/**"
+    - "!runners/softfloat/berkeley-softfloat-3/**"
+    - "!**/fuzz/inputs*/**"
