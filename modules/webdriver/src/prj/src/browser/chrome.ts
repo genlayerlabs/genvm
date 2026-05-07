@@ -193,4 +193,8 @@ class ChromeBrowserManager implements browser.Manager {
 	}
 }
 
-export const INSTANCE: Promise<browser.Manager> = ChromeBrowserManager.create();
+export const INSTANCE: Promise<browser.Manager> =
+	ChromeBrowserManager.create().catch((error) => {
+		logger.log('error', 'failed to create initial browser', { error });
+		process.exit(1);
+	});

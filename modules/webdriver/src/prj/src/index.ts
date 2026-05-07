@@ -278,12 +278,14 @@ async function handleHealthcheck(parsedUrl: URL, res: http.ServerResponse) {
 
 	const query = parsedUrl.searchParams;
 	const targetUrl = query.get('url') ?? '';
-	const mode = query.get('mode') as 'text' | 'html' | 'screenshot';
+	const VALID_MODES = ['text', 'html', 'screenshot'] as const;
+	const rawMode = query.get('mode');
+	const mode = VALID_MODES.find((m) => m === rawMode);
 
 	if (!targetUrl || !mode) {
 		logger.log('warn', 'healthcheck missing parameters', {
 			url: targetUrl,
-			mode,
+			mode: rawMode,
 		});
 		res.writeHead(400, { 'Content-Type': 'text/plain' });
 		res.end('missing url or mode query parameters');
