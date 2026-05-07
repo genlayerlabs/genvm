@@ -30,3 +30,5 @@ clap = { version = "4.5.35", features = ["derive"] }
 arbitrary = "1.4.2"
 chrono = { version = "0.4.42", features = ["serde"] }
 bytes = {version = "1.11.0", features = ["serde"] }
+rpds = "1.2.0"
+archery = "1.2.2"
