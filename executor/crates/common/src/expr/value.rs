@@ -92,6 +92,7 @@ pub enum Expr {
         func: Box<Expr>,
         arg: Box<Expr>,
     },
+    Array(Vec<Expr>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -137,6 +138,7 @@ pub enum Value {
         body: Arc<Expr>,
         env: Env,
     },
+    Array(Rc<Vec<Value>>),
 }
 
 impl Value {
@@ -145,6 +147,7 @@ impl Value {
             Value::Rational(_) => "number",
             Value::Bool(_) => "bool",
             Value::HostFn(_) | Value::GuestFn { .. } => "function",
+            Value::Array(_) => "array",
         }
     }
 
@@ -176,6 +179,7 @@ impl fmt::Debug for Value {
             Value::Bool(b) => f.debug_tuple("Bool").field(b).finish(),
             Value::HostFn(_) => f.debug_tuple("HostFn").finish(),
             Value::GuestFn { name, .. } => f.debug_tuple("GuestFn").field(name).finish(),
+            Value::Array(elems) => f.debug_tuple("Array").field(elems).finish(),
         }
     }
 }
@@ -187,6 +191,16 @@ impl fmt::Display for Value {
             Value::Bool(b) => write!(f, "{b}"),
             Value::HostFn(_) => write!(f, "<host-fn>"),
             Value::GuestFn { name, .. } => write!(f, "<fn {name}>"),
+            Value::Array(elems) => {
+                write!(f, "[")?;
+                for (i, e) in elems.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{e}")?;
+                }
+                write!(f, "]")
+            }
         }
     }
 }

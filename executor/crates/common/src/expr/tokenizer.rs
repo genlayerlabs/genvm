@@ -29,6 +29,9 @@ pub(crate) enum Token {
     Then,
     Else,
     Backslash,
+    LBracket,
+    RBracket,
+    Comma,
     Eof,
 }
 
@@ -56,6 +59,9 @@ impl fmt::Display for Token {
             Token::Then => write!(f, "`then`"),
             Token::Else => write!(f, "`else`"),
             Token::Backslash => write!(f, r"`\`"),
+            Token::LBracket => write!(f, "`[`"),
+            Token::RBracket => write!(f, "`]`"),
+            Token::Comma => write!(f, "`,`"),
             Token::Eof => write!(f, "end of input"),
         }
     }
@@ -184,6 +190,9 @@ impl<'a> Tokenizer<'a> {
             b'(' => Ok(Token::LParen),
             b')' => Ok(Token::RParen),
             b'\\' => Ok(Token::Backslash),
+            b'[' => Ok(Token::LBracket),
+            b']' => Ok(Token::RBracket),
+            b',' => Ok(Token::Comma),
             b'=' => {
                 if self.pos < self.input.len() && self.input[self.pos] == b'=' {
                     self.pos += 1;

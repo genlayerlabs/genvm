@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
-use num_traits::Zero;
+use num_rational::BigRational;
+use num_traits::{ToPrimitive, Zero};
 
 use super::value::{BinOp, EvalError, Expr, Value};
 
@@ -16,6 +17,8 @@ fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Value, EvalError> {
         Expr::Ident(name) => {
             if let Some(val) = ctx.let_bindings.get(name.as_str()) {
                 Ok(val.clone())
+            } else if let Some(builtin) = resolve_builtin(name) {
+                Ok(builtin)
             } else {
                 (ctx.get_var)(name)
             }
@@ -76,6 +79,10 @@ fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Value, EvalError> {
             let a = eval(arg, ctx)?;
             apply(&f, &a, ctx)
         }
+        Expr::Array(elems) => {
+            let vals: Result<Vec<Value>, _> = elems.iter().map(|e| eval(e, ctx)).collect();
+            Ok(Value::Array(Rc::new(vals?)))
+        }
     }
 }
 
@@ -93,6 +100,46 @@ fn apply(f: &Value, arg: &Value, ctx: &EvalContext) -> Result<Value, EvalError> 
             expected: "function",
             got: other.typ(),
         }),
+    }
+}
+
+fn resolve_builtin(name: &str) -> Option<Value> {
+    match name {
+        "arrayLen" => Some(Value::HostFn(Rc::new(|arg: &Value| match arg {
+            Value::Array(elems) => Ok(Value::Rational(BigRational::from_integer(
+                elems.len().into(),
+            ))),
+            other => Err(EvalError::TypeError {
+                expected: "array",
+                got: other.typ(),
+            }),
+        }))),
+        "arrayGetElem" => Some(Value::HostFn(Rc::new(|arr: &Value| match arr {
+            Value::Array(elems) => {
+                let elems = elems.clone();
+                Ok(Value::HostFn(Rc::new(move |idx: &Value| {
+                    let i = idx
+                        .clone()
+                        .into_rational()?
+                        .to_integer()
+                        .to_usize()
+                        .ok_or_else(|| {
+                            EvalError::Custom(format!("array index out of range: {idx}"))
+                        })?;
+                    elems.get(i).cloned().ok_or_else(|| {
+                        EvalError::Custom(format!(
+                            "array index {i} out of bounds for length {}",
+                            elems.len()
+                        ))
+                    })
+                })))
+            }
+            other => Err(EvalError::TypeError {
+                expected: "array",
+                got: other.typ(),
+            }),
+        }))),
+        _ => None,
     }
 }
 

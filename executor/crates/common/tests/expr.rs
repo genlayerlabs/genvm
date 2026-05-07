@@ -223,3 +223,47 @@ fn church_pairs() {
         1,
     );
 }
+
+#[test]
+fn array_literal() {
+    assert_rational(eval("arrayLen [1, 2, 3]"), 3, 1);
+    assert_rational(eval("arrayLen []"), 0, 1);
+}
+
+#[test]
+fn array_get_elem() {
+    assert_rational(eval("arrayGetElem [10, 20, 30] 0"), 10, 1);
+    assert_rational(eval("arrayGetElem [10, 20, 30] 2"), 30, 1);
+}
+
+#[test]
+fn array_with_exprs() {
+    assert_rational(
+        eval("let a = [1 + 2, 3 * 4] in arrayGetElem a 0 + arrayGetElem a 1"),
+        15,
+        1,
+    );
+}
+
+#[test]
+fn array_of_functions() {
+    assert_rational(
+        eval(
+            r"
+            let fns = [\x = x + 1, \x = x * 2] in
+            (arrayGetElem fns 0) 10 + (arrayGetElem fns 1) 10
+        ",
+        ),
+        31,
+        1,
+    );
+}
+
+#[test]
+fn array_nested() {
+    assert_rational(
+        eval("arrayGetElem (arrayGetElem [[1, 2], [3, 4]] 1) 0"),
+        3,
+        1,
+    );
+}

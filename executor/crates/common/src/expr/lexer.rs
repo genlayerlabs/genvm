@@ -169,7 +169,10 @@ impl Parser {
     }
 
     fn is_primary_start(&self) -> bool {
-        matches!(self.peek(), Token::Num(_) | Token::Ident(_) | Token::LParen)
+        matches!(
+            self.peek(),
+            Token::Num(_) | Token::Ident(_) | Token::LParen | Token::LBracket
+        )
     }
 
     fn parse_application(&mut self) -> Result<Expr, ParseError> {
@@ -192,6 +195,18 @@ impl Parser {
                 let expr = self.parse_expr()?;
                 self.expect(&Token::RParen)?;
                 Ok(expr)
+            }
+            Token::LBracket => {
+                let mut elems = Vec::new();
+                if *self.peek() != Token::RBracket {
+                    elems.push(self.parse_expr()?);
+                    while *self.peek() == Token::Comma {
+                        self.advance();
+                        elems.push(self.parse_expr()?);
+                    }
+                }
+                self.expect(&Token::RBracket)?;
+                Ok(Expr::Array(elems))
             }
             tok => Err(ParseError::UnexpectedToken(tok.to_string())),
         }
