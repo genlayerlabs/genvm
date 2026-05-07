@@ -3,7 +3,7 @@ Virtual Machine execution and sandbox module.
 
 This module provides:
 - Sandbox execution with ``spawn_sandbox``
-- Non-deterministic execution with ``run_nondet`` and ``run_nondet_unsafe``
+- Non-deterministic execution with ``run_nondet_default`` and ``run_nondet``
 - Result types: ``Return``, ``VMError``, ``UserError``, ``Result``
 - Event emission with ``Event``
 """
@@ -11,8 +11,8 @@ This module provides:
 __all__ = (
 	# vm
 	'spawn_sandbox',
-	'run_nondet_unsafe',
 	'run_nondet',
+	'run_nondet_default',
 	'unpack_result',
 	'Return',
 	'VMError',
@@ -187,7 +187,7 @@ def spawn_sandbox[T: calldata.Decoded](
 
 
 @_lazy_api
-def run_nondet_unsafe[T: calldata.Decoded](
+def run_nondet[T: calldata.Decoded](
 	leader_fn: typing.Callable[[], T], validator_fn: typing.Callable[[Result], bool], /
 ) -> Lazy[T]:
 	"""
@@ -203,7 +203,7 @@ def run_nondet_unsafe[T: calldata.Decoded](
 	.. warning::
 		This function does not use extra sandbox for catching validator errors.
 		Validator error will result in a ``Disagree`` error in executor (same as if
-		this function returned ``False``). Use :py:func:`run_nondet` instead if you
+		this function returned ``False``). Use :py:func:`run_nondet_default` instead if you
 		want to catch and inspect ``validator_fn`` errors, or use sandbox inside of it.
 
 	.. note::
@@ -214,7 +214,7 @@ def run_nondet_unsafe[T: calldata.Decoded](
 		...   return os.urandom(1)[0] % 3
 		>>> def validator(result):
 		...   return unpack_result(result) == 1  # agree in 33% of cases
-		>>> value = gl.vm.run_nondet_unsafe(leader, validator)
+		>>> value = gl.vm.run_nondet(leader, validator)
 	"""
 	import cloudpickle
 
@@ -236,7 +236,7 @@ def run_nondet_unsafe[T: calldata.Decoded](
 
 
 @_lazy_api
-def run_nondet[T: calldata.Decoded](
+def run_nondet_default[T: calldata.Decoded](
 	leader_fn: typing.Callable[[], T],
 	validator_fn: typing.Callable[[Result[T]], bool],
 	/,
@@ -250,7 +250,7 @@ def run_nondet[T: calldata.Decoded](
 	Executes a non-deterministic block with comprehensive error handling.
 
 	This is the recommended API for custom non-deterministic execution. It provides safer
-	error handling compared to :py:func:`run_nondet_unsafe` by running the validator
+	error handling compared to :py:func:`run_nondet` by running the validator
 	in a sandbox and handling validator errors with provided functions with sensible defaults.
 
 	:param leader_fn: Function executed by the leader node
@@ -272,7 +272,7 @@ def run_nondet[T: calldata.Decoded](
 		...     return False
 		...   my_data = leader()
 		...   return numpy.linalg.norm(np.array(result.calldata) - np.array(my_data)) < 0.1
-		>>> value = run_nondet(leader, validator)
+		>>> value = run_nondet_default(leader, validator)
 	"""
 	import cloudpickle
 
