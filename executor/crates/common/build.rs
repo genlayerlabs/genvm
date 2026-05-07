@@ -1,11 +1,18 @@
 fn main() -> std::io::Result<()> {
-    println!("cargo:rerun-if-env-changed=GENVM_PROFILE");
+    println!("cargo::rerun-if-env-changed=CARGO_LD_LIBRARY_PATH");
+    if let Ok(v) = std::env::var("CARGO_LD_LIBRARY_PATH") {
+        for path in v.split(':') {
+            println!("cargo::rustc-link-search=native={path}");
+        }
+    }
+
+    println!("cargo::rerun-if-env-changed=GENVM_PROFILE");
     let tag: String = std::env::var("GENVM_PROFILE").unwrap_or("vTEST".into());
 
     let arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
 
-    println!("cargo:rerun-if-env-changed=PROFILE");
+    println!("cargo::rerun-if-env-changed=PROFILE");
     let profile = std::env::var("PROFILE").unwrap();
     println!("cargo::rustc-env=PROFILE={profile}");
 

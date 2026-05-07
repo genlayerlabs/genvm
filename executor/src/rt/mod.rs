@@ -37,8 +37,7 @@ impl<T> DetNondet<T> {
 
 #[derive(Debug)]
 pub struct DataFeesLimit {
-    fast: std::sync::atomic::AtomicU64,
-    rest: tokio::sync::Mutex<primitive_types::U256>,
+    remaining: tokio::sync::Mutex<primitive_types::U256>,
 
     storage_page_cost: u32,
     receipt_word_cost: u32,
@@ -51,62 +50,25 @@ impl DataFeesLimit {
         receipt_word_cost: u32,
     ) -> Self {
         Self {
-            fast: std::sync::atomic::AtomicU64::new(0),
-            rest: tokio::sync::Mutex::new(full),
+            remaining: tokio::sync::Mutex::new(full),
             storage_page_cost,
             receipt_word_cost,
         }
     }
 
-    async fn refuel(&self) -> bool {
-        let mut rest = self.rest.lock().await;
-        let cur = self.fast.load(std::sync::atomic::Ordering::SeqCst);
-        let to_add_max = u64::MAX - cur;
-        let to_add_max = primitive_types::U256::from(to_add_max);
-        let to_add = std::cmp::min(*rest, to_add_max);
-
-        if to_add.is_zero() {
-            return false;
-        }
-
-        *rest -= to_add;
-        self.fast
-            .fetch_add(to_add.as_u64(), std::sync::atomic::Ordering::SeqCst);
-
-        true
-    }
-
-    #[inline(always)]
-    fn consume_fast(&self, amount: u64) -> bool {
-        self.fast
-            .fetch_update(
-                std::sync::atomic::Ordering::SeqCst,
-                std::sync::atomic::Ordering::SeqCst,
-                |cur| cur.checked_sub(amount),
-            )
-            .is_ok()
-    }
-
     pub async fn consume_raw(&self, amount: u64) -> bool {
-        if self.consume_fast(amount) {
-            return true;
-        }
-
-        loop {
-            let refuelled = self.refuel().await;
-
-            if self.consume_fast(amount) {
-                return true;
-            }
-
-            if !refuelled {
-                return false;
-            }
+        let mut remaining = self.remaining.lock().await;
+        let amount = primitive_types::U256::from(amount);
+        if *remaining >= amount {
+            *remaining -= amount;
+            true
+        } else {
+            false
         }
     }
 
-    pub fn remaining_fast(&self) -> u64 {
-        self.fast.load(std::sync::atomic::Ordering::SeqCst)
+    pub async fn remaining(&self) -> primitive_types::U256 {
+        *self.remaining.lock().await
     }
 
     pub async fn consume_storage_pages(&self, pages: u64) -> bool {

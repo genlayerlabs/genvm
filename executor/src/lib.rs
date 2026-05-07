@@ -316,7 +316,7 @@ pub async fn run_with(
 
     log_debug!("sending final result");
 
-    let data_fees_remaining = supervisor.shared_data.data_fees_limit.remaining_fast();
+    let data_fees_remaining = supervisor.shared_data.data_fees_limit.remaining().await;
 
     let res = match res {
         Ok((a, b)) => Ok(host::FullResult::new(
