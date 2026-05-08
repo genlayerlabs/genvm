@@ -86,21 +86,18 @@
 									inherit system;
 								};
 
-								custom-rust = import ./support/rust.nix { inherit pkgs system; withLinters = true; withZig = false; };
+								deps = import ./support/fetch-deps.nix { inherit pkgs; };
+
+								custom-rust = import ./support/rust.nix { inherit pkgs deps system; withLinters = true; withZig = false; };
 								custom-rust-builder = import ./support/compile-rust.nix {
-									inherit pkgs system;
-									zig = import ./support/zig.nix { inherit pkgs system; };
+									inherit pkgs deps system;
+									zig = import ./support/zig.nix { inherit pkgs deps system; };
 								};
 
 								custom-cargo-afl = custom-rust-builder rec {
 									name = "cargo-afl";
 									version = "0.15.18";
-									src = pkgs.fetchzip {
-										url = "https://crates.io/api/v1/crates/cargo-afl/0.15.18/download";
-										hash = "sha256-6ti50bwE4bLwIyR76bMt/Vn6Nwqu9n0IKdVuDdYkiHg=";
-										extension = ".tar.gz";
-										name = "cargo-afl-0.15.18.tar.gz";
-									};
+									src = deps."cargo-afl-0.15.18";
 
 									target = system;
 

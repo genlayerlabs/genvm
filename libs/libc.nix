@@ -1,6 +1,8 @@
 { conf-target
 , name-target
 , pkgs
+, deps
+, ...
 }:
 let
 	musl-src = builtins.fetchGit {
@@ -8,10 +10,7 @@ let
 		rev = "0784374d561435f7c787a555aeab8ede699ed298";
 		shallow = true;
 	};
-	aarch64-compiler-rt = builtins.fetchTarball {
-		url = "https://storage.googleapis.com/genvm-artifacts/compiler-rt-21.1.5-1-aarch64.pkg.tar.xz";
-		sha256 = "08j9n9i7hw6y5bs9mmg0h90g4vr3pbqfijch1gzcwmndm7ndc33k";
-	};
+	aarch64-compiler-rt = deps."compiler-rt-aarch64-21.1.5-1";
 in pkgs.stdenvNoCC.mkDerivation {
 	name = "libc-${name-target}";
 

@@ -17,8 +17,10 @@ let
 		};
 	runnersLib = import ./support args;
 
+	deps = import ../support/fetch-deps.nix { inherit pkgs; };
+
 	args = {
-		inherit pkgs runnersLib;
+		inherit pkgs deps runnersLib;
 		inherit (pkgs) lib stdenvNoCC;
 	};
 in

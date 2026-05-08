@@ -1,4 +1,5 @@
 { pkgs
+, deps
 , lib
 , stdenvNoCC
 , runnersLib
@@ -12,11 +13,7 @@ stdenvNoCC.mkDerivation {
 	outputHashMode = "recursive";
 
 	srcs = [
-		(pkgs.fetchzip {
-			url = "https://github.com/libffi/libffi/releases/download/v3.4.6/libffi-3.4.6.tar.gz";
-			sha256 = "sha256-5kYA8yUGBeIA8eCRDM8CLWRsvKmNj5nWhl3+zl5RIhU=";
-			name = "genvm-ffi-src";
-		})
+		deps."genvm-ffi-src-3.4.6"
 		(builtins.path { name = "stub_ffi.c"; path = ./stub_ffi.c; })
 	];
 

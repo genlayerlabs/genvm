@@ -1,4 +1,5 @@
 { pkgs
+, deps
 , zig
 , ...
 }@args0:

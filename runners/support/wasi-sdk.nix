@@ -1,13 +1,10 @@
 { pkgs
+, deps
 , lib
 , ...
 }:
 let
-	wasi-sdk-raw = (pkgs.fetchzip {
-		name = "wasi-sdk-raw";
-		url = "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-linux.tar.gz";
-		hash = "sha256-/cyLxhFsfBBQxn4NrhLdbgHjU3YUjYhPnvquWJodcO8=";
-	});
+	wasi-sdk-raw = deps."wasi-sdk-raw-24.0";
 	wasi-sdk = pkgs.stdenvNoCC.mkDerivation {
 		name = "wasi-sdk";
 		version = "24.0";

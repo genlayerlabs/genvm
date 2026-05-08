@@ -1,4 +1,5 @@
 { pkgs
+, deps
 , lib
 , stdenvNoCC
 , runnersLib
@@ -11,11 +12,7 @@ stdenvNoCC.mkDerivation {
 	outputHash = "sha256-QkCPAzngwhJJdoEzcL2JaxW6FenoYnMcRjcK2MlHALc=";
 	outputHashMode = "recursive";
 
-	src = pkgs.fetchzip {
-		url = "https://github.com/tukaani-project/xz/releases/download/v5.6.2/xz-5.6.2.tar.gz";
-		sha256 = "sha256-3ELGir/E3YS9qWEYQ8SGFrU0md71/pl2QOyUIiH55BQ=";
-		name = "genvm-xz-src";
-	};
+	src = deps."genvm-xz-src-5.6.2";
 
 	nativeBuildInputs = [runnersLib.wasi-sdk.package];
 
