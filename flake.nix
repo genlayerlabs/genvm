@@ -23,163 +23,153 @@
 
 	outputs = { self, nixpkgs, flake-utils, systems }:
 		let
-			genvm-release =
-				let
-					pkgs = import nixpkgs {
-						system = "x86_64-linux";
-					};
-
-					lib = pkgs.lib;
-
-					args = import ./support {
-						inherit pkgs;
-						root-src = self;
-					} // {
-						inherit components;
-
-						build-config = builtins.fromJSON (builtins.readFile ./flake-config.json);
-					};
-
-					components = args.merge-components [
-						(import ./libs args)
-						(import ./modules args)
-						(import ./executor args)
-						(import ./runners/release.nix args)
-						(import ./runners/support/all args)
-					];
-
-					merge-all-for-platform = platform:
+			for-systems =
+				flake-utils.lib.eachDefaultSystem
+					(system:
 						let
-							for-platform = components.${platform};
-							names = builtins.attrNames for-platform;
-							just-derivations = builtins.attrValues for-platform;
-						in
-							pkgs.stdenvNoCC.mkDerivation {
-								name = "genvm-${platform}";
+							pkgs = import nixpkgs {
+								inherit system;
+							};
 
-								srcs = just-derivations;
+							deps = import ./support/fetch-deps.nix { inherit pkgs; };
 
-								dontUnpack = true;
-								dontConfigure = true;
-								dontBuild = true;
-								dontFixup = true;
+							custom-rust = import ./support/rust.nix { inherit pkgs deps system; withLinters = true; withZig = false; };
+							custom-rust-builder = import ./support/compile-rust.nix {
+								inherit pkgs deps system;
+								zig = import ./support/zig.nix { inherit pkgs deps system; };
+							};
+
+							custom-cargo-afl = custom-rust-builder rec {
+								name = "cargo-afl";
+								version = "0.15.18";
+								src = deps."cargo-afl-0.15.18";
+
+								target = system;
+
+								cargoLock.lockFile = "${src}/Cargo.lock";
+
+								nativeBuildInputs = [ pkgs.gnumake pkgs.makeWrapper ];
+
+								postBuild = ''
+									XDG_DATA_HOME="$out/data" ./target/*/release/cargo-afl afl config --build --verbose
+								'';
 
 								installPhase = ''
-									mkdir -p $out
-									for src in $srcs; do
-										cp --no-preserve=ownership -r $src/. $out/.
-										chmod -R u+w $out
-									done
+									mkdir -p $out/bin
+									cp target/__out $out/bin/cargo-afl
+									wrapProgram $out/bin/cargo-afl \
+										--set XDG_DATA_HOME "$out/data"
 								'';
 							};
-				in {
-					inherit components;
 
-					all-for-platform = builtins.mapAttrs (platform: sub: merge-all-for-platform platform) components;
-				};
-
-				for-systems =
-					flake-utils.lib.eachDefaultSystem
-						(system:
-							let
-								pkgs = import nixpkgs {
-									inherit system;
-								};
-
-								deps = import ./support/fetch-deps.nix { inherit pkgs; };
-
-								custom-rust = import ./support/rust.nix { inherit pkgs deps system; withLinters = true; withZig = false; };
-								custom-rust-builder = import ./support/compile-rust.nix {
-									inherit pkgs deps system;
-									zig = import ./support/zig.nix { inherit pkgs deps system; };
-								};
-
-								custom-cargo-afl = custom-rust-builder rec {
-									name = "cargo-afl";
-									version = "0.15.18";
-									src = deps."cargo-afl-0.15.18";
-
-									target = system;
-
-									cargoLock.lockFile = "${src}/Cargo.lock";
-
-									nativeBuildInputs = [ pkgs.gnumake pkgs.makeWrapper ];
-
-									postBuild = ''
-										XDG_DATA_HOME="$out/data" ./target/*/release/cargo-afl afl config --build --verbose
+							packages-0 = with pkgs; [ bash xz zlib git python312 coreutils which jq stdenv.cc glibc nix ];
+							packages-lint = with pkgs; [ pre-commit ];
+							packages-rust = [ custom-rust ];
+							packages-debug-test = with pkgs; [
+								(pkgs.ninja.overrideAttrs (old: {
+									postPatch = old.postPatch + ''
+										substituteInPlace src/subprocess-posix.cc \
+											--replace '"/bin/sh"' '"${pkgs.bash}/bin/bash"'
 									'';
+								}))
+								ruby
+								gcc
 
-									installPhase = ''
-										mkdir -p $out/bin
-										cp target/__out $out/bin/cargo-afl
-										wrapProgram $out/bin/cargo-afl \
-											--set XDG_DATA_HOME "$out/data"
-									'';
-								};
+								custom-cargo-afl
+								llvmPackages.libllvm
 
-								packages-0 = with pkgs; [ bash xz zlib git python312 coreutils which jq stdenv.cc glibc nix ];
-								packages-lint = with pkgs; [ pre-commit ];
-								packages-rust = [ custom-rust ];
-								packages-debug-test = with pkgs; [
-									(pkgs.ninja.overrideAttrs (old: {
-										postPatch = old.postPatch + ''
-											substituteInPlace src/subprocess-posix.cc \
-												--replace '"/bin/sh"' '"${pkgs.bash}/bin/bash"'
+								python312Packages.jsonnet
+								pkgs.python312Packages.aiohttp
+								wabt
+							];
+							packages-py-test = with pkgs; [
+								# aflplusplus # currently we don't run fuzzing on CI
+								python312
+								poetry
+							];
+							shell-hook-base = ''
+								export PATH="$(pwd)/tools/git-third-party:$PATH"
+								export LD_LIBRARY_PATH="${toString pkgs.xz.out}/lib:${toString pkgs.zlib.out}/lib:${pkgs.stdenv.cc.cc.lib}/lib:${toString pkgs.glibc}/lib:$LD_LIBRARY_PATH"
+								export LLVM_PROFILE_FILE=/dev/null
+							'';
+
+							release-args = import ./support {
+								inherit pkgs system;
+								root-src = self;
+							} // {
+								inherit components;
+
+								build-config = builtins.fromJSON (builtins.readFile ./flake-config.json);
+							};
+
+							components = release-args.merge-components [
+								(import ./libs release-args)
+								(import ./modules release-args)
+								(import ./executor release-args)
+								(import ./runners/release.nix release-args)
+								(import ./runners/support/all release-args)
+							];
+
+							merge-all-for-platform = platform:
+								let
+									for-platform = components.${platform};
+									just-derivations = builtins.attrValues for-platform;
+								in
+									pkgs.stdenvNoCC.mkDerivation {
+										name = "genvm-${platform}";
+
+										srcs = just-derivations;
+
+										dontUnpack = true;
+										dontConfigure = true;
+										dontBuild = true;
+										dontFixup = true;
+
+										installPhase = ''
+											mkdir -p $out
+											for src in $srcs; do
+												cp --no-preserve=ownership -r $src/. $out/.
+												chmod -R u+w $out
+											done
 										'';
-									}))
-									ruby
-									gcc
+									};
+						in
+						{
+							packages = builtins.mapAttrs (platform: sub: merge-all-for-platform platform) components // {
+								all-for-platform = builtins.mapAttrs (platform: sub: merge-all-for-platform platform) components;
+							};
 
-									custom-cargo-afl
-									llvmPackages.libllvm
-
-									python312Packages.jsonnet
+							devShells.py-test = pkgs.mkShell {
+								packages = packages-py-test ++ [ pkgs.ruby ];
+								shellHook = shell-hook-base;
+							};
+							devShells.initial-check = pkgs.mkShell {
+								packages = packages-0 ++ packages-rust ++ packages-lint;
+								shellHook = shell-hook-base;
+							};
+							devShells.rust-test = pkgs.mkShell {
+								packages = packages-0 ++ packages-debug-test ++ packages-rust;
+								shellHook = shell-hook-base;
+							};
+							devShells.mock-tests = pkgs.mkShell {
+								packages = packages-0 ++ [
+									pkgs.python312
+									pkgs.python312Packages.jsonnet
 									pkgs.python312Packages.aiohttp
-									wabt
+									pkgs.wabt
 								];
-								packages-py-test = with pkgs; [
-									# aflplusplus # currently we don't run fuzzing on CI
-									python312
-									poetry
-								];
-								shell-hook-base = ''
-									export PATH="$(pwd)/tools/git-third-party:$PATH"
-									export LD_LIBRARY_PATH="${toString pkgs.xz.out}/lib:${toString pkgs.zlib.out}/lib:${pkgs.stdenv.cc.cc.lib}/lib:${toString pkgs.glibc}/lib:$LD_LIBRARY_PATH"
-									export LLVM_PROFILE_FILE=/dev/null
-								'';
-							in
-							{
-								devShells.py-test = pkgs.mkShell {
-									packages = packages-py-test ++ [ pkgs.ruby ];
-									shellHook = shell-hook-base;
-								};
-								devShells.initial-check = pkgs.mkShell {
-									packages = packages-0 ++ packages-rust ++ packages-lint;
-									shellHook = shell-hook-base;
-								};
-								devShells.rust-test = pkgs.mkShell {
-									packages = packages-0 ++ packages-debug-test ++ packages-rust;
-									shellHook = shell-hook-base;
-								};
-								devShells.mock-tests = pkgs.mkShell {
-									packages = packages-0 ++ [
-										pkgs.python312
-										pkgs.python312Packages.jsonnet
-										pkgs.python312Packages.aiohttp
-										pkgs.wabt
-									];
-									shellHook = shell-hook-base;
-								};
-								devShells.full = pkgs.mkShell {
-									packages = packages-0 ++ packages-debug-test ++ packages-py-test ++ packages-rust ++ packages-lint;
-									shellHook = shell-hook-base;
-								};
-								devShells.check-qemu = pkgs.mkShell {
-									packages = packages-0 ++ [ pkgs.qemu ];
-									shellHook = shell-hook-base;
-								};
-							}
-						);
-			in
-			for-systems // genvm-release;
+								shellHook = shell-hook-base;
+							};
+							devShells.full = pkgs.mkShell {
+								packages = packages-0 ++ packages-debug-test ++ packages-py-test ++ packages-rust ++ packages-lint;
+								shellHook = shell-hook-base;
+							};
+							devShells.check-qemu = pkgs.mkShell {
+								packages = packages-0 ++ [ pkgs.qemu ];
+								shellHook = shell-hook-base;
+							};
+						}
+					);
+		in
+		for-systems;
 }

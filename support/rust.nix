@@ -61,17 +61,18 @@ in pkgs.stdenvNoCC.mkDerivation rec {
 	nativeBuildInputs = [ pkgs.makeWrapper ];
 
 	buildInputs = [
-		pkgs.glibc
 		pkgs.zlib
 		pkgs.bash
-		pkgs.gcc.cc.lib
 
 		zig
+	] ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+		pkgs.glibc
+		pkgs.gcc.cc.lib
 	];
 
 	dontAutoPatchelf = true;
 
-	fixupPhase = ''
+	fixupPhase = if pkgs.stdenv.hostPlatform.isLinux then ''
 		SEARCH_DIRS="$out/bin"
 		if [[ "${system}" == "x86_64-linux" ]]
 		then
@@ -80,10 +81,6 @@ in pkgs.stdenvNoCC.mkDerivation rec {
 		if [[ "${system}" == "aarch64-linux" ]]
 		then
 			SEARCH_DIRS="$SEARCH_DIRS $out/lib/rustlib/aarch64-unknown-linux-gnu/bin"
-		fi
-		if [[ "${system}" == "aarch64-darwin" ]]
-		then
-			SEARCH_DIRS="$SEARCH_DIRS $out/lib/rustlib/aarch64-apple-darwin/bin"
 		fi
 		find $SEARCH_DIRS -type f -executable | while read binary; do
 			if file "$binary" | grep -q "ELF"
@@ -106,6 +103,8 @@ in pkgs.stdenvNoCC.mkDerivation rec {
 			fi
 		done
 
+		runHook postInstall
+	'' else ''
 		runHook postInstall
 	'';
 

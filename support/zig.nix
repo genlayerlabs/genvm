@@ -4,12 +4,17 @@
 , ...
 }:
 let
-	zig = deps.${"zig-" + system + "-0.15.1"};
+	zig-system = {
+		"x86_64-linux" = "x86_64-linux";
+		"aarch64-linux" = "aarch64-linux";
+		"aarch64-darwin" = "aarch64-macos";
+	}.${system};
+	zig = deps.${"zig-" + zig-system + "-0.15.1"};
 
 	make-cc-wrapper = trg: pkgs.writeShellScript "zig-cc-${trg}" ''
 		if [ ! -d "$HOME" ]; then
-			export ZIG_GLOBAL_CACHE_DIR=/build/.zig-cache
-			export ZIG_LOCAL_CACHE_DIR=/build/.zig-cache-local
+			export ZIG_GLOBAL_CACHE_DIR=$NIX_BUILD_TOP/.zig-cache
+			export ZIG_LOCAL_CACHE_DIR=$NIX_BUILD_TOP/.zig-cache-local
 		fi
 		args=()
 		for arg in "$@"; do
@@ -24,14 +29,30 @@ let
 				[[ "$arg" != *CoreFoundation* ]] && \
 				[[ "$arg" != *Foundation* ]] && \
 				[[ "$arg" != -F ]] && \
-				[[ "$arg" != -F* ]]; then
+				[[ "$arg" != -F* ]] && \
+				[[ "$arg" != -Wl,-exported_symbols_list ]]; then
 				args+=("$arg")
-			elif [[ "$arg" == -framework ]] || [[ "$arg" == -F ]]; then
+			elif [[ "$arg" == -framework ]] || [[ "$arg" == -F ]] || [[ "$arg" == -Wl,-exported_symbols_list ]]; then
 				skip_next=true
 			fi
 		done
 
-		exec "${zig}/zig" cc -fdebug-prefix-map=${toString zig}=/zig -target ${trg} "''${args[@]}"
+		# Append -L paths from NIX_LDFLAGS so libs from {native,}buildInputs are visible
+		nix_ld_args=()
+		read -r -a _nix_ld <<< "''${NIX_LDFLAGS:-} ''${NIX_LDFLAGS_FOR_BUILD:-}"
+		take_next=false
+		for ldarg in "''${_nix_ld[@]}"; do
+			if [[ "$take_next" == true ]]; then
+				nix_ld_args+=("-L" "$ldarg")
+				take_next=false
+			elif [[ "$ldarg" == "-L" ]]; then
+				take_next=true
+			elif [[ "$ldarg" == -L* ]]; then
+				nix_ld_args+=("$ldarg")
+			fi
+		done
+
+		exec "${zig}/zig" cc -fdebug-prefix-map=${toString zig}=/zig -target ${trg} "''${nix_ld_args[@]}" "''${args[@]}"
 	'';
 in
 pkgs.stdenvNoCC.mkDerivation {

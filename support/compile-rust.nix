@@ -85,7 +85,7 @@ stdenv.mkDerivation (
 		inherit buildAndTestSubdir;
 
 		RUSTFLAGS =
-			"-C target-feature=-crt-static -l dylib=c -L /build/libs -C link-arg=-dynamic "
+			"-C target-feature=-crt-static -l dylib=c -C link-arg=-dynamic "
 			+ (args.RUSTFLAGS or "");
 
 		hardeningDisable = ["all"];
@@ -100,13 +100,15 @@ stdenv.mkDerivation (
 				cargoSetupHook
 				rust-pkg
 				zig
+			]
+			++ lib.optionals stdenv.hostPlatform.isLinux [
 				pkgs.glibc
 				pkgs.libllvm
-			];
+			]
+			++ lib.optionals stdenv.hostPlatform.isDarwin [ libiconv ];
 
 		buildInputs =
-			buildInputs
-			++ lib.optionals stdenv.hostPlatform.isDarwin [ libiconv ];
+			buildInputs;
 
 		patches = cargoPatches ++ patches;
 
@@ -116,14 +118,14 @@ stdenv.mkDerivation (
 			''
 				eval "$cargoDepsHook"
 
-				mkdir -p /build/libs
+				mkdir -p $NIX_BUILD_TOP/libs
 
 				export RUST_LOG=${logLevel}
 			''
 			+ (args.postUnpack or "")
 			+ "\n"
 			+ builtins.concatStringsSep "\n" (
-				builtins.map (x: "cp ${x}/lib/* /build/libs/") extraLibs
+				builtins.map (x: "cp ${x}/lib/* $NIX_BUILD_TOP/libs/") extraLibs
 			);
 
 		configurePhase =
@@ -141,7 +143,9 @@ stdenv.mkDerivation (
 		buildPhase = ''
 			runHook preBuild
 
-			ls -l /build/libs/
+			export RUSTFLAGS="-L $NIX_BUILD_TOP/libs $RUSTFLAGS"
+
+			ls -l $NIX_BUILD_TOP/libs/
 
 			echo "PATH=$PATH"
 			echo "RUSTFLAGS=$RUSTFLAGS"
@@ -163,7 +167,7 @@ stdenv.mkDerivation (
 
 				for i in $(patchelf --print-needed target/__out)
 				do
-					if [[ "$i" == /build/libs/* ]]
+					if [[ "$i" == $NIX_BUILD_TOP/libs/* ]]
 					then
 						echo "Replacing $i with $(basename $i)"
 						patchelf --replace-needed "$i" "$(basename $i)" target/__out
