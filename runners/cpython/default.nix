@@ -14,6 +14,7 @@
 , lib
 , runnersLib
 , stdenvNoCC
+, pkgs-host
 , ...
 }@args:
 let
@@ -26,11 +27,11 @@ let
 
 	setupLines = ["*static*"] ++ modules.setupLines ++ [""];
 
-	modules-setup = pkgs.writeText "Setup.local" (builtins.concatStringsSep "\n" setupLines);
+	modules-setup = pkgs-host.writeText "Setup.local" (builtins.concatStringsSep "\n" setupLines);
 
 	deps = import ./deps args;
 
-	conf-site = pkgs.writeText "conf.site" (builtins.readFile ./conf.site);
+	conf-site = pkgs-host.writeText "conf.site" (builtins.readFile ./conf.site);
 
 	pythonObjs = stdenvNoCC.mkDerivation {
 		name = "genvm-cpython-objs";
@@ -144,7 +145,7 @@ let
 		];
 	};
 
-	runnerJSON-file = pkgs.writeText "runner.json" (builtins.toJSON runnerJSON);
+	runnerJSON-file = pkgs-host.writeText "runner.json" (builtins.toJSON runnerJSON);
 
 	undefinedSymbols = [
 		"storage_read"
@@ -154,7 +155,7 @@ let
 		"gl_call"
 	];
 
-	undefinedSymbols-file = pkgs.writeText "undef-symbols.txt" (builtins.concatStringsSep "\n" undefinedSymbols);
+	undefinedSymbols-file = pkgs-host.writeText "undef-symbols.txt" (builtins.concatStringsSep "\n" undefinedSymbols);
 
 	linked = stdenvNoCC.mkDerivation {
 		name = "genvm-cpython";

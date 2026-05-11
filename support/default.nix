@@ -69,7 +69,7 @@ let
 
 		dontFixup = true;
 	};
-	deps = import ./fetch-deps.nix { inherit pkgs; };
+	deps = import ../runners/support/deps/fetch-deps.nix { inherit pkgs; };
 in rec {
 	inherit pkgs deps;
 

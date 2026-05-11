@@ -52,9 +52,9 @@ repos:
 
       - id: no-commit-test
         name: do not commit test runners
-        entry: grep -P false runners/support/current/dev-mode.nix
+        entry: grep -P false runners/support/versions/dev-mode.nix
         language: system
-        files: ^runners/support/current/dev-mode.nix$
+        files: ^runners/support/versions/dev-mode.nix$
 
       - id: cargo-fmt
         name: cargo fmt

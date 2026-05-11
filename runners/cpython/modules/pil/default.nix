@@ -3,12 +3,13 @@
 , stdenvNoCC
 , runnersLib
 , lib
+, pkgs-host
 , ...
 }:
 let
-	h_config_private = pkgs.writeText "opj_config_private.h" (builtins.readFile ./opj_config_private.h);
-	h_config = pkgs.writeText "opj_config.h" (builtins.readFile ./opj_config.h);
-	c_opj_clock = pkgs.writeText "opj_clock.c" (builtins.readFile ./opj_clock.c);
+	h_config_private = pkgs-host.writeText "opj_config_private.h" (builtins.readFile ./opj_config_private.h);
+	h_config = pkgs-host.writeText "opj_config.h" (builtins.readFile ./opj_config.h);
+	c_opj_clock = pkgs-host.writeText "opj_clock.c" (builtins.readFile ./opj_clock.c);
 
 	extra_c_files = [
 		"decode"
@@ -25,7 +26,7 @@ let
 		"_imagingmorph"
 	];
 
-	makefile_in = pkgs.writeText "Makefile.in" (builtins.readFile ./Makefile.in);
+	makefile_in = pkgs-host.writeText "Makefile.in" (builtins.readFile ./Makefile.in);
 
 	extra_c_files_str = builtins.concatStringsSep " " (builtins.map (x: "pillow-src/src/" + x + ".c") extra_c_files);
 

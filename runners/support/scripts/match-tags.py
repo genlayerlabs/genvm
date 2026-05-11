@@ -49,10 +49,10 @@ current_commit = subprocess.run(
 
 current_commit = current_commit.stdout.strip()
 
-eval_file = Path(__file__).parent.parent.joinpath('docs.nix')
+eval_file = Path(__file__).parent.parent.joinpath('views', 'docs.nix')
 
 build_config = json.loads(
-	Path(__file__).parent.parent.parent.joinpath('flake-config.json').read_text()
+	Path(__file__).parent.parent.parent.parent.joinpath('flake-config.json').read_text()
 )
 build_config['head-revision'] = current_commit
 commit2tag[current_commit] = build_config['executor-version']

@@ -3,10 +3,11 @@
 , stdenvNoCC
 , runnersLib
 , lib
+, pkgs-host
 , ...
 }:
 let
-	genlayer_c = pkgs.writeText "genlayer.c" (builtins.readFile ./genlayer.c);
+	genlayer_c = pkgs-host.writeText "genlayer.c" (builtins.readFile ./genlayer.c);
 	extraObj = stdenvNoCC.mkDerivation {
 		name = "genvm-cpython-mod-genlayer-objs";
 		outputHashMode = "recursive";

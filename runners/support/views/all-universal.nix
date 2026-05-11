@@ -18,5 +18,5 @@
 				cp ${x.derivation} "$out/${result-path}"
 			'';
 		};
-	}) {} (import ./all.nix args);
+	}) {} (import ../versions/all.nix args);
 }

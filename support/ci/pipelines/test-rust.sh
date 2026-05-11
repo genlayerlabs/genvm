@@ -9,11 +9,11 @@ export ORIGINAL_LD_LIBRARY_PATH="$LD_LIBRARY_PATH"
 mkdir -p build/out/executor/vTEST/data
 
 nix eval --verbose --impure --read-only --show-trace --json --expr \
-    'let drv = import ./runners ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = builtins.convertHash { hash = x.hash; toHashFormat = "nix32"; }; }) drv)' \
+    'let drv = import ./runners { host-system = builtins.currentSystem; } ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = builtins.convertHash { hash = x.hash; toHashFormat = "nix32"; }; }) drv)' \
     > build/out/executor/vTEST/data/latest.json
 
 nix eval --verbose --impure --read-only --show-trace --json --expr \
-    'let drv = import ./runners ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = [ (builtins.convertHash { hash = x.hash; toHashFormat = "nix32"; }) ]; }) drv)' \
+    'let drv = import ./runners { host-system = builtins.currentSystem; } ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = [ (builtins.convertHash { hash = x.hash; toHashFormat = "nix32"; }) ]; }) drv)' \
     > build/out/executor/vTEST/data/all.json
 
 # we can't run it within nix because it uses `nix add` which sigsegvs
@@ -21,7 +21,7 @@ python3 ./support/runner-script.py \
     download \
     --nix-preload --allow-partial --dest build/out/runners --registry build/out/executor/vTEST/data/all.json
 
-nix build -v -L -o build/out-runners --file ./runners/build-here.nix
+nix build -v -L -o build/out-runners .#debug-runners
 mkdir -p ./build/out/runners
 cp -r ./build/out-runners/. ./build/out/runners/.
 chmod -R +w ./build/out/runners/.

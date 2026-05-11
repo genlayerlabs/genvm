@@ -23,6 +23,12 @@ default_env = {
 	if ya_test_runner.util.environ.DEFAULT_FILTER(k, v)
 }
 
+cargo_ld_library_path = os.environ.get('CARGO_LD_LIBRARY_PATH', None)
+base_ld_library_path = default_env.get('LD_LIBRARY_PATH', None)
+default_env['LD_LIBRARY_PATH'] = ':'.join(
+	filter(None, [cargo_ld_library_path, base_ld_library_path])
+)
+
 default_env['LLVM_PROFILE_FILE'] = '/dev/null'
 
 default_env['AFL_FUZZER_LOOPCOUNT'] = '20'  # without it no coverage will be written!

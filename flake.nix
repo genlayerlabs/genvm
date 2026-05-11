@@ -31,9 +31,13 @@
 								inherit system;
 							};
 
-							deps = import ./support/fetch-deps.nix { inherit pkgs; };
+							deps = import ./runners/support/deps/fetch-deps.nix { inherit pkgs; };
 
-							custom-rust = import ./support/rust.nix { inherit pkgs deps system; withLinters = true; withZig = false; };
+							custom-rust = import ./support/rust.nix {
+								inherit pkgs deps system;
+								withLinters = true;
+								withZig = false;
+							};
 							custom-rust-builder = import ./support/compile-rust.nix {
 								inherit pkgs deps system;
 								zig = import ./support/zig.nix { inherit pkgs deps system; };
@@ -89,7 +93,7 @@
 							];
 							shell-hook-base = ''
 								export PATH="$(pwd)/tools/git-third-party:$PATH"
-								export LD_LIBRARY_PATH="${toString pkgs.xz.out}/lib:${toString pkgs.zlib.out}/lib:${pkgs.stdenv.cc.cc.lib}/lib:${toString pkgs.glibc}/lib:$LD_LIBRARY_PATH"
+								export CARGO_LD_LIBRARY_PATH="${toString pkgs.xz.out}/lib:${toString pkgs.zlib.out}/lib:${pkgs.stdenv.cc.cc.lib}/lib:${toString pkgs.glibc}/lib"
 								export LLVM_PROFILE_FILE=/dev/null
 							'';
 
@@ -99,6 +103,8 @@
 							} // {
 								inherit components;
 
+								host-system = system;
+
 								build-config = builtins.fromJSON (builtins.readFile ./flake-config.json);
 							};
 
@@ -106,9 +112,14 @@
 								(import ./libs release-args)
 								(import ./modules release-args)
 								(import ./executor release-args)
-								(import ./runners/release.nix release-args)
-								(import ./runners/support/all release-args)
+								(import ./runners/support/views/release.nix release-args)
+								(import ./runners/support/views/all-universal.nix release-args)
 							];
+
+							debug-runners = import ./runners/support/views/debug-build.nix {
+								inherit pkgs;
+								host-system = system;
+							};
 
 							merge-all-for-platform = platform:
 								let
@@ -137,6 +148,7 @@
 						{
 							packages = builtins.mapAttrs (platform: sub: merge-all-for-platform platform) components // {
 								all-for-platform = builtins.mapAttrs (platform: sub: merge-all-for-platform platform) components;
+								inherit debug-runners;
 							};
 
 							devShells.py-test = pkgs.mkShell {

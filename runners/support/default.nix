@@ -1,17 +1,18 @@
 { pkgs
 , stdenvNoCC
+, pkgs-host
 , ...
 }@args:
 let
-	dev-mode = import ./nix/dev-mode.nix;
+	dev-mode = import ./versions/dev-mode.nix;
 in rec {
-	hashes = import ./current/hashes.nix;
+	hashes = import ./versions/current.nix;
 
-	wasi-sdk = import ./wasi-sdk.nix args;
+	wasi-sdk = import ./tools/wasi-sdk.nix args;
 
 	wasmPatchers = {
-		floats-2-soft = import ./genvm-floats-to-soft args;
-		add-mod-name = import ./genvm-wasm-add-mod-name args;
+		floats-2-soft = import ./tools/genvm-floats-to-soft args;
+		add-mod-name = import ./tools/genvm-wasm-add-mod-name args;
 	};
 
 	hashToIDHash = hash: if hash == "test" then "test" else builtins.convertHash { inherit hash; toHashFormat = "nix32"; };
@@ -20,22 +21,22 @@ in rec {
 
 		uid = "${id}:${hashToIDHash hash}";
 
-		derivation = stdenvNoCC.mkDerivation ({
+		derivation = pkgs-host.stdenvNoCC.mkDerivation ({
 			name = "genvm_runner_${id}_${hashToIDHash hash}";
 
-			srcs = [ baseDerivation ./build-scripts ];
+			srcs = [ baseDerivation ./scripts ];
 			sourceRoot = ".";
 
 			phases = ["unpackPhase" "buildPhase" "installPhase"];
 
-			nativeBuildInputs = with pkgs; [ python313 ];
+			nativeBuildInputs = with pkgs-host; [ python313 ];
 
 			buildPhase = ''
-				out="$(readlink -f ./build-scripts)/debug-out.tar" ${pkgs.python313}/bin/python3 ./build-scripts/make-tar.py
+				out="$(readlink -f ./scripts)/debug-out.tar" ${pkgs-host.python313}/bin/python3 ./scripts/make-tar.py
 			'';
 
 			installPhase = ''
-				${pkgs.python313}/bin/python3 ./build-scripts/make-tar.py
+				${pkgs-host.python313}/bin/python3 ./scripts/make-tar.py
 			'';
 
 			outputHashMode = "flat";
@@ -45,11 +46,11 @@ in rec {
 	packageWithRunnerJSON = { id, hash, baseDerivation, expr }: package {
 		inherit id hash;
 
-		baseDerivation = pkgs.symlinkJoin {
+		baseDerivation = pkgs-host.symlinkJoin {
 			name = "genvm_runner_${id}_${hashToIDHash hash}-merged";
 			paths = [
 				baseDerivation
-				(let file = pkgs.writeText "runner.json" (builtins.toJSON expr); in stdenvNoCC.mkDerivation {
+				(let file = pkgs-host.writeText "runner.json" (builtins.toJSON expr); in pkgs-host.stdenvNoCC.mkDerivation {
 					name = "genvm_runner_${id}_${hashToIDHash hash}-runner";
 
 					phases = ["installPhase"];
@@ -65,7 +66,7 @@ in rec {
 	packageGlue = { id, hash, expr }: package {
 		inherit id hash;
 
-		baseDerivation = let file = pkgs.writeText "runner.json" (builtins.toJSON expr); in stdenvNoCC.mkDerivation {
+		baseDerivation = let file = pkgs-host.writeText "runner.json" (builtins.toJSON expr); in pkgs-host.stdenvNoCC.mkDerivation {
 			name = "genvm_runner_${id}_${hashToIDHash hash}-runner";
 
 			phases = ["installPhase"];
