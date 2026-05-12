@@ -271,9 +271,7 @@ def run_merge(args):
 	print(json.dumps(all_regs_list, sort_keys=True))
 
 
-def run_prefetch_needed(args):
-	import subprocess
-
+def _iter_needed_deps(targets: set[str] | None, all_deps: bool):
 	deps_file = (
 		Path(__file__).parent.parent
 		/ 'runners'
@@ -285,46 +283,83 @@ def run_prefetch_needed(args):
 	with open(deps_file, 'r') as f:
 		deps = json.load(f)
 
-	targets = set(args.target) if args.target else None
-
 	for dep in deps:
-		if not args.all and not dep.get('must_preload', False):
+		if not all_deps and not dep.get('must_preload', False):
 			continue
 
 		needed_for = dep.get('needed-for', [])
 		if targets is not None and not any(t in targets for t in needed_for):
 			continue
 
-		name = dep['name']
-		fetcher = dep.get('fetcher', 'fetchTarball')
-		unpack = fetcher in ('fetchTarball', 'fetchzip')
+		yield dep
 
-		urls = [dep['original_url']]
-		if dep.get('alternative_urls'):
-			urls.extend(dep['alternative_urls'])
 
-		success = False
-		for url in urls:
-			try:
-				print(f'info: prefetching {name} from {url}')
-				cmd = ['nix-prefetch-url', '--name', name]
-				if unpack:
-					cmd.append('--unpack')
-				cmd.append(url)
-				subprocess.run(
-					cmd,
-					check=True,
-					env=ORIGINAL_ENV,
-				)
-				success = True
-				break
-			except subprocess.CalledProcessError:
-				print(f'warn: failed to prefetch {name} from {url}', file=sys.stderr)
-				continue
+def _prefetch_dep(dep, *, capture_path: bool = False) -> str | None:
+	import subprocess
 
-		if not success:
-			print(f'err: failed to prefetch {name} from all urls', file=sys.stderr)
-			_sys_exit(1)
+	name = dep['name']
+	fetcher = dep.get('fetcher', 'fetchTarball')
+	unpack = fetcher in ('fetchTarball', 'fetchzip')
+
+	urls = [dep['original_url']]
+	if dep.get('alternative_urls'):
+		urls.extend(dep['alternative_urls'])
+
+	for url in urls:
+		try:
+			print(f'info: prefetching {name} from {url}')
+			cmd = ['nix-prefetch-url', '--name', name]
+			if unpack:
+				cmd.append('--unpack')
+			if capture_path:
+				cmd.append('--print-path')
+			cmd.append(url)
+			proc = subprocess.run(
+				cmd,
+				check=True,
+				env=ORIGINAL_ENV,
+				text=True,
+				capture_output=capture_path,
+			)
+			if capture_path:
+				lines = [l for l in proc.stdout.strip().splitlines() if l]
+				return lines[-1]
+			return None
+		except subprocess.CalledProcessError as e:
+			print(f'warn: failed to prefetch {name} from {url}', file=sys.stderr)
+			if capture_path and e.stderr:
+				print(e.stderr, file=sys.stderr)
+			continue
+
+	print(f'err: failed to prefetch {name} from all urls', file=sys.stderr)
+	_sys_exit(1)
+
+
+def run_prefetch_needed(args):
+	targets = set(args.target) if args.target else None
+	for dep in _iter_needed_deps(targets, args.all):
+		_prefetch_dep(dep)
+
+
+def run_push_needed(args):
+	import subprocess
+
+	targets = set(args.target) if args.target else None
+	store_uri: str = args.store_uri
+
+	paths: list[str] = []
+	for dep in _iter_needed_deps(targets, args.all):
+		path = _prefetch_dep(dep, capture_path=True)
+		if path:
+			paths.append(path)
+
+	if not paths:
+		print('info: nothing to push')
+		return
+
+	print(f'info: pushing {len(paths)} path(s) to {store_uri}')
+	cmd = ['nix', 'copy', '--to', store_uri, *paths]
+	subprocess.run(cmd, check=True, env=ORIGINAL_ENV)
 
 
 def run_mirror_to_gcs(args):
@@ -442,6 +477,16 @@ if __name__ == '__main__':
 	prefetch_parser.add_argument('--target', action='append', default=None)
 	prefetch_parser.add_argument('--all', action='store_true', default=False)
 	prefetch_parser.set_defaults(func=run_prefetch_needed)
+
+	push_parser = dep_subparsers.add_parser('push-to-store')
+	push_parser.add_argument('--target', action='append', default=None)
+	push_parser.add_argument('--all', action='store_true', default=False)
+	push_parser.add_argument(
+		'--store-uri',
+		required=True,
+		help='nix store URI to push to (e.g. s3://bucket, ssh://host, file:///path)',
+	)
+	push_parser.set_defaults(func=run_push_needed)
 
 	mirror_parser = dep_subparsers.add_parser('mirror-to-gcs')
 	mirror_parser.add_argument('--bucket', default='genvm-artifacts')
