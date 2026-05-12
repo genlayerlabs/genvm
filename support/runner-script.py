@@ -274,8 +274,13 @@ def run_merge(args):
 def run_prefetch_needed(args):
 	import subprocess
 
-	script_dir = Path(__file__).parent
-	deps_file = script_dir / 'dependencies' / 'dependency-urls.json'
+	deps_file = (
+		Path(__file__).parent.parent
+		/ 'runners'
+		/ 'support'
+		/ 'deps'
+		/ 'dependency-urls.json'
+	)
 
 	with open(deps_file, 'r') as f:
 		deps = json.load(f)
@@ -323,8 +328,13 @@ def run_prefetch_needed(args):
 
 
 def run_mirror_to_gcs(args):
-	script_dir = Path(__file__).parent
-	deps_file = script_dir / 'dependencies' / 'dependency-urls.json'
+	deps_file = (
+		Path(__file__).parent.parent
+		/ 'runners'
+		/ 'support'
+		/ 'deps'
+		/ 'dependency-urls.json'
+	)
 
 	with open(deps_file, 'r') as f:
 		deps = json.load(f)
