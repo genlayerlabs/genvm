@@ -1,6 +1,6 @@
 [
   {
-    "name": "zig-x86_64-linux",
+    "name": "zig-x86_64-linux-0.15.1",
     "original_url": "https://ziglang.org/download/0.15.1/zig-x86_64-linux-0.15.1.tar.xz",
     "alternative_urls": [
       "https://storage.googleapis.com/genvm-artifacts/zig-x86_64-linux-0.15.1.tar.xz"
@@ -14,7 +14,7 @@
     "alternative_name": null
   },
   {
-    "name": "zig-aarch64-linux",
+    "name": "zig-aarch64-linux-0.15.1",
     "original_url": "https://ziglang.org/download/0.15.1/zig-aarch64-linux-0.15.1.tar.xz",
     "alternative_urls": [
       "https://storage.googleapis.com/genvm-artifacts/zig-aarch64-linux-0.15.1.tar.xz"
@@ -27,7 +27,7 @@
     "fetcher": "fetchzip"
   },
   {
-    "name": "zig-aarch64-macos",
+    "name": "zig-aarch64-macos-0.15.1",
     "original_url": "https://ziglang.org/download/0.15.1/zig-aarch64-macos-0.15.1.tar.xz",
     "alternative_urls": [
       "https://storage.googleapis.com/genvm-artifacts/zig-aarch64-macos-0.15.1.tar.xz"
@@ -40,7 +40,7 @@
     "fetcher": "fetchzip"
   },
   {
-    "name": "rust-channel-stable",
+    "name": "rust-channel-stable-2026-03-05",
     "original_url": "https://static.rust-lang.org/dist/2026-03-05/channel-rust-stable.toml",
     "alternative_urls": [
       "https://storage.googleapis.com/genvm-artifacts/channel-rust-stable-2026-03-05.toml"
@@ -56,7 +56,7 @@
     "upload_as": "channel-rust-stable-2026-03-05.toml"
   },
   {
-    "name": "binaryen-raw",
+    "name": "binaryen-raw-128",
     "original_url": "https://github.com/WebAssembly/binaryen/releases/download/version_128/binaryen-version_128-x86_64-linux.tar.gz",
     "alternative_urls": [
       "https://storage.googleapis.com/genvm-artifacts/binaryen-version_128-x86_64-linux.tar.gz"
@@ -69,7 +69,7 @@
     "fetcher": "fetchzip"
   },
   {
-    "name": "wasi-sdk-raw",
+    "name": "wasi-sdk-raw-31.0",
     "original_url": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-31/wasi-sdk-31.0-x86_64-linux.tar.gz",
     "alternative_urls": [
       "https://storage.googleapis.com/genvm-artifacts/wasi-sdk-31.0-x86_64-linux.tar.gz"
@@ -82,7 +82,8 @@
     "fetcher": "fetchzip"
   },
   {
-    "name": "genvm-zlib-src",
+    "name": "genvm-zlib-src-1.3.1",
+    "nix_der_name": "genvm-zlib-src",
     "original_url": "https://www.zlib.net/zlib-1.3.1.tar.gz",
     "alternative_urls": [
       "https://storage.googleapis.com/genvm-artifacts/zlib-1.3.1.tar.gz"
@@ -95,7 +96,8 @@
     "fetcher": "fetchzip"
   },
   {
-    "name": "genvm-bz2-src",
+    "name": "genvm-bz2-src-1.0.8",
+    "nix_der_name": "genvm-bz2-src",
     "original_url": "https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz",
     "alternative_urls": [
       "https://storage.googleapis.com/genvm-artifacts/bzip2-1.0.8.tar.gz"
@@ -108,7 +110,7 @@
     "fetcher": "fetchzip"
   },
   {
-    "name": "genvm-ffi-src",
+    "name": "genvm-ffi-src-3.4.6",
     "original_url": "https://github.com/libffi/libffi/releases/download/v3.4.6/libffi-3.4.6.tar.gz",
     "alternative_urls": [
       "https://storage.googleapis.com/genvm-artifacts/libffi-3.4.6.tar.gz"
@@ -121,7 +123,8 @@
     "fetcher": "fetchzip"
   },
   {
-    "name": "genvm-xz-src",
+    "name": "genvm-xz-src-5.6.2",
+    "nix_der_name": "genvm-xz-src",
     "original_url": "https://github.com/tukaani-project/xz/releases/download/v5.6.2/xz-5.6.2.tar.gz",
     "alternative_urls": [
       "https://storage.googleapis.com/genvm-artifacts/xz-5.6.2.tar.gz"
@@ -134,7 +137,7 @@
     "fetcher": "fetchzip"
   },
   {
-    "name": "cargo-afl",
+    "name": "cargo-afl-0.17.1",
     "original_url": "https://crates.io/api/v1/crates/cargo-afl/0.17.1/download",
     "alternative_urls": [
       "https://storage.googleapis.com/genvm-artifacts/cargo-afl-0.17.1.tar.gz"
@@ -151,7 +154,7 @@
     "upload_as": "cargo-afl-0.17.1.tar.gz"
   },
   {
-    "name": "compiler-rt-aarch64",
+    "name": "compiler-rt-aarch64-21.1.5-1",
     "original_url": "https://storage.googleapis.com/genvm-artifacts/compiler-rt-21.1.5-1-aarch64.pkg.tar.xz",
     "alternative_urls": [],
     "hash": "sha256-cwzW7KnNVs7+C5DJ6PC6I2/yQILg1Zr0Kt5weGKySSI=",
@@ -162,7 +165,7 @@
     "fetcher": "fetchzip"
   },
   {
-    "name": "libiconv",
+    "name": "libiconv-1.18",
     "original_url": "https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz",
     "alternative_urls": [
       "https://storage.googleapis.com/genvm-artifacts/libiconv-1.18.tar.gz"
@@ -173,5 +176,52 @@
       "aarch64-macos"
     ],
     "fetcher": "fetchzip"
+  },
+  {
+    "name": "rust-channel-stable-2025-03-18",
+    "original_url": "https://static.rust-lang.org/dist/2025-03-18/channel-rust-stable.toml",
+    "alternative_urls": [
+      "https://storage.googleapis.com/genvm-artifacts/channel-rust-stable-2025-03-18.toml"
+    ],
+    "hash": "sha256-Hn2uaQzRLidAWpfmRwSRdImifGUCAb9HeAqTYFXWeQk=",
+    "must_preload": false,
+    "needed-for": [
+      "x86_64-linux",
+      "aarch64-linux",
+      "aarch64-macos"
+    ],
+    "fetcher": "fetchurl",
+    "upload_as": "channel-rust-stable-2025-03-18.toml"
+  },
+  {
+    "name": "wasi-sdk-raw-24.0",
+    "nix_der_name": "wasi-sdk-raw",
+    "original_url": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-linux.tar.gz",
+    "alternative_urls": [
+      "https://storage.googleapis.com/genvm-artifacts/wasi-sdk-24.0-x86_64-linux.tar.gz"
+    ],
+    "hash": "sha256-/cyLxhFsfBBQxn4NrhLdbgHjU3YUjYhPnvquWJodcO8=",
+    "must_preload": false,
+    "needed-for": [
+      "universal"
+    ],
+    "fetcher": "fetchzip"
+  },
+  {
+    "name": "cargo-afl-0.15.18",
+    "original_url": "https://crates.io/api/v1/crates/cargo-afl/0.15.18/download",
+    "alternative_urls": [
+      "https://storage.googleapis.com/genvm-artifacts/cargo-afl-0.15.18.tar.gz"
+    ],
+    "hash": "sha256-6ti50bwE4bLwIyR76bMt/Vn6Nwqu9n0IKdVuDdYkiHg=",
+    "must_preload": false,
+    "needed-for": [
+      "x86_64-linux",
+      "aarch64-linux",
+      "aarch64-macos"
+    ],
+    "fetcher": "fetchzip",
+    "extension": ".tar.gz",
+    "upload_as": "cargo-afl-0.15.18.tar.gz"
   }
 ]

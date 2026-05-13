@@ -1,0 +1,25 @@
+Port 22
+Protocol 2
+
+SetEnv PATH=/nix/var/nix/profiles/default/bin:/nix/var/nix/profiles/default/sbin:/usr/local/bin:/usr/bin:/bin
+
+PermitRootLogin prohibit-password
+PasswordAuthentication no
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+KbdInteractiveAuthentication no
+UsePAM no
+
+HostKey /etc/ssh/ssh_host_ed25519_key
+
+PubkeyAuthentication yes
+AuthorizedKeysFile /etc/ssh/authorized_keys
+
+AllowUsers root
+
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding yes
+PrintMotd no
+
+Subsystem sftp /nix/var/nix/profiles/default/libexec/sftp-server

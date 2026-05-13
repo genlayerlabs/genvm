@@ -1046,6 +1046,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arbitrary",
+ "archery",
  "bytes",
  "chrono",
  "clap",
@@ -1060,6 +1061,7 @@ dependencies = [
  "num-traits",
  "primitive-types",
  "regex",
+ "rpds",
  "rustix 0.38.44",
  "serde",
  "serde_json",

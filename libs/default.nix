@@ -1,6 +1,6 @@
 { pkgs
-, zig
 , deps
+, zig
 , ...
 }:
 let
@@ -31,7 +31,7 @@ in {
 			name-target = "arm64-macos";
 		};
 		libiconv = import ./iconv.nix {
-			inherit pkgs zig deps;
+			inherit pkgs deps zig;
 		};
 	};
 }

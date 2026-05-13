@@ -1,5 +1,6 @@
 { pkgs
 , build-config
+, host-system
 , ...
 }@args:
 let
@@ -31,8 +32,14 @@ let
 					pairs;
 		in groupByKey pairs;
 
-	latest = builtins.toFile "latest.json" (builtins.toJSON (converter-single (import ./default.nix)));
-	all = builtins.toFile "all.json" (builtins.toJSON (converter-multi (import ./support/all/all.nix args)));
+	dflt-base = import ../../default.nix;
+	dflt =
+		if builtins.isFunction dflt-base
+		then dflt-base { inherit host-system; }
+		else dflt-base;
+
+	latest = builtins.toFile "latest.json" (builtins.toJSON (converter-single dflt));
+	all = builtins.toFile "all.json" (builtins.toJSON (converter-multi (import ../versions/all.nix args)));
 
 	subpath = "executor/${build-config.executor-version}/data/";
 in {

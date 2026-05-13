@@ -101,8 +101,10 @@ let
 						(name: name != "__prefix")
 						(builtins.attrNames val)))
 		else
-			if val.hash == null || val.hash == "test" then
-				""
+			if val.hash == null
+			then ""
+			else if val.hash == "test" then
+				(if dev-mode then "" else "set ${pref+name} hash to 'null'\n")
 			else if hashHasSpecialDeps null val then
 				"set ${pref+name} hash to null\n"
 			else if hashHasSpecialDeps null val then

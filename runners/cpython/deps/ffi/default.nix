@@ -1,8 +1,8 @@
 { pkgs
+, deps
 , lib
 , stdenvNoCC
 , runnersLib
-, deps
 , ...
 }:
 stdenvNoCC.mkDerivation {
@@ -13,7 +13,7 @@ stdenvNoCC.mkDerivation {
 	outputHashMode = "recursive";
 
 	srcs = [
-		deps."genvm-ffi-src"
+		deps."genvm-ffi-src-3.4.6"
 		(builtins.path { name = "stub_ffi.c"; path = ./stub_ffi.c; })
 	];
 

@@ -1,5 +1,6 @@
 { pkgs
 , root-src
+, system
 }:
 let
 	mergeDoubleDepthAttrs = l: r:
@@ -68,13 +69,13 @@ let
 
 		dontFixup = true;
 	};
-	deps = import ./fetch-deps.nix { inherit pkgs; };
+	deps = import ../runners/support/deps/fetch-deps.nix { inherit pkgs; };
 in rec {
 	inherit pkgs deps;
 
 	root-src = full-src;
 
-	zig = import ./zig.nix { inherit pkgs deps; };
+	zig = import ./zig.nix { inherit pkgs deps system; };
 
 	get-root-subtree = paths:
 		let
@@ -98,7 +99,7 @@ in rec {
 						# builtins.trace "${relPath} -> ${if allow-dflt then "true" else "false"}" allow-dflt;
 		};
 
-	compile-rust = import ./compile-rust.nix { inherit pkgs zig; withZig = true; };
+	compile-rust = import ./compile-rust.nix { inherit pkgs deps zig system; withZig = true; };
 
 	patch-yaml-schema = pkgs.writers.writePython3Bin "patch-yaml-schema" { doCheck = false; } (builtins.readFile ./scripts/remove-schema.py);
 

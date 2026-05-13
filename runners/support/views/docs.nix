@@ -4,7 +4,7 @@ let
 	build-config = builtins.fromJSON build-config-str;
 	commitToTag = builtins.fromJSON commitToTagStr;
 	# list[{id, hash, derivation}]
-	allRunnersList = import ./support/all/all.nix { inherit build-config; };
+	allRunnersList = import ../versions/all.nix { inherit build-config; };
 	res = builtins.foldl' (l: r:
 		let
 			rev_id = if builtins.hasAttr r.rev commitToTag then commitToTag.${r.rev} else r.rev;

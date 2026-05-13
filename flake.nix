@@ -23,186 +23,182 @@
 
 	outputs = { self, nixpkgs, flake-utils, systems }:
 		let
-			genvm-release =
-				let
-					pkgs = import nixpkgs {
-						system = "x86_64-linux";
-					};
-
-					lib = pkgs.lib;
-
-					args = import ./support {
-						inherit pkgs;
-						root-src = self;
-					} // {
-						inherit components;
-
-						build-config = builtins.fromJSON (builtins.readFile ./flake-config.json);
-					};
-
-					components = args.merge-components [
-						(import ./libs args)
-						(import ./modules args)
-						(import ./executor args)
-						(import ./runners/release.nix args)
-						(import ./runners/support/all args)
-					];
-
-					merge-all-for-platform = platform:
+			for-systems =
+				flake-utils.lib.eachDefaultSystem
+					(system:
 						let
-							for-platform = components.${platform};
-							names = builtins.attrNames for-platform;
-							just-derivations = builtins.attrValues for-platform;
-						in
-							pkgs.stdenvNoCC.mkDerivation {
-								name = "genvm-${platform}";
+							pkgs = import nixpkgs {
+								inherit system;
+							};
 
-								srcs = just-derivations;
+							ya-test-runner = pkgs.python312Packages.buildPythonApplication {
+								pname = "ya-test-runner";
+								version = "0.1.0";
+								pyproject = true;
+								src = ./tools/ya-test-runner;
+								build-system = [ pkgs.python312Packages.poetry-core ];
+								dependencies = with pkgs.python312Packages; [ aiohttp jsonnet ];
+								doCheck = false;
+							};
 
-								dontUnpack = true;
-								dontConfigure = true;
-								dontBuild = true;
-								dontFixup = true;
+							deps = import ./runners/support/deps/fetch-deps.nix { inherit pkgs; };
+
+							custom-rust = import ./support/rust.nix { inherit pkgs deps system; withLinters = true; withZig = false; withWasi = true; };
+							custom-rust-builder = import ./support/compile-rust.nix {
+								inherit pkgs system deps;
+								zig = import ./support/zig.nix { inherit pkgs deps system; };
+							};
+
+							custom-cargo-afl = custom-rust-builder rec {
+								name = "cargo-afl";
+								version = "0.17.1";
+								src = deps."cargo-afl-0.17.1";
+
+								target = system;
+
+								cargoLock.lockFile = "${src}/Cargo.lock";
+
+								nativeBuildInputs = [ pkgs.gnumake pkgs.makeWrapper ];
+
+								postBuild = ''
+									XDG_DATA_HOME="$out/data" ./target/*/release/cargo-afl afl config --build --verbose
+								'';
 
 								installPhase = ''
-									mkdir -p $out
-									for src in $srcs; do
-										cp --no-preserve=ownership -r $src/. $out/.
-										chmod -R u+w $out
-									done
+									mkdir -p $out/bin
+									cp target/__out $out/bin/cargo-afl
+									wrapProgram $out/bin/cargo-afl \
+										--set XDG_DATA_HOME "$out/data"
 								'';
 							};
-				in {
-					inherit components;
 
-					all-for-platform = builtins.mapAttrs (platform: sub: merge-all-for-platform platform) components;
-				};
-
-				for-systems =
-					flake-utils.lib.eachDefaultSystem
-						(system:
-							let
-								pkgs = import nixpkgs {
-									inherit system;
-								};
-
-								ya-test-runner = pkgs.python312Packages.buildPythonApplication {
-									pname = "ya-test-runner";
-									version = "0.1.0";
-									pyproject = true;
-									src = ./tools/ya-test-runner;
-									build-system = [ pkgs.python312Packages.poetry-core ];
-									dependencies = with pkgs.python312Packages; [ aiohttp jsonnet ];
-									doCheck = false;
-								};
-
-								deps = import ./support/fetch-deps.nix { inherit pkgs; };
-
-								custom-rust = import ./support/rust.nix { inherit pkgs deps system; withLinters = true; withZig = false; withWasi = true; };
-								custom-rust-builder = import ./support/compile-rust.nix {
-									inherit pkgs system deps;
-									zig = import ./support/zig.nix { inherit pkgs deps system; };
-								};
-
-								custom-cargo-afl = custom-rust-builder rec {
-									name = "cargo-afl";
-									version = "0.17.1";
-									src = deps."cargo-afl";
-
-									target = system;
-
-									cargoLock.lockFile = "${src}/Cargo.lock";
-
-									nativeBuildInputs = [ pkgs.gnumake pkgs.makeWrapper ];
-
-									postBuild = ''
-										XDG_DATA_HOME="$out/data" ./target/*/release/cargo-afl afl config --build --verbose
+							packages-0 = with pkgs; [ bash xz zlib git python312 coreutils which jq stdenv.cc glibc nix ];
+							packages-lint = with pkgs; [ pre-commit ];
+							packages-rust = [ custom-rust ];
+							packages-debug-test = with pkgs; [
+								(pkgs.ninja.overrideAttrs (old: {
+									postPatch = old.postPatch + ''
+										substituteInPlace src/subprocess-posix.cc \
+											--replace '"/bin/sh"' '"${pkgs.bash}/bin/bash"'
 									'';
+								}))
+								ruby
+								gcc
 
-									installPhase = ''
-										mkdir -p $out/bin
-										cp target/__out $out/bin/cargo-afl
-										wrapProgram $out/bin/cargo-afl \
-											--set XDG_DATA_HOME "$out/data"
-									'';
-								};
+								custom-cargo-afl
+								llvmPackages.libllvm
 
-								packages-0 = with pkgs; [ bash xz zlib git python312 coreutils which jq stdenv.cc glibc nix ];
-								packages-lint = with pkgs; [ pre-commit ];
-								packages-rust = [ custom-rust ];
-								packages-debug-test = with pkgs; [
-									(pkgs.ninja.overrideAttrs (old: {
-										postPatch = old.postPatch + ''
-											substituteInPlace src/subprocess-posix.cc \
-												--replace '"/bin/sh"' '"${pkgs.bash}/bin/bash"'
+								python312Packages.jsonnet
+								pkgs.python312Packages.aiohttp
+								wabt
+								ya-test-runner
+							];
+							packages-gen-docs = with pkgs; [
+								lua-language-server
+								mermaid-cli
+							];
+							packages-py-test = with pkgs; [
+								# aflplusplus # currently we don't run fuzzing on CI
+								python312
+								poetry
+							];
+							shell-hook-base = ''
+								export PATH="$(pwd)/tools/git-third-party:$PATH"
+								export CARGO_LD_LIBRARY_PATH="${toString pkgs.xz.out}/lib:${toString pkgs.zlib.out}/lib:${pkgs.stdenv.cc.cc.lib}/lib:${toString pkgs.glibc}/lib"
+								export LLVM_PROFILE_FILE=/dev/null
+							'';
+
+							release-args = import ./support {
+								inherit pkgs system;
+								root-src = self;
+							} // {
+								inherit components;
+
+								host-system = system;
+
+								build-config = builtins.fromJSON (builtins.readFile ./flake-config.json);
+							};
+
+							components = release-args.merge-components [
+								(import ./libs release-args)
+								(import ./modules release-args)
+								(import ./executor release-args)
+								(import ./runners/support/views/release.nix release-args)
+								(import ./runners/support/views/all-universal.nix release-args)
+							];
+
+							debug-runners = import ./runners/support/views/debug-build.nix {
+								inherit pkgs;
+								host-system = system;
+							};
+
+							merge-all-for-platform = platform:
+								let
+									for-platform = components.${platform};
+									just-derivations = builtins.attrValues for-platform;
+								in
+									pkgs.stdenvNoCC.mkDerivation {
+										name = "genvm-${platform}";
+
+										srcs = just-derivations;
+
+										dontUnpack = true;
+										dontConfigure = true;
+										dontBuild = true;
+										dontFixup = true;
+
+										installPhase = ''
+											mkdir -p $out
+											for src in $srcs; do
+												cp --no-preserve=ownership -r $src/. $out/.
+												chmod -R u+w $out
+											done
 										'';
-									}))
-									ruby
-									gcc
+									};
+						in
+						{
+							packages = builtins.mapAttrs (platform: sub: merge-all-for-platform platform) components // {
+								all-for-platform = builtins.mapAttrs (platform: sub: merge-all-for-platform platform) components;
+								inherit debug-runners ya-test-runner;
+							};
 
-									custom-cargo-afl
-									llvmPackages.libllvm
-
-									python312Packages.jsonnet
-									pkgs.python312Packages.aiohttp
-									wabt
-									ya-test-runner
-								];
-								packages-gen-docs = with pkgs; [
-									lua-language-server
-									mermaid-cli
-								];
-								packages-py-test = with pkgs; [
-									# aflplusplus # currently we don't run fuzzing on CI
-									python312
-									poetry
-								];
-								shell-hook-base = ''
-									export PATH="$(pwd)/tools/git-third-party:$PATH"
-									export CARGO_LD_LIBRARY_PATH="${toString pkgs.xz.out}/lib:${toString pkgs.zlib.out}/lib:${pkgs.stdenv.cc.cc.lib}/lib:${toString pkgs.glibc}/lib"
-									export LLVM_PROFILE_FILE=/dev/null
-								'';
-							in
-							{
-								packages.ya-test-runner = ya-test-runner;
-
-								devShells.py-test = pkgs.mkShell {
-									packages = packages-py-test ++ [ pkgs.ruby ];
-									shellHook = shell-hook-base;
-								};
-								devShells.gen-docs = pkgs.mkShell {
-									packages = packages-py-test ++ packages-gen-docs ++ [ pkgs.ruby ];
-									shellHook = shell-hook-base;
-								};
-								devShells.initial-check = pkgs.mkShell {
-									packages = packages-0 ++ packages-rust ++ packages-lint;
-									shellHook = shell-hook-base;
-								};
-								devShells.rust-test = pkgs.mkShell {
-									packages = packages-0 ++ packages-debug-test ++ packages-rust;
-									shellHook = shell-hook-base;
-								};
-								devShells.mock-tests = pkgs.mkShell {
-									packages = packages-0 ++ packages-rust ++ packages-debug-test;
-									shellHook = shell-hook-base;
-								};
-								devShells.full = pkgs.mkShell {
-									packages =
-										packages-0 ++
-										packages-debug-test ++
-										packages-py-test ++
-										packages-rust ++
-										packages-lint ++
-										packages-gen-docs ++
-										[ pkgs.nodejs ];
-									shellHook = shell-hook-base;
-								};
-								devShells.check-qemu = pkgs.mkShell {
-									packages = packages-0 ++ [ pkgs.qemu ];
-									shellHook = shell-hook-base;
-								};
-							}
-						);
-			in
-			for-systems // genvm-release;
+							devShells.py-test = pkgs.mkShell {
+								packages = packages-py-test ++ [ pkgs.ruby ];
+								shellHook = shell-hook-base;
+							};
+							devShells.gen-docs = pkgs.mkShell {
+								packages = packages-py-test ++ packages-gen-docs ++ [ pkgs.ruby ];
+								shellHook = shell-hook-base;
+							};
+							devShells.initial-check = pkgs.mkShell {
+								packages = packages-0 ++ packages-rust ++ packages-lint;
+								shellHook = shell-hook-base;
+							};
+							devShells.rust-test = pkgs.mkShell {
+								packages = packages-0 ++ packages-debug-test ++ packages-rust;
+								shellHook = shell-hook-base;
+							};
+							devShells.mock-tests = pkgs.mkShell {
+								packages = packages-0 ++ packages-rust ++ packages-debug-test;
+								shellHook = shell-hook-base;
+							};
+							devShells.full = pkgs.mkShell {
+								packages =
+									packages-0 ++
+									packages-debug-test ++
+									packages-py-test ++
+									packages-rust ++
+									packages-lint ++
+									packages-gen-docs ++
+									[ pkgs.nodejs ];
+								shellHook = shell-hook-base;
+							};
+							devShells.check-qemu = pkgs.mkShell {
+								packages = packages-0 ++ [ pkgs.qemu ];
+								shellHook = shell-hook-base;
+							};
+						}
+					);
+		in
+		for-systems;
 }

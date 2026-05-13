@@ -2,6 +2,7 @@
 , name-target
 , pkgs
 , deps
+, ...
 }:
 let
 	musl-src = builtins.fetchGit {
@@ -9,7 +10,7 @@ let
 		rev = "0784374d561435f7c787a555aeab8ede699ed298";
 		shallow = true;
 	};
-	aarch64-compiler-rt = deps."compiler-rt-aarch64";
+	aarch64-compiler-rt = deps."compiler-rt-aarch64-21.1.5-1";
 in pkgs.stdenvNoCC.mkDerivation {
 	name = "libc-${name-target}";
 

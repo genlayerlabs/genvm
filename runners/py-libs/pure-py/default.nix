@@ -1,6 +1,7 @@
 { pkgs
 , lib
 , runnersLib
+, pkgs-host
 , ...
 }@args:
 let
@@ -10,7 +11,7 @@ let
 		runner_json ? { MapFile = { to = "/py/libs/"; file = "src/"; }; },
 	}:
 		let
-			runner_json_file = pkgs.writeText "runner.json" (builtins.toJSON runner_json);
+			runner_json_file = pkgs-host.writeText "runner.json" (builtins.toJSON runner_json);
 		in runnersLib.package {
 			hash = obj.hash;
 			id = obj.id;
