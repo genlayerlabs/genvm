@@ -28,7 +28,6 @@ from .stage.pipeline import (
 class _ParserResult(typing.NamedTuple):
 	parser: argparse.ArgumentParser
 	run_parser: argparse.ArgumentParser
-	shared_parser: argparse.ArgumentParser
 	filter_parser: argparse.ArgumentParser
 
 
@@ -49,7 +48,7 @@ def _create_shared_parser() -> argparse.ArgumentParser:
 	return shared
 
 
-def create_parser(shared: argparse.ArgumentParser) -> _ParserResult:
+def create_parser() -> _ParserResult:
 	"""Create the command-line argument parser."""
 	filter_parser = argparse.ArgumentParser(add_help=False)
 	ya_test_runner.stage.filter.add_args(filter_parser)
@@ -57,14 +56,12 @@ def create_parser(shared: argparse.ArgumentParser) -> _ParserResult:
 	parser = argparse.ArgumentParser(
 		prog='ya-test-runner',
 		description='A test runner utility',
-		parents=[shared],
+		parents=[filter_parser],
 	)
 
 	subparsers = parser.add_subparsers()
 
-	run_parser = subparsers.add_parser(
-		'run', parents=[shared, filter_parser], help='run tests'
-	)
+	run_parser = subparsers.add_parser('run', parents=[filter_parser], help='run tests')
 	run_parser.set_defaults(func=workflow_run)
 
 	run_parser.add_argument(
@@ -94,31 +91,31 @@ def create_parser(shared: argparse.ArgumentParser) -> _ParserResult:
 
 	# 'show' subcommand with nested subcommands
 	show_parser = subparsers.add_parser(
-		'show', parents=[shared], help='show information without running'
+		'show', parents=[], help='show information without running'
 	)
 	show_subparsers = show_parser.add_subparsers()
 
 	show_plan_parser = show_subparsers.add_parser(
-		'plan', parents=[shared, filter_parser], help='show execution plan'
+		'plan', parents=[filter_parser], help='show execution plan'
 	)
 	show_plan_parser.set_defaults(func=workflow_plan)
 
 	show_test_parser = show_subparsers.add_parser(
-		'test', parents=[shared, filter_parser], help='show available tests'
+		'test', parents=[filter_parser], help='show available tests'
 	)
 	show_test_parser.set_defaults(func=workflow_list)
 
 	show_services_parser = show_subparsers.add_parser(
-		'services', parents=[shared], help='show service dependencies'
+		'services', parents=[], help='show service dependencies'
 	)
 	show_services_parser.set_defaults(func=workflow_services)
 
 	show_tags_parser = show_subparsers.add_parser(
-		'tags', parents=[shared], help='show available tags'
+		'tags', parents=[], help='show available tags'
 	)
 	show_tags_parser.set_defaults(func=workflow_tags)
 
-	return _ParserResult(parser, run_parser, shared, filter_parser)
+	return _ParserResult(parser, run_parser, filter_parser)
 
 
 from . import const
@@ -442,12 +439,11 @@ def main() -> None:
 			logger.debug('adding extra python path', path=extra_path)
 			sys.path.append(extra_path_str)
 
-	parser_result = create_parser(shared_parser)
+	parser_result = create_parser()
 
 	initial_env = ya_test_runner.stage.configuration.InitialEnv(
 		parser=parser_result.parser,
 		run_parser=parser_result.run_parser,
-		shared_parser=parser_result.shared_parser,
 		filter_parser=parser_result.filter_parser,
 		remaining_args=remaining_args,
 	)

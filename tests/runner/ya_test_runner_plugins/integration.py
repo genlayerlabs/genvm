@@ -36,6 +36,18 @@ build_info = json.loads(
 BUILD_DIR = Path(build_info['build_dir'])
 TARGET_DIR = Path(build_info['rust_target_dir'])
 
+local_ctx.run_parser.add_argument(
+	'--ignore-hash',
+	action='store_true',
+	default=False,
+	help='Ignore .hash files entirely (skip hash comparison and do not write missing ones)',
+)
+
+
+def _is_ignore_hash_enabled() -> bool:
+	return '--ignore-hash' in sys.argv
+
+
 # Set up paths for importing plugin modules
 TESTS_DIR = local_ctx.shared.root_dir.joinpath('tests')
 CASES_DIR = TESTS_DIR.joinpath('cases')
@@ -702,6 +714,8 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 			res.result_kind == public_abi.ResultCode.VM_ERROR and res.result_data == 'timeout'
 		):
 			check_expected_hash = False  # Don't check hash for timeouts, as they can be flaky
+		if _is_ignore_hash_enabled():
+			check_expected_hash = False
 
 		if check_expected_hash:
 			expected_hash_path = Path(expected_hash_path)

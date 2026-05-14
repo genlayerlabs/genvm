@@ -1,17 +1,6 @@
-# we have following targets:
-# - x86_64-linux-musl
-# - aarch64-linux-musl
-# - aarch64-macos
-# - universal
-
-# runners are universal target
-# lib, modules and executor are platform-dependent
-# each platform is going to have same layout
-# full installation is going to be a merge of platform-specific and universal
-
 {
 	inputs = {
-		nixpkgs.url = "github:NixOS/nixpkgs/2b4230bf03deb33103947e2528cac2ed516c5c89";
+		nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 		systems = {
 			url = "github:nix-systems/default";
 		};
@@ -112,55 +101,48 @@
 								inherit pkgs system;
 								root-src = self;
 							} // {
-								inherit components;
-
 								host-system = system;
+								host-system-as-genvm = {
+									"x86_64-linux" = "amd64-linux";
+									"aarch64-linux" = "arm64-linux";
+									"aarch64-darwin" = "arm64-macos";
+								}."${system}";
 
 								build-config = builtins.fromJSON (builtins.readFile ./flake-config.json);
 							};
 
-							components = release-args.merge-components [
-								(import ./libs release-args)
-								(import ./modules release-args)
-								(import ./executor release-args)
-								(import ./runners/support/views/release.nix release-args)
-								(import ./runners/support/views/all-universal.nix release-args)
-							];
+							compiled-libs = import ./libs release-args;
 
 							debug-runners = import ./runners/support/views/debug-build.nix {
 								inherit pkgs;
 								host-system = system;
 							};
 
-							merge-all-for-platform = platform:
-								let
-									for-platform = components.${platform};
-									just-derivations = builtins.attrValues for-platform;
-								in
-									pkgs.stdenvNoCC.mkDerivation {
-										name = "genvm-${platform}";
+							runners-args = {
+								inherit pkgs deps;
+								host-system = system;
+								build-config = builtins.fromJSON (builtins.readFile ./flake-config.json);
+							};
 
-										srcs = just-derivations;
+							runners-list = import ./runners/support/versions/all.nix runners-args;
 
-										dontUnpack = true;
-										dontConfigure = true;
-										dontBuild = true;
-										dontFixup = true;
+							runners-universal-set = (import ./runners/support/views/all-universal.nix runners-args).universal;
 
-										installPhase = ''
-											mkdir -p $out
-											for src in $srcs; do
-												cp --no-preserve=ownership -r $src/. $out/.
-												chmod -R u+w $out
-											done
-										'';
-									};
+							runners-all = pkgs.symlinkJoin {
+								name = "genvm-runners-all";
+								paths = builtins.attrValues runners-universal-set;
+							};
 						in
 						{
-							packages = builtins.mapAttrs (platform: sub: merge-all-for-platform platform) components // {
-								all-for-platform = builtins.mapAttrs (platform: sub: merge-all-for-platform platform) components;
-								inherit debug-runners ya-test-runner;
-							};
+							packages =
+								{
+									inherit debug-runners ya-test-runner;
+									runners = runners-list;
+									inherit runners-all;
+								}
+								// (import ./executor (release-args // { inherit compiled-libs; }))
+								// (import ./modules (release-args // { inherit compiled-libs; }))
+							;
 
 							devShells.py-test = pkgs.mkShell {
 								packages = packages-py-test ++ [ pkgs.ruby ];

@@ -1,5 +1,4 @@
 { pkgs
-, build-config
 , host-system
 , ...
 }@args:
@@ -35,41 +34,9 @@ let
 	dflt-base = import ../../default.nix;
 	dflt =
 		if builtins.isFunction dflt-base
-		then dflt-base { inherit host-system; }
+		then dflt-base args
 		else dflt-base;
-
+in {
 	latest = builtins.toFile "latest.json" (builtins.toJSON (converter-single dflt));
 	all = builtins.toFile "all.json" (builtins.toJSON (converter-multi (import ../versions/all.nix args)));
-
-	subpath = "executor/${build-config.executor-version}/data/";
-in {
-	universal-manifest = {
-		runners-latest = pkgs.stdenvNoCC.mkDerivation rec {
-			name = "genvm-runners-latest";
-
-			dontUnpack = true;
-			dontConfigure = true;
-			dontBuild = true;
-			dontFixup = true;
-
-			installPhase = ''
-				mkdir -p $out/${subpath}
-				cp ${latest} $out/${subpath}/latest.json
-			'';
-		};
-
-		runners-all = pkgs.stdenvNoCC.mkDerivation rec {
-			name = "genvm-runners-all";
-
-			dontUnpack = true;
-			dontConfigure = true;
-			dontBuild = true;
-			dontFixup = true;
-
-			installPhase = ''
-				mkdir -p $out/${subpath}
-				cp ${all} $out/${subpath}/all.json
-			'';
-		};
-	};
 }

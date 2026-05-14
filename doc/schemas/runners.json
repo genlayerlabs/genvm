@@ -1,5 +1,5 @@
 {
-    "$id": "https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/runner.json",
+    "$id": "https://raw.githubusercontent.com/genlayerlabs/genvm/refs/heads/main/doc/schemas/runner.json",
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "GenVM runner.json",
 

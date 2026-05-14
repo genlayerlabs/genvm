@@ -105,18 +105,24 @@ in rec {
 
 	patch-manifest = pkgs.writers.writePython3Bin "patch-manifest" {
 		doCheck = false;
-		libraries = [ pkgs.python312Packages.ruamel-yaml ];
+		libraries = [ pkgs.python3Packages.ruamel-yaml ];
 	} (builtins.readFile ./scripts/patch-and-check-manifest.py);
 
 	patch-llm-config = pkgs.writers.writePython3Bin "patch-llm-config" {
 		doCheck = false;
-		libraries = [ pkgs.python312Packages.ruamel-yaml ];
+		libraries = [ pkgs.python3Packages.ruamel-yaml ];
 	} (builtins.readFile ./scripts/patch-llm-config.py);
 
 	patch-web-config = pkgs.writers.writePython3Bin "patch-web-config" {
 		doCheck = false;
-		libraries = [ pkgs.python312Packages.ruamel-yaml ];
+		libraries = [ pkgs.python3Packages.ruamel-yaml ];
 	} (builtins.readFile ./scripts/patch-web-config.py);
+
+	patch-rpath = pkgs.writers.writePython3Bin "patch-rpath" {
+		doCheck = false;
+		libraries = [ pkgs.python3Packages.lief ];
+		makeWrapperArgs = [ "--prefix" "PATH" ":" "${pkgs.rcodesign}/bin" ];
+	} (builtins.readFile ./scripts/patch-rpath.py);
 
 	merge-components = builtins.foldl' mergeDoubleDepthAttrs {};
 }
