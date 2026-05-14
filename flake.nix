@@ -164,7 +164,9 @@
 
 							devShells.py-test = pkgs.mkShell {
 								packages = packages-py-test ++ [ pkgs.ruby ];
-								shellHook = shell-hook-base;
+								shellHook = shell-hook-base + ''
+									export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib:${toString pkgs.zlib.out}/lib:''${LD_LIBRARY_PATH:-}"
+								'';
 							};
 							devShells.gen-docs = pkgs.mkShell {
 								packages = packages-py-test ++ packages-gen-docs ++ [ pkgs.ruby ];
