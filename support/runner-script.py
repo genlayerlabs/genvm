@@ -273,7 +273,7 @@ def run_merge(args):
 
 def _iter_needed_deps(targets: set[str] | None, all_deps: bool):
 	deps_file = (
-		Path(__file__).parent.parent
+		Path(__file__).resolve().parent.parent
 		/ 'runners'
 		/ 'support'
 		/ 'deps'
@@ -364,7 +364,7 @@ def run_push_needed(args):
 
 def run_mirror_to_gcs(args):
 	deps_file = (
-		Path(__file__).parent.parent
+		Path(__file__).resolve().parent.parent
 		/ 'runners'
 		/ 'support'
 		/ 'deps'
@@ -487,7 +487,6 @@ if __name__ == '__main__':
 		help='nix store URI to push to (e.g. s3://bucket, ssh://host, file:///path)',
 	)
 	push_parser.set_defaults(func=run_push_needed)
-
 
 	mirror_parser = dep_subparsers.add_parser('mirror-to-gcs')
 	mirror_parser.add_argument('--bucket', default='genvm-artifacts')

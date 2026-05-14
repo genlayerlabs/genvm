@@ -22,9 +22,7 @@ let
 				src = get-root-subtree [
 					"executor/src"
 					"modules/interfaces"
-					"executor/crates/common"
-					"executor/crates/calldata"
-					"executor/crates/sdk-rs"
+					"executor/crates"
 					"executor/third-party"
 					"executor/Cargo.toml"
 					"executor/Cargo.lock"

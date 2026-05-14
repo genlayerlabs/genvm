@@ -26,9 +26,7 @@ let
 				src = get-root-subtree [
 					"modules/implementation"
 					"modules/interfaces"
-					"executor/crates/common"
-					"executor/crates/sdk-rs"
-					"executor/crates/calldata"
+					"executor/crates"
 				];
 				sourceRoot = "./source/modules/implementation";
 

@@ -20,7 +20,7 @@ let
 				pkgs.fetchzip ({
 					name = store-name;
 					inherit urls hash;
-				} // (if entry ? extension then { extension = entry.extension; } else {}))
+				} // (entry.fetcher_args or {}))
 			else
 				throw "unknown fetcher: ${entry.fetcher} for ${entry.name}";
 	dep-name = entry:
