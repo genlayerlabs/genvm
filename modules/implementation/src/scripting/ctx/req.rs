@@ -14,6 +14,7 @@ fn default_false() -> bool {
     false
 }
 
+/// NOTE: when changing fields, also update request in modules/install/lib/genvm-lua/lib-genvm.lua
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Request {
     pub method: web_iface::RequestMethod,
@@ -31,6 +32,8 @@ pub struct Request {
     pub json: bool,
     #[serde(default = "default_false")]
     pub error_on_status: bool,
+    #[serde(default)]
+    pub timeout: Option<crate::common::Timeout>,
 }
 
 const DROP_HEADERS: &[&str] = &[
@@ -92,8 +95,13 @@ impl Request {
 
         let request = client.request(method, self.url.clone()).headers(headers);
 
-        Ok(if let Some(body) = self.body {
+        let request = if let Some(body) = self.body {
             request.body(body)
+        } else {
+            request
+        };
+        Ok(if let Some(timeout) = self.timeout {
+            request.timeout(timeout.to_duration())
         } else {
             request
         })
@@ -126,6 +134,7 @@ mod tests {
             error_on_status: false,
             sign: false,
             response_body_max_size: Some(1024),
+            timeout: None,
         };
 
         let body_size_limit = req.response_body_max_size.unwrap_or(usize::MAX);
@@ -163,6 +172,7 @@ mod tests {
             error_on_status: false,
             sign: false,
             response_body_max_size: Some(1024),
+            timeout: None,
         };
 
         let body_size_limit = 1024;

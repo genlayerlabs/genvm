@@ -80,12 +80,15 @@ impl CtxPart {
     }
 }
 
+/// NOTE: when changing fields, also update exec_prompt_in_provider in modules/install/lib/genvm-lua/lib-llm.lua
 #[derive(Deserialize)]
 struct Args {
     provider: String,
     prompt: prompt::Internal,
     format: prompt::ExtendedOutputFormat,
     model: String,
+    #[serde(default)]
+    timeout: Option<crate::common::Timeout>,
 }
 
 async fn exec_prompt_in_provider(
@@ -102,14 +105,13 @@ async fn exec_prompt_in_provider(
         .with_context(|| "deserializing arguments")
         .map_err(scripting::anyhow_to_lua_error)?;
 
+    let mut prompt = args.prompt;
+    if args.timeout.is_some() {
+        prompt.timeout = args.timeout;
+    }
+
     let res = ctx
-        .exec_prompt_in_provider(
-            &dflt,
-            &args.prompt,
-            &args.model,
-            &args.provider,
-            args.format,
-        )
+        .exec_prompt_in_provider(&dflt, &prompt, &args.model, &args.provider, args.format)
         .await
         .with_context(|| "running in provider")
         .map_err(scripting::anyhow_to_lua_error)?;
@@ -154,6 +156,11 @@ pub fn create_global(vm: &mlua::Lua, config: &Config) -> anyhow::Result<mlua::Va
     llm.set(
         "meta",
         vm.to_value_with(&config.meta, scripting::DEFAULT_LUA_SER_OPTIONS)?,
+    )?;
+
+    llm.set(
+        "timeout",
+        vm.to_value_with(&config.timeout, scripting::DEFAULT_LUA_SER_OPTIONS)?,
     )?;
 
     Ok(mlua::Value::Table(llm))

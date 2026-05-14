@@ -14,6 +14,7 @@ local lib = require("lib-genvm")
 ---@field seed integer | nil
 ---@field extra table<string, any> | nil
 ---@field extra_merge_strategy MergeStrategy | nil
+---@field timeout number | nil
 
 ---@alias Format "text" | "json" | "bool"
 
@@ -23,10 +24,12 @@ local lib = require("lib-genvm")
 ---@field supports_image boolean
 ---@field use_max_completion_tokens boolean
 ---@field meta any
+---@field timeout number | nil
 
 ---@class ProviderEntry
 ---@field models table<string, ModelConfig>
 ---@field meta any
+---@field timeout number | nil
 
 ---@alias ProvidersDB table<string, ProviderEntry>
 
@@ -41,7 +44,8 @@ local lib = require("lib-genvm")
 ---@field [string] string
 
 ---@class LLM
----@field exec_prompt_in_provider fun(ctx, data: { prompt: Prompt, format: Format, model: string, provider: string }): any
+---@field exec_prompt_in_provider fun(ctx, data: { prompt: Prompt, format: Format, model: string, provider: string, timeout: number | nil }): any
+---@field timeout number | nil
 ---@field providers ProvidersDB
 ---@field templates { eq_comparative: any, eq_non_comparative_leader: any, eq_non_comparative_validator: any }
 

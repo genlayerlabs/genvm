@@ -550,6 +550,74 @@ where
     GENVM_ID.scope(genvm_id, f)
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Timeout(std::time::Duration);
+
+impl Timeout {
+    pub fn to_duration(self) -> std::time::Duration {
+        self.0
+    }
+
+    fn parse_str(s: &str) -> Result<std::time::Duration, String> {
+        if let Some(v) = s.strip_suffix("ms") {
+            v.trim()
+                .parse::<f64>()
+                .map(|n| std::time::Duration::from_secs_f64(n / 1000.0))
+                .map_err(|e| e.to_string())
+        } else if let Some(v) = s.strip_suffix('m') {
+            v.trim()
+                .parse::<f64>()
+                .map(|n| std::time::Duration::from_secs_f64(n * 60.0))
+                .map_err(|e| e.to_string())
+        } else if let Some(v) = s.strip_suffix('s') {
+            v.trim()
+                .parse::<f64>()
+                .map(std::time::Duration::from_secs_f64)
+                .map_err(|e| e.to_string())
+        } else {
+            Err(format!("expected suffix m, s, or ms, got \"{s}\""))
+        }
+    }
+}
+
+impl Serialize for Timeout {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_f64(self.0.as_secs_f64())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Timeout {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct TimeoutVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for TimeoutVisitor {
+            type Value = Timeout;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a number (seconds) or a string like \"1.5s\", \"500ms\", \"2m\"")
+            }
+
+            fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Timeout, E> {
+                Ok(Timeout(std::time::Duration::from_secs_f64(v as f64)))
+            }
+
+            fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Timeout, E> {
+                Ok(Timeout(std::time::Duration::from_secs(v)))
+            }
+
+            fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<Timeout, E> {
+                Ok(Timeout(std::time::Duration::from_secs_f64(v)))
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Timeout, E> {
+                Timeout::parse_str(v).map(Timeout).map_err(E::custom)
+            }
+        }
+
+        deserializer.deserialize_any(TimeoutVisitor)
+    }
+}
+
 pub fn create_client() -> anyhow::Result<reqwest::Client> {
     reqwest::ClientBuilder::new()
         .user_agent("reqwest")

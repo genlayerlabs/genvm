@@ -27,7 +27,7 @@ fn default_json_null() -> serde_json::Value {
     serde_json::Value::Null
 }
 
-/// NOTE: when changing fields, also update doc/schemas/default-config.json
+/// NOTE: when changing fields, also update doc/schemas/default-config.json and ModelConfig in modules/install/lib/genvm-lua/lib-llm.lua
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ModelConfig {
     #[serde(default = "enabled_true")]
@@ -41,15 +41,21 @@ pub struct ModelConfig {
 
     #[serde(default = "default_json_null")]
     pub meta: serde_json::Value,
+
+    #[serde(default)]
+    pub timeout: Option<common::Timeout>,
 }
 
-/// NOTE: when changing fields, also update doc/schemas/default-config.json
+/// NOTE: when changing fields, also update doc/schemas/default-config.json and ProviderEntry in modules/install/lib/genvm-lua/lib-llm.lua
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ScriptBackendConfig {
     pub models: BTreeMap<String, ModelConfig>,
 
     #[serde(default = "default_json_null")]
     pub meta: serde_json::Value,
+
+    #[serde(default)]
+    pub timeout: Option<common::Timeout>,
 }
 
 /// NOTE: when changing fields, also update doc/schemas/default-config.json
@@ -72,7 +78,7 @@ pub struct PromptTemplates {
     pub eq_non_comparative_validator: serde_json::Value,
 }
 
-/// NOTE: when changing fields, also update doc/schemas/default-config.json
+/// NOTE: when changing fields, also update doc/schemas/default-config.json and LLM in modules/install/lib/genvm-lua/lib-llm.lua
 #[derive(Deserialize)]
 pub struct Config {
     pub backends: BTreeMap<String, BackendConfig>,
@@ -86,6 +92,9 @@ pub struct Config {
 
     #[serde(flatten)]
     pub mod_base: common::ModuleBaseConfig,
+
+    #[serde(default)]
+    pub timeout: Option<common::Timeout>,
 }
 
 impl BackendConfig {

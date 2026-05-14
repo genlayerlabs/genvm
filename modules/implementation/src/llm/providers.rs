@@ -313,7 +313,7 @@ impl Provider for OpenAICompatible {
         let res = scripting::send_request_get_lua_compatible_response_json(
             &ctx.metrics,
             &url,
-            request,
+            prompt.apply_timeout(request),
             true,
             usize::MAX,
         )
@@ -382,7 +382,7 @@ impl Provider for OpenAICompatible {
         let res = scripting::send_request_get_lua_compatible_response_json(
             &ctx.metrics,
             &url,
-            request,
+            prompt.apply_timeout(request),
             true,
             usize::MAX,
         )
@@ -476,7 +476,7 @@ impl Provider for OLlama {
         let res = scripting::send_request_get_lua_compatible_response_json(
             &ctx.metrics,
             &url,
-            request,
+            prompt.apply_timeout(request),
             true,
             usize::MAX,
         )
@@ -535,7 +535,7 @@ impl Provider for OLlama {
         let res = scripting::send_request_get_lua_compatible_response_json(
             &ctx.metrics,
             &url,
-            request,
+            prompt.apply_timeout(request),
             true,
             usize::MAX,
         )
@@ -605,7 +605,7 @@ impl Provider for Gemini {
         let res_json = scripting::send_request_get_lua_compatible_response_json(
             &ctx.metrics,
             &url,
-            request,
+            prompt.apply_timeout(request),
             true,
             usize::MAX,
         )
@@ -666,7 +666,7 @@ impl Provider for Gemini {
         let res_json = scripting::send_request_get_lua_compatible_response_json(
             &ctx.metrics,
             &url,
-            request,
+            prompt.apply_timeout(request),
             true,
             usize::MAX,
         )
@@ -771,7 +771,7 @@ impl Provider for Anthropic {
         let res = scripting::send_request_get_lua_compatible_response_json(
             &ctx.metrics,
             &url,
-            request,
+            prompt.apply_timeout(request),
             true,
             usize::MAX,
         )
@@ -844,7 +844,7 @@ impl Provider for Anthropic {
         let res = scripting::send_request_get_lua_compatible_response_json(
             &ctx.metrics,
             &url,
-            request,
+            prompt.apply_timeout(request),
             true,
             usize::MAX,
         )
@@ -914,7 +914,7 @@ impl Provider for Anthropic {
         let res = scripting::send_request_get_lua_compatible_response_json(
             &ctx.metrics,
             &url,
-            request,
+            prompt.apply_timeout(request),
             true,
             usize::MAX,
         )
@@ -1081,6 +1081,7 @@ mod tests {
                     seed: Some(42),
                     extra: Default::default(),
                     extra_merge_strategy: Default::default(),
+                    timeout: None,
                 },
                 backend
                     .script_config
@@ -1173,6 +1174,7 @@ mod tests {
                     seed: Some(123),
                     extra: Default::default(),
                     extra_merge_strategy: Default::default(),
+                    timeout: None,
                 },
                 backend
                     .script_config
@@ -1259,6 +1261,7 @@ mod tests {
                     seed: Some(456),
                     extra: Default::default(),
                     extra_merge_strategy: Default::default(),
+                    timeout: None,
                 },
                 backend
                     .script_config
@@ -1366,6 +1369,7 @@ mod tests {
                     seed: Some(789),
                     extra: Default::default(),
                     extra_merge_strategy: Default::default(),
+                    timeout: None,
                 },
                 backend
                     .script_config

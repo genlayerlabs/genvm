@@ -299,6 +299,7 @@ mod tests {
             error_on_status: true,
             sign: true,
             response_body_max_size: None,
+            timeout: None,
         };
 
         req.normalize_headers();
@@ -356,6 +357,7 @@ mod tests {
             error_on_status: true,
             sign: true,
             response_body_max_size: None,
+            timeout: None,
         };
 
         req.normalize_headers();
@@ -415,6 +417,7 @@ mod tests {
             error_on_status: true,
             sign: true,
             response_body_max_size: None,
+            timeout: None,
         };
 
         let part = CtxPart {
