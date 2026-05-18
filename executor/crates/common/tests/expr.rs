@@ -29,7 +29,8 @@ fn string_literals_and_escapes() {
 #[test]
 fn to_string_builtin() {
     assert_str(eval("toString (2 + 3)"), "5");
-    assert_str(eval("toString true"), "true");
+    assert_str(eval("toString (1 == 1)"), "true");
+    assert_str(eval("toString (1 == 2)"), "false");
     assert_str(eval(r#" toString "x" "#), "x");
 }
 

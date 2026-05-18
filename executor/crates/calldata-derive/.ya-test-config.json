@@ -1,0 +1,8 @@
+{
+  "skip": {
+    "lib": true,
+    "tests": true,
+    "examples": true,
+    "bins": true
+  }
+}

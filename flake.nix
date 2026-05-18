@@ -90,6 +90,11 @@
 								# aflplusplus # currently we don't run fuzzing on CI
 								python312
 								poetry
+								# pytest + plugins so `poetry run -- pytest` has the
+								# coverage plugin available (addopts uses --cov)
+								python312Packages.pytest
+								python312Packages.pytest-cov
+								python312Packages.pytest-xdist
 							];
 							shell-hook-base = ''
 								export PATH="$(pwd)/tools/git-third-party:$PATH"
