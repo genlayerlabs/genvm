@@ -86,6 +86,25 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    /// Skips whitespace and `#` line comments. A `#` starts a comment only
+    /// when followed by a space, a newline, or end of input; it runs to the
+    /// next newline (or EOF). Otherwise `#` is left for `next_token` to reject.
+    fn skip_trivia(&mut self) {
+        loop {
+            self.skip_whitespace();
+            if self.pos >= self.input.len() || self.input[self.pos] != b'#' {
+                break;
+            }
+            match self.input.get(self.pos + 1) {
+                None | Some(b' ') | Some(b'\n') => {}
+                Some(_) => break,
+            }
+            while self.pos < self.input.len() && self.input[self.pos] != b'\n' {
+                self.pos += 1;
+            }
+        }
+    }
+
     fn read_digits(&mut self) -> String {
         let start = self.pos;
         while self.pos < self.input.len() && self.input[self.pos].is_ascii_digit() {
@@ -147,7 +166,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn next_token(&mut self) -> Result<Token, ParseError> {
-        self.skip_whitespace();
+        self.skip_trivia();
 
         if self.pos >= self.input.len() {
             return Ok(Token::Eof);

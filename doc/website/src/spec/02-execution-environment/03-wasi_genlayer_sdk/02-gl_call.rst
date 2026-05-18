@@ -75,10 +75,17 @@ Requirements
 
 Creates new :term:`sub-VM` instance for contract execution. See :ref:`gvm-permissions` for permission inheritance details.
 
+.. _gvm-def-post-message:
+
 ``PostMessage`` Message
 -----------------------
 
 Posts message to GenLayer contract for later execution.
+
+When GenVM forwards this message it derives a :ref:`call_key <gvm-def-call-key>`
+from the ``method`` field of ``calldata`` and attaches it to the emitted
+message. The :ref:`call_key <gvm-def-call-key>` is the function-selector
+analog used to identify the target method.
 
 Payload
 ~~~~~~~

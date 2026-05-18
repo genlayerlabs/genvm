@@ -45,21 +45,33 @@ impl Parser {
 
     fn parse_lambda(&mut self) -> Result<Expr, ParseError> {
         self.advance();
-        let param = match self.advance() {
-            Token::Ident(s) => s,
-            tok => {
-                return Err(ParseError::ExpectedToken {
-                    expected: "identifier".to_owned(),
-                    got: tok.to_string(),
-                })
+
+        // `\x y z = body` is sugar for `\x = \y = \z = body`.
+        let mut params = Vec::new();
+        loop {
+            match self.advance() {
+                Token::Ident(s) => params.push(s),
+                tok => {
+                    return Err(ParseError::ExpectedToken {
+                        expected: "identifier".to_owned(),
+                        got: tok.to_string(),
+                    })
+                }
             }
-        };
+            if self.peek() == &Token::Eq {
+                break;
+            }
+        }
         self.expect(&Token::Eq)?;
-        let body = self.parse_expr()?;
-        Ok(Expr::Lambda {
-            param: Arc::from(param),
-            body: Arc::new(body),
-        })
+
+        let mut expr = self.parse_expr()?;
+        for param in params.into_iter().rev() {
+            expr = Expr::Lambda {
+                param: Arc::from(param),
+                body: Arc::new(expr),
+            };
+        }
+        Ok(expr)
     }
 
     fn parse_let(&mut self) -> Result<Expr, ParseError> {

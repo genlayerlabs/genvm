@@ -388,9 +388,7 @@ pub struct Request {
     #[serde(default = "default_max_execution_minutes")]
     #[calldata(default = default_max_execution_minutes)]
     pub max_execution_minutes: u64,
-    pub data_fees_limit: num_bigint::BigInt,
-    pub storage_page_cost: u32,
-    pub receipt_word_cost: u32,
+    pub bucket_totals: Vec<num_bigint::BigInt>,
     pub host_data: String,
     #[calldata(serialize_with = encode_datetime_rfc3339, deserialize_with = decode_datetime_rfc3339)]
     pub timestamp: chrono::DateTime<chrono::Utc>,
@@ -939,9 +937,7 @@ pub async fn start_genvm(
         code: req.code.clone(),
         leader_nondet_results: req.leader_nondet_results.clone(),
         method_hosts,
-        data_fees_limit: req.data_fees_limit.clone(),
-        storage_page_cost: req.storage_page_cost,
-        receipt_word_cost: req.receipt_word_cost,
+        bucket_totals: req.bucket_totals.clone(),
     };
     let execution_data_bytes = genvm_common::calldata::encode_obj(&execution_data);
 

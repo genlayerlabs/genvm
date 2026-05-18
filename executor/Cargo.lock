@@ -982,6 +982,7 @@ dependencies = [
  "primitive-types",
  "serde",
  "serde_bytes",
+ "sha3",
 ]
 
 [[package]]
@@ -1013,6 +1014,7 @@ dependencies = [
  "libc",
  "mt19937",
  "num-bigint",
+ "num-rational",
  "once_cell",
  "primitive-types",
  "rand_core 0.9.3",

@@ -21,29 +21,42 @@ fn default_entry_stage_data() -> calldata::Value {
     calldata::Value::Null
 }
 
-fn calc_receipt_size(len: usize) -> u64 {
-    len.div_ceil(256) as u64
+fn fee_oom(what: &str) -> generated::types::Error {
+    generated::types::Error::trap(crate::anyhow_to_wasmtime(
+        rt::errors::VMError(
+            abi::consts::VmError::oom().receipt(),
+            Some(anyhow::anyhow!("consuming {what} fee")),
+        )
+        .into(),
+    ))
 }
 
-async fn consume_receipt_words(
+async fn consume_message_receipt(
     shared_data: &rt::SharedData,
-    words: u64,
+    is_internal: bool,
+    is_deploy: bool,
+    calldata_length: u64,
 ) -> Result<(), generated::types::Error> {
-    if words == 0 {
-        return Ok(());
-    }
     if !shared_data
         .data_fees_limit
-        .consume_receipt_words(words)
+        .consume_message_receipt(is_internal, is_deploy, calldata_length)
         .await
     {
-        return Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
-            rt::errors::VMError(
-                abi::consts::VmError::oom().receipt(),
-                Some(anyhow::anyhow!("consuming {words} receipt words")),
-            )
-            .into(),
-        )));
+        return Err(fee_oom("message receipt"));
+    }
+    Ok(())
+}
+
+async fn consume_nondet_output(
+    shared_data: &rt::SharedData,
+    output_length: u64,
+) -> Result<(), generated::types::Error> {
+    if !shared_data
+        .data_fees_limit
+        .consume_nondet_output(output_length)
+        .await
+    {
+        return Err(fee_oom("nondet output"));
     }
     Ok(())
 }
@@ -129,7 +142,7 @@ impl rt::vm::storage::HostStorageLocking for StorageHostHolder {
 }
 
 pub struct VMDataAccumulator {
-    pub data_fees_limit: DArc<rt::DataFeesLimit>,
+    pub data_fees_limit: DArc<rt::fees::DataLimit>,
     pub messages_value_decremented: primitive_types::U256,
     pub emissions: Vec<genlayer_sdk::abi::ExecutionEmission>,
 }
@@ -454,9 +467,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     value,
                 };
                 let encoded = calldata::encode_obj(&emission);
-                consume_receipt_words(
+                consume_message_receipt(
                     &self.context.data.supervisor.shared_data,
-                    calc_receipt_size(encoded.len()),
+                    false,
+                    false,
+                    encoded.len() as u64,
                 )
                 .await?;
 
@@ -658,6 +673,16 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let sd = self.context.data.supervisor.shared_data.clone();
 
+                let method_name = calldata
+                    .as_map()
+                    .and_then(|x| x.get("method"))
+                    .and_then(|x| x.as_str());
+                let call_key = if let Some(method_name) = method_name {
+                    abi::call_key::for_method(method_name)
+                } else {
+                    abi::call_key::UNNAMED
+                };
+
                 if !value.is_zero() {
                     let my_balance = self
                         .context
@@ -671,15 +696,18 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 }
 
                 let emission = genlayer_sdk::abi::ExecutionEmission::PostMessage {
+                    call_key,
                     address,
                     calldata,
                     value,
                     on,
                 };
                 let encoded = calldata::encode_obj(&emission);
-                consume_receipt_words(
+                consume_message_receipt(
                     &self.context.data.supervisor.shared_data,
-                    calc_receipt_size(encoded.len()),
+                    true,
+                    false,
+                    encoded.len() as u64,
                 )
                 .await?;
 
@@ -725,9 +753,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     salt_nonce,
                 };
                 let encoded = calldata::encode_obj(&emission);
-                consume_receipt_words(
+                consume_message_receipt(
                     &self.context.data.supervisor.shared_data,
-                    calc_receipt_size(encoded.len()),
+                    true,
+                    true,
+                    encoded.len() as u64,
                 )
                 .await?;
 
@@ -1284,11 +1314,8 @@ impl ContextVFS<'_> {
             .get_leader_nondet_result(call_no);
 
         if let Some(ref data) = leaders_res_bytes {
-            consume_receipt_words(
-                &self.context.data.supervisor.shared_data,
-                calc_receipt_size(data.len()),
-            )
-            .await?;
+            consume_nondet_output(&self.context.data.supervisor.shared_data, data.len() as u64)
+                .await?;
         }
 
         let leaders_res = match leaders_res_bytes {

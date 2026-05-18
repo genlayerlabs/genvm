@@ -979,6 +979,7 @@ dependencies = [
  "primitive-types",
  "serde",
  "serde_bytes",
+ "sha3",
 ]
 
 [[package]]

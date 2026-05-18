@@ -267,3 +267,115 @@ fn array_nested() {
         1,
     );
 }
+
+// `fold` / `foldRange` are not builtins: they are defined in the language
+// itself, with recursion expressed via the Y combinator. This exercises
+// call-by-need evaluation — under call-by-value the Y combinator diverges.
+const PRELUDE: &str = r"
+let Y = \f = (\x = f (\v = x x v)) (\x = f (\v = x x v)) in
+let fold = \arr = \acc = \fn =
+    Y (\go = \i = \a =
+        if i >= arrayLen arr then a
+        else go (i + 1) (fn a (arrayGetElem arr i))
+    ) 0 acc in
+let foldRange = \lo = \hi = \acc = \fn =
+    Y (\go = \i = \a =
+        if i >= hi then a
+        else go (i + 1) (fn a i)
+    ) lo acc in
+";
+
+fn eval_p(body: &str) -> Value {
+    eval(&format!("{PRELUDE} {body}"))
+}
+
+#[test]
+fn fold_sum() {
+    assert_rational(eval_p(r"fold [1, 2, 3, 4] 0 (\acc = \x = acc + x)"), 10, 1);
+}
+
+#[test]
+fn fold_empty() {
+    assert_rational(eval_p(r"fold [] 42 (\acc = \x = acc + x)"), 42, 1);
+}
+
+#[test]
+fn fold_product() {
+    assert_rational(eval_p(r"fold [1, 2, 3, 4] 1 (\acc = \x = acc * x)"), 24, 1);
+}
+
+#[test]
+fn fold_range_sum() {
+    assert_rational(eval_p(r"foldRange 0 5 0 (\acc = \i = acc + i)"), 10, 1);
+}
+
+#[test]
+fn fold_range_empty() {
+    assert_rational(eval_p(r"foldRange 3 3 99 (\acc = \i = acc + i)"), 99, 1);
+}
+
+#[test]
+fn fold_range_with_array() {
+    assert_rational(
+        eval_p(
+            r"
+            let arr = [10, 20, 30] in
+            foldRange 0 3 0 (\acc = \i = acc + arrayGetElem arr i)
+        ",
+        ),
+        60,
+        1,
+    );
+}
+
+#[test]
+fn fold_state_pair() {
+    assert_rational(
+        eval_p(
+            r"
+            let state = foldRange 0 3 [0, 1] (\st = \i =
+                let sum = arrayGetElem st 0 in
+                let prod = arrayGetElem st 1 in
+                [sum + i, prod * (i + 1)]
+            ) in
+            arrayGetElem state 0 + arrayGetElem state 1
+        ",
+        ),
+        // sum = 0+1+2 = 3, prod = 1*1*2*3 = 6, total = 9
+        9,
+        1,
+    );
+}
+
+#[test]
+fn line_comments() {
+    assert_rational(eval("1 + # this is a comment\n 2"), 3, 1);
+    assert_rational(eval("# leading comment\n 7"), 7, 1);
+    assert_rational(eval("42 # trailing comment, no newline"), 42, 1);
+    assert_rational(
+        eval(
+            r"
+            let x = 10 in # bind x
+            # the body:
+            x * 2
+        ",
+        ),
+        20,
+        1,
+    );
+    // `#` not followed by space/newline/EOF is still a lexing error.
+    assert!(Expr::parse("1 #2").is_err());
+}
+
+#[test]
+fn lazy_unused_let_is_not_evaluated() {
+    // `boom` would fail with DivisionByZero if `let` were strict; call-by-need
+    // never forces it because the body never refers to it.
+    assert_rational(eval("let boom = 1 / 0 in 42"), 42, 1);
+}
+
+#[test]
+fn lazy_unused_argument_is_not_evaluated() {
+    // The argument `1 / 0` is passed as a thunk and never demanded.
+    assert_rational(eval(r"(\x = 7) (1 / 0)"), 7, 1);
+}

@@ -65,10 +65,10 @@ pub trait HostStorageLocking {
 }
 
 #[derive(Clone, Debug)]
-pub struct Limiter(sync::DArc<rt::DataFeesLimit>);
+pub struct Limiter(sync::DArc<rt::fees::DataLimit>);
 
 impl Limiter {
-    pub fn new(data_fees_limit: sync::DArc<rt::DataFeesLimit>) -> Self {
+    pub fn new(data_fees_limit: sync::DArc<rt::fees::DataLimit>) -> Self {
         Self(data_fees_limit)
     }
 

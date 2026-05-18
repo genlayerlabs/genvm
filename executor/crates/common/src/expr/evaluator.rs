@@ -1,22 +1,29 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use num_rational::BigRational;
 use num_traits::{ToPrimitive, Zero};
 
-use super::value::{BinOp, EvalError, Expr, Value};
+use super::value::{BinOp, EvalError, Expr, Thunk, Value};
 
 #[derive(Clone)]
 struct EvalContext {
-    get_var: Rc<dyn Fn(&str) -> Result<Value, EvalError>>,
-    let_bindings: rpds::RedBlackTreeMap<String, Value, archery::RcK>,
+    get_var: Arc<dyn Fn(&str) -> Result<Value, EvalError> + Send + Sync>,
+    let_bindings: rpds::RedBlackTreeMap<String, Thunk, archery::ArcK>,
+}
+
+/// Builds a call-by-need thunk that evaluates `expr` in `ctx` when first forced.
+fn thunk_of(expr: &Expr, ctx: &EvalContext) -> Thunk {
+    let expr = expr.clone();
+    let ctx = ctx.clone();
+    Thunk::deferred(move || eval(&expr, &ctx))
 }
 
 fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Value, EvalError> {
     match expr {
         Expr::Const(n) => Ok(Value::Rational(n.clone())),
         Expr::Ident(name) => {
-            if let Some(val) = ctx.let_bindings.get(name.as_str()) {
-                Ok(val.clone())
+            if let Some(thunk) = ctx.let_bindings.get(name.as_str()) {
+                thunk.force()
             } else if let Some(builtin) = resolve_builtin(name) {
                 Ok(builtin)
             } else {
@@ -50,10 +57,13 @@ fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Value, EvalError> {
             }
         }
         Expr::Let { name, value, body } => {
-            let val = eval(value, ctx)?;
+            // Non-recursive: the binding's thunk closes over `ctx` *without*
+            // itself, so `let` cannot observe its own value. Recursion is
+            // expressed with the Y combinator instead.
+            let thunk = thunk_of(value, ctx);
             let new_ctx = EvalContext {
                 get_var: ctx.get_var.clone(),
-                let_bindings: ctx.let_bindings.insert(name.clone(), val),
+                let_bindings: ctx.let_bindings.insert(name.clone(), thunk),
             };
             eval(body, &new_ctx)
         }
@@ -76,23 +86,26 @@ fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Value, EvalError> {
         }),
         Expr::Apply { func, arg } => {
             let f = eval(func, ctx)?;
-            let a = eval(arg, ctx)?;
-            apply(&f, &a, ctx)
+            // Call-by-need: the argument is passed unevaluated as a thunk and
+            // forced only if (and when) the callee actually demands it.
+            let arg = thunk_of(arg, ctx);
+            apply(&f, arg, ctx)
         }
         Expr::Array(elems) => {
             let vals: Result<Vec<Value>, _> = elems.iter().map(|e| eval(e, ctx)).collect();
-            Ok(Value::Array(Rc::new(vals?)))
+            Ok(Value::Array(Arc::new(vals?)))
         }
     }
 }
 
-fn apply(f: &Value, arg: &Value, ctx: &EvalContext) -> Result<Value, EvalError> {
+fn apply(f: &Value, arg: Thunk, ctx: &EvalContext) -> Result<Value, EvalError> {
     match f {
-        Value::HostFn(f) => f(arg),
+        // Builtins are strict in their argument.
+        Value::HostFn(host) => host(&arg.force()?),
         Value::GuestFn { name, body, env } => {
             let new_ctx = EvalContext {
                 get_var: ctx.get_var.clone(),
-                let_bindings: env.insert(name.to_string(), arg.clone()),
+                let_bindings: env.insert(name.to_string(), arg),
             };
             eval(body, &new_ctx)
         }
@@ -105,7 +118,10 @@ fn apply(f: &Value, arg: &Value, ctx: &EvalContext) -> Result<Value, EvalError> 
 
 fn resolve_builtin(name: &str) -> Option<Value> {
     match name {
-        "arrayLen" => Some(Value::HostFn(Rc::new(|arg: &Value| match arg {
+        "floor" => Some(Value::HostFn(Arc::new(|arg: &Value| {
+            Ok(Value::Rational(arg.clone().into_rational()?.floor()))
+        }))),
+        "arrayLen" => Some(Value::HostFn(Arc::new(|arg: &Value| match arg {
             Value::Array(elems) => Ok(Value::Rational(BigRational::from_integer(
                 elems.len().into(),
             ))),
@@ -114,10 +130,10 @@ fn resolve_builtin(name: &str) -> Option<Value> {
                 got: other.typ(),
             }),
         }))),
-        "arrayGetElem" => Some(Value::HostFn(Rc::new(|arr: &Value| match arr {
+        "arrayGetElem" => Some(Value::HostFn(Arc::new(|arr: &Value| match arr {
             Value::Array(elems) => {
                 let elems = elems.clone();
-                Ok(Value::HostFn(Rc::new(move |idx: &Value| {
+                Ok(Value::HostFn(Arc::new(move |idx: &Value| {
                     let i = idx
                         .clone()
                         .into_rational()?
@@ -150,12 +166,12 @@ impl Expr {
 
     pub fn evaluate_with(
         &self,
-        get_var: impl Fn(&str) -> Result<Value, EvalError> + 'static,
+        get_var: impl Fn(&str) -> Result<Value, EvalError> + Send + Sync + 'static,
     ) -> Result<Value, EvalError> {
         eval(
             self,
             &EvalContext {
-                get_var: Rc::new(get_var),
+                get_var: Arc::new(get_var),
                 let_bindings: Default::default(),
             },
         )

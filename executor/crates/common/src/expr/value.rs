@@ -1,6 +1,5 @@
 use std::fmt;
-use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use num_rational::BigRational;
 
@@ -126,19 +125,87 @@ impl fmt::Display for BinOp {
     }
 }
 
-pub type Env = rpds::RedBlackTreeMap<String, Value, archery::RcK>;
+pub type Env = rpds::RedBlackTreeMap<String, Thunk, archery::ArcK>;
+
+pub type HostFnImpl = dyn Fn(&Value) -> Result<Value, EvalError> + Send + Sync;
 
 #[derive(Clone)]
 pub enum Value {
     Rational(BigRational),
     Bool(bool),
-    HostFn(Rc<dyn Fn(&Value) -> Result<Value, EvalError>>),
+    HostFn(Arc<HostFnImpl>),
     GuestFn {
         name: Arc<str>,
         body: Arc<Expr>,
         env: Env,
     },
-    Array(Rc<Vec<Value>>),
+    Array(Arc<Vec<Value>>),
+}
+
+/// A memoized, lazily-evaluated value (call-by-need).
+///
+/// Holds either an already-computed [`Value`] or a deferred computation that
+/// is run at most once, on the first [`Thunk::force`]. Re-entrant forcing of
+/// the same thunk (which would only happen via genuine self-reference, since
+/// `let` is non-recursive — recursion is expressed with the Y combinator)
+/// is detected and reported instead of deadlocking or looping forever.
+#[derive(Clone)]
+pub struct Thunk(Arc<Mutex<ThunkState>>);
+
+enum ThunkState {
+    Forced(Value),
+    Deferred(Box<dyn FnOnce() -> Result<Value, EvalError> + Send>),
+    InProgress,
+}
+
+impl Thunk {
+    pub fn forced(value: Value) -> Self {
+        Thunk(Arc::new(Mutex::new(ThunkState::Forced(value))))
+    }
+
+    pub fn deferred(f: impl FnOnce() -> Result<Value, EvalError> + Send + 'static) -> Self {
+        Thunk(Arc::new(Mutex::new(ThunkState::Deferred(Box::new(f)))))
+    }
+
+    pub fn force(&self) -> Result<Value, EvalError> {
+        let deferred = {
+            let mut state = self.0.lock().expect("thunk mutex poisoned");
+            match std::mem::replace(&mut *state, ThunkState::InProgress) {
+                ThunkState::Forced(v) => {
+                    *state = ThunkState::Forced(v.clone());
+                    return Ok(v);
+                }
+                ThunkState::InProgress => {
+                    return Err(EvalError::Custom(
+                        "infinite recursion while forcing a lazy value".to_owned(),
+                    ));
+                }
+                ThunkState::Deferred(f) => f,
+            }
+        };
+
+        // Lock is released here on purpose: a re-entrant `force` of this same
+        // thunk now observes `InProgress` and errors instead of deadlocking.
+        let result = deferred();
+
+        let mut state = self.0.lock().expect("thunk mutex poisoned");
+        match &result {
+            Ok(v) => *state = ThunkState::Forced(v.clone()),
+            // Leave it `InProgress`: a failed computation is not retried, and
+            // any later force surfaces the recursion/error path consistently.
+            Err(_) => {}
+        }
+        result
+    }
+}
+
+impl fmt::Debug for Thunk {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0.try_lock().as_deref() {
+            Ok(ThunkState::Forced(v)) => f.debug_tuple("Thunk").field(v).finish(),
+            _ => f.write_str("Thunk(<unevaluated>)"),
+        }
+    }
 }
 
 impl Value {

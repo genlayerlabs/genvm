@@ -37,9 +37,7 @@ pub mod domain {
         pub leader_nondet_results: Option<Vec<Bytes>>,
         /// Maps each host method (by index) to a host id. When empty, all methods use host 0.
         pub method_hosts: Vec<u8>,
-        pub data_fees_limit: num_bigint::BigInt,
-        pub storage_page_cost: u32,
-        pub receipt_word_cost: u32,
+        pub bucket_totals: Vec<num_bigint::BigInt>,
     }
 }
 

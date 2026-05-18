@@ -1,4 +1,5 @@
 pub mod errors;
+pub mod fees;
 pub mod memlimiter;
 pub mod supervisor;
 pub mod vm;
@@ -35,59 +36,6 @@ impl<T> DetNondet<T> {
     }
 }
 
-#[derive(Debug)]
-pub struct DataFeesLimit {
-    remaining: tokio::sync::Mutex<primitive_types::U256>,
-
-    storage_page_cost: u32,
-    receipt_word_cost: u32,
-}
-
-impl DataFeesLimit {
-    pub fn new(
-        full: primitive_types::U256,
-        storage_page_cost: u32,
-        receipt_word_cost: u32,
-    ) -> Self {
-        Self {
-            remaining: tokio::sync::Mutex::new(full),
-            storage_page_cost,
-            receipt_word_cost,
-        }
-    }
-
-    pub async fn consume_raw(&self, amount: u64) -> bool {
-        let mut remaining = self.remaining.lock().await;
-        let amount = primitive_types::U256::from(amount);
-        if *remaining >= amount {
-            *remaining -= amount;
-            true
-        } else {
-            false
-        }
-    }
-
-    pub async fn remaining(&self) -> primitive_types::U256 {
-        *self.remaining.lock().await
-    }
-
-    pub async fn consume_storage_pages(&self, pages: u64) -> bool {
-        let cost = match pages.checked_mul(self.storage_page_cost as u64) {
-            Some(c) => c,
-            None => return false,
-        };
-        self.consume_raw(cost).await
-    }
-
-    pub async fn consume_receipt_words(&self, words: u64) -> bool {
-        let cost = match words.checked_mul(self.receipt_word_cost as u64) {
-            Some(c) => c,
-            None => return false,
-        };
-        self.consume_raw(cost).await
-    }
-}
-
 /// basic data that is shared across all VMs
 pub struct SharedData {
     pub cancellation: Arc<genvm_common::cancellation::Token>,
@@ -95,7 +43,7 @@ pub struct SharedData {
     pub genvm_id: genvm_modules_interfaces::GenVMId,
     pub debug_mode: bool,
     pub metrics: crate::Metrics,
-    pub data_fees_limit: DataFeesLimit,
+    pub data_fees_limit: fees::DataLimit,
 }
 
 pub fn parse_host_data(

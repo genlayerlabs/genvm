@@ -6,6 +6,55 @@ modules:
   web:
     address: ws://127.0.0.1:3032
 
+fees:
+  expr_prelude: |
+    let Y = \f = (\x = f (\v = x x v)) (\x = f (\v = x x v)) in
+    let fold = \arr acc fn =
+        Y (\go i a =
+            if i >= arrayLen arr then a
+            else go (i + 1) (fn a (arrayGetElem arr i))
+        ) 0 acc in
+    let foldRange = \lo hi acc fn =
+        Y (\go i a =
+            if i >= hi then a
+            else go (i + 1) (fn a i)
+        ) lo acc in
+    let ceilDiv = \a b -> floor ((a + b - 1) / b) in
+  storage:
+    bucket_no: 1
+    subtract_on_start_expr: |
+      0
+    delta_expr: |
+      pages * storageUnitPrice
+  message_receipt:
+    bucket_no: 0
+    subtract_on_start_expr: |
+      fixedProposeReceiptGas # for propose
+        + intrinsicGas
+        + bootloaderOverhead
+        + 7 * gasPerChangedSlot
+        + fixedMessageRevealGas # for reveal
+        + intrinsicGas
+        + bootloaderOverhead
+        + 32 * gasPerChangedSlot # for 32 bytes of length
+    delta_expr: |
+      let real_length = 32 + 32 + ceilDiv calldataLength 32 * 32 in # bytes are indirection + length + data, rounded up to 32 bytes
+      real_length * receiptGasPerByte + 1 * gasPerChangedSlot
+  nondet_output:
+    bucket_no: 0
+    subtract_on_start_expr: |
+      32 * gasPerChangedSlot # for 32 bytes of length
+    delta_expr: |
+      (32 + 32 + ceilDiv outputLength 32 * 32) * receiptGasPerByte # bytes are indirection + length + data, rounded up to 32 bytes
+  message_fee:
+    bucket_no: 2
+    subtract_on_start_expr: |
+      0
+    delta_expr: |
+      if isInternal
+      then 0
+      else 0
+
 threads: 2
 blocking_threads: 4
 log_disable: genvm::rt::memlimiter
