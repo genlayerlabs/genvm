@@ -18,7 +18,7 @@ executor_versions = doc['executor_versions']
 
 import re
 
-ver_regex = re.compile(r'v(\d+)\.(\d+)\.(\d+)')
+ver_regex = re.compile(r'v(\d+)\.(\d+)\.(\d+)(?:-.*)?')
 
 
 def fetch_version_tuple(version_str: str) -> tuple[int, int, int]:
@@ -45,10 +45,11 @@ if args.tag not in executor_versions:
 x = list(executor_versions.keys())
 x.sort()
 
+all_tuples = {fetch_version_tuple(k) for k in x}
+
 for key in x:
 	major, minor, patch = fetch_version_tuple(key)
-	next_version = f'v{major}.{minor}.{patch + 1}'
-	if next_version in executor_versions:
+	if (major, minor, patch + 1) in all_tuples:
 		del executor_versions[key]
 
 import io

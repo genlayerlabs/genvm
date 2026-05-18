@@ -15,6 +15,61 @@ fn assert_bool(val: Value, expected: bool) {
     assert_eq!(val.is_truthy().unwrap(), expected);
 }
 
+fn assert_str(val: Value, expected: &str) {
+    assert_eq!(val.as_str().unwrap(), expected);
+}
+
+#[test]
+fn string_literals_and_escapes() {
+    assert_str(eval(r#" "hello" "#), "hello");
+    assert_str(eval(r#" "a\nb\t\"c\\" "#), "a\nb\t\"c\\");
+    assert_str(eval(r#" "" "#), "");
+}
+
+#[test]
+fn to_string_builtin() {
+    assert_str(eval("toString (2 + 3)"), "5");
+    assert_str(eval("toString true"), "true");
+    assert_str(eval(r#" toString "x" "#), "x");
+}
+
+#[test]
+fn string_interpolation() {
+    assert_str(eval(r#" "sum=\(1 + 2)!" "#), "sum=3!");
+    assert_str(
+        eval(r#" let x = 7 in "x is \(x), twice is \(x * 2)" "#),
+        "x is 7, twice is 14",
+    );
+    // nested string inside interpolation
+    assert_str(eval(r#" "\( "inner" )" "#), "inner");
+}
+
+#[test]
+fn object_and_field() {
+    assert_rational(eval("{ a = 1; b = 2; }.a"), 1, 1);
+    assert_rational(eval(r#"{ a = 1; b = 2; }."b""#), 2, 1);
+    assert_rational(eval("let o = { x = 10; y = 20; } in o.x + o.y"), 30, 1);
+    assert_rational(eval("{ outer = { inner = 42; }; }.outer.inner"), 42, 1);
+}
+
+#[test]
+fn has_key_builtin() {
+    assert_bool(eval(r#" hasKey { a = 1; } "a" "#), true);
+    assert_bool(eval(r#" hasKey { a = 1; } "z" "#), false);
+}
+
+#[test]
+fn object_missing_key_is_error() {
+    let expr = Expr::parse("{ a = 1; }.b").unwrap();
+    assert!(matches!(expr.evaluate(), Err(EvalError::Custom(_))));
+}
+
+#[test]
+fn field_binds_tighter_than_application() {
+    // `toString o.a` must be `toString (o.a)`
+    assert_str(eval("let o = { a = 5; } in toString o.a"), "5");
+}
+
 #[test]
 fn arithmetic() {
     assert_rational(eval("2 + 3 * 4"), 14, 1);

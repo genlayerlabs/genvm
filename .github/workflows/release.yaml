@@ -59,15 +59,6 @@ jobs:
           fi
           echo "new version will be: ${{ steps.determine-version.outputs.new_version }}"
 
-  build-universal-manifest:
-    needs: [gen-tag]
-    uses: ./.github/workflows/incl_build_trg.yaml
-    with:
-      target: universal-manifest
-      executor_version: ${{ needs.gen-tag.outputs.tag }}
-    secrets:
-      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-
   build-universal:
     needs: [gen-tag]
     uses: ./.github/workflows/incl_build_trg.yaml
@@ -80,39 +71,33 @@ jobs:
   build-linux-amd64:
     needs:
       - gen-tag
-      - build-universal-manifest
     uses: ./.github/workflows/incl_build_trg.yaml
     with:
-      target: amd64-linux
-      secondary_target: amd64-linux-executor
+      target: manager-amd64-linux
+      secondary_target: executor-amd64-linux
       executor_version: ${{ needs.gen-tag.outputs.tag }}
-      bundle_extra: ${{ needs.build-universal-manifest.outputs.artifact_url }}
     secrets:
       GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
 
   build-linux-arm64:
     needs:
       - gen-tag
-      - build-universal-manifest
     uses: ./.github/workflows/incl_build_trg.yaml
     with:
-      target: arm64-linux
-      secondary_target: arm64-linux-executor
+      target: manager-arm64-linux
+      secondary_target: executor-arm64-linux
       executor_version: ${{ needs.gen-tag.outputs.tag }}
-      bundle_extra: ${{ needs.build-universal-manifest.outputs.artifact_url }}
     secrets:
       GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
 
   build-macos-arm64:
     needs:
       - gen-tag
-      - build-universal-manifest
     uses: ./.github/workflows/incl_build_trg.yaml
     with:
-      target: arm64-macos
-      secondary_target: arm64-macos-executor
+      target: manager-arm64-macos
+      secondary_target: executor-arm64-macos
       executor_version: ${{ needs.gen-tag.outputs.tag }}
-      bundle_extra: ${{ needs.build-universal-manifest.outputs.artifact_url }}
     secrets:
       GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
 

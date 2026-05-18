@@ -28,13 +28,14 @@ impl<'de> serde::Deserialize<'de> for Version {
             return Err(serde::de::Error::custom("Invalid version format"));
         }
         let part0 = parts[0].strip_prefix("v").unwrap_or(parts[0]);
+        let patch_str = parts[2].split('-').next().unwrap_or(parts[2]);
         let major = part0
             .parse()
             .map_err(|_| serde::de::Error::custom("Invalid major version"))?;
         let minor = parts[1]
             .parse()
             .map_err(|_| serde::de::Error::custom("Invalid minor version"))?;
-        let patch = parts[2]
+        let patch = patch_str
             .parse()
             .map_err(|_| serde::de::Error::custom("Invalid patch version"))?;
 
@@ -46,9 +47,48 @@ impl<'de> serde::Deserialize<'de> for Version {
     }
 }
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(Clone)]
 pub struct Manifest {
     pub executor_versions: std::collections::BTreeMap<Version, ExecutorVersion>,
+    pub version_orig_keys: std::collections::BTreeMap<Version, String>,
+}
+
+impl<'de> serde::Deserialize<'de> for Manifest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Raw {
+            executor_versions: std::collections::BTreeMap<String, ExecutorVersion>,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        let mut executor_versions = std::collections::BTreeMap::new();
+        let mut version_orig_keys = std::collections::BTreeMap::new();
+        for (key, value) in raw.executor_versions {
+            let ver: Version = serde::Deserialize::deserialize(
+                serde::de::value::StringDeserializer::<D::Error>::new(key.clone()),
+            )?;
+            if let Some(prev_key) = version_orig_keys.get(&ver) {
+                return Err(serde::de::Error::custom(format!(
+                    "duplicate version {}.{}.{} in manifest ({} and {})",
+                    ver.major, ver.minor, ver.patch, prev_key, key,
+                )));
+            }
+            executor_versions.insert(ver, value);
+            version_orig_keys.insert(ver, key);
+        }
+        Ok(Manifest {
+            executor_versions,
+            version_orig_keys,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct ResolvedVersion {
+    pub version: Version,
+    pub orig_key: String,
 }
 
 pub struct Ctx {
@@ -96,7 +136,7 @@ impl Ctx {
         &self,
         major: u32,
         timestamp: chrono::DateTime<chrono::Utc>,
-    ) -> Option<Version> {
+    ) -> Option<ResolvedVersion> {
         let lock = self.manifest.read().await;
 
         let mut ver = lock
@@ -116,7 +156,10 @@ impl Ctx {
             }
         }
 
-        Some(ver)
+        Some(ResolvedVersion {
+            version: ver,
+            orig_key: lock.version_orig_keys.get(&ver)?.clone(),
+        })
     }
 }
 
@@ -138,10 +181,7 @@ pub async fn detect_major_spec(
 
     let mut genvm_path = std::path::PathBuf::from(full_ctx.run_ctx.executors_path());
 
-    genvm_path.push(format!(
-        "v{}.{}.{}",
-        execute_in.major, execute_in.minor, execute_in.patch
-    ));
+    genvm_path.push(&execute_in.orig_key);
 
     if !zelf.config.reroute_to.is_empty() {
         genvm_path.pop();

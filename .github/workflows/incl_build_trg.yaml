@@ -16,11 +16,6 @@ on:
         description: 'Version name of the executor'
         required: true
         type: string
-      bundle_extra:
-        description: 'Extra bundle to include in the build'
-        required: false
-        type: string
-        default: ''
     secrets:
       GCP_SA_KEY:
         description: 'Google Cloud Service Account Key'
@@ -56,13 +51,6 @@ jobs:
           with_nix: "true"
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get Extra
-        if: ${{ inputs.bundle_extra != '' }}
-        run: |
-          echo "Downloading extra bundle: ${{ inputs.bundle_extra }}"
-          curl -fsSL -o extra.tar.xz "${{ inputs.bundle_extra }}"
-          xz -d extra.tar.xz
-
       - name: Build
         run: |
           ./support/ci/pipelines/build.sh \
@@ -74,8 +62,7 @@ jobs:
         run: |
           ./support/ci/pipelines/build.sh \
             --target ${{ inputs.secondary_target }} \
-            --executor-version ${{ inputs.executor_version }} \
-            $(if [ "${{ inputs.bundle_extra }}" != "" ]; then echo "--extra-bundle extra.tar"; fi)
+            --executor-version ${{ inputs.executor_version }}
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2

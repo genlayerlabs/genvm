@@ -8,7 +8,9 @@
     "hash": "sha256-4IDg2hjtCLT5QyzVCiYCy7Hg541tWv7ZAOVJHBQRWXk=",
     "must_preload": false,
     "needed-for": [
-      "x86_64-linux"
+      "x86_64-linux",
+      "manager-amd64-linux",
+      "executor-amd64-linux"
     ],
     "fetcher": "fetchzip",
     "alternative_name": null
@@ -22,7 +24,9 @@
     "hash": "sha256-/g+869pK//5ctzH00n1zZ3ypfm1jP1bk5aQyHdTZbKc=",
     "must_preload": false,
     "needed-for": [
-      "aarch64-linux"
+      "aarch64-linux",
+      "manager-arm64-linux",
+      "executor-arm64-linux"
     ],
     "fetcher": "fetchzip"
   },
@@ -35,7 +39,9 @@
     "hash": "sha256-bsvBZLiziNinx5lueHj1I+vV8A8cnmQVgvj2QlnIWz8=",
     "must_preload": false,
     "needed-for": [
-      "aarch64-macos"
+      "aarch64-macos",
+      "manager-arm64-macos",
+      "executor-arm64-macos"
     ],
     "fetcher": "fetchzip"
   },
@@ -50,7 +56,13 @@
     "needed-for": [
       "x86_64-linux",
       "aarch64-linux",
-      "aarch64-macos"
+      "aarch64-macos",
+      "manager-amd64-linux",
+      "executor-amd64-linux",
+      "manager-arm64-linux",
+      "executor-arm64-linux",
+      "manager-arm64-macos",
+      "executor-arm64-macos"
     ],
     "fetcher": "fetchurl",
     "upload_as": "channel-rust-stable-2026-03-05.toml"
@@ -147,7 +159,13 @@
     "needed-for": [
       "x86_64-linux",
       "aarch64-linux",
-      "aarch64-macos"
+      "aarch64-macos",
+      "manager-amd64-linux",
+      "executor-amd64-linux",
+      "manager-arm64-linux",
+      "executor-arm64-linux",
+      "manager-arm64-macos",
+      "executor-arm64-macos"
     ],
     "fetcher": "fetchzip",
     "fetcher_args": {
@@ -162,7 +180,9 @@
     "hash": "sha256-cwzW7KnNVs7+C5DJ6PC6I2/yQILg1Zr0Kt5weGKySSI=",
     "must_preload": false,
     "needed-for": [
-      "aarch64-linux"
+      "aarch64-linux",
+      "manager-arm64-linux",
+      "executor-arm64-linux"
     ],
     "fetcher": "fetchzip",
     "fetcher_args": {
@@ -178,7 +198,9 @@
     "hash": "sha256-BS84zQYbV0J+E5XEulbj0Th6YoO9079ype/x2IEF21g=",
     "must_preload": false,
     "needed-for": [
-      "aarch64-macos"
+      "aarch64-macos",
+      "manager-arm64-macos",
+      "executor-arm64-macos"
     ],
     "fetcher": "fetchzip"
   },
@@ -193,7 +215,13 @@
     "needed-for": [
       "x86_64-linux",
       "aarch64-linux",
-      "aarch64-macos"
+      "aarch64-macos",
+      "manager-amd64-linux",
+      "executor-amd64-linux",
+      "manager-arm64-linux",
+      "executor-arm64-linux",
+      "manager-arm64-macos",
+      "executor-arm64-macos"
     ],
     "fetcher": "fetchurl",
     "upload_as": "channel-rust-stable-2025-03-18.toml"
@@ -223,7 +251,13 @@
     "needed-for": [
       "x86_64-linux",
       "aarch64-linux",
-      "aarch64-macos"
+      "aarch64-macos",
+      "manager-amd64-linux",
+      "executor-amd64-linux",
+      "manager-arm64-linux",
+      "executor-arm64-linux",
+      "manager-arm64-macos",
+      "executor-arm64-macos"
     ],
     "fetcher": "fetchzip",
     "fetcher_args": {

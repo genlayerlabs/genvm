@@ -29,15 +29,17 @@ impl std::str::FromStr for Version {
 
         parts[0] = parts[0].strip_prefix('v').unwrap_or(parts[0]);
 
+        let patch_str = parts[2].split('-').next().unwrap_or(parts[2]);
+
         let major = parts[0]
             .parse::<u16>()
             .with_context(|| format!("Invalid major version: {}", parts[0]))?;
         let minor = parts[1]
             .parse::<u16>()
             .with_context(|| format!("Invalid minor version: {}", parts[1]))?;
-        let patch = parts[2]
+        let patch = patch_str
             .parse::<u16>()
-            .with_context(|| format!("Invalid patch version: {}", parts[2]))?;
+            .with_context(|| format!("Invalid patch version: {}", patch_str))?;
 
         let ret = Version {
             major,

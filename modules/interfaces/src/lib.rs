@@ -391,10 +391,6 @@ pub mod web {
 pub struct HostData {
     pub node_address: String,
     pub tx_id: String,
-    /// Extra string constants injected by the host, e.g. exposed as variables
-    /// to fee expression evaluation.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub gas_data: Option<std::collections::BTreeMap<String, String>>,
     #[serde(flatten)]
     pub rest: serde_json::Map<String, serde_json::Value>,
 }

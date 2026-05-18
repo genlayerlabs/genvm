@@ -1,7 +1,19 @@
 use std::sync::Arc;
 
-use super::tokenizer::{Token, Tokenizer};
-use super::value::{BinOp, Expr, ParseError};
+use super::tokenizer::{StrPart, Token, Tokenizer};
+use super::value::{BinOp, Expr, ParseError, StrSeg};
+
+/// A string token used as an attribute name or field key must be a single
+/// plain literal (no interpolation). The empty string is allowed.
+fn string_key(parts: Vec<StrPart>) -> Result<String, ParseError> {
+    match parts.as_slice() {
+        [] => Ok(String::new()),
+        [StrPart::Lit(s)] => Ok(s.clone()),
+        _ => Err(ParseError::UnexpectedToken(
+            "interpolation in attribute name".to_owned(),
+        )),
+    }
+}
 
 struct Parser {
     tokens: Vec<Token>,
@@ -183,17 +195,46 @@ impl Parser {
     fn is_primary_start(&self) -> bool {
         matches!(
             self.peek(),
-            Token::Num(_) | Token::Ident(_) | Token::LParen | Token::LBracket
+            Token::Num(_)
+                | Token::Ident(_)
+                | Token::LParen
+                | Token::LBracket
+                | Token::LBrace
+                | Token::Str(_)
         )
     }
 
     fn parse_application(&mut self) -> Result<Expr, ParseError> {
-        let mut expr = self.parse_primary()?;
+        let mut expr = self.parse_postfix()?;
         while self.is_primary_start() {
-            let arg = self.parse_primary()?;
+            let arg = self.parse_postfix()?;
             expr = Expr::Apply {
                 func: Box::new(expr),
                 arg: Box::new(arg),
+            };
+        }
+        Ok(expr)
+    }
+
+    /// `obj.key` / `obj."key"` attribute selection. Binds tighter than
+    /// application (so `f a.b` is `f (a.b)`), matching Nix.
+    fn parse_postfix(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.parse_primary()?;
+        while *self.peek() == Token::Dot {
+            self.advance();
+            let key = match self.advance() {
+                Token::Ident(s) => s,
+                Token::Str(parts) => string_key(parts)?,
+                tok => {
+                    return Err(ParseError::ExpectedToken {
+                        expected: "field name".to_owned(),
+                        got: tok.to_string(),
+                    })
+                }
+            };
+            expr = Expr::Field {
+                obj: Box::new(expr),
+                key,
             };
         }
         Ok(expr)
@@ -220,8 +261,50 @@ impl Parser {
                 self.expect(&Token::RBracket)?;
                 Ok(Expr::Array(elems))
             }
+            Token::Str(parts) => Ok(Expr::Str(Self::parse_str_parts(parts)?)),
+            Token::LBrace => {
+                // Nix-style attrset: `{ name = expr; ... }`, empty `{}` ok.
+                let mut fields = Vec::new();
+                while *self.peek() != Token::RBrace {
+                    let key = match self.advance() {
+                        Token::Ident(s) => s,
+                        Token::Str(parts) => string_key(parts)?,
+                        tok => {
+                            return Err(ParseError::ExpectedToken {
+                                expected: "attribute name".to_owned(),
+                                got: tok.to_string(),
+                            })
+                        }
+                    };
+                    self.expect(&Token::Eq)?;
+                    let value = self.parse_expr()?;
+                    self.expect(&Token::Semicolon)?;
+                    fields.push((key, value));
+                }
+                self.advance(); // closing `}`
+                Ok(Expr::Object(fields))
+            }
             tok => Err(ParseError::UnexpectedToken(tok.to_string())),
         }
+    }
+
+    fn parse_str_parts(parts: Vec<StrPart>) -> Result<Vec<StrSeg>, ParseError> {
+        let mut segs = Vec::with_capacity(parts.len());
+        for part in parts {
+            match part {
+                StrPart::Lit(s) => segs.push(StrSeg::Lit(s)),
+                StrPart::Interp(mut tokens) => {
+                    tokens.push(Token::Eof);
+                    let mut sub = Parser::new(tokens);
+                    let expr = sub.parse_expr()?;
+                    if *sub.peek() != Token::Eof {
+                        return Err(ParseError::UnexpectedToken(sub.peek().to_string()));
+                    }
+                    segs.push(StrSeg::Interp(Box::new(expr)));
+                }
+            }
+        }
+        Ok(segs)
     }
 }
 

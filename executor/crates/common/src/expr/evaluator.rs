@@ -3,7 +3,7 @@ use std::sync::Arc;
 use num_rational::BigRational;
 use num_traits::{ToPrimitive, Zero};
 
-use super::value::{BinOp, EvalError, Expr, Thunk, Value};
+use super::value::{BinOp, EvalError, Expr, StrSeg, Thunk, Value};
 
 #[derive(Clone)]
 struct EvalContext {
@@ -95,6 +95,38 @@ fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Value, EvalError> {
             let vals: Result<Vec<Value>, _> = elems.iter().map(|e| eval(e, ctx)).collect();
             Ok(Value::Array(Arc::new(vals?)))
         }
+        Expr::Str(segs) => {
+            let mut out = String::new();
+            for seg in segs {
+                match seg {
+                    StrSeg::Lit(s) => out.push_str(s),
+                    StrSeg::Interp(e) => out.push_str(&stringify(&eval(e, ctx)?)),
+                }
+            }
+            Ok(Value::Str(out.into()))
+        }
+        Expr::Object(fields) => {
+            let mut map = std::collections::BTreeMap::new();
+            for (k, v) in fields {
+                map.insert(k.clone(), eval(v, ctx)?);
+            }
+            Ok(Value::Object(Arc::new(map)))
+        }
+        Expr::Field { obj, key } => {
+            let obj = eval(obj, ctx)?;
+            obj.as_object()?
+                .get(key)
+                .cloned()
+                .ok_or_else(|| EvalError::Custom(format!("object has no key `{key}`")))
+        }
+    }
+}
+
+/// Renders a value to its string form (used by `toString` and `\(..)`).
+fn stringify(v: &Value) -> String {
+    match v {
+        Value::Str(s) => s.to_string(),
+        other => other.to_string(),
     }
 }
 
@@ -120,6 +152,15 @@ fn resolve_builtin(name: &str) -> Option<Value> {
     match name {
         "floor" => Some(Value::HostFn(Arc::new(|arg: &Value| {
             Ok(Value::Rational(arg.clone().into_rational()?.floor()))
+        }))),
+        "toString" => Some(Value::HostFn(Arc::new(|arg: &Value| {
+            Ok(Value::Str(stringify(arg).into()))
+        }))),
+        "hasKey" => Some(Value::HostFn(Arc::new(|obj: &Value| {
+            let obj = obj.as_object()?.clone();
+            Ok(Value::HostFn(Arc::new(move |key: &Value| {
+                Ok(Value::Bool(obj.contains_key(key.as_str()?)))
+            })))
         }))),
         "arrayLen" => Some(Value::HostFn(Arc::new(|arg: &Value| match arg {
             Value::Array(elems) => Ok(Value::Rational(BigRational::from_integer(
@@ -156,6 +197,22 @@ fn resolve_builtin(name: &str) -> Option<Value> {
             }),
         }))),
         _ => None,
+    }
+}
+
+impl Value {
+    /// Applies this value as a function to `arg`. Free variables in a guest
+    /// function's body are resolved via `get_var` (e.g. host-provided `node`).
+    pub fn apply_with(
+        &self,
+        arg: Value,
+        get_var: impl Fn(&str) -> Result<Value, EvalError> + Send + Sync + 'static,
+    ) -> Result<Value, EvalError> {
+        let ctx = EvalContext {
+            get_var: Arc::new(get_var),
+            let_bindings: Default::default(),
+        };
+        apply(self, Thunk::forced(arg), &ctx)
     }
 }
 

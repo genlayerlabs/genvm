@@ -67,6 +67,17 @@ default_env = {
 	if ya_test_runner.util.environ.DEFAULT_FILTER(k, v)
 }
 
+# `prepare` scripts run `cargo build`; the host `rustc` used for build
+# scripts/proc-macros needs libz etc. on LD_LIBRARY_PATH. Fold in
+# CARGO_LD_LIBRARY_PATH the same way cargo.py does for its own commands.
+_cargo_ld_library_path = os.environ.get('CARGO_LD_LIBRARY_PATH', None)
+_base_ld_library_path = default_env.get('LD_LIBRARY_PATH', None)
+_new_ld_library_path = ':'.join(
+	filter(None, [_cargo_ld_library_path, _base_ld_library_path])
+)
+if _new_ld_library_path:
+	default_env['LD_LIBRARY_PATH'] = _new_ld_library_path
+
 
 class _SavedLog(typing.TypedDict):
 	level: str

@@ -1,48 +1,56 @@
 use std::sync::Arc;
 
-type Constants = Arc<std::collections::BTreeMap<String, genvm_common::expr::Value>>;
-
 /// Builds a numeric expression value.
 pub fn num(v: impl Into<num_bigint::BigInt>) -> genvm_common::expr::Value {
     genvm_common::expr::Value::Rational(num_rational::BigRational::from_integer(v.into()))
 }
 
-/// A fee bucket. Total cost is `subtract_on_start` (charged once, up-front)
-/// plus the sum of `delta` evaluations (charged per change). The call site
-/// passes whatever variables the expression needs.
-/// Both expressions are prelude-prefixed and parsed once at construction.
-#[derive(Debug)]
-struct BucketExpr {
-    bucket_no: u8,
-    subtract_on_start: genvm_common::expr::Expr,
-    delta: genvm_common::expr::Expr,
+/// Builds a numeric expression value from a `U256`.
+pub fn num_u256(v: primitive_types::U256) -> genvm_common::expr::Value {
+    let bytes = v.to_big_endian();
+    num(num_bigint::BigInt::from_bytes_be(
+        num_bigint::Sign::Plus,
+        &bytes,
+    ))
 }
 
-#[derive(Debug)]
-pub struct DataLimit {
-    buckets: Vec<tokio::sync::Mutex<primitive_types::U256>>,
-    storage: BucketExpr,
-    message_receipt: BucketExpr,
-    nondet_output: BucketExpr,
-    message_fee: BucketExpr,
-    /// Host-provided constants, exposed as variables to the fee expressions.
-    constants: Constants,
+/// Resolver passed to `apply_with` once `node` is baked into the closure:
+/// there are no remaining free variables, so any lookup is a bug.
+fn no_free_vars(name: &str) -> Result<genvm_common::expr::Value, genvm_common::expr::EvalError> {
+    Err(genvm_common::expr::EvalError::UndefinedVariable(
+        name.to_owned(),
+    ))
 }
 
-fn parse_expr(prelude: &str, label: &str, code: &str) -> anyhow::Result<genvm_common::expr::Expr> {
-    genvm_common::expr::Expr::parse(&format!("{prelude}\n{code}"))
-        .map_err(|e| anyhow::anyhow!("parsing {label} fee expression `{code}`: {e}"))
+/// Builds the attrs object passed to a `delta` function.
+fn attrs_object(vars: &[(&str, genvm_common::expr::Value)]) -> genvm_common::expr::Value {
+    genvm_common::expr::Value::Object(Arc::new(
+        vars.iter()
+            .map(|(k, v)| ((*k).to_owned(), v.clone()))
+            .collect(),
+    ))
 }
 
-fn parse_bucket(
-    prelude: &str,
-    cfg: &crate::config::FeesBucketConfig,
-) -> anyhow::Result<BucketExpr> {
-    Ok(BucketExpr {
-        bucket_no: cfg.bucket_no,
-        subtract_on_start: parse_expr(prelude, "subtract_on_start", &cfg.subtract_on_start_expr)?,
-        delta: parse_expr(prelude, "delta", &cfg.delta_expr)?,
-    })
+/// Builds the `feeParams` object consumed by the `messageFeeFloor` prelude fn.
+pub fn fee_params_value(p: &genvm_common::domain::MessageFeeParams) -> genvm_common::expr::Value {
+    use genvm_common::expr::Value;
+    let mut m = std::collections::BTreeMap::new();
+    m.insert("appealRounds".to_owned(), num_u256(p.appeal_rounds));
+    m.insert(
+        "leaderTimeunitsAllocation".to_owned(),
+        num_u256(p.leader_timeunits_allocation),
+    );
+    m.insert(
+        "validatorTimeunitsAllocation".to_owned(),
+        num_u256(p.validator_timeunits_allocation),
+    );
+    m.insert(
+        "executionBudgetPerRound".to_owned(),
+        num_u256(p.execution_budget_per_round),
+    );
+    let rotations: Vec<Value> = p.rotations.iter().map(|r| num_u256(*r)).collect();
+    m.insert("rotations".to_owned(), Value::Array(Arc::new(rotations)));
+    Value::Object(Arc::new(m))
 }
 
 fn value_to_u256(value: genvm_common::expr::Value) -> anyhow::Result<primitive_types::U256> {
@@ -61,65 +69,100 @@ fn value_to_u256(value: genvm_common::expr::Value) -> anyhow::Result<primitive_t
     Ok(primitive_types::U256::from_big_endian(&buf))
 }
 
-/// Evaluates a fee expression. `vars` are exposed as variables (shadowing
-/// constants of the same name); the up-front cost is evaluated with none.
-fn eval_cost(
-    expr: &genvm_common::expr::Expr,
-    constants: &Constants,
-    vars: &[(&str, genvm_common::expr::Value)],
-) -> anyhow::Result<primitive_types::U256> {
-    let constants = constants.clone();
-    let vars: std::collections::BTreeMap<String, genvm_common::expr::Value> = vars
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), v.clone()))
-        .collect();
-    let value = expr
-        .evaluate_with(move |name: &str| {
-            if let Some(v) = vars.get(name) {
-                Ok(v.clone())
-            } else if let Some(v) = constants.get(name) {
-                Ok(v.clone())
-            } else {
-                Err(genvm_common::expr::EvalError::UndefinedVariable(
-                    name.to_owned(),
-                ))
-            }
-        })
-        .map_err(|e| anyhow::anyhow!("evaluating fee expression: {e}"))?;
-    value_to_u256(value)
+/// Parses `\node = <prelude> <code>` and applies it to `node`, so the result
+/// closes over `node` (and the prelude). The `delta` form additionally
+/// returns a `\attrs = ...` function ready to be applied per charge.
+fn eval_with_node(
+    prelude: &str,
+    label: &str,
+    code: &str,
+    node: &genvm_common::expr::Value,
+) -> anyhow::Result<genvm_common::expr::Value> {
+    let src = format!("\\node = {prelude}\n{code}");
+    let lambda = genvm_common::expr::Expr::parse(&src)
+        .map_err(|e| anyhow::anyhow!("parsing {label} fee expression `{code}`: {e}"))?
+        .evaluate()
+        .map_err(|e| anyhow::anyhow!("evaluating {label} fee expression: {e}"))?;
+    lambda
+        .apply_with(node.clone(), no_free_vars)
+        .map_err(|e| anyhow::anyhow!("binding `node` in {label} fee expression: {e}"))
+}
+
+/// A fee bucket: total = `subtract_on_start` (charged once, applied above) +
+/// Σ `delta(attrs)`. `delta` is a function closing over `node`/the prelude.
+struct Bucket {
+    bucket_no: u8,
+    delta: genvm_common::expr::Value,
+}
+
+impl std::fmt::Debug for Bucket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Bucket")
+            .field("bucket_no", &self.bucket_no)
+            .finish()
+    }
+}
+
+fn build_bucket(
+    prelude: &str,
+    cfg: &crate::config::FeesBucketConfig,
+    node: &genvm_common::expr::Value,
+    bucket_totals: &mut [primitive_types::U256],
+) -> anyhow::Result<Bucket> {
+    // Up-front cost: a plain number; charge it now.
+    let start = value_to_u256(eval_with_node(
+        prelude,
+        "subtract_on_start",
+        &cfg.subtract_on_start_expr,
+        node,
+    )?)?;
+    if let Some(total) = bucket_totals.get_mut(cfg.bucket_no as usize) {
+        *total = total.saturating_sub(start);
+    }
+
+    // Per-change cost: a `\attrs = ...` function.
+    let delta = eval_with_node(prelude, "delta", &cfg.delta_expr, node)?;
+    Ok(Bucket {
+        bucket_no: cfg.bucket_no,
+        delta,
+    })
+}
+
+#[derive(Debug)]
+pub struct DataLimit {
+    buckets: Vec<tokio::sync::Mutex<primitive_types::U256>>,
+    storage: Bucket,
+    message_receipt: Bucket,
+    nondet_output: Bucket,
+    message_fee: Bucket,
 }
 
 impl DataLimit {
     pub fn new(
         mut bucket_totals: Vec<primitive_types::U256>,
         fees: crate::config::FeesConfig,
-        gas_data: Option<std::collections::BTreeMap<String, String>>,
+        gas_data: std::collections::BTreeMap<String, String>,
     ) -> anyhow::Result<Self> {
         let prelude = &fees.expr_prelude;
 
-        let mut constants = std::collections::BTreeMap::new();
-        for (name, raw) in gas_data.unwrap_or_default() {
+        // Host-provided values are exposed under a single `node` object, e.g.
+        // `node.gasPerChangedSlot`.
+        let mut node = std::collections::BTreeMap::new();
+        for (name, raw) in gas_data {
             let src = format!("{prelude}\n{raw}");
             let value = genvm_common::expr::Expr::parse(&src)
                 .map_err(|e| anyhow::anyhow!("parsing gas_data constant `{name}`: {e}"))?
                 .evaluate()
                 .map_err(|e| anyhow::anyhow!("evaluating gas_data constant `{name}`: {e}"))?;
-            constants.insert(name, value);
+            node.insert(name, value);
         }
-        let constants: Constants = Arc::new(constants);
+        let node = genvm_common::expr::Value::Object(Arc::new(node));
 
-        let storage = parse_bucket(prelude, &fees.storage)?;
-        let message_receipt = parse_bucket(prelude, &fees.message_receipt)?;
-        let nondet_output = parse_bucket(prelude, &fees.nondet_output)?;
-        let message_fee = parse_bucket(prelude, &fees.message_fee)?;
-
-        // Charge the fixed, up-front part of every fee kind once.
-        for bucket in [&storage, &message_receipt, &nondet_output, &message_fee] {
-            let start = eval_cost(&bucket.subtract_on_start, &constants, &[])?;
-            if let Some(total) = bucket_totals.get_mut(bucket.bucket_no as usize) {
-                *total = total.saturating_sub(start);
-            }
-        }
+        let storage = build_bucket(prelude, &fees.storage, &node, &mut bucket_totals)?;
+        let message_receipt =
+            build_bucket(prelude, &fees.message_receipt, &node, &mut bucket_totals)?;
+        let nondet_output = build_bucket(prelude, &fees.nondet_output, &node, &mut bucket_totals)?;
+        let message_fee = build_bucket(prelude, &fees.message_fee, &node, &mut bucket_totals)?;
 
         Ok(Self {
             buckets: bucket_totals
@@ -130,16 +173,20 @@ impl DataLimit {
             message_receipt,
             nondet_output,
             message_fee,
-            constants,
         })
     }
 
     async fn consume_bucket(
         &self,
-        bucket: &BucketExpr,
+        bucket: &Bucket,
         vars: &[(&str, genvm_common::expr::Value)],
     ) -> bool {
-        let cost = match eval_cost(&bucket.delta, &self.constants, vars) {
+        let cost = match bucket
+            .delta
+            .apply_with(attrs_object(vars), no_free_vars)
+            .map_err(|e| anyhow::anyhow!("{e}"))
+            .and_then(value_to_u256)
+        {
             Ok(cost) => cost,
             Err(e) => {
                 genvm_common::log_error!(error:ah = e; "failed to evaluate fee expression");
@@ -193,7 +240,24 @@ impl DataLimit {
             .await
     }
 
-    pub async fn consume_message_fee(&self) -> bool {
-        self.consume_bucket(&self.message_fee, &[]).await
+    pub async fn consume_message_fee_internal(
+        &self,
+        on_acceptance: bool,
+        matched_fee_params: &genvm_common::domain::MessageFeeParams,
+    ) -> bool {
+        self.consume_bucket(
+            &self.message_fee,
+            &[
+                ("isInternal", num(1u64)),
+                ("onAcceptance", num(u64::from(on_acceptance))),
+                ("matchedFeeParams", fee_params_value(matched_fee_params)),
+            ],
+        )
+        .await
+    }
+
+    pub async fn consume_message_fee_external(&self) -> bool {
+        self.consume_bucket(&self.message_fee, &[("isInternal", num(0u64))])
+            .await
     }
 }

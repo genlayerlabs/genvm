@@ -159,7 +159,7 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         data_fees_limit: genvm::rt::fees::DataLimit::new(
             bucket_totals,
             config.fees.clone(),
-            host_data.gas_data.clone(),
+            execution_data.gas_data.clone(),
         )?,
     });
 

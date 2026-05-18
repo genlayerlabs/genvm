@@ -10,7 +10,6 @@
 
 use crate::calldata;
 use bytes::Bytes;
-use primitive_types::U256;
 use std::collections::BTreeMap;
 
 #[cfg(feature = "arbitrary")]
@@ -22,14 +21,6 @@ pub mod gl_call;
 
 #[cfg(feature = "wasi")]
 pub mod wasi;
-
-pub struct MessageFeeParams {
-    pub leader_timeunits_allocation: U256,
-    pub validator_timeunits_allocation: U256,
-    pub appeal_rounds: U256,
-    pub execution_budget_per_round: U256,
-    pub rotations: Vec<U256>,
-}
 
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, calldata::Encode)]

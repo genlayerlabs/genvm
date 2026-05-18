@@ -77,17 +77,12 @@ EOF
 python3 "$SCRIPT_DIR/../../runner-script.py" dependencies prefetch-needed --all --target "$TARGET"
 
 mkdir -p build
-nix build -o build/out-$TARGET -v -L .#all-for-platform.$TARGET --show-trace
+nix build -o build/out-$TARGET -v -L .#$TARGET --show-trace
 
 PREV=$(readlink -f .)
 pushd build/out-$TARGET
 find . -type f -print0 | sort -z | \
 	xargs -0 tar --transform 's,^\./,,' --mode=ug+w -cf "$PREV/build/genvm-$TARGET.tar"
-
-if [ "$EXTRA_BUNDLE" != "" ]
-then
-	tar -A -f "$PREV/build/genvm-$TARGET.tar" "$EXTRA_BUNDLE"
-fi
 
 xz -z -9 --force "$PREV/build/genvm-$TARGET.tar"
 

@@ -10,6 +10,7 @@ pub enum ParseError {
     ExpectedToken { expected: String, got: String },
     ExpectedDigits(&'static str),
     InvalidNumber(String),
+    UnterminatedString,
 }
 
 impl fmt::Display for ParseError {
@@ -22,6 +23,7 @@ impl fmt::Display for ParseError {
             }
             ParseError::ExpectedDigits(ctx) => write!(f, "expected digits {ctx}"),
             ParseError::InvalidNumber(s) => write!(f, "invalid number `{s}`"),
+            ParseError::UnterminatedString => write!(f, "unterminated string literal"),
         }
     }
 }
@@ -92,6 +94,22 @@ pub enum Expr {
         arg: Box<Expr>,
     },
     Array(Vec<Expr>),
+    /// String literal with `\(expr)` interpolation segments.
+    Str(Vec<StrSeg>),
+    /// Object/attrset literal. Keys are stored unsorted here; the evaluated
+    /// [`Value::Object`] is sorted by key (it is a `BTreeMap`).
+    Object(Vec<(String, Expr)>),
+    /// `obj.key` attribute selection.
+    Field {
+        obj: Box<Expr>,
+        key: String,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum StrSeg {
+    Lit(String),
+    Interp(Box<Expr>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -140,6 +158,9 @@ pub enum Value {
         env: Env,
     },
     Array(Arc<Vec<Value>>),
+    Str(Arc<str>),
+    /// Attribute set, kept sorted by key.
+    Object(Arc<std::collections::BTreeMap<String, Value>>),
 }
 
 /// A memoized, lazily-evaluated value (call-by-need).
@@ -215,6 +236,28 @@ impl Value {
             Value::Bool(_) => "bool",
             Value::HostFn(_) | Value::GuestFn { .. } => "function",
             Value::Array(_) => "array",
+            Value::Str(_) => "string",
+            Value::Object(_) => "object",
+        }
+    }
+
+    pub fn as_str(&self) -> Result<&str, EvalError> {
+        match self {
+            Value::Str(s) => Ok(s),
+            other => Err(EvalError::TypeError {
+                expected: "string",
+                got: other.typ(),
+            }),
+        }
+    }
+
+    pub fn as_object(&self) -> Result<&std::collections::BTreeMap<String, Value>, EvalError> {
+        match self {
+            Value::Object(o) => Ok(o),
+            other => Err(EvalError::TypeError {
+                expected: "object",
+                got: other.typ(),
+            }),
         }
     }
 
@@ -247,6 +290,8 @@ impl fmt::Debug for Value {
             Value::HostFn(_) => f.debug_tuple("HostFn").finish(),
             Value::GuestFn { name, .. } => f.debug_tuple("GuestFn").field(name).finish(),
             Value::Array(elems) => f.debug_tuple("Array").field(elems).finish(),
+            Value::Str(s) => f.debug_tuple("Str").field(s).finish(),
+            Value::Object(o) => f.debug_tuple("Object").field(o).finish(),
         }
     }
 }
@@ -267,6 +312,14 @@ impl fmt::Display for Value {
                     write!(f, "{e}")?;
                 }
                 write!(f, "]")
+            }
+            Value::Str(s) => write!(f, "{s}"),
+            Value::Object(o) => {
+                write!(f, "{{ ")?;
+                for (k, v) in o.iter() {
+                    write!(f, "{k} = {v}; ")?;
+                }
+                write!(f, "}}")
             }
         }
     }

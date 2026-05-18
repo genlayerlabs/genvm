@@ -481,7 +481,14 @@ all_executor_versions.sort()
 def parse_executor_version(executor_version: str) -> tuple[int, int, int]:
 	executor_version = executor_version.removeprefix('v')
 	major_str, minor_str, patch_str = executor_version.split('.', 2)
+	patch_str = patch_str.split('-', 1)[0]
 	return (int(major_str), int(minor_str), int(patch_str))
+
+
+all_executor_version_tuples = set()
+for v in all_executor_versions:
+	if v != 'vTEST':
+		all_executor_version_tuples.add(parse_executor_version(v))
 
 
 def process_executor_version(executor_version: str):
@@ -489,8 +496,7 @@ def process_executor_version(executor_version: str):
 
 	if executor_version != 'vTEST':
 		major, minor, patch = parse_executor_version(executor_version)
-		next_version = f'v{major}.{minor}.{patch + 1}'
-		if next_version in all_executor_versions:
+		if (major, minor, patch + 1) in all_executor_version_tuples:
 			logger.info(
 				f'Skipping executor version {executor_version} because a newer version {next_version} exists'
 			)
