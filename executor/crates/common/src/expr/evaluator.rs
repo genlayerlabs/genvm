@@ -5,6 +5,10 @@ use num_traits::{ToPrimitive, Zero};
 
 use super::value::{BinOp, EvalError, Expr, StrSeg, Thunk, Value};
 
+// SAFETY: this evaluator has no recursion depth or fuel limits.
+// It is only used for trusted, operator-supplied fee config expressions,
+// never for contract-supplied or user-supplied input.
+
 #[derive(Clone)]
 struct EvalContext {
     get_var: Arc<dyn Fn(&str) -> Result<Value, EvalError> + Send + Sync>,

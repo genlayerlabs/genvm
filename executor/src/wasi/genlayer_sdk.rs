@@ -1313,11 +1313,6 @@ impl ContextVFS<'_> {
             .supervisor
             .get_leader_nondet_result(call_no);
 
-        if let Some(ref data) = leaders_res_bytes {
-            consume_nondet_output(&self.context.data.supervisor.shared_data, data.len() as u64)
-                .await?;
-        }
-
         let leaders_res = match leaders_res_bytes {
             None if self.context.data.supervisor.is_leader() => None,
             None => {
@@ -1463,6 +1458,12 @@ impl ContextVFS<'_> {
                 }
             }
         };
+
+        consume_nondet_output(
+            &self.context.data.supervisor.shared_data,
+            result_to_return.as_bytes().len() as u64,
+        )
+        .await?;
 
         self.set_vm_run_result(result_to_return).map(|x| x.0)
     }

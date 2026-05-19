@@ -108,7 +108,7 @@ builders-use-substitutes = true
 
 # Appendix
 
-For users unfammiliar with nix your `/etc/nix/nix.conf ` should look something like this
+For users unfamiliar with nix your `/etc/nix/nix.conf` should look something like this
 
 ```
 sandbox = true

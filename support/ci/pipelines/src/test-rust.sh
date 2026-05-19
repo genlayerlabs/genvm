@@ -12,4 +12,4 @@ python3 ./build/out/bin/post-install.py \
     --error-on-missing-executor=false \
     --default-download=false
 
-nix develop .#mock-tests --command ya-test-runner --filter-tag "$(cat tests/presets/rust.txt)" run
+nix develop .#mock-tests --command ya-test-runner run --filter-tag "$(cat tests/presets/rust.txt)"

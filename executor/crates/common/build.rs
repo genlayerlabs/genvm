@@ -1,7 +1,7 @@
 fn main() -> std::io::Result<()> {
     println!("cargo::rerun-if-env-changed=CARGO_LD_LIBRARY_PATH");
     if let Ok(v) = std::env::var("CARGO_LD_LIBRARY_PATH") {
-        for path in v.split(':') {
+        for path in v.split(':').filter(|p| !p.is_empty()) {
             println!("cargo::rustc-link-search=native={path}");
         }
     }

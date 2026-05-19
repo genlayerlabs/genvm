@@ -32,7 +32,6 @@ class Context:
 	shared: SharedContext
 	parser: argparse.ArgumentParser
 	run_parser: argparse.ArgumentParser
-	shared_parser: argparse.ArgumentParser
 	filter_parser: argparse.ArgumentParser
 	current_path: Path
 	plugins: dict[str, typing.Any]

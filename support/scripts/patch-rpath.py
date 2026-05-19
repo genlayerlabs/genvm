@@ -15,7 +15,7 @@ lief.logging.set_level(lief.logging.LEVEL.ERROR)
 
 
 def patch_elf(binary: lief.ELF.Binary, rpaths: list[str]) -> None:
-	logger.info(f'Processing ELF binary')
+	logger.info('Processing ELF binary')
 
 	if binary.has(lief.ELF.DynamicEntry.TAG.RPATH):
 		rpath_entry = binary.get(lief.ELF.DynamicEntry.TAG.RPATH)
@@ -29,7 +29,7 @@ def patch_elf(binary: lief.ELF.Binary, rpaths: list[str]) -> None:
 
 
 def patch_macho(binary: lief.MachO.Binary, rpaths: list[str]) -> None:
-	logger.info(f'Processing Mach-O binary')
+	logger.info('Processing Mach-O binary')
 
 	for cmd in binary.commands:
 		if cmd.command in (

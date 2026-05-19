@@ -165,7 +165,9 @@
 							};
 							devShells.rust-test = pkgs.mkShell {
 								packages = packages-0 ++ packages-debug-test ++ packages-rust;
-								shellHook = shell-hook-base;
+								shellHook = shell-hook-base + ''
+									export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib:${toString pkgs.zlib.out}/lib:''${LD_LIBRARY_PATH:-}"
+								'';
 							};
 							devShells.mock-tests = pkgs.mkShell {
 								packages = packages-0 ++ packages-rust ++ packages-debug-test;

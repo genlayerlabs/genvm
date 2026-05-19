@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use crate::rt;
+use genlayer_sdk::abi;
+
 /// Builds a numeric expression value.
 pub fn num(v: impl Into<num_bigint::BigInt>) -> genvm_common::expr::Value {
     genvm_common::expr::Value::Rational(num_rational::BigRational::from_integer(v.into()))
@@ -57,7 +60,11 @@ fn value_to_u256(value: genvm_common::expr::Value) -> anyhow::Result<primitive_t
     let rational = value
         .into_rational()
         .map_err(|e| anyhow::anyhow!("fee expression must yield a number: {e}"))?;
-    let int = rational.floor().to_integer();
+    anyhow::ensure!(
+        rational.is_integer(),
+        "fee expression must yield an integer, got {rational}"
+    );
+    let int = rational.to_integer();
     let (sign, bytes) = int.to_bytes_be();
     anyhow::ensure!(
         sign != num_bigint::Sign::Minus,
@@ -116,9 +123,25 @@ fn build_bucket(
         &cfg.subtract_on_start_expr,
         node,
     )?)?;
-    if let Some(total) = bucket_totals.get_mut(cfg.bucket_no as usize) {
-        *total = total.saturating_sub(start);
-    }
+    let num_buckets = bucket_totals.len();
+    let total = bucket_totals
+        .get_mut(cfg.bucket_no as usize)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "bucket_no {} is out of range (have {} buckets)",
+                cfg.bucket_no,
+                num_buckets
+            )
+        })?;
+    *total = total.checked_sub(start).ok_or_else(|| {
+        rt::errors::VMError(
+            abi::consts::VmError::oom().receipt(),
+            Some(anyhow::anyhow!(
+                "subtract_on_start exceeds bucket {} total",
+                cfg.bucket_no
+            )),
+        )
+    })?;
 
     // Per-change cost: a `\attrs = ...` function.
     let delta = eval_with_node(prelude, "delta", &cfg.delta_expr, node)?;
