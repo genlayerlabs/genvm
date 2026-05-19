@@ -6,9 +6,7 @@ from pathlib import Path
 
 src_dir = Path('.')
 
-deduce_src = [
-	x for x in src_dir.iterdir() if x.name not in ['build-scripts', 'env-vars']
-]
+deduce_src = [x for x in src_dir.iterdir() if x.name not in ['scripts', 'env-vars']]
 if len(deduce_src) != 1:
 	raise Exception(f'Invalid structure {deduce_src}')
 

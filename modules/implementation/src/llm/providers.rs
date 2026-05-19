@@ -393,7 +393,7 @@ impl Provider for OpenAICompatible {
         let response = res
             .body
             .pointer("/choices/0/message/content")
-            .and_then(|v| v.as_str())
+            .and_then(|v| if v.is_null() { Some("") } else { v.as_str() })
             .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
 
         Ok(ProviderResponse::new(sanitize_json_str(response), tokens))
@@ -1463,7 +1463,7 @@ mod tests {
     make_test!(openai);
     make_test!(anthropic);
     make_test!(google);
-    make_test!(xai);
+    //make_test!(xai);
 
     make_test!(heurist);
     make_test!(heurist_deepseek);

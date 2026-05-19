@@ -1,8 +1,8 @@
 { pkgs
+, deps
 , lib
 , stdenvNoCC
 , runnersLib
-, deps
 , ...
 }:
 stdenvNoCC.mkDerivation {
@@ -12,7 +12,7 @@ stdenvNoCC.mkDerivation {
 	outputHash = "sha256-NQdALM+p13cAlPKMBY8E2vH6/qEZJ6R+ktLgDZuEXxo=";
 	outputHashMode = "recursive";
 
-	src = deps."genvm-bz2-src";
+	src = deps."genvm-bz2-src-1.0.8";
 
 	nativeBuildInputs = [ runnersLib.wasi-sdk.package ];
 

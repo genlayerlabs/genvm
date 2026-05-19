@@ -1,10 +1,9 @@
 import puppeteer, * as pup from 'puppeteer-core';
 import http from 'http';
-import url from 'url';
 import { Command } from 'commander';
 
 import * as logger from './logging.js';
-import * as browser from './browser.js';
+import * as chromeBrowser from './browser/chrome.js';
 import { envDurationMs, formatDurationMs } from './duration.js';
 
 interface NavigationOptions {
@@ -134,7 +133,7 @@ async function renderPage(
 	mode: 'text' | 'html' | 'screenshot',
 	options: RenderOptions = {},
 ): Promise<{ status: number; body: any }> {
-	const browserManager = await browser.BrowserManager.INSTANCE;
+	const browserManager = await chromeBrowser.INSTANCE;
 	const browserInstance = browserManager.getBrowser();
 	try {
 		return renderPageWithBrowser(
@@ -206,15 +205,15 @@ async function renderPageWithBrowser(
 }
 
 async function handleRenderRequest(
-	parsedUrl: url.UrlWithParsedQuery,
+	parsedUrl: URL,
 	req: http.IncomingMessage,
 	res: http.ServerResponse,
 ) {
-	const query = parsedUrl.query;
+	const query = parsedUrl.searchParams;
 
 	try {
-		const targetUrl = query.url as string;
-		const mode = query.mode as 'text' | 'html' | 'screenshot';
+		const targetUrl = query.get('url') ?? '';
+		const mode = query.get('mode') as 'text' | 'html' | 'screenshot';
 
 		if (!targetUrl) {
 			res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -233,10 +232,11 @@ async function handleRenderRequest(
 		}
 
 		const options: RenderOptions = {
-			waitAfterLoaded: parseFloat((query.waitAfterLoaded as string) || '0'),
-			loadTimeout: parseInt((query.loadTimeout as string) || '30000'),
+			waitAfterLoaded: parseFloat(query.get('waitAfterLoaded') || '0'),
+			loadTimeout: parseInt(query.get('loadTimeout') || '30000'),
 			waitUntil:
-				(query.waitUntil as pup.PuppeteerLifeCycleEvent) || 'domcontentloaded',
+				(query.get('waitUntil') as pup.PuppeteerLifeCycleEvent) ||
+				'domcontentloaded',
 		};
 
 		const result = await renderPage(targetUrl, mode, options);
@@ -264,10 +264,7 @@ async function handleRenderRequest(
 	}
 }
 
-async function handleHealthcheck(
-	parsedUrl: url.UrlWithParsedQuery,
-	res: http.ServerResponse,
-) {
+async function handleHealthcheck(parsedUrl: URL, res: http.ServerResponse) {
 	const now = Date.now();
 	const sinceLastSuccessMs = now - lastSuccessfulRenderTime;
 	if (sinceLastSuccessMs < HEALTHCHECK_CACHE_DURATION_MS) {
@@ -279,14 +276,16 @@ async function handleHealthcheck(
 		return;
 	}
 
-	const query = parsedUrl.query;
-	const targetUrl = query.url as string;
-	const mode = query.mode as 'text' | 'html' | 'screenshot';
+	const query = parsedUrl.searchParams;
+	const targetUrl = query.get('url') ?? '';
+	const VALID_MODES = ['text', 'html', 'screenshot'] as const;
+	const rawMode = query.get('mode');
+	const mode = VALID_MODES.find((m) => m === rawMode);
 
 	if (!targetUrl || !mode) {
 		logger.log('warn', 'healthcheck missing parameters', {
 			url: targetUrl,
-			mode,
+			mode: rawMode,
 		});
 		res.writeHead(400, { 'Content-Type': 'text/plain' });
 		res.end('missing url or mode query parameters');
@@ -321,7 +320,7 @@ async function handleHealthcheck(
 }
 
 const server = http.createServer(async (req, res) => {
-	const parsedUrl = url.parse(req.url || '', true);
+	const parsedUrl = new URL(req.url || '/', 'http://localhost');
 	const pathname = parsedUrl.pathname;
 
 	if (pathname === '/render') {

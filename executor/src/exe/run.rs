@@ -117,18 +117,38 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         .collect::<Vec<_>>();
     metrics.hosts = Box::from(metrics_for_each_host);
 
-    let data_fees_limit = {
-        let (sign, bytes) = execution_data.data_fees_limit.to_bytes_be();
-        anyhow::ensure!(
-            sign != num_bigint::Sign::Minus,
-            "data_fees_limit must be non-negative"
-        );
-        let mut buf = [0u8; 32];
-        let start = 32usize.saturating_sub(bytes.len());
-        anyhow::ensure!(bytes.len() <= 32, "data_fees_limit exceeds U256 range");
-        buf[start..].copy_from_slice(&bytes);
-        primitive_types::U256::from_big_endian(&buf)
-    };
+    let bucket_totals = execution_data
+        .bucket_totals
+        .iter()
+        .map(|bi| {
+            let (sign, bytes) = bi.to_bytes_be();
+            anyhow::ensure!(
+                sign != num_bigint::Sign::Minus,
+                "bucket total must be non-negative"
+            );
+            anyhow::ensure!(bytes.len() <= 32, "bucket total exceeds U256 range");
+            let mut buf = [0u8; 32];
+            let start = 32usize.saturating_sub(bytes.len());
+            buf[start..].copy_from_slice(&bytes);
+            Ok(primitive_types::U256::from_big_endian(&buf))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let max_bucket_no = [
+        config.fees.storage.bucket_no,
+        config.fees.message_receipt.bucket_no,
+        config.fees.nondet_output.bucket_no,
+        config.fees.message_fee.bucket_no,
+    ]
+    .into_iter()
+    .max()
+    .unwrap_or(0);
+
+    anyhow::ensure!(
+        (max_bucket_no as usize) < bucket_totals.len(),
+        "fees config references bucket {max_bucket_no} but only {} bucket(s) provided",
+        bucket_totals.len(),
+    );
 
     let shared_data = sync::DArc::new(genvm::rt::SharedData {
         cancellation: token,
@@ -136,11 +156,11 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         genvm_id: genvm_modules_interfaces::GenVMId(genvm_id),
         debug_mode: args.debug_mode,
         metrics,
-        data_fees_limit: genvm::rt::DataFeesLimit::new(
-            data_fees_limit,
-            execution_data.storage_page_cost,
-            execution_data.receipt_word_cost,
-        ),
+        data_fees_limit: genvm::rt::fees::DataLimit::new(
+            bucket_totals,
+            config.fees.clone(),
+            execution_data.gas_data.clone(),
+        )?,
     });
 
     let hosts: Vec<genvm::Host> = args

@@ -388,9 +388,7 @@ pub struct Request {
     #[serde(default = "default_max_execution_minutes")]
     #[calldata(default = default_max_execution_minutes)]
     pub max_execution_minutes: u64,
-    pub data_fees_limit: num_bigint::BigInt,
-    pub storage_page_cost: u32,
-    pub receipt_word_cost: u32,
+    pub bucket_totals: Vec<num_bigint::BigInt>,
     pub host_data: String,
     #[calldata(serialize_with = encode_datetime_rfc3339, deserialize_with = decode_datetime_rfc3339)]
     pub timestamp: chrono::DateTime<chrono::Utc>,
@@ -408,6 +406,22 @@ pub struct Request {
     #[calldata(default = default_no_modules)]
     pub no_modules: bool,
     pub leader_nondet_results: Option<Vec<bytes::Bytes>>,
+    /// Host-provided `node` fee constants (moved off `host_data`).
+    #[serde(default)]
+    #[calldata(default = default_gas_data)]
+    pub gas_data: std::collections::BTreeMap<String, String>,
+    /// Message-fee allocation tree passed alongside the execution.
+    #[serde(default)]
+    #[calldata(default = default_message_fee_allocation)]
+    pub message_fee_allocation: Vec<genvm_common::domain::MessageFeeAllocationNode>,
+}
+
+fn default_gas_data() -> std::collections::BTreeMap<String, String> {
+    std::collections::BTreeMap::new()
+}
+
+fn default_message_fee_allocation() -> Vec<genvm_common::domain::MessageFeeAllocationNode> {
+    Vec::new()
 }
 
 fn default_permissions() -> String {
@@ -895,7 +909,7 @@ pub async fn start_genvm(
 
     // Resolve command path
     let mut command_path = ctx.executors_path.clone();
-    let version_str_owned = format!("v{}.{}.{}", version.major, version.minor, version.patch);
+    let version_str_owned = version.orig_key.clone();
     let mut version_str: &str = &version_str_owned;
     if !reroute_to.is_empty() {
         version_str = &*reroute_to;
@@ -939,9 +953,9 @@ pub async fn start_genvm(
         code: req.code.clone(),
         leader_nondet_results: req.leader_nondet_results.clone(),
         method_hosts,
-        data_fees_limit: req.data_fees_limit.clone(),
-        storage_page_cost: req.storage_page_cost,
-        receipt_word_cost: req.receipt_word_cost,
+        bucket_totals: req.bucket_totals.clone(),
+        gas_data: req.gas_data.clone(),
+        message_fee_allocation: req.message_fee_allocation.clone(),
     };
     let execution_data_bytes = genvm_common::calldata::encode_obj(&execution_data);
 
@@ -985,8 +999,8 @@ pub async fn start_genvm(
     let exec_ctx = sync::DArc::new(SingleGenVMContext {
         result: tokio::sync::OnceCell::new(),
         version: version_str.to_owned(),
-        version_major: version.major as u16,
-        version_minor: version.minor as u16,
+        version_major: version.version.major as u16,
+        version_minor: version.version.minor as u16,
         id: genvm_id,
         process_handle: tokio::sync::Mutex::new(child),
         started_at: chrono::Utc::now(),

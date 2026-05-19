@@ -219,9 +219,7 @@ class PermitsTestStep(ya_test_runner.exec.step.Python):
 				'extra_args': [],
 				'code': code,
 				'calldata': gvm_calldata.encode({}),
-				'data_fees_limit': 10_000_000,
-				'storage_page_cost': 1,
-				'receipt_word_cost': 1,
+				'bucket_totals': [10_000_000],
 				'no_modules': True,
 				'leader_nondet_results': [],
 			}

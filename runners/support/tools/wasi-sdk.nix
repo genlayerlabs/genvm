@@ -1,11 +1,11 @@
 { pkgs
-, lib
 , deps
+, lib
 , ...
 }:
 let
-	binaryen-raw = deps."binaryen-raw";
-	wasi-sdk-raw = deps."wasi-sdk-raw";
+	binaryen-raw = deps."binaryen-raw-128";
+	wasi-sdk-raw = deps."wasi-sdk-raw-31.0";
 	wasi-sdk = pkgs.stdenvNoCC.mkDerivation {
 		name = "wasi-sdk";
 		version = "31.0";

@@ -36,6 +36,18 @@ build_info = json.loads(
 BUILD_DIR = Path(build_info['build_dir'])
 TARGET_DIR = Path(build_info['rust_target_dir'])
 
+local_ctx.run_parser.add_argument(
+	'--ignore-hash',
+	action='store_true',
+	default=False,
+	help='Ignore .hash files entirely (skip hash comparison and do not write missing ones)',
+)
+
+
+def _is_ignore_hash_enabled() -> bool:
+	return '--ignore-hash' in sys.argv
+
+
 # Set up paths for importing plugin modules
 TESTS_DIR = local_ctx.shared.root_dir.joinpath('tests')
 CASES_DIR = TESTS_DIR.joinpath('cases')
@@ -54,6 +66,17 @@ default_env = {
 	for k, v in os.environ.items()
 	if ya_test_runner.util.environ.DEFAULT_FILTER(k, v)
 }
+
+# `prepare` scripts run `cargo build`; the host `rustc` used for build
+# scripts/proc-macros needs libz etc. on LD_LIBRARY_PATH. Fold in
+# CARGO_LD_LIBRARY_PATH the same way cargo.py does for its own commands.
+_cargo_ld_library_path = os.environ.get('CARGO_LD_LIBRARY_PATH', None)
+_base_ld_library_path = default_env.get('LD_LIBRARY_PATH', None)
+_new_ld_library_path = ':'.join(
+	filter(None, [_cargo_ld_library_path, _base_ld_library_path])
+)
+if _new_ld_library_path:
+	default_env['LD_LIBRARY_PATH'] = _new_ld_library_path
 
 
 class _SavedLog(typing.TypedDict):
@@ -538,9 +561,8 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				request_extra = {}
 				if 'stable' in self._test_case.description.tags:
 					request_extra['no_modules'] = True
-				for key in ('data_fees_limit', 'storage_page_cost', 'receipt_word_cost'):
-					if key in single_conf:
-						request_extra[key] = single_conf[key]
+				if 'bucket_totals' in single_conf:
+					request_extra['bucket_totals'] = single_conf['bucket_totals']
 
 				if not single_conf['message'].get('is_init', False):
 					code = None
@@ -702,6 +724,8 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 			res.result_kind == public_abi.ResultCode.VM_ERROR and res.result_data == 'timeout'
 		):
 			check_expected_hash = False  # Don't check hash for timeouts, as they can be flaky
+		if _is_ignore_hash_enabled():
+			check_expected_hash = False
 
 		if check_expected_hash:
 			expected_hash_path = Path(expected_hash_path)

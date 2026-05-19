@@ -365,10 +365,12 @@ generator.build(:phony, 'codegen') do
 	add_dependency $source_dir.join('doc', 'website', 'src', 'spec', 'appendix', 'constants.rst')
 end
 
+$cargo_ld_library_path = 'LD_LIBRARY_PATH="$${CARGO_LD_LIBRARY_PATH}$${LD_LIBRARY_PATH:+:$$LD_LIBRARY_PATH}"'
+
 generator.rule(:cargo) do
 	command \
 		'cd', Ninja::RawStr.new('$wd'),
-		Ninja::AND, Ninja::RawStr.new('$env'), 'cargo', Ninja::RawStr.new('$subcommand'), '--target', $rust_target, '--target-dir', $rust_target_dir.to_s, Ninja::RawStr.new('$extra_args'),
+		Ninja::AND, Ninja::RawStr.new($cargo_ld_library_path), Ninja::RawStr.new('$env'), 'cargo', Ninja::RawStr.new('$subcommand'), '--target', $rust_target, '--target-dir', $rust_target_dir.to_s, Ninja::RawStr.new('$extra_args'),
 		Ninja::AND, 'cd', $build_dir.expand_path.to_s,
 		Ninja::AND, 'touch', Ninja::VAR_OUT
 	description 'Running cargo $subcommand'
@@ -379,7 +381,7 @@ end
 generator.rule(:cargo_build) do
 	command \
 		'cd', Ninja::RawStr.new('$wd'),
-		Ninja::AND, Ninja::RawStr.new('$env'), 'cargo', 'build', '--target', $rust_target, '--target-dir', $rust_target_dir.to_s, Ninja::RawStr.new('$extra_args')
+		Ninja::AND, Ninja::RawStr.new($cargo_ld_library_path), Ninja::RawStr.new('$env'), 'cargo', 'build', '--target', $rust_target, '--target-dir', $rust_target_dir.to_s, Ninja::RawStr.new('$extra_args')
 
 	description 'Running cargo $subcommand'
 
@@ -485,12 +487,12 @@ generator.rule(:nix_eval) do
 end
 
 generator.build(:nix_eval, 'out/executor/vTEST/data/latest.json') do
-	var 'expr', 'let drv = import ./runners ; conv-hash = hash: if hash == "test" then "test" else builtins.convertHash { inherit hash; toHashFormat = "nix32"; } ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = conv-hash x.hash; }) drv)'
+	var 'expr', 'let drv = import ./runners { host-system = builtins.currentSystem; } ; conv-hash = hash: if hash == "test" then "test" else builtins.convertHash { inherit hash; toHashFormat = "nix32"; } ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = conv-hash x.hash; }) drv)'
 	var 'wd', $source_dir
 end
 
 generator.build(:nix_eval, 'out/executor/vTEST/data/all.json') do
-	var 'expr', 'let drv = import ./runners ; conv-hash = hash: if hash == "test" then "test" else builtins.convertHash { inherit hash; toHashFormat = "nix32"; } ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = [ (conv-hash x.hash) ]; }) drv)'
+	var 'expr', 'let drv = import ./runners { host-system = builtins.currentSystem; } ; conv-hash = hash: if hash == "test" then "test" else builtins.convertHash { inherit hash; toHashFormat = "nix32"; } ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = [ (conv-hash x.hash) ]; }) drv)'
 	var 'wd', $source_dir
 end
 
@@ -501,13 +503,14 @@ end
 
 generator.build(:CUSTOM_COMMAND, 'target/runners') do
 	var :command, [
-		'nix', 'build', '-v', '-L', '-o', $build_dir.join('runners-nix'), '--file', $source_dir.join('runners', 'build-here.nix'),
+		'nix', 'build', '-v', '-L', '-o', $build_dir.join('runners-nix'), "git+file:#{$source_dir}#debug-runners",
 		Ninja::AND, 'mkdir', '-p', './out/runners',
 		Ninja::AND, 'cp', '-r', './runners-nix/.', './out/runners/.',
 		Ninja::AND, 'chmod', '-R', '+w', './out/runners/.',
 	]
 
-	add_dependency $source_dir.join('runners', 'build-here.nix')
+	add_dependency $source_dir.join('flake.nix')
+	add_dependency $source_dir.join('runners', 'support', 'views', 'debug-build.nix')
 
 	add_implicit_dependency $source_dir.join('runners').glob('**/*').filter { |f|
 		f.file? && !f.each_filename.any? { |x| ["test", "tests", "fuzz"].include? x }

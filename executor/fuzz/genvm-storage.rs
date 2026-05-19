@@ -149,11 +149,36 @@ async fn run_storage_fuzz(input: FuzzInput) -> anyhow::Result<()> {
     let host = MockHostStorageHolder(Arc::new(tokio::sync::Mutex::new(mock_host)));
     let mut storage = Storage::new(
         address,
-        genvm::rt::vm::storage::Limiter::new(sync::DArc::new(rt::DataFeesLimit::new(
-            primitive_types::U256::MAX,
-            0,
-            0,
-        ))),
+        genvm::rt::vm::storage::Limiter::new(sync::DArc::new(
+            rt::fees::DataLimit::new(
+                vec![primitive_types::U256::MAX],
+                genvm::config::FeesConfig {
+                    expr_prelude: String::new(),
+                    storage: genvm::config::FeesBucketConfig {
+                        bucket_no: 0,
+                        subtract_on_start_expr: "0".into(),
+                        delta_expr: r"\attrs = 0".into(),
+                    },
+                    message_receipt: genvm::config::FeesBucketConfig {
+                        bucket_no: 0,
+                        subtract_on_start_expr: "0".into(),
+                        delta_expr: r"\attrs = 0".into(),
+                    },
+                    nondet_output: genvm::config::FeesBucketConfig {
+                        bucket_no: 0,
+                        subtract_on_start_expr: "0".into(),
+                        delta_expr: r"\attrs = 0".into(),
+                    },
+                    message_fee: genvm::config::FeesBucketConfig {
+                        bucket_no: 0,
+                        subtract_on_start_expr: "0".into(),
+                        delta_expr: r"\attrs = 0".into(),
+                    },
+                },
+                std::collections::BTreeMap::new(),
+            )
+            .unwrap(),
+        )),
         host.clone(),
     );
 

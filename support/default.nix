@@ -1,5 +1,6 @@
 { pkgs
 , root-src
+, system
 }:
 let
 	mergeDoubleDepthAttrs = l: r:
@@ -68,13 +69,13 @@ let
 
 		dontFixup = true;
 	};
-	deps = import ./fetch-deps.nix { inherit pkgs; };
+	deps = import ../runners/support/deps/fetch-deps.nix { inherit pkgs; };
 in rec {
 	inherit pkgs deps;
 
 	root-src = full-src;
 
-	zig = import ./zig.nix { inherit pkgs deps; };
+	zig = import ./zig.nix { inherit pkgs deps system; };
 
 	get-root-subtree = paths:
 		let
@@ -98,24 +99,30 @@ in rec {
 						# builtins.trace "${relPath} -> ${if allow-dflt then "true" else "false"}" allow-dflt;
 		};
 
-	compile-rust = import ./compile-rust.nix { inherit pkgs zig; withZig = true; };
+	compile-rust = import ./compile-rust.nix { inherit pkgs deps zig system; withZig = true; };
 
 	patch-yaml-schema = pkgs.writers.writePython3Bin "patch-yaml-schema" { doCheck = false; } (builtins.readFile ./scripts/remove-schema.py);
 
 	patch-manifest = pkgs.writers.writePython3Bin "patch-manifest" {
 		doCheck = false;
-		libraries = [ pkgs.python312Packages.ruamel-yaml ];
+		libraries = [ pkgs.python3Packages.ruamel-yaml ];
 	} (builtins.readFile ./scripts/patch-and-check-manifest.py);
 
 	patch-llm-config = pkgs.writers.writePython3Bin "patch-llm-config" {
 		doCheck = false;
-		libraries = [ pkgs.python312Packages.ruamel-yaml ];
+		libraries = [ pkgs.python3Packages.ruamel-yaml ];
 	} (builtins.readFile ./scripts/patch-llm-config.py);
 
 	patch-web-config = pkgs.writers.writePython3Bin "patch-web-config" {
 		doCheck = false;
-		libraries = [ pkgs.python312Packages.ruamel-yaml ];
+		libraries = [ pkgs.python3Packages.ruamel-yaml ];
 	} (builtins.readFile ./scripts/patch-web-config.py);
+
+	patch-rpath = pkgs.writers.writePython3Bin "patch-rpath" {
+		doCheck = false;
+		libraries = [ pkgs.python3Packages.lief ];
+		makeWrapperArgs = [ "--prefix" "PATH" ":" "${pkgs.rcodesign}/bin" ];
+	} (builtins.readFile ./scripts/patch-rpath.py);
 
 	merge-components = builtins.foldl' mergeDoubleDepthAttrs {};
 }

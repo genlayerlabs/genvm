@@ -161,7 +161,7 @@ pub struct FullResult {
     pub nondet_disagreement: Option<u32>,
     pub nondet_results: Vec<bytes::Bytes>,
 
-    pub data_fees_remaining: u64,
+    pub data_fees_remaining: Vec<primitive_types::U256>,
 }
 
 impl FullResult {
@@ -175,7 +175,7 @@ impl FullResult {
             emissions: Vec::new(),
             nondet_disagreement: None,
             nondet_results: Vec::new(),
-            data_fees_remaining: 0,
+            data_fees_remaining: Vec::new(),
         }
     }
 }
@@ -196,7 +196,7 @@ impl FullResult {
         rt_result: rt::vm::FullResult,
         nondet_results: Vec<bytes::Bytes>,
         nondet_disagreement: Option<u32>,
-        data_fees_remaining: u64,
+        data_fees_remaining: Vec<primitive_types::U256>,
     ) -> Self {
         #[derive(serde::Serialize)]
         struct Hashable<'a> {
@@ -204,7 +204,7 @@ impl FullResult {
             data: &'a calldata::Value,
             fingerprint: &'a Option<rt::errors::Fingerprint>,
             storage_changes: &'a Vec<rt::vm::storage::Delta>,
-            data_fees_remaining: u64,
+            data_fees_remaining: &'a Vec<primitive_types::U256>,
         }
 
         impl<W: calldata::Writer> calldata::codec::Encode<W> for Hashable<'_> {
@@ -217,7 +217,7 @@ impl FullResult {
                 calldata::codec::Encode::encode(self.data, enc)?;
 
                 enc.push_map_k("data_fees_remaining")?;
-                calldata::codec::Encode::encode(&self.data_fees_remaining, enc)?;
+                calldata::codec::Encode::encode(self.data_fees_remaining, enc)?;
 
                 enc.push_map_k("fingerprint")?;
                 calldata::codec::Encode::encode(self.fingerprint, enc)?;
@@ -237,7 +237,7 @@ impl FullResult {
             data: &rt_result.data,
             fingerprint: &rt_result.fingerprint,
             storage_changes: &rt_result.storage_changes,
-            data_fees_remaining,
+            data_fees_remaining: &data_fees_remaining,
         };
 
         let as_value = calldata::to_value(&hashable);

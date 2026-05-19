@@ -8,11 +8,9 @@
 //! - [`gl_call`]: Message types for gl_call operations
 //! - [`wasi`]: WASI bindings for storage, balance, and gl_call
 
-use std::collections::BTreeMap;
-
-use bytes::Bytes;
-
 use crate::calldata;
+use bytes::Bytes;
+use std::collections::BTreeMap;
 
 #[cfg(feature = "arbitrary")]
 pub(crate) mod arb;
@@ -35,6 +33,7 @@ pub enum ExecutionEmission {
         value: primitive_types::U256,
     },
     PostMessage {
+        call_key: primitive_types::U256,
         address: calldata::Address,
         calldata: calldata::Value,
         value: primitive_types::U256,
@@ -51,4 +50,27 @@ pub enum ExecutionEmission {
         topics: Vec<Bytes>,
         blob: BTreeMap<String, calldata::Value>,
     },
+}
+
+pub mod call_key {
+    pub const DEPLOY: primitive_types::U256 = primitive_types::U256::zero();
+    pub const UNNAMED: primitive_types::U256 = primitive_types::U256::zero();
+
+    pub fn for_method(name: &str) -> primitive_types::U256 {
+        use sha3::Digest;
+
+        let name = name.as_bytes();
+        let mut call_key = [0u8; 32];
+
+        if name.len() < 32 {
+            call_key[..name.len()].copy_from_slice(name);
+        } else {
+            let mut hasher = sha3::Keccak256::new();
+            hasher.update(name);
+            call_key.copy_from_slice(&hasher.finalize());
+            call_key[31] |= 1;
+        }
+
+        primitive_types::U256::from_big_endian(&call_key)
+    }
 }

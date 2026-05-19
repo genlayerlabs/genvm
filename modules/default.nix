@@ -1,17 +1,21 @@
 { pkgs
 , root-src
 , compile-rust
-, components
 , get-root-subtree
 , build-config
 , patch-yaml-schema
 , patch-manifest
 , patch-llm-config
 , patch-web-config
+, patch-rpath
+, host-system
+, host-system-as-genvm
+, compiled-libs
 , ...
-}:
+}@args:
 let
 	lib = pkgs.lib;
+
 	make-for-target = target:
 		let
 			exe = compile-rust rec {
@@ -26,37 +30,34 @@ let
 				src = get-root-subtree [
 					"modules/implementation"
 					"modules/interfaces"
-					"executor/crates/common"
-					"executor/crates/sdk-rs"
-					"executor/crates/calldata"
+					"executor/crates"
 				];
 				sourceRoot = "./source/modules/implementation";
 
-				extraLibs = [
-					components.${target}.liblua
-				] ++ (if target == "arm64-macos" then [ components.${target}.libiconv ] else [ components.${target}.libc ]);
+				extraLibs = compiled-libs.${target};
 
 				LUA_LIB_NAME = "lua";
 
 				GENVM_PROFILE = build-config.executor-version;
 			};
 		in pkgs.stdenvNoCC.mkDerivation rec {
-			name = "genvm-modules-${target}";
+			name = "genvm-manager-${target}";
 
 			srcs = [
 				exe
 				./install
-			];
+			] ++ compiled-libs.${target};
 
 
 			dontUnpack = true;
 			dontConfigure = true;
 			dontBuild = true;
 
-			nativeBuildInputs = [ pkgs.makeWrapper patch-yaml-schema patch-manifest patch-llm-config patch-web-config ];
+			nativeBuildInputs = [ pkgs.makeWrapper patch-yaml-schema patch-manifest patch-llm-config patch-web-config patch-rpath ];
 
 			installPhase = ''
 				mkdir -p $out/bin
+				mkdir -p $out/lib
 				cp ${exe} "$out/bin/genvm-modules"
 				for src in $srcs; do
 					if [[ "$src" != "${exe}" ]]
@@ -67,20 +68,16 @@ let
 
 				chmod -R u+w "$out"
 				patch-yaml-schema --tag ${build-config.executor-version} "$out"
-
-				patch-manifest --tag ${build-config.executor-version} "$out/data/manifest.yaml"
 				patch-llm-config --tag ${build-config.executor-version} "$out/config/genvm-module-llm.yaml"
 				patch-web-config --tag ${build-config.executor-version} "$out/config/genvm-module-web.yaml"
+				patch-manifest --tag ${build-config.executor-version} "$out/data/manifest.yaml"
+
+				patch-rpath --codesign --rpath '$ORIGIN/../lib' "$out/bin/genvm-modules"
 			'';
 		};
 in {
-	amd64-linux = {
-		modules = make-for-target "amd64-linux";
-	};
-	arm64-linux = {
-		modules = make-for-target "arm64-linux";
-	};
-	arm64-macos = {
-		modules = make-for-target "arm64-macos";
-	};
+	manager = make-for-target host-system-as-genvm;
+	manager-amd64-linux = make-for-target "amd64-linux";
+	manager-arm64-linux = make-for-target "arm64-linux";
+	manager-arm64-macos = make-for-target "arm64-macos";
 }

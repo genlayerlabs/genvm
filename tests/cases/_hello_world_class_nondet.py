@@ -11,5 +11,5 @@ from genlayer.types import *
 
 class Contract(gl.contract.Contract):
 	def __init__(self):
-		gl.vm.run_nondet_unsafe(lambda: None, lambda x: True)
+		gl.vm.run_nondet(lambda: None, lambda x: True)
 		print('hello world')

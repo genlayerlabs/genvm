@@ -32,6 +32,7 @@ class Context:
 	shared: SharedContext
 	parser: argparse.ArgumentParser
 	run_parser: argparse.ArgumentParser
+	filter_parser: argparse.ArgumentParser
 	current_path: Path
 	plugins: dict[str, typing.Any]
 
@@ -106,6 +107,7 @@ class Env(typing.NamedTuple):
 class InitialEnv(typing.NamedTuple):
 	parser: argparse.ArgumentParser
 	run_parser: argparse.ArgumentParser
+	filter_parser: argparse.ArgumentParser
 	remaining_args: list[str]
 
 
@@ -114,6 +116,7 @@ def run(shared: SharedContext, env: InitialEnv, /) -> Env:
 	ctx.shared = shared
 	ctx.parser = env.parser
 	ctx.run_parser = env.run_parser
+	ctx.filter_parser = env.filter_parser
 	ctx.plugins = {}
 	ctx._collectors = []
 	ctx._reporter = []

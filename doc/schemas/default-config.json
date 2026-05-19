@@ -1,5 +1,5 @@
 {
-  "$id": "https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/default-config.json",
+  "$id": "https://raw.githubusercontent.com/genlayerlabs/genvm/refs/heads/main/doc/schemas/default-config.json",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "GenVM configuration",
   "genvm": {
@@ -20,6 +20,12 @@
           }
         },
         "required": ["modules"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "fees": { "$ref": "#/definitions/genvm-fees-conf" }
+        }
       }
     ]
   },
@@ -257,6 +263,56 @@
         }
       },
       "required": ["bind_address", "lua_script_path", "vm_count", "lua_path"]
+    },
+    "u256": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "description": "a u64 integer"
+        },
+        {
+          "type": "string",
+          "pattern": "^(0x[0-9a-fA-F]+|[0-9]+)$",
+          "description": "a decimal or 0x-prefixed hex string"
+        }
+      ]
+    },
+    "genvm-fees-bucket-conf": {
+      "type": "object",
+      "properties": {
+        "bucket_no": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "subtract_on_start_expr": {
+          "type": "string",
+          "default": "0",
+          "description": "cost charged once, up-front, when the bucket is created (fixed part of `start + sum of per-change`); see `expr_prelude`"
+        },
+        "delta_expr": {
+          "type": "string",
+          "description": "cost charged per change, evaluated with the `units` variable; see `expr_prelude`"
+        }
+      },
+      "required": ["bucket_no", "delta_expr"],
+      "additionalProperties": false
+    },
+    "genvm-fees-conf": {
+      "type": "object",
+      "properties": {
+        "expr_prelude": {
+          "type": "string",
+          "description": "expression prelude prepended to every bucket expression (shared `let` definitions)"
+        },
+        "storage": { "$ref": "#/definitions/genvm-fees-bucket-conf" },
+        "message_receipt": { "$ref": "#/definitions/genvm-fees-bucket-conf" },
+        "nondet_output": { "$ref": "#/definitions/genvm-fees-bucket-conf" },
+        "message_fee": { "$ref": "#/definitions/genvm-fees-bucket-conf" }
+      },
+      "required": ["expr_prelude", "storage", "message_receipt", "nondet_output", "message_fee"],
+      "additionalProperties": false
     },
     "base-conf": {
       "type": "object",

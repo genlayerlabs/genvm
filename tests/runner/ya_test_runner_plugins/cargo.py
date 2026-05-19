@@ -44,6 +44,13 @@ def _get_default_env() -> dict[str, str]:
 		if ya_test_runner.util.environ.DEFAULT_FILTER(k, v)
 	}
 
+	cargo_ld_library_path = os.environ.get('CARGO_LD_LIBRARY_PATH', None)
+	base_ld_library_path = env.get('LD_LIBRARY_PATH', None)
+	new_ld_library_path = ':'.join(
+		filter(None, [cargo_ld_library_path, base_ld_library_path])
+	)
+	env['LD_LIBRARY_PATH'] = new_ld_library_path
+
 	if _is_coverage_enabled():
 		# Enable coverage instrumentation
 		env['RUSTFLAGS'] = '-C instrument-coverage'

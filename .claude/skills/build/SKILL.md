@@ -51,16 +51,16 @@ nix develop .#full --command python3 build/out/bin/post-install.py --create-venv
 To develop/modify a runner (e.g., cloudpickle):
 
 1. **Enable dev mode:**
-   Set `runners/support/current/dev-mode.nix` to `true`
+   Set `runners/support/versions/dev-mode.nix` to `true`
 
 2. **Set hash to "test":**
-   In `runners/support/current/hashes.nix`, set the runner's hash to `"test"`
+   In `runners/support/versions/current.nix`, set the runner's hash to `"test"`
 
 3. **Make your modifications and run tests**
    With dev-mode enabled and hash set to "test", you can build and run tests.
 
 4. **Disable dev mode:**
-   Set `runners/support/current/dev-mode.nix` back to `false`. The build will now tell you to set hashes to `null`.
+   Set `runners/support/versions/dev-mode.nix` back to `false`. The build will now tell you to set hashes to `null`.
 
 5. **Set hashes to null and build:**
    Set the runner's hash (and dependent runners' hashes) to `null`, then build:

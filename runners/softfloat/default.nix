@@ -2,10 +2,11 @@
 , stdenvNoCC
 , lib
 , runnersLib
+, pkgs-host
 , ...
 }@args:
 let
-	runnerJSON = pkgs.writeText "runner.json" (builtins.toJSON { LinkWasm = "softfloat.wasm"; });
+	runnerJSON = pkgs-host.writeText "runner.json" (builtins.toJSON { LinkWasm = "softfloat.wasm"; });
 in
 [
 	(runnersLib.package {

@@ -37,7 +37,7 @@ def strict_eq[T: calldata.Decoded](fn: typing.Callable[[], T], /) -> Lazy[T]:
 	:param fn: function that provides result that will be validated
 
 	.. warning::
-		See :py:func:`genlayer.gl.vm.run_nondet` for description of data transformations
+		See :py:func:`genlayer.gl.vm.run_nondet_default` for description of data transformations
 	"""
 
 	def validator_fn(
@@ -46,7 +46,7 @@ def strict_eq[T: calldata.Decoded](fn: typing.Callable[[], T], /) -> Lazy[T]:
 		my_res = vm.spawn_sandbox(fn)
 		return my_res == leaders_res
 
-	return vm.run_nondet_unsafe.lazy(fn, validator_fn)
+	return vm.run_nondet.lazy(fn, validator_fn)
 
 
 from genlayer.nondet import _decode_nondet
@@ -60,7 +60,7 @@ def prompt_comparative[T: calldata.Decoded](
 	Comparative equivalence principle that utilizes NLP for verifying that results are equivalent
 
 	For validator: in case of non-``Return`` result in ``fn``,
-	agreement will be decided by :py:func:`genlayer.gl.vm.run_nondet`,
+	agreement will be decided by :py:func:`genlayer.gl.vm.run_nondet_default`,
 	which executed validator wrapper function in a sandbox VM.
 	If on the other hand leader reported an error, while our function execution is successful,
 	the validator votes ``False``.
@@ -68,13 +68,13 @@ def prompt_comparative[T: calldata.Decoded](
 	:param fn: function that does all the job
 	:param principle: principle with which equivalence will be evaluated in the validator (via performing NLP)
 
-	See :py:func:`genlayer.gl.vm.run_nondet` for description of data transformations
+	See :py:func:`genlayer.gl.vm.run_nondet_default` for description of data transformations
 
 	.. note::
 		As leader results are encoded as calldata, :py:func:`format` is used for string representation. However, operating on strings by yourself is more safe in general
 
 	.. warning::
-		See :py:func:`genlayer.gl.vm.run_nondet` for description of data transformations
+		See :py:func:`genlayer.gl.vm.run_nondet_default` for description of data transformations
 	"""
 
 	def validator_fn(
@@ -99,7 +99,7 @@ def prompt_comparative[T: calldata.Decoded](
 
 		return ret.get()
 
-	return vm.run_nondet.lazy(fn, validator_fn)
+	return vm.run_nondet_default.lazy(fn, validator_fn)
 
 
 @_lazy_api
@@ -114,7 +114,7 @@ def prompt_non_comparative(
 	This principle is useful when task is subjective. For instance, when you want to check if some text is a good summary of the input text.
 
 	For validator: in case of non-``Return`` result in ``fn``,
-	agreement will be decided by :py:func:`genlayer.gl.vm.run_nondet`,
+	agreement will be decided by :py:func:`genlayer.gl.vm.run_nondet_default`,
 	which executed validator wrapper function in a sandbox VM.
 	If on the other hand leader reported an error, while our function execution is successful,
 	the validator votes ``False``.
@@ -160,4 +160,4 @@ def prompt_non_comparative(
 		ret = ret.get()
 		return ret
 
-	return vm.run_nondet.lazy(leader_fn, validator_fn)
+	return vm.run_nondet_default.lazy(leader_fn, validator_fn)

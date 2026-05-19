@@ -1,9 +1,10 @@
 { pkgs
-, zig
 , deps
+, zig
+, ...
 }:
 let
-	iconv-src = deps."libiconv";
+	iconv-src = deps."libiconv-1.18";
 in pkgs.stdenvNoCC.mkDerivation {
 	name = "libiconv";
 

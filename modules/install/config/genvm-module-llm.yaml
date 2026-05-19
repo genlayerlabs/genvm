@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=../../../doc/schemas/default-config.json#llm
-# yaml-language-server: $schema=https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/@GENVM_TAG@/doc/schemas/default-config.json#llm
+# yaml-language-server: $schema=https://raw.githubusercontent.com/genlayerlabs/genvm/refs/heads/@GENVM_TAG@/doc/schemas/default-config.json#llm
 
 bind_address: 127.0.0.1:3031
 
@@ -7,7 +7,8 @@ lua_script_path: ${exeDir}/../config/genvm-llm-default.lua
 vm_count: 6
 lua_path: ${exeDir}/../lib/genvm-lua/?.lua
 signer_url: "http://localhost:9155/genvm/sign"
-signer_headers: {}
+signer_headers:
+  "x-admin-auth": "#{admin_token}"
 
 threads: 4
 blocking_threads: 16

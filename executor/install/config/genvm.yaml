@@ -1,10 +1,117 @@
 # yaml-language-server: $schema=../../../doc/schemas/default-config.json#genvm
-# yaml-language-server: $schema=https://raw.githubusercontent.com/yeagerai/genvm/refs/heads/main/doc/schemas/default-config.json#genvm
+# yaml-language-server: $schema=https://raw.githubusercontent.com/genlayerlabs/genvm/refs/heads/main/doc/schemas/default-config.json#genvm
 modules:
   llm:
     address: ws://127.0.0.1:3031
   web:
     address: ws://127.0.0.1:3032
+
+fees:
+  # Required host-provided `node` fields (from gas_data):
+  #   node.storageUnitPrice       - price per storage page
+  #   node.receiptGasPerByte      - price per receipt/output byte
+  #   node.gasPerChangedSlot      - price per changed storage slot
+  #   node.intrinsicGas           - per-tx intrinsic gas
+  #   node.bootloaderOverhead     - per-tx bootloader overhead
+  #   node.fixedProposeReceiptGas - fixed cost of a propose receipt
+  #   node.fixedMessageRevealGas  - fixed cost of a message reveal
+  #   node.genPerTimeUnit         - GEN per time unit (0 disables the time term)
+  # Optional:
+  #   node.validatorsPerRound[]   - validator count per round
+  #                                 (defaults to defaultValidatorsPerRound below)
+  expr_prelude: |
+    let Y = \f = (\x = f (\v = x x v)) (\x = f (\v = x x v)) in
+    let fold = \arr acc fn =
+        Y (\go i a =
+            if i >= arrayLen arr then a
+            else go (i + 1) (fn a (arrayGetElem arr i))
+        ) 0 acc in
+    let foldRange = \lo hi acc fn =
+        Y (\go i a =
+            if i >= hi then a
+            else go (i + 1) (fn a i)
+        ) lo acc in
+    let ceilDiv = \a b = floor ((a + b - 1) / b) in
+    let idiv = \a b = floor (a / b) in
+    # validators per round; falls back to the governance default table when
+    # the node does not provide node.validatorsPerRound
+    let defaultValidatorsPerRound =
+      [5, 7, 11, 13, 23, 25, 47, 49, 95, 97, 191, 193, 383, 385, 767, 769, 1535, 1537] in
+    let validatorsPerRound =
+      if hasKey node "validatorsPerRound" then node.validatorsPerRound
+      else defaultValidatorsPerRound in
+    # leaf-node message fee floor = minPrimaryFees * lifecycleMultiplier
+    # feeParams: object { appealRounds, leaderTimeunitsAllocation,
+    #   validatorTimeunitsAllocation, executionBudgetPerRound, rotations[] }
+    # onAcceptance: per-message lifecycle flag (1/0)
+    # uses validatorsPerRound[] (node or default), node.genPerTimeUnit
+    let messageFeeFloor = \feeParams onAcceptance =
+      let appealRounds = feeParams.appealRounds in
+      let leaderTU = feeParams.leaderTimeunitsAllocation in
+      let validatorTU = feeParams.validatorTimeunitsAllocation in
+      let execBudgetPerRound = feeParams.executionBudgetPerRound in
+      let rotations = feeParams.rotations in
+      # round parity: odd when round - 2*(round/2) == 1
+      let isOdd = \n = n - 2 * idiv n 2 == 1 in
+      # 1. rotation count per round
+      let rotationsForRound = \round =
+        if round == 0 then arrayGetElem rotations 0 + 1
+        else if isOdd round then 1
+        else arrayGetElem rotations (idiv round 2) + 1 in
+      # 2. consensus (time) term, round = 0 .. 2*appealRounds
+      let consensusTerm = foldRange 0 (2 * appealRounds + 1) 0 (\acc round =
+        acc + rotationsForRound round
+            * (leaderTU + arrayGetElem validatorsPerRound round * validatorTU)) in
+      # 3. leader rounds = (Σ i=0..appealRounds (rotations[i]+1)) + appealRounds
+      let leaderRounds =
+        foldRange 0 (appealRounds + 1) 0 (\acc i = acc + arrayGetElem rotations i + 1)
+          + appealRounds in
+      # 4. execution-budget term
+      let executionTerm = execBudgetPerRound * leaderRounds in
+      # 5. minimum primary fees (caps forced to zero by construction)
+      let minPrimaryFees =
+        (if node.genPerTimeUnit > 0 then node.genPerTimeUnit * consensusTerm else consensusTerm)
+          + executionTerm in
+      # 6. lifecycle multiplier
+      let lifecycleMultiplier = if onAcceptance == 1 then appealRounds + 1 else 1 in
+      minPrimaryFees * lifecycleMultiplier
+    in
+  storage:
+    bucket_no: 1
+    subtract_on_start_expr: |
+      0
+    delta_expr: |
+      \a = a.pages * node.storageUnitPrice
+  message_receipt:
+    bucket_no: 0
+    subtract_on_start_expr: |
+      node.fixedProposeReceiptGas # for propose
+        + node.intrinsicGas
+        + node.bootloaderOverhead
+        + 7 * node.gasPerChangedSlot
+        + node.fixedMessageRevealGas # for reveal
+        + node.intrinsicGas
+        + node.bootloaderOverhead
+        + 32 * node.gasPerChangedSlot # for 32 bytes of length
+    delta_expr: |
+      \a =
+      let real_length = 32 + 32 + ceilDiv a.calldataLength 32 * 32 in # bytes are indirection + length + data, rounded up to 32 bytes
+      real_length * node.receiptGasPerByte + 1 * node.gasPerChangedSlot
+  nondet_output:
+    bucket_no: 0
+    subtract_on_start_expr: |
+      32 * node.receiptGasPerByte # for 32 bytes of length
+    delta_expr: |
+      \a = (32 + 32 + ceilDiv a.outputLength 32 * 32) * node.receiptGasPerByte # bytes are indirection + length + data, rounded up to 32 bytes
+  message_fee:
+    bucket_no: 2
+    subtract_on_start_expr: |
+      0
+    delta_expr: |
+      \a =
+      if a.isInternal == 1
+      then messageFeeFloor a.matchedFeeParams a.onAcceptance
+      else 0
 
 threads: 2
 blocking_threads: 4

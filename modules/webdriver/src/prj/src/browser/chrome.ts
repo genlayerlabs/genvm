@@ -1,12 +1,9 @@
 import puppeteer, * as pup from 'puppeteer-core';
-import * as logger from './logging.js';
+import * as logger from '../logging.js';
 import * as util from 'util';
-import { envDurationMs, envInt, formatDurationMs } from './duration.js';
-
-export interface BrowserHandle {
-	close(): Promise<void>;
-	get(): pup.Browser;
-}
+import * as child_process from 'child_process';
+import { envDurationMs, envInt, formatDurationMs } from '../duration.js';
+import type * as browser from './index.js';
 
 class BrowserHolder {
 	browser: pup.Browser;
@@ -88,8 +85,6 @@ async function newBrowser(): Promise<BrowserHolder> {
 	return new BrowserHolder(realBrowser);
 }
 
-import * as child_process from 'child_process';
-
 async function getRssMBByPid(pid: number): Promise<number> {
 	try {
 		const output = await util.promisify(child_process.exec)(
@@ -115,7 +110,7 @@ async function getTotalRssMB(pid: number): Promise<number> {
 	return (await getSelfRssMB()) + (await getRssMBByPid(pid));
 }
 
-export class BrowserManager {
+class ChromeBrowserManager implements browser.Manager {
 	private holder: BrowserHolder;
 	private used: boolean;
 	private lastMemoryMB: number | null = null;
@@ -184,14 +179,22 @@ export class BrowserManager {
 		}, ROTATION_CHECK_INTERVAL_MS);
 	}
 
-	getBrowser(): BrowserHandle {
+	getBrowser(): browser.Handle {
 		this.holder.counter++;
 		this.used = true;
 		return this.holder;
 	}
 
-	static INSTANCE: Promise<BrowserManager> = (async () => {
-		const browser = await newBrowser();
-		return new BrowserManager(browser);
-	})();
+	static create(): Promise<ChromeBrowserManager> {
+		return (async () => {
+			const browser = await newBrowser();
+			return new ChromeBrowserManager(browser);
+		})();
+	}
 }
+
+export const INSTANCE: Promise<browser.Manager> =
+	ChromeBrowserManager.create().catch((error) => {
+		logger.log('error', 'failed to create initial browser', { error });
+		process.exit(1);
+	});

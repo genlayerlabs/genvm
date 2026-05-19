@@ -33,6 +33,21 @@ from . import public_abi
 ACCOUNT_ADDR_SIZE = 20
 SLOT_ID_SIZE = 32
 
+# Default host-provided `node` fee constants (see fees.expr_prelude in
+# install/config/genvm.yaml). Values are strings (gas_data is Map<str, str>)
+# and are kept minimal/deterministic for tests. `validatorsPerRound` is
+# intentionally omitted so the prelude default table is used.
+DEFAULT_GAS_DATA: dict[str, str] = {
+	'storageUnitPrice': '1',
+	'receiptGasPerByte': '1',
+	'gasPerChangedSlot': '1',
+	'intrinsicGas': '0',
+	'bootloaderOverhead': '0',
+	'fixedProposeReceiptGas': '0',
+	'fixedMessageRevealGas': '0',
+	'genPerTimeUnit': '0',
+}
+
 from .logger import Logger
 
 
@@ -421,11 +436,11 @@ async def run_genvm(
 	capture_output: bool = True,
 	message: Message,
 	host_data: str = '',
+	gas_data: dict[str, str] | None = None,
 	host: str,
 	extra_args: list[str] = [],
-	data_fees_limit: int = 10_000_000,
-	storage_page_cost: int = 1,
-	receipt_word_cost: int = 1,
+	# default config fee buckets use bucket_no 0, 1 and 2
+	bucket_totals: list[int] = [10_000_000, 10_000_000, 10_000_000],
 	code: bytes | None = None,
 	calldata: bytes,
 	leader_nondet_results: list[bytes] | None = None,
@@ -433,6 +448,9 @@ async def run_genvm(
 	shutdown_early: asyncio.Event | None = None,
 ) -> RunHostAndProgramRes:
 	logger = ctx.logger
+
+	# `node` fee constants are an ExecutionData field (no longer in host_data).
+	effective_gas_data = DEFAULT_GAS_DATA if gas_data is None else gas_data
 
 	perf_timeline: dict[str, typing.Any] = {
 		'run_started_s': time.perf_counter(),
@@ -468,9 +486,8 @@ async def run_genvm(
 					'code': code,
 					'calldata': calldata,
 					'leader_nondet_results': leader_nondet_results,
-					'data_fees_limit': data_fees_limit,
-					'storage_page_cost': storage_page_cost,
-					'receipt_word_cost': receipt_word_cost,
+					'bucket_totals': bucket_totals,
+					'gas_data': effective_gas_data,
 					**request_extra,
 				}
 			),
