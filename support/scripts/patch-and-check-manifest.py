@@ -30,17 +30,22 @@ def fetch_version_tuple(version_str: str) -> tuple[int, int, int]:
 
 if args.tag not in executor_versions:
 	(major, minor, patch) = fetch_version_tuple(args.tag)
-	patched = False
-	for i in range(patch):
-		prev_patch = patch - 1 - i
-		previous_version = f'v{major}.{minor}.{prev_patch}'
-		if previous_version in executor_versions:
-			if not patched:
-				executor_versions[args.tag] = executor_versions[previous_version]
-				patched = True
-			del executor_versions[previous_version]
-	if not patched:
-		raise ValueError(f'Could not find any previous version for tag {args.tag}')
+	base_version = f'v{major}.{minor}.{patch}'
+	if base_version in executor_versions:
+		executor_versions[args.tag] = executor_versions[base_version]
+		del executor_versions[base_version]
+	else:
+		patched = False
+		for i in range(patch):
+			prev_patch = patch - 1 - i
+			previous_version = f'v{major}.{minor}.{prev_patch}'
+			if previous_version in executor_versions:
+				if not patched:
+					executor_versions[args.tag] = executor_versions[previous_version]
+					patched = True
+				del executor_versions[previous_version]
+		if not patched:
+			raise ValueError(f'Could not find any previous version for tag {args.tag}')
 
 x = list(executor_versions.keys())
 x.sort()

@@ -34,7 +34,7 @@ while [[ $# -gt 0 ]]; do
 			;;
 		-h|--help)
 			echo "Usage: $0 [--target TARGET] [--executor-version VERSION]"
-			echo "  --target TARGET              Specify the target platform (default: universal)"
+			echo "  --target TARGET              Specify the target platform"
 			echo "  --executor-version VERSION   Specify the executor version"
 			exit 0
 			;;

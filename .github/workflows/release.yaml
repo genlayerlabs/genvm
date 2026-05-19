@@ -59,11 +59,11 @@ jobs:
           fi
           echo "new version will be: ${{ steps.determine-version.outputs.new_version }}"
 
-  build-universal:
+  build-runners-all:
     needs: [gen-tag]
     uses: ./.github/workflows/incl_build_trg.yaml
     with:
-      target: universal
+      target: runners-all
       executor_version: ${{ needs.gen-tag.outputs.tag }}
     secrets:
       GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
@@ -134,7 +134,7 @@ jobs:
   test-linux-amd64:
     needs:
       - build-linux-amd64
-      - build-universal
+      - build-runners-all
       - gen-tag
     runs-on: ubuntu-latest
     steps:
@@ -151,10 +151,10 @@ jobs:
           mkdir -p build/out && \
           pushd build/out && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-amd64.tar.xz ${{ needs.build-linux-amd64.outputs.artifact_url }} && \
-          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-universal.tar.xz ${{ needs.build-universal.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-runners-all.tar.xz ${{ needs.build-runners-all.outputs.artifact_url }} && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-amd64-executor.tar.xz ${{ needs.build-linux-amd64.outputs.secondary_artifact_url }} && \
           tar -xf genvm-linux-amd64.tar.xz --no-same-owner && \
-          tar -xf genvm-universal.tar.xz --no-same-owner && \
+          tar -xf genvm-runners-all.tar.xz --no-same-owner && \
           tar -xf genvm-linux-amd64-executor.tar.xz --no-same-owner && \
           popd && \
           true
@@ -170,7 +170,7 @@ jobs:
   test-macos-arm64:
     needs:
       - build-macos-arm64
-      - build-universal
+      - build-runners-all
       - gen-tag
     runs-on: macos-latest
     steps:
@@ -187,10 +187,10 @@ jobs:
           mkdir -p build/out && \
           pushd build/out && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-macos-arm64.tar.xz ${{ needs.build-macos-arm64.outputs.artifact_url }} && \
-          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-universal.tar.xz ${{ needs.build-universal.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-runners-all.tar.xz ${{ needs.build-runners-all.outputs.artifact_url }} && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-macos-arm64-executor.tar.xz ${{ needs.build-macos-arm64.outputs.secondary_artifact_url }} && \
           tar -xf genvm-macos-arm64.tar.xz --no-same-owner && \
-          tar -xf genvm-universal.tar.xz --no-same-owner && \
+          tar -xf genvm-runners-all.tar.xz --no-same-owner && \
           tar -xf genvm-macos-arm64-executor.tar.xz --no-same-owner && \
           popd && \
           true
@@ -219,7 +219,7 @@ jobs:
       - build-linux-amd64
       - build-linux-arm64
       - build-macos-arm64
-      - build-universal
+      - build-runners-all
       - test-linux-amd64
       - test-linux-arm64
       - test-macos-arm64
@@ -246,7 +246,7 @@ jobs:
             poetry publish -r test-pypi && \
             popd
       - run: |
-          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-universal.tar.xz ${{ needs.build-universal.outputs.artifact_url }} && \
+          curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-runners-all.tar.xz ${{ needs.build-runners-all.outputs.artifact_url }} && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-amd64.tar.xz ${{ needs.build-linux-amd64.outputs.artifact_url }} && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-linux-arm64.tar.xz ${{ needs.build-linux-arm64.outputs.artifact_url }} && \
           curl -L --fail-with-body -H 'Accept: application/octet-stream' -o genvm-macos-arm64.tar.xz ${{ needs.build-macos-arm64.outputs.artifact_url }} && \
@@ -275,7 +275,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            genvm-universal.tar.xz
+            genvm-runners-all.tar.xz
             genvm-linux-amd64.tar.xz
             genvm-linux-arm64.tar.xz
             genvm-macos-arm64.tar.xz

@@ -76,7 +76,7 @@
     "hash": "sha256-0AKDcwjrOLiC5roAsTb9dZqqrxDs2+E5e+2usQwrQgA=",
     "must_preload": false,
     "needed-for": [
-      "universal"
+      "runners-all"
     ],
     "fetcher": "fetchzip"
   },
@@ -89,7 +89,7 @@
     "hash": "sha256-ZSI7b1wc1D3hqx3IqT8dlFVKldUFjQUZ7u48Cn8wbnE=",
     "must_preload": false,
     "needed-for": [
-      "universal"
+      "runners-all"
     ],
     "fetcher": "fetchzip"
   },
@@ -103,7 +103,7 @@
     "hash": "sha256-acY8yFzIRYbrZ2CGODoxLnZuppsP6KZy19I9Yy77pfc=",
     "must_preload": true,
     "needed-for": [
-      "universal"
+      "runners-all"
     ],
     "fetcher": "fetchzip"
   },
@@ -117,7 +117,7 @@
     "hash": "sha256-Uvi4JZPPERK3gym4yoaeTEJwKXF5brBAEN7GgF+iF6g=",
     "must_preload": false,
     "needed-for": [
-      "universal"
+      "runners-all"
     ],
     "fetcher": "fetchzip"
   },
@@ -130,7 +130,7 @@
     "hash": "sha256-5kYA8yUGBeIA8eCRDM8CLWRsvKmNj5nWhl3+zl5RIhU=",
     "must_preload": false,
     "needed-for": [
-      "universal"
+      "runners-all"
     ],
     "fetcher": "fetchzip"
   },
@@ -144,7 +144,7 @@
     "hash": "sha256-3ELGir/E3YS9qWEYQ8SGFrU0md71/pl2QOyUIiH55BQ=",
     "must_preload": false,
     "needed-for": [
-      "universal"
+      "runners-all"
     ],
     "fetcher": "fetchzip"
   },
@@ -236,7 +236,7 @@
     "hash": "sha256-/cyLxhFsfBBQxn4NrhLdbgHjU3YUjYhPnvquWJodcO8=",
     "must_preload": false,
     "needed-for": [
-      "universal"
+      "runners-all"
     ],
     "fetcher": "fetchzip"
   },
