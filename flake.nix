@@ -133,9 +133,20 @@
 
 							runners-universal-set = (import ./runners/support/views/all-universal.nix runners-args).universal;
 
-							runners-all = pkgs.symlinkJoin {
+							runners-all = pkgs.stdenvNoCC.mkDerivation {
 								name = "genvm-runners-all";
-								paths = builtins.attrValues runners-universal-set;
+								srcs = builtins.attrValues runners-universal-set;
+								dontUnpack = true;
+								dontConfigure = true;
+								dontBuild = true;
+								dontFixup = true;
+								installPhase = ''
+									mkdir -p $out
+									for src in $srcs; do
+										cp --no-preserve=ownership -r $src/. $out/.
+										chmod -R u+w $out
+									done
+								'';
 							};
 						in
 						{
