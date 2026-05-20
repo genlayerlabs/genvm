@@ -197,6 +197,9 @@ jobs:
       - name: Get wabt
         run: |
           brew install wabt
+      - name: Setup Rust
+        run: |
+          rustup target add wasm32-wasip1
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
