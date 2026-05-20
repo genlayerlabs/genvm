@@ -1,7 +1,7 @@
 executor_versions:
   # new major.minor.* versions will override older ones
   v0.3.0:
-    available_after: "2026-04-21T00:00:00Z"
+    available_after: "2024-09-01T00:00:00Z"
 
 runners_download_urls:
   - "https://storage.googleapis.com/gh-af/genvm_runners/{name}/{hash}.tar"
