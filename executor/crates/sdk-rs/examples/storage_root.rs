@@ -7,6 +7,9 @@ use genlayer_sdk::storage::Root;
 
 const MAGIC: &str = "MAGIC_MARKER_42";
 
+#[used]
+static MAGIC_BYTES: [u8; 15] = *b"MAGIC_MARKER_42";
+
 genlayer_sdk::record!(ContractData { counter: u32 });
 
 #[derive(Default)]
@@ -14,6 +17,7 @@ pub struct StorageRootExample;
 
 impl Contract for StorageRootExample {
     fn handle_main(&mut self, _message: MessageData, _data: bytes::Bytes) -> Result<Value, String> {
+        std::hint::black_box(&MAGIC_BYTES);
         let root = Root::<ContractData>::get();
 
         // search own code for the magic string
