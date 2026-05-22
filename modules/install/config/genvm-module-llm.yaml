@@ -1,5 +1,5 @@
-# yaml-language-server: $schema=../../../doc/schemas/default-config.json#llm
-# yaml-language-server: $schema=https://raw.githubusercontent.com/genlayerlabs/genvm/refs/heads/@GENVM_TAG@/doc/schemas/default-config.json#llm
+# yaml-language-server: $schema=../../../doc/schemas/default-config.json#/llm
+# yaml-language-server: $schema=https://raw.githubusercontent.com/genlayerlabs/genvm/refs/heads/@GENVM_TAG@/doc/schemas/default-config.json#/llm
 
 bind_address: 127.0.0.1:3031
 
@@ -14,6 +14,8 @@ threads: 4
 blocking_threads: 16
 log_disable: tracing*,polling*,tungstenite*,tokio_tungstenite*
 #log_level: info
+
+timeout: 3m
 
 backends:
   dev:
@@ -68,7 +70,8 @@ backends:
       grok-3:
         supports_json: true
         supports_image: false # hallucinates
-    priority: -5 # <- this is used in lua to sort providers, higher is better
+    meta:
+      priority: -5
 
   google:
     host: https://generativelanguage.googleapis.com

@@ -106,6 +106,9 @@
                           "meta": {
                             "type": ["object", "null"],
                             "default": null
+                          },
+                          "timeout": {
+                            "$ref": "#/definitions/timeout"
                           }
                         },
                         "additionalProperties": false
@@ -115,6 +118,9 @@
                   "meta": {
                     "type": ["object", "null"],
                     "default": null
+                  },
+                  "timeout": {
+                    "$ref": "#/definitions/timeout"
                   }
                 },
                 "required": ["host", "key", "provider", "models"],
@@ -148,8 +154,34 @@
           "meta": {
             "type": ["object", "null"],
             "default": null
+          },
+          "timeout": {
+            "$ref": "#/definitions/timeout"
           }
         }
+      }
+    ]
+  },
+  "manager": {
+    "allOf": [
+      {
+        "$ref": "#/definitions/base-conf"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "manifest_path": {
+            "type": "string",
+            "description": "path to manifest file"
+          },
+          "permits": {
+            "type": ["integer", "null"],
+            "default": null,
+            "minimum": 1,
+            "description": "concurrency permits; if null will be auto-discovered; full VM takes 2, sync VM takes 1"
+          }
+        },
+        "required": ["manifest_path"]
       }
     ]
   },
@@ -195,6 +227,12 @@
     ]
   },
   "definitions": {
+    "timeout": {
+      "oneOf": [
+        { "type": "number", "description": "timeout in seconds" },
+        { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(ms|s|m)$", "description": "timeout with unit suffix, e.g. \"1.5s\", \"500ms\", \"2m\"" }
+      ]
+    },
     "llm-template-conf": {
       "type": "object",
       "properties": {

@@ -7,6 +7,7 @@ use crate::common::{ModuleError, ModuleResult};
 
 pub use super::merge::MergeStrategy;
 
+/// NOTE: when changing fields, also update Prompt in modules/install/lib/genvm-lua/lib-llm.lua
 #[derive(Serialize, Deserialize)]
 pub struct Internal {
     pub system_message: Option<String>,
@@ -22,6 +23,19 @@ pub struct Internal {
     pub extra: serde_json::Map<String, serde_json::Value>,
     #[serde(default)]
     pub extra_merge_strategy: MergeStrategy,
+
+    #[serde(default)]
+    pub timeout: Option<crate::common::Timeout>,
+}
+
+impl Internal {
+    pub fn apply_timeout(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        if let Some(timeout) = self.timeout {
+            request.timeout(timeout.to_duration())
+        } else {
+            request
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
