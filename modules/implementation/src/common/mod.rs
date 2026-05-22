@@ -558,22 +558,31 @@ impl Timeout {
         self.0
     }
 
+    fn from_secs_f64_checked(n: f64) -> Result<std::time::Duration, String> {
+        if !n.is_finite() || n < 0.0 {
+            return Err(format!(
+                "timeout must be a finite, non-negative number, got {n}"
+            ));
+        }
+        std::time::Duration::try_from_secs_f64(n).map_err(|e| e.to_string())
+    }
+
     fn parse_str(s: &str) -> Result<std::time::Duration, String> {
         if let Some(v) = s.strip_suffix("ms") {
             v.trim()
                 .parse::<f64>()
-                .map(|n| std::time::Duration::from_secs_f64(n / 1000.0))
                 .map_err(|e| e.to_string())
+                .and_then(|n| Self::from_secs_f64_checked(n / 1000.0))
         } else if let Some(v) = s.strip_suffix('m') {
             v.trim()
                 .parse::<f64>()
-                .map(|n| std::time::Duration::from_secs_f64(n * 60.0))
                 .map_err(|e| e.to_string())
+                .and_then(|n| Self::from_secs_f64_checked(n * 60.0))
         } else if let Some(v) = s.strip_suffix('s') {
             v.trim()
                 .parse::<f64>()
-                .map(std::time::Duration::from_secs_f64)
                 .map_err(|e| e.to_string())
+                .and_then(Self::from_secs_f64_checked)
         } else {
             Err(format!("expected suffix m, s, or ms, got \"{s}\""))
         }
@@ -598,7 +607,9 @@ impl<'de> serde::Deserialize<'de> for Timeout {
             }
 
             fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Timeout, E> {
-                Ok(Timeout(std::time::Duration::from_secs_f64(v as f64)))
+                Timeout::from_secs_f64_checked(v as f64)
+                    .map(Timeout)
+                    .map_err(E::custom)
             }
 
             fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Timeout, E> {
@@ -606,7 +617,9 @@ impl<'de> serde::Deserialize<'de> for Timeout {
             }
 
             fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<Timeout, E> {
-                Ok(Timeout(std::time::Duration::from_secs_f64(v)))
+                Timeout::from_secs_f64_checked(v)
+                    .map(Timeout)
+                    .map_err(E::custom)
             }
 
             fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Timeout, E> {

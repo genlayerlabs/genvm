@@ -15,10 +15,8 @@ use crate::scripting;
 async fn test_overloaded() {
     common::tests::setup();
 
-    const BIND_ADDR: &str = "127.0.0.1:11434";
-    const CONNECT_ADDR: &str = "http://127.0.0.1:11434";
-
-    let server = tokio::net::TcpListener::bind(BIND_ADDR).await.unwrap();
+    let server = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let connect_addr = format!("http://{}", server.local_addr().unwrap());
 
     let made_request = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
@@ -56,13 +54,19 @@ async fn test_overloaded() {
             meta: serde_json::Value::Null,
             timeout: None,
         },
-        host: CONNECT_ADDR.to_owned(),
+        host: connect_addr.clone(),
     };
 
     let backend_real = config::BackendConfig {
         enabled: true,
         provider: config::Provider::OpenaiCompatible,
-        key: std::env::var("OPENAIKEY").unwrap(),
+        key: match std::env::var("OPENAIKEY") {
+            Ok(v) => v,
+            Err(_) => {
+                eprintln!("skipping test_overloaded: OPENAIKEY is not set");
+                return;
+            }
+        },
         script_config: ScriptBackendConfig {
             models: BTreeMap::from([(
                 "openrouter/auto".to_owned(),
