@@ -99,7 +99,20 @@
             ]
           },
           "storage",
-          "receipt"
+          {
+            "head": "receipt",
+            "tail": [
+              "nondet_output",
+              {
+                "head": "message",
+                "tail": ["internal", "external"]
+              }
+            ]
+          },
+          {
+            "head": "fees",
+            "tail": ["internal", "external"]
+          }
         ]
       },
       {

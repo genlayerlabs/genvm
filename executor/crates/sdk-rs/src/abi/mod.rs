@@ -22,8 +22,58 @@ pub mod gl_call;
 #[cfg(feature = "wasi")]
 pub mod wasi;
 
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    calldata::Encode,
+    calldata::Decode,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub struct CallKey(
+    #[calldata(
+        serialize_with = ::genlayer_calldata::codec::as_bytes::serialize,
+        deserialize_with = ::genlayer_calldata::codec::as_bytes::deserialize,
+    )]
+    pub [u8; 32],
+);
+
+impl CallKey {
+    pub const DEPLOY: CallKey = CallKey([0u8; 32]);
+    pub const UNNAMED: CallKey = CallKey([0u8; 32]);
+
+    pub fn for_method(name: &str) -> CallKey {
+        use sha3::Digest;
+
+        let name = name.as_bytes();
+        let mut call_key = [0u8; 32];
+
+        if name.len() < 32 {
+            call_key[..name.len()].copy_from_slice(name);
+        } else {
+            let mut hasher = sha3::Keccak256::new();
+            hasher.update(name);
+            call_key.copy_from_slice(&hasher.finalize());
+            call_key[31] |= 1;
+        }
+
+        CallKey(call_key)
+    }
+
+    pub fn as_u256(&self) -> primitive_types::U256 {
+        primitive_types::U256::from_big_endian(&self.0)
+    }
+
+    pub fn from_u256(value: primitive_types::U256) -> CallKey {
+        CallKey(value.to_big_endian())
+    }
+}
+
 #[allow(clippy::enum_variant_names)]
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, calldata::Encode)]
+#[derive(Debug, Clone, PartialEq, Eq, calldata::Encode, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, tag = "type")]
 #[calldata(tag = "type")]
 pub enum ExecutionEmission {
@@ -33,7 +83,7 @@ pub enum ExecutionEmission {
         value: primitive_types::U256,
     },
     PostMessage {
-        call_key: primitive_types::U256,
+        call_key: CallKey,
         address: calldata::Address,
         calldata: calldata::Value,
         value: primitive_types::U256,
@@ -50,27 +100,4 @@ pub enum ExecutionEmission {
         topics: Vec<Bytes>,
         blob: BTreeMap<String, calldata::Value>,
     },
-}
-
-pub mod call_key {
-    pub const DEPLOY: primitive_types::U256 = primitive_types::U256::zero();
-    pub const UNNAMED: primitive_types::U256 = primitive_types::U256::zero();
-
-    pub fn for_method(name: &str) -> primitive_types::U256 {
-        use sha3::Digest;
-
-        let name = name.as_bytes();
-        let mut call_key = [0u8; 32];
-
-        if name.len() < 32 {
-            call_key[..name.len()].copy_from_slice(name);
-        } else {
-            let mut hasher = sha3::Keccak256::new();
-            hasher.update(name);
-            call_key.copy_from_slice(&hasher.finalize());
-            call_key[31] |= 1;
-        }
-
-        primitive_types::U256::from_big_endian(&call_key)
-    }
 }

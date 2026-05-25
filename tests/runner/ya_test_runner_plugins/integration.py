@@ -561,8 +561,20 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				request_extra = {}
 				if 'stable' in self._test_case.description.tags:
 					request_extra['no_modules'] = True
-				if 'bucket_totals' in single_conf:
-					request_extra['bucket_totals'] = single_conf['bucket_totals']
+				dflt_bucket = 2**200
+				bucket_totals: list[int] = single_conf.get(
+					'bucket_totals', [dflt_bucket, dflt_bucket, dflt_bucket]
+				)
+
+				default_message_fee_allocation = [
+					base_host.DEFAULT_EXTERNAL_MESSAGE_ALLOC,
+					base_host.DEFAULT_INTERNAL_FIN_MESSAGE_ALLOC,
+					base_host.DEFAULT_INTERNAL_ACC_MESSAGE_ALLOC,
+				]
+
+				message_fee_allocation: list[base_host.MessageFeeAllocationNode] = (
+					single_conf.get('message_fee_allocation', default_message_fee_allocation)
+				)
 
 				if not single_conf['message'].get('is_init', False):
 					code = None
@@ -581,7 +593,9 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					extra_args=['--debug-mode'],
 					code=code,
 					calldata=calldata_bytes,
+					bucket_totals=bucket_totals,
 					leader_nondet_results=leader_nondet,
+					message_fee_allocation=message_fee_allocation,
 					request_extra=request_extra,
 				)
 				stdout_raw = res.stdout

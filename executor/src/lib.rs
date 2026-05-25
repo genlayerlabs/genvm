@@ -180,6 +180,7 @@ pub async fn run_with_impl(
             data_fees_limit,
             messages_value_decremented: primitive_types::U256::zero(),
             emissions: Vec::new(),
+            message_fee_allocation: entry_data.message_fee_allocation,
         },
     };
 

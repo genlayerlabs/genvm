@@ -88,6 +88,17 @@ pub trait Writer {
     }
 }
 
+pub struct CounterWriter(pub u64);
+
+impl Writer for CounterWriter {
+    type Error = std::convert::Infallible;
+
+    fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+        self.0 += data.len() as u64;
+        Ok(())
+    }
+}
+
 pub struct StdWriter<W>(W)
 where
     W: std::io::Write;

@@ -10,7 +10,7 @@ use wiggle::GuestError;
 
 use crate::host::{self, SlotID};
 use crate::wasi::json_to_calldata::json_map_to_calldata;
-use crate::{calldata, public_abi, rt};
+use crate::{anyhow_to_wasmtime, calldata, public_abi, rt};
 
 pub use genlayer_sdk::abi::entry::ExtendedMessage;
 use genlayer_sdk::abi::{self, gl_call};
@@ -21,29 +21,95 @@ fn default_entry_stage_data() -> calldata::Value {
     calldata::Value::Null
 }
 
-fn fee_oom(what: &str) -> generated::types::Error {
+fn oom_trap(error: abi::consts::VmError) -> generated::types::Error {
     generated::types::Error::trap(crate::anyhow_to_wasmtime(
-        rt::errors::VMError(
-            abi::consts::VmError::oom().receipt(),
-            Some(anyhow::anyhow!("consuming {what} fee")),
-        )
-        .into(),
+        rt::errors::VMError(error, None).into(),
     ))
 }
 
-async fn consume_message_receipt(
+async fn consume_message_fee_internal(
     shared_data: &rt::SharedData,
-    is_internal: bool,
+    node: &mut domain::MessageFeeAllocationNode,
+    on_acceptance: bool,
+    is_deploy: bool,
+    calldata_length: u64,
+    code_length: u64,
+) -> Result<(), generated::types::Error> {
+    let fee_cost = shared_data
+        .data_fees_limit
+        .calculate_message_fee_internal(on_acceptance, &node.fee_params)
+        .map_err(|x| generated::types::Error::trap(anyhow_to_wasmtime(x)))?;
+
+    if fee_cost > node.budget {
+        log_warn!(
+            node:cd = *node,
+            fee_cost:cd = fee_cost,
+            budget: cd = node.budget;
+            "message fee cost exceeds node budget"
+        );
+        return Err(oom_trap(abi::consts::VmError::oom().fees().internal()));
+    }
+
+    let receipt_cost = shared_data
+        .data_fees_limit
+        .calculate_message_receipt(on_acceptance, is_deploy, calldata_length, code_length)
+        .map_err(|x| {
+            generated::types::Error::trap(anyhow_to_wasmtime(
+                x.context("calculate_message_receipt"),
+            ))
+        })?;
+
+    if !shared_data
+        .data_fees_limit
+        .consume_message_fee(fee_cost, receipt_cost)
+        .await
+    {
+        log_warn!(
+            node:cd = *node,
+            fee_cost:cd = fee_cost,
+            receipt_cost: cd = receipt_cost,
+            buckets:? = shared_data.data_fees_limit;
+            "not enough remaining fee limit to consume message fee"
+        );
+        return Err(oom_trap(abi::consts::VmError::oom().fees().internal()));
+    }
+
+    node.budget -= fee_cost;
+
+    Ok(())
+}
+
+async fn consume_message_fee_external(
+    shared_data: &rt::SharedData,
+    node: &mut domain::MessageFeeAllocationNode,
+    on_acceptance: bool,
     is_deploy: bool,
     calldata_length: u64,
 ) -> Result<(), generated::types::Error> {
+    let fee_cost = shared_data
+        .data_fees_limit
+        .calculate_message_fee_external(&node.fee_params)
+        .map_err(|x| generated::types::Error::trap(anyhow_to_wasmtime(x)))?;
+
+    if fee_cost > node.budget {
+        return Err(oom_trap(abi::consts::VmError::oom().fees().external()));
+    }
+
+    let receipt_cost = shared_data
+        .data_fees_limit
+        .calculate_message_receipt(on_acceptance, is_deploy, calldata_length, 0)
+        .map_err(|x| generated::types::Error::trap(anyhow_to_wasmtime(x)))?;
+
     if !shared_data
         .data_fees_limit
-        .consume_message_receipt(is_internal, is_deploy, calldata_length)
+        .consume_message_fee(fee_cost, receipt_cost)
         .await
     {
-        return Err(fee_oom("message receipt"));
+        return Err(oom_trap(abi::consts::VmError::oom().fees().external()));
     }
+
+    node.budget -= fee_cost;
+
     Ok(())
 }
 
@@ -55,8 +121,11 @@ async fn consume_nondet_output(
         .data_fees_limit
         .consume_nondet_output(output_length)
         .await
+        .map_err(|x| generated::types::Error::trap(anyhow_to_wasmtime(x)))?
     {
-        return Err(fee_oom("nondet output"));
+        return Err(oom_trap(
+            abi::consts::VmError::oom().receipt().nondet_output(),
+        ));
     }
     Ok(())
 }
@@ -145,6 +214,7 @@ pub struct VMDataAccumulator {
     pub data_fees_limit: DArc<rt::fees::DataLimit>,
     pub messages_value_decremented: primitive_types::U256,
     pub emissions: Vec<genlayer_sdk::abi::ExecutionEmission>,
+    pub message_fee_allocation: Vec<domain::MessageFeeAllocationNode>,
 }
 
 pub struct SingleVMData {
@@ -425,7 +495,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             Ok(v) => v,
         };
 
-        log_trace!(request:serde = request; "gl_call");
+        log_trace!(request:cd = request; "gl_call");
 
         let request: gl_call::Message = match calldata::from_value(request) {
             Ok(v) => v,
@@ -461,17 +531,46 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                 }
 
+                let mut call_key = abi::CallKey([0u8; 32]);
+                if calldata.len() < 4 {
+                    log_warn!(len = calldata.len(); "calldata too short for method selector, using unnamed call key");
+                } else {
+                    call_key.0[..4].copy_from_slice(&calldata[..4]);
+                }
+
+                let Some(matched_node) = self
+                    .context
+                    .data
+                    .accumulator
+                    .message_fee_allocation
+                    .iter_mut()
+                    .filter(|node| node.matches(domain::MessageType::External, address, call_key))
+                    .next()
+                else {
+                    log_warn!(
+                        recipient = calldata::Address::zero(),
+                        call_key:? = call_key;
+                        "no matching node for message fee allocation"
+                    );
+
+                    return Err(oom_trap(abi::consts::VmError::oom().fees().external()));
+                };
+
+                let calldata_length = calldata.len() as u64;
+
                 let emission = genlayer_sdk::abi::ExecutionEmission::EthSend {
                     address,
                     calldata,
                     value,
                 };
                 let encoded = calldata::encode_obj(&emission);
-                consume_message_receipt(
+
+                consume_message_fee_external(
                     &self.context.data.supervisor.shared_data,
+                    matched_node,
                     false,
                     false,
-                    encoded.len() as u64,
+                    calldata_length,
                 )
                 .await?;
 
@@ -584,6 +683,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                             .accumulator
                             .messages_value_decremented,
                         emissions: Vec::new(),
+                        message_fee_allocation: Vec::new(),
                     },
                 };
 
@@ -678,9 +778,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .and_then(|x| x.get("method"))
                     .and_then(|x| x.as_str());
                 let call_key = if let Some(method_name) = method_name {
-                    abi::call_key::for_method(method_name)
+                    abi::CallKey::for_method(method_name)
                 } else {
-                    abi::call_key::UNNAMED
+                    abi::CallKey::UNNAMED
                 };
 
                 if !value.is_zero() {
@@ -695,6 +795,36 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                 }
 
+                let Some(matched_node) = self
+                    .context
+                    .data
+                    .accumulator
+                    .message_fee_allocation
+                    .iter_mut()
+                    .filter(|node| {
+                        node.matches(
+                            match on {
+                                abi::gl_call::On::Accepted => domain::MessageType::InternalAccepted,
+                                abi::gl_call::On::Finalized => {
+                                    domain::MessageType::InternalFinalized
+                                }
+                            },
+                            address,
+                            call_key,
+                        )
+                    })
+                    .next()
+                else {
+                    log_warn!(
+                        recipient = address,
+                        call_key:? = call_key,
+                        on:? = on;
+                        "no matching node for message fee allocation"
+                    );
+
+                    return Err(oom_trap(abi::consts::VmError::oom().fees().internal()));
+                };
+
                 let emission = genlayer_sdk::abi::ExecutionEmission::PostMessage {
                     call_key,
                     address,
@@ -703,11 +833,14 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     on,
                 };
                 let encoded = calldata::encode_obj(&emission);
-                consume_message_receipt(
+
+                consume_message_fee_internal(
                     &self.context.data.supervisor.shared_data,
-                    true,
+                    matched_node,
+                    on == abi::gl_call::On::Accepted,
                     false,
                     encoded.len() as u64,
+                    0,
                 )
                 .await?;
 
@@ -745,6 +878,41 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                 }
 
+                let Some(matched_node) = self
+                    .context
+                    .data
+                    .accumulator
+                    .message_fee_allocation
+                    .iter_mut()
+                    .filter(|node| {
+                        node.matches(
+                            match on {
+                                abi::gl_call::On::Accepted => domain::MessageType::InternalAccepted,
+                                abi::gl_call::On::Finalized => {
+                                    domain::MessageType::InternalFinalized
+                                }
+                            },
+                            calldata::Address::zero(),
+                            abi::CallKey::DEPLOY,
+                        )
+                    })
+                    .next()
+                else {
+                    log_warn!(
+                        recipient = calldata::Address::zero(),
+                        call_key:? = abi::CallKey::DEPLOY,
+                        on:? = on;
+                        "no matching node for message fee allocation"
+                    );
+
+                    return Err(oom_trap(abi::consts::VmError::oom().fees().internal()));
+                };
+
+                let code_length = code.len() as u64;
+                let mut enc = calldata::Encoder::new(calldata::CounterWriter(0));
+                calldata::encode_to(&mut enc, &calldata);
+                let calldata_length = enc.into_inner().0 as u64;
+
                 let emission = genlayer_sdk::abi::ExecutionEmission::DeployContract {
                     calldata,
                     code,
@@ -753,11 +921,14 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     salt_nonce,
                 };
                 let encoded = calldata::encode_obj(&emission);
-                consume_message_receipt(
+
+                consume_message_fee_internal(
                     &self.context.data.supervisor.shared_data,
+                    matched_node,
+                    on == abi::gl_call::On::Accepted,
                     true,
-                    true,
-                    encoded.len() as u64,
+                    calldata_length,
+                    code_length,
                 )
                 .await?;
 
@@ -1407,6 +1578,7 @@ impl ContextVFS<'_> {
                     .accumulator
                     .messages_value_decremented,
                 emissions: Vec::new(),
+                message_fee_allocation: Vec::new(),
             };
 
             let vm_data = SingleVMData {
@@ -1489,6 +1661,7 @@ impl ContextVFS<'_> {
             data_fees_limit: self.context.data.accumulator.data_fees_limit.clone(),
             messages_value_decremented: primitive_types::U256::max_value(),
             emissions: Vec::new(),
+            message_fee_allocation: Vec::new(),
         };
 
         std::mem::swap(&mut self.context.data.accumulator, &mut fake_my_data);

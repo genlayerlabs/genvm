@@ -20,6 +20,21 @@ impl Codec for Vec<u8> {
     }
 }
 
+impl<const N: usize> Codec for [u8; N] {
+    fn encode_bytes<W: Writer>(&self, enc: &mut Encoder<W>) -> Result<(), W::Error> {
+        enc.push_bytes(self.as_slice())
+    }
+
+    fn decode_bytes(val: Value) -> Result<Self, DecodeError> {
+        match val {
+            Value::Bytes(b) => b
+                .try_into()
+                .map_err(|_| DecodeError::Unexpected("expected exact byte length")),
+            _ => Err(DecodeError::Unexpected("expected bytes")),
+        }
+    }
+}
+
 impl Codec for Option<Vec<u8>> {
     fn encode_bytes<W: Writer>(&self, enc: &mut Encoder<W>) -> Result<(), W::Error> {
         match self {

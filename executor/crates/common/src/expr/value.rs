@@ -282,6 +282,48 @@ impl Value {
     }
 }
 
+impl From<BigRational> for Value {
+    fn from(v: BigRational) -> Self {
+        Value::Rational(v)
+    }
+}
+
+impl From<bool> for Value {
+    fn from(v: bool) -> Self {
+        Value::Bool(v)
+    }
+}
+
+impl From<u64> for Value {
+    fn from(v: u64) -> Self {
+        Value::Rational(BigRational::from_integer(v.into()))
+    }
+}
+
+impl From<usize> for Value {
+    fn from(v: usize) -> Self {
+        Value::Rational(BigRational::from_integer(v.into()))
+    }
+}
+
+impl From<i32> for Value {
+    fn from(v: i32) -> Self {
+        Value::Rational(BigRational::from_integer(v.into()))
+    }
+}
+
+impl From<Arc<str>> for Value {
+    fn from(v: Arc<str>) -> Self {
+        Value::Str(v)
+    }
+}
+
+impl From<String> for Value {
+    fn from(v: String) -> Self {
+        Value::Str(v.into())
+    }
+}
+
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

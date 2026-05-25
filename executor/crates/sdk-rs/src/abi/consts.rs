@@ -231,12 +231,34 @@ pub mod __VmError {
         pub const fn limit(&self) -> VmError { VmError(Cow::Borrowed("OOM RAM limit")) }
     }
 
+    pub struct OomReceiptMessage;
+
+    impl OomReceiptMessage {
+        pub const fn internal(&self) -> VmError { VmError(Cow::Borrowed("OOM receipt message internal")) }
+        pub const fn external(&self) -> VmError { VmError(Cow::Borrowed("OOM receipt message external")) }
+    }
+
+    pub struct OomReceipt;
+
+    impl OomReceipt {
+        pub const fn nondet_output(&self) -> VmError { VmError(Cow::Borrowed("OOM receipt nondet_output")) }
+        pub const fn message(&self) -> OomReceiptMessage { OomReceiptMessage }
+    }
+
+    pub struct OomFees;
+
+    impl OomFees {
+        pub const fn internal(&self) -> VmError { VmError(Cow::Borrowed("OOM fees internal")) }
+        pub const fn external(&self) -> VmError { VmError(Cow::Borrowed("OOM fees external")) }
+    }
+
     pub struct Oom;
 
     impl Oom {
         pub const fn storage(&self) -> VmError { VmError(Cow::Borrowed("OOM storage")) }
-        pub const fn receipt(&self) -> VmError { VmError(Cow::Borrowed("OOM receipt")) }
         pub const fn ram(&self) -> OomRam { OomRam }
+        pub const fn receipt(&self) -> OomReceipt { OomReceipt }
+        pub const fn fees(&self) -> OomFees { OomFees }
     }
 
     pub struct InvalidContractWasm;
