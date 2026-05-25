@@ -116,6 +116,14 @@ function ExecPrompt(ctx, args, remaining_gen)
 		"NormalizeWS",
 	})
 
+	if args.prompt == "" then
+		lib.rs.user_error {
+			causes = { "EMPTY_PROMPT" },
+			fatal = false,
+			ctx = {},
+		}
+	end
+
 	local mapped = llm.exec_prompt_transform(args)
 
 	return just_in_backend(ctx, mapped, remaining_gen)
