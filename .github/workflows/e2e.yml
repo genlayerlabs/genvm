@@ -68,11 +68,11 @@ name: E2E Pipeline
 # list (where the bare run_id was previously opaque).
 run-name: >-
   ${{ (github.event_name == 'issue_comment'
-       && startsWith(github.event.comment.body, '/run-e2e')
-       && format('PR #{0} /run-e2e', github.event.issue.number))
-   || (github.event_name == 'workflow_dispatch'
-       && format('E2E Test {0}/{1}/{2}/{3}', inputs.profile, inputs.track, inputs.scope, inputs.stack))
-   || format('noop {0}', github.run_id) }}
+    && startsWith(github.event.comment.body, '/run-e2e')
+    && format('PR #{0} /run-e2e', github.event.issue.number))
+    || (github.event_name == 'workflow_dispatch'
+    && format('E2E Test {0}/{1}/{2}/{3}', inputs.profile, inputs.track, inputs.scope, inputs.stack))
+    || format('noop {0}', github.run_id) }}
 
 on:
   issue_comment:
@@ -201,7 +201,7 @@ jobs:
     if: |
       !cancelled() &&
       (needs.acknowledge.result == 'success' ||
-       (needs.acknowledge.result == 'skipped' && github.event_name == 'workflow_dispatch'))
+        (needs.acknowledge.result == 'skipped' && github.event_name == 'workflow_dispatch'))
     uses: genlayerlabs/genlayer-e2e/.github/workflows/e2e-planner.yml@main
     with:
       # Coalesce: acknowledge tokens win on the PR-comment path; on
