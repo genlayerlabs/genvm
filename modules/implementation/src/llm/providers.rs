@@ -33,6 +33,10 @@ pub struct TokenUsage {
     pub input: Option<u32>,
     pub output: Option<u32>,
     pub total: Option<u32>,
+    pub cache_read_tokens: Option<u32>,
+    pub cache_write_tokens: Option<u32>,
+    pub image_units: Option<u32>,
+    pub raw_usage: serde_json::Value,
 }
 
 #[allow(dead_code)]
@@ -42,6 +46,7 @@ impl TokenUsage {
             input,
             output,
             total,
+            ..Default::default()
         }
     }
 
@@ -50,14 +55,14 @@ impl TokenUsage {
             input: Some(input),
             output: Some(output),
             total: Some(input + output),
+            ..Default::default()
         }
     }
 
     pub fn from_total(total: u32) -> Self {
         Self {
-            input: None,
-            output: None,
             total: Some(total),
+            ..Default::default()
         }
     }
 
@@ -245,19 +250,36 @@ impl prompt::Internal {
 }
 
 fn extract_openai_tokens(body: &serde_json::Value) -> TokenUsage {
-    let input = body
-        .pointer("/usage/prompt_tokens")
+    let usage = body.pointer("/usage");
+    let input = usage
+        .and_then(|v| v.get("prompt_tokens"))
         .and_then(|v| v.as_u64())
         .map(|v| v as u32);
-    let output = body
-        .pointer("/usage/completion_tokens")
+    let output = usage
+        .and_then(|v| v.get("completion_tokens"))
         .and_then(|v| v.as_u64())
         .map(|v| v as u32);
-    let total = body
-        .pointer("/usage/total_tokens")
+    let total = usage
+        .and_then(|v| v.get("total_tokens"))
         .and_then(|v| v.as_u64())
         .map(|v| v as u32);
-    TokenUsage::new(input, output, total)
+    let cache_read_tokens = usage
+        .and_then(|v| v.pointer("/prompt_tokens_details/cached_tokens"))
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+    let cache_write_tokens = usage
+        .and_then(|v| v.pointer("/prompt_tokens_details/cache_write_tokens"))
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+    TokenUsage {
+        input,
+        output,
+        total,
+        cache_read_tokens,
+        cache_write_tokens,
+        raw_usage: usage.cloned().unwrap_or_default(),
+        ..Default::default()
+    }
 }
 
 #[async_trait::async_trait]
@@ -454,7 +476,20 @@ fn extract_ollama_tokens(body: &serde_json::Value) -> TokenUsage {
         (Some(i), Some(o)) => Some(i + o),
         _ => None,
     };
-    TokenUsage::new(input, output, total)
+    let mut raw = serde_json::Map::new();
+    if let Some(v) = body.get("prompt_eval_count") {
+        raw.insert("prompt_eval_count".into(), v.clone());
+    }
+    if let Some(v) = body.get("eval_count") {
+        raw.insert("eval_count".into(), v.clone());
+    }
+    TokenUsage {
+        input,
+        output,
+        total,
+        raw_usage: serde_json::Value::Object(raw),
+        ..Default::default()
+    }
 }
 
 #[async_trait::async_trait]
@@ -554,19 +589,31 @@ impl Provider for OLlama {
 }
 
 fn extract_gemini_tokens(body: &serde_json::Value) -> TokenUsage {
-    let input = body
-        .pointer("/usageMetadata/promptTokenCount")
+    let usage = body.pointer("/usageMetadata");
+    let input = usage
+        .and_then(|v| v.get("promptTokenCount"))
         .and_then(|v| v.as_u64())
         .map(|v| v as u32);
-    let output = body
-        .pointer("/usageMetadata/candidatesTokenCount")
+    let output = usage
+        .and_then(|v| v.get("candidatesTokenCount"))
         .and_then(|v| v.as_u64())
         .map(|v| v as u32);
-    let total = body
-        .pointer("/usageMetadata/totalTokenCount")
+    let total = usage
+        .and_then(|v| v.get("totalTokenCount"))
         .and_then(|v| v.as_u64())
         .map(|v| v as u32);
-    TokenUsage::new(input, output, total)
+    let cache_read_tokens = usage
+        .and_then(|v| v.get("cachedContentTokenCount"))
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+    TokenUsage {
+        input,
+        output,
+        total,
+        cache_read_tokens,
+        raw_usage: usage.cloned().unwrap_or_default(),
+        ..Default::default()
+    }
 }
 
 #[async_trait::async_trait]
@@ -731,19 +778,36 @@ impl prompt::Internal {
 }
 
 fn extract_anthropic_tokens(body: &serde_json::Value) -> TokenUsage {
-    let input = body
-        .pointer("/usage/input_tokens")
+    let usage = body.pointer("/usage");
+    let input = usage
+        .and_then(|v| v.get("input_tokens"))
         .and_then(|v| v.as_u64())
         .map(|v| v as u32);
-    let output = body
-        .pointer("/usage/output_tokens")
+    let output = usage
+        .and_then(|v| v.get("output_tokens"))
         .and_then(|v| v.as_u64())
         .map(|v| v as u32);
     let total = match (input, output) {
         (Some(i), Some(o)) => Some(i + o),
         _ => None,
     };
-    TokenUsage::new(input, output, total)
+    let cache_read_tokens = usage
+        .and_then(|v| v.get("cache_read_input_tokens"))
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+    let cache_write_tokens = usage
+        .and_then(|v| v.get("cache_creation_input_tokens"))
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+    TokenUsage {
+        input,
+        output,
+        total,
+        cache_read_tokens,
+        cache_write_tokens,
+        raw_usage: usage.cloned().unwrap_or_default(),
+        ..Default::default()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1066,6 +1130,8 @@ mod tests {
                     node_address: "test_node".to_owned(),
                     rest: serde_json::Map::new(),
                 },
+                gas_data: std::collections::BTreeMap::new(),
+                initial_time_units_allocation: 0,
             }),
         };
 
@@ -1160,6 +1226,8 @@ mod tests {
                     node_address: "test_node".to_owned(),
                     rest: serde_json::Map::new(),
                 },
+                gas_data: std::collections::BTreeMap::new(),
+                initial_time_units_allocation: 0,
             }),
         };
 
@@ -1247,6 +1315,8 @@ mod tests {
                     node_address: "test_node".to_owned(),
                     rest: serde_json::Map::new(),
                 },
+                gas_data: std::collections::BTreeMap::new(),
+                initial_time_units_allocation: 0,
             }),
         };
 
@@ -1356,6 +1426,8 @@ mod tests {
                     node_address: "test_node".to_owned(),
                     rest: serde_json::Map::new(),
                 },
+                gas_data: std::collections::BTreeMap::new(),
+                initial_time_units_allocation: 0,
             }),
         };
 

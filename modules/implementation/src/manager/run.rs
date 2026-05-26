@@ -414,6 +414,8 @@ pub struct Request {
     #[serde(default)]
     #[calldata(default = default_message_fee_allocation)]
     pub message_fee_allocation: Vec<genvm_common::domain::MessageFeeAllocationNode>,
+    /// Initial time-unit budget for this execution.
+    pub initial_time_units_allocation: u32,
 }
 
 fn default_gas_data() -> std::collections::BTreeMap<String, String> {
@@ -887,6 +889,8 @@ pub async fn start_genvm(
             genvm_id,
             role,
             host_data,
+            gas_data: std::collections::BTreeMap::new(),
+            initial_time_units_allocation: 0,
         });
         Some(full_ctx.mod_ctx.create_execution_context(hello).await?)
     } else {
@@ -962,6 +966,7 @@ pub async fn start_genvm(
         bucket_totals: req.bucket_totals.clone(),
         gas_data: req.gas_data.clone(),
         message_fee_allocation: req.message_fee_allocation.clone(),
+        initial_time_units_allocation: req.initial_time_units_allocation,
     };
     let execution_data_bytes = genvm_common::calldata::encode_obj(&execution_data);
 

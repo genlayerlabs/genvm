@@ -25,6 +25,7 @@ local value2json = require("value2json")
 ---@field filter_image fun(image: string, filters: any[]): string
 ---@field random_bytes fun(length: integer): string
 ---@field random_float fun(): number
+---@field data_dir string
 
 ---@type RS
 M.rs = __dflt ---@diagnostic disable-line

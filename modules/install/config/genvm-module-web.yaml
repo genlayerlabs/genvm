@@ -6,6 +6,7 @@ webdriver_host: http://127.0.0.1:4444
 lua_script_path: ${exeDir}/../config/genvm-web-default.lua
 vm_count: 6
 lua_path: ${exeDir}/../lib/genvm-lua/?.lua
+data_dir: ${exeDir}/../data
 signer_url: "#{signerUrl}"
 signer_headers: {}
 

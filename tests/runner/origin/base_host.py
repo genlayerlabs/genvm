@@ -1,4 +1,5 @@
 import enum
+import math
 import socket
 import typing
 import collections.abc
@@ -505,6 +506,7 @@ async def run_genvm(
 					'bucket_totals': bucket_totals,
 					'gas_data': effective_gas_data,
 					'message_fee_allocation': message_fee_allocation,
+					'initial_time_units_allocation': math.ceil(timeout or 10 * 60),
 					**request_extra,
 				}
 			),

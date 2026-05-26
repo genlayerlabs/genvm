@@ -67,6 +67,8 @@ pub fn create_supervisor(
     mut hosts: Vec<Host>,
     method_hosts: Vec<u8>,
     host_data: genvm_modules_interfaces::HostData,
+    gas_data: std::collections::BTreeMap<String, String>,
+    initial_time_units_allocation: u32,
     shared_data: sync::DArc<rt::SharedData>,
     message: &domain::MessageData,
     leader_nondet_results: Option<Vec<bytes::Bytes>>,
@@ -87,6 +89,8 @@ pub fn create_supervisor(
             shared_data.genvm_id,
             role,
             host_data.clone(),
+            gas_data.clone(),
+            initial_time_units_allocation,
             metrics.gep(|x| &x.web_module),
         )),
         llm: Arc::new(modules::Module::new(
@@ -96,6 +100,8 @@ pub fn create_supervisor(
             shared_data.genvm_id,
             role,
             host_data,
+            gas_data,
+            initial_time_units_allocation,
             metrics.gep(|x| &x.llm_module),
         )),
     };

@@ -22,6 +22,8 @@ pub struct Module {
     genvm_id: genvm_modules_interfaces::GenVMId,
     role: genvm_modules_interfaces::Role,
     host_data: genvm_modules_interfaces::HostData,
+    gas_data: std::collections::BTreeMap<String, String>,
+    initial_time_units_allocation: u32,
     metrics: sync::DArc<Metrics>,
 }
 
@@ -96,6 +98,8 @@ impl Module {
         genvm_id: genvm_modules_interfaces::GenVMId,
         role: genvm_modules_interfaces::Role,
         host_data: genvm_modules_interfaces::HostData,
+        gas_data: std::collections::BTreeMap<String, String>,
+        initial_time_units_allocation: u32,
         metrics: sync::DArc<Metrics>,
     ) -> Self {
         Self {
@@ -105,6 +109,8 @@ impl Module {
             role,
             name,
             host_data,
+            gas_data,
+            initial_time_units_allocation,
             metrics,
         }
     }
@@ -146,6 +152,8 @@ impl Module {
                     genvm_id: self.genvm_id,
                     role: self.role,
                     host_data: self.host_data.clone(),
+                    gas_data: self.gas_data.clone(),
+                    initial_time_units_allocation: self.initial_time_units_allocation,
                 }),
             )
             .await?;

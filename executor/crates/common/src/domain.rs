@@ -103,4 +103,6 @@ pub struct ExecutionData {
     pub gas_data: std::collections::BTreeMap<String, String>,
     /// Message-fee allocation tree passed alongside the execution.
     pub message_fee_allocation: Vec<MessageFeeAllocationNode>,
+    /// Initial time-unit budget for this execution.
+    pub initial_time_units_allocation: u32,
 }

@@ -196,6 +196,8 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         hosts,
         method_hosts,
         host_data,
+        execution_data.gas_data.clone(),
+        execution_data.initial_time_units_allocation,
         shared_data,
         message,
         execution_data.leader_nondet_results.clone(),

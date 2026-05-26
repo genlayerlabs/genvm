@@ -429,6 +429,8 @@ mod tests {
                     tx_id: "test_tx_id".to_string(),
                     rest: serde_json::Map::new(),
                 },
+                gas_data: std::collections::BTreeMap::new(),
+                initial_time_units_allocation: 0,
             }),
             client: common::tests::create_test_client(),
             sign_url: Arc::from("https://test-server.genlayer.com/genvm/sign"),

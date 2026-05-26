@@ -44,6 +44,7 @@ function Rat:pow(exp) end
 ---@class RatLib
 ---@field new fun(value: string|number|Rat, denom: integer|string|nil): Rat
 ---@field is_rat fun(value: any): boolean
+---@field zero Rat
 
 ---@type RatLib
 rat = rat ---@diagnostic disable-line

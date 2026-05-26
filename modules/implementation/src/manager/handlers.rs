@@ -365,6 +365,8 @@ async fn check_llm_availability(
                 tx_id: "test_tx".to_owned(),
                 rest: serde_json::Map::new(),
             },
+            gas_data: std::collections::BTreeMap::new(),
+            initial_time_units_allocation: 0,
         }),
     };
 

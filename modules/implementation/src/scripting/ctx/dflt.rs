@@ -49,8 +49,13 @@ impl CtxPart {
     }
 }
 
-pub fn create_global(vm: &mlua::Lua) -> anyhow::Result<mlua::Value> {
+pub fn create_global(
+    vm: &mlua::Lua,
+    config: &crate::common::ModuleBaseConfig,
+) -> anyhow::Result<mlua::Value> {
     let dflt = vm.create_table()?;
+
+    dflt.set("data_dir", config.data_dir.as_str())?;
 
     dflt.set("log_json", vm.create_function(|vm: &mlua::Lua, data: mlua::Value| {
         let mut as_serde: BTreeMap<String, genvm_modules_interfaces::GenericValue> = vm.from_value(data)?;
@@ -316,6 +321,7 @@ mod tests {
             lua_path: extra_path,
             signer_headers: Arc::new(BTreeMap::new()),
             signer_url: Arc::from(""),
+            data_dir: String::new(),
         });
 
         scripting::UserVM::create(
@@ -341,6 +347,7 @@ mod tests {
             lua_path: "".to_owned(),
             signer_headers: Arc::new(BTreeMap::new()),
             signer_url: Arc::from(""),
+            data_dir: String::new(),
         });
         let scripting = scripting::create_ctx_part(&hello, &conf, metrics).unwrap();
         sync::DArc::new(TestCtx { scripting })

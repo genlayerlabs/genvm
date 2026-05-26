@@ -1,14 +1,9 @@
 { name-target
 , pkgs
 , zig
+, lua-src
 }:
 let
-	lua-src = builtins.fetchGit {
-		url = "https://github.com/lua/lua.git";
-		rev = "75ea9ccbea7c4886f30da147fb67b693b2624c26";
-		shallow = true;
-	};
-
 	version = "5.3";
 
 	isMacos = name-target == "arm64-macos";

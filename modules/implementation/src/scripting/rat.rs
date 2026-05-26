@@ -261,5 +261,10 @@ pub fn create_rat_lib(vm: &Lua) -> LuaResult<LuaValue> {
         })?,
     )?;
 
+    rat_table.set(
+        "zero",
+        LuaRat(BigRational::new(BigInt::from(0), BigInt::from(1))),
+    )?;
+
     Ok(LuaValue::Table(rat_table))
 }

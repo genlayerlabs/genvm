@@ -120,15 +120,25 @@ async fn exec_prompt_in_provider(
 
     let answer_data = vm.to_value_with(&res.result, scripting::DEFAULT_LUA_SER_OPTIONS)?;
 
+    let tokens = vm.create_table()?;
+    tokens.set("input", res.tokens.input)?;
+    tokens.set("output", res.tokens.output)?;
+    tokens.set("total", res.tokens.total)?;
+    tokens.set("cache_read", res.tokens.cache_read_tokens)?;
+    tokens.set("cache_write", res.tokens.cache_write_tokens)?;
+    tokens.set("image_units", res.tokens.image_units)?;
+    tokens.set(
+        "raw_usage",
+        vm.to_value_with(&res.tokens.raw_usage, scripting::DEFAULT_LUA_SER_OPTIONS)?,
+    )?;
+
     let answer = vm.create_table()?;
     answer.set("data", answer_data)?;
     answer.set(
         "consumed_gen",
         scripting::rat::LuaRat(num_rational::BigRational::from(num_bigint::BigInt::from(0))),
     )?;
-    answer.set("input_tokens", res.tokens.input)?;
-    answer.set("output_tokens", res.tokens.output)?;
-    answer.set("total_tokens", res.tokens.total)?;
+    answer.set("tokens", tokens)?;
 
     Ok(mlua::Value::Table(answer))
 }
@@ -164,15 +174,8 @@ pub fn create_global(vm: &mlua::Lua, config: &Config) -> anyhow::Result<mlua::Va
 
     llm.set(
         "exhaust",
-        vm.create_function(|vm: &mlua::Lua, _: ()| {
-            let u256_max = num_bigint::BigInt::from_bytes_be(num_bigint::Sign::Plus, &[0xFF; 32]);
-            let answer = vm.create_table()?;
-            answer.set("data", "")?;
-            answer.set(
-                "consumed_gen",
-                scripting::rat::LuaRat(num_rational::BigRational::from(u256_max)),
-            )?;
-            Ok(mlua::Value::Table(answer))
+        vm.create_function(|_vm: &mlua::Lua, _: ()| -> mlua::Result<()> {
+            Err(mlua::Error::external(crate::common::BudgetExhausted))
         })?,
     )?;
 

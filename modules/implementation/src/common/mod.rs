@@ -43,6 +43,17 @@ impl ErrorKind {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct BudgetExhausted;
+
+impl std::fmt::Display for BudgetExhausted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "INSUFFICIENT_EXECUTION_BUDGET")
+    }
+}
+
+impl std::error::Error for BudgetExhausted {}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModuleError {
     pub causes: Vec<String>,
@@ -73,6 +84,8 @@ pub struct ModuleBaseConfig {
 
     pub signer_url: Arc<str>,
     pub signer_headers: Arc<BTreeMap<String, String>>,
+
+    pub data_dir: String,
 }
 
 pub trait MapUserError {
@@ -812,6 +825,8 @@ pub mod tests {
                 tx_id: "test_tx_id".to_owned(),
                 rest: serde_json::Map::new(),
             },
+            gas_data: std::collections::BTreeMap::new(),
+            initial_time_units_allocation: 0,
         })
     }
 }

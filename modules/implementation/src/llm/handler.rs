@@ -200,6 +200,32 @@ impl Inner {
         Ok(llm_iface::PromptAnswer { data, consumed_gen })
     }
 
+    fn try_catch_budget_exhausted(err: anyhow::Error) -> ModuleResult<llm_iface::PromptAnswer> {
+        if err
+            .downcast_ref::<crate::common::BudgetExhausted>()
+            .is_some()
+        {
+            return Ok(llm_iface::PromptAnswer {
+                data: llm_iface::PromptAnswerData::Text(String::new()),
+                consumed_gen: primitive_types::U256::MAX,
+            });
+        }
+        if let Some(mlua_err) = err.downcast_ref::<mlua::Error>() {
+            if let mlua::Error::ExternalError(ext) = mlua_err {
+                if ext
+                    .downcast_ref::<crate::common::BudgetExhausted>()
+                    .is_some()
+                {
+                    return Ok(llm_iface::PromptAnswer {
+                        data: llm_iface::PromptAnswerData::Text(String::new()),
+                        consumed_gen: primitive_types::U256::MAX,
+                    });
+                }
+            }
+        }
+        Err(err)
+    }
+
     async fn exec_prompt(
         &self,
         _zelf: Arc<Inner>,
@@ -218,14 +244,18 @@ impl Inner {
             .to_value_with(&payload, scripting::DEFAULT_LUA_SER_OPTIONS)?;
         let fuel = self.u256_to_lua_rat(remaining_fuel_as_gen)?;
 
-        let res: mlua::Value = self
+        let res: Result<mlua::Value, _> = self
             .user_vm
             .call_fn(
                 &self.user_vm.data.exec_prompt,
                 (self.ctx_val.clone(), payload, fuel),
             )
-            .await?;
-        let res = self.lua_result_to_prompt_answer(res)?;
+            .await;
+
+        let res = match res {
+            Ok(val) => self.lua_result_to_prompt_answer(val)?,
+            Err(err) => Self::try_catch_budget_exhausted(err)?,
+        };
 
         log_debug_into!(&LoggerWithId, result:serde = res, genvm_id:id = self.genvm_id.0; "exec_prompt returned");
 
@@ -246,14 +276,18 @@ impl Inner {
             .to_value_with(&payload, scripting::DEFAULT_LUA_SER_OPTIONS)?;
         let fuel = self.u256_to_lua_rat(remaining_fuel_as_gen)?;
 
-        let res: mlua::Value = self
+        let res: Result<mlua::Value, _> = self
             .user_vm
             .call_fn(
                 &self.user_vm.data.exec_prompt_template,
                 (self.ctx_val.clone(), payload, fuel),
             )
-            .await?;
-        let res = self.lua_result_to_prompt_answer(res)?;
+            .await;
+
+        let res = match res {
+            Ok(val) => self.lua_result_to_prompt_answer(val)?,
+            Err(err) => Self::try_catch_budget_exhausted(err)?,
+        };
 
         log_debug_into!(&LoggerWithId, result:serde = res, genvm_id:id = self.genvm_id.0; "exec_prompt_template returned");
 

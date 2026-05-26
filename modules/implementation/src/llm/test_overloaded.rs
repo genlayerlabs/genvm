@@ -112,6 +112,7 @@ async fn test_overloaded() {
             lua_path: extra_path,
             signer_url: Arc::from(""),
             signer_headers: Arc::new(BTreeMap::new()),
+            data_dir: String::new(),
         },
         prompt_templates: config::PromptTemplates {
             eq_comparative: serde_json::Value::Null,

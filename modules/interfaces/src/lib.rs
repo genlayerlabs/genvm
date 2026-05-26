@@ -440,6 +440,9 @@ pub struct GenVMHello {
     pub role: Role,
     #[calldata(deserialize_with = decode_host_data)]
     pub host_data: HostData,
+    #[serde(default)]
+    pub gas_data: std::collections::BTreeMap<String, String>,
+    pub initial_time_units_allocation: u32,
 }
 
 /// Decode a `serde_json::Value` from a calldata `Value`.
