@@ -20,6 +20,7 @@ pub struct Module {
     cancellation: Arc<genvm_common::cancellation::Token>,
     imp: tokio::sync::Mutex<ModuleImpl>,
     genvm_id: genvm_modules_interfaces::GenVMId,
+    role: genvm_modules_interfaces::Role,
     host_data: genvm_modules_interfaces::HostData,
     metrics: sync::DArc<Metrics>,
 }
@@ -93,6 +94,7 @@ impl Module {
         url: String,
         cancellation: Arc<genvm_common::cancellation::Token>,
         genvm_id: genvm_modules_interfaces::GenVMId,
+        role: genvm_modules_interfaces::Role,
         host_data: genvm_modules_interfaces::HostData,
         metrics: sync::DArc<Metrics>,
     ) -> Self {
@@ -100,6 +102,7 @@ impl Module {
             imp: tokio::sync::Mutex::new(ModuleImpl { url, stream: None }),
             cancellation,
             genvm_id,
+            role,
             name,
             host_data,
             metrics,
@@ -141,6 +144,7 @@ impl Module {
                 &mut stream,
                 &calldata::encode_obj(&genvm_modules_interfaces::GenVMHello {
                     genvm_id: self.genvm_id,
+                    role: self.role,
                     host_data: self.host_data.clone(),
                 }),
             )

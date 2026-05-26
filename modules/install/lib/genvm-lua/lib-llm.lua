@@ -45,6 +45,7 @@ local lib = require("lib-genvm")
 
 ---@class LLM
 ---@field exec_prompt_in_provider fun(ctx, data: { prompt: Prompt, format: Format, model: string, provider: string, timeout: number | nil }): any
+---@field exhaust fun(): { data: string, consumed_gen: Rat }
 ---@field timeout number | nil
 ---@field providers ProvidersDB
 ---@field templates { eq_comparative: any, eq_non_comparative_leader: any, eq_non_comparative_validator: any }
@@ -67,6 +68,11 @@ M.overloaded_statuses = {
 --- Execute a prompt against a specific provider/model. Delegates to the runtime.
 ---@type fun(ctx, data: { prompt: Prompt, format: Format, model: string, provider: string }): any
 M.exec_prompt_in_provider = rs.exec_prompt_in_provider
+
+--- Signal budget exhaustion. Returns a response with consumed_gen=U256::MAX that
+--- causes the executor to terminate the VM with a timeout error.
+---@type fun(): { data: string, consumed_gen: Rat }
+M.exhaust = rs.exhaust
 
 --- Full provider database (all providers and models).
 ---@type ProvidersDB

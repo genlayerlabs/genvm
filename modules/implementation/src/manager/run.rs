@@ -878,8 +878,14 @@ pub async fn start_genvm(
     // Create execution context if modules are needed
     let execution_context = if req.needs_modules() {
         let host_data: genvm_modules_interfaces::HostData = serde_json::from_str(&req.host_data)?;
+        let role = if req.leader_nondet_results.is_none() {
+            genvm_modules_interfaces::Role::Leader
+        } else {
+            genvm_modules_interfaces::Role::Validator
+        };
         let hello = Arc::new(genvm_modules_interfaces::GenVMHello {
             genvm_id,
+            role,
             host_data,
         });
         Some(full_ctx.mod_ctx.create_execution_context(hello).await?)

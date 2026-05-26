@@ -348,7 +348,7 @@ async def host_loop(
 				)
 				return None
 			case host_fns.Methods.CONSUME_FUEL:
-				gas = await recv_int(8)
+				gas = await recv_int(32)
 				await handler.consume_gas(gas)
 			case host_fns.Methods.ETH_CALL:
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
@@ -378,9 +378,8 @@ async def host_loop(
 				except HostException as e:
 					await send_all(bytes([e.error_code]))
 				else:
-					res = min(res, 2**53 - 1)
 					await send_all(bytes([host_fns.Errors.OK]))
-					await send_all(res.to_bytes(8, byteorder='little', signed=False))
+					await send_all(res.to_bytes(32, byteorder='little', signed=False))
 			case host_fns.Methods.NOTIFY_NONDET_DISAGREEMENT:
 				call_no = await recv_int()
 				await handler.notify_nondet_disagreement(call_no)

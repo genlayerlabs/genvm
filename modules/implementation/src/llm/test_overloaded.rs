@@ -195,16 +195,20 @@ async fn test_overloaded() {
         .unwrap();
     let fuel = user_vm
         .vm
-        .to_value_with(&0u64, scripting::DEFAULT_LUA_SER_OPTIONS)
+        .create_userdata(scripting::rat::LuaRat(num_rational::BigRational::from(
+            num_bigint::BigInt::from(0),
+        )))
         .unwrap();
 
-    let res = user_vm
+    let res: mlua::Value = user_vm
         .call_fn(&user_vm.data.exec_prompt, (ctx_lua, payload, fuel))
         .await
         .unwrap();
-    let res: llm_iface::PromptAnswer = user_vm.vm.from_value(res).unwrap();
+    let table = res.as_table().unwrap();
+    let data: llm_iface::PromptAnswerData =
+        user_vm.vm.from_value(table.get("data").unwrap()).unwrap();
 
-    match res.data {
+    match data {
         llm_iface::PromptAnswerData::Text(text) => {
             assert_eq!(text.trim().to_lowercase(), "ok");
         }

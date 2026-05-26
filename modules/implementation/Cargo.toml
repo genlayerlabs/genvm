@@ -45,6 +45,10 @@ ring = { version = "0.17.14", features = ["std"] }
 url = { version = "2.5.4", features = ["serde"] }
 hex = "0.4.3"
 num-bigint = { version = "0.4.6", features = ["serde"] }
+num-rational = { version = "0.4.2" }
+num-traits = { version = "0.2.19" }
+num-integer = { version = "0.1.46" }
+primitive-types = { version = "0.13", features = ["impl-serde"] }
 unicode-normalization = "0.1.20"
 unicode-width = "0.2.1"
 image = { version = "0.25.8", features = ["png", "jpeg", "webp"]}

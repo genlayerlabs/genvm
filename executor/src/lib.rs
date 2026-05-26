@@ -73,12 +73,19 @@ pub fn create_supervisor(
 ) -> Result<Arc<rt::supervisor::Supervisor>> {
     let metrics = shared_data.gep(|x| &x.metrics);
 
+    let role = if leader_nondet_results.is_none() {
+        genvm_modules_interfaces::Role::Leader
+    } else {
+        genvm_modules_interfaces::Role::Validator
+    };
+
     let modules = modules::All {
         web: Arc::new(modules::Module::new(
             "web".into(),
             config.modules.web.address.clone(),
             shared_data.cancellation.clone(),
             shared_data.genvm_id,
+            role,
             host_data.clone(),
             metrics.gep(|x| &x.web_module),
         )),
@@ -87,6 +94,7 @@ pub fn create_supervisor(
             config.modules.llm.address.clone(),
             shared_data.cancellation.clone(),
             shared_data.genvm_id,
+            role,
             host_data,
             metrics.gep(|x| &x.llm_module),
         )),

@@ -305,11 +305,11 @@ pub mod llm {
     pub enum Message {
         Prompt {
             payload: PromptPayload,
-            remaining_fuel_as_gen: u64,
+            remaining_fuel_as_gen: primitive_types::U256,
         },
         PromptTemplate {
             payload: PromptTemplatePayload,
-            remaining_fuel_as_gen: u64,
+            remaining_fuel_as_gen: primitive_types::U256,
         },
 
         GetStats,
@@ -343,7 +343,7 @@ pub mod llm {
     )]
     pub struct PromptAnswer {
         pub data: PromptAnswerData,
-        pub consumed_gen: u64,
+        pub consumed_gen: primitive_types::U256,
     }
 
     impl PromptAnswer {
@@ -417,9 +417,27 @@ impl std::fmt::Display for GenVMId {
     }
 }
 
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    genlayer_calldata::Encode,
+    genlayer_calldata::Decode,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    Leader,
+    Validator,
+}
+
 #[derive(Debug, Serialize, Deserialize, genlayer_calldata::Encode, genlayer_calldata::Decode)]
 pub struct GenVMHello {
     pub genvm_id: GenVMId,
+    pub role: Role,
     #[calldata(deserialize_with = decode_host_data)]
     pub host_data: HostData,
 }

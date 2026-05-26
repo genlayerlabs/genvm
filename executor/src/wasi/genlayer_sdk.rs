@@ -1074,8 +1074,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     sup.host
                         .lock_for(host::host_fns::Methods::ConsumeFuel)
                         .await
-                        .consume_fuel(result.consumed_gen)
-                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+                        .consume_fuel(result.consumed_gen)?;
+
+                    if result.consumed_gen == primitive_types::U256::MAX {
+                        return Err(
+                            rt::errors::VMError(abi::consts::VmError::timeout(), None).into(),
+                        );
+                    }
 
                     let mut result = result.data;
 
@@ -1155,10 +1160,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         sup.host
                             .lock_for(host::host_fns::Methods::ConsumeFuel)
                             .await
-                            .consume_fuel(*consumed_gen)
-                            .map_err(|e| {
-                                generated::types::Error::trap(crate::anyhow_to_wasmtime(e))
-                            })?;
+                            .consume_fuel(*consumed_gen)?;
+                        if *consumed_gen == primitive_types::U256::MAX {
+                            return Err(
+                                rt::errors::VMError(abi::consts::VmError::timeout(), None).into()
+                            );
+                        }
                     }
 
                     match (expect_bool, answer) {
@@ -1167,14 +1174,14 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                             true,
                             Ok(PromptAnswer {
                                 data: PromptAnswerData::Bool(answer),
-                                consumed_gen,
+                                ..
                             }),
                         ) => Ok(Ok(PromptAnswerData::Bool(answer))),
                         (
                             false,
                             Ok(PromptAnswer {
                                 data: PromptAnswerData::Text(answer),
-                                consumed_gen,
+                                ..
                             }),
                         ) => Ok(Ok(PromptAnswerData::Text(answer))),
                         (_, Ok(_)) => Err(anyhow::anyhow!("unmatched result")),

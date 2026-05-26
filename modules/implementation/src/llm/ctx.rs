@@ -13,6 +13,8 @@ use super::{config::Config, prompt, providers};
 pub struct VMData {
     pub exec_prompt: mlua::Function,
     pub exec_prompt_template: mlua::Function,
+    pub setup: Option<mlua::Function>,
+    pub teardown: Option<mlua::Function>,
 }
 
 pub struct CtxPart {
@@ -116,17 +118,14 @@ async fn exec_prompt_in_provider(
         .with_context(|| "running in provider")
         .map_err(scripting::anyhow_to_lua_error)?;
 
-    let answer = llm_iface::PromptAnswer {
-        data: res.result,
-        consumed_gen: 0,
-    };
+    let answer_data = vm.to_value_with(&res.result, scripting::DEFAULT_LUA_SER_OPTIONS)?;
 
-    let mlua::Value::Table(answer) =
-        vm.to_value_with(&answer, scripting::DEFAULT_LUA_SER_OPTIONS)?
-    else {
-        std::unreachable!("to_value_with returned non-table for struct");
-    };
-
+    let answer = vm.create_table()?;
+    answer.set("data", answer_data)?;
+    answer.set(
+        "consumed_gen",
+        scripting::rat::LuaRat(num_rational::BigRational::from(num_bigint::BigInt::from(0))),
+    )?;
     answer.set("input_tokens", res.tokens.input)?;
     answer.set("output_tokens", res.tokens.output)?;
     answer.set("total_tokens", res.tokens.total)?;
@@ -161,6 +160,20 @@ pub fn create_global(vm: &mlua::Lua, config: &Config) -> anyhow::Result<mlua::Va
     llm.set(
         "timeout",
         vm.to_value_with(&config.timeout, scripting::DEFAULT_LUA_SER_OPTIONS)?,
+    )?;
+
+    llm.set(
+        "exhaust",
+        vm.create_function(|vm: &mlua::Lua, _: ()| {
+            let u256_max = num_bigint::BigInt::from_bytes_be(num_bigint::Sign::Plus, &[0xFF; 32]);
+            let answer = vm.create_table()?;
+            answer.set("data", "")?;
+            answer.set(
+                "consumed_gen",
+                scripting::rat::LuaRat(num_rational::BigRational::from(u256_max)),
+            )?;
+            Ok(mlua::Value::Table(answer))
+        })?,
     )?;
 
     Ok(mlua::Value::Table(llm))

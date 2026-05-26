@@ -1060,6 +1060,7 @@ mod tests {
             sign_vars: BTreeMap::new(),
             hello: std::sync::Arc::new(genvm_modules_interfaces::GenVMHello {
                 genvm_id: genvm_modules_interfaces::GenVMId(999),
+                role: genvm_modules_interfaces::Role::Leader,
                 host_data: genvm_modules_interfaces::HostData {
                     tx_id: "test_tx".to_owned(),
                     node_address: "test_node".to_owned(),
@@ -1153,6 +1154,7 @@ mod tests {
             sign_vars: BTreeMap::new(),
             hello: std::sync::Arc::new(genvm_modules_interfaces::GenVMHello {
                 genvm_id: genvm_modules_interfaces::GenVMId(999),
+                role: genvm_modules_interfaces::Role::Leader,
                 host_data: genvm_modules_interfaces::HostData {
                     tx_id: "test_tx".to_owned(),
                     node_address: "test_node".to_owned(),
@@ -1239,6 +1241,7 @@ mod tests {
             sign_vars: BTreeMap::new(),
             hello: std::sync::Arc::new(genvm_modules_interfaces::GenVMHello {
                 genvm_id: genvm_modules_interfaces::GenVMId(999),
+                role: genvm_modules_interfaces::Role::Leader,
                 host_data: genvm_modules_interfaces::HostData {
                     tx_id: "test_tx".to_owned(),
                     node_address: "test_node".to_owned(),
@@ -1347,6 +1350,7 @@ mod tests {
             sign_vars: BTreeMap::new(),
             hello: std::sync::Arc::new(genvm_modules_interfaces::GenVMHello {
                 genvm_id: genvm_modules_interfaces::GenVMId(999),
+                role: genvm_modules_interfaces::Role::Leader,
                 host_data: genvm_modules_interfaces::HostData {
                     tx_id: "test_tx".to_owned(),
                     node_address: "test_node".to_owned(),

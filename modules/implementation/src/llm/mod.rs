@@ -68,10 +68,14 @@ async fn create_vm(config: &sync::DArc<config::Config>) -> anyhow::Result<UserVM
             // get functions populated by script
             let exec_prompt: mlua::Function = vm.globals().get("ExecPrompt")?;
             let exec_prompt_template: mlua::Function = vm.globals().get("ExecPromptTemplate")?;
+            let setup: Option<mlua::Function> = vm.globals().get("Setup").ok();
+            let teardown: Option<mlua::Function> = vm.globals().get("Teardown").ok();
 
             Ok(ctx::VMData {
                 exec_prompt,
                 exec_prompt_template,
+                setup,
+                teardown,
             })
         },
         Box::new(move |vm, table, sub_ctx: &sync::DArc<LlmSubContext>| {

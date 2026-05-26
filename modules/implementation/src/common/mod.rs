@@ -806,6 +806,7 @@ pub mod tests {
     pub fn get_hello() -> Arc<genvm_modules_interfaces::GenVMHello> {
         Arc::new(genvm_modules_interfaces::GenVMHello {
             genvm_id: genvm_modules_interfaces::GenVMId(999),
+            role: genvm_modules_interfaces::Role::Leader,
             host_data: genvm_modules_interfaces::HostData {
                 node_address: "test_node_address".to_owned(),
                 tx_id: "test_tx_id".to_owned(),

@@ -1,4 +1,5 @@
 pub mod pool;
+pub mod rat;
 
 mod ctx;
 
@@ -146,6 +147,8 @@ impl<T, R, E> UserVM<T, R, E> {
             "__dflt",
             ctx::dflt::create_global(&vm).context("creating global for __dflt")?,
         )?;
+
+        rat::register_rat_global(&vm).context("registering rat global")?;
 
         Ok(Self {
             data: data_getter(vm.clone()).await?,

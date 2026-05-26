@@ -15,3 +15,4 @@ serde_bytes = "0.11.17"
 genlayer_calldata = { path = "../../executor/crates/calldata" }
 num-bigint = "0.4"
 num-traits = "0.2"
+primitive-types = { version = "0.13", features = ["impl-serde"] }

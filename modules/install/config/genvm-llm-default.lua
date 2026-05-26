@@ -106,6 +106,10 @@ local function just_in_backend(ctx, mapped_prompt, remaining_gen)
 	}
 end
 
+function Setup(ctx) end
+
+function Teardown(ctx) end
+
 function ExecPrompt(ctx, args, remaining_gen)
 	---@cast args LLMExecPromptPayload
 	---@cast remaining_gen number
