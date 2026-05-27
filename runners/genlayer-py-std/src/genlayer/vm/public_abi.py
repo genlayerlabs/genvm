@@ -73,16 +73,43 @@ class _VmErrorOomRam:
 	def limit() -> 'VmError':
 		return VmError('OOM RAM limit')
 
+class _VmErrorOomReceiptMessage:
+	@staticmethod
+	def internal() -> 'VmError':
+		return VmError('OOM receipt message internal')
+	@staticmethod
+	def external() -> 'VmError':
+		return VmError('OOM receipt message external')
+
+class _VmErrorOomReceipt:
+	@staticmethod
+	def nondet_output() -> 'VmError':
+		return VmError('OOM receipt nondet_output')
+	@staticmethod
+	def message() -> '_VmErrorOomReceiptMessage':
+		return _VmErrorOomReceiptMessage()
+
+class _VmErrorOomFees:
+	@staticmethod
+	def internal() -> 'VmError':
+		return VmError('OOM fees internal')
+	@staticmethod
+	def external() -> 'VmError':
+		return VmError('OOM fees external')
+
 class _VmErrorOom:
 	@staticmethod
 	def storage() -> 'VmError':
 		return VmError('OOM storage')
 	@staticmethod
-	def receipt() -> 'VmError':
-		return VmError('OOM receipt')
-	@staticmethod
 	def ram() -> '_VmErrorOomRam':
 		return _VmErrorOomRam()
+	@staticmethod
+	def receipt() -> '_VmErrorOomReceipt':
+		return _VmErrorOomReceipt()
+	@staticmethod
+	def fees() -> '_VmErrorOomFees':
+		return _VmErrorOomFees()
 
 class _VmErrorInvalidContractWasm:
 	@staticmethod

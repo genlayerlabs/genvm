@@ -50,5 +50,13 @@ the following data:
     Slot contains 4 bytes little-endian length followed length arrays of 32 byte :term:`SlotID`\s
 - ``upgraders``: (offset 3) A list of addresses that are authorized to modify the contract code and locked slots.
     Slot contains 4 bytes little-endian length followed length arrays of 20 byte addresses
+- ``major``: (offset 4) Single octet (``u8``) identifying the major version of the public ABI
+    that the contract was built against. It is written at deploy time (the value is detected
+    from the contract package — see :doc:`04-upgradability` and the impl-spec for the detection flow)
+    and read on every load so :term:`GenVM` can refuse to execute a contract whose public ABI
+    major does not match the host's ``CURRENT_MAJOR``.
 
-Upgrade permissions and slot locking is described in :doc:`04-upgradability`
+Offsets at and above ``5`` are unused by :term:`GenVM` itself and are available to the contract
+runtime for bootstrapping its own storage (see ``Root.get_vacant_slot`` in the Python SDK).
+
+Upgrade permissions and slot locking are described in :doc:`04-upgradability`.

@@ -67,6 +67,12 @@ Payload
      }
    }
 
+When ``state`` is ``0`` (``default``) :term:`GenVM` resolves it to ``latest_non_final``.
+The motivation is that the caller has already observed (and possibly modified)
+non-final state in the current transaction, so reading anything older than
+``latest_non_final`` for an in-transaction call would expose stale data and
+break causality between the caller and callee.
+
 Requirements
 ~~~~~~~~~~~~
 

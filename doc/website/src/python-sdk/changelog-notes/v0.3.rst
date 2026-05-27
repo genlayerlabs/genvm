@@ -13,14 +13,14 @@ The recommended import pattern has changed:
 
 .. code-block:: python
 
-    # v0.1.x
+    # v0.2.x
     from genlayer import *
 
     # v0.3.0
     import genlayer as gl
     from genlayer.types import *
 
-The ``from genlayer import *`` star-import previously brought ``gl`` (a lazy proxy to ``genlayer.gl``), all types, and storage names into scope. Now ``import genlayer as gl`` gives you direct access to submodules (``gl.contract``, ``gl.vm``, ``gl.message``, etc.), decorators (``gl.public``, ``gl.private``), and storage types (``gl.TreeMap``, ``gl.DynArray``, ``gl.Array``). The ``from genlayer.types import *`` import brings the type aliases (``u8``..``u256``, ``i8``..``i256``, ``Address``, ``bigint``, etc.) into local scope.
+The ``from genlayer import *`` star-import previously brought ``gl`` (a lazy proxy to ``genlayer.gl``), all types, and storage names into scope. Now ``import genlayer as gl`` gives you direct access to submodules (``gl.contract``, ``gl.vm``, ``gl.message``, ``gl.chain``, etc.), decorators (``gl.public``, ``gl.private``), and storage types (``gl.TreeMap``, ``gl.DynArray``, ``gl.Array``). The ``from genlayer.types import *`` import brings the type aliases (``u8``..``u256``, ``i8``..``i256``, ``Address``, ``bigint``, etc.) into local scope.
 
 Module Path Changes
 ~~~~~~~~~~~~~~~~~~~
@@ -31,7 +31,7 @@ All ``genlayer.py.*`` and ``genlayer.gl.*`` paths are removed. Here is the mappi
    :header-rows: 1
    :widths: 50 50
 
-   * - v0.1.x
+   * - v0.2.x
      - v0.3.0
    * - ``genlayer.py.types``
      - ``genlayer.types``
@@ -61,7 +61,7 @@ Contract Declaration
 
 .. code-block:: python
 
-    # v0.1.x
+    # v0.2.x
     class MyToken(gl.Contract):
         ...
 
@@ -76,7 +76,7 @@ Functions for interacting with other contracts have been renamed and moved into 
 
 .. code-block:: python
 
-    # v0.1.x
+    # v0.2.x
     contract = gl.get_contract_at(address)
     gl.deploy_contract(code=source, args=[...])
 
@@ -96,6 +96,35 @@ Functions for interacting with other contracts have been renamed and moved into 
 
 The ``ContractProxy`` type is renamed to ``gl.contract.Proxy``.
 
+Contract proxies, ``Contract`` itself, and the new ``gl.chain.Account`` all implement the ``gl.chain.IAccount`` protocol, exposing ``address``, ``balance``, and ``emit_transfer(value, *, on=...)``.
+
+Value Transfers and ``on=`` Parameter
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Write-call and deploy APIs now take an ``on`` keyword controlling when the message is applied, with values ``'accepted'`` or ``'finalized'`` (default ``'finalized'``):
+
+.. code-block:: python
+
+    contract.emit(value=100, on='finalized').transfer(to, amount)
+    gl.contract.deploy(code=source, value=1000, on='finalized', salt_nonce=42)
+
+A new ``emit_transfer`` helper sends a plain value transfer without a method call. The receiver may catch it via ``Contract.__receive__`` (must be ``@gl.public.write.payable``):
+
+.. code-block:: python
+
+    contract.emit_transfer(1000, on='finalized')
+
+Accounts
+~~~~~~~~
+
+``gl.chain.Account`` is a new lightweight wrapper around an ``Address`` that allows querying the balance of, or emitting a transfer to, any on-chain account (contract or EoA):
+
+.. code-block:: python
+
+    acc = gl.chain.Account(some_address)
+    bal = acc.balance
+    acc.emit_transfer(100)
+
 Message Context
 ~~~~~~~~~~~~~~~
 
@@ -103,7 +132,7 @@ The ``gl.message`` object was a ``NamedTuple``. It is now a module (``genlayer.m
 
 .. code-block:: python
 
-    # v0.1.x
+    # v0.2.x
     sender = gl.message.sender_address
     value = gl.message.value
 
@@ -111,24 +140,24 @@ The ``gl.message`` object was a ``NamedTuple``. It is now a module (``genlayer.m
     sender = gl.message.sender_address
     value = gl.message.value
 
-``gl.message_raw`` is now ``gl.message.raw``.
+``gl.message_raw`` is now ``gl.message.raw``. The chain ID is exposed as ``gl.message.chain_id`` (and as ``gl.chain.id``).
 
 Events
 ~~~~~~
 
-The ``Event`` class has moved from ``genlayer.gl`` to ``genlayer.vm``:
+The ``Event`` class has moved from ``genlayer.gl`` to ``genlayer.chain``:
 
 .. code-block:: python
 
-    # v0.1.x
+    # v0.2.x
     class Transfer(gl.Event):
         def __init__(self, sender: Address, to: Address, /): ...
 
     # v0.3.0
-    class Transfer(gl.vm.Event):
+    class Transfer(gl.chain.Event):
         def __init__(self, sender: Address, to: Address, /): ...
 
-``gl.advanced.emit_raw_event(topics, blob)`` is now ``gl.vm.Event.emit_raw(topics, blob)``.
+``gl.advanced.emit_raw_event(topics, blob)`` is now ``gl.chain.Event.emit_raw(topics, blob)``.
 
 Advanced / Error Handling
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -137,13 +166,26 @@ The ``genlayer.gl.advanced`` module is removed. Its functionality has been reloc
 
 .. code-block:: python
 
-    # v0.1.x
+    # v0.2.x
     gl.advanced.user_error_immediate("reason")
     gl.advanced.emit_raw_event(topics, blob)
 
     # v0.3.0
     gl.vm.UserError.immediate("reason")
-    gl.vm.Event.emit_raw(topics, blob)
+    gl.chain.Event.emit_raw(topics, blob)
+
+``UserError`` now carries an arbitrary calldata-encodable payload instead of a string. The payload is accessed via ``.data`` (previously ``.message``), and ``UserError.immediate`` accepts any ``calldata.Encodable``:
+
+.. code-block:: python
+
+    raise gl.vm.UserError({'kind': 'InsufficientBalance', 'have': have, 'need': need})
+
+    try:
+        ...
+    except gl.vm.UserError as e:
+        payload = e.data
+
+The error-message handler hook (``__on_errored_message__``) has been removed.
 
 VM Tracing
 ~~~~~~~~~~
@@ -152,7 +194,7 @@ Trace functions have moved from ``genlayer.gl`` to ``genlayer.vm``:
 
 .. code-block:: python
 
-    # v0.1.x
+    # v0.2.x
     gl.trace("debug message")
     gl.trace_time_micro()
 
@@ -163,11 +205,11 @@ Trace functions have moved from ``genlayer.gl`` to ``genlayer.vm``:
 Storage
 ~~~~~~~
 
-``allow_storage`` decorator is renamed to ``allow``:
+``allow_storage`` decorator is renamed to ``allow`` and is available as ``gl.storage.allow`` (also re-exported at ``gl.allow``):
 
 .. code-block:: python
 
-    # v0.1.x
+    # v0.2.x
     @gl.storage.allow_storage
     class MyRecord:
         x: u32
@@ -186,12 +228,22 @@ Decorators
 
 .. code-block:: python
 
-    # Both v0.1.x and v0.3.0
+    # Both v0.2.x and v0.3.0
     @gl.public.write
     def transfer(self, to: Address, amount: u256): ...
 
     @gl.public.view
     def balance_of(self, owner: Address) -> u256: ...
+
+Non-deterministic Operations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``gl.nondet`` now raises a dedicated ``gl.nondet.NondetException`` (with ``causes`` and ``ctx``) on errors instead of a bare exception. Web request helpers (``gl.nondet.web.get``/``post``/``put``/...) accept a ``sign: bool`` keyword to sign outbound requests with the contract's identity.
+
+Environment Detection
+~~~~~~~~~~~~~~~~~~~~~
+
+A new top-level ``gl.IS_IN_VM`` boolean indicates whether code is running inside the GenVM, which is useful for code that is shared between contracts and off-chain tooling. The raw WASI module is available as ``gl.wasi``.
 
 Summary of Renames
 ~~~~~~~~~~~~~~~~~~
@@ -200,7 +252,7 @@ Summary of Renames
    :header-rows: 1
    :widths: 50 50
 
-   * - v0.1.x
+   * - v0.2.x
      - v0.3.0
    * - ``gl.Contract``
      - ``gl.contract.Contract``
@@ -213,11 +265,11 @@ Summary of Renames
    * - ``gl.ContractProxy``
      - ``gl.contract.Proxy``
    * - ``gl.Event``
-     - ``gl.vm.Event``
+     - ``gl.chain.Event``
    * - ``gl.advanced.user_error_immediate(...)``
      - ``gl.vm.UserError.immediate(...)``
    * - ``gl.advanced.emit_raw_event(...)``
-     - ``gl.vm.Event.emit_raw(...)``
+     - ``gl.chain.Event.emit_raw(...)``
    * - ``gl.trace(...)``
      - ``gl.vm.trace(...)``
    * - ``gl.trace_time_micro()``
@@ -226,3 +278,5 @@ Summary of Renames
      - ``gl.message.raw``
    * - ``gl.storage.allow_storage``
      - ``gl.storage.allow``
+   * - ``UserError(msg: str).message``
+     - ``UserError(data: Encodable).data``

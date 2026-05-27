@@ -503,7 +503,7 @@ end
 
 generator.build(:CUSTOM_COMMAND, 'target/runners') do
 	var :command, [
-		'nix', 'build', '-v', '-L', '-o', $build_dir.join('runners-nix'), "git+file:#{$source_dir}#debug-runners",
+		'nix', 'build', '--keep-going', '-v', '-L', '-o', $build_dir.join('runners-nix'), "git+file:#{$source_dir}#debug-runners",
 		Ninja::AND, 'mkdir', '-p', './out/runners',
 		Ninja::AND, 'cp', '-r', './runners-nix/.', './out/runners/.',
 		Ninja::AND, 'chmod', '-R', '+w', './out/runners/.',

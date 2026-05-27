@@ -695,7 +695,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             }
             gl_call::Message::EmitEvent { topics, blob } => {
                 if !self.context.data.conf.is_deterministic {
-                    log_warn!("forbidden emit event in deterministic mode");
+                    log_warn!("EmitEvent requires deterministic mode");
 
                     return Err(generated::types::Errno::Forbidden.into());
                 }
