@@ -7,10 +7,6 @@ local sqlite3 = require("lsqlite3")
 -- Instead, each genvm creates a session, which has a single `ctx` object,
 -- which is preserved across multiple calls
 
-local DEFAULT_POLICY = {
-	margin = rat.new("1/2"),
-}
-
 local function get_or_create_stats(ctx, provider, model)
 	local key = provider .. "/" .. model
 	local entry = ctx.stats[key]
@@ -38,13 +34,6 @@ local function exec_update_policy_data(ctx, request, calc_consumed_gen)
 	local entry = get_or_create_stats(ctx, request.provider, request.model)
 
 	if success then
-		lib.log {
-			level = "debug",
-			message = "provider call successful",
-			request = request,
-			result = res,
-		}
-
 		local consumed_gen = calc_consumed_gen(res)
 		if consumed_gen then
 			ctx.policy.spent_gen_wei = ctx.policy.spent_gen_wei + rat.new(consumed_gen)

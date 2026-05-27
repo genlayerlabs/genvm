@@ -1,2 +1,3 @@
-({'causes': ['EMPTY_PROMPT'], 'ctx': {}},)
+['EMPTY_PROMPT']
+{}
 executed with `Return(null)`

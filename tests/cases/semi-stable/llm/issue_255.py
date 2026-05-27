@@ -15,6 +15,7 @@ class Contract(gl.contract.Contract):
 				)
 				print(v, file=sys.stderr)
 			except gl.nondet.NondetException as e:
-				print(e.args)
+				print(e.causes)
+				print(e.ctx)
 
 		gl.eq_principle.strict_eq(run)

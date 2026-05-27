@@ -27,7 +27,13 @@ import genlayer._internal.on_chain.gl_call as gl_call
 
 
 class NondetException(Exception):
-	""" """
+	causes: list[str]
+	ctx: dict[str, typing.Any]
+
+	def __init__(self, causes: list[str], ctx: dict[str, typing.Any]):
+		self.causes = causes
+		self.ctx = ctx
+		super().__init__(': '.join(causes))
 
 
 import genlayer.calldata as calldata
@@ -36,7 +42,12 @@ import genlayer.calldata as calldata
 def _decode_nondet(buf):
 	ret = typing.cast(dict, calldata.decode(buf))
 	if err := ret.get('error'):
-		raise NondetException(err)
+		if isinstance(err, dict) and 'causes' in err:
+			raise NondetException(
+				causes=err.get('causes', []),
+				ctx=err.get('ctx', {}),
+			)
+		raise NondetException(causes=[str(err)], ctx={})
 	return ret['ok']
 
 
@@ -101,6 +112,9 @@ def exec_prompt(
 
 	:rtype: ``str``
 	"""
+
+	if len(prompt) == 0:
+		raise ValueError('Prompt cannot be empty')
 
 	images: list[bytes] = []
 	for im in config.get('images', None) or []:
