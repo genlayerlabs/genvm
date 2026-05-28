@@ -23,7 +23,7 @@ struct WasmModuleCache {
 }
 
 pub struct NonDetVMTask {
-    pub task: wasi::genlayer_sdk::SingleVMData,
+    pub task: Box<wasi::genlayer_sdk::SingleVMData>,
     pub call_no: u32,
     pub tasks_done: Arc<tokio::sync::Notify>,
 }
@@ -300,9 +300,9 @@ impl Supervisor {
 
 pub async fn spawn(
     zelf: &Arc<Supervisor>,
-    vm: wasi::genlayer_sdk::SingleVMData,
+    vm: Box<wasi::genlayer_sdk::SingleVMData>,
     limiter: rt::memlimiter::Limiter,
-) -> std::result::Result<rt::vm::VM<()>, (anyhow::Error, wasi::genlayer_sdk::SingleVMData)> {
+) -> std::result::Result<rt::vm::VM<()>, (anyhow::Error, Box<wasi::genlayer_sdk::SingleVMData>)> {
     if vm.depth >= public_abi::top_limits::VM_RECURSION {
         return Err((
             rt::errors::VMError(public_abi::VmError::oom().ram().limit(), None).into(),
@@ -340,7 +340,10 @@ pub async fn spawn(
     if let Err(e) = wasi::add_to_linker_sync(&mut linker, |host: &mut rt::vm::WasmtimeStoreData| {
         host.genlayer_ctx_mut()
     }) {
-        return Err((e, store.into_data().genlayer_ctx.genlayer_sdk.data));
+        return Err((
+            e,
+            Box::new(store.into_data().genlayer_ctx.genlayer_sdk.data),
+        ));
     }
 
     Ok(rt::vm::VM {
@@ -356,7 +359,7 @@ pub async fn spawn(
 pub async fn apply_contract_actions(
     zelf: &std::sync::Arc<Supervisor>,
     mut vm: rt::vm::VM<()>,
-) -> std::result::Result<rt::vm::VM<wasmtime::Instance>, (anyhow::Error, SingleVMData)> {
+) -> std::result::Result<rt::vm::VM<wasmtime::Instance>, (anyhow::Error, Box<SingleVMData>)> {
     let contract_address = vm
         .vm_base
         .store
@@ -381,7 +384,7 @@ pub async fn apply_contract_actions(
         }),
         Err(e) => Err((
             e,
-            vm.vm_base.store.into_data().genlayer_ctx.genlayer_sdk.data,
+            Box::new(vm.vm_base.store.into_data().genlayer_ctx.genlayer_sdk.data),
         )),
     }
 }
@@ -465,7 +468,8 @@ async fn run_single_nondet_inner(
     zelf: &std::sync::Arc<Supervisor>,
     task: NonDetVMTask,
     limiter: memlimiter::Limiter,
-) -> std::result::Result<rt::vm::RunResult, (anyhow::Error, wasi::genlayer_sdk::SingleVMData)> {
+) -> std::result::Result<rt::vm::RunResult, (anyhow::Error, Box<wasi::genlayer_sdk::SingleVMData>)>
+{
     let vm = spawn(zelf, task.task, limiter).await?;
     let vm = apply_contract_actions(zelf, vm).await?;
     vm.run().await

@@ -19,7 +19,7 @@ pub enum RunOk {
 pub struct RunResult {
     pub run_ok: RunOk,
     pub fingerprint: Option<rt::errors::Fingerprint>,
-    pub vm_data: wasi::genlayer_sdk::SingleVMData,
+    pub vm_data: Box<wasi::genlayer_sdk::SingleVMData>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -146,7 +146,7 @@ pub struct VM<T> {
 impl VM<wasmtime::Instance> {
     pub async fn run(
         mut self,
-    ) -> Result<RunResult, (anyhow::Error, wasi::genlayer_sdk::SingleVMData)> {
+    ) -> Result<RunResult, (anyhow::Error, Box<wasi::genlayer_sdk::SingleVMData>)> {
         log_debug!(
             wasi_preview1: serde = self.vm_base.store.data().genlayer_ctx.preview1.log(),
             genlayer_sdk: serde = self.vm_base.store.data().genlayer_ctx.genlayer_sdk.log();
@@ -170,13 +170,14 @@ impl VM<wasmtime::Instance> {
                         Some(crate::wasmtime_to_anyhow(e)),
                     ),
                     fingerprint: None,
-                    vm_data: self
-                        .vm_base
-                        .store
-                        .into_data()
-                        .genlayer_ctx
-                        .genlayer_sdk
-                        .data,
+                    vm_data: Box::new(
+                        self.vm_base
+                            .store
+                            .into_data()
+                            .genlayer_ctx
+                            .genlayer_sdk
+                            .data,
+                    ),
                 });
             }
         };
@@ -241,27 +242,21 @@ impl VM<wasmtime::Instance> {
             }
         };
 
+        let vm_data = Box::new(
+            self.vm_base
+                .store
+                .into_data()
+                .genlayer_ctx
+                .genlayer_sdk
+                .data,
+        );
         match res {
             Ok((run_ok, fingerprint)) => Ok(RunResult {
                 run_ok,
                 fingerprint,
-                vm_data: self
-                    .vm_base
-                    .store
-                    .into_data()
-                    .genlayer_ctx
-                    .genlayer_sdk
-                    .data,
+                vm_data,
             }),
-            Err(e) => Err((
-                e,
-                self.vm_base
-                    .store
-                    .into_data()
-                    .genlayer_ctx
-                    .genlayer_sdk
-                    .data,
-            )),
+            Err(e) => Err((e, vm_data)),
         }
     }
 }

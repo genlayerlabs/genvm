@@ -18,9 +18,9 @@ pub struct Context {
 
 impl Context {
     pub fn new(
-        mut data: genlayer_sdk::SingleVMData,
+        mut data: Box<genlayer_sdk::SingleVMData>,
         limiter: rt::memlimiter::Limiter,
-    ) -> std::result::Result<Self, (rt::errors::VMError, genlayer_sdk::SingleVMData)> {
+    ) -> std::result::Result<Self, (rt::errors::VMError, Box<genlayer_sdk::SingleVMData>)> {
         let msg_data: original_genlayer_sdk::abi::entry::ExtendedMessageFlat =
             data.message_data.into();
         let as_bytes = calldata::encode_obj(&msg_data);

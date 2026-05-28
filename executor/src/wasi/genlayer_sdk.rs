@@ -284,9 +284,7 @@ fn read_addr_from_mem(
         ),
     )?;
     let mut ret = calldata::Address::zero();
-    for (x, y) in ret.ref_mut().iter_mut().zip(cow.iter()) {
-        *x = *y;
-    }
+    ret.ref_mut().copy_from_slice(&cow);
     Ok(ret)
 }
 
@@ -318,11 +316,11 @@ fn read_owned_vec(
 }
 
 impl Context {
-    pub fn new(data: SingleVMData) -> Self {
+    pub fn new(data: Box<SingleVMData>) -> Self {
         let now = std::time::Instant::now();
 
         Self {
-            data,
+            data: *data,
             start_time: now,
             prev_time: now,
         }
@@ -634,7 +632,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let calldata_encoded = calldata::encode(&calldata);
 
-                let vm_data = SingleVMData {
+                let vm_data = Box::new(SingleVMData {
                     depth: self.context.data.depth + 1,
                     conf: base::Config {
                         needs_error_fingerprint: true,
@@ -684,7 +682,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         emissions: Vec::new(),
                         message_fee_allocation: Vec::new(),
                     },
-                };
+                });
 
                 let res = rt::spawn_apply_run(&supervisor, vm_data)
                     .await
@@ -1585,7 +1583,7 @@ impl ContextVFS<'_> {
                 message_fee_allocation: Vec::new(),
             };
 
-            let vm_data = SingleVMData {
+            let vm_data = Box::new(SingleVMData {
                 depth: self.context.data.depth + 1,
                 conf: base::Config {
                     needs_error_fingerprint: false,
@@ -1602,7 +1600,7 @@ impl ContextVFS<'_> {
                 should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 storage: storage_checkpoint,
                 accumulator: fake_accum,
-            };
+            });
 
             let task_done = Arc::new(tokio::sync::Notify::new());
             let task = rt::supervisor::NonDetVMTask {
@@ -1672,7 +1670,7 @@ impl ContextVFS<'_> {
 
         let stolen_data = fake_my_data;
 
-        let vm_data = SingleVMData {
+        let vm_data = Box::new(SingleVMData {
             depth: self.context.data.depth + 1,
             conf: base::Config {
                 needs_error_fingerprint: false,
@@ -1689,7 +1687,7 @@ impl ContextVFS<'_> {
             should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             storage: storage_checkpoint,
             accumulator: stolen_data,
-        };
+        });
 
         let my_res = rt::spawn_apply_run(&supervisor, vm_data)
             .await

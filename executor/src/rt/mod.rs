@@ -55,7 +55,7 @@ pub fn parse_host_data(
 
 pub async fn spawn_apply_run(
     supervisor: &Arc<supervisor::Supervisor>,
-    vm: wasi::genlayer_sdk::SingleVMData,
+    vm: Box<wasi::genlayer_sdk::SingleVMData>,
 ) -> std::result::Result<vm::RunResult, anyhow::Error> {
     match spawn_apply_run_inner(supervisor, vm).await {
         Ok(res) => Ok(res),
@@ -74,8 +74,8 @@ pub async fn spawn_apply_run(
 
 async fn spawn_apply_run_inner(
     supervisor: &Arc<supervisor::Supervisor>,
-    vm: wasi::genlayer_sdk::SingleVMData,
-) -> std::result::Result<vm::RunResult, (anyhow::Error, wasi::genlayer_sdk::SingleVMData)> {
+    vm: Box<wasi::genlayer_sdk::SingleVMData>,
+) -> std::result::Result<vm::RunResult, (anyhow::Error, Box<wasi::genlayer_sdk::SingleVMData>)> {
     let limiter = supervisor.limiter.get(vm.conf.is_deterministic).derived();
 
     let vm = supervisor::spawn(supervisor, vm, limiter).await?;
