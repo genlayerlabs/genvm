@@ -176,7 +176,9 @@
   {
     "name": "compiler-rt-aarch64-21.1.5-1",
     "original_url": "https://storage.googleapis.com/genvm-artifacts/compiler-rt-21.1.5-1-aarch64.pkg.tar.xz",
-    "alternative_urls": [],
+    "alternative_urls": [
+      "https://storage.googleapis.com/genvm-artifacts/compiler-rt-21.1.5-1-aarch64.pkg.tar.xz"
+    ],
     "hash": "sha256-cwzW7KnNVs7+C5DJ6PC6I2/yQILg1Zr0Kt5weGKySSI=",
     "must_preload": false,
     "needed-for": [
@@ -269,7 +271,9 @@
     "name": "lsqlite3-0.9.6",
     "nix_der_name": "lsqlite3-0.9.6",
     "original_url": "https://lua.sqlite.org/home/zip/lsqlite3_v096.zip?uuid=v0.9.6",
-    "alternative_urls": [],
+    "alternative_urls": [
+      "https://storage.googleapis.com/genvm-artifacts/lsqlite3_v096.zip"
+    ],
     "hash": "sha256-1bb0hy5Tp2ULUGL9/AnMLZz7XrP+Jh9KCh1o4094RFw=",
     "must_preload": false,
     "needed-for": [

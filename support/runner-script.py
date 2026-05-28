@@ -294,7 +294,9 @@ def _iter_needed_deps(targets: set[str] | None, all_deps: bool):
 		yield dep
 
 
-def _prefetch_dep(dep, *, capture_path: bool = False) -> str | None:
+def _prefetch_dep(
+	dep, *, capture_path: bool = False, user_agent: str = 'kira@genlayer.com'
+) -> str | None:
 	import subprocess
 
 	name = dep['name']
@@ -308,7 +310,14 @@ def _prefetch_dep(dep, *, capture_path: bool = False) -> str | None:
 	for url in urls:
 		try:
 			print(f'info: prefetching {name} from {url}')
-			cmd = ['nix-prefetch-url', '--name', name]
+			cmd = [
+				'nix-prefetch-url',
+				'--option',
+				'user-agent-suffix',
+				user_agent,
+				'--name',
+				name,
+			]
 			if unpack:
 				cmd.append('--unpack')
 			if capture_path:
@@ -338,7 +347,7 @@ def _prefetch_dep(dep, *, capture_path: bool = False) -> str | None:
 def run_prefetch_needed(args):
 	targets = set(args.target) if args.target else None
 	for dep in _iter_needed_deps(targets, args.all):
-		_prefetch_dep(dep)
+		_prefetch_dep(dep, user_agent=args.user_agent)
 
 
 def run_push_needed(args):
@@ -349,7 +358,7 @@ def run_push_needed(args):
 
 	paths: list[str] = []
 	for dep in _iter_needed_deps(targets, args.all):
-		path = _prefetch_dep(dep, capture_path=True)
+		path = _prefetch_dep(dep, capture_path=True, user_agent=args.user_agent)
 		if path:
 			paths.append(path)
 
@@ -392,10 +401,8 @@ def run_mirror_to_gcs(args):
 		)
 
 	had_failure = False
+	modified = False
 	for dep in deps:
-		if dep.get('alternative_urls'):
-			continue
-
 		name = dep['name']
 		original_url = dep['original_url']
 
@@ -406,6 +413,10 @@ def run_mirror_to_gcs(args):
 			filename = url_path.rsplit('/', 1)[-1]
 
 		upload_object = upload_template.format(name=name, filename=filename)
+		public_url = f'https://storage.googleapis.com/{args.bucket}/{upload_object}'
+
+		if public_url in dep.get('alternative_urls', []):
+			continue
 
 		if dry_run:
 			print(
@@ -417,7 +428,11 @@ def run_mirror_to_gcs(args):
 
 		try:
 			print(f'info: downloading {name} from {original_url}')
-			with urllib.request.urlopen(original_url) as resp:
+			download_req = urllib.request.Request(
+				original_url,
+				headers={'User-Agent': f'genvm-mirror ({args.user_agent})'},
+			)
+			with urllib.request.urlopen(download_req) as resp:
 				data = resp.read()
 
 			print(f'info: uploading {name} to gs://{args.bucket}/{upload_object}')
@@ -433,10 +448,21 @@ def run_mirror_to_gcs(args):
 			with urllib.request.urlopen(req) as resp:
 				resp.read()
 
+			if 'alternative_urls' not in dep:
+				dep['alternative_urls'] = []
+			dep['alternative_urls'].append(public_url)
+			modified = True
+
 			print(f'info: done {name}')
 		except Exception as e:
 			print(f'err: failed to mirror {name}: {e}', file=sys.stderr)
 			had_failure = True
+
+	if modified:
+		with open(deps_file, 'w') as f:
+			json.dump(deps, f, indent=2)
+			f.write('\n')
+		print(f'info: updated {deps_file}')
 
 	if had_failure:
 		_sys_exit(1)
@@ -471,6 +497,11 @@ if __name__ == '__main__':
 	merge_parser.set_defaults(func=run_merge)
 
 	dependencies_parser = subparsers.add_parser('dependencies')
+	dependencies_parser.add_argument(
+		'--user-agent',
+		default='kira@genlayer.com',
+		help='user agent suffix for HTTP requests',
+	)
 	dep_subparsers = dependencies_parser.add_subparsers()
 
 	prefetch_parser = dep_subparsers.add_parser('prefetch-needed')
@@ -496,6 +527,12 @@ if __name__ == '__main__':
 		help='object name template, available vars: {name}, {filename}',
 	)
 	mirror_parser.add_argument('--dry-run', action='store_true', default=False)
+	mirror_parser.add_argument(
+		'--force',
+		action='store_true',
+		default=False,
+		help='re-upload deps that already have alternative URLs',
+	)
 	mirror_parser.set_defaults(func=run_mirror_to_gcs)
 
 	args = parser.parse_args()
