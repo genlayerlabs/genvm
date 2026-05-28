@@ -8,7 +8,7 @@ use std::str::FromStr;
 pub struct LuaRat(pub BigRational);
 
 impl LuaRat {
-    fn from_args(vm: &Lua, args: LuaMultiValue) -> LuaResult<Self> {
+    fn from_args(_vm: &Lua, args: LuaMultiValue) -> LuaResult<Self> {
         let mut iter = args.into_iter();
         let first = iter
             .next()
@@ -230,8 +230,21 @@ pub fn lua_rat_to_u256(table: &mlua::Table) -> anyhow::Result<primitive_types::U
             buf[32 - bytes.len()..].copy_from_slice(&bytes);
             Ok(primitive_types::U256::from_big_endian(&buf))
         }
-        LuaValue::Integer(n) => Ok(primitive_types::U256::from(n.max(0) as u64)),
-        LuaValue::Number(n) => Ok(primitive_types::U256::from(n.max(0.0) as u64)),
+        LuaValue::Integer(n) => {
+            if n < 0 {
+                anyhow::bail!("consumed_gen must be non-negative");
+            }
+            Ok(primitive_types::U256::from(n as u64))
+        }
+        LuaValue::Number(n) => {
+            if !n.is_finite() || n < 0.0 || n.fract() != 0.0 {
+                anyhow::bail!("consumed_gen must be a non-negative integer");
+            }
+            if n > u64::MAX as f64 {
+                anyhow::bail!("consumed_gen exceeds supported numeric range; use rat");
+            }
+            Ok(primitive_types::U256::from(n as u64))
+        }
         LuaValue::Nil => Ok(primitive_types::U256::zero()),
         _ => anyhow::bail!("consumed_gen: expected Rat, number, or nil"),
     }

@@ -845,14 +845,14 @@ impl MapAccess for BinaryMapAccess<'_, '_> {
         }
         self.remaining -= 1;
         let key = self.de.fetch_map_key()?;
-        if let Some(prev) = self.prev_key {
-            if prev >= key {
-                return Err(BinDecodeError::InvalidMapOrdering {
-                    prev: prev.to_owned(),
-                    current: key.to_owned(),
-                }
-                .into());
+        if let Some(prev) = self.prev_key
+            && prev >= key
+        {
+            return Err(BinDecodeError::InvalidMapOrdering {
+                prev: prev.to_owned(),
+                current: key.to_owned(),
             }
+            .into());
         }
         self.prev_key = Some(key);
         let val = T::decode(&mut *self.de)?;

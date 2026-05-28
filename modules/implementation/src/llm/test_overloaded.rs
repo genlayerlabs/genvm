@@ -184,6 +184,10 @@ async fn test_overloaded() {
 
     let (_ctx, ctx_lua) = user_vm.create_ctx(&sub_ctx).unwrap();
 
+    if let Some(ref setup) = user_vm.data.setup {
+        let _: mlua::Value = user_vm.call_fn(setup, ctx_lua.clone()).await.unwrap();
+    }
+
     let payload = llm_iface::PromptPayload {
         images: Vec::new(),
         response_format: llm_iface::OutputFormat::Text,

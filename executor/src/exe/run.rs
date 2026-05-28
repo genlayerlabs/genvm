@@ -194,13 +194,15 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
     let supervisor = genvm::create_supervisor(
         &config,
         hosts,
-        method_hosts,
+        genvm::CreateSupervisorNamedArgs {
+            method_hosts,
+            gas_data: execution_data.gas_data.clone(),
+            initial_time_units_allocation: execution_data.initial_time_units_allocation,
+            leader_nondet_results: execution_data.leader_nondet_results.clone(),
+        },
         host_data,
-        execution_data.gas_data.clone(),
-        execution_data.initial_time_units_allocation,
         shared_data,
         message,
-        execution_data.leader_nondet_results.clone(),
     )
     .with_context(|| format!("creating supervisor for genvm_id {genvm_id}"))?;
 

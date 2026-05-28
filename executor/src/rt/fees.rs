@@ -379,7 +379,7 @@ impl DataLimit {
             "consume_message_fee: ok"
         );
 
-        return true;
+        true
     }
 
     pub fn calculate_message_fee_external(

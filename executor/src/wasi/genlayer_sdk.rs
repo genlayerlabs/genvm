@@ -544,11 +544,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .accumulator
                     .message_fee_allocation
                     .iter_mut()
-                    .filter(|node| node.matches(domain::MessageType::External, address, call_key))
-                    .next()
+                    .find(|node| node.matches(domain::MessageType::External, address, call_key))
                 else {
                     log_warn!(
-                        recipient = calldata::Address::zero(),
+                        recipient = address,
                         call_key:? = call_key;
                         "no matching node for message fee allocation"
                     );
@@ -801,7 +800,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .accumulator
                     .message_fee_allocation
                     .iter_mut()
-                    .filter(|node| {
+                    .find(|node| {
                         node.matches(
                             match on {
                                 abi::gl_call::On::Accepted => domain::MessageType::InternalAccepted,
@@ -813,7 +812,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                             call_key,
                         )
                     })
-                    .next()
                 else {
                     log_warn!(
                         recipient = address,
@@ -884,7 +882,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .accumulator
                     .message_fee_allocation
                     .iter_mut()
-                    .filter(|node| {
+                    .find(|node| {
                         node.matches(
                             match on {
                                 abi::gl_call::On::Accepted => domain::MessageType::InternalAccepted,
@@ -896,7 +894,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                             abi::CallKey::DEPLOY,
                         )
                     })
-                    .next()
                 else {
                     log_warn!(
                         recipient = calldata::Address::zero(),
@@ -911,7 +908,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let code_length = code.len() as u64;
                 let mut enc = calldata::Encoder::new(calldata::CounterWriter(0));
                 calldata::encode_to(&mut enc, &calldata);
-                let calldata_length = enc.into_inner().0 as u64;
+                let calldata_length = enc.into_inner().0;
 
                 let emission = genlayer_sdk::abi::ExecutionEmission::DeployContract {
                     calldata,
@@ -1052,7 +1049,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let sup = self.context.data.supervisor.clone();
 
                 let task = taskify(async move {
-                    let format = prompt_payload.response_format.clone();
+                    let format = prompt_payload.response_format;
                     let result = sup
                         .modules
                         .llm

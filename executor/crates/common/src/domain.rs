@@ -74,10 +74,8 @@ impl MessageFeeAllocationNode {
             false
         } else if self.recipient.as_ref().is_some_and(|r| *r != recipient) {
             false
-        } else if self.call_key.as_ref().is_some_and(|ck| *ck != call_key) {
-            false
         } else {
-            true
+            !self.call_key.as_ref().is_some_and(|ck| *ck != call_key)
         }
     }
 }

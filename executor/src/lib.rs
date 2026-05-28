@@ -62,20 +62,24 @@ impl<W: calldata::Writer> calldata::codec::Encode<W> for Metrics {
     }
 }
 
+pub struct CreateSupervisorNamedArgs {
+    pub method_hosts: Vec<u8>,
+    pub gas_data: std::collections::BTreeMap<String, String>,
+    pub initial_time_units_allocation: u32,
+    pub leader_nondet_results: Option<Vec<bytes::Bytes>>,
+}
+
 pub fn create_supervisor(
     config: &config::Config,
     mut hosts: Vec<Host>,
-    method_hosts: Vec<u8>,
+    named: CreateSupervisorNamedArgs,
     host_data: genvm_modules_interfaces::HostData,
-    gas_data: std::collections::BTreeMap<String, String>,
-    initial_time_units_allocation: u32,
     shared_data: sync::DArc<rt::SharedData>,
     message: &domain::MessageData,
-    leader_nondet_results: Option<Vec<bytes::Bytes>>,
 ) -> Result<Arc<rt::supervisor::Supervisor>> {
     let metrics = shared_data.gep(|x| &x.metrics);
 
-    let role = if leader_nondet_results.is_none() {
+    let role = if named.leader_nondet_results.is_none() {
         genvm_modules_interfaces::Role::Leader
     } else {
         genvm_modules_interfaces::Role::Validator
@@ -83,36 +87,41 @@ pub fn create_supervisor(
 
     let modules = modules::All {
         web: Arc::new(modules::Module::new(
-            "web".into(),
-            config.modules.web.address.clone(),
+            modules::ModuleNamedArgs {
+                name: "web".into(),
+                url: config.modules.web.address.clone(),
+                gas_data: named.gas_data.clone(),
+                initial_time_units_allocation: named.initial_time_units_allocation,
+            },
             shared_data.cancellation.clone(),
             shared_data.genvm_id,
             role,
             host_data.clone(),
-            gas_data.clone(),
-            initial_time_units_allocation,
             metrics.gep(|x| &x.web_module),
         )),
         llm: Arc::new(modules::Module::new(
-            "llm".into(),
-            config.modules.llm.address.clone(),
+            modules::ModuleNamedArgs {
+                name: "llm".into(),
+                url: config.modules.llm.address.clone(),
+                gas_data: named.gas_data,
+                initial_time_units_allocation: named.initial_time_units_allocation,
+            },
             shared_data.cancellation.clone(),
             shared_data.genvm_id,
             role,
             host_data,
-            gas_data,
-            initial_time_units_allocation,
             metrics.gep(|x| &x.llm_module),
         )),
     };
 
     let limiter_det = rt::memlimiter::Limiter::new("det");
 
-    let storage_host_idx = if (host::host_fns::Methods::StorageRead as usize) < method_hosts.len() {
-        method_hosts[host::host_fns::Methods::StorageRead as usize] as usize
-    } else {
-        0
-    };
+    let storage_host_idx =
+        if (host::host_fns::Methods::StorageRead as usize) < named.method_hosts.len() {
+            named.method_hosts[host::host_fns::Methods::StorageRead as usize] as usize
+        } else {
+            0
+        };
 
     let locked_slots = hosts[storage_host_idx]
         .get_locked_slots_for_sender(
@@ -122,7 +131,7 @@ pub fn create_supervisor(
         )
         .context("reading locked slots")?;
 
-    let multi_host = host::MultiHost::new(hosts, method_hosts);
+    let multi_host = host::MultiHost::new(hosts, named.method_hosts);
 
     let ctor = rt::supervisor::Ctor {
         shared_data,
@@ -132,7 +141,7 @@ pub fn create_supervisor(
             non_det: rt::memlimiter::Limiter::new("nondet"),
         },
         locked_slots,
-        leader_nondet_results,
+        leader_nondet_results: named.leader_nondet_results,
         multi_host,
     };
 

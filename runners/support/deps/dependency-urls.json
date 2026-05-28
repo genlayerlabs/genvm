@@ -268,7 +268,7 @@
   {
     "name": "lsqlite3-0.9.6",
     "nix_der_name": "lsqlite3-0.9.6",
-    "original_url": "http://lua.sqlite.org/home/zip/lsqlite3_v096.zip?uuid=v0.9.6",
+    "original_url": "https://lua.sqlite.org/home/zip/lsqlite3_v096.zip?uuid=v0.9.6",
     "alternative_urls": [],
     "hash": "sha256-1bb0hy5Tp2ULUGL9/AnMLZz7XrP+Jh9KCh1o4094RFw=",
     "must_preload": false,

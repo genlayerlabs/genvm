@@ -220,55 +220,79 @@ function Teardown(ctx)
 		return
 	end
 
-	local db_path = data_dir .. "/stats.sqlite"
-	local db = sqlite3.open(db_path)
+	-- Stats persistence is best-effort telemetry: swallow failures so a transient
+	-- SQLite issue (locked db, disk full, malformed file) does not break session
+	-- teardown. `lib.finally` guarantees the db/stmt are released even on error.
+	local ok, err = pcall(function()
+		local db_path = data_dir .. "/stats.sqlite"
+		local db = sqlite3.open(db_path)
+		if not db then
+			error("failed to open stats db at " .. db_path)
+		end
 
-	db:exec([[
-		CREATE TABLE IF NOT EXISTS provider_stats (
-			provider_model TEXT PRIMARY KEY,
-			error_count INTEGER NOT NULL DEFAULT 0,
-			input_tokens INTEGER NOT NULL DEFAULT 0,
-			output_tokens INTEGER NOT NULL DEFAULT 0,
-			total_tokens INTEGER NOT NULL DEFAULT 0,
-			cache_read_tokens INTEGER NOT NULL DEFAULT 0,
-			cache_write_tokens INTEGER NOT NULL DEFAULT 0,
-			image_units INTEGER NOT NULL DEFAULT 0
-		)
-	]])
+		lib.finally(function()
+			db:exec([[
+				CREATE TABLE IF NOT EXISTS provider_stats (
+					provider_model TEXT PRIMARY KEY,
+					error_count INTEGER NOT NULL DEFAULT 0,
+					input_tokens INTEGER NOT NULL DEFAULT 0,
+					output_tokens INTEGER NOT NULL DEFAULT 0,
+					total_tokens INTEGER NOT NULL DEFAULT 0,
+					cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+					cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+					image_units INTEGER NOT NULL DEFAULT 0
+				)
+			]])
 
-	local stmt = db:prepare([[
-		INSERT INTO provider_stats (
-			provider_model, error_count,
-			input_tokens, output_tokens, total_tokens,
-			cache_read_tokens, cache_write_tokens, image_units
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(provider_model) DO UPDATE SET
-			error_count = error_count + excluded.error_count,
-			input_tokens = input_tokens + excluded.input_tokens,
-			output_tokens = output_tokens + excluded.output_tokens,
-			total_tokens = total_tokens + excluded.total_tokens,
-			cache_read_tokens = cache_read_tokens + excluded.cache_read_tokens,
-			cache_write_tokens = cache_write_tokens + excluded.cache_write_tokens,
-			image_units = image_units + excluded.image_units
-	]])
+			local stmt = db:prepare([[
+				INSERT INTO provider_stats (
+					provider_model, error_count,
+					input_tokens, output_tokens, total_tokens,
+					cache_read_tokens, cache_write_tokens, image_units
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+				ON CONFLICT(provider_model) DO UPDATE SET
+					error_count = error_count + excluded.error_count,
+					input_tokens = input_tokens + excluded.input_tokens,
+					output_tokens = output_tokens + excluded.output_tokens,
+					total_tokens = total_tokens + excluded.total_tokens,
+					cache_read_tokens = cache_read_tokens + excluded.cache_read_tokens,
+					cache_write_tokens = cache_write_tokens + excluded.cache_write_tokens,
+					image_units = image_units + excluded.image_units
+			]])
+			if not stmt then
+				error("failed to prepare stats insert statement")
+			end
 
-	for key, entry in pairs(ctx.stats) do
-		stmt:bind_values(
-			key,
-			entry.error_count,
-			entry.input_tokens,
-			entry.output_tokens,
-			entry.total_tokens,
-			entry.cache_read_tokens,
-			entry.cache_write_tokens,
-			entry.image_units
-		)
-		stmt:step()
-		stmt:reset()
+			lib.finally(function()
+				for key, entry in pairs(ctx.stats) do
+					stmt:bind_values(
+						key,
+						entry.error_count,
+						entry.input_tokens,
+						entry.output_tokens,
+						entry.total_tokens,
+						entry.cache_read_tokens,
+						entry.cache_write_tokens,
+						entry.image_units
+					)
+					stmt:step()
+					stmt:reset()
+				end
+			end, function()
+				stmt:finalize()
+			end)
+		end, function()
+			db:close()
+		end)
+	end)
+
+	if not ok then
+		lib.log {
+			level = "warning",
+			message = "failed to persist llm stats during teardown",
+			error = tostring(err),
+		}
 	end
-
-	stmt:finalize()
-	db:close()
 end
 
 function ExecPrompt(ctx, args, remaining_gen)

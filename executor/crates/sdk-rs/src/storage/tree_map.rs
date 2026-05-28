@@ -62,7 +62,7 @@ where
     /// Allocate a slot (recycle or append). Returns (0-based index, node handle).
     fn alloc_slot(&self) -> (u32, TreeMapNode<K, V>) {
         let free = self.free_slots();
-        if free.len() > 0 {
+        if !free.is_empty() {
             let idx = free.index(free.len() - 1).get();
             free.pop();
             (idx, self.slots().index(idx))

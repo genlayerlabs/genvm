@@ -889,8 +889,8 @@ pub async fn start_genvm(
             genvm_id,
             role,
             host_data,
-            gas_data: std::collections::BTreeMap::new(),
-            initial_time_units_allocation: 0,
+            gas_data: req.gas_data.clone(),
+            initial_time_units_allocation: req.initial_time_units_allocation,
         });
         Some(full_ctx.mod_ctx.create_execution_context(hello).await?)
     } else {

@@ -90,27 +90,34 @@ async fn connect(url: &str) -> anyhow::Result<BoxedStream> {
     }
 }
 
+pub struct ModuleNamedArgs {
+    pub name: String,
+    pub url: String,
+    pub gas_data: std::collections::BTreeMap<String, String>,
+    pub initial_time_units_allocation: u32,
+}
+
 impl Module {
     pub fn new(
-        name: String,
-        url: String,
+        named: ModuleNamedArgs,
         cancellation: Arc<genvm_common::cancellation::Token>,
         genvm_id: genvm_modules_interfaces::GenVMId,
         role: genvm_modules_interfaces::Role,
         host_data: genvm_modules_interfaces::HostData,
-        gas_data: std::collections::BTreeMap<String, String>,
-        initial_time_units_allocation: u32,
         metrics: sync::DArc<Metrics>,
     ) -> Self {
         Self {
-            imp: tokio::sync::Mutex::new(ModuleImpl { url, stream: None }),
+            imp: tokio::sync::Mutex::new(ModuleImpl {
+                url: named.url,
+                stream: None,
+            }),
             cancellation,
             genvm_id,
             role,
-            name,
+            name: named.name,
             host_data,
-            gas_data,
-            initial_time_units_allocation,
+            gas_data: named.gas_data,
+            initial_time_units_allocation: named.initial_time_units_allocation,
             metrics,
         }
     }

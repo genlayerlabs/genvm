@@ -19,7 +19,7 @@ pub struct VMData {
 
 pub struct CtxPart {
     pub providers: Arc<BTreeMap<String, Box<dyn providers::Provider + Send + Sync>>>,
-    pub metrics: sync::DArc<super::Metrics>,
+    pub(crate) metrics: sync::DArc<super::Metrics>,
 }
 
 impl mlua::UserData for CtxPart {}

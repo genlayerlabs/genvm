@@ -30,4 +30,5 @@ fn main() {
         .compile("lsqlite3");
 
     println!("cargo:rustc-cfg=has_lsqlite3");
+    println!("cargo::rustc-check-cfg=cfg(has_lsqlite3)");
 }

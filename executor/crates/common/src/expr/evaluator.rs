@@ -262,7 +262,7 @@ impl Value {
 
 impl Expr {
     pub fn evaluate(&self) -> Result<Value, EvalError> {
-        self.evaluate_with(&|name: &str| Err(EvalError::UndefinedVariable(name.to_owned())))
+        self.evaluate_with(|name: &str| Err(EvalError::UndefinedVariable(name.to_owned())))
     }
 
     pub fn evaluate_with(
