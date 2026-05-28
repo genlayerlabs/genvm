@@ -3,6 +3,7 @@
 , zig
 , deps
 , lua-src
+, liblua
 }:
 let
 	lsqlite3-src = deps."lsqlite3-0.9.6";
@@ -27,7 +28,7 @@ in pkgs.stdenvNoCC.mkDerivation {
 		zig-cc-${name-target} ${if isMacos then "-g0" else ""} -O2 -fPIC -DSQLITE_CORE -I. -fdebug-prefix-map=${toString zig}=/zig -no-canonical-prefixes -c sqlite3.c -o sqlite3.o
 		zig-cc-${name-target} ${if isMacos then "-g0" else ""} -O2 -fPIC -I${lua-src} -I. -fdebug-prefix-map=${toString zig}=/zig -no-canonical-prefixes -c lsqlite3.c -o lsqlite3.o
 
-		zig-cc-${name-target} -O2 -fPIC -shared -o lsqlite3.${outSuffix} sqlite3.o lsqlite3.o
+		zig-cc-${name-target} -O2 -fPIC -shared -L${liblua}/lib -llua -o lsqlite3.${outSuffix} sqlite3.o lsqlite3.o
 	'';
 
 	installPhase = ''

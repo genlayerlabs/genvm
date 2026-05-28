@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -14,45 +15,106 @@ logger = logging.getLogger(__name__)
 lief.logging.set_level(lief.logging.LEVEL.ERROR)
 
 
-def patch_elf(binary: lief.ELF.Binary, rpaths: list[str]) -> None:
+def _resolve_needed(binary_path: Path, libraries, search_dir: Path | None):
+	"""Replace absolute needed paths with basenames and compute rpaths from search_dir."""
+	replacements: dict[str, str] = {}
+	resolved_rpaths: set[str] = set()
+
+	for lib in libraries:
+		name = lib if isinstance(lib, str) else lib.name
+		if '/' not in name:
+			continue
+		basename = name.rsplit('/', 1)[-1]
+		replacements[name] = basename
+
+		if search_dir is not None:
+			found = list(search_dir.rglob(basename))
+			if found:
+				lib_dir = found[0].parent
+				rel = os.path.relpath(lib_dir, binary_path.parent)
+				resolved_rpaths.add(f'$ORIGIN/{rel}' if rel != '.' else '$ORIGIN')
+				logger.info(f'Resolved {basename} -> {found[0]} (rpath: $ORIGIN/{rel})')
+
+	return replacements, resolved_rpaths
+
+
+def patch_elf(
+	binary: lief.ELF.Binary, rpaths: list[str], binary_path: Path, search_dir: Path | None
+) -> None:
 	logger.info('Processing ELF binary')
+
+	replacements, resolved_rpaths = _resolve_needed(
+		binary_path, list(binary.libraries), search_dir
+	)
+	for entry in binary.dynamic_entries:
+		if entry.tag == lief.ELF.DynamicEntry.TAG.NEEDED and entry.name in replacements:
+			old_name = entry.name
+			entry.name = replacements[old_name]
+			logger.info(f'Replaced needed: "{old_name}" -> "{entry.name}"')
+
+	all_rpaths = list(dict.fromkeys(rpaths + sorted(resolved_rpaths)))
 
 	if binary.has(lief.ELF.DynamicEntry.TAG.RPATH):
 		rpath_entry = binary.get(lief.ELF.DynamicEntry.TAG.RPATH)
 		old_rpath = str(rpath_entry.value)
-		rpath_entry.paths = rpaths
+		rpath_entry.paths = all_rpaths
 		logger.info(f'Updated RPATH from "{old_rpath}" to: "{rpath_entry.value}"')
 	else:
-		rpath_entry = lief.ELF.DynamicEntryRpath(rpaths)
+		rpath_entry = lief.ELF.DynamicEntryRpath(all_rpaths)
 		binary.add(rpath_entry)
-		logger.info(f'Added new RPATH entry: "{rpaths}"')
+		logger.info(f'Added new RPATH entry: "{all_rpaths}"')
 
 
-def patch_macho(binary: lief.MachO.Binary, rpaths: list[str]) -> None:
+def patch_macho(
+	binary: lief.MachO.Binary,
+	rpaths: list[str],
+	binary_path: Path,
+	search_dir: Path | None,
+) -> None:
 	logger.info('Processing Mach-O binary')
 
-	for cmd in binary.commands:
-		if cmd.command in (
+	dylib_cmds = [
+		cmd
+		for cmd in binary.commands
+		if cmd.command
+		in (
 			lief.MachO.LoadCommand.TYPE.LOAD_DYLIB,
 			lief.MachO.LoadCommand.TYPE.LOAD_WEAK_DYLIB,
-		):
-			if cmd.name == '/usr/local/lib/libiconv.2.dylib':
-				old_name = cmd.name
-				cmd.name = '@rpath/libiconv.dylib'
-				logger.info(f'Replaced library reference: "{old_name}" -> "{cmd.name}"')
-			elif '/' not in cmd.name:
-				old_name = cmd.name
-				cmd.name = '@rpath/' + cmd.name
-				logger.info(f'Replaced library reference: "{old_name}" -> "{cmd.name}"')
+		)
+	]
 
-	for rpath in rpaths:
+	_, resolved_rpaths = _resolve_needed(
+		binary_path,
+		[cmd.name for cmd in dylib_cmds],
+		search_dir,
+	)
+
+	for cmd in dylib_cmds:
+		if cmd.name == '/usr/local/lib/libiconv.2.dylib':
+			old_name = cmd.name
+			cmd.name = '@rpath/libiconv.dylib'
+			logger.info(f'Replaced library reference: "{old_name}" -> "{cmd.name}"')
+		elif '/' in cmd.name:
+			old_name = cmd.name
+			basename = cmd.name.rsplit('/', 1)[-1]
+			cmd.name = '@rpath/' + basename
+			logger.info(f'Replaced library reference: "{old_name}" -> "{cmd.name}"')
+		elif '/' not in cmd.name:
+			old_name = cmd.name
+			cmd.name = '@rpath/' + cmd.name
+			logger.info(f'Replaced library reference: "{old_name}" -> "{cmd.name}"')
+
+	all_rpaths = list(dict.fromkeys(rpaths + sorted(resolved_rpaths)))
+	for rpath in all_rpaths:
 		macho_rpath = rpath.replace('$ORIGIN', '@loader_path')
 		rpath_cmd = lief.MachO.RPathCommand.create(macho_rpath)
 		binary.add(rpath_cmd)
 		logger.info(f'Added RPATH to Mach-O binary: "{macho_rpath}"')
 
 
-def patch_binary(path: Path, rpaths: list[str], codesign: bool) -> None:
+def patch_binary(
+	path: Path, rpaths: list[str], codesign: bool, search_dir: Path | None = None
+) -> None:
 	logger.info(f'Patching {path} with rpaths {rpaths}')
 
 	binary = lief.parse(str(path))
@@ -60,9 +122,9 @@ def patch_binary(path: Path, rpaths: list[str], codesign: bool) -> None:
 		raise RuntimeError(f'Failed to parse binary at {path}')
 
 	if binary.format == lief.Binary.FORMATS.ELF:
-		patch_elf(binary, rpaths)
+		patch_elf(binary, rpaths, path, search_dir)
 	elif binary.format == lief.Binary.FORMATS.MACHO:
-		patch_macho(binary, rpaths)
+		patch_macho(binary, rpaths, path, search_dir)
 	else:
 		raise RuntimeError(f'Unsupported binary format for {path}: {binary.format}')
 
@@ -104,11 +166,17 @@ def main() -> int:
 		action='store_true',
 		help='Ad-hoc code sign Mach-O binaries after patching.',
 	)
+	parser.add_argument(
+		'--search-dir',
+		default=None,
+		help='Directory to search for needed libraries to compute rpaths.',
+	)
 	parser.add_argument('binary', help='Path to binary to patch')
 
 	args = parser.parse_args()
 
-	patch_binary(Path(args.binary), args.rpath, args.codesign)
+	search_dir = Path(args.search_dir) if args.search_dir else None
+	patch_binary(Path(args.binary), args.rpath, args.codesign, search_dir)
 	return 0
 
 

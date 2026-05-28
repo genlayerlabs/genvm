@@ -149,14 +149,23 @@
 								host-system = system;
 							};
 
-							debug-lsqlite3 = import ./libs/lsqlite3.nix {
-								inherit pkgs deps lua-src;
-								zig = import ./support/zig.nix { inherit pkgs deps system; };
-								name-target = {
+							debug-lsqlite3 = let
+								debug-zig = import ./support/zig.nix { inherit pkgs deps system; };
+								debug-name-target = {
 									"x86_64-linux" = "amd64-linux";
 									"aarch64-linux" = "arm64-linux";
 									"aarch64-darwin" = "arm64-macos";
 								}."${system}";
+								debug-liblua = import ./libs/liblua.nix {
+									inherit pkgs lua-src;
+									zig = debug-zig;
+									name-target = debug-name-target;
+								};
+							in import ./libs/lsqlite3.nix {
+								inherit pkgs deps lua-src;
+								zig = debug-zig;
+								liblua = debug-liblua;
+								name-target = debug-name-target;
 							};
 
 							runners-args = {
