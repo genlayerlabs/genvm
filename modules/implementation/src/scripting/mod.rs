@@ -1,4 +1,5 @@
 pub mod pool;
+pub mod rat;
 
 mod ctx;
 
@@ -14,6 +15,24 @@ use crate::common::{self, MapUserError, ModuleError};
 pub use ctx::filters;
 pub use ctx::CtxPart;
 pub use ctx::Metrics;
+
+#[cfg(has_lsqlite3)]
+unsafe extern "C-unwind" {
+    fn luaopen_lsqlite3(state: *mut mlua::lua_State) -> std::ffi::c_int;
+}
+
+pub fn preload_lsqlite3(#[allow(unused)] vm: &mlua::Lua) -> anyhow::Result<()> {
+    #[cfg(has_lsqlite3)]
+    {
+        let func = unsafe { vm.create_c_function(luaopen_lsqlite3)? };
+        let preload: mlua::Table = vm
+            .globals()
+            .get::<mlua::Table>("package")?
+            .get::<mlua::Table>("preload")?;
+        preload.set("lsqlite3", func)?;
+    }
+    Ok(())
+}
 
 pub struct LuaDArc<T: 'static>(pub DArc<T>);
 
@@ -130,6 +149,7 @@ impl<T, R, E> UserVM<T, R, E> {
         use mlua::StdLib;
 
         std::env::set_var("LUA_PATH", &mod_config.lua_path);
+        std::env::set_var("LUA_CPATH", mod_config.lua_path.replace(".lua", ".so"));
 
         let lua_libs = StdLib::COROUTINE
             | StdLib::TABLE
@@ -142,10 +162,14 @@ impl<T, R, E> UserVM<T, R, E> {
 
         vm.load_std_libs(lua_libs).context("loading stdlib")?;
 
+        preload_lsqlite3(&vm).context("preloading lsqlite3")?;
+
         vm.globals().set(
             "__dflt",
-            ctx::dflt::create_global(&vm).context("creating global for __dflt")?,
+            ctx::dflt::create_global(&vm, mod_config).context("creating global for __dflt")?,
         )?;
+
+        rat::register_rat_global(&vm).context("registering rat global")?;
 
         Ok(Self {
             data: data_getter(vm.clone()).await?,

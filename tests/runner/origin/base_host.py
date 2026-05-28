@@ -1,4 +1,5 @@
 import enum
+import math
 import socket
 import typing
 import collections.abc
@@ -120,6 +121,22 @@ class FingerprintFrame(typing.TypedDict):
 class ResultFingerprint(typing.TypedDict):
 	frames: list[FingerprintFrame]
 	module_instances: dict[str, typing.Any]
+
+
+class MessageFeeParams(typing.TypedDict):
+	leader_timeunits_allocation: int
+	validator_timeunits_allocation: int
+	execution_budget_per_round: int
+	rotations: list[int]
+
+
+class MessageFeeAllocationNode(typing.TypedDict):
+	message_type: typing.Literal['InternalAccepted', 'InternalFinalized', 'External']
+	parent_index: int | None
+	recipient: Address | None
+	call_key: bytes | None
+	budget: int
+	fee_params: MessageFeeParams
 
 
 class EthSendInner(typing.TypedDict):
@@ -332,7 +349,7 @@ async def host_loop(
 				)
 				return None
 			case host_fns.Methods.CONSUME_FUEL:
-				gas = await recv_int(8)
+				gas = await recv_int(32)
 				await handler.consume_gas(gas)
 			case host_fns.Methods.ETH_CALL:
 				account = await read_exact(ACCOUNT_ADDR_SIZE)
@@ -362,9 +379,8 @@ async def host_loop(
 				except HostException as e:
 					await send_all(bytes([e.error_code]))
 				else:
-					res = min(res, 2**53 - 1)
 					await send_all(bytes([host_fns.Errors.OK]))
-					await send_all(res.to_bytes(8, byteorder='little', signed=False))
+					await send_all(res.to_bytes(32, byteorder='little', signed=False))
 			case host_fns.Methods.NOTIFY_NONDET_DISAGREEMENT:
 				call_no = await recv_int()
 				await handler.notify_nondet_disagreement(call_no)
@@ -440,10 +456,11 @@ async def run_genvm(
 	host: str,
 	extra_args: list[str] = [],
 	# default config fee buckets use bucket_no 0, 1 and 2
-	bucket_totals: list[int] = [10_000_000, 10_000_000, 10_000_000],
+	bucket_totals: list[int],
 	code: bytes | None = None,
 	calldata: bytes,
 	leader_nondet_results: list[bytes] | None = None,
+	message_fee_allocation: list[MessageFeeAllocationNode] = [],
 	request_extra: dict[str, gvm_calldata.Encodable] = {},
 	shutdown_early: asyncio.Event | None = None,
 ) -> RunHostAndProgramRes:
@@ -488,6 +505,8 @@ async def run_genvm(
 					'leader_nondet_results': leader_nondet_results,
 					'bucket_totals': bucket_totals,
 					'gas_data': effective_gas_data,
+					'message_fee_allocation': message_fee_allocation,
+					'initial_time_units_allocation': math.ceil(timeout or 10 * 60),
 					**request_extra,
 				}
 			),
@@ -817,3 +836,46 @@ async def run_genvm(
 		)
 
 	raise Exception('Execution failed')
+
+
+DEFAULT_EXTERNAL_MESSAGE_ALLOC: MessageFeeAllocationNode = {
+	'budget': 2**200,
+	'recipient': None,
+	'call_key': None,
+	'message_type': 'External',
+	'fee_params': {
+		'execution_budget_per_round': 0,
+		'rotations': [],
+		'leader_timeunits_allocation': 0,
+		'validator_timeunits_allocation': 0,
+	},
+	'parent_index': None,
+}
+
+DEFAULT_INTERNAL_ACC_MESSAGE_ALLOC: MessageFeeAllocationNode = {
+	'budget': 2**200,
+	'recipient': None,
+	'call_key': None,
+	'message_type': 'InternalAccepted',
+	'fee_params': {
+		'execution_budget_per_round': 2**10,
+		'rotations': [4] * 5,
+		'leader_timeunits_allocation': 5,
+		'validator_timeunits_allocation': 5,
+	},
+	'parent_index': None,
+}
+
+DEFAULT_INTERNAL_FIN_MESSAGE_ALLOC: MessageFeeAllocationNode = {
+	'budget': 2**200,
+	'recipient': None,
+	'call_key': None,
+	'message_type': 'InternalFinalized',
+	'fee_params': {
+		'execution_budget_per_round': 2**10,
+		'rotations': [4] * 5,
+		'leader_timeunits_allocation': 5,
+		'validator_timeunits_allocation': 5,
+	},
+	'parent_index': None,
+}

@@ -29,7 +29,7 @@ impl<W: Writer> Encode<W> for Value {
                 Item::Value(value) => match value {
                     Value::Null => enc.push_null()?,
                     Value::Bool(v) => enc.push_bool(*v)?,
-                    Value::Address(address) => enc.push_address(&address)?,
+                    Value::Address(address) => enc.push_address(address)?,
                     Value::Str(data) => enc.push_str(data)?,
                     Value::Bytes(data) => enc.push_bytes(data)?,
                     Value::Number(big_int) => enc.push_bigint(big_int)?,

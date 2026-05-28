@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use anyhow::Context;
+use genvm_common::*;
+
 use crate::rt;
 use genlayer_sdk::abi;
 
@@ -38,7 +41,6 @@ fn attrs_object(vars: &[(&str, genvm_common::expr::Value)]) -> genvm_common::exp
 pub fn fee_params_value(p: &genvm_common::domain::MessageFeeParams) -> genvm_common::expr::Value {
     use genvm_common::expr::Value;
     let mut m = std::collections::BTreeMap::new();
-    m.insert("appealRounds".to_owned(), num_u256(p.appeal_rounds));
     m.insert(
         "leaderTimeunitsAllocation".to_owned(),
         num_u256(p.leader_timeunits_allocation),
@@ -115,6 +117,7 @@ fn build_bucket(
     cfg: &crate::config::FeesBucketConfig,
     node: &genvm_common::expr::Value,
     bucket_totals: &mut [primitive_types::U256],
+    oom_error: abi::consts::VmError,
 ) -> anyhow::Result<Bucket> {
     // Up-front cost: a plain number; charge it now.
     let start = value_to_u256(eval_with_node(
@@ -135,7 +138,7 @@ fn build_bucket(
         })?;
     *total = total.checked_sub(start).ok_or_else(|| {
         rt::errors::VMError(
-            abi::consts::VmError::oom().receipt(),
+            oom_error.clone(),
             Some(anyhow::anyhow!(
                 "subtract_on_start exceeds bucket {} total",
                 cfg.bucket_no
@@ -153,7 +156,7 @@ fn build_bucket(
 
 #[derive(Debug)]
 pub struct DataLimit {
-    buckets: Vec<tokio::sync::Mutex<primitive_types::U256>>,
+    buckets: tokio::sync::Mutex<Vec<primitive_types::U256>>,
     storage: Bucket,
     message_receipt: Bucket,
     nondet_output: Bucket,
@@ -181,17 +184,37 @@ impl DataLimit {
         }
         let node = genvm_common::expr::Value::Object(Arc::new(node));
 
-        let storage = build_bucket(prelude, &fees.storage, &node, &mut bucket_totals)?;
-        let message_receipt =
-            build_bucket(prelude, &fees.message_receipt, &node, &mut bucket_totals)?;
-        let nondet_output = build_bucket(prelude, &fees.nondet_output, &node, &mut bucket_totals)?;
-        let message_fee = build_bucket(prelude, &fees.message_fee, &node, &mut bucket_totals)?;
+        let storage = build_bucket(
+            prelude,
+            &fees.storage,
+            &node,
+            &mut bucket_totals,
+            abi::consts::VmError::oom().storage(),
+        )?;
+        let message_receipt = build_bucket(
+            prelude,
+            &fees.message_receipt,
+            &node,
+            &mut bucket_totals,
+            abi::consts::VmError::oom().receipt().message().internal(),
+        )?;
+        let nondet_output = build_bucket(
+            prelude,
+            &fees.nondet_output,
+            &node,
+            &mut bucket_totals,
+            abi::consts::VmError::oom().receipt().nondet_output(),
+        )?;
+        let message_fee = build_bucket(
+            prelude,
+            &fees.message_fee,
+            &node,
+            &mut bucket_totals,
+            abi::consts::VmError::oom().fees().internal(),
+        )?;
 
         Ok(Self {
-            buckets: bucket_totals
-                .into_iter()
-                .map(tokio::sync::Mutex::new)
-                .collect(),
+            buckets: tokio::sync::Mutex::new(bucket_totals),
             storage,
             message_receipt,
             nondet_output,
@@ -199,88 +222,177 @@ impl DataLimit {
         })
     }
 
-    async fn consume_bucket(
+    fn calculate_bucket(
         &self,
         bucket: &Bucket,
         vars: &[(&str, genvm_common::expr::Value)],
-    ) -> bool {
-        let cost = match bucket
+    ) -> anyhow::Result<primitive_types::U256> {
+        match bucket
             .delta
             .apply_with(attrs_object(vars), no_free_vars)
             .map_err(|e| anyhow::anyhow!("{e}"))
             .and_then(value_to_u256)
         {
-            Ok(cost) => cost,
+            Ok(cost) => Ok(cost),
             Err(e) => {
-                genvm_common::log_error!(error:ah = e; "failed to evaluate fee expression");
-                return false;
+                log_error!(error:ah = e; "failed to evaluate fee expression");
+                Err(e).context("failed to evaluate fee expression")
             }
-        };
-        let Some(slot) = self.buckets.get(bucket.bucket_no as usize) else {
+        }
+    }
+
+    async fn consume_bucket(
+        &self,
+        bucket: &Bucket,
+        vars: &[(&str, genvm_common::expr::Value)],
+    ) -> anyhow::Result<bool> {
+        let cost = self.calculate_bucket(bucket, vars)?;
+        Ok(self.consume_bucket_raw(bucket, cost).await)
+    }
+
+    async fn consume_bucket_raw(&self, bucket: &Bucket, cost: primitive_types::U256) -> bool {
+        let mut buckets = self.buckets.lock().await;
+        let Some(remaining) = buckets.get_mut(bucket.bucket_no as usize) else {
+            log_warn!(bucket = bucket.bucket_no; "consume_bucket: bucket index out of range");
             return false;
         };
-        let mut remaining = slot.lock().await;
         if *remaining >= cost {
             *remaining -= cost;
+            log_debug!(
+                bucket = bucket.bucket_no,
+                cost:display = cost,
+                remaining:display = *remaining;
+                "consume_bucket: ok"
+            );
             true
         } else {
+            log_warn!(
+                bucket = bucket.bucket_no,
+                cost:display = cost,
+                remaining:display = *remaining;
+                "consume_bucket: insufficient funds"
+            );
             false
         }
     }
 
     pub async fn remaining(&self) -> Vec<primitive_types::U256> {
-        let mut result = Vec::with_capacity(self.buckets.len());
-        for bucket in &self.buckets {
-            result.push(*bucket.lock().await);
-        }
-        result
+        self.buckets.lock().await.clone()
     }
 
-    pub async fn consume_storage_pages(&self, pages: u64) -> bool {
+    pub async fn consume_storage_pages(&self, pages: u64) -> anyhow::Result<bool> {
         self.consume_bucket(&self.storage, &[("pages", num(pages))])
             .await
     }
 
-    pub async fn consume_message_receipt(
+    pub fn calculate_message_receipt(
         &self,
         is_internal: bool,
         is_deploy: bool,
         calldata_length: u64,
-    ) -> bool {
-        self.consume_bucket(
+        code_length: u64,
+    ) -> anyhow::Result<primitive_types::U256> {
+        self.calculate_bucket(
             &self.message_receipt,
             &[
-                ("isInternal", num(u64::from(is_internal))),
-                ("isDeploy", num(u64::from(is_deploy))),
+                ("isInternal", is_internal.into()),
+                ("isDeploy", is_deploy.into()),
                 ("calldataLength", num(calldata_length)),
+                ("codeLength", num(code_length)),
             ],
         )
+        .context("calculating message receipt")
+    }
+
+    pub async fn consume_nondet_output(&self, output_length: u64) -> anyhow::Result<bool> {
+        self.consume_bucket(
+            &self.nondet_output,
+            &[("outputLength", output_length.into())],
+        )
         .await
+        .context("consuming nondet output")
     }
 
-    pub async fn consume_nondet_output(&self, output_length: u64) -> bool {
-        self.consume_bucket(&self.nondet_output, &[("outputLength", num(output_length))])
-            .await
-    }
-
-    pub async fn consume_message_fee_internal(
+    pub fn calculate_message_fee_internal(
         &self,
         on_acceptance: bool,
         matched_fee_params: &genvm_common::domain::MessageFeeParams,
-    ) -> bool {
-        self.consume_bucket(
+    ) -> anyhow::Result<primitive_types::U256> {
+        self.calculate_bucket(
             &self.message_fee,
             &[
-                ("isInternal", num(1u64)),
-                ("onAcceptance", num(u64::from(on_acceptance))),
+                ("isInternal", true.into()),
+                ("onAcceptance", on_acceptance.into()),
                 ("matchedFeeParams", fee_params_value(matched_fee_params)),
             ],
         )
-        .await
+        .context("calculating message fee internal")
     }
 
-    pub async fn consume_message_fee_external(&self) -> bool {
-        self.consume_bucket(&self.message_fee, &[("isInternal", num(0u64))])
-            .await
+    pub async fn consume_message_fee(
+        &self,
+        cost_fee: primitive_types::U256,
+        cost_receipt: primitive_types::U256,
+    ) -> bool {
+        if self.message_fee.bucket_no == self.message_receipt.bucket_no {
+            let Some(sum) = cost_fee.checked_add(cost_receipt) else {
+                log_warn!(
+                    cost_fee:display = cost_fee,
+                    cost_receipt:display = cost_receipt;
+                    "consume_message_fee: overflow adding fee + receipt"
+                );
+                return false;
+            };
+            return self.consume_bucket_raw(&self.message_fee, sum).await;
+        }
+
+        let mut buckets = self.buckets.lock().await;
+
+        if cost_fee > buckets[self.message_fee.bucket_no as usize] {
+            log_warn!(
+                bucket = self.message_fee.bucket_no,
+                cost_fee:display = cost_fee,
+                remaining:display = buckets[self.message_fee.bucket_no as usize];
+                "consume_message_fee: insufficient funds for fee"
+            );
+            return false;
+        }
+
+        if cost_receipt > buckets[self.message_receipt.bucket_no as usize] {
+            log_warn!(
+                bucket = self.message_receipt.bucket_no,
+                cost_receipt:display = cost_receipt,
+                remaining:display = buckets[self.message_receipt.bucket_no as usize];
+                "consume_message_fee: insufficient funds for receipt"
+            );
+            return false;
+        }
+
+        buckets[self.message_fee.bucket_no as usize] -= cost_fee;
+        buckets[self.message_receipt.bucket_no as usize] -= cost_receipt;
+
+        log_debug!(
+            fee_bucket = self.message_fee.bucket_no,
+            cost_fee:display = cost_fee,
+            receipt_bucket = self.message_receipt.bucket_no,
+            cost_receipt:display = cost_receipt;
+            "consume_message_fee: ok"
+        );
+
+        true
+    }
+
+    pub fn calculate_message_fee_external(
+        &self,
+        matched_fee_params: &genvm_common::domain::MessageFeeParams,
+    ) -> anyhow::Result<primitive_types::U256> {
+        self.calculate_bucket(
+            &self.message_fee,
+            &[
+                ("isInternal", false.into()),
+                ("matchedFeeParams", fee_params_value(matched_fee_params)),
+            ],
+        )
+        .context("calculating message fee external")
     }
 }

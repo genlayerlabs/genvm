@@ -31,6 +31,9 @@ local function transform(value, ctx, include_ids)
 	local typ = type(value)
 
 	if typ == "userdata" then
+		if rat and rat.is_rat(value) then
+			return "rat:" .. tostring(value)
+		end
 		if ctx.userdata_ids[value] == nil then
 			ctx.userdata_ids[value] = ctx.userdata_next_id
 			ctx.userdata_next_id = ctx.userdata_next_id + 1

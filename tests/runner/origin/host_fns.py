@@ -1,5 +1,7 @@
 # This file is auto-generated. Do not edit!
 
+# fmt: off
+
 from enum import IntEnum, StrEnum
 import typing
 

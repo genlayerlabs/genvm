@@ -116,7 +116,7 @@ NoFormatter.INSTANCE = NoFormatter()
 
 def _is_small(x) -> bool:
 	if x is None:
-		return False
+		return True
 	if isinstance(x, (int, bool)):
 		return True
 	if isinstance(x, str):

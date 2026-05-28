@@ -204,6 +204,10 @@ macro_rules! __make_capture {
         $crate::logger::Capture::Display(&$value)
     };
 
+    (display = $value:expr) => {
+        $crate::logger::Capture::Display(&$value)
+    };
+
     (err = $value:expr) => {
         $crate::logger::Capture::Error(&$value)
     };
@@ -574,7 +578,7 @@ impl Visitor<'_, '_> {
         let full_name = std::any::type_name_of_val(value);
 
         match full_name {
-            "genvm_common::calldata::types::Value" => {
+            "genlayer_calldata::types::Value" => {
                 let casted = unsafe {
                     (std::ptr::from_ref(value) as *const calldata::Value)
                         .as_ref()
@@ -591,7 +595,7 @@ impl Visitor<'_, '_> {
                 }
                 Ok(())
             }
-            "genvm_common::calldata::types::Address" => {
+            "genlayer_calldata::types::Address" => {
                 let casted = unsafe {
                     (std::ptr::from_ref(value) as *const calldata::Address)
                         .as_ref()

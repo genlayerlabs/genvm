@@ -25,6 +25,7 @@ local value2json = require("value2json")
 ---@field filter_image fun(image: string, filters: any[]): string
 ---@field random_bytes fun(length: integer): string
 ---@field random_float fun(): number
+---@field data_dir string
 
 ---@type RS
 M.rs = __dflt ---@diagnostic disable-line
@@ -72,6 +73,19 @@ M.reraise_with_fatality = function(e, new_fatality)
 
 	err.fatal = new_fatality
 	M.rs.user_error(err)
+end
+
+--- Run `body` and always run `cleanup` afterwards, even if `body` raises.
+--- If `body` raises, that error is re-raised after `cleanup`. Errors raised by
+--- `cleanup` itself are swallowed so the original `body` error takes priority.
+---@param body fun()
+---@param cleanup fun()
+M.finally = function(body, cleanup)
+	local ok, res = pcall(body)
+	pcall(cleanup)
+	if not ok then
+		error(res, 0)
+	end
 end
 
 --- Linearly map a value in [0, 1] to [range_min, range_max].

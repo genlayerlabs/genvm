@@ -359,11 +359,14 @@ async fn check_llm_availability(
         sign_vars: BTreeMap::new(),
         hello: Arc::new(genvm_modules_interfaces::GenVMHello {
             genvm_id: genvm_modules_interfaces::GenVMId(999),
+            role: genvm_modules_interfaces::Role::Leader,
             host_data: genvm_modules_interfaces::HostData {
                 node_address: "test_node".to_owned(),
                 tx_id: "test_tx".to_owned(),
                 rest: serde_json::Map::new(),
             },
+            gas_data: std::collections::BTreeMap::new(),
+            initial_time_units_allocation: 0,
         }),
     };
 

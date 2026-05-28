@@ -11,6 +11,12 @@ impl std::fmt::Debug for Address {
     }
 }
 
+impl std::fmt::Display for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "addr#{}", hex::encode(self.0))
+    }
+}
+
 #[cfg(feature = "arbitrary")]
 impl arbitrary::Arbitrary<'_> for Address {
     fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {

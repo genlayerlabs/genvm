@@ -5,7 +5,12 @@
 }@args0:
 let
 	lib = pkgs.lib;
-	importCargoLock = pkgs.rustPlatform.importCargoLock;
+	fetchurlWithUA = args: pkgs.fetchurl (args // {
+		curlOptsList = (args.curlOptsList or []) ++ [ "--user-agent" "genvm/kira@genlayerlabs.com" ];
+	});
+	importCargoLock = pkgs.rustPlatform.importCargoLock.override {
+		fetchurl = fetchurlWithUA;
+	};
 	fetchCargoTarball = pkgs.rustPlatform.fetchCargoTarball;
 	fetchCargoVendor = pkgs.rustPlatform.fetchCargoVendor;
 	stdenv = pkgs.stdenv;

@@ -1081,6 +1081,7 @@ dependencies = [
  "genlayer_sdk",
  "num-bigint",
  "num-traits",
+ "primitive-types",
  "regex",
  "serde",
  "serde_bytes",

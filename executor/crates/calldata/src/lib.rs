@@ -7,7 +7,7 @@ mod encoder;
 mod error;
 mod types;
 
-pub use encoder::{Encoder, StdWriter, Writer};
+pub use encoder::{CounterWriter, Encoder, StdWriter, Writer};
 pub use genlayer_calldata_derive::*;
 
 pub use bin::{BinDecodeError, Options as DecodeOptions, decode, decode_with, encode, encode_to};

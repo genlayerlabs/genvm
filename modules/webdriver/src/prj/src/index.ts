@@ -4,7 +4,7 @@ import { Command } from 'commander';
 
 import * as logger from './logging.js';
 import * as chromeBrowser from './browser/chrome.js';
-import { envDurationMs, formatDurationMs } from './duration.js';
+import { envDurationMs, envInt, formatDurationMs } from './duration.js';
 
 interface NavigationOptions {
 	waitUntil?: pup.PuppeteerLifeCycleEvent;
@@ -15,6 +15,7 @@ interface RenderOptions {
 	loadTimeout?: number;
 	waitAfterLoaded?: number;
 	waitUntil?: pup.PuppeteerLifeCycleEvent;
+	maxPageHeapMB?: number;
 }
 
 const program = new Command();
@@ -28,6 +29,8 @@ program
 const options = program.opts();
 
 const STATUS_I_AM_A_TEAPOT = 418;
+
+const DEFAULT_MAX_PAGE_HEAP_MB = envInt('GVM_WEBDRIVER_MAX_PAGE_HEAP_MB', 1024);
 
 const HEALTHCHECK_CACHE_DURATION_MS = envDurationMs(
 	'GVM_WEBDRIVER_HEALTHCHECK_CACHE_DURATION',
@@ -124,6 +127,73 @@ async function asScreenshot(page: pup.Page) {
 	return await page.screenshot();
 }
 
+class HeapLimitExceeded extends Error {
+	constructor(heapMB: number, maxHeapMB: number) {
+		super(`Page JS heap ${heapMB.toFixed(1)}MB exceeds limit ${maxHeapMB}MB`);
+	}
+}
+
+const HEAP_CHECK_INTERVAL_MS = envInt(
+	'GVM_WEBDRIVER_HEAP_CHECK_INTERVAL_MS',
+	200,
+);
+
+async function withHeapMonitor<T>(
+	page: pup.Page,
+	maxHeapMB: number,
+	fn: () => Promise<T>,
+): Promise<T> {
+	let stopped = false;
+	let stopResolve: () => void;
+	const stopPromise = new Promise<void>((r) => {
+		stopResolve = r;
+	});
+	const monitor = (async () => {
+		while (!stopped) {
+			await new Promise((r) => setTimeout(r, HEAP_CHECK_INTERVAL_MS));
+			if (stopped) break;
+			let totalMB: number;
+			try {
+				totalMB = await page.evaluate(
+					() => (performance as any).memory?.totalJSHeapSize / 1024 / 1024,
+				);
+			} catch {
+				await stopPromise;
+				return;
+			}
+			logger.log('debug', 'heap monitor check', {
+				heapMB: totalMB.toFixed(1),
+			});
+			if (totalMB > maxHeapMB) {
+				throw new HeapLimitExceeded(totalMB, maxHeapMB);
+			}
+		}
+	})();
+
+	try {
+		const result = await Promise.race([
+			fn(),
+			monitor.then(() => undefined as never),
+		]);
+		let totalMB: number;
+		try {
+			totalMB = await page.evaluate(
+				() => (performance as any).memory?.totalJSHeapSize / 1024 / 1024,
+			);
+		} catch {
+			return result;
+		}
+		if (totalMB > maxHeapMB) {
+			throw new HeapLimitExceeded(totalMB, maxHeapMB);
+		}
+		return result;
+	} finally {
+		stopped = true;
+		stopResolve!();
+		await monitor.catch(() => {});
+	}
+}
+
 function statusIsGood(status: number): boolean {
 	return (status >= 200 && status < 300) || status === 304;
 }
@@ -157,6 +227,7 @@ async function renderPageWithBrowser(
 		loadTimeout = 30000,
 		waitAfterLoaded = 0,
 		waitUntil = 'domcontentloaded',
+		maxPageHeapMB = DEFAULT_MAX_PAGE_HEAP_MB,
 	} = options;
 
 	const page = await browserInstance.newPage();
@@ -164,41 +235,53 @@ async function renderPageWithBrowser(
 	try {
 		page.setViewport({ width: 1920 / 2, height: 1080 / 2 });
 
-		const navigationResult = await navigateToPage(page, targetUrl, {
-			waitUntil,
-			timeout: loadTimeout,
+		return await withHeapMonitor(page, maxPageHeapMB, async () => {
+			const navigationResult = await navigateToPage(page, targetUrl, {
+				waitUntil,
+				timeout: loadTimeout,
+			});
+
+			if (navigationResult.error) {
+				return {
+					status: navigationResult.status,
+					body: navigationResult.error,
+				};
+			}
+
+			const statusCode = navigationResult.status;
+
+			if (statusIsGood(statusCode) && waitAfterLoaded > 0) {
+				await new Promise((resolve) =>
+					setTimeout(resolve, Math.floor(waitAfterLoaded * 1000)),
+				);
+			}
+
+			let data;
+			switch (mode) {
+				case 'text':
+					data = await asText(page);
+					break;
+				case 'html':
+					data = await asHTML(page);
+					break;
+				case 'screenshot':
+					data = await asScreenshot(page);
+					break;
+				default:
+					data = 'Invalid mode';
+			}
+
+			return { status: statusCode, body: data };
 		});
-
-		// If navigation failed, return the error immediately
-		if (navigationResult.error) {
-			return { status: navigationResult.status, body: navigationResult.error };
+	} catch (e) {
+		if (e instanceof HeapLimitExceeded) {
+			logger.log('warn', 'page heap limit exceeded', {
+				url: targetUrl,
+				error: e.message,
+			});
+			return { status: 507, body: e.message };
 		}
-
-		const statusCode = navigationResult.status;
-
-		// Wait after loaded if status is 200
-		if (statusIsGood(statusCode) && waitAfterLoaded > 0) {
-			await new Promise((resolve) =>
-				setTimeout(resolve, Math.floor(waitAfterLoaded * 1000)),
-			);
-		}
-
-		let data;
-		switch (mode) {
-			case 'text':
-				data = await asText(page);
-				break;
-			case 'html':
-				data = await asHTML(page);
-				break;
-			case 'screenshot':
-				data = await asScreenshot(page);
-				break;
-			default:
-				data = 'Invalid mode';
-		}
-
-		return { status: statusCode, body: data };
+		throw e;
 	} finally {
 		await page.close();
 	}
@@ -237,6 +320,9 @@ async function handleRenderRequest(
 			waitUntil:
 				(query.get('waitUntil') as pup.PuppeteerLifeCycleEvent) ||
 				'domcontentloaded',
+			...(query.get('maxPageHeapMB')
+				? { maxPageHeapMB: parseInt(query.get('maxPageHeapMB')!) }
+				: {}),
 		};
 
 		const result = await renderPage(targetUrl, mode, options);
@@ -327,6 +413,30 @@ const server = http.createServer(async (req, res) => {
 		await handleRenderRequest(parsedUrl, req, res);
 	} else if (pathname === '/healthcheck') {
 		await handleHealthcheck(parsedUrl, res);
+	} else if (pathname === '/log-level') {
+		if (req.method === 'GET') {
+			res.writeHead(200, { 'Content-Type': 'text/plain' });
+			res.end(logger.MIN_LEVEL);
+			return;
+		}
+		if (req.method !== 'POST') {
+			res.writeHead(405, { 'Content-Type': 'text/plain' });
+			res.end('method not allowed');
+			return;
+		}
+		const level = parsedUrl.searchParams.get('level');
+		if (!level || !logger.VALID_LEVELS.includes(level as logger.LogLevel)) {
+			res.writeHead(400, { 'Content-Type': 'text/plain' });
+			res.end(
+				`invalid level, must be one of: ${logger.VALID_LEVELS.join(', ')}`,
+			);
+			return;
+		}
+		const prev = logger.MIN_LEVEL;
+		logger.setMinLevel(level as logger.LogLevel);
+		logger.log('info', 'log level changed', { from: prev, to: level });
+		res.writeHead(200, { 'Content-Type': 'text/plain' });
+		res.end(level);
 	} else {
 		res.writeHead(404, { 'Content-Type': 'text/plain' });
 		res.end(
@@ -338,6 +448,7 @@ const server = http.createServer(async (req, res) => {
 const port = parseInt(options.port);
 
 import * as proc from 'process';
+import { log } from 'console';
 
 server.listen(port, () => {
 	logger.log('info', 'server started', {

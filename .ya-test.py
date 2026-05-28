@@ -124,6 +124,13 @@ local_ctx.run_parser.add_argument(
 	help='Do not start manager, modules, or webdriver services (assumes manager is already running)',
 )
 
+local_ctx.run_parser.add_argument(
+	'--no-webdriver',
+	default=False,
+	action='store_true',
+	help='Do not start the webdriver service (assumes an existing webdriver is reachable on the standard port)',
+)
+
 
 def collect_integration(ctx: ya_test_runner.stage.collection.Context):
 	# Load build info to find binary paths
@@ -138,6 +145,7 @@ def collect_integration(ctx: ya_test_runner.stage.collection.Context):
 	# for non-run
 	reroute_to = getattr(ctx.configuration.args, 'genvm_reroute_to', 'vTEST')
 	no_manager = getattr(ctx.configuration.args, 'no_manager', False)
+	no_webdriver = getattr(ctx.configuration.args, 'no_webdriver', False)
 
 	manager_port = genvm.get_manager_port(ctx.configuration)
 
@@ -153,9 +161,12 @@ def collect_integration(ctx: ya_test_runner.stage.collection.Context):
 			env=ctx.configuration,
 		)
 		# Create webdriver service
-		webdriver_impl = ya_test_runner.exec.service.FunctionService(
-			lambda: genvm.start_webdriver_service(ctx.configuration)
-		)
+		if no_webdriver:
+			webdriver_impl = genvm.NoOpService()
+		else:
+			webdriver_impl = ya_test_runner.exec.service.FunctionService(
+				lambda: genvm.start_webdriver_service(ctx.configuration)
+			)
 		# This starts Llm and Web modules on the manager
 		modules_impl = genvm.ModulesService(
 			manager_uri=f'http://localhost:{manager_port}',

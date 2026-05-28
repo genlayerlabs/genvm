@@ -15,10 +15,8 @@ use crate::scripting;
 async fn test_overloaded() {
     common::tests::setup();
 
-    const BIND_ADDR: &str = "127.0.0.1:11434";
-    const CONNECT_ADDR: &str = "http://127.0.0.1:11434";
-
-    let server = tokio::net::TcpListener::bind(BIND_ADDR).await.unwrap();
+    let server = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let connect_addr = format!("http://{}", server.local_addr().unwrap());
 
     let made_request = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
@@ -56,13 +54,19 @@ async fn test_overloaded() {
             meta: serde_json::Value::Null,
             timeout: None,
         },
-        host: CONNECT_ADDR.to_owned(),
+        host: connect_addr.clone(),
     };
 
     let backend_real = config::BackendConfig {
         enabled: true,
         provider: config::Provider::OpenaiCompatible,
-        key: std::env::var("OPENAIKEY").unwrap(),
+        key: match std::env::var("OPENAIKEY") {
+            Ok(v) => v,
+            Err(_) => {
+                eprintln!("skipping test_overloaded: OPENAIKEY is not set");
+                return;
+            }
+        },
         script_config: ScriptBackendConfig {
             models: BTreeMap::from([(
                 "openrouter/auto".to_owned(),
@@ -108,6 +112,7 @@ async fn test_overloaded() {
             lua_path: extra_path,
             signer_url: Arc::from(""),
             signer_headers: Arc::new(BTreeMap::new()),
+            data_dir: String::new(),
         },
         prompt_templates: config::PromptTemplates {
             eq_comparative: serde_json::Value::Null,
@@ -179,6 +184,10 @@ async fn test_overloaded() {
 
     let (_ctx, ctx_lua) = user_vm.create_ctx(&sub_ctx).unwrap();
 
+    if let Some(ref setup) = user_vm.data.setup {
+        let _: mlua::Value = user_vm.call_fn(setup, ctx_lua.clone()).await.unwrap();
+    }
+
     let payload = llm_iface::PromptPayload {
         images: Vec::new(),
         response_format: llm_iface::OutputFormat::Text,
@@ -191,16 +200,20 @@ async fn test_overloaded() {
         .unwrap();
     let fuel = user_vm
         .vm
-        .to_value_with(&0u64, scripting::DEFAULT_LUA_SER_OPTIONS)
+        .create_userdata(scripting::rat::LuaRat(num_rational::BigRational::from(
+            num_bigint::BigInt::from(0),
+        )))
         .unwrap();
 
-    let res = user_vm
+    let res: mlua::Value = user_vm
         .call_fn(&user_vm.data.exec_prompt, (ctx_lua, payload, fuel))
         .await
         .unwrap();
-    let res: llm_iface::PromptAnswer = user_vm.vm.from_value(res).unwrap();
+    let table = res.as_table().unwrap();
+    let data: llm_iface::PromptAnswerData =
+        user_vm.vm.from_value(table.get("data").unwrap()).unwrap();
 
-    match res.data {
+    match data {
         llm_iface::PromptAnswerData::Text(text) => {
             assert_eq!(text.trim().to_lowercase(), "ok");
         }

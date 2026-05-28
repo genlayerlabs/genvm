@@ -152,7 +152,7 @@ impl<'a> Tokenizer<'a> {
             }
             let scale = BigInt::from(10).pow(frac_digits.len() as u32);
             let frac = BigRational::new(self.parse_bigint(&frac_digits)?, scale);
-            value = value + frac;
+            value += frac;
         }
 
         if self.pos < self.input.len()

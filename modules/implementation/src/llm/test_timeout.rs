@@ -13,10 +13,8 @@ use crate::scripting;
 async fn test_timeout() {
     common::tests::setup();
 
-    const BIND_ADDR: &str = "127.0.0.1:11435";
-    const CONNECT_ADDR: &str = "http://127.0.0.1:11435";
-
-    let server = tokio::net::TcpListener::bind(BIND_ADDR).await.unwrap();
+    let server = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let connect_addr = format!("http://{}", server.local_addr().unwrap());
 
     let server_task = tokio::spawn(async move {
         let (mut client, _) = server.accept().await.unwrap();
@@ -47,7 +45,7 @@ async fn test_timeout() {
             meta: serde_json::Value::Null,
             timeout: None,
         },
-        host: CONNECT_ADDR.to_owned(),
+        host: connect_addr.clone(),
     };
 
     let provider = backend.to_provider();
@@ -74,6 +72,7 @@ async fn test_timeout() {
             lua_path: extra_path,
             signer_url: Arc::from(""),
             signer_headers: Arc::new(BTreeMap::new()),
+            data_dir: String::new(),
         },
         prompt_templates: config::PromptTemplates {
             eq_comparative: serde_json::Value::Null,

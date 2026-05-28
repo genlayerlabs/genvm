@@ -4,12 +4,23 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export let MIN_LEVEL: LogLevel = 'info';
 
+export const VALID_LEVELS: readonly LogLevel[] = [
+	'debug',
+	'info',
+	'warn',
+	'error',
+];
+
 const LEVELS: { [key in LogLevel]: number } = {
 	debug: 10,
 	info: 20,
 	warn: 30,
 	error: 40,
 };
+
+export function setMinLevel(level: LogLevel): void {
+	MIN_LEVEL = level;
+}
 
 export function log(
 	level: LogLevel,

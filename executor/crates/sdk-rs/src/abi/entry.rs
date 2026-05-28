@@ -639,7 +639,7 @@ pub mod wasi_only {
         std::mem::drop(input);
 
         let extended: ExtendedMessageFlat =
-            calldata::from_value(value).map_err(|e| ContractMainError::MessageDecode(e))?;
+            calldata::from_value(value).map_err(ContractMainError::MessageDecode)?;
 
         let extended: ExtendedMessage = extended.into();
 

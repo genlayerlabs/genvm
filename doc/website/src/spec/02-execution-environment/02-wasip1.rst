@@ -136,6 +136,10 @@ Functions
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 Deterministic mode: mt19937 that is initialized with ``GenLayer`` as 8 ascii octets.
+The seed is fixed across runs and does **not** mix in the transaction hash, block
+height or message data — two deterministic runs of the same contract see the same
+``random_get`` stream. Non-deterministic randomness MUST be obtained via
+:ref:`gvm-def-non-det-mode` calls.
 
 Non-deterministic mode: cryptographically secure random number generator,
 with optional fallback to pseudo-random numbers, if secure source is exhausted or unavailable.
@@ -209,24 +213,42 @@ Does nothing and always returns success.
 ``clock_time_get`` Function
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Returns transaction unix timestamp in **both** modes
+Returns transaction unix timestamp in **both** modes, **regardless of the requested
+clock id** (``realtime``, ``monotonic``, ``process_cputime_id`` and ``thread_cputime_id``
+all return the same value). Standard WASI distinguishes these clocks; GenVM does not,
+because non-determinism would otherwise leak through the monotonic clock in
+:ref:`gvm-def-det-mode`.
 
 ``clock_res_get`` Function
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Always returns ``1``
+Always returns ``1`` (one nanosecond) for every clock id. The actual granularity of
+``clock_time_get`` is bounded by the granularity of the host-provided transaction
+timestamp.
 
 ``environ_sizes_get`` Function
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+Reports the size of the host-supplied environment block. The contract cannot mutate it,
+and the host fills it from a fixed list per runner; see :doc:`04-runners`. There is no
+inheritance from the operating-system environment.
+
 ``environ_get`` Function
 ~~~~~~~~~~~~~~~~~~~~~~~~
+
+Copies the host-supplied environment block into guest memory.
 
 ``args_sizes_get`` Function
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+Reports the size of the host-supplied argv. The first argument is the runner's entry
+point (e.g. the contract source path inside the VFS); subsequent arguments are
+provided by the runner, never by an external caller.
+
 ``args_get`` Function
 ~~~~~~~~~~~~~~~~~~~~~
+
+Copies the host-supplied argv into guest memory.
 
 Virtual File System
 -------------------

@@ -11,6 +11,8 @@
     "ANTHROPICKEY",
     "XAIKEY",
     "GEMINIKEY",
-    "ATOMAKEY"
+    "ATOMAKEY",
+    "LSQLITE3_SRC",
+    "LUA_INCLUDE"
   ]
 }

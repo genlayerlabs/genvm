@@ -43,8 +43,23 @@ local lib = require("lib-genvm")
 ---@field template "EqComparative" | "EqNonComparativeValidator" | "EqNonComparativeLeader"
 ---@field [string] string
 
+---@class TokenUsage
+---@field input integer | nil
+---@field output integer | nil
+---@field total integer | nil
+---@field cache_read integer | nil
+---@field cache_write integer | nil
+---@field image_units integer | nil
+---@field raw_usage table
+
+---@class ProviderResult
+---@field data any
+---@field consumed_gen Rat
+---@field tokens TokenUsage
+
 ---@class LLM
----@field exec_prompt_in_provider fun(ctx, data: { prompt: Prompt, format: Format, model: string, provider: string, timeout: number | nil }): any
+---@field exec_prompt_in_provider fun(ctx, data: { prompt: Prompt, format: Format, model: string, provider: string, timeout: number | nil }): ProviderResult
+---@field exhaust fun() Signal budget exhaustion (raises an error, never returns)
 ---@field timeout number | nil
 ---@field providers ProvidersDB
 ---@field templates { eq_comparative: any, eq_non_comparative_leader: any, eq_non_comparative_validator: any }
@@ -67,6 +82,10 @@ M.overloaded_statuses = {
 --- Execute a prompt against a specific provider/model. Delegates to the runtime.
 ---@type fun(ctx, data: { prompt: Prompt, format: Format, model: string, provider: string }): any
 M.exec_prompt_in_provider = rs.exec_prompt_in_provider
+
+--- Signal budget exhaustion. Raises an error (never returns).
+---@type fun() never
+M.exhaust = rs.exhaust
 
 --- Full provider database (all providers and models).
 ---@type ProvidersDB

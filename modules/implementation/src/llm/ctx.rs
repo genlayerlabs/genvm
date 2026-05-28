@@ -13,11 +13,13 @@ use super::{config::Config, prompt, providers};
 pub struct VMData {
     pub exec_prompt: mlua::Function,
     pub exec_prompt_template: mlua::Function,
+    pub setup: Option<mlua::Function>,
+    pub teardown: Option<mlua::Function>,
 }
 
 pub struct CtxPart {
     pub providers: Arc<BTreeMap<String, Box<dyn providers::Provider + Send + Sync>>>,
-    pub metrics: sync::DArc<super::Metrics>,
+    pub(crate) metrics: sync::DArc<super::Metrics>,
 }
 
 impl mlua::UserData for CtxPart {}
@@ -116,20 +118,27 @@ async fn exec_prompt_in_provider(
         .with_context(|| "running in provider")
         .map_err(scripting::anyhow_to_lua_error)?;
 
-    let answer = llm_iface::PromptAnswer {
-        data: res.result,
-        consumed_gen: 0,
-    };
+    let answer_data = vm.to_value_with(&res.result, scripting::DEFAULT_LUA_SER_OPTIONS)?;
 
-    let mlua::Value::Table(answer) =
-        vm.to_value_with(&answer, scripting::DEFAULT_LUA_SER_OPTIONS)?
-    else {
-        std::unreachable!("to_value_with returned non-table for struct");
-    };
+    let tokens = vm.create_table()?;
+    tokens.set("input", res.tokens.input)?;
+    tokens.set("output", res.tokens.output)?;
+    tokens.set("total", res.tokens.total)?;
+    tokens.set("cache_read", res.tokens.cache_read_tokens)?;
+    tokens.set("cache_write", res.tokens.cache_write_tokens)?;
+    tokens.set("image_units", res.tokens.image_units)?;
+    tokens.set(
+        "raw_usage",
+        vm.to_value_with(&res.tokens.raw_usage, scripting::DEFAULT_LUA_SER_OPTIONS)?,
+    )?;
 
-    answer.set("input_tokens", res.tokens.input)?;
-    answer.set("output_tokens", res.tokens.output)?;
-    answer.set("total_tokens", res.tokens.total)?;
+    let answer = vm.create_table()?;
+    answer.set("data", answer_data)?;
+    answer.set(
+        "consumed_gen",
+        scripting::rat::LuaRat(num_rational::BigRational::from(num_bigint::BigInt::from(0))),
+    )?;
+    answer.set("tokens", tokens)?;
 
     Ok(mlua::Value::Table(answer))
 }
@@ -161,6 +170,13 @@ pub fn create_global(vm: &mlua::Lua, config: &Config) -> anyhow::Result<mlua::Va
     llm.set(
         "timeout",
         vm.to_value_with(&config.timeout, scripting::DEFAULT_LUA_SER_OPTIONS)?,
+    )?;
+
+    llm.set(
+        "exhaust",
+        vm.create_function(|_vm: &mlua::Lua, _: ()| -> mlua::Result<()> {
+            Err(mlua::Error::external(crate::common::BudgetExhausted))
+        })?,
     )?;
 
     Ok(mlua::Value::Table(llm))

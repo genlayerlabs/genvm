@@ -420,6 +420,7 @@ def generator.register_cargo(rel_path, extra_args: [], build_to: nil)
 		var :subcommand, 'clippy'
 		var :wd, dir
 		var :extra_args, extra_args + ['--', '-A', 'clippy::upper_case_acronyms', '-Dwarnings']
+		var :env, Ninja::RawStr.new('RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE=/dev/null')
 	end
 
 	build(:phony, 'target/' + rel_path + '/clippy') do
@@ -433,6 +434,7 @@ def generator.register_cargo(rel_path, extra_args: [], build_to: nil)
 		var :subcommand, 'clippy'
 		var :wd, dir
 		var :extra_args, extra_args + ['--fix', '--allow-dirty', '--allow-staged', '--', '-A', 'clippy::upper_case_acronyms', '-Dwarnings']
+		var :env, Ninja::RawStr.new('RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE=/dev/null')
 	end
 	$all_clippy_fix.push(to.join('clippy.fix.trg'))
 
@@ -503,7 +505,7 @@ end
 
 generator.build(:CUSTOM_COMMAND, 'target/runners') do
 	var :command, [
-		'nix', 'build', '-v', '-L', '-o', $build_dir.join('runners-nix'), "git+file:#{$source_dir}#debug-runners",
+		'nix', 'build', '--keep-going', '-v', '-L', '-o', $build_dir.join('runners-nix'), "git+file:#{$source_dir}#debug-runners",
 		Ninja::AND, 'mkdir', '-p', './out/runners',
 		Ninja::AND, 'cp', '-r', './runners-nix/.', './out/runners/.',
 		Ninja::AND, 'chmod', '-R', '+w', './out/runners/.',

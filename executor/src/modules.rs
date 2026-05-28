@@ -20,7 +20,10 @@ pub struct Module {
     cancellation: Arc<genvm_common::cancellation::Token>,
     imp: tokio::sync::Mutex<ModuleImpl>,
     genvm_id: genvm_modules_interfaces::GenVMId,
+    role: genvm_modules_interfaces::Role,
     host_data: genvm_modules_interfaces::HostData,
+    gas_data: std::collections::BTreeMap<String, String>,
+    initial_time_units_allocation: u32,
     metrics: sync::DArc<Metrics>,
 }
 
@@ -87,21 +90,34 @@ async fn connect(url: &str) -> anyhow::Result<BoxedStream> {
     }
 }
 
+pub struct ModuleNamedArgs {
+    pub name: String,
+    pub url: String,
+    pub gas_data: std::collections::BTreeMap<String, String>,
+    pub initial_time_units_allocation: u32,
+}
+
 impl Module {
     pub fn new(
-        name: String,
-        url: String,
+        named: ModuleNamedArgs,
         cancellation: Arc<genvm_common::cancellation::Token>,
         genvm_id: genvm_modules_interfaces::GenVMId,
+        role: genvm_modules_interfaces::Role,
         host_data: genvm_modules_interfaces::HostData,
         metrics: sync::DArc<Metrics>,
     ) -> Self {
         Self {
-            imp: tokio::sync::Mutex::new(ModuleImpl { url, stream: None }),
+            imp: tokio::sync::Mutex::new(ModuleImpl {
+                url: named.url,
+                stream: None,
+            }),
             cancellation,
             genvm_id,
-            name,
+            role,
+            name: named.name,
             host_data,
+            gas_data: named.gas_data,
+            initial_time_units_allocation: named.initial_time_units_allocation,
             metrics,
         }
     }
@@ -141,7 +157,10 @@ impl Module {
                 &mut stream,
                 &calldata::encode_obj(&genvm_modules_interfaces::GenVMHello {
                     genvm_id: self.genvm_id,
+                    role: self.role,
                     host_data: self.host_data.clone(),
+                    gas_data: self.gas_data.clone(),
+                    initial_time_units_allocation: self.initial_time_units_allocation,
                 }),
             )
             .await?;

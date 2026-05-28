@@ -298,9 +298,13 @@
               "type": "string"
             },
             "default": {}
+        },
+        "data_dir": {
+            "type": "string",
+            "description": "path to data directory for persistent storage (e.g. stats database)"
         }
       },
-      "required": ["bind_address", "lua_script_path", "vm_count", "lua_path"]
+      "required": ["bind_address", "lua_script_path", "vm_count", "lua_path", "data_dir"]
     },
     "u256": {
       "oneOf": [

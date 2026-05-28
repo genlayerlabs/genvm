@@ -56,8 +56,22 @@ fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Value, EvalError> {
                 BinOp::Gt => Ok(Value::Bool(l.into_rational()? > r.into_rational()?)),
                 BinOp::Le => Ok(Value::Bool(l.into_rational()? <= r.into_rational()?)),
                 BinOp::Ge => Ok(Value::Bool(l.into_rational()? >= r.into_rational()?)),
-                BinOp::Eq => Ok(Value::Bool(l.into_rational()? == r.into_rational()?)),
-                BinOp::Ne => Ok(Value::Bool(l.into_rational()? != r.into_rational()?)),
+                BinOp::Eq => match (l, r) {
+                    (Value::Bool(a), Value::Bool(b)) => Ok(Value::Bool(a == b)),
+                    (Value::Rational(a), Value::Rational(b)) => Ok(Value::Bool(a == b)),
+                    (l, r) => Err(EvalError::TypeError {
+                        expected: l.typ(),
+                        got: r.typ(),
+                    }),
+                },
+                BinOp::Ne => match (l, r) {
+                    (Value::Bool(a), Value::Bool(b)) => Ok(Value::Bool(a != b)),
+                    (Value::Rational(a), Value::Rational(b)) => Ok(Value::Bool(a != b)),
+                    (l, r) => Err(EvalError::TypeError {
+                        expected: l.typ(),
+                        got: r.typ(),
+                    }),
+                },
             }
         }
         Expr::Let { name, value, body } => {
@@ -200,6 +214,32 @@ fn resolve_builtin(name: &str) -> Option<Value> {
                 got: other.typ(),
             }),
         }))),
+        "pow" => Some(Value::HostFn(Arc::new(|base: &Value| {
+            let base = base.clone().into_rational()?;
+            Ok(Value::HostFn(Arc::new(move |exp: &Value| {
+                let exp = exp.clone().into_rational()?;
+                if !exp.is_integer() {
+                    return Err(EvalError::Custom(format!(
+                        "pow exponent must be an integer, got {exp}"
+                    )));
+                }
+                let exp = exp.to_integer();
+                let negative = exp < num_bigint::BigInt::ZERO;
+                let exp: u64 = exp
+                    .magnitude()
+                    .try_into()
+                    .map_err(|_| EvalError::Custom("pow exponent too large".to_owned()))?;
+                let result = num_traits::pow::pow(base.clone(), exp as usize);
+                if negative {
+                    if result.is_zero() {
+                        return Err(EvalError::DivisionByZero);
+                    }
+                    Ok(Value::Rational(result.recip()))
+                } else {
+                    Ok(Value::Rational(result))
+                }
+            })))
+        }))),
         _ => None,
     }
 }
@@ -222,7 +262,7 @@ impl Value {
 
 impl Expr {
     pub fn evaluate(&self) -> Result<Value, EvalError> {
-        self.evaluate_with(&|name: &str| Err(EvalError::UndefinedVariable(name.to_owned())))
+        self.evaluate_with(|name: &str| Err(EvalError::UndefinedVariable(name.to_owned())))
     }
 
     pub fn evaluate_with(

@@ -414,6 +414,8 @@ pub struct Request {
     #[serde(default)]
     #[calldata(default = default_message_fee_allocation)]
     pub message_fee_allocation: Vec<genvm_common::domain::MessageFeeAllocationNode>,
+    /// Initial time-unit budget for this execution.
+    pub initial_time_units_allocation: u32,
 }
 
 fn default_gas_data() -> std::collections::BTreeMap<String, String> {
@@ -878,9 +880,17 @@ pub async fn start_genvm(
     // Create execution context if modules are needed
     let execution_context = if req.needs_modules() {
         let host_data: genvm_modules_interfaces::HostData = serde_json::from_str(&req.host_data)?;
+        let role = if req.leader_nondet_results.is_none() {
+            genvm_modules_interfaces::Role::Leader
+        } else {
+            genvm_modules_interfaces::Role::Validator
+        };
         let hello = Arc::new(genvm_modules_interfaces::GenVMHello {
             genvm_id,
+            role,
             host_data,
+            gas_data: req.gas_data.clone(),
+            initial_time_units_allocation: req.initial_time_units_allocation,
         });
         Some(full_ctx.mod_ctx.create_execution_context(hello).await?)
     } else {
@@ -956,6 +966,7 @@ pub async fn start_genvm(
         bucket_totals: req.bucket_totals.clone(),
         gas_data: req.gas_data.clone(),
         message_fee_allocation: req.message_fee_allocation.clone(),
+        initial_time_units_allocation: req.initial_time_units_allocation,
     };
     let execution_data_bytes = genvm_common::calldata::encode_obj(&execution_data);
 

@@ -50,6 +50,14 @@ const ROTATION_AT_LEAST_MS = envDurationMs(
 	'GVM_WEBDRIVER_ROTATION_AT_LEAST',
 	0,
 );
+const RENDERER_MAX_OLD_SPACE_MB = envInt(
+	'GVM_WEBDRIVER_RENDERER_MAX_OLD_SPACE_MB',
+	1024,
+);
+const RENDERER_PROCESS_LIMIT = envInt(
+	'GVM_WEBDRIVER_RENDERER_PROCESS_LIMIT',
+	4,
+);
 
 async function newBrowser(): Promise<BrowserHolder> {
 	const realBrowser = await puppeteer.launch({
@@ -59,9 +67,11 @@ async function newBrowser(): Promise<BrowserHolder> {
 			'--disable-dev-shm-usage',
 			'--disable-accelerated-2d-canvas',
 			'--no-first-run',
-			'--single-process',
 			'--no-zygote',
 			'--disable-gpu',
+			'--enable-precise-memory-info',
+			`--js-flags=--max-old-space-size=${RENDERER_MAX_OLD_SPACE_MB}`,
+			`--renderer-process-limit=${RENDERER_PROCESS_LIMIT}`,
 		],
 		executablePath: '/usr/bin/chromium',
 	});

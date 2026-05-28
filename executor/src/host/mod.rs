@@ -426,12 +426,13 @@ impl Host {
         Ok(())
     }
 
-    pub fn consume_fuel(&mut self, gas: u64) -> Result<()> {
+    pub fn consume_fuel(&mut self, gas: primitive_types::U256) -> Result<()> {
         log_trace!("consume_fuel");
 
         let mut sock = self.lock_sock();
         sock.write_all(&[host_fns::Methods::ConsumeFuel as u8])?;
-        sock.write_all(&gas.to_le_bytes())?;
+        let buf = gas.to_little_endian();
+        sock.write_all(&buf)?;
 
         sock.flush()?;
         Ok(())
@@ -469,7 +470,7 @@ impl Host {
         Ok(primitive_types::U256::from_little_endian(&buf))
     }
 
-    pub fn remaining_fuel_as_gen(&mut self) -> Result<u64> {
+    pub fn remaining_fuel_as_gen(&mut self) -> Result<primitive_types::U256> {
         log_trace!("remaining_fuel_as_gen");
 
         let mut sock = self.lock_sock();
@@ -477,10 +478,10 @@ impl Host {
 
         handle_host_error(&mut **sock, "remaining_fuel_as_gen")?;
 
-        let mut buf: [u8; 8] = [0; 8];
+        let mut buf: [u8; 32] = [0; 32];
         sock.read_exact(&mut buf)
             .with_context(|| "reading remaining fuel")?;
-        Ok(u64::from_le_bytes(buf))
+        Ok(primitive_types::U256::from_little_endian(&buf))
     }
 
     pub fn notify_nondet_disagreement(&mut self, call_no: u32) -> Result<()> {

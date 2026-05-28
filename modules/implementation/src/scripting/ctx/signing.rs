@@ -422,12 +422,15 @@ mod tests {
 
         let part = CtxPart {
             hello: Arc::new(genvm_modules_interfaces::GenVMHello {
+                genvm_id: genvm_modules_interfaces::GenVMId(999),
+                role: genvm_modules_interfaces::Role::Leader,
                 host_data: genvm_modules_interfaces::HostData {
                     node_address: "test_address".to_string(),
                     tx_id: "test_tx_id".to_string(),
                     rest: serde_json::Map::new(),
                 },
-                genvm_id: genvm_modules_interfaces::GenVMId(999),
+                gas_data: std::collections::BTreeMap::new(),
+                initial_time_units_allocation: 0,
             }),
             client: common::tests::create_test_client(),
             sign_url: Arc::from("https://test-server.genlayer.com/genvm/sign"),
