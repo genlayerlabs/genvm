@@ -1,9 +1,10 @@
 { pkgs
 , host-system
+, pkgs-overlays ? []
 , ...
 }:
 let
-	allRunners = import ../../default.nix { inherit host-system; };
+	allRunners = import ../../default.nix { inherit host-system pkgs-overlays; };
 
 	pathOfRunner = runner:
 		let

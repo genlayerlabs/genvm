@@ -8,6 +8,7 @@
 # all args are optional
 { host-system ? "x86_64-linux"
 	, deps ? null
+	, pkgs-overlays ? []
 	, ...
 }:
 let
@@ -19,9 +20,11 @@ let
 		});
 	pkgs = import pkgs-pure {
 		system = "x86_64-linux";
+		overlays = pkgs-overlays;
 	};
 	pkgs-host = import pkgs-pure {
 		system = host-system;
+		overlays = pkgs-overlays;
 	};
 	runnersLib = import ./support args;
 

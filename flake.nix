@@ -16,8 +16,26 @@
 				flake-utils.lib.eachDefaultSystem
 					(system:
 						let
+							cargo-ua-overlay = final: prev:
+								let
+									fetchurlWithUA = args: prev.fetchurl (args // {
+										curlOptsList = (args.curlOptsList or []) ++ [ "--user-agent" "genvm (kira@genlayerlabs.com)" ];
+									});
+									importCargoLockWithUA = prev.rustPlatform.importCargoLock.override {
+										fetchurl = fetchurlWithUA;
+									};
+								in {
+									rustPlatform = prev.rustPlatform // {
+										importCargoLock = importCargoLockWithUA;
+										buildRustPackage = prev.rustPlatform.buildRustPackage.override {
+											importCargoLock = importCargoLockWithUA;
+										};
+									};
+								};
+							pkgs-overlays = [ cargo-ua-overlay ];
 							pkgs = import nixpkgs {
 								inherit system;
+								overlays = pkgs-overlays;
 							};
 
 							ya-test-runner = pkgs.python312Packages.buildPythonApplication {
@@ -127,7 +145,7 @@
 							compiled-libs = import ./libs release-args;
 
 							debug-runners = import ./runners/support/views/debug-build.nix {
-								inherit pkgs;
+								inherit pkgs pkgs-overlays;
 								host-system = system;
 							};
 
@@ -142,7 +160,7 @@
 							};
 
 							runners-args = {
-								inherit pkgs deps;
+								inherit pkgs deps pkgs-overlays;
 								host-system = system;
 								build-config = builtins.fromJSON (builtins.readFile ./flake-config.json);
 							};

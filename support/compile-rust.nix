@@ -5,12 +5,7 @@
 }@args0:
 let
 	lib = pkgs.lib;
-	fetchurlWithUA = args: pkgs.fetchurl (args // {
-		curlOptsList = (args.curlOptsList or []) ++ [ "--user-agent" "genvm/kira@genlayerlabs.com" ];
-	});
-	importCargoLock = pkgs.rustPlatform.importCargoLock.override {
-		fetchurl = fetchurlWithUA;
-	};
+	importCargoLock = pkgs.rustPlatform.importCargoLock;
 	fetchCargoTarball = pkgs.rustPlatform.fetchCargoTarball;
 	fetchCargoVendor = pkgs.rustPlatform.fetchCargoVendor;
 	stdenv = pkgs.stdenv;
@@ -134,7 +129,7 @@ stdenv.mkDerivation (
 			+ (args.postUnpack or "")
 			+ "\n"
 			+ builtins.concatStringsSep "\n" (
-				builtins.map (x: "cp ${x}/lib/* $NIX_BUILD_TOP/libs/") extraLibs
+				builtins.map (x: "cp -r ${x}/lib/. $NIX_BUILD_TOP/libs/") extraLibs
 			);
 
 		configurePhase =

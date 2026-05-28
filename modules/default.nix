@@ -63,10 +63,9 @@ let
 					if [[ "$src" != "${exe}" ]]
 					then
 						cp --no-preserve=ownership -r "$src/." "$out/."
+						chmod -R u+w "$out"
 					fi
 				done
-
-				chmod -R u+w "$out"
 				patch-yaml-schema --tag ${build-config.executor-version} "$out"
 				patch-llm-config --tag ${build-config.executor-version} "$out/config/genvm-module-llm.yaml"
 				patch-web-config --tag ${build-config.executor-version} "$out/config/genvm-module-web.yaml"
