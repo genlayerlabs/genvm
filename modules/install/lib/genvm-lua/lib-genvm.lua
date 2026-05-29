@@ -78,14 +78,17 @@ end
 --- Run `body` and always run `cleanup` afterwards, even if `body` raises.
 --- If `body` raises, that error is re-raised after `cleanup`. Errors raised by
 --- `cleanup` itself are swallowed so the original `body` error takes priority.
----@param body fun()
+---@generic T
+---@param body fun(): T
 ---@param cleanup fun()
+---@return T
 M.finally = function(body, cleanup)
 	local ok, res = pcall(body)
 	pcall(cleanup)
 	if not ok then
 		error(res, 0)
 	end
+	return res
 end
 
 --- Linearly map a value in [0, 1] to [range_min, range_max].

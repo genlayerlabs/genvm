@@ -16,21 +16,17 @@ pub use ctx::filters;
 pub use ctx::CtxPart;
 pub use ctx::Metrics;
 
-#[cfg(has_lsqlite3)]
 unsafe extern "C-unwind" {
     fn luaopen_lsqlite3(state: *mut mlua::lua_State) -> std::ffi::c_int;
 }
 
-pub fn preload_lsqlite3(#[allow(unused)] vm: &mlua::Lua) -> anyhow::Result<()> {
-    #[cfg(has_lsqlite3)]
-    {
-        let func = unsafe { vm.create_c_function(luaopen_lsqlite3)? };
-        let preload: mlua::Table = vm
-            .globals()
-            .get::<mlua::Table>("package")?
-            .get::<mlua::Table>("preload")?;
-        preload.set("lsqlite3", func)?;
-    }
+pub fn preload_lsqlite3(vm: &mlua::Lua) -> anyhow::Result<()> {
+    let func = unsafe { vm.create_c_function(luaopen_lsqlite3)? };
+    let preload: mlua::Table = vm
+        .globals()
+        .get::<mlua::Table>("package")?
+        .get::<mlua::Table>("preload")?;
+    preload.set("lsqlite3", func)?;
     Ok(())
 }
 

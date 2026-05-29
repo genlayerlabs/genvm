@@ -4,10 +4,18 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo:rerun-if-env-changed=LSQLITE3_SRC");
     println!("cargo:rerun-if-env-changed=LUA_INCLUDE");
+    println!("cargo:rerun-if-env-changed=LSQLITE3_PREBUILT");
+
+    if env::var("LSQLITE3_PREBUILT").is_ok() {
+        println!("cargo:rustc-link-lib=static=lsqlite3_bundle");
+        return;
+    }
 
     let lsqlite3_src = match env::var("LSQLITE3_SRC") {
         Ok(v) => PathBuf::from(v),
-        Err(_) => return,
+        Err(_) => {
+            panic!("either LSQLITE3_PREBUILT or LSQLITE3_SRC must be set");
+        }
     };
 
     let lua_include =
@@ -28,7 +36,4 @@ fn main() {
         .opt_level(2)
         .warnings(false)
         .compile("lsqlite3");
-
-    println!("cargo:rustc-cfg=has_lsqlite3");
-    println!("cargo::rustc-check-cfg=cfg(has_lsqlite3)");
 }
