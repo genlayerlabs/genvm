@@ -32,6 +32,18 @@ while [[ $# -gt 0 ]]; do
 			EXTRA_BUNDLE="$(readlink -f "$EXTRA_BUNDLE")"
 			shift
 			;;
+		--no-refetch)
+			NO_REFETCH=1
+			shift
+			;;
+		--compression)
+			COMPRESSION="$2"
+			shift 2
+			;;
+		--compression=*)
+			COMPRESSION="${1#*=}"
+			shift
+			;;
 		-h|--help)
 			echo "Usage: $0 [--target TARGET] [--executor-version VERSION]"
 			echo "  --target TARGET              Specify the target platform"
@@ -56,6 +68,14 @@ if [[ -n "$EXECUTOR_VERSION" && -z "$EXECUTOR_VERSION" ]]; then
 	exit 1
 fi
 
+if [[ -n "${COMPRESSION:-}" && "$COMPRESSION" != "skip" ]]; then
+	if ! [[ "$COMPRESSION" =~ ^[1-9]$ ]]; then
+		echo "Error: --compression must be 1-9 or 'skip'" >&2
+		exit 1
+	fi
+	exit 1
+fi
+
 HEAD_REVISION=$(git rev-parse HEAD)
 
 echo "\$TARGET = $TARGET"
@@ -74,7 +94,9 @@ cat <<EOF > flake-config.json
 }
 EOF
 
-python3 "$SCRIPT_DIR/../../runner-script.py" dependencies prefetch-needed --all --target "$TARGET"
+if [[ -z "${NO_REFETCH:-}" ]]; then
+	python3 "$SCRIPT_DIR/../../runner-script.py" dependencies prefetch-needed --all --target "$TARGET"
+fi
 
 mkdir -p build
 nix build -o "build/out-$TARGET" -v -L ".#$TARGET" --show-trace
@@ -84,6 +106,8 @@ pushd "build/out-$TARGET"
 find . -type f -print0 | sort -z | \
 	xargs -0 tar --transform 's,^\./,,' --mode=ug+w -cf "$PREV/build/genvm-$TARGET.tar"
 
-xz -z -9 --force "$PREV/build/genvm-$TARGET.tar"
+if [[ "${COMPRESSION:-9}" != "skip" ]]; then
+	xz -z -"${COMPRESSION:-9}" --force "$PREV/build/genvm-$TARGET.tar"
+fi
 
 popd

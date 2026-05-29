@@ -71,8 +71,8 @@ let
 				patch-web-config --tag ${build-config.executor-version} "$out/config/genvm-module-web.yaml"
 				patch-manifest --tag ${build-config.executor-version} "$out/data/manifest.yaml"
 
-				patch-rpath --codesign --rpath '$ORIGIN/../lib' "$out/bin/genvm-modules"
-				find "$out/lib" -type f \( -name '*.so' -o -name '*.dylib' \) | while read lib; do
+				patch-rpath --codesign --search-dir "$out/lib" --rpath '$ORIGIN/../lib' "$out/bin/genvm-modules"
+				find "$out/lib" -type f \( -name '*.so' -o -name '*.dylib' \) -not -name 'libc.so' | while read lib; do
 					patch-rpath --codesign --search-dir "$out/lib" --rpath '$ORIGIN' "$lib"
 				done
 			'';

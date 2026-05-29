@@ -89,20 +89,26 @@ def patch_macho(
 		search_dir,
 	)
 
+	known_libs: dict[str, str] = {}
+	if search_dir is not None:
+		for p in search_dir.rglob('*'):
+			if p.is_file() and p.suffix in ('.dylib', '.so'):
+				known_libs[p.name] = p.name
+
+	# /usr/local/lib/libiconv.2.dylib -> libiconv.dylib (versioned name differs from shipped name)
+	if 'libiconv.dylib' in known_libs:
+		known_libs['libiconv.2.dylib'] = 'libiconv.dylib'
+
 	for cmd in dylib_cmds:
-		if cmd.name == '/usr/local/lib/libiconv.2.dylib':
-			old_name = cmd.name
-			cmd.name = '@rpath/libiconv.dylib'
-			logger.info(f'Replaced library reference: "{old_name}" -> "{cmd.name}"')
-		elif '/' in cmd.name:
-			old_name = cmd.name
-			basename = cmd.name.rsplit('/', 1)[-1]
-			cmd.name = '@rpath/' + basename
-			logger.info(f'Replaced library reference: "{old_name}" -> "{cmd.name}"')
-		elif '/' not in cmd.name:
-			old_name = cmd.name
-			cmd.name = '@rpath/' + cmd.name
-			logger.info(f'Replaced library reference: "{old_name}" -> "{cmd.name}"')
+		if cmd.name.startswith('@'):
+			continue
+		basename = cmd.name.rsplit('/', 1)[-1] if '/' in cmd.name else cmd.name
+		target_name = known_libs.get(basename)
+		if target_name is None:
+			continue
+		old_name = cmd.name
+		cmd.name = '@rpath/' + target_name
+		logger.info(f'Replaced library reference: "{old_name}" -> "{cmd.name}"')
 
 	all_rpaths = list(dict.fromkeys(rpaths + sorted(resolved_rpaths)))
 	for rpath in all_rpaths:
