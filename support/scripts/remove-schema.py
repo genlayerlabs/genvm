@@ -32,6 +32,7 @@ def process_one(p: Path):
 
 	if len(text) > 0 and text[0].startswith(schema_prefix):
 		text[0] = text[0].replace('refs/heads/main', f'refs/tags/{args.tag}')
+		text[0] = text[0].replace('refs/heads/@GENVM_TAG@', f'refs/tags/{args.tag}')
 
 	Path(p).write_text('\n'.join(text) + '\n')
 

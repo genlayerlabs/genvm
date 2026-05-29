@@ -204,10 +204,6 @@
               "http://127.0.0.1:4444"
             ]
           },
-          "session_create_request": {
-            "type": "string",
-            "description": "raw json that will be sent to webdriver for creating a session"
-          },
           "extra_tld": {
             "type": "array",
             "items": { "type": "string" },

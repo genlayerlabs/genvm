@@ -114,18 +114,12 @@
 								python312Packages.pytest-cov
 								python312Packages.pytest-xdist
 							];
-							lua-src = builtins.fetchGit {
-								url = "https://github.com/lua/lua.git";
-								rev = "75ea9ccbea7c4886f30da147fb67b693b2624c26";
-								shallow = true;
-							};
-
 							shell-hook-base = ''
 								export PATH="$(pwd)/tools/git-third-party:$PATH"
 								export CARGO_LD_LIBRARY_PATH="${toString pkgs.xz.out}/lib:${toString pkgs.zlib.out}/lib:${pkgs.stdenv.cc.cc.lib}/lib:${toString pkgs.glibc}/lib"
 								export LLVM_PROFILE_FILE=/dev/null
 								export LSQLITE3_SRC="${deps."lsqlite3-0.9.6"}"
-								export LUA_INCLUDE="${lua-src}"
+								export LUA_INCLUDE="${release-args.lua-src}"
 							'';
 
 							release-args = import ./support {
@@ -147,25 +141,6 @@
 							debug-runners = import ./runners/support/views/debug-build.nix {
 								inherit pkgs pkgs-overlays;
 								host-system = system;
-							};
-
-							debug-lsqlite3 = let
-								debug-zig = import ./support/zig.nix { inherit pkgs deps system; };
-								debug-name-target = {
-									"x86_64-linux" = "amd64-linux";
-									"aarch64-linux" = "arm64-linux";
-									"aarch64-darwin" = "arm64-macos";
-								}."${system}";
-								debug-liblua = import ./libs/liblua.nix {
-									inherit pkgs lua-src;
-									zig = debug-zig;
-									name-target = debug-name-target;
-								};
-							in import ./libs/lsqlite3.nix {
-								inherit pkgs deps lua-src;
-								zig = debug-zig;
-								liblua = debug-liblua;
-								name-target = debug-name-target;
 							};
 
 							runners-args = {
@@ -197,7 +172,7 @@
 						{
 							packages =
 								{
-									inherit debug-runners debug-lsqlite3 ya-test-runner;
+									inherit debug-runners ya-test-runner;
 									runners = runners-list;
 									inherit runners-all;
 								}

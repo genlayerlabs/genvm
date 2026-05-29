@@ -11,7 +11,6 @@ fn default_json_null() -> serde_json::Value {
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub webdriver_host: String,
-    pub session_create_request: String,
 
     pub extra_tld: Vec<Box<str>>,
     pub always_allow_hosts: Vec<Box<str>>,

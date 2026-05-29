@@ -15,19 +15,5 @@ blocking_threads: 16
 log_disable: ""
 #log_level: trace
 
-session_create_request: |
-  {
-    "capabilities": {
-      "alwaysMatch": {
-        "browserName": "firefox",
-        "moz:firefoxOptions": {
-          "args": [
-            "--headless"
-          ]
-        }
-      }
-    }
-  }
-
 extra_tld: []
 always_allow_hosts: []

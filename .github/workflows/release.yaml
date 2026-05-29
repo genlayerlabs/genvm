@@ -130,6 +130,11 @@ jobs:
             --error-on-missing-executor=false \
             --default-download=false || true
           nix develop .#check-qemu --command bash -c 'qemu-aarch64 ./build/out/bin/genvm-modules --version'
+      - name: Smoke test modules startup
+        run: |
+          nix develop .#check-qemu --command bash -c '
+            timeout 5 qemu-aarch64 ./build/out/bin/genvm-modules llm --allow-empty-backends --config ./build/out/config/genvm-module-llm.yaml || test $? -eq 124
+          '
 
   test-linux-amd64:
     needs:
@@ -163,6 +168,9 @@ jobs:
           ./build/out/bin/post-install.py \
             --error-on-missing-executor=false \
             --default-download=false
+      - name: Smoke test modules startup
+        run: |
+          timeout 5 ./build/out/bin/genvm-modules llm --allow-empty-backends --config ./build/out/config/genvm-module-llm.yaml || test $? -eq 124
       - name: Run stable tests
         run: |
           nix develop .#mock-tests --command ya-test-runner run --filter-tag "$(cat tests/presets/release.txt)" --genvm-reroute-to ${{ needs.gen-tag.outputs.tag }}
@@ -209,6 +217,10 @@ jobs:
           ./build/out/bin/post-install.py \
             --error-on-missing-executor=false \
             --default-download=false
+      - name: Smoke test modules startup
+        run: |
+          brew install coreutils
+          gtimeout 5 ./build/out/bin/genvm-modules llm --allow-empty-backends --config ./build/out/config/genvm-module-llm.yaml || test $? -eq 124
       - name: Run stable tests
         run: |
           python3 -m venv .venv

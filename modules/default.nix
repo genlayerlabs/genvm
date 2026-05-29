@@ -11,6 +11,8 @@
 , host-system
 , host-system-as-genvm
 , compiled-libs
+, deps
+, lua-src
 , ...
 }@args:
 let
@@ -37,6 +39,9 @@ let
 				extraLibs = compiled-libs.${target};
 
 				LUA_LIB_NAME = "lua";
+
+				LSQLITE3_SRC = deps."lsqlite3-0.9.6";
+				LUA_INCLUDE = lua-src;
 
 				GENVM_PROFILE = build-config.executor-version;
 			};

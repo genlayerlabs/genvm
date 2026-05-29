@@ -70,8 +70,14 @@ let
 		dontFixup = true;
 	};
 	deps = import ../runners/support/deps/fetch-deps.nix { inherit pkgs; };
+
+	lua-src = builtins.fetchGit {
+		url = "https://github.com/lua/lua.git";
+		rev = "75ea9ccbea7c4886f30da147fb67b693b2624c26";
+		shallow = true;
+	};
 in rec {
-	inherit pkgs deps;
+	inherit pkgs deps lua-src;
 
 	root-src = full-src;
 
