@@ -17,6 +17,7 @@ in pkgs.stdenvNoCC.mkDerivation {
 			LD=zig-cc-arm64-macos \
 			AR="${zig}/zig ar" \
 			CFLAGS="-O2" \
+			LDFLAGS="-Wl,-install_name,@rpath/libiconv.dylib" \
 			./configure --host=aarch64-apple-darwin --enable-shared=yes
 	'';
 
