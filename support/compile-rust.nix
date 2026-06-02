@@ -74,7 +74,12 @@ let
 		x86_64-linux = "x86_64-unknown-linux-gnu";
 	}.${target};
 
-	rust-pkg = import ./rust.nix args0;
+	# On a darwin host the arm64-macos target is native, so the native
+	# clang/ld64 toolchain links it correctly. zig is a cross-compiler whose
+	# 0.15.1 self-hosted MachO linker crashes (SIGABRT/SIGSEGV) on these
+	# links; skip the zig cargo wrapper on darwin and let cargo fall back to
+	# the native cc. zig stays in use for the linux cross targets.
+	rust-pkg = import ./rust.nix (args0 // { withZig = !pkgs.stdenv.hostPlatform.isDarwin; });
 in
 
 stdenv.mkDerivation (
