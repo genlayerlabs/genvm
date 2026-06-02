@@ -197,7 +197,9 @@ if _is_coverage_enabled():
 	_profile_objects.append(BUILD_DIR / 'out' / 'bin' / 'genvm-modules')
 
 
-def _load_cargo_config(rust_root_dir: Path) -> tuple[dict, dict[str, str], list[str]]:
+def _load_cargo_config(
+	rust_root_dir: Path, flags_key: str = 'cargo_test_flags'
+) -> tuple[dict, dict[str, str], list[str]]:
 	"""Load .ya-test-config.json and return (config, env, extra_flags)."""
 	test_env = _get_default_env()
 	extra_flags: list[str] = []
@@ -206,7 +208,7 @@ def _load_cargo_config(rust_root_dir: Path) -> tuple[dict, dict[str, str], list[
 	extra_conf: dict = {}
 	if extra_config.exists():
 		extra_conf = json.loads(extra_config.read_text())
-		extra_flags.extend(extra_conf.get('cargo_test_flags', []))
+		extra_flags.extend(extra_conf.get(flags_key, []))
 		for name in extra_conf.get('keep_env', []):
 			if name in os.environ:
 				test_env[name] = os.environ[name]
@@ -371,14 +373,9 @@ def cargo_fuzz(
 		console_pool=True,
 	)
 
-	test_env = _get_default_env()
-
-	extra_flags = []
-
-	extra_config = rust_root_dir.joinpath('.ya-test-config.json')
-	if extra_config.exists():
-		extra_conf = json.loads(extra_config.read_text())
-		extra_flags.extend(extra_conf.get('cargo_afl_build_flags', []))
+	_extra_conf, test_env, extra_flags = _load_cargo_config(
+		rust_root_dir, 'cargo_afl_build_flags'
+	)
 
 	# Track fuzz binary for coverage
 	if _is_coverage_enabled():

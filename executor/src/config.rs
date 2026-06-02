@@ -33,6 +33,7 @@ pub struct FeesConfig {
     pub message_receipt: FeesBucketConfig,
     pub nondet_output: FeesBucketConfig,
     pub message_fee: FeesBucketConfig,
+    pub event: FeesBucketConfig,
 }
 
 #[derive(Deserialize)]

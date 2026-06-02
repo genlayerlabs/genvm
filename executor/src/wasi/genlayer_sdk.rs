@@ -34,7 +34,7 @@ async fn consume_message_fee_internal(
     is_deploy: bool,
     calldata_length: u64,
     code_length: u64,
-) -> Result<(), generated::types::Error> {
+) -> Result<rt::fees::MessageFeeConsumption, generated::types::Error> {
     let fee_cost = shared_data
         .data_fees_limit
         .calculate_message_fee_internal(on_acceptance, &node.fee_params)
@@ -76,7 +76,10 @@ async fn consume_message_fee_internal(
 
     node.budget -= fee_cost;
 
-    Ok(())
+    Ok(rt::fees::MessageFeeConsumption {
+        message_fee: fee_cost,
+        receipt_fee: receipt_cost,
+    })
 }
 
 async fn consume_message_fee_external(
@@ -85,7 +88,7 @@ async fn consume_message_fee_external(
     on_acceptance: bool,
     is_deploy: bool,
     calldata_length: u64,
-) -> Result<(), generated::types::Error> {
+) -> Result<rt::fees::MessageFeeConsumption, generated::types::Error> {
     let fee_cost = shared_data
         .data_fees_limit
         .calculate_message_fee_external(&node.fee_params)
@@ -110,7 +113,10 @@ async fn consume_message_fee_external(
 
     node.budget -= fee_cost;
 
-    Ok(())
+    Ok(rt::fees::MessageFeeConsumption {
+        message_fee: fee_cost,
+        receipt_fee: receipt_cost,
+    })
 }
 
 async fn consume_nondet_output(
@@ -213,7 +219,7 @@ impl rt::vm::storage::HostStorageLocking for StorageHostHolder {
 pub struct VMDataAccumulator {
     pub data_fees_limit: DArc<rt::fees::DataLimit>,
     pub messages_value_decremented: primitive_types::U256,
-    pub emissions: Vec<genlayer_sdk::abi::ExecutionEmission>,
+    pub emissions: Vec<domain::ExecutionEmission>,
     pub message_fee_allocation: Vec<domain::MessageFeeAllocationNode>,
 }
 
@@ -555,14 +561,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let calldata_length = calldata.len() as u64;
 
-                let emission = genlayer_sdk::abi::ExecutionEmission::EthSend {
-                    address,
-                    calldata,
-                    value,
-                };
-                let encoded = calldata::encode_obj(&emission);
-
-                consume_message_fee_external(
+                let fees = consume_message_fee_external(
                     &self.context.data.supervisor.shared_data,
                     matched_node,
                     false,
@@ -571,7 +570,17 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 )
                 .await?;
 
-                self.context.data.accumulator.emissions.push(emission);
+                self.context
+                    .data
+                    .accumulator
+                    .emissions
+                    .push(domain::ExecutionEmission::EthSend {
+                        address,
+                        calldata,
+                        value,
+                        message_fee: fees.message_fee,
+                        receipt_fee: fees.receipt_fee,
+                    });
 
                 self.context.data.accumulator.messages_value_decremented += value;
                 Ok(file_fd_none())
@@ -736,22 +745,24 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let supervisor = self.context.data.supervisor.clone();
 
-                let size = topics.len() + enc.into_inner().0.div_ceil(32);
-                let size = size as u64;
-                supervisor
-                    .get_storage_limiter()
-                    .consume(size)
-                    .await
-                    .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+                let blob_size = enc.into_inner().0 as u64;
+                let topics_count = topics.len() as u64;
 
-                self.context
-                    .data
-                    .accumulator
-                    .emissions
-                    .push(abi::ExecutionEmission::EmitEvent {
+                let storage_fee = supervisor
+                    .shared_data
+                    .data_fees_limit
+                    .consume_event(blob_size, topics_count)
+                    .await
+                    .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?
+                    .ok_or_else(|| oom_trap(abi::consts::VmError::oom().storage()))?;
+
+                self.context.data.accumulator.emissions.push(
+                    domain::ExecutionEmission::EmitEvent {
                         topics: real_topics,
                         blob,
-                    });
+                        storage_fee,
+                    },
+                );
 
                 Ok(file_fd_none())
             }
@@ -821,26 +832,31 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     return Err(oom_trap(abi::consts::VmError::oom().fees().internal()));
                 };
 
-                let emission = genlayer_sdk::abi::ExecutionEmission::PostMessage {
-                    call_key,
-                    address,
-                    calldata,
-                    value,
-                    on,
-                };
-                let encoded = calldata::encode_obj(&emission);
+                let mut enc = calldata::Encoder::new(calldata::CounterWriter(0));
+                calldata::encode_to(&mut enc, &calldata).unwrap_or_else(|e| match e {});
+                let calldata_length = enc.into_inner().0;
 
-                consume_message_fee_internal(
+                let fees = consume_message_fee_internal(
                     &self.context.data.supervisor.shared_data,
                     matched_node,
                     on == abi::gl_call::On::Accepted,
                     false,
-                    encoded.len() as u64,
+                    calldata_length,
                     0,
                 )
                 .await?;
 
-                self.context.data.accumulator.emissions.push(emission);
+                self.context.data.accumulator.emissions.push(
+                    domain::ExecutionEmission::PostMessage {
+                        call_key,
+                        address,
+                        calldata,
+                        value,
+                        on,
+                        message_fee: fees.message_fee,
+                        receipt_fee: fees.receipt_fee,
+                    },
+                );
 
                 self.context.data.accumulator.messages_value_decremented += value;
 
@@ -905,19 +921,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let code_length = code.len() as u64;
                 let mut enc = calldata::Encoder::new(calldata::CounterWriter(0));
-                calldata::encode_to(&mut enc, &calldata);
+                calldata::encode_to(&mut enc, &calldata).unwrap_or_else(|e| match e {});
                 let calldata_length = enc.into_inner().0;
 
-                let emission = genlayer_sdk::abi::ExecutionEmission::DeployContract {
-                    calldata,
-                    code,
-                    value,
-                    on,
-                    salt_nonce,
-                };
-                let encoded = calldata::encode_obj(&emission);
-
-                consume_message_fee_internal(
+                let fees = consume_message_fee_internal(
                     &self.context.data.supervisor.shared_data,
                     matched_node,
                     on == abi::gl_call::On::Accepted,
@@ -927,7 +934,17 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 )
                 .await?;
 
-                self.context.data.accumulator.emissions.push(emission);
+                self.context.data.accumulator.emissions.push(
+                    domain::ExecutionEmission::DeployContract {
+                        calldata,
+                        code,
+                        value,
+                        on,
+                        salt_nonce,
+                        message_fee: fees.message_fee,
+                        receipt_fee: fees.receipt_fee,
+                    },
+                );
 
                 self.context.data.accumulator.messages_value_decremented += value;
 
@@ -1077,6 +1094,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         );
                     }
 
+                    {
+                        let mut acc = sup.shared_data.llm_consumption.lock().await;
+                        *acc = acc.saturating_add(result.consumed_gen);
+                    }
+
                     let mut result = result.data;
 
                     if format == llm_iface::OutputFormat::JSON {
@@ -1160,6 +1182,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                             return Err(
                                 rt::errors::VMError(abi::consts::VmError::timeout(), None).into()
                             );
+                        }
+
+                        {
+                            let mut acc = sup.shared_data.llm_consumption.lock().await;
+                            *acc = acc.saturating_add(*consumed_gen);
                         }
                     }
 

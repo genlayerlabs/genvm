@@ -1,0 +1,51 @@
+{
+  "Seq": [
+    {
+      "MapFile": {
+        "to": "/vm/contract.py",
+        "file": "contract.py"
+      }
+    },
+    {
+      "MapFile": {
+        "file": "contract.py",
+        "to": "/contract.py"
+      }
+    },
+    {
+      "Depends": "softfloat:test"
+    },
+    {
+      "SetArgs": [
+        "py",
+        "-u",
+        "-c",
+        "import contract;"
+      ]
+    },
+    {
+      "With": {
+        "runner": "cpython:test",
+        "action": {
+          "Seq": [
+            {
+              "MapFile": {
+                "to": "/py/std/",
+                "file": "py/std/"
+              }
+            },
+            {
+              "AddEnv": {
+                "name": "PYTHONPATH",
+                "val": "/py/std:/py/libs"
+              }
+            },
+            {
+              "StartWasm": "cpython.det.wasm"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

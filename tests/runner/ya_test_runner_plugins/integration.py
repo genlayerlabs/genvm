@@ -6,6 +6,7 @@ It uses the same MockHost/base_host infrastructure as the old runner.
 """
 
 import base64
+import gzip
 import json
 import os
 import pickle
@@ -653,9 +654,10 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		# Save outputs
 		my_tmp_dir.joinpath('stdout.txt').write_text(res.stdout)
 		my_tmp_dir.joinpath('stderr.txt').write_text(res.stderr)
-		my_tmp_dir.joinpath('genvm.log').write_text(
-			'\n'.join(json.dumps(x) for x in res.genvm_log)
-		)
+		with gzip.open(my_tmp_dir.joinpath('genvm.log.gz'), 'wt') as log_file:
+			for log_line in res.genvm_log:
+				json.dump(log_line, log_file)
+				log_file.write('\n')
 
 		# Save RunHostAndProgramRes pickle
 		result_path = Path(single_conf['result_path'])
@@ -708,6 +710,9 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		if semantics_components:
 			semantics = ''.join(semantics_parts[c] for c in semantics_components)
 
+			semantics_path = my_tmp_dir.joinpath('semantics.txt')
+			semantics_path.write_text(semantics)
+
 			exp_semantics_path = Path(single_conf['expected_semantics_path'])
 			if exp_semantics_path.exists():
 				exp_text = exp_semantics_path.read_text()
@@ -718,7 +723,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 						'context': {
 							'reason': 'semantics mismatch',
 							'expected_path': str(exp_semantics_path),
-							'got_path': str(my_tmp_dir.joinpath('stdout.txt')),
+							'got_path': str(semantics_path),
 							'semantics': semantics,
 							'stderr': res.stderr,
 							'genvm_log': res.genvm_log,

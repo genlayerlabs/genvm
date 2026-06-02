@@ -174,6 +174,11 @@ async fn run_storage_fuzz(input: FuzzInput) -> anyhow::Result<()> {
                         subtract_on_start_expr: "0".into(),
                         delta_expr: r"\attrs = 0".into(),
                     },
+                    event: genvm::config::FeesBucketConfig {
+                        bucket_no: 0,
+                        subtract_on_start_expr: "0".into(),
+                        delta_expr: r"\attrs = 0".into(),
+                    },
                 },
                 std::collections::BTreeMap::new(),
             )

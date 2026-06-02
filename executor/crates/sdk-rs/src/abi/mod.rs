@@ -9,8 +9,6 @@
 //! - [`wasi`]: WASI bindings for storage, balance, and gl_call
 
 use crate::calldata;
-use bytes::Bytes;
-use std::collections::BTreeMap;
 
 #[cfg(feature = "arbitrary")]
 pub(crate) mod arb;
@@ -70,34 +68,4 @@ impl CallKey {
     pub fn from_u256(value: primitive_types::U256) -> CallKey {
         CallKey(value.to_big_endian())
     }
-}
-
-#[allow(clippy::enum_variant_names)]
-#[derive(Debug, Clone, PartialEq, Eq, calldata::Encode, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields, tag = "type")]
-#[calldata(tag = "type")]
-pub enum ExecutionEmission {
-    EthSend {
-        address: calldata::Address,
-        calldata: Bytes,
-        value: primitive_types::U256,
-    },
-    PostMessage {
-        call_key: CallKey,
-        address: calldata::Address,
-        calldata: calldata::Value,
-        value: primitive_types::U256,
-        on: gl_call::On,
-    },
-    DeployContract {
-        calldata: calldata::Value,
-        code: Bytes,
-        value: primitive_types::U256,
-        on: gl_call::On,
-        salt_nonce: primitive_types::U256,
-    },
-    EmitEvent {
-        topics: Vec<Bytes>,
-        blob: BTreeMap<String, calldata::Value>,
-    },
 }

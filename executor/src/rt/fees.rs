@@ -154,6 +154,12 @@ fn build_bucket(
     })
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct MessageFeeConsumption {
+    pub message_fee: primitive_types::U256,
+    pub receipt_fee: primitive_types::U256,
+}
+
 #[derive(Debug)]
 pub struct DataLimit {
     buckets: tokio::sync::Mutex<Vec<primitive_types::U256>>,
@@ -161,6 +167,7 @@ pub struct DataLimit {
     message_receipt: Bucket,
     nondet_output: Bucket,
     message_fee: Bucket,
+    event: Bucket,
 }
 
 impl DataLimit {
@@ -212,6 +219,13 @@ impl DataLimit {
             &mut bucket_totals,
             abi::consts::VmError::oom().fees().internal(),
         )?;
+        let event = build_bucket(
+            prelude,
+            &fees.event,
+            &node,
+            &mut bucket_totals,
+            abi::consts::VmError::oom().storage(),
+        )?;
 
         Ok(Self {
             buckets: tokio::sync::Mutex::new(bucket_totals),
@@ -219,6 +233,7 @@ impl DataLimit {
             message_receipt,
             nondet_output,
             message_fee,
+            event,
         })
     }
 
@@ -311,6 +326,25 @@ impl DataLimit {
         )
         .await
         .context("consuming nondet output")
+    }
+
+    pub async fn consume_event(
+        &self,
+        blob_size: u64,
+        topics_count: u64,
+    ) -> anyhow::Result<Option<primitive_types::U256>> {
+        let cost = self.calculate_bucket(
+            &self.event,
+            &[
+                ("blobSize", num(blob_size)),
+                ("topicsCount", num(topics_count)),
+            ],
+        )?;
+        if self.consume_bucket_raw(&self.event, cost).await {
+            Ok(Some(cost))
+        } else {
+            Ok(None)
+        }
     }
 
     pub fn calculate_message_fee_internal(

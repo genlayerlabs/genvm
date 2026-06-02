@@ -139,6 +139,7 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         config.fees.message_receipt.bucket_no,
         config.fees.nondet_output.bucket_no,
         config.fees.message_fee.bucket_no,
+        config.fees.event.bucket_no,
     ]
     .into_iter()
     .max()
@@ -161,6 +162,7 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
             config.fees.clone(),
             execution_data.gas_data.clone(),
         )?,
+        llm_consumption: tokio::sync::Mutex::new(primitive_types::U256::zero()),
     });
 
     let hosts: Vec<genvm::Host> = args

@@ -347,9 +347,10 @@
         "storage": { "$ref": "#/definitions/genvm-fees-bucket-conf" },
         "message_receipt": { "$ref": "#/definitions/genvm-fees-bucket-conf" },
         "nondet_output": { "$ref": "#/definitions/genvm-fees-bucket-conf" },
-        "message_fee": { "$ref": "#/definitions/genvm-fees-bucket-conf" }
+        "message_fee": { "$ref": "#/definitions/genvm-fees-bucket-conf" },
+        "event": { "$ref": "#/definitions/genvm-fees-bucket-conf" }
       },
-      "required": ["expr_prelude", "storage", "message_receipt", "nondet_output", "message_fee"],
+      "required": ["expr_prelude", "storage", "message_receipt", "nondet_output", "message_fee", "event"],
       "additionalProperties": false
     },
     "base-conf": {

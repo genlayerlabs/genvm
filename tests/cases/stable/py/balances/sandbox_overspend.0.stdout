@@ -2,4 +2,4 @@ balance before=100 after_first_send=40
 sandbox result=VMError(message='exit_code 1')
 balance final=40
 executed with `Return(null)`
-{"address":addr#0200000000000000000000000000000000000000,"call_key":b#0000000000000000000000000000000000000000000000000000000000000000,"calldata":{},"on":"finalized","type":"PostMessage","value":60}
+{"address":addr#0200000000000000000000000000000000000000,"call_key":b#0000000000000000000000000000000000000000000000000000000000000000,"calldata":{},"message_fee":34836,"on":"finalized","receipt_fee":97,"type":"PostMessage","value":60}
