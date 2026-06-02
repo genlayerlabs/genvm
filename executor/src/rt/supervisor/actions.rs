@@ -24,6 +24,10 @@ fn make_malformed_runner_error(extra_msg: &str) -> anyhow::Error {
     .into()
 }
 
+fn maps_into_vm(to: &str) -> bool {
+    to.split('/').find(|component| !component.is_empty()) == Some("vm")
+}
+
 impl Ctx<'_, '_> {
     async fn get_arch(
         &mut self,
@@ -256,6 +260,12 @@ impl Ctx<'_, '_> {
                         }
                         name_in_fs.push_str(&name[must_start_with.len()..]);
 
+                        if maps_into_vm(&name_in_fs) {
+                            return Err(make_malformed_runner_error(&format!(
+                                "mapping into /vm/ is forbidden: {name_in_fs}"
+                            )));
+                        }
+
                         let limiter = &self.vm.store.data_mut().limits;
 
                         if !limiter.consume(
@@ -277,6 +287,12 @@ impl Ctx<'_, '_> {
                             .map_file(&name_in_fs, file_contents.clone())?;
                     }
                 } else {
+                    if maps_into_vm(to) {
+                        return Err(make_malformed_runner_error(&format!(
+                            "mapping into /vm/ is forbidden: {to}"
+                        )));
+                    }
+
                     let limiter = &self.vm.store.data_mut().limits;
 
                     if !limiter
