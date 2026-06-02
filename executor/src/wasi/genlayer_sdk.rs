@@ -833,7 +833,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 };
 
                 let mut enc = calldata::Encoder::new(calldata::CounterWriter(0));
-                calldata::encode_to(&mut enc, &calldata);
+                calldata::encode_to(&mut enc, &calldata).unwrap_or_else(|e| match e {});
                 let calldata_length = enc.into_inner().0;
 
                 let fees = consume_message_fee_internal(
@@ -921,7 +921,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let code_length = code.len() as u64;
                 let mut enc = calldata::Encoder::new(calldata::CounterWriter(0));
-                calldata::encode_to(&mut enc, &calldata);
+                calldata::encode_to(&mut enc, &calldata).unwrap_or_else(|e| match e {});
                 let calldata_length = enc.into_inner().0;
 
                 let fees = consume_message_fee_internal(

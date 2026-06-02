@@ -6,6 +6,7 @@ It uses the same MockHost/base_host infrastructure as the old runner.
 """
 
 import base64
+import gzip
 import json
 import os
 import pickle
@@ -653,9 +654,10 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		# Save outputs
 		my_tmp_dir.joinpath('stdout.txt').write_text(res.stdout)
 		my_tmp_dir.joinpath('stderr.txt').write_text(res.stderr)
-		my_tmp_dir.joinpath('genvm.log').write_text(
-			'\n'.join(json.dumps(x) for x in res.genvm_log)
-		)
+		with gzip.open(my_tmp_dir.joinpath('genvm.log.gz'), 'wt') as log_file:
+			for log_line in res.genvm_log:
+				json.dump(log_line, log_file)
+				log_file.write('\n')
 
 		# Save RunHostAndProgramRes pickle
 		result_path = Path(single_conf['result_path'])
