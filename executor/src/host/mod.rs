@@ -156,12 +156,14 @@ pub struct FullResult {
     pub fingerprint: Option<rt::errors::Fingerprint>,
     pub storage_changes: Vec<rt::vm::storage::Delta>,
 
-    pub emissions: Vec<genlayer_sdk::abi::ExecutionEmission>,
+    pub emissions: Vec<domain::ExecutionEmission>,
 
     pub nondet_disagreement: Option<u32>,
     pub nondet_results: Vec<bytes::Bytes>,
 
     pub data_fees_remaining: Vec<primitive_types::U256>,
+
+    pub llm_consumption: primitive_types::U256,
 }
 
 impl FullResult {
@@ -176,6 +178,7 @@ impl FullResult {
             nondet_disagreement: None,
             nondet_results: Vec::new(),
             data_fees_remaining: Vec::new(),
+            llm_consumption: primitive_types::U256::zero(),
         }
     }
 }
@@ -197,6 +200,7 @@ impl FullResult {
         nondet_results: Vec<bytes::Bytes>,
         nondet_disagreement: Option<u32>,
         data_fees_remaining: Vec<primitive_types::U256>,
+        llm_consumption: primitive_types::U256,
     ) -> Self {
         #[derive(serde::Serialize)]
         struct Hashable<'a> {
@@ -260,6 +264,7 @@ impl FullResult {
             nondet_results,
             nondet_disagreement,
             data_fees_remaining,
+            llm_consumption,
         }
     }
 }

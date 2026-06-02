@@ -1,2 +1,2 @@
 executed with `Return(null)`
-{"address":addr#3030303030303030303030303030303030303030,"call_key":b#666f6f0000000000000000000000000000000000000000000000000000000000,"calldata":{"args":[1,2],"method":"foo"},"on":"accepted","type":"PostMessage","value":0}
+{"address":addr#3030303030303030303030303030303030303030,"call_key":b#666f6f0000000000000000000000000000000000000000000000000000000000,"calldata":{"args":[1,2],"method":"foo"},"message_fee":174180,"on":"accepted","receipt_fee":97,"type":"PostMessage","value":0}

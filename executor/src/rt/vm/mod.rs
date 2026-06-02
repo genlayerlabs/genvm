@@ -29,7 +29,7 @@ pub struct FullResult {
     pub fingerprint: Option<rt::errors::Fingerprint>,
     pub storage_changes: Vec<storage::Delta>,
 
-    pub emissions: Vec<genlayer_sdk::abi::ExecutionEmission>,
+    pub emissions: Vec<domain::ExecutionEmission>,
 }
 
 impl FullResult {

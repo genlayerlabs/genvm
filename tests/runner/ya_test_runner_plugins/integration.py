@@ -708,6 +708,9 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		if semantics_components:
 			semantics = ''.join(semantics_parts[c] for c in semantics_components)
 
+			semantics_path = my_tmp_dir.joinpath('semantics.txt')
+			semantics_path.write_text(semantics)
+
 			exp_semantics_path = Path(single_conf['expected_semantics_path'])
 			if exp_semantics_path.exists():
 				exp_text = exp_semantics_path.read_text()
@@ -718,7 +721,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 						'context': {
 							'reason': 'semantics mismatch',
 							'expected_path': str(exp_semantics_path),
-							'got_path': str(my_tmp_dir.joinpath('stdout.txt')),
+							'got_path': str(semantics_path),
 							'semantics': semantics,
 							'stderr': res.stderr,
 							'genvm_log': res.genvm_log,

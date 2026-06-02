@@ -44,6 +44,7 @@ pub struct SharedData {
     pub debug_mode: bool,
     pub metrics: crate::Metrics,
     pub data_fees_limit: fees::DataLimit,
+    pub llm_consumption: tokio::sync::Mutex<primitive_types::U256>,
 }
 
 pub fn parse_host_data(

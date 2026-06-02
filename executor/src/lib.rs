@@ -341,6 +341,7 @@ pub async fn run_with(
     log_debug!("sending final result");
 
     let data_fees_remaining = supervisor.shared_data.data_fees_limit.remaining().await;
+    let llm_consumption = *supervisor.shared_data.llm_consumption.lock().await;
 
     let res = match res {
         Ok((a, b)) => Ok(host::FullResult::new(
@@ -348,6 +349,7 @@ pub async fn run_with(
             supervisor.take_nondet_results().await,
             b,
             data_fees_remaining,
+            llm_consumption,
         )),
         Err(e) => Err(e),
     };

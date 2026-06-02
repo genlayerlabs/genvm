@@ -116,6 +116,12 @@ fees:
       if a.isInternal
       then messageFeeFloor a.matchedFeeParams a.onAcceptance
       else 0
+  event:
+    bucket_no: 1
+    subtract_on_start_expr: |
+      0
+    delta_expr: |
+      \a = (a.topicsCount + ceilDiv a.blobSize 32) * node.storageUnitPrice
 
 threads: 2
 blocking_threads: 4

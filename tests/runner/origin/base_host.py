@@ -144,6 +144,8 @@ class EthSendInner(typing.TypedDict):
 	address: Address
 	calldata: bytes
 	value: int
+	message_fee: int
+	receipt_fee: int
 
 
 class PostMessageInner(typing.TypedDict):
@@ -152,6 +154,8 @@ class PostMessageInner(typing.TypedDict):
 	calldata: gvm_calldata.Decoded
 	value: int
 	on: typing.Literal['finalized', 'accepted']
+	message_fee: int
+	receipt_fee: int
 
 
 class DeployContractInner(typing.TypedDict):
@@ -161,12 +165,15 @@ class DeployContractInner(typing.TypedDict):
 	value: int
 	on: typing.Literal['finalized', 'accepted']
 	salt_nonce: int
+	message_fee: int
+	receipt_fee: int
 
 
 class EmitEventInner(typing.TypedDict):
 	type: typing.Literal['EmitEvent']
 	topics: list[bytes]
 	blob: dict[str, gvm_calldata.Decoded]
+	storage_fee: int
 
 
 type ResultEmission = typing.Union[
