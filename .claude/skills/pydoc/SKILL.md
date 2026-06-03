@@ -1,6 +1,7 @@
 ---
 name: pydoc
 description: Add RST docstrings to public Python methods/classes. Use when asked to document Python code.
+argument-hint: "[file.py ...]"
 ---
 
 # Python Documentation Skill

@@ -16,7 +16,7 @@ nix develop .#mock-tests --command ya-test-runner run
 
 Run release tests (stable integration):
 ```bash
-nix develop .#mock-tests --command ya-test-runner --filter-tag "$(cat tests/presets/release.txt)" run
+nix develop .#mock-tests --command ya-test-runner run --filter-tag "$(cat tests/presets/release.txt)"
 ```
 
 Run a specific test:
@@ -77,24 +77,24 @@ ya-test-runner --filter-tag "$(cat tests/presets/release.txt)" run
 End-to-end tests using jsonnet configuration. Services (manager, modules, webdriver) are started automatically.
 
 ```bash
-nix develop .#mock-tests --command ya-test-runner --filter-tag integration run
+nix develop .#mock-tests --command ya-test-runner run --filter-tag integration
 ```
 
 ### Rust Tests
 Cargo tests for Rust crates:
 ```bash
-nix develop .#rust-test --command ya-test-runner --filter-tag rust run
+nix develop .#rust-test --command ya-test-runner run --filter-tag rust
 ```
 
 With coverage:
 ```bash
-nix develop .#rust-test --command ya-test-runner --filter-tag rust --coverage run
+nix develop .#rust-test --command ya-test-runner run --filter-tag rust --coverage
 ```
 
 ### Python Tests
 Tests for the Python standard library (`genlayer-py-std`):
 ```bash
-nix develop .#mock-tests --command ya-test-runner --filter-tag python run
+nix develop .#mock-tests --command ya-test-runner run --filter-tag python
 ```
 
 Or directly with pytest inside nix develop:
@@ -125,7 +125,7 @@ When tests fail, ya-test-runner writes failed test names to `build/test-artifact
 
 ```bash
 # Use filename shown in failure summary
-ya-test-runner --filter-continue 20260123-143052-abc123 run
+ya-test-runner run --filter-continue 20260123-143052-abc123
 ```
 
 ## Quick Reference
@@ -133,9 +133,9 @@ ya-test-runner --filter-continue 20260123-143052-abc123 run
 | What to test | Command |
 |--------------|---------|
 | All tests | `nix develop .#mock-tests --command ya-test-runner run` |
-| Release tests | `nix develop .#mock-tests --command ya-test-runner --filter-tag "$(cat tests/presets/release.txt)" run` |
-| Rust tests | `nix develop .#rust-test --command ya-test-runner --filter-tag rust run` |
+| Release tests | `nix develop .#mock-tests --command ya-test-runner run --filter-tag "$(cat tests/presets/release.txt)"` |
+| Rust tests | `nix develop .#rust-test --command ya-test-runner run --filter-tag rust` |
 | Python (poetry) | `nix develop .#mock-tests --command bash -c "cd runners/genlayer-py-std && poetry run pytest tests/"` |
-| Re-run failed | `ya-test-runner --filter-continue <file> run` |
+| Re-run failed | `ya-test-runner run --filter-continue <file>` |
 | With debug logs | `nix develop .#mock-tests --command ya-test-runner run --log-level debug` |
 | Show test list | `nix develop .#mock-tests --command ya-test-runner show test` |

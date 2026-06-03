@@ -19,7 +19,7 @@ This runs the `configure.rb` Ruby script at the project root, which regenerates 
 
 **Build all Rust binaries:**
 ```bash
-nix develop .#full --command bash .claude/skills/build/run-ninja.sh -C build all/bin
+nix develop .#full --command bash .claude/skills/build/scripts/run-ninja.sh -C build all/bin
 ```
 
 This runs ninja silently and only shows output on failure (to save tokens).
