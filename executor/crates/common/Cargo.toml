@@ -23,7 +23,7 @@ num-traits = "0.2"
 hex = "0.4.3"
 primitive-types = { version = "0.13.1", default-features = false, features = ["impl-serde", "std"] }
 crossbeam = "0.8.4"
-rustix = { version = "0.38.44", features = ["mm", "std"], default-features = false}
+rustix = { version = "1.0.0", features = ["mm", "std"], default-features = false}
 symbol_table = { version = "0.4.0", features = ["global"] }
 dashmap = "6.1.0"
 clap = { version = "4.5.35", features = ["derive"] }
