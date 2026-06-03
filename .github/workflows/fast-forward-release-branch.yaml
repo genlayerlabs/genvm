@@ -1,0 +1,41 @@
+name: Fast-forward release branch
+
+# On every push to main, fast-forward the current release branch
+# (v<MAJOR_MINOR>.x, e.g. v0.3.x) to the new main commit.
+#
+# Both main and the release branch are protected, so the default
+# GITHUB_TOKEN cannot push to the release branch. We push over SSH with a
+# write deploy key (GENVM_CI_PRIVATE_KEY), which must be added to the
+# release branch ruleset's "Deploy keys" bypass list. The push is a plain
+# (non-force) push, so it only succeeds when it is an actual
+# fast-forward and is rejected if the branches have diverged.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -x {0}
+
+jobs:
+  fast-forward:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.GENVM_CI_PRIVATE_KEY }}
+          # Full history: a shallow (depth-1) checkout only has main's tip,
+          # not the release branch's current tip, so git cannot prove the
+          # push is a fast-forward and the server rejects it ("fetch first").
+          fetch-depth: 0
+
+      - name: Fast-forward release branch to main
+        run: |
+          MAJOR_MINOR="$(cat support/ci/MAJOR_MINOR)"
+          BRANCH="v${MAJOR_MINOR}.x"
+          echo "Fast-forwarding ${BRANCH} to ${GITHUB_SHA}"
+          git push origin "${GITHUB_SHA}:refs/heads/${BRANCH}"

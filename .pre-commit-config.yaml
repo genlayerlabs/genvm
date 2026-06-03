@@ -81,3 +81,10 @@ repos:
         language: system
         pass_filenames: false
         files: ^flake-config\.(orig\.)?json$
+
+      - id: check-cargo-versions
+        name: check Cargo.toml versions match support/ci/MAJOR_MINOR
+        entry: ./support/ci/check-versions.py
+        language: system
+        pass_filenames: false
+        files: ^(executor/Cargo\.toml|modules/implementation/Cargo\.toml|support/ci/MAJOR_MINOR)$

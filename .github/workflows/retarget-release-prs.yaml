@@ -1,0 +1,54 @@
+name: Retarget release-branch PRs
+
+# The release branch (v<MAJOR_MINOR>.x, e.g. v0.3.x) is protected and is
+# maintained automatically by fast-forwarding from main (see
+# fast-forward-release-branch.yaml). Contributions must therefore target
+# main, not the release branch. When a PR is opened against the release
+# branch we retarget it to main and leave an explanatory comment.
+#
+# pull_request_target is used so the workflow gets a write-scoped token
+# even for PRs from forks. We never check out or run the PR head code;
+# the checkout is of the trusted base branch only (to read MAJOR_MINOR).
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+defaults:
+  run:
+    shell: bash -x {0}
+
+jobs:
+  retarget:
+    # Cheap skip for the common case of PRs already targeting main.
+    if: github.event.pull_request.base.ref != 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Retarget PR to main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MAJOR_MINOR="$(cat support/ci/MAJOR_MINOR)"
+          BRANCH="v${MAJOR_MINOR}.x"
+          BASE="${{ github.event.pull_request.base.ref }}"
+          PR="${{ github.event.pull_request.number }}"
+
+          if [ "$BASE" != "$BRANCH" ]; then
+            echo "PR base '${BASE}' is not the release branch '${BRANCH}'; nothing to do"
+            exit 0
+          fi
+
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --base main
+
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "$(cat <<EOF
+          👋 This PR targeted the \`${BRANCH}\` current release branch, so I've retargeted it to \`main\`.
+
+          \`${BRANCH}\` is protected and maintained automatically by fast-forwarding from \`main\` — please base your changes on \`main\` and they will reach \`${BRANCH}\` on the next push.
+          EOF
+          )"
