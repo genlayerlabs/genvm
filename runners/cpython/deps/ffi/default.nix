@@ -41,6 +41,10 @@ stdenvNoCC.mkDerivation {
 	'';
 
 	buildPhase = ''
+		mkdir -p /build/path
+		ln -s ${runnersLib.wasi-sdk.package}/bin/ar /build/path/ar
+		export PATH="/build/path:$PATH"
+
 		AR_SCRIPT="CREATE libffi.a"
 
 		for i in stub_ffi.c src/closures.c src/prep_cif.c src/tramp.c src/debug.c src/raw_api.c src/types.c
