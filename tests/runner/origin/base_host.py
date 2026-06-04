@@ -30,6 +30,7 @@ if True:
 
 from . import host_fns
 from . import public_abi
+from . import fees
 
 ACCOUNT_ADDR_SIZE = 20
 SLOT_ID_SIZE = 32
@@ -123,22 +124,6 @@ class ResultFingerprint(typing.TypedDict):
 	module_instances: dict[str, typing.Any]
 
 
-class MessageFeeParams(typing.TypedDict):
-	leader_timeunits_allocation: int
-	validator_timeunits_allocation: int
-	execution_budget_per_round: int
-	rotations: list[int]
-
-
-class MessageFeeAllocationNode(typing.TypedDict):
-	message_type: typing.Literal['InternalAccepted', 'InternalFinalized', 'External']
-	parent_index: int | None
-	recipient: Address | None
-	call_key: bytes | None
-	budget: int
-	fee_params: MessageFeeParams
-
-
 class EthSendInner(typing.TypedDict):
 	type: typing.Literal['EthSend']
 	address: Address
@@ -146,6 +131,7 @@ class EthSendInner(typing.TypedDict):
 	value: int
 	message_fee: int
 	receipt_fee: int
+	fee_params: fees.ExternalMessageParams
 
 
 class PostMessageInner(typing.TypedDict):
@@ -156,6 +142,9 @@ class PostMessageInner(typing.TypedDict):
 	on: typing.Literal['finalized', 'accepted']
 	message_fee: int
 	receipt_fee: int
+	fee_params: fees.InternalMessageParams
+	# ABI-encoded allocation subtree carried in the receipt under commitment modes.
+	subtree: bytes
 
 
 class DeployContractInner(typing.TypedDict):
@@ -167,6 +156,9 @@ class DeployContractInner(typing.TypedDict):
 	salt_nonce: int
 	message_fee: int
 	receipt_fee: int
+	fee_params: fees.InternalMessageParams
+	# ABI-encoded allocation subtree carried in the receipt under commitment modes.
+	subtree: bytes
 
 
 class EmitEventInner(typing.TypedDict):
@@ -467,7 +459,7 @@ async def run_genvm(
 	code: bytes | None = None,
 	calldata: bytes,
 	leader_nondet_results: list[bytes] | None = None,
-	message_fee_allocation: list[MessageFeeAllocationNode] = [],
+	message_fee_allocation: list[fees.MessageAllocationNode] = [],
 	request_extra: dict[str, gvm_calldata.Encodable] = {},
 	shutdown_early: asyncio.Event | None = None,
 ) -> RunHostAndProgramRes:
@@ -843,46 +835,3 @@ async def run_genvm(
 		)
 
 	raise Exception('Execution failed')
-
-
-DEFAULT_EXTERNAL_MESSAGE_ALLOC: MessageFeeAllocationNode = {
-	'budget': 2**200,
-	'recipient': None,
-	'call_key': None,
-	'message_type': 'External',
-	'fee_params': {
-		'execution_budget_per_round': 0,
-		'rotations': [],
-		'leader_timeunits_allocation': 0,
-		'validator_timeunits_allocation': 0,
-	},
-	'parent_index': None,
-}
-
-DEFAULT_INTERNAL_ACC_MESSAGE_ALLOC: MessageFeeAllocationNode = {
-	'budget': 2**200,
-	'recipient': None,
-	'call_key': None,
-	'message_type': 'InternalAccepted',
-	'fee_params': {
-		'execution_budget_per_round': 2**10,
-		'rotations': [4] * 5,
-		'leader_timeunits_allocation': 5,
-		'validator_timeunits_allocation': 5,
-	},
-	'parent_index': None,
-}
-
-DEFAULT_INTERNAL_FIN_MESSAGE_ALLOC: MessageFeeAllocationNode = {
-	'budget': 2**200,
-	'recipient': None,
-	'call_key': None,
-	'message_type': 'InternalFinalized',
-	'fee_params': {
-		'execution_budget_per_round': 2**10,
-		'rotations': [4] * 5,
-		'leader_timeunits_allocation': 5,
-		'validator_timeunits_allocation': 5,
-	},
-	'parent_index': None,
-}

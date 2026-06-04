@@ -27,17 +27,24 @@ fn oom_trap(error: abi::consts::VmError) -> generated::types::Error {
     ))
 }
 
-async fn consume_message_fee_internal(
-    shared_data: &rt::SharedData,
-    node: &mut domain::MessageFeeAllocationNode,
-    on_acceptance: bool,
+/// Named arguments for [`consume_message_fee_internal`].
+struct ConsumeInternalArgs {
     is_deploy: bool,
     calldata_length: u64,
     code_length: u64,
+    subtree_length: u64,
+}
+
+async fn consume_message_fee_internal(
+    shared_data: &rt::SharedData,
+    node: &mut domain::fees::MessageAllocationNode,
+    fee_params: Arc<domain::fees::InternalMessageParams>,
+    on: gl_call::On,
+    args: ConsumeInternalArgs,
 ) -> Result<rt::fees::MessageFeeConsumption, generated::types::Error> {
     let fee_cost = shared_data
         .data_fees_limit
-        .calculate_message_fee_internal(on_acceptance, &node.fee_params)
+        .calculate_message_fee_internal(on, &fee_params)
         .map_err(|x| generated::types::Error::trap(anyhow_to_wasmtime(x)))?;
 
     if fee_cost > node.budget {
@@ -52,7 +59,13 @@ async fn consume_message_fee_internal(
 
     let receipt_cost = shared_data
         .data_fees_limit
-        .calculate_message_receipt(on_acceptance, is_deploy, calldata_length, code_length)
+        .calculate_message_receipt(rt::fees::MessageReceiptParams {
+            is_internal: true,
+            is_deploy: args.is_deploy,
+            calldata_length: args.calldata_length,
+            code_length: args.code_length,
+            subtree_length: args.subtree_length,
+        })
         .map_err(|x| {
             generated::types::Error::trap(anyhow_to_wasmtime(
                 x.context("calculate_message_receipt"),
@@ -82,16 +95,24 @@ async fn consume_message_fee_internal(
     })
 }
 
-async fn consume_message_fee_external(
-    shared_data: &rt::SharedData,
-    node: &mut domain::MessageFeeAllocationNode,
-    on_acceptance: bool,
+/// Named arguments for [`consume_message_fee_external`].
+struct ConsumeExternalArgs {
     is_deploy: bool,
     calldata_length: u64,
+}
+
+async fn consume_message_fee_external(
+    shared_data: &rt::SharedData,
+    node: &mut domain::fees::MessageAllocationNode,
+    params: domain::fees::ExternalMessageParams,
+    // External messages are always emitted on finalization; carried for signature
+    // symmetry with the internal path.
+    _on: gl_call::On,
+    args: ConsumeExternalArgs,
 ) -> Result<rt::fees::MessageFeeConsumption, generated::types::Error> {
     let fee_cost = shared_data
         .data_fees_limit
-        .calculate_message_fee_external(&node.fee_params)
+        .calculate_message_fee_external(&params)
         .map_err(|x| generated::types::Error::trap(anyhow_to_wasmtime(x)))?;
 
     if fee_cost > node.budget {
@@ -100,7 +121,13 @@ async fn consume_message_fee_external(
 
     let receipt_cost = shared_data
         .data_fees_limit
-        .calculate_message_receipt(on_acceptance, is_deploy, calldata_length, 0)
+        .calculate_message_receipt(rt::fees::MessageReceiptParams {
+            is_internal: false,
+            is_deploy: args.is_deploy,
+            calldata_length: args.calldata_length,
+            code_length: 0,
+            subtree_length: 0,
+        })
         .map_err(|x| generated::types::Error::trap(anyhow_to_wasmtime(x)))?;
 
     if !shared_data
@@ -220,7 +247,7 @@ pub struct VMDataAccumulator {
     pub data_fees_limit: DArc<rt::fees::DataLimit>,
     pub messages_value_decremented: primitive_types::U256,
     pub emissions: Vec<domain::ExecutionEmission>,
-    pub message_fee_allocation: Vec<domain::MessageFeeAllocationNode>,
+    pub message_fee_allocation: Vec<domain::fees::MessageAllocationNode>,
 }
 
 pub struct SingleVMData {
@@ -542,13 +569,16 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     call_key.0[..4].copy_from_slice(&calldata[..4]);
                 }
 
-                let Some(matched_node) = self
+                let Some((matched_node, matched_params)) = self
                     .context
                     .data
                     .accumulator
                     .message_fee_allocation
                     .iter_mut()
-                    .find(|node| node.matches(domain::MessageType::External, address, call_key))
+                    .find_map(|node| {
+                        node.matches_external(address, call_key)
+                            .map(|params| (node, params))
+                    })
                 else {
                     log_warn!(
                         recipient = address,
@@ -564,9 +594,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let fees = consume_message_fee_external(
                     &self.context.data.supervisor.shared_data,
                     matched_node,
-                    false,
-                    false,
-                    calldata_length,
+                    matched_params,
+                    gl_call::On::Finalized,
+                    ConsumeExternalArgs {
+                        is_deploy: false,
+                        calldata_length,
+                    },
                 )
                 .await?;
 
@@ -580,6 +613,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         value,
                         message_fee: fees.message_fee,
                         receipt_fee: fees.receipt_fee,
+                        fee_params: matched_params,
                     });
 
                 self.context.data.accumulator.messages_value_decremented += value;
@@ -803,23 +837,15 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                 }
 
-                let Some(matched_node) = self
+                let Some((matched_node, matched_params)) = self
                     .context
                     .data
                     .accumulator
                     .message_fee_allocation
                     .iter_mut()
-                    .find(|node| {
-                        node.matches(
-                            match on {
-                                abi::gl_call::On::Accepted => domain::MessageType::InternalAccepted,
-                                abi::gl_call::On::Finalized => {
-                                    domain::MessageType::InternalFinalized
-                                }
-                            },
-                            address,
-                            call_key,
-                        )
+                    .find_map(|node| {
+                        node.matches_internal(on, address, call_key)
+                            .map(|params| (node, params))
                     })
                 else {
                     log_warn!(
@@ -836,13 +862,22 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 calldata::encode_to(&mut enc, &calldata).unwrap_or_else(|e| match e {});
                 let calldata_length = enc.into_inner().0;
 
+                let fee_params = (*matched_params).clone();
+                let subtree = bytes::Bytes::from(domain::fees::MessageAllocationNode::abi_encode(
+                    &matched_node.children,
+                ));
+
                 let fees = consume_message_fee_internal(
                     &self.context.data.supervisor.shared_data,
                     matched_node,
-                    on == abi::gl_call::On::Accepted,
-                    false,
-                    calldata_length,
-                    0,
+                    matched_params,
+                    on,
+                    ConsumeInternalArgs {
+                        is_deploy: false,
+                        calldata_length,
+                        code_length: 0,
+                        subtree_length: subtree.len() as u64,
+                    },
                 )
                 .await?;
 
@@ -855,6 +890,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         on,
                         message_fee: fees.message_fee,
                         receipt_fee: fees.receipt_fee,
+                        fee_params,
+                        subtree,
                     },
                 );
 
@@ -890,23 +927,15 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     }
                 }
 
-                let Some(matched_node) = self
+                let Some((matched_node, matched_params)) = self
                     .context
                     .data
                     .accumulator
                     .message_fee_allocation
                     .iter_mut()
-                    .find(|node| {
-                        node.matches(
-                            match on {
-                                abi::gl_call::On::Accepted => domain::MessageType::InternalAccepted,
-                                abi::gl_call::On::Finalized => {
-                                    domain::MessageType::InternalFinalized
-                                }
-                            },
-                            calldata::Address::zero(),
-                            abi::CallKey::DEPLOY,
-                        )
+                    .find_map(|node| {
+                        node.matches_internal(on, calldata::Address::zero(), abi::CallKey::DEPLOY)
+                            .map(|params| (node, params))
                     })
                 else {
                     log_warn!(
@@ -924,13 +953,22 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 calldata::encode_to(&mut enc, &calldata).unwrap_or_else(|e| match e {});
                 let calldata_length = enc.into_inner().0;
 
+                let fee_params = (*matched_params).clone();
+                let subtree = bytes::Bytes::from(domain::fees::MessageAllocationNode::abi_encode(
+                    &matched_node.children,
+                ));
+
                 let fees = consume_message_fee_internal(
                     &self.context.data.supervisor.shared_data,
                     matched_node,
-                    on == abi::gl_call::On::Accepted,
-                    true,
-                    calldata_length,
-                    code_length,
+                    matched_params,
+                    on,
+                    ConsumeInternalArgs {
+                        is_deploy: true,
+                        calldata_length,
+                        code_length,
+                        subtree_length: subtree.len() as u64,
+                    },
                 )
                 .await?;
 
@@ -943,6 +981,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         salt_nonce,
                         message_fee: fees.message_fee,
                         receipt_fee: fees.receipt_fee,
+                        fee_params,
+                        subtree,
                     },
                 );
 

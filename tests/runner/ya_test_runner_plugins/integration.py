@@ -58,6 +58,7 @@ import genlayer.calldata as gvm_calldata
 from genlayer.types import Address
 from gvm_extra.mock_host import MockHost as MockHost, MockStorage as MockStorage
 import origin.base_host as base_host
+import origin.fees as fees
 import origin.logger as origin_logger
 import origin.public_abi as public_abi
 
@@ -568,13 +569,13 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				)
 
 				default_message_fee_allocation = [
-					base_host.DEFAULT_EXTERNAL_MESSAGE_ALLOC,
-					base_host.DEFAULT_INTERNAL_FIN_MESSAGE_ALLOC,
-					base_host.DEFAULT_INTERNAL_ACC_MESSAGE_ALLOC,
+					fees.DEFAULT_EXTERNAL_MESSAGE_ALLOC,
+					fees.DEFAULT_INTERNAL_FIN_MESSAGE_ALLOC,
+					fees.DEFAULT_INTERNAL_ACC_MESSAGE_ALLOC,
 				]
 
-				message_fee_allocation: list[base_host.MessageFeeAllocationNode] = (
-					single_conf.get('message_fee_allocation', default_message_fee_allocation)
+				message_fee_allocation: list[fees.MessageAllocationNode] = single_conf.get(
+					'message_fee_allocation', default_message_fee_allocation
 				)
 
 				if not single_conf['message'].get('is_init', False):
