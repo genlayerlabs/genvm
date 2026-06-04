@@ -1,6 +1,6 @@
 { pkgs
 , deps
-, system ? "x86_64-linux"
+, system
 , withLinters ? false
 , withZig ? true
 , withWasi ? false
@@ -20,6 +20,8 @@ let
 		aarch64-linux = "arm64-linux";
 		aarch64-darwin = "arm64-macos";
 	}.${system};
+
+	is-macos = systemAsGenVM == "arm64-macos";
 
 	manifest-src = deps."rust-channel-stable-2026-03-05";
 
@@ -127,10 +129,10 @@ in pkgs.stdenvNoCC.mkDerivation rec {
 			--set CC_x86_64_unknown_linux_gnu zig-cc-amd64-linux-gnu \
 			--set CC_aarch64_unknown_linux_musl zig-cc-arm64-linux \
 			--set CC_aarch64_unknown_linux_gnu zig-cc-arm64-linux-gnu \
-			--set CC_aarch64_apple_darwin zig-cc-arm64-macos \
+			${if is-macos then "" else "--set CC_aarch64_apple_darwin zig-cc-arm64-macos"} \
 			--set CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER zig-cc-amd64-linux \
 			--set CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER zig-cc-arm64-linux \
-			--set CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER zig-cc-arm64-macos \
+			${if is-macos then "" else "--set CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER zig-cc-arm64-macos"} \
 			--set CC zig-cc-${systemAsGenVM} \
 			--set CARGO_LINKER zig-cc-${systemAsGenVM} \
 			--prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath buildInputs}"
