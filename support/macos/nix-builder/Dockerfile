@@ -2,6 +2,11 @@ FROM nixos/nix:2.32.8 AS base
 
 ENV PATH=/nix/var/nix/profiles/default/bin:/nix/var/nix/profiles/default/sbin:/usr/local/bin:/usr/bin:/bin
 
+# Under emulated (foreign-arch) execution the seccomp BPF filter cannot be
+# loaded ("unable to load seccomp BPF program: Invalid argument"); disabling
+# the syscall filter is required for nix to build inside an emulated container.
+ENV NIX_CONFIG="filter-syscalls = false"
+
 RUN nix-env -iA --profile /nix/var/nix/profiles/default \
         nixpkgs.openssh \
         nixpkgs.python3 \

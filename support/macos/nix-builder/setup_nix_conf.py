@@ -16,6 +16,8 @@ Path('/etc/nix/nix.conf').write_text(
 experimental-features = nix-command flakes
 sandbox = true
 sandbox-fallback = false
+filter-syscalls = false
+cores = 0
 build-users-group =
 system = {native}
 extra-platforms = {foreign}
