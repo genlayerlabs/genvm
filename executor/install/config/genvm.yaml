@@ -81,7 +81,7 @@ fees:
       minPrimaryFees * lifecycleMultiplier
     in
   storage:
-    bucket_no: 1
+    bucket_no: 0
     subtract_on_start_expr: |
       0
     delta_expr: |
@@ -112,7 +112,7 @@ fees:
     delta_expr: |
       \a = (32 + 32 + ceilDiv a.outputLength 32 * 32) * node.receiptGasPerByte # bytes are indirection + length + data, rounded up to 32 bytes
   message_fee:
-    bucket_no: 2
+    bucket_no: 1
     subtract_on_start_expr: |
       0
     delta_expr: |
@@ -123,7 +123,7 @@ fees:
       # (matches the chain's `budget == k * (gasLimit * maxGasPrice)` requirement)
       else a.matchedFeeParams.gasLimit * a.matchedFeeParams.maxGasPrice
   event:
-    bucket_no: 1
+    bucket_no: 0
     subtract_on_start_expr: |
       0
     delta_expr: |
