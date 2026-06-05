@@ -68,9 +68,7 @@ pub enum MessageAllocationNodeParams {
     genlayer_calldata::Decode,
 )]
 pub struct MessageAllocationNode {
-    /// `None` for a root-layer node; otherwise the parent's index in the
-    /// allocation array (chain sentinel: `NODE_ROOT_SENTINEL`).
-    /// Target contract.
+    /// Target contract address; `None` means wildcard (any recipient).
     pub recipient: Option<genlayer_sdk::calldata::Address>,
     /// `None` = wildcard: all call keys for this recipient
     /// (chain sentinel: `CALL_KEY_WILDCARD` = `bytes32(0)`).

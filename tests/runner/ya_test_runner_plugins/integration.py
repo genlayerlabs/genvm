@@ -655,7 +655,9 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 		# Save outputs
 		my_tmp_dir.joinpath('stdout.txt').write_text(res.stdout)
 		my_tmp_dir.joinpath('stderr.txt').write_text(res.stderr)
-		with gzip.open(my_tmp_dir.joinpath('genvm.log.gz'), 'wt') as log_file:
+		with gzip.open(
+			my_tmp_dir.joinpath('genvm.log.gz'), 'wt', compresslevel=5
+		) as log_file:
 			for log_line in res.genvm_log:
 				json.dump(log_line, log_file)
 				log_file.write('\n')
