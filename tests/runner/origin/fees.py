@@ -1,0 +1,109 @@
+"""Message-fee allocation tree types.
+
+Mirrors the executor's `genvm_common::domain::fees` module: the fee parameters
+and the nested `MessageAllocationNode` tree that is passed alongside an
+execution and matched against emitted messages.
+"""
+
+import sys
+import json
+import typing
+
+from pathlib import Path
+
+if True:
+	root = Path(__file__).parent
+	while root.parent != root:
+		mr_root = root.joinpath('.genvm-monorepo-root')
+		if mr_root.exists():
+			dir_to_add = json.loads(mr_root.read_bytes())['py-std']
+			sys.path.insert(0, str(root.joinpath(*dir_to_add)))
+			break
+		root = root.parent
+	from genlayer.types import Address
+
+
+class InternalMessageParams(typing.TypedDict):
+	leader_timeunits_allocation: int
+	validator_timeunits_allocation: int
+	execution_budget_per_round: int
+	# `appealRounds` is not carried here; the chain derives it as
+	# `len(rotations) - 1`, so `rotations` must be non-empty.
+	rotations: list[int]
+
+
+class ExternalMessageParams(typing.TypedDict):
+	gas_limit: int
+	max_gas_price: int
+
+
+# Externally-tagged `MessageAllocationNodeParams` enum: exactly one of the keys.
+class _InternalParams(typing.TypedDict):
+	Internal: InternalMessageParams
+
+
+class _ExternalParams(typing.TypedDict):
+	External: ExternalMessageParams
+
+
+MessageAllocationNodeParams = typing.Union[_InternalParams, _ExternalParams]
+
+
+class MessageAllocationNode(typing.TypedDict):
+	recipient: Address | None
+	call_key: bytes | None
+	budget: int
+	# Lifecycle the node matches against (only meaningful for internal messages).
+	on: typing.Literal['finalized', 'accepted']
+	fee_params: MessageAllocationNodeParams
+	# Nested allocation subtree; the chain receives this flattened to
+	# parent-pointer form.
+	children: list['MessageAllocationNode']
+
+
+DEFAULT_EXTERNAL_MESSAGE_ALLOC: MessageAllocationNode = {
+	'budget': 2**200,
+	'recipient': None,
+	'call_key': None,
+	# Unused for external messages (no acceptance/finalize lifecycle).
+	'on': 'finalized',
+	'fee_params': {
+		'External': {
+			'gas_limit': 2**200,
+			'max_gas_price': 0,
+		},
+	},
+	'children': [],
+}
+
+DEFAULT_INTERNAL_ACC_MESSAGE_ALLOC: MessageAllocationNode = {
+	'budget': 2**200,
+	'recipient': None,
+	'call_key': None,
+	'on': 'accepted',
+	'fee_params': {
+		'Internal': {
+			'execution_budget_per_round': 2**10,
+			'rotations': [4] * 5,
+			'leader_timeunits_allocation': 5,
+			'validator_timeunits_allocation': 5,
+		},
+	},
+	'children': [],
+}
+
+DEFAULT_INTERNAL_FIN_MESSAGE_ALLOC: MessageAllocationNode = {
+	'budget': 2**200,
+	'recipient': None,
+	'call_key': None,
+	'on': 'finalized',
+	'fee_params': {
+		'Internal': {
+			'execution_budget_per_round': 2**10,
+			'rotations': [4] * 5,
+			'leader_timeunits_allocation': 5,
+			'validator_timeunits_allocation': 5,
+		},
+	},
+	'children': [],
+}

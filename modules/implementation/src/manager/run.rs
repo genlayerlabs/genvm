@@ -413,7 +413,7 @@ pub struct Request {
     /// Message-fee allocation tree passed alongside the execution.
     #[serde(default)]
     #[calldata(default = default_message_fee_allocation)]
-    pub message_fee_allocation: Vec<genvm_common::domain::MessageFeeAllocationNode>,
+    pub message_fee_allocation: Vec<genvm_common::domain::fees::MessageAllocationNode>,
     /// Initial time-unit budget for this execution.
     pub initial_time_units_allocation: u32,
 }
@@ -422,7 +422,7 @@ fn default_gas_data() -> std::collections::BTreeMap<String, String> {
     std::collections::BTreeMap::new()
 }
 
-fn default_message_fee_allocation() -> Vec<genvm_common::domain::MessageFeeAllocationNode> {
+fn default_message_fee_allocation() -> Vec<genvm_common::domain::fees::MessageAllocationNode> {
     Vec::new()
 }
 

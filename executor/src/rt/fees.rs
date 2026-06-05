@@ -38,7 +38,9 @@ fn attrs_object(vars: &[(&str, genvm_common::expr::Value)]) -> genvm_common::exp
 }
 
 /// Builds the `feeParams` object consumed by the `messageFeeFloor` prelude fn.
-pub fn fee_params_value(p: &genvm_common::domain::MessageFeeParams) -> genvm_common::expr::Value {
+pub fn fee_params_value_internal(
+    p: &genvm_common::domain::fees::InternalMessageParams,
+) -> genvm_common::expr::Value {
     use genvm_common::expr::Value;
     let mut m = std::collections::BTreeMap::new();
     m.insert(
@@ -55,6 +57,16 @@ pub fn fee_params_value(p: &genvm_common::domain::MessageFeeParams) -> genvm_com
     );
     let rotations: Vec<Value> = p.rotations.iter().map(|r| num_u256(*r)).collect();
     m.insert("rotations".to_owned(), Value::Array(Arc::new(rotations)));
+    Value::Object(Arc::new(m))
+}
+
+pub fn fee_params_value_external(
+    p: &genvm_common::domain::fees::ExternalMessageParams,
+) -> genvm_common::expr::Value {
+    use genvm_common::expr::Value;
+    let mut m = std::collections::BTreeMap::new();
+    m.insert("gasLimit".to_owned(), num_u256(p.gas_limit));
+    m.insert("maxGasPrice".to_owned(), num_u256(p.max_gas_price));
     Value::Object(Arc::new(m))
 }
 
@@ -158,6 +170,17 @@ fn build_bucket(
 pub struct MessageFeeConsumption {
     pub message_fee: primitive_types::U256,
     pub receipt_fee: primitive_types::U256,
+}
+
+/// Inputs to [`DataLimit::calculate_message_receipt`]. Passed as a struct so the
+/// several `bool`/`u64` arguments are named at the call site.
+#[derive(Debug, Clone, Copy)]
+pub struct MessageReceiptParams {
+    pub is_internal: bool,
+    pub is_deploy: bool,
+    pub calldata_length: u64,
+    pub code_length: u64,
+    pub subtree_length: u64,
 }
 
 #[derive(Debug)]
@@ -302,18 +325,16 @@ impl DataLimit {
 
     pub fn calculate_message_receipt(
         &self,
-        is_internal: bool,
-        is_deploy: bool,
-        calldata_length: u64,
-        code_length: u64,
+        params: MessageReceiptParams,
     ) -> anyhow::Result<primitive_types::U256> {
         self.calculate_bucket(
             &self.message_receipt,
             &[
-                ("isInternal", is_internal.into()),
-                ("isDeploy", is_deploy.into()),
-                ("calldataLength", num(calldata_length)),
-                ("codeLength", num(code_length)),
+                ("isInternal", params.is_internal.into()),
+                ("isDeploy", params.is_deploy.into()),
+                ("calldataLength", num(params.calldata_length)),
+                ("codeLength", num(params.code_length)),
+                ("subtreeLength", num(params.subtree_length)),
             ],
         )
         .context("calculating message receipt")
@@ -349,15 +370,18 @@ impl DataLimit {
 
     pub fn calculate_message_fee_internal(
         &self,
-        on_acceptance: bool,
-        matched_fee_params: &genvm_common::domain::MessageFeeParams,
+        on: abi::gl_call::On,
+        matched_fee_params: &genvm_common::domain::fees::InternalMessageParams,
     ) -> anyhow::Result<primitive_types::U256> {
         self.calculate_bucket(
             &self.message_fee,
             &[
                 ("isInternal", true.into()),
-                ("onAcceptance", on_acceptance.into()),
-                ("matchedFeeParams", fee_params_value(matched_fee_params)),
+                ("onAcceptance", (on == abi::gl_call::On::Accepted).into()),
+                (
+                    "matchedFeeParams",
+                    fee_params_value_internal(matched_fee_params),
+                ),
             ],
         )
         .context("calculating message fee internal")
@@ -418,13 +442,16 @@ impl DataLimit {
 
     pub fn calculate_message_fee_external(
         &self,
-        matched_fee_params: &genvm_common::domain::MessageFeeParams,
+        matched_fee_params: &genvm_common::domain::fees::ExternalMessageParams,
     ) -> anyhow::Result<primitive_types::U256> {
         self.calculate_bucket(
             &self.message_fee,
             &[
                 ("isInternal", false.into()),
-                ("matchedFeeParams", fee_params_value(matched_fee_params)),
+                (
+                    "matchedFeeParams",
+                    fee_params_value_external(matched_fee_params),
+                ),
             ],
         )
         .context("calculating message fee external")

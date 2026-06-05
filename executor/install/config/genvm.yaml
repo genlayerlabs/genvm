@@ -99,8 +99,12 @@ fees:
         + 32 * node.gasPerChangedSlot # for 32 bytes of length
     delta_expr: |
       \a =
-      let real_length = 32 + 32 + ceilDiv a.calldataLength 32 * 32 in # bytes are indirection + length + data, rounded up to 32 bytes
-      real_length * node.receiptGasPerByte + 1 * node.gasPerChangedSlot
+      # each `bytes` field is indirection + length + data, rounded up to 32 bytes
+      let calldataBytes = 32 + 32 + ceilDiv a.calldataLength 32 * 32 in
+      # allocationSubtree the leader carries in the receipt under commitment modes
+      # (empty for external messages -> just the 64-byte indirection + length)
+      let subtreeBytes = 32 + 32 + ceilDiv a.subtreeLength 32 * 32 in
+      (calldataBytes + subtreeBytes) * node.receiptGasPerByte + 1 * node.gasPerChangedSlot
   nondet_output:
     bucket_no: 0
     subtract_on_start_expr: |
@@ -115,7 +119,9 @@ fees:
       \a =
       if a.isInternal
       then messageFeeFloor a.matchedFeeParams a.onAcceptance
-      else 0
+      # external messages reserve the worst-case L1 gas cost: gasLimit * maxGasPrice
+      # (matches the chain's `budget == k * (gasLimit * maxGasPrice)` requirement)
+      else a.matchedFeeParams.gasLimit * a.matchedFeeParams.maxGasPrice
   event:
     bucket_no: 1
     subtract_on_start_expr: |

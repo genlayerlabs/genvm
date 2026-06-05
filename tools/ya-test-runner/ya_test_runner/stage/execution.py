@@ -247,6 +247,22 @@ async def _run_case(
 		latch.decrement()
 
 
+async def _warn_not_finished(
+	ctx: _ExecutionContext, case_name: str, start_time: float
+) -> None:
+	"""Print a warning every minute while a test is still running."""
+	import time
+
+	while True:
+		await asyncio.sleep(60)
+		elapsed = time.monotonic() - start_time
+		ctx.shared.logger.warning(
+			'Test still running',
+			case_name=case_name,
+			elapsed_seconds=round(elapsed, 1),
+		)
+
+
 async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Case):
 	import time
 
@@ -254,6 +270,12 @@ async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Cas
 	context: dict[str, typing.Any] = {}
 	start_time = time.monotonic()
 	elapsed = 0.0
+
+	warn_task: asyncio.Task | None = None
+	if not case.description.console_pool:
+		warn_task = asyncio.create_task(
+			_warn_not_finished(ctx, case.description.name, start_time)
+		)
 
 	try:
 		ctx.shared.logger.debug(
@@ -291,6 +313,13 @@ async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Cas
 			error=e,
 		)
 	finally:
+		if warn_task is not None:
+			warn_task.cancel()
+			try:
+				await warn_task
+			except asyncio.CancelledError:
+				pass
+
 		if not success:
 			ctx.failed.append(case.description.name)
 			if ctx.fail_fast:
