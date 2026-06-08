@@ -57,6 +57,21 @@ pub fn fee_params_value_internal(
     );
     let rotations: Vec<Value> = p.rotations.iter().map(|r| num_u256(*r)).collect();
     m.insert("rotations".to_owned(), Value::Array(Arc::new(rotations)));
+    // v0.6-dev (CON-549) price caps, exposed so the host-provided fee expression
+    // can charge at `maxPriceGenPerTimeUnit` as the funding multiplier and clamp
+    // the storage/receipt components, matching the chain's `_calculateRoundFees`.
+    m.insert(
+        "maxPriceGenPerTimeUnit".to_owned(),
+        num_u256(p.max_price_gen_per_time_unit),
+    );
+    m.insert(
+        "storageFeeMaxGasPrice".to_owned(),
+        num_u256(p.storage_fee_max_gas_price),
+    );
+    m.insert(
+        "receiptFeeMaxGasPrice".to_owned(),
+        num_u256(p.receipt_fee_max_gas_price),
+    );
     Value::Object(Arc::new(m))
 }
 

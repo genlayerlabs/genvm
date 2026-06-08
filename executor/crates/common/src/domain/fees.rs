@@ -25,8 +25,19 @@ pub struct InternalMessageParams {
     /// `appealRounds == rotations.length - 1` (`FeesVerifier.InvalidAppealRounds`),
     /// so we derive `appeal_rounds = rotations.len() - 1` instead. The ABI
     /// encoder re-inserts it so the encoded bytes (and their `keccak256` fee-param
-    /// pin) match the chain's 5-field layout.
+    /// pin) match the chain's field layout.
     pub rotations: Vec<U256>,
+    /// Per-time-unit GEN price cap locked at activation (consensus CON-549,
+    /// v0.6-dev). The chain charges at this cap as the funding multiplier and
+    /// cancels the tx if the global price exceeds it; `MessagePayments` requires
+    /// it to be non-zero for internal messages.
+    pub max_price_gen_per_time_unit: U256,
+    /// Max gas price applied to the storage-fee component (v0.6-dev). Revert
+    /// guard in `_calculateRoundFees`; must be non-zero for internal messages.
+    pub storage_fee_max_gas_price: U256,
+    /// Max gas price applied to the receipt-fee component (v0.6-dev). Revert
+    /// guard in `_calculateRoundFees`; must be non-zero for internal messages.
+    pub receipt_fee_max_gas_price: U256,
 }
 
 #[derive(

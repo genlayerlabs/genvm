@@ -58,6 +58,9 @@ fn internal_node(
                 validator_timeunits_allocation: U256::from(2),
                 execution_budget_per_round: U256::from(3),
                 rotations: rotations.iter().map(|r| U256::from(*r)).collect(),
+                max_price_gen_per_time_unit: U256::from(11),
+                storage_fee_max_gas_price: U256::from(12),
+                receipt_fee_max_gas_price: U256::from(13),
             },
         )),
         children,
@@ -166,7 +169,9 @@ fn internal_params_encode_derived_appeal_rounds() {
     // feeParams = [len][ abi.encode(InternalMessageParams) ], tuple starts after len.
     let inner_base = fee_params_len_idx + 1;
 
-    // InternalMessageParams tuple: [offset][leader][validator][appealRounds][exec][rot off][rot len]...
+    // InternalMessageParams tuple (v0.6-dev, 8 head words):
+    // [offset][leader][validator][appealRounds][exec][rot off][maxPriceGen]
+    // [storageCap][receiptCap][rot len][rot...]
     assert_eq!(
         word(&encoded, inner_base),
         U256::from(0x20),
@@ -186,11 +191,26 @@ fn internal_params_encode_derived_appeal_rounds() {
     );
     assert_eq!(
         word(&encoded, inner_base + 5),
-        U256::from(0xA0),
-        "rotations offset"
+        U256::from(0x100),
+        "rotations offset (8 head words)"
     );
     assert_eq!(
         word(&encoded, inner_base + 6),
+        U256::from(11),
+        "maxPriceGenPerTimeUnit"
+    );
+    assert_eq!(
+        word(&encoded, inner_base + 7),
+        U256::from(12),
+        "storageFeeMaxGasPrice"
+    );
+    assert_eq!(
+        word(&encoded, inner_base + 8),
+        U256::from(13),
+        "receiptFeeMaxGasPrice"
+    );
+    assert_eq!(
+        word(&encoded, inner_base + 9),
         U256::from(3),
         "rotations length"
     );
