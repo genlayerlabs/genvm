@@ -3,7 +3,6 @@
 //! This module defines the payload structures for all gl_call operations,
 //! including web requests, LLM prompts, contract calls, and more.
 
-
 use bytes::Bytes;
 use genlayer_calldata::{Decode, Encode};
 use serde::{Deserialize, Serialize};
