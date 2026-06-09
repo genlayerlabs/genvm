@@ -158,7 +158,7 @@ pub fn unwrap_vm_errors_fingerprint(
 }
 
 #[derive(Debug)]
-pub struct UserError(pub calldata::Value);
+pub struct UserError(pub calldata::unparsed::Maybe<calldata::Value>);
 
 impl std::error::Error for UserError {}
 

@@ -216,9 +216,9 @@ pub async fn run_with_impl(
             rt::vm::RunOk::VMError(_, _) => public_abi::ResultCode::VmError,
         },
         data: match run_result.run_ok {
-            rt::vm::RunOk::Return(buf) => calldata::decode(&buf)?,
+            rt::vm::RunOk::Return(buf) => buf,
             rt::vm::RunOk::UserError(val) => val,
-            rt::vm::RunOk::VMError(msg, _) => calldata::Value::Str(msg.0.into()),
+            rt::vm::RunOk::VMError(msg, _) => calldata::Value::Str(msg.0.into()).into(),
         },
         fingerprint: run_result.fingerprint,
         storage_changes: run_result.vm_data.storage.make_delta(),
@@ -254,7 +254,7 @@ pub async fn run_with(
         match merged_result {
             Ok(mut r) => {
                 if r.0.kind == public_abi::ResultCode::VmError {
-                    r.0.data = calldata::Value::Str(public_abi::VmError::timeout().0.into());
+                    r.0.data = calldata::Value::Str(public_abi::VmError::timeout().0.into()).into();
                 }
                 Ok(r)
             }

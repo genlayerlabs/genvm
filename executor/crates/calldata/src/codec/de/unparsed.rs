@@ -19,14 +19,27 @@ use crate::{Encoder, Value, Writer};
 use super::{BinaryDeserializer, Decode, DecodeError, Deserializer, ValueDeserializer};
 
 /// Validated-but-unparsed calldata: a single well-formed value kept as raw wire bytes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Raw(pub bytes::Bytes);
 
 /// A value that is either materialized eagerly, or validated-but-deferred as raw bytes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Maybe<T> {
     Materialized(T),
     Checked(Raw),
+}
+
+impl<T> From<T> for Maybe<T> {
+    fn from(value: T) -> Self {
+        Maybe::Materialized(value)
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl<'a, T: arbitrary::Arbitrary<'a>> arbitrary::Arbitrary<'a> for Maybe<T> {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        u.arbitrary().map(|t| Maybe::Materialized(t))
+    }
 }
 
 impl Raw {
@@ -98,6 +111,10 @@ impl<T: Decode> Maybe<T> {
 }
 
 impl Maybe<Value> {
+    pub fn from_raw(value: Raw) -> Self {
+        Maybe::Checked(value)
+    }
+
     /// Decode a deferred [`Value`] into some other type `U`.
     ///
     /// On the byte-backed path ([`Maybe::Checked`]) this decodes `U` straight
@@ -110,6 +127,23 @@ impl Maybe<Value> {
         match self {
             Maybe::Checked(raw) => raw.decode_as::<U>(),
             Maybe::Materialized(value) => U::decode(ValueDeserializer(value)),
+        }
+    }
+
+    /// Cheaply check whether the deferred value is a boolean, without materializing.
+    ///
+    /// On the byte-backed path this reads only the single leading wire byte; on the
+    /// materialized path it inspects the [`Value`] directly. Returns `None` when the
+    /// value is anything other than a boolean.
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Maybe::Materialized(Value::Bool(b)) => Some(*b),
+            Maybe::Materialized(_) => None,
+            Maybe::Checked(raw) => match raw.0.first() {
+                Some(&crate::consts::SPECIAL_TRUE) => Some(true),
+                Some(&crate::consts::SPECIAL_FALSE) => Some(false),
+                _ => None,
+            },
         }
     }
 }

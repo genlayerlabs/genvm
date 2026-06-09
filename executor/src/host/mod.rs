@@ -147,12 +147,12 @@ pub fn all_useful_work_done() {
     std::process::exit(0);
 }
 
-#[derive(Debug, Clone, serde::Serialize, genlayer_calldata::Encode)]
+#[derive(Debug, Clone, genlayer_calldata::Encode)]
 pub struct FullResult {
     pub execution_hash: bytes::Bytes,
 
     pub kind: public_abi::ResultCode,
-    pub data: calldata::Value,
+    pub data: calldata::unparsed::Maybe<calldata::Value>,
     pub fingerprint: Option<rt::errors::Fingerprint>,
     pub storage_changes: Vec<rt::vm::storage::Delta>,
 
@@ -171,7 +171,7 @@ impl FullResult {
         Self {
             execution_hash: bytes::Bytes::new(),
             kind: public_abi::ResultCode::InternalError,
-            data: calldata::Value::Str(msg),
+            data: calldata::Value::Str(msg).into(),
             fingerprint: None,
             storage_changes: Vec::new(),
             emissions: Vec::new(),
@@ -202,10 +202,9 @@ impl FullResult {
         data_fees_remaining: Vec<primitive_types::U256>,
         llm_consumption: primitive_types::U256,
     ) -> Self {
-        #[derive(serde::Serialize)]
         struct Hashable<'a> {
             kind: &'a public_abi::ResultCode,
-            data: &'a calldata::Value,
+            data: &'a calldata::unparsed::Maybe<calldata::Value>,
             fingerprint: &'a Option<rt::errors::Fingerprint>,
             storage_changes: &'a Vec<rt::vm::storage::Delta>,
             data_fees_remaining: &'a Vec<primitive_types::U256>,

@@ -518,8 +518,15 @@ async fn nondet_vm_processor(
                 let res = run_single_nondet(&zelf, task, limiter.derived()).await;
 
                 let do_disagree = match res {
-                    Ok(rt::vm::RunOk::Return(v)) if v == [16] => false,
-                    Ok(rt::vm::RunOk::Return(v)) if v == [8] => true,
+                    Ok(rt::vm::RunOk::Return(v)) => {
+                        match v.as_bool() {
+                            None => {
+                                log_warn!("nondet block returned non-bool value, setting to disagree");
+                                true
+                            },
+                            Some(b) => !b,
+                        }
+                    },
                     Ok(other) => {
                         log_warn!(result:? = other; "unexpected result in nondet block, setting to disagree");
                         true

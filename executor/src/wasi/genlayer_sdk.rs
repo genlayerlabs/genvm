@@ -12,6 +12,7 @@ use crate::host::{self, SlotID};
 use crate::wasi::json_to_calldata::json_map_to_calldata;
 use crate::{anyhow_to_wasmtime, calldata, public_abi, rt};
 
+use genlayer_calldata::codec::Encode;
 pub use genlayer_sdk::abi::entry::ExtendedMessage;
 use genlayer_sdk::abi::{self, gl_call};
 
@@ -393,7 +394,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct ContractReturn(pub Vec<u8>);
+pub struct ContractReturn(pub calldata::unparsed::Maybe<calldata::Value>);
 
 impl std::error::Error for ContractReturn {}
 
@@ -664,7 +665,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let my_conf = self.context.data.conf;
 
-                let calldata_encoded = calldata::encode(&calldata);
+                let calldata_encoded = calldata::encode_obj(&calldata);
 
                 let mut my_data = self
                     .context
@@ -673,7 +674,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .fork(public_abi::EntryKind::Main, calldata_encoded.into());
                 my_data.message.stack.push(my_data.message.contract_address);
 
-                let calldata_encoded = calldata::encode(&calldata);
+                let calldata_encoded = calldata::encode_obj(&calldata);
 
                 let vm_data = Box::new(SingleVMData {
                     depth: self.context.data.depth + 1,
@@ -769,17 +770,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 }
 
                 let mut enc = calldata::Encoder::new(CountingWriter(0));
-
-                let val = calldata::Value::Map(blob);
-                calldata::encode_to(&mut enc, &val).unwrap_or_else(|e| match e {});
-                let blob = match val {
-                    calldata::Value::Map(m) => m,
-                    _ => unreachable!(),
-                };
+                blob.encode(&mut enc).unwrap_or_else(|e| match e {});
+                let blob_size = enc.into_inner().0 as u64;
 
                 let supervisor = self.context.data.supervisor.clone();
-
-                let blob_size = enc.into_inner().0 as u64;
                 let topics_count = topics.len() as u64;
 
                 let storage_fee = supervisor
@@ -822,8 +816,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let sd = self.context.data.supervisor.shared_data.clone();
 
-                let method_name = calldata
-                    .as_map()
+                // Peek the (possibly deferred) calldata to derive the fee call key.
+                let calldata_materialized = calldata.clone().materialize().ok();
+                let method_name = calldata_materialized
+                    .as_ref()
+                    .and_then(|x| x.as_map())
                     .and_then(|x| x.get("method"))
                     .and_then(|x| x.as_str());
                 let call_key = if let Some(method_name) = method_name {
@@ -873,7 +870,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 );
 
                 let mut enc = calldata::Encoder::new(calldata::CounterWriter(0));
-                calldata::encode_to(&mut enc, &calldata).unwrap_or_else(|e| match e {});
+                calldata::codec::Encode::encode(&calldata, &mut enc).unwrap_or_else(|e| match e {});
                 let calldata_length = enc.into_inner().0;
 
                 let fee_params = (*matched_params).clone();
@@ -970,7 +967,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let code_length = code.len() as u64;
                 let mut enc = calldata::Encoder::new(calldata::CounterWriter(0));
-                calldata::encode_to(&mut enc, &calldata).unwrap_or_else(|e| match e {});
+                calldata::codec::Encode::encode(&calldata, &mut enc).unwrap_or_else(|e| match e {});
                 let calldata_length = enc.into_inner().0;
 
                 let fee_params = (*matched_params).clone();
@@ -1290,8 +1287,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 crate::anyhow_to_wasmtime(rt::errors::UserError(msg).into()),
             )),
             gl_call::Message::Return(value) => {
-                let ret = calldata::encode(&value);
-
                 // for return we are not interested in it
                 self.context
                     .data
@@ -1299,7 +1294,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .store(false, std::sync::atomic::Ordering::Relaxed);
 
                 Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
-                    ContractReturn(ret).into(),
+                    ContractReturn(value).into(),
                 )))
             }
             gl_call::Message::RunNondet {
@@ -1585,7 +1580,11 @@ impl ContextVFS<'_> {
                 use crate::public_abi::ResultCode;
                 let rest = &data[1..];
                 let res = match data[0] {
-                    x if x == ResultCode::Return as u8 => rt::vm::RunOk::Return(rest.into()),
+                    x if x == ResultCode::Return as u8 => {
+                        rt::vm::RunOk::Return(calldata::unparsed::Maybe::Checked(
+                            calldata::unparsed::Raw(bytes::Bytes::copy_from_slice(rest)),
+                        ))
+                    }
                     x if x == ResultCode::UserError as u8 => {
                         let val = if rest.len() >= 4 && rest[..4] == [0u8; 4] {
                             calldata::decode(&rest[4..]).map_err(|e| {
@@ -1602,7 +1601,7 @@ impl ContextVFS<'_> {
                                 },
                             )?))
                         };
-                        rt::vm::RunOk::UserError(val)
+                        rt::vm::RunOk::UserError(calldata::unparsed::Maybe::Materialized(val))
                     }
                     x if x == ResultCode::VmError as u8 => {
                         let code = std::str::from_utf8(rest).map_err(|e| {

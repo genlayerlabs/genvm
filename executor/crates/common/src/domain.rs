@@ -6,10 +6,7 @@ pub use genlayer_sdk::abi::entry::MessageData;
 pub mod fees;
 
 #[allow(clippy::enum_variant_names)]
-#[derive(
-    Debug, Clone, PartialEq, Eq, genlayer_calldata::Encode, serde::Serialize, serde::Deserialize,
-)]
-#[serde(deny_unknown_fields, tag = "type")]
+#[derive(Debug, Clone, PartialEq, Eq, genlayer_calldata::Encode)]
 #[calldata(tag = "type")]
 pub enum ExecutionEmission {
     EthSend {
@@ -24,7 +21,7 @@ pub enum ExecutionEmission {
     PostMessage {
         call_key: genlayer_sdk::abi::CallKey,
         address: genlayer_sdk::calldata::Address,
-        calldata: genlayer_sdk::calldata::Value,
+        calldata: genlayer_calldata::codec::Maybe<genlayer_sdk::calldata::Value>,
         value: U256,
         on: genlayer_sdk::abi::gl_call::On,
         message_fee: U256,
@@ -34,7 +31,7 @@ pub enum ExecutionEmission {
         subtree: bytes::Bytes,
     },
     DeployContract {
-        calldata: genlayer_sdk::calldata::Value,
+        calldata: genlayer_calldata::codec::Maybe<genlayer_sdk::calldata::Value>,
         code: Bytes,
         value: U256,
         on: genlayer_sdk::abi::gl_call::On,
@@ -47,7 +44,9 @@ pub enum ExecutionEmission {
     },
     EmitEvent {
         topics: Vec<Bytes>,
-        blob: std::collections::BTreeMap<String, genlayer_sdk::calldata::Value>,
+        blob: genlayer_calldata::codec::Maybe<
+            genlayer_sdk::calldata::Map<genlayer_sdk::calldata::Value>,
+        >,
         storage_fee: U256,
     },
 }

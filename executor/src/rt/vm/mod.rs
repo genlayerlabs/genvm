@@ -6,14 +6,11 @@ use itertools::Itertools;
 
 pub mod storage;
 
-#[derive(serde::Serialize, Debug)]
+#[derive(Debug)]
 pub enum RunOk {
-    Return(Vec<u8>),
-    UserError(calldata::Value),
-    VMError(
-        abi::consts::VmError,
-        #[serde(skip_serializing)] Option<anyhow::Error>,
-    ),
+    Return(calldata::unparsed::Maybe<calldata::Value>),
+    UserError(calldata::unparsed::Maybe<calldata::Value>),
+    VMError(abi::consts::VmError, Option<anyhow::Error>),
 }
 
 pub struct RunResult {
@@ -22,10 +19,10 @@ pub struct RunResult {
     pub vm_data: Box<wasi::genlayer_sdk::SingleVMData>,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, genlayer_calldata::Encode)]
 pub struct FullResult {
     pub kind: public_abi::ResultCode,
-    pub data: calldata::Value,
+    pub data: calldata::unparsed::Maybe<calldata::Value>,
     pub fingerprint: Option<rt::errors::Fingerprint>,
     pub storage_changes: Vec<storage::Delta>,
 
@@ -41,9 +38,9 @@ impl FullResult {
                 RunOk::VMError(_, _) => public_abi::ResultCode::VmError,
             },
             data: match run_ok {
-                RunOk::Return(buf) => calldata::Value::Bytes(buf),
+                RunOk::Return(buf) => buf,
                 RunOk::UserError(val) => val,
-                RunOk::VMError(msg, _) => calldata::Value::Str(msg.into()),
+                RunOk::VMError(msg, _) => calldata::Value::Str(msg.into()).into(),
             },
             fingerprint: None,
             storage_changes: Vec::new(),
@@ -54,7 +51,7 @@ impl FullResult {
     pub fn timeout() -> Self {
         Self {
             kind: public_abi::ResultCode::VmError,
-            data: calldata::Value::Str(public_abi::VmError::timeout().into()),
+            data: calldata::Value::Str(public_abi::VmError::timeout().into()).into(),
             fingerprint: None,
             storage_changes: Vec::new(),
             emissions: Vec::new(),
@@ -64,27 +61,33 @@ impl FullResult {
 
 impl RunOk {
     pub fn empty_return() -> Self {
-        Self::Return([0].into())
+        Self::Return(calldata::Value::Null.into())
     }
 
     pub fn as_bytes(&self) -> Vec<u8> {
         use crate::public_abi::ResultCode;
         match self {
             RunOk::Return(buf) => {
-                let mut res = Vec::with_capacity(1 + buf.len());
+                let encoded = calldata::encode_obj(buf);
+                let mut res = Vec::with_capacity(1 + encoded.len());
                 res.push(ResultCode::Return as u8);
-                res.extend_from_slice(buf);
+                res.extend_from_slice(&encoded);
                 res
             }
             RunOk::UserError(val) => {
                 let mut res = vec![ResultCode::UserError as u8];
                 match val {
-                    calldata::Value::Str(s) => {
+                    calldata::unparsed::Maybe::Materialized(calldata::Value::Str(s)) => {
                         res.extend_from_slice(s.as_bytes());
                     }
-                    other => {
+                    calldata::unparsed::Maybe::Materialized(other) => {
                         res.extend_from_slice(&0u32.to_le_bytes());
                         res.extend_from_slice(&calldata::encode(other));
+                    }
+                    // Already-encoded calldata bytes; emit them in the tagged form.
+                    calldata::unparsed::Maybe::Checked(raw) => {
+                        res.extend_from_slice(&0u32.to_le_bytes());
+                        res.extend_from_slice(&raw.0);
                     }
                 }
                 res
@@ -103,7 +106,8 @@ impl std::fmt::Display for RunOk {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Return(r) => {
-                let str = util::str::decode_utf8(r.iter().cloned())
+                let encoded = calldata::encode_obj(r);
+                let str = util::str::decode_utf8(encoded.iter().cloned())
                     .map(|r| match r {
                         Ok('\\') => "\\\\".into(),
                         Ok(c) if c.is_control() || c == '\n' || c == '\x07' => {
@@ -232,7 +236,7 @@ impl VM<wasmtime::Instance> {
                 log_debug!(result = "Return"; "execution result unwrapped")
             }
             Ok((rt::vm::RunOk::UserError(msg), _)) => {
-                log_debug!(result = "UserError", message:serde = msg; "execution result unwrapped")
+                log_debug!(result = "UserError", message:cd = msg.clone(); "execution result unwrapped")
             }
             Ok((rt::vm::RunOk::VMError(e, cause), _)) => {
                 log_debug!(result = "VMError", message = e.0, cause:? = cause; "execution result unwrapped")

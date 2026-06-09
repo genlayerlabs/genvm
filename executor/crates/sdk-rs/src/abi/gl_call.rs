@@ -523,7 +523,7 @@ pub enum Message {
     },
     CallContract {
         address: calldata::Address,
-        calldata: calldata::Value,
+        calldata: calldata::unparsed::Maybe<calldata::Value>,
         #[calldata(
             serialize_with = encode_storage_type,
             deserialize_with = decode_storage_type
@@ -540,13 +540,13 @@ pub enum Message {
     },
     PostMessage {
         address: calldata::Address,
-        calldata: calldata::Value,
+        calldata: calldata::unparsed::Maybe<calldata::Value>,
         #[cfg_attr(feature = "arbitrary", arbitrary(with = crate::abi::arb::arb_u256))]
         value: primitive_types::U256,
         on: On,
     },
     DeployContract {
-        calldata: calldata::Value,
+        calldata: calldata::unparsed::Maybe<calldata::Value>,
         #[cfg_attr(feature = "arbitrary", arbitrary(with = crate::abi::arb::arb_bytes))]
         code: Bytes,
         #[cfg_attr(feature = "arbitrary", arbitrary(with = crate::abi::arb::arb_u256))]
@@ -558,7 +558,7 @@ pub enum Message {
     EmitEvent {
         #[cfg_attr(feature = "arbitrary", arbitrary(with = crate::abi::arb::arb_vec_bytes))]
         topics: Vec<Bytes>,
-        blob: calldata::Map<calldata::Value>,
+        blob: calldata::unparsed::Maybe<calldata::Map<calldata::Value>>,
     },
 
     RunNondet {
@@ -581,9 +581,9 @@ pub enum Message {
     ExecPromptTemplate(llm_iface::PromptTemplatePayload),
 
     #[deprecated(note = "Use UserError. Will be removed before 1.0 release")]
-    Rollback(calldata::Value),
-    UserError(calldata::Value),
-    Return(calldata::Value),
+    Rollback(calldata::unparsed::Maybe<calldata::Value>),
+    UserError(calldata::unparsed::Maybe<calldata::Value>),
+    Return(calldata::unparsed::Maybe<calldata::Value>),
 
     Trace(TracePayload),
 }
