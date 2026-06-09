@@ -20,7 +20,13 @@ pub(super) fn dispatch_ref<V: Visitor>(visitor: V, value: &Value) -> Result<V::V
         Value::Str(v) => visitor.visit_str(v),
         Value::Bytes(v) => visitor.visit_bytes(v),
         Value::Array(arr) => visitor.visit_seq(arr.len() as u64, RefValueSeqAccess(arr.iter())),
-        Value::Map(map) => visitor.visit_map(map.len() as u64, RefValueMapAccess(map.iter())),
+        Value::Map(map) => visitor.visit_map(
+            map.len() as u64,
+            RefValueMapAccess {
+                iter: map.iter(),
+                pending: None,
+            },
+        ),
     }
 }
 
@@ -42,6 +48,7 @@ pub(super) fn dispatch_owned<V: Visitor>(
             ValueMapAccess {
                 iter: map.into_iter(),
                 current_key: String::new(),
+                pending: None,
             },
         ),
     }
@@ -194,6 +201,7 @@ impl SeqAccess for ValueSeqAccess {
 struct ValueMapAccess {
     iter: std::collections::btree_map::IntoIter<String, Value>,
     current_key: String,
+    pending: Option<Value>,
 }
 
 impl MapAccess for ValueMapAccess {
@@ -216,6 +224,30 @@ impl MapAccess for ValueMapAccess {
             }
             None => Ok(None),
         }
+    }
+
+    fn next_key(&mut self) -> Result<Option<&str>, DecodeError> {
+        match self.iter.next() {
+            Some((k, v)) => {
+                self.current_key = k;
+                self.pending = Some(v);
+                Ok(Some(&self.current_key))
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn next_value<T: Decode>(&mut self) -> Result<T, DecodeError> {
+        let value = self.pending.take().expect("next_value without next_key");
+        T::decode(ValueDeserializer(value))
+    }
+
+    fn next_value_visit<V: Visitor>(&mut self, visitor: V) -> Result<V::Value, DecodeError> {
+        let value = self
+            .pending
+            .take()
+            .expect("next_value_visit without next_key");
+        ValueDeserializer(value).deserialize(visitor)
     }
 }
 
@@ -250,11 +282,14 @@ impl SeqAccess for RefValueSeqAccess<'_> {
     }
 }
 
-struct RefValueMapAccess<'a>(std::collections::btree_map::Iter<'a, String, Value>);
+struct RefValueMapAccess<'a> {
+    iter: std::collections::btree_map::Iter<'a, String, Value>,
+    pending: Option<&'a Value>,
+}
 
 impl MapAccess for RefValueMapAccess<'_> {
     fn next_element<T: Decode>(&mut self) -> Result<Option<(&str, T)>, DecodeError> {
-        match self.0.next() {
+        match self.iter.next() {
             Some((k, v)) => {
                 let val = T::decode(RefValueDeserializer(v))?;
                 Ok(Some((k.as_str(), val)))
@@ -264,9 +299,32 @@ impl MapAccess for RefValueMapAccess<'_> {
     }
 
     fn next_element_validate<T: Decode>(&mut self) -> Result<Option<()>, DecodeError> {
-        match self.0.next() {
+        match self.iter.next() {
             Some((_k, v)) => T::validate(RefValueDeserializer(v)).map(Some),
             None => Ok(None),
         }
+    }
+
+    fn next_key(&mut self) -> Result<Option<&str>, DecodeError> {
+        match self.iter.next() {
+            Some((k, v)) => {
+                self.pending = Some(v);
+                Ok(Some(k.as_str()))
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn next_value<T: Decode>(&mut self) -> Result<T, DecodeError> {
+        let value = self.pending.take().expect("next_value without next_key");
+        T::decode(RefValueDeserializer(value))
+    }
+
+    fn next_value_visit<V: Visitor>(&mut self, visitor: V) -> Result<V::Value, DecodeError> {
+        let value = self
+            .pending
+            .take()
+            .expect("next_value_visit without next_key");
+        RefValueDeserializer(value).deserialize(visitor)
     }
 }

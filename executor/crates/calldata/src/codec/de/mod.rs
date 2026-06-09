@@ -2,9 +2,11 @@ use crate::{Address, Value, ValueKind};
 
 mod bin;
 mod builtin;
+mod unparsed;
 mod value;
 
 pub use bin::*;
+pub use unparsed::*;
 pub use value::*;
 
 pub enum DecodeError {
@@ -85,6 +87,15 @@ pub trait Decode: Sized {
 
 pub trait Deserializer: Sized {
     fn deserialize<V: Visitor>(self, visitor: V) -> Result<V::Value, DecodeError>;
+
+    /// Decode the next value as a [`Maybe<T>`]. Byte-backed deserializers defer:
+    /// they validate as `T` (cheap, `O(depth)` retained) and keep the raw wire
+    /// bytes ([`Maybe::Checked`]). For other sources there are no bytes to keep —
+    /// the in-memory value already exists — so decoding eagerly into the (usually
+    /// smaller) `T` ([`Maybe::Materialized`]) is both simpler and cheaper.
+    fn deserialize_maybe<T: Decode>(self) -> Result<Maybe<T>, DecodeError> {
+        Ok(Maybe::Materialized(T::decode(self)?))
+    }
 }
 
 pub trait SeqAccess {
@@ -105,6 +116,22 @@ pub trait MapAccess {
     fn next_element_validate<T>(&mut self) -> Result<Option<()>, DecodeError>
     where
         T: Decode;
+
+    /// Advance to the next entry and return its key, or `None` at the end. The
+    /// value must then be read with exactly one `next_value` / `next_value_visit`
+    /// call before the following `next_key`.
+    ///
+    /// Unlike [`MapAccess::next_element`], this lets the caller pick the value's
+    /// target type *after* seeing the key — so a value can be decoded directly
+    /// from the underlying deserializer (e.g. deferred into [`super::Maybe`])
+    /// instead of being materialized into a [`Value`] first.
+    fn next_key(&mut self) -> Result<Option<&str>, DecodeError>;
+
+    /// Decode the value of the entry whose key was just returned by [`MapAccess::next_key`].
+    fn next_value<T: Decode>(&mut self) -> Result<T, DecodeError>;
+
+    /// Run `visitor` over the deserializer of the current entry's value.
+    fn next_value_visit<V: Visitor>(&mut self, visitor: V) -> Result<V::Value, DecodeError>;
 }
 
 pub trait Visitor: Sized {

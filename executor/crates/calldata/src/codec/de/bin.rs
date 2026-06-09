@@ -3,7 +3,7 @@
 use crate::consts::*;
 use crate::{Address, BinDecodeError};
 
-use super::{Decode, DecodeError, Deserializer, MapAccess, SeqAccess, Visitor};
+use super::{Decode, DecodeError, Deserializer, MapAccess, Maybe, Raw, SeqAccess, Visitor};
 
 /// Options for [`BinaryDeserializer`].
 #[derive(Debug, Clone)]
@@ -207,6 +207,15 @@ impl Deserializer for &mut BinaryDeserializer<'_> {
     fn deserialize<V: Visitor>(self, visitor: V) -> Result<V::Value, DecodeError> {
         self.deserialize_one(visitor)
     }
+
+    fn deserialize_maybe<T: Decode>(self) -> Result<Maybe<T>, DecodeError> {
+        let start = self.data;
+        T::validate(&mut *self)?;
+        let consumed = start.len() - self.data.len();
+        Ok(Maybe::Checked(Raw(bytes::Bytes::copy_from_slice(
+            &start[..consumed],
+        ))))
+    }
 }
 
 impl Deserializer for BinaryDeserializer<'_> {
@@ -220,6 +229,22 @@ impl Deserializer for BinaryDeserializer<'_> {
             .into());
         }
         Ok(result)
+    }
+
+    fn deserialize_maybe<T: Decode>(mut self) -> Result<Maybe<T>, DecodeError> {
+        let start = self.data;
+        T::validate(&mut self)?;
+        if !self.data.is_empty() {
+            return Err(BinDecodeError::UnexpectedEnd {
+                available: self.data.len(),
+                expected: 0,
+            }
+            .into());
+        }
+        let consumed = start.len() - self.data.len();
+        Ok(Maybe::Checked(Raw(bytes::Bytes::copy_from_slice(
+            &start[..consumed],
+        ))))
     }
 }
 
@@ -293,5 +318,32 @@ impl MapAccess for BinaryMapAccess<'_, '_> {
         }
         self.prev_key = Some(key);
         T::validate(&mut *self.de).map(Some)
+    }
+
+    fn next_key(&mut self) -> Result<Option<&str>, DecodeError> {
+        if self.remaining == 0 {
+            return Ok(None);
+        }
+        self.remaining -= 1;
+        let key = self.de.fetch_map_key()?;
+        if let Some(prev) = self.prev_key
+            && prev >= key
+        {
+            return Err(BinDecodeError::InvalidMapOrdering {
+                prev: prev.to_owned(),
+                current: key.to_owned(),
+            }
+            .into());
+        }
+        self.prev_key = Some(key);
+        Ok(Some(key))
+    }
+
+    fn next_value<T: Decode>(&mut self) -> Result<T, DecodeError> {
+        T::decode(&mut *self.de)
+    }
+
+    fn next_value_visit<V: Visitor>(&mut self, visitor: V) -> Result<V::Value, DecodeError> {
+        (&mut *self.de).deserialize(visitor)
     }
 }

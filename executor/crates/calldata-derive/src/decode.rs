@@ -433,21 +433,29 @@ fn decode_enum_external(name: &syn::Ident, data: &syn::DataEnum) -> syn::Result<
 
     let has_unit = !unit_arms.is_empty();
 
-    // Non-unit variant arms for visit_map (single-key map)
-    let map_arms: Vec<_> = data
+    // Non-unit variants are dispatched in two phases: first map the (borrowed)
+    // key to an index, then decode the payload directly from the deserializer.
+    // The two phases drop the key borrow before the value is read, and decoding
+    // the payload via the live deserializer is what lets `Maybe`/`Raw` fields
+    // stay deferred instead of being materialized into a `Value` first.
+    let nonunit: Vec<&syn::Variant> = data
         .variants
         .iter()
         .filter(|v| !matches!(v.fields, Fields::Unit))
-        .map(|v| {
-            let vattrs = FieldAttrs::from_ast(&v.attrs)?;
-            let wire = vattrs.variant_wire_name(&v.ident);
-            let ident = &v.ident;
-            let decode_body = decode_variant_payload(name, ident, &v.fields, &vattrs)?;
-            Ok(quote! { #wire => { #decode_body } })
-        })
-        .collect::<syn::Result<Vec<_>>>()?;
+        .collect();
 
-    let has_map = !map_arms.is_empty();
+    let mut key_arms: Vec<TokenStream> = Vec::new();
+    let mut payload_arms: Vec<TokenStream> = Vec::new();
+    for (i, v) in nonunit.iter().enumerate() {
+        let vattrs = FieldAttrs::from_ast(&v.attrs)?;
+        let wire = vattrs.variant_wire_name(&v.ident);
+        let idx = proc_macro2::Literal::usize_unsuffixed(i);
+        let payload = decode_variant_payload(name, &v.ident, &v.fields, &vattrs)?;
+        key_arms.push(quote! { #wire => #idx, });
+        payload_arms.push(quote! { #idx => { #payload } });
+    }
+
+    let has_map = !nonunit.is_empty();
 
     let visit_str_impl = if has_unit {
         quote! {
@@ -469,20 +477,40 @@ fn decode_enum_external(name: &syn::Ident, data: &syn::DataEnum) -> syn::Result<
         quote! {
             fn visit_map<__A: genlayer_calldata::codec::MapAccess>(
                 self,
-                _len: u64,
+                __len: u64,
                 mut __map: __A,
             ) -> ::core::result::Result<#name, genlayer_calldata::codec::DecodeError> {
-                let (__key, __val) = __map
-                    .next_element::<genlayer_calldata::Value>()?
-                    .ok_or(genlayer_calldata::codec::DecodeError::Unexpected(
-                        "expected single-key map for enum variant",
-                    ))?;
-                match __key {
-                    #(#map_arms)*
-                    _ => ::core::result::Result::Err(genlayer_calldata::codec::DecodeError::UnknownVariant {
-                        got: __key.to_owned(),
-                        expected: #names_joined,
-                    }),
+                if __len != 1 {
+                    return ::core::result::Result::Err(
+                        genlayer_calldata::codec::DecodeError::LengthMismatch {
+                            expected: 1,
+                            got: __len as usize,
+                        },
+                    );
+                }
+                let __idx: usize = match __map.next_key()? {
+                    ::core::option::Option::Some(__key) => match __key {
+                        #(#key_arms)*
+                        _ => {
+                            return ::core::result::Result::Err(
+                                genlayer_calldata::codec::DecodeError::UnknownVariant {
+                                    got: __key.to_owned(),
+                                    expected: #names_joined,
+                                },
+                            );
+                        }
+                    },
+                    ::core::option::Option::None => {
+                        return ::core::result::Result::Err(
+                            genlayer_calldata::codec::DecodeError::Unexpected(
+                                "expected single-key map for enum variant",
+                            ),
+                        );
+                    }
+                };
+                match __idx {
+                    #(#payload_arms)*
+                    _ => ::core::unreachable!(),
                 }
             }
         }
@@ -501,7 +529,13 @@ fn decode_enum_external(name: &syn::Ident, data: &syn::DataEnum) -> syn::Result<
     })
 }
 
-/// Decode the payload for a non-unit enum variant from a `Value`.
+/// Decode the payload for a non-unit external-enum variant.
+///
+/// Generates an expression of type `Result<#enum_name, DecodeError>`, assuming a
+/// `MapAccess` named `__map` (positioned on the variant entry's value) is in
+/// scope. The payload is read with `__map.next_value` / `next_value_visit` so it
+/// decodes straight from the underlying deserializer — keeping `Maybe`/`Raw`
+/// fields deferred — instead of materializing a `Value` first.
 fn decode_variant_payload(
     enum_name: &syn::Ident,
     variant_ident: &syn::Ident,
@@ -519,16 +553,15 @@ fn decode_variant_payload(
                 .as_ref()
                 .or(vattrs.deserialize_with.as_ref());
             let decode_inner = if let Some(func) = de_fn {
-                quote! { #func(__val)? }
-            } else {
                 quote! {
-                    <#ty as genlayer_calldata::codec::Decode>::decode(
-                        genlayer_calldata::codec::ValueDeserializer(__val)
-                    )?
+                    let __val = __map.next_value::<genlayer_calldata::Value>()?;
+                    #func(__val)?
                 }
+            } else {
+                quote! { __map.next_value::<#ty>()? }
             };
             Ok(quote! {
-                let __inner = #decode_inner;
+                let __inner = { #decode_inner };
                 ::core::result::Result::Ok(#enum_name::#variant_ident(__inner))
             })
         }
@@ -540,26 +573,31 @@ fn decode_variant_payload(
                 .map(|i| syn::Ident::new(&format!("__f{i}"), proc_macro2::Span::call_site()))
                 .collect();
             Ok(quote! {
-                let genlayer_calldata::Value::Array(__arr) = __val else {
-                    return ::core::result::Result::Err(
-                        genlayer_calldata::codec::DecodeError::Unexpected("expected array for tuple variant")
-                    );
-                };
-                if __arr.len() != #n {
-                    return ::core::result::Result::Err(
-                        genlayer_calldata::codec::DecodeError::LengthMismatch {
-                            expected: #n,
-                            got: __arr.len(),
+                struct __PayloadV;
+                impl genlayer_calldata::codec::Visitor for __PayloadV {
+                    type Value = #enum_name;
+                    fn visit_seq<__S: genlayer_calldata::codec::SeqAccess>(
+                        self,
+                        __len: u64,
+                        mut __seq: __S,
+                    ) -> ::core::result::Result<#enum_name, genlayer_calldata::codec::DecodeError> {
+                        if __len != #n as u64 {
+                            return ::core::result::Result::Err(
+                                genlayer_calldata::codec::DecodeError::LengthMismatch {
+                                    expected: #n,
+                                    got: __len as usize,
+                                }
+                            );
                         }
-                    );
+                        #(
+                            let #vars = __seq.next_element::<#tys>()?.ok_or(
+                                genlayer_calldata::codec::DecodeError::Unexpected("missing tuple variant element")
+                            )?;
+                        )*
+                        ::core::result::Result::Ok(#enum_name::#variant_ident(#(#vars),*))
+                    }
                 }
-                let mut __iter = __arr.into_iter();
-                #(
-                    let #vars = <#tys as genlayer_calldata::codec::Decode>::decode(
-                        genlayer_calldata::codec::ValueDeserializer(__iter.next().unwrap())
-                    )?;
-                )*
-                ::core::result::Result::Ok(#enum_name::#variant_ident(#(#vars),*))
+                __map.next_value_visit(__PayloadV)
             })
         }
 
@@ -581,21 +619,28 @@ fn decode_variant_payload(
 
             let field_tys: Vec<_> = entries.iter().map(|(_, _, ty, _)| *ty).collect();
 
-            let match_arms = entries
-                .iter()
-                .zip(&option_vars)
-                .map(|((wire, _, ty, attrs), var)| {
-                    let decode_expr = if let Some(func) = &attrs.deserialize_with {
-                        quote! { #func(__v)? }
-                    } else {
-                        quote! {
-                            <#ty as genlayer_calldata::codec::Decode>::decode(
-                                genlayer_calldata::codec::ValueDeserializer(__v)
-                            )?
+            // Two-phase per-field dispatch (key -> index -> typed value), so the
+            // key borrow is released before `next_value` reads the value.
+            let mut key_arms: Vec<TokenStream> = Vec::new();
+            let mut assign_arms: Vec<TokenStream> = Vec::new();
+            for (j, ((_, _, ty, attrs), var)) in entries.iter().zip(&option_vars).enumerate() {
+                let wire = &entries[j].0;
+                let idx = proc_macro2::Literal::usize_unsuffixed(j);
+                key_arms.push(quote! { #wire => #idx, });
+                let assign = if let Some(func) = &attrs.deserialize_with {
+                    quote! {
+                        #idx => {
+                            let __v = __m.next_value::<genlayer_calldata::Value>()?;
+                            #var = ::core::option::Option::Some(#func(__v)?);
                         }
-                    };
-                    quote! { #wire => { #var = ::core::option::Option::Some(#decode_expr); } }
-                });
+                    }
+                } else {
+                    quote! {
+                        #idx => { #var = ::core::option::Option::Some(__m.next_value::<#ty>()?); }
+                    }
+                };
+                assign_arms.push(assign);
+            }
 
             let field_constructions =
                 entries
@@ -614,29 +659,39 @@ fn decode_variant_payload(
                     });
 
             Ok(quote! {
-                let genlayer_calldata::Value::Map(__inner_map) = __val else {
-                    return ::core::result::Result::Err(
-                        genlayer_calldata::codec::DecodeError::Unexpected("expected map for struct variant")
-                    );
-                };
-                #(
-                    let mut #option_vars: ::core::option::Option<#field_tys> = ::core::option::Option::None;
-                )*
-                for (__k, __v) in __inner_map {
-                    match __k.as_str() {
-                        #(#match_arms)*
-                        __other => {
-                            return ::core::result::Result::Err(
-                                genlayer_calldata::codec::DecodeError::UnknownField(
-                                    __other.to_owned()
-                                )
-                            );
+                struct __PayloadV;
+                impl genlayer_calldata::codec::Visitor for __PayloadV {
+                    type Value = #enum_name;
+                    fn visit_map<__M: genlayer_calldata::codec::MapAccess>(
+                        self,
+                        _len: u64,
+                        mut __m: __M,
+                    ) -> ::core::result::Result<#enum_name, genlayer_calldata::codec::DecodeError> {
+                        #(
+                            let mut #option_vars: ::core::option::Option<#field_tys> = ::core::option::Option::None;
+                        )*
+                        while let ::core::option::Option::Some(__key) = __m.next_key()? {
+                            let __idx: usize = match __key {
+                                #(#key_arms)*
+                                __other => {
+                                    return ::core::result::Result::Err(
+                                        genlayer_calldata::codec::DecodeError::UnknownField(
+                                            __other.to_owned()
+                                        )
+                                    );
+                                }
+                            };
+                            match __idx {
+                                #(#assign_arms)*
+                                _ => ::core::unreachable!(),
+                            }
                         }
+                        ::core::result::Result::Ok(#enum_name::#variant_ident {
+                            #(#field_constructions),*
+                        })
                     }
                 }
-                ::core::result::Result::Ok(#enum_name::#variant_ident {
-                    #(#field_constructions),*
-                })
+                __map.next_value_visit(__PayloadV)
             })
         }
     }
