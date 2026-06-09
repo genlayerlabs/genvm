@@ -77,7 +77,7 @@ impl std::fmt::Display for ValueKind {
     }
 }
 
-pub type Map = BTreeMap<String, Value>;
+pub type Map<V = Value> = BTreeMap<String, V>;
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Value {
@@ -87,7 +87,7 @@ pub enum Value {
     Str(String),
     Bytes(Vec<u8>),
     Number(num_bigint::BigInt),
-    Map(BTreeMap<String, Value>),
+    Map(super::Map<Value>),
     Array(Vec<Value>),
 }
 
