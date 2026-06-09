@@ -399,6 +399,14 @@ impl Host {
     pub fn consume_result(&mut self, res: &Result<FullResult>) -> Result<()> {
         log_trace!("consume_result");
 
+        if let Ok(r) = res {
+            log_debug!(
+                emissions = r.emissions.len(),
+                kind:? = r.kind;
+                "consume_result: serializing FullResult to host"
+            );
+        }
+
         let data = encode_result(res)?;
 
         let mut sock = self.lock_sock();
