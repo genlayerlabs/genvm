@@ -165,7 +165,7 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         llm_consumption: tokio::sync::Mutex::new(primitive_types::U256::zero()),
     });
 
-    let hosts: Vec<genvm::Host> = args
+    let mut hosts: Vec<genvm::Host> = args
         .host
         .iter()
         .enumerate()
@@ -177,6 +177,47 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         .collect::<Result<_>>()?;
 
     let method_hosts = execution_data.method_hosts.clone();
+
+    // Charge the per-bucket up-front fees now that the hosts are connected. If a
+    // bucket cannot cover its `subtract_on_start`, report the resulting VM error
+    // to the host as a normal receipt instead of crashing during setup.
+    if let Some(insufficient_err) = runtime.block_on(shared_data.data_fees_limit.consume_initial())
+    {
+        let host_for = |method: genvm::host::host_fns::Methods| -> usize {
+            let m = method as usize;
+            if m < method_hosts.len() {
+                method_hosts[m] as usize
+            } else {
+                0
+            }
+        };
+
+        let data_fees_remaining = runtime.block_on(shared_data.data_fees_limit.remaining());
+        let result: Result<genvm::host::FullResult> = Ok(genvm::host::FullResult::new(
+            genvm::rt::vm::FullResult::empty_from(genvm::rt::vm::RunOk::VMError(
+                insufficient_err.0,
+                insufficient_err.1,
+            )),
+            Vec::new(),
+            None,
+            data_fees_remaining,
+            primitive_types::U256::zero(),
+        ));
+
+        hosts[host_for(genvm::host::host_fns::Methods::ConsumeResult)]
+            .consume_result(&result)
+            .context("consume result")?;
+        hosts[host_for(genvm::host::host_fns::Methods::NotifyFinished)]
+            .notify_finished()
+            .context("notify finished")?;
+
+        runtime.shutdown_timeout(std::time::Duration::from_millis(30));
+
+        let _ = std::io::stdout().flush();
+        let _ = std::io::stderr().flush();
+
+        return Ok(());
+    }
 
     let mut perm_size = 0;
     for perm in ["r", "w", "s", "c", "n"] {
