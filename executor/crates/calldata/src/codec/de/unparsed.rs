@@ -16,7 +16,7 @@
 use crate::codec::Encode;
 use crate::{Encoder, Value, Writer};
 
-use super::{BinaryDeserializer, Decode, DecodeError, Deserializer};
+use super::{BinaryDeserializer, Decode, DecodeError, Deserializer, ValueDeserializer};
 
 /// Validated-but-unparsed calldata: a single well-formed value kept as raw wire bytes.
 #[derive(Debug, Clone)]
@@ -93,6 +93,23 @@ impl<T: Decode> Maybe<T> {
         match self {
             Maybe::Materialized(value) => Ok(value),
             Maybe::Checked(raw) => raw.decode_as::<T>(),
+        }
+    }
+}
+
+impl Maybe<Value> {
+    /// Decode a deferred [`Value`] into some other type `U`.
+    ///
+    /// On the byte-backed path ([`Maybe::Checked`]) this decodes `U` straight
+    /// from the retained wire bytes, so no [`Value`] is ever materialized. When
+    /// the value was already materialized it is decoded in-memory. This is what
+    /// lets an internally tagged enum's ambiguously-typed field (buffered as
+    /// `Maybe<Value>` before the tag is known) be turned into the exact
+    /// per-variant type without a `Value` round-trip.
+    pub fn decode_into<U: Decode>(self) -> Result<U, DecodeError> {
+        match self {
+            Maybe::Checked(raw) => raw.decode_as::<U>(),
+            Maybe::Materialized(value) => U::decode(ValueDeserializer(value)),
         }
     }
 }

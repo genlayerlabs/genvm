@@ -4,6 +4,8 @@ use syn::{Data, DeriveInput, Fields};
 
 use crate::attrs::{ContainerAttrs, FieldAttrs};
 
+mod tagged;
+
 pub fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
     let name = &input.ident;
     let container = ContainerAttrs::from_ast(&input.attrs)?;
@@ -213,7 +215,7 @@ fn decode_enum(
     if container.untagged {
         decode_enum_untagged(name, data)
     } else if let Some(tag_field) = &container.tag {
-        decode_enum_tagged(name, data, tag_field)
+        tagged::decode(name, data, tag_field)
     } else {
         decode_enum_external(name, data)
     }
@@ -695,149 +697,4 @@ fn decode_variant_payload(
             })
         }
     }
-}
-
-/// Internally tagged: `{"tag": "Variant", ...fields...}`.
-fn decode_enum_tagged(
-    name: &syn::Ident,
-    data: &syn::DataEnum,
-    tag_field: &str,
-) -> syn::Result<TokenStream> {
-    let all_names = variant_names_list(data);
-    let names_joined = all_names.join(", ");
-
-    let variant_arms: Vec<_> = data
-        .variants
-        .iter()
-        .map(|v| {
-            let vattrs = FieldAttrs::from_ast(&v.attrs)?;
-            let wire = vattrs.variant_wire_name(&v.ident);
-            let ident = &v.ident;
-
-            match &v.fields {
-                Fields::Unit => Ok(quote! {
-                    #wire => ::core::result::Result::Ok(#name::#ident),
-                }),
-
-                Fields::Unnamed(_) => Err(syn::Error::new_spanned(
-                    ident,
-                    "internally tagged enums do not support tuple variants",
-                )),
-
-                Fields::Named(fields) => {
-                    let mut entries: Vec<(String, &syn::Ident, &syn::Type, FieldAttrs)> =
-                        Vec::new();
-                    for f in &fields.named {
-                        let fi = f.ident.as_ref().unwrap();
-                        let attrs = FieldAttrs::from_ast(&f.attrs)?;
-                        let w = attrs.wire_name(fi);
-                        entries.push((w, fi, &f.ty, attrs));
-                    }
-
-                    let option_vars: Vec<_> = entries
-                        .iter()
-                        .map(|(_, fi, _, _)| {
-                            syn::Ident::new(
-                                &format!("__f_{fi}"),
-                                proc_macro2::Span::call_site(),
-                            )
-                        })
-                        .collect();
-
-                    let field_tys: Vec<_> = entries.iter().map(|(_, _, ty, _)| *ty).collect();
-
-                    let match_arms = entries.iter().zip(&option_vars).map(
-                        |((w, _, ty, attrs), var)| {
-                            let decode_expr = if let Some(func) = &attrs.deserialize_with {
-                                quote! { #func(__v)? }
-                            } else {
-                                quote! {
-                                    <#ty as genlayer_calldata::codec::Decode>::decode(
-                                        genlayer_calldata::codec::ValueDeserializer(__v)
-                                    )?
-                                }
-                            };
-                            quote! { #w => { #var = ::core::option::Option::Some(#decode_expr); } }
-                        },
-                    );
-
-                    let field_constructions = entries.iter().zip(&option_vars).map(
-                        |((w, fi, _, attrs), var)| {
-                            if let Some(default_fn) = &attrs.default {
-                                quote! { #fi: #var.unwrap_or_else(#default_fn) }
-                            } else {
-                                quote! {
-                                    #fi: #var.ok_or(
-                                        genlayer_calldata::codec::DecodeError::FieldMissing(#w)
-                                    )?
-                                }
-                            }
-                        },
-                    );
-
-                    Ok(quote! {
-                        #wire => {
-                            #(
-                                let mut #option_vars: ::core::option::Option<#field_tys> = ::core::option::Option::None;
-                            )*
-                            for (__k, __v) in __entries {
-                                match __k.as_str() {
-                                    #(#match_arms)*
-                                    __other => {
-                                        return ::core::result::Result::Err(
-                                            genlayer_calldata::codec::DecodeError::UnknownField(
-                                                __other.to_owned()
-                                            )
-                                        );
-                                    }
-                                }
-                            }
-                            ::core::result::Result::Ok(#name::#ident {
-                                #(#field_constructions),*
-                            })
-                        }
-                    })
-                }
-            }
-        })
-        .collect::<syn::Result<Vec<_>>>()?;
-
-    Ok(quote! {
-        struct __V;
-        impl genlayer_calldata::codec::Visitor for __V {
-            type Value = #name;
-            fn visit_map<__A: genlayer_calldata::codec::MapAccess>(
-                self,
-                _len: u64,
-                mut __map: __A,
-            ) -> ::core::result::Result<#name, genlayer_calldata::codec::DecodeError> {
-                // Collect all entries; extract tag.
-                let mut __entries = ::std::collections::BTreeMap::<::std::string::String, genlayer_calldata::Value>::new();
-                while let ::core::option::Option::Some((__key, __val)) =
-                    __map.next_element::<genlayer_calldata::Value>()?
-                {
-                    __entries.insert(__key.to_owned(), __val);
-                }
-
-                let __tag_val = __entries
-                    .remove(#tag_field)
-                    .ok_or(genlayer_calldata::codec::DecodeError::FieldMissing(#tag_field))?;
-
-                let genlayer_calldata::Value::Str(__tag_str) = __tag_val else {
-                    return ::core::result::Result::Err(
-                        genlayer_calldata::codec::DecodeError::Unexpected("expected string for tag field")
-                    );
-                };
-
-                match __tag_str.as_str() {
-                    #(#variant_arms)*
-                    _ => ::core::result::Result::Err(genlayer_calldata::codec::DecodeError::UnknownVariant {
-                        got: __tag_str.to_owned(),
-                        expected: #names_joined,
-                    }),
-                }
-            }
-        }
-        __deserializer.deserialize(__V)
-    })
 }

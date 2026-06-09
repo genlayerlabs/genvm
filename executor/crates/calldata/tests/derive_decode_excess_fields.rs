@@ -89,6 +89,21 @@ fn external_enum_struct_variant_rejects_unknown_field() {
 
 #[test]
 fn tagged_enum_rejects_unknown_field() {
+    // `B` is {t, v} (len 2 == max), so an in-range unknown key `u` (replacing the
+    // expected `v`) is reported as an unknown field rather than a length error.
+    let val = Value::Map(BTreeMap::from([
+        ("t".into(), Value::Str("B".into())),
+        ("u".into(), Value::Bool(true)),
+    ]));
+    let err = try_decode_from_value::<Tagged>(val).unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("unknown field"), "unexpected error: {msg}");
+    assert!(msg.contains("`u`"), "should mention field name: {msg}");
+}
+
+#[test]
+fn tagged_enum_rejects_excess_fields_by_length() {
+    // Beyond the widest variant's entry count, the length-range gate fires first.
     let val = Value::Map(BTreeMap::from([
         ("t".into(), Value::Str("B".into())),
         ("v".into(), Value::Bool(true)),
@@ -96,8 +111,8 @@ fn tagged_enum_rejects_unknown_field() {
     ]));
     let err = try_decode_from_value::<Tagged>(val).unwrap_err();
     let msg = err.to_string();
-    assert!(msg.contains("unknown field"), "unexpected error: {msg}");
-    assert!(msg.contains("`extra`"), "should mention field name: {msg}");
+    assert!(msg.contains("expected 2"), "unexpected error: {msg}");
+    assert!(msg.contains("got 3"), "unexpected error: {msg}");
 }
 
 // ── Valid inputs still work ─────────────────────────────────────────

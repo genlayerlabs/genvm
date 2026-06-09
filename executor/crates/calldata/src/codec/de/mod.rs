@@ -12,6 +12,7 @@ pub use value::*;
 pub enum DecodeError {
     FieldMissing(&'static str),
     FieldOutOfOrder(&'static str),
+    DuplicateField(&'static str),
     Unexpected(&'static str),
     UnexpectedKind(ValueKind),
 
@@ -36,6 +37,7 @@ impl std::fmt::Display for DecodeError {
         match self {
             DecodeError::FieldMissing(field) => write!(f, "field missing: {field}"),
             DecodeError::FieldOutOfOrder(field) => write!(f, "field out of order: {field}"),
+            DecodeError::DuplicateField(field) => write!(f, "duplicate field: {field}"),
             DecodeError::Unexpected(msg) => write!(f, "unexpected: {msg}"),
             DecodeError::UnexpectedKind(kind) => write!(f, "unexpected {kind}"),
             DecodeError::UnknownField(field) => write!(f, "unknown field `{field}`"),
