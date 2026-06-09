@@ -73,6 +73,10 @@ impl std::error::Error for DecodeError {
 
 pub trait Decode: Sized {
     fn decode<D: Deserializer>(deserializer: D) -> Result<Self, DecodeError>;
+
+    fn validate<D: Deserializer>(deserializer: D) -> Result<(), DecodeError> {
+        Self::decode(deserializer).map(|_| ())
+    }
 }
 
 pub trait Deserializer: Sized {
@@ -83,12 +87,20 @@ pub trait SeqAccess {
     fn next_element<T>(&mut self) -> Result<Option<T>, DecodeError>
     where
         T: Decode;
+
+    fn next_element_validate<T>(&mut self) -> Result<Option<()>, DecodeError>
+    where
+        T: Decode,;
 }
 
 pub trait MapAccess {
     fn next_element<T>(&mut self) -> Result<Option<(&str, T)>, DecodeError>
     where
         T: Decode;
+
+    fn next_element_validate<T>(&mut self) -> Result<Option<()>, DecodeError>
+    where
+        T: Decode,;
 }
 
 pub trait Visitor: Sized {
@@ -136,6 +148,56 @@ pub trait Visitor: Sized {
 
     fn visit_map<A: MapAccess>(self, _len: u64, _map: A) -> Result<Self::Value, DecodeError> {
         Err(DecodeError::UnexpectedKind(ValueKind::Map))
+    }
+
+    fn visit_value(self, value: &Value) -> Result<Self::Value, DecodeError> {
+        match value {
+            Value::Null => self.visit_null(),
+            Value::Bool(v) => self.visit_bool(*v),
+            Value::Address(v) => self.visit_address(v),
+            Value::Number(v) => self.visit_bigint(v),
+            Value::Str(v) => self.visit_str(v),
+            Value::Bytes(v) => self.visit_bytes(v),
+            Value::Array(arr) => {
+                let len = arr.len() as u64;
+                self.visit_seq(len, ValueSeqAccess(arr.clone().into_iter()))
+            }
+            Value::Map(map) => {
+                let len = map.len() as u64;
+                self.visit_map(
+                    len,
+                    ValueMapAccess {
+                        iter: map.clone().into_iter(),
+                        current_key: String::new(),
+                    },
+                )
+            }
+        }
+    }
+
+    fn visit_value_owned(self, value: Value) -> Result<Self::Value, DecodeError> {
+        match value {
+            Value::Null => self.visit_null(),
+            Value::Bool(v) => self.visit_bool(v),
+            Value::Address(v) => self.visit_address(&v),
+            Value::Number(v) => self.visit_bigint(&v),
+            Value::Str(v) => self.visit_str(&v),
+            Value::Bytes(v) => self.visit_bytes(&v),
+            Value::Array(arr) => {
+                let len = arr.len() as u64;
+                self.visit_seq(len, ValueSeqAccess(arr.into_iter()))
+            }
+            Value::Map(map) => {
+                let len = map.len() as u64;
+                self.visit_map(
+                    len,
+                    ValueMapAccess {
+                        iter: map.into_iter(),
+                        current_key: String::new(),
+                    },
+                )
+            }
+        }
     }
 }
 
@@ -205,6 +267,17 @@ impl Decode for String {
         }
         deserializer.deserialize(V)
     }
+
+    fn validate<D: Deserializer>(deserializer: D) -> Result<(), DecodeError> {
+        struct V;
+        impl Visitor for V {
+            type Value = ();
+            fn visit_str(self, _value: &str) -> Result<(), DecodeError> {
+                Ok(())
+            }
+        }
+        deserializer.deserialize(V)
+    }
 }
 
 // bytes::Bytes
@@ -216,6 +289,17 @@ impl Decode for bytes::Bytes {
             type Value = bytes::Bytes;
             fn visit_bytes(self, value: &[u8]) -> Result<bytes::Bytes, DecodeError> {
                 Ok(bytes::Bytes::copy_from_slice(value))
+            }
+        }
+        deserializer.deserialize(V)
+    }
+
+    fn validate<D: Deserializer>(deserializer: D) -> Result<(), DecodeError> {
+        struct V;
+        impl Visitor for V {
+            type Value = ();
+            fn visit_bytes(self, _value: &[u8]) -> Result<(), DecodeError> {
+                Ok(())
             }
         }
         deserializer.deserialize(V)
@@ -434,6 +518,20 @@ impl<T: Decode> Decode for Vec<T> {
         }
         deserializer.deserialize(V(std::marker::PhantomData))
     }
+
+    fn validate<D: Deserializer>(deserializer: D) -> Result<(), DecodeError> {
+        struct V<T>(std::marker::PhantomData<T>);
+        impl<T: Decode> Visitor for V<T> {
+            type Value = ();
+            fn visit_seq<A: SeqAccess>(self, _len: u64, mut seq: A) -> Result<(), DecodeError> {
+                while let Some(()) = seq.next_element_validate::<T>()? {
+                }
+                Ok(())
+            }
+        }
+        let v: V<T> = V(std::marker::PhantomData);
+        deserializer.deserialize(v)
+    }
 }
 
 // BTreeMap<String, T>
@@ -456,6 +554,24 @@ impl<T: Decode> Decode for BTreeMap<String, T> {
             }
         }
         deserializer.deserialize(V(std::marker::PhantomData))
+    }
+
+    fn validate<D: Deserializer>(deserializer: D) -> Result<(), DecodeError> {
+        struct V<T>(std::marker::PhantomData<T>);
+        impl<T: Decode> Visitor for V<T> {
+            type Value = ();
+            fn visit_map<A: MapAccess>(
+                self,
+                _len: u64,
+                mut map: A,
+            ) -> Result<(), DecodeError> {
+                while let Some(()) = map.next_element_validate::<T>()? {
+                }
+                Ok(())
+            }
+        }
+        let v: V<T> = V(std::marker::PhantomData);
+        deserializer.deserialize(v)
     }
 }
 
@@ -510,6 +626,70 @@ impl Decode for Value {
                 }
                 Ok(Value::Map(result))
             }
+
+            fn visit_value(self, value: &Value) -> Result<Value, DecodeError> {
+                Ok(value.clone())
+            }
+
+            fn visit_value_owned(self, value: Value) -> Result<Value, DecodeError> {
+                Ok(value)
+            }
+        }
+        deserializer.deserialize(V)
+    }
+
+    fn validate<D: Deserializer>(deserializer: D) -> Result<(), DecodeError> {
+        struct V;
+        impl Visitor for V {
+            type Value = ();
+
+            fn visit_bool(self, _value: bool) -> Result<(), DecodeError> {
+                Ok(())
+            }
+
+            fn visit_null(self) -> Result<(), DecodeError> {
+                Ok(())
+            }
+
+            fn visit_address(self, _value: &Address) -> Result<(), DecodeError> {
+                Ok(())
+            }
+
+            fn visit_bigint(self, _value: &num_bigint::BigInt) -> Result<(), DecodeError> {
+                Ok(())
+            }
+
+            fn visit_bigint_owned(self, _value: num_bigint::BigInt) -> Result<(), DecodeError> {
+                Ok(())
+            }
+
+            fn visit_str(self, _value: &str) -> Result<(), DecodeError> {
+                Ok(())
+            }
+
+            fn visit_bytes(self, _value: &[u8]) -> Result<(), DecodeError> {
+                Ok(())
+            }
+
+            fn visit_seq<A: SeqAccess>(self, _len: u64, mut seq: A) -> Result<(), DecodeError> {
+                while let Some(()) = seq.next_element_validate::<Value>()? {
+                }
+                Ok(())
+            }
+
+            fn visit_map<A: MapAccess>(self, _len: u64, mut map: A) -> Result<(), DecodeError> {
+                while let Some(()) = map.next_element_validate::<Value>()? {
+                }
+                Ok(())
+            }
+
+            fn visit_value(self, _value: &Value) -> Result<(), DecodeError> {
+                Ok(())
+            }
+
+            fn visit_value_owned(self, _value: Value) -> Result<(), DecodeError> {
+                Ok(())
+            }
         }
         deserializer.deserialize(V)
     }
@@ -521,17 +701,29 @@ impl<T: Decode> Decode for Box<T> {
     fn decode<D: Deserializer>(deserializer: D) -> Result<Self, DecodeError> {
         T::decode(deserializer).map(Box::new)
     }
+
+    fn validate<D: Deserializer>(deserializer: D) -> Result<(), DecodeError> {
+        T::validate(deserializer)
+    }
 }
 
 impl<T: Decode> Decode for Arc<T> {
     fn decode<D: Deserializer>(deserializer: D) -> Result<Self, DecodeError> {
         T::decode(deserializer).map(Arc::new)
     }
+
+    fn validate<D: Deserializer>(deserializer: D) -> Result<(), DecodeError> {
+        T::validate(deserializer)
+    }
 }
 
 impl<T: Decode> Decode for std::rc::Rc<T> {
     fn decode<D: Deserializer>(deserializer: D) -> Result<Self, DecodeError> {
         T::decode(deserializer).map(std::rc::Rc::new)
+    }
+
+    fn validate<D: Deserializer>(deserializer: D) -> Result<(), DecodeError> {
+        T::validate(deserializer)
     }
 }
 
@@ -541,28 +733,7 @@ pub struct ValueDeserializer(pub Value);
 
 impl Deserializer for ValueDeserializer {
     fn deserialize<V: Visitor>(self, visitor: V) -> Result<V::Value, DecodeError> {
-        match self.0 {
-            Value::Null => visitor.visit_null(),
-            Value::Bool(v) => visitor.visit_bool(v),
-            Value::Address(v) => visitor.visit_address(&v),
-            Value::Number(v) => visitor.visit_bigint_owned(v),
-            Value::Str(v) => visitor.visit_str(&v),
-            Value::Bytes(v) => visitor.visit_bytes(&v),
-            Value::Array(v) => {
-                let len = v.len() as u64;
-                visitor.visit_seq(len, ValueSeqAccess(v.into_iter()))
-            }
-            Value::Map(v) => {
-                let len = v.len() as u64;
-                visitor.visit_map(
-                    len,
-                    ValueMapAccess {
-                        iter: v.into_iter(),
-                        current_key: String::new(),
-                    },
-                )
-            }
-        }
+        visitor.visit_value_owned(self.0)
     }
 }
 
@@ -572,6 +743,13 @@ impl SeqAccess for ValueSeqAccess {
     fn next_element<T: Decode>(&mut self) -> Result<Option<T>, DecodeError> {
         match self.0.next() {
             Some(v) => T::decode(ValueDeserializer(v)).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    fn next_element_validate<T: Decode>(&mut self) -> Result<Option<()>, DecodeError> {
+        match self.0.next() {
+            Some(v) => T::validate(ValueDeserializer(v)).map(Some),
             None => Ok(None),
         }
     }
@@ -589,6 +767,16 @@ impl MapAccess for ValueMapAccess {
                 self.current_key = k;
                 let val = T::decode(ValueDeserializer(v))?;
                 Ok(Some((&self.current_key, val)))
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn next_element_validate<T: Decode>(&mut self) -> Result<Option<()>, DecodeError> {
+        match self.iter.next() {
+            Some((k, v)) => {
+                self.current_key = k;
+                T::validate(ValueDeserializer(v)).map(Some)
             }
             None => Ok(None),
         }
@@ -830,6 +1018,17 @@ impl SeqAccess for BinarySeqAccess<'_, '_> {
         self.remaining -= 1;
         T::decode(&mut *self.de).map(Some)
     }
+
+    fn next_element_validate<T>(&mut self) -> Result<Option<()>, DecodeError>
+    where
+        T: Decode,
+    {
+        if self.remaining == 0 {
+            return Ok(None);
+        }
+        self.remaining -= 1;
+        T::validate(&mut *self.de).map(Some)
+    }
 }
 
 struct BinaryMapAccess<'a, 'b> {
@@ -857,5 +1056,24 @@ impl MapAccess for BinaryMapAccess<'_, '_> {
         self.prev_key = Some(key);
         let val = T::decode(&mut *self.de)?;
         Ok(Some((key, val)))
+    }
+
+    fn next_element_validate<T: Decode>(&mut self) -> Result<Option<()>, DecodeError> {
+        if self.remaining == 0 {
+            return Ok(None);
+        }
+        self.remaining -= 1;
+        let key = self.de.fetch_map_key()?;
+        if let Some(prev) = self.prev_key
+            && prev >= key
+        {
+            return Err(BinDecodeError::InvalidMapOrdering {
+                prev: prev.to_owned(),
+                current: key.to_owned(),
+            }
+            .into());
+        }
+        self.prev_key = Some(key);
+        T::validate(&mut *self.de).map(Some)
     }
 }

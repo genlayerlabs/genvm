@@ -3,7 +3,6 @@
 //! This module defines the payload structures for all gl_call operations,
 //! including web requests, LLM prompts, contract calls, and more.
 
-use std::collections::BTreeMap;
 
 use bytes::Bytes;
 use genlayer_calldata::{Decode, Encode};
@@ -560,7 +559,7 @@ pub enum Message {
     EmitEvent {
         #[cfg_attr(feature = "arbitrary", arbitrary(with = crate::abi::arb::arb_vec_bytes))]
         topics: Vec<Bytes>,
-        blob: BTreeMap<String, calldata::Value>,
+        blob: calldata::Map<calldata::Value>,
     },
 
     RunNondet {
