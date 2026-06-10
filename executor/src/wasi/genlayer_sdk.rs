@@ -806,10 +806,17 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 value,
                 on,
             } => {
+                log_debug!(
+                    recipient = address,
+                    on:? = on;
+                    "PostMessage dispatched"
+                );
                 if !self.context.data.conf.is_deterministic {
+                    log_debug!("PostMessage rejected: non-deterministic context (Forbidden)");
                     return Err(generated::types::Errno::Forbidden.into());
                 }
                 if !self.context.data.conf.can_send_messages {
+                    log_debug!("PostMessage rejected: can_send_messages=false (Forbidden)");
                     return Err(generated::types::Errno::Forbidden.into());
                 }
 
@@ -858,6 +865,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     return Err(oom_trap(abi::consts::VmError::oom().fees().internal()));
                 };
 
+                log_debug!(
+                    recipient = address,
+                    call_key:? = call_key,
+                    on:? = on;
+                    "PostMessage matched fee allocation node"
+                );
+
                 let mut enc = calldata::Encoder::new(calldata::CounterWriter(0));
                 calldata::encode_to(&mut enc, &calldata).unwrap_or_else(|e| match e {});
                 let calldata_length = enc.into_inner().0;
@@ -893,6 +907,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         fee_params,
                         subtree,
                     },
+                );
+
+                log_debug!(
+                    depth = self.context.data.depth,
+                    emissions_total = self.context.data.accumulator.emissions.len();
+                    "PostMessage emission pushed to accumulator"
                 );
 
                 self.context.data.accumulator.messages_value_decremented += value;

@@ -30,6 +30,9 @@ class InternalMessageParams(typing.TypedDict):
 	# `appealRounds` is not carried here; the chain derives it as
 	# `len(rotations) - 1`, so `rotations` must be non-empty.
 	rotations: list[int]
+	max_price_gen_per_time_unit: int
+	storage_fee_max_gas_price: int
+	receipt_fee_max_gas_price: int
 
 
 class ExternalMessageParams(typing.TypedDict):
@@ -87,6 +90,9 @@ DEFAULT_INTERNAL_ACC_MESSAGE_ALLOC: MessageAllocationNode = {
 			'rotations': [4] * 5,
 			'leader_timeunits_allocation': 5,
 			'validator_timeunits_allocation': 5,
+			'max_price_gen_per_time_unit': 2**200,
+			'storage_fee_max_gas_price': 2**200,
+			'receipt_fee_max_gas_price': 2**200,
 		},
 	},
 	'children': [],
@@ -103,6 +109,9 @@ DEFAULT_INTERNAL_FIN_MESSAGE_ALLOC: MessageAllocationNode = {
 			'rotations': [4] * 5,
 			'leader_timeunits_allocation': 5,
 			'validator_timeunits_allocation': 5,
+			'max_price_gen_per_time_unit': 2**200,
+			'storage_fee_max_gas_price': 20,
+			'receipt_fee_max_gas_price': 20,
 		},
 	},
 	'children': [],

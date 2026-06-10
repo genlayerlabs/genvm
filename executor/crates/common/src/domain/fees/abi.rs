@@ -23,8 +23,11 @@ const MESSAGE_TYPE_INTERNAL: u64 = 1;
 const NODE_HEAD_WORDS: usize = 7;
 
 /// Number of head words in the Solidity `InternalMessageParams` tuple
-/// (leader, validator, appealRounds, executionBudgetPerRound, rotations).
-const INTERNAL_PARAMS_HEAD_WORDS: usize = 5;
+/// (leader, validator, appealRounds, executionBudgetPerRound, rotations,
+/// maxPriceGenPerTimeUnit, storageFeeMaxGasPrice, receiptFeeMaxGasPrice).
+/// `rotations` is the only dynamic field; the three price caps (v0.6-dev,
+/// CON-549) are static and follow it in the head region.
+const INTERNAL_PARAMS_HEAD_WORDS: usize = 8;
 
 fn push_u256(buf: &mut Vec<u8>, value: U256) {
     buf.extend_from_slice(&value.to_big_endian());
@@ -136,6 +139,12 @@ fn encode_node(node: &MessageAllocationNode, parent_index: U256) -> Vec<u8> {
 /// `abi.encode(InternalMessageParams)` — a dynamic tuple (contains
 /// `uint256[] rotations`), so it is prefixed with the offset word. `appealRounds`
 /// is reconstructed as `len(rotations) - 1` (the chain-derived value).
+///
+/// Field order matches the chain's `InternalMessageFeeParams` (v0.6-dev):
+/// leader, validator, appealRounds, executionBudgetPerRound, rotations,
+/// maxPriceGenPerTimeUnit, storageFeeMaxGasPrice, receiptFeeMaxGasPrice. The
+/// three price caps are static and sit in the head *after* the `rotations`
+/// offset word, so the rotations tail starts past all 8 head words.
 fn encode_internal_params(params: &InternalMessageParams) -> Vec<u8> {
     let appeal_rounds = U256::from(params.rotations.len().saturating_sub(1) as u64);
 
@@ -146,8 +155,14 @@ fn encode_internal_params(params: &InternalMessageParams) -> Vec<u8> {
     push_u256(&mut buf, params.validator_timeunits_allocation);
     push_u256(&mut buf, appeal_rounds);
     push_u256(&mut buf, params.execution_budget_per_round);
-    // `rotations` is the only dynamic field; its offset follows the head words.
+    // `rotations` is the only dynamic field; its offset follows all head words.
     push_word(&mut buf, (INTERNAL_PARAMS_HEAD_WORDS * 32) as u64);
+    // Static price caps occupy head words 6-8 (between the rotations offset and
+    // the rotations tail), mirroring the chain struct field order.
+    push_u256(&mut buf, params.max_price_gen_per_time_unit);
+    push_u256(&mut buf, params.storage_fee_max_gas_price);
+    push_u256(&mut buf, params.receipt_fee_max_gas_price);
+    // Tail: `rotations` length + data, after the 8 head words.
     push_word(&mut buf, params.rotations.len() as u64);
     for rotation in &params.rotations {
         push_u256(&mut buf, *rotation);
