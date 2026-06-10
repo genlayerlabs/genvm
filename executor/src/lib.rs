@@ -196,7 +196,6 @@ pub async fn run_with_impl(
             entry_stage_data: calldata::Value::Null,
         },
         supervisor: supervisor.clone(),
-        should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(true)),
 
         storage: topmost_storage,
         accumulator: VMDataAccumulator {

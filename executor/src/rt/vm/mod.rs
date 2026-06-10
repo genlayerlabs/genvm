@@ -199,7 +199,12 @@ impl VM<wasmtime::Instance> {
             Err(e) => {
                 let e = rt::errors::UnwrapDynError::from(e);
                 if self.vm_base.config_copy.needs_error_fingerprint {
-                    rt::errors::unwrap_vm_errors_fingerprint(e).map(|(a, b)| (a, Some(b)))
+                    // The store is still alive here and holds the wasm memory
+                    // state as left by the trapping execution, so take the
+                    // memory fingerprint directly from it.
+                    let module_instances = self.vm_base.store.fingerprint().module_instances;
+                    rt::errors::unwrap_vm_errors_fingerprint(e, module_instances)
+                        .map(|(a, b)| (a, Some(b)))
                 } else {
                     rt::errors::unwrap_vm_errors(e).map(|a| (a, None))
                 }

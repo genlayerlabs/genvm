@@ -314,8 +314,6 @@ pub async fn spawn(
 
     let engine = zelf.engines.get(vm.conf.is_deterministic);
 
-    let should_capture_fp = std::sync::Arc::new(vm.conf.is_deterministic.into());
-
     let mut store = wasmtime::Store::new(
         engine,
         rt::vm::WasmtimeStoreData {
@@ -325,7 +323,6 @@ pub async fn spawn(
             supervisor: zelf.clone(),
         },
         wasmtime::GenVMCtx {
-            should_capture_fp,
             should_quit: zelf.shared_data.cancellation.should_quit.clone(),
         },
     );

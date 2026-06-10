@@ -61,7 +61,13 @@ pub async fn spawn_apply_run(
     match spawn_apply_run_inner(supervisor, vm).await {
         Ok(res) => Ok(res),
         Err((e, vm_data)) => {
-            match errors::unwrap_vm_errors_fingerprint(errors::UnwrapDynError::from(e)) {
+            // The store has already been consumed by `vm.run()` by the time we
+            // get here, so no memory fingerprint can be taken; only the
+            // backtrace frames (carried by the error) are recovered.
+            match errors::unwrap_vm_errors_fingerprint(
+                errors::UnwrapDynError::from(e),
+                Default::default(),
+            ) {
                 Ok((run_ok, fp)) => Ok(vm::RunResult {
                     run_ok,
                     fingerprint: Some(fp),

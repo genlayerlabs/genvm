@@ -257,7 +257,6 @@ pub struct SingleVMData {
     pub message_data: ExtendedMessage,
     pub supervisor: Arc<rt::supervisor::Supervisor>,
     pub storage: rt::vm::storage::Storage<StorageHostHolder>,
-    pub should_capture_fp: Arc<std::sync::atomic::AtomicBool>,
     pub accumulator: VMDataAccumulator,
 }
 
@@ -715,7 +714,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         ),
                     ),
                     supervisor: supervisor.clone(),
-                    should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(true)),
                     accumulator: VMDataAccumulator {
                         data_fees_limit: self.context.data.accumulator.data_fees_limit.clone(),
                         messages_value_decremented: self
@@ -1286,17 +1284,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             gl_call::Message::UserError(msg) => Err(generated::types::Error::trap(
                 crate::anyhow_to_wasmtime(rt::errors::UserError(msg).into()),
             )),
-            gl_call::Message::Return(value) => {
-                // for return we are not interested in it
-                self.context
-                    .data
-                    .should_capture_fp
-                    .store(false, std::sync::atomic::Ordering::Relaxed);
-
-                Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
-                    ContractReturn(value).into(),
-                )))
-            }
+            gl_call::Message::Return(value) => Err(generated::types::Error::trap(
+                crate::anyhow_to_wasmtime(ContractReturn(value).into()),
+            )),
             gl_call::Message::RunNondet {
                 data_leader,
                 data_validator,
@@ -1683,7 +1673,6 @@ impl ContextVFS<'_> {
                 },
                 message_data,
                 supervisor: supervisor.clone(),
-                should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 storage: storage_checkpoint,
                 accumulator: fake_accum,
             });
@@ -1770,7 +1759,6 @@ impl ContextVFS<'_> {
             },
             message_data,
             supervisor: supervisor.clone(),
-            should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             storage: storage_checkpoint,
             accumulator: stolen_data,
         });

@@ -124,12 +124,11 @@ impl UnwrapDynError {
 
 pub fn unwrap_vm_errors_fingerprint(
     err: UnwrapDynError,
+    module_instances: BTreeMap<String, wasmtime::ModuleFingerprint>,
 ) -> anyhow::Result<(rt::vm::RunOk, Fingerprint)> {
-    let err = err;
-
     let mut fingerprint = Fingerprint {
         frames: Vec::new(),
-        module_instances: BTreeMap::new(),
+        module_instances,
     };
 
     if let Some(bt) = err.downcast_ref::<wasmtime::WasmBacktrace>() {
@@ -145,11 +144,6 @@ pub fn unwrap_vm_errors_fingerprint(
         fingerprint.frames = frames;
     } else {
         log_warn!("no backtrace attached");
-    }
-    if let Some(fp) = err.downcast_ref::<wasmtime::Fingerprint>() {
-        fingerprint.module_instances = fp.module_instances.clone();
-    } else {
-        log_warn!("no memories attached");
     }
 
     log_debug!(fp:serde = fingerprint, frames = fingerprint.frames.len(); "captured fingerprint");
