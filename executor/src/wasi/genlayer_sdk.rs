@@ -1589,6 +1589,7 @@ impl ContextVFS<'_> {
                                 ))
                             })?
                         } else {
+                            // FIXME: deprecate in next release (raw-string user error encoding)
                             calldata::Value::Str(String::from(std::str::from_utf8(rest).map_err(
                                 |e| {
                                     generated::types::Error::trap(crate::anyhow_to_wasmtime(

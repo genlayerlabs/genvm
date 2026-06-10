@@ -92,6 +92,7 @@ impl RunOk {
             RunOk::UserError(val) => {
                 let mut res = vec![ResultCode::UserError as u8];
                 match val {
+                    // FIXME: deprecate in next release (always use the tagged calldata form below)
                     calldata::unparsed::Maybe::Materialized(calldata::Value::Str(s)) => {
                         res.extend_from_slice(s.as_bytes());
                     }
