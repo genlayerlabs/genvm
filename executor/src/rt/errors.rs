@@ -201,9 +201,9 @@ impl<W: calldata::Writer> calldata::codec::Encode<W> for Backtrace {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct MemoryHashes(pub BTreeMap<String, wasmtime::ModuleFingerprint>);
+pub struct WasmStoreHashes(pub BTreeMap<String, wasmtime::ModuleFingerprint>);
 
-impl<W: calldata::Writer> calldata::codec::Encode<W> for MemoryHashes {
+impl<W: calldata::Writer> calldata::codec::Encode<W> for WasmStoreHashes {
     type Error = W::Error;
 
     fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {

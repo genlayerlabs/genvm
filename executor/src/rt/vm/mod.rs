@@ -1,5 +1,6 @@
 use crate::{public_abi, rt, wasi};
 
+use genlayer_calldata::codec::Encode;
 use genlayer_sdk::abi;
 use genvm_common::*;
 use itertools::Itertools;
@@ -16,7 +17,7 @@ pub enum RunOk {
 pub struct RunResult {
     pub run_ok: RunOk,
     pub backtrace: Option<rt::errors::Backtrace>,
-    pub memory_hashes: rt::errors::MemoryHashes,
+    pub wasm_store_hashes: rt::errors::WasmStoreHashes,
     pub vm_data: Box<wasi::genlayer_sdk::SingleVMData>,
 }
 
@@ -25,10 +26,18 @@ pub struct FullResult {
     pub kind: public_abi::ResultCode,
     pub data: calldata::unparsed::Maybe<calldata::Value>,
     pub backtrace: Option<rt::errors::Backtrace>,
-    pub memory_hashes: rt::errors::MemoryHashes,
+    pub wasm_store_hashes: rt::errors::WasmStoreHashes,
+    pub subvm_hashes: bytes::Bytes,
     pub storage_changes: Vec<storage::Delta>,
 
     pub emissions: Vec<domain::ExecutionEmission>,
+}
+
+/// Digest of an empty sub-VM hash accumulator, i.e. the value a run with no
+/// deterministic sub-calls produces. Kept in sync with how [`RunResult`]'s
+/// `det_subvm_hashes` is finalized so error/edge results hash uniformly.
+pub(crate) fn empty_subvm_hashes() -> bytes::Bytes {
+    bytes::Bytes::from(sha3::Digest::finalize(sha3::Sha3_256::default()).to_vec())
 }
 
 impl FullResult {
@@ -45,7 +54,8 @@ impl FullResult {
                 RunOk::VMError(msg, _) => calldata::Value::Str(msg.into()).into(),
             },
             backtrace: None,
-            memory_hashes: rt::errors::MemoryHashes::default(),
+            wasm_store_hashes: rt::errors::WasmStoreHashes::default(),
+            subvm_hashes: empty_subvm_hashes(),
             storage_changes: Vec::new(),
             emissions: Vec::new(),
         }
@@ -56,7 +66,8 @@ impl FullResult {
             kind: public_abi::ResultCode::VmError,
             data: calldata::Value::Str(public_abi::VmError::timeout().into()).into(),
             backtrace: None,
-            memory_hashes: rt::errors::MemoryHashes::default(),
+            wasm_store_hashes: rt::errors::WasmStoreHashes::default(),
+            subvm_hashes: empty_subvm_hashes(),
             storage_changes: Vec::new(),
             emissions: Vec::new(),
         }
@@ -176,7 +187,7 @@ impl VM<wasmtime::Instance> {
                         Some(crate::wasmtime_to_anyhow(e)),
                     ),
                     backtrace: None,
-                    memory_hashes: self.vm_base.memory_hashes(),
+                    wasm_store_hashes: self.vm_base.wasm_store_hashes(),
                     vm_data: Box::new(
                         self.vm_base
                             .store
@@ -212,7 +223,7 @@ impl VM<wasmtime::Instance> {
             }
         };
 
-        let memory_hashes = self.vm_base.memory_hashes();
+        let wasm_store_hashes = self.vm_base.wasm_store_hashes();
 
         let res = if self
             .vm_base
@@ -268,7 +279,7 @@ impl VM<wasmtime::Instance> {
                 Ok(RunResult {
                     run_ok,
                     backtrace,
-                    memory_hashes,
+                    wasm_store_hashes,
                     vm_data,
                 })
             }
@@ -296,7 +307,65 @@ pub struct VMBase {
 }
 
 impl VMBase {
-    pub fn memory_hashes(&mut self) -> rt::errors::MemoryHashes {
-        rt::errors::MemoryHashes(self.store.fingerprint().module_instances)
+    pub fn wasm_store_hashes(&mut self) -> rt::errors::WasmStoreHashes {
+        rt::errors::WasmStoreHashes(self.store.fingerprint().module_instances)
+    }
+}
+
+/// A [`calldata::Writer`] that feeds the encoded bytes straight into a sha3
+/// digest, used to hash a value without materializing its encoding.
+pub(crate) struct Sha3Writer(pub sha3::Sha3_256);
+
+impl calldata::Writer for &mut Sha3Writer {
+    type Error = std::convert::Infallible;
+
+    fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+        sha3::Digest::update(&mut self.0, data);
+        Ok(())
+    }
+}
+
+impl RunResult {
+    fn small_hash_impl(&self) -> std::result::Result<[u8; 32], std::convert::Infallible> {
+        use sha3::Digest;
+
+        let mut hasher = Sha3Writer(sha3::Sha3_256::new());
+
+        let mut enc = calldata::Encoder::new(&mut hasher);
+
+        enc.start_map(4)?;
+        enc.push_map_k("kind")?;
+        match &self.run_ok {
+            RunOk::Return(_) => enc.push_str("Return")?,
+            RunOk::UserError(_) => enc.push_str("UserError")?,
+            RunOk::VMError(_, _) => enc.push_str("VMError")?,
+        }
+        enc.push_map_k("result")?;
+        match &self.run_ok {
+            RunOk::Return(buf) => {
+                buf.encode(&mut enc)?;
+            }
+            RunOk::UserError(buf) => {
+                buf.encode(&mut enc)?;
+            }
+            RunOk::VMError(data, _) => {
+                enc.push_str(&data.0)?;
+            }
+        }
+
+        enc.push_map_k("subvm_hashes")?;
+        enc.push_bytes(&self.vm_data.det_subvm_hashes.clone().finalize())?;
+
+        enc.push_map_k("wasm_store_hashes")?;
+        self.wasm_store_hashes.encode(&mut enc)?;
+
+        Ok(hasher.0.finalize().into())
+    }
+
+    pub fn small_hash(&self) -> [u8; 32] {
+        match self.small_hash_impl() {
+            Ok(hash) => hash,
+            Err(e) => match e {},
+        }
     }
 }

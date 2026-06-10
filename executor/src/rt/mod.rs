@@ -71,9 +71,9 @@ pub async fn spawn_apply_run(
     match spawn_apply_run_inner(supervisor, vm).await {
         Ok(res) => Ok(res),
         Err(SpawnError { error, state }) => {
-            let (memory_hashes, vm_data) = match *state {
+            let (wasm_store_hashes, vm_data) = match *state {
                 SpawnErrorState::Spawned(mut vm_base) => (
-                    vm_base.memory_hashes(),
+                    vm_base.wasm_store_hashes(),
                     Box::new(vm_base.store.into_data().genlayer_ctx.genlayer_sdk.data),
                 ),
                 SpawnErrorState::Unspawned(vm_data) => (Default::default(), vm_data),
@@ -82,7 +82,7 @@ pub async fn spawn_apply_run(
                 Ok((run_ok, backtrace)) => Ok(vm::RunResult {
                     run_ok,
                     backtrace,
-                    memory_hashes,
+                    wasm_store_hashes,
                     vm_data,
                 }),
                 Err(e) => Err(e),

@@ -204,6 +204,7 @@ pub async fn run_with_impl(
             emissions: Vec::new(),
             message_fee_allocation: entry_data.message_fee_allocation,
         },
+        det_subvm_hashes: Default::default(),
     });
 
     let run_result = rt::spawn_apply_run(&supervisor, essential_data).await?;
@@ -220,7 +221,10 @@ pub async fn run_with_impl(
             rt::vm::RunOk::VMError(msg, _) => calldata::Value::Str(msg.0.into()).into(),
         },
         backtrace: run_result.backtrace,
-        memory_hashes: run_result.memory_hashes,
+        wasm_store_hashes: run_result.wasm_store_hashes,
+        subvm_hashes: bytes::Bytes::from(
+            sha3::Digest::finalize(run_result.vm_data.det_subvm_hashes).to_vec(),
+        ),
         storage_changes: run_result.vm_data.storage.make_delta(),
         emissions: run_result.vm_data.accumulator.emissions,
     })

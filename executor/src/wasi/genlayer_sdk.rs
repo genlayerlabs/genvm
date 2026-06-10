@@ -6,6 +6,7 @@ use genvm_common::sync::DArc;
 use genvm_common::*;
 
 use genvm_modules_interfaces::GenericValue;
+use sha3::digest::Update;
 use wiggle::GuestError;
 
 use crate::host::{self, SlotID};
@@ -258,6 +259,7 @@ pub struct SingleVMData {
     pub supervisor: Arc<rt::supervisor::Supervisor>,
     pub storage: rt::vm::storage::Storage<StorageHostHolder>,
     pub accumulator: VMDataAccumulator,
+    pub det_subvm_hashes: sha3::Sha3_256,
 }
 
 pub struct Context {
@@ -724,11 +726,15 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         emissions: Vec::new(),
                         message_fee_allocation: Vec::new(),
                     },
+                    det_subvm_hashes: Default::default(),
                 });
 
                 let res = rt::spawn_apply_run(&supervisor, vm_data)
                     .await
                     .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
+                let hash = res.small_hash();
+                self.context.data.det_subvm_hashes.update(&hash);
 
                 self.set_vm_run_result(res.run_ok).map(|x| x.0)
             }
@@ -1675,6 +1681,7 @@ impl ContextVFS<'_> {
                 supervisor: supervisor.clone(),
                 storage: storage_checkpoint,
                 accumulator: fake_accum,
+                det_subvm_hashes: Default::default(), // won't be used
             });
 
             let task_done = Arc::new(tokio::sync::Notify::new());
@@ -1761,11 +1768,17 @@ impl ContextVFS<'_> {
             supervisor: supervisor.clone(),
             storage: storage_checkpoint,
             accumulator: stolen_data,
+            det_subvm_hashes: Default::default(),
         });
 
         let my_res = rt::spawn_apply_run(&supervisor, vm_data)
             .await
             .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
+        if self.context.data.conf.is_deterministic {
+            let hash = my_res.small_hash();
+            self.context.data.det_subvm_hashes.update(&hash);
+        }
 
         self.context.data.accumulator = my_res.vm_data.accumulator;
         self.context.data.storage = my_res.vm_data.storage;
