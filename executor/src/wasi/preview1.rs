@@ -280,9 +280,23 @@ where
 }
 
 impl Context {
-    pub fn new(datetime: chrono::DateTime<chrono::Utc>, conf: base::Config) -> Self {
-        const SEED_ARR: [u32; 2] = [u32::from_le_bytes(*b"GenL"), u32::from_le_bytes(*b"ayer")];
-        let seed = mt19937::MT19937::new_with_slice_seed(&SEED_ARR);
+    pub fn new(
+        datetime: chrono::DateTime<chrono::Utc>,
+        conf: base::Config,
+        seed: [u8; 32],
+    ) -> Self {
+        // Deterministic randomness is seeded from `sha3-256(stdin)` of the VM, so two
+        // runs with identical inputs see the same `random_get` stream while different
+        // inputs diverge. The 32-byte digest is consumed as 8 little-endian u32 words.
+        let seed_words: [u32; 8] = std::array::from_fn(|i| {
+            u32::from_le_bytes([
+                seed[i * 4],
+                seed[i * 4 + 1],
+                seed[i * 4 + 2],
+                seed[i * 4 + 3],
+            ])
+        });
+        let seed = mt19937::MT19937::new_with_slice_seed(&seed_words);
 
         Self {
             args_buf: Vec::new(),

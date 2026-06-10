@@ -25,13 +25,21 @@ impl Context {
             data.message_data.into();
         let as_bytes = calldata::encode_obj(&msg_data);
         data.message_data = msg_data.into();
+
+        // The deterministic RNG seed is the sha3-256 of the VM's stdin (the encoded
+        // message data), so it is fully determined by the VM inputs at construction.
+        let seed: [u8; 32] = {
+            use sha3::Digest as _;
+            sha3::Sha3_256::digest(&as_bytes).into()
+        };
+
         let vfs = match vfs::VFS::new(as_bytes, limiter) {
             Ok(vfs) => vfs,
             Err(e) => return Err((e, data)),
         };
         Ok(Self {
             vfs,
-            preview1: preview1::Context::new(data.message_data.message.datetime, data.conf),
+            preview1: preview1::Context::new(data.message_data.message.datetime, data.conf, seed),
             genlayer_sdk: genlayer_sdk::Context::new(data),
         })
     }
