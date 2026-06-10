@@ -6,6 +6,16 @@ pub mod vm;
 
 use std::sync::Arc;
 
+enum SpawnErrorState {
+    Spawned(vm::VMBase),
+    Unspawned(Box<wasi::genlayer_sdk::SingleVMData>),
+}
+
+pub struct SpawnError {
+    error: anyhow::Error,
+    state: Box<SpawnErrorState>,
+}
+
 #[derive(Default, Debug, serde::Serialize, genlayer_calldata::Encode)]
 pub struct Metrics {
     precompile_hits: genvm_common::stats::metric::Count,
@@ -60,17 +70,19 @@ pub async fn spawn_apply_run(
 ) -> std::result::Result<vm::RunResult, anyhow::Error> {
     match spawn_apply_run_inner(supervisor, vm).await {
         Ok(res) => Ok(res),
-        Err((e, vm_data)) => {
-            // The store has already been consumed by `vm.run()` by the time we
-            // get here, so no memory fingerprint can be taken; only the
-            // backtrace frames (carried by the error) are recovered.
-            match errors::unwrap_vm_errors_fingerprint(
-                errors::UnwrapDynError::from(e),
-                Default::default(),
-            ) {
-                Ok((run_ok, fp)) => Ok(vm::RunResult {
+        Err(SpawnError { error, state }) => {
+            let (memory_hashes, vm_data) = match *state {
+                SpawnErrorState::Spawned(mut vm_base) => (
+                    vm_base.memory_hashes(),
+                    Box::new(vm_base.store.into_data().genlayer_ctx.genlayer_sdk.data),
+                ),
+                SpawnErrorState::Unspawned(vm_data) => (Default::default(), vm_data),
+            };
+            match errors::unwrap_vm_errors_backtrace(errors::UnwrapDynError::from(error)) {
+                Ok((run_ok, backtrace)) => Ok(vm::RunResult {
                     run_ok,
-                    fingerprint: Some(fp),
+                    backtrace,
+                    memory_hashes,
                     vm_data,
                 }),
                 Err(e) => Err(e),
@@ -82,7 +94,7 @@ pub async fn spawn_apply_run(
 async fn spawn_apply_run_inner(
     supervisor: &Arc<supervisor::Supervisor>,
     vm: Box<wasi::genlayer_sdk::SingleVMData>,
-) -> std::result::Result<vm::RunResult, (anyhow::Error, Box<wasi::genlayer_sdk::SingleVMData>)> {
+) -> std::result::Result<vm::RunResult, SpawnError> {
     let limiter = supervisor.limiter.get(vm.conf.is_deterministic).derived();
 
     let vm = supervisor::spawn(supervisor, vm, limiter).await?;

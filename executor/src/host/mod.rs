@@ -153,7 +153,8 @@ pub struct FullResult {
 
     pub kind: public_abi::ResultCode,
     pub data: calldata::unparsed::Maybe<calldata::Value>,
-    pub fingerprint: Option<rt::errors::Fingerprint>,
+    pub backtrace: Option<rt::errors::Backtrace>,
+    pub memory_hashes: rt::errors::MemoryHashes,
     pub storage_changes: Vec<rt::vm::storage::Delta>,
 
     pub emissions: Vec<domain::ExecutionEmission>,
@@ -172,7 +173,8 @@ impl FullResult {
             execution_hash: bytes::Bytes::new(),
             kind: public_abi::ResultCode::InternalError,
             data: calldata::Value::Str(msg).into(),
-            fingerprint: None,
+            backtrace: None,
+            memory_hashes: rt::errors::MemoryHashes::default(),
             storage_changes: Vec::new(),
             emissions: Vec::new(),
             nondet_disagreement: None,
@@ -203,18 +205,22 @@ impl FullResult {
         llm_consumption: primitive_types::U256,
     ) -> Self {
         struct Hashable<'a> {
-            kind: &'a public_abi::ResultCode,
+            backtrace: &'a Option<rt::errors::Backtrace>,
             data: &'a calldata::unparsed::Maybe<calldata::Value>,
-            fingerprint: &'a Option<rt::errors::Fingerprint>,
-            storage_changes: &'a Vec<rt::vm::storage::Delta>,
             data_fees_remaining: &'a Vec<primitive_types::U256>,
+            kind: &'a public_abi::ResultCode,
+            memory_hashes: &'a rt::errors::MemoryHashes,
+            storage_changes: &'a Vec<rt::vm::storage::Delta>,
         }
 
         impl<W: calldata::Writer> calldata::codec::Encode<W> for Hashable<'_> {
             type Error = W::Error;
 
             fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
-                enc.start_map(5)?;
+                enc.start_map(6)?;
+
+                enc.push_map_k("backtrace")?;
+                calldata::codec::Encode::encode(self.backtrace, enc)?;
 
                 enc.push_map_k("data")?;
                 calldata::codec::Encode::encode(self.data, enc)?;
@@ -222,11 +228,11 @@ impl FullResult {
                 enc.push_map_k("data_fees_remaining")?;
                 calldata::codec::Encode::encode(self.data_fees_remaining, enc)?;
 
-                enc.push_map_k("fingerprint")?;
-                calldata::codec::Encode::encode(self.fingerprint, enc)?;
-
                 enc.push_map_k("kind")?;
                 calldata::codec::Encode::encode(self.kind, enc)?;
+
+                enc.push_map_k("memory_hashes")?;
+                calldata::codec::Encode::encode(self.memory_hashes, enc)?;
 
                 enc.push_map_k("storage_changes")?;
                 calldata::codec::Encode::encode(self.storage_changes, enc)?;
@@ -238,7 +244,8 @@ impl FullResult {
         let hashable = Hashable {
             kind: &rt_result.kind,
             data: &rt_result.data,
-            fingerprint: &rt_result.fingerprint,
+            backtrace: &rt_result.backtrace,
+            memory_hashes: &rt_result.memory_hashes,
             storage_changes: &rt_result.storage_changes,
             data_fees_remaining: &data_fees_remaining,
         };
@@ -256,7 +263,8 @@ impl FullResult {
             execution_hash,
 
             data: rt_result.data,
-            fingerprint: rt_result.fingerprint,
+            backtrace: rt_result.backtrace,
+            memory_hashes: rt_result.memory_hashes,
             kind: rt_result.kind,
             storage_changes: rt_result.storage_changes,
             emissions: rt_result.emissions,

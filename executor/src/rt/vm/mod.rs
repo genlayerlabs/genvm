@@ -15,7 +15,8 @@ pub enum RunOk {
 
 pub struct RunResult {
     pub run_ok: RunOk,
-    pub fingerprint: Option<rt::errors::Fingerprint>,
+    pub backtrace: Option<rt::errors::Backtrace>,
+    pub memory_hashes: rt::errors::MemoryHashes,
     pub vm_data: Box<wasi::genlayer_sdk::SingleVMData>,
 }
 
@@ -23,7 +24,8 @@ pub struct RunResult {
 pub struct FullResult {
     pub kind: public_abi::ResultCode,
     pub data: calldata::unparsed::Maybe<calldata::Value>,
-    pub fingerprint: Option<rt::errors::Fingerprint>,
+    pub backtrace: Option<rt::errors::Backtrace>,
+    pub memory_hashes: rt::errors::MemoryHashes,
     pub storage_changes: Vec<storage::Delta>,
 
     pub emissions: Vec<domain::ExecutionEmission>,
@@ -42,7 +44,8 @@ impl FullResult {
                 RunOk::UserError(val) => val,
                 RunOk::VMError(msg, _) => calldata::Value::Str(msg.into()).into(),
             },
-            fingerprint: None,
+            backtrace: None,
+            memory_hashes: rt::errors::MemoryHashes::default(),
             storage_changes: Vec::new(),
             emissions: Vec::new(),
         }
@@ -52,7 +55,8 @@ impl FullResult {
         Self {
             kind: public_abi::ResultCode::VmError,
             data: calldata::Value::Str(public_abi::VmError::timeout().into()).into(),
-            fingerprint: None,
+            backtrace: None,
+            memory_hashes: rt::errors::MemoryHashes::default(),
             storage_changes: Vec::new(),
             emissions: Vec::new(),
         }
@@ -148,9 +152,7 @@ pub struct VM<T> {
 }
 
 impl VM<wasmtime::Instance> {
-    pub async fn run(
-        mut self,
-    ) -> Result<RunResult, (anyhow::Error, Box<wasi::genlayer_sdk::SingleVMData>)> {
+    pub async fn run(mut self) -> Result<RunResult, rt::SpawnError> {
         log_debug!(
             wasi_preview1: serde = self.vm_base.store.data().genlayer_ctx.preview1.log(),
             genlayer_sdk: serde = self.vm_base.store.data().genlayer_ctx.genlayer_sdk.log();
@@ -173,7 +175,8 @@ impl VM<wasmtime::Instance> {
                         public_abi::VmError::invalid_contract().wasm().entrypoint(),
                         Some(crate::wasmtime_to_anyhow(e)),
                     ),
-                    fingerprint: None,
+                    backtrace: None,
+                    memory_hashes: self.vm_base.memory_hashes(),
                     vm_data: Box::new(
                         self.vm_base
                             .store
@@ -194,7 +197,7 @@ impl VM<wasmtime::Instance> {
             wasm_start_elapsed:? = time_start.elapsed();
             "vm execution finished"
         );
-        let res: anyhow::Result<(rt::vm::RunOk, Option<rt::errors::Fingerprint>)> = match res {
+        let res: anyhow::Result<(rt::vm::RunOk, Option<rt::errors::Backtrace>)> = match res {
             Ok(()) => Ok((rt::vm::RunOk::empty_return(), None)),
             Err(e) => {
                 let e = rt::errors::UnwrapDynError::from(e);
@@ -202,14 +205,15 @@ impl VM<wasmtime::Instance> {
                     // The store is still alive here and holds the wasm memory
                     // state as left by the trapping execution, so take the
                     // memory fingerprint directly from it.
-                    let module_instances = self.vm_base.store.fingerprint().module_instances;
-                    rt::errors::unwrap_vm_errors_fingerprint(e, module_instances)
-                        .map(|(a, b)| (a, Some(b)))
+                    rt::errors::unwrap_vm_errors_backtrace(e)
                 } else {
-                    rt::errors::unwrap_vm_errors(e).map(|a| (a, None))
+                    rt::errors::unwrap_vm_errors(e).map(|run_ok| (run_ok, None))
                 }
             }
         };
+
+        let memory_hashes = self.vm_base.memory_hashes();
+
         let res = if self
             .vm_base
             .store
@@ -220,12 +224,12 @@ impl VM<wasmtime::Instance> {
             .is_cancelled()
         {
             match res {
-                Ok((rt::vm::RunOk::VMError(msg, cause), fp)) => Ok((
+                Ok((rt::vm::RunOk::VMError(msg, cause), backtrace)) => Ok((
                     rt::vm::RunOk::VMError(
                         public_abi::VmError::timeout(),
                         cause.map(|v| v.context(msg.0)),
                     ),
-                    fp,
+                    backtrace,
                 )),
                 Ok(r) => Ok(r),
                 Err(e) => Ok((
@@ -251,21 +255,27 @@ impl VM<wasmtime::Instance> {
             }
         };
 
-        let vm_data = Box::new(
-            self.vm_base
-                .store
-                .into_data()
-                .genlayer_ctx
-                .genlayer_sdk
-                .data,
-        );
         match res {
-            Ok((run_ok, fingerprint)) => Ok(RunResult {
-                run_ok,
-                fingerprint,
-                vm_data,
+            Ok((run_ok, backtrace)) => {
+                let vm_data = Box::new(
+                    self.vm_base
+                        .store
+                        .into_data()
+                        .genlayer_ctx
+                        .genlayer_sdk
+                        .data,
+                );
+                Ok(RunResult {
+                    run_ok,
+                    backtrace,
+                    memory_hashes,
+                    vm_data,
+                })
+            }
+            Err(e) => Err(rt::SpawnError {
+                error: e,
+                state: Box::new(rt::SpawnErrorState::Spawned(self.vm_base)),
             }),
-            Err(e) => Err((e, vm_data)),
         }
     }
 }
@@ -283,4 +293,10 @@ pub struct VMBase {
     pub(super) store: wasmtime::Store<WasmtimeStoreData>,
     pub(super) linker: wasmtime::Linker<WasmtimeStoreData>,
     pub(super) config_copy: wasi::base::Config,
+}
+
+impl VMBase {
+    pub fn memory_hashes(&mut self) -> rt::errors::MemoryHashes {
+        rt::errors::MemoryHashes(self.store.fingerprint().module_instances)
+    }
 }

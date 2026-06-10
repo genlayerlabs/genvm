@@ -219,7 +219,8 @@ pub async fn run_with_impl(
             rt::vm::RunOk::UserError(val) => val,
             rt::vm::RunOk::VMError(msg, _) => calldata::Value::Str(msg.0.into()).into(),
         },
-        fingerprint: run_result.fingerprint,
+        backtrace: run_result.backtrace,
+        memory_hashes: run_result.memory_hashes,
         storage_changes: run_result.vm_data.storage.make_delta(),
         emissions: run_result.vm_data.accumulator.emissions,
     })
