@@ -193,6 +193,7 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         };
 
         let data_fees_remaining = runtime.block_on(shared_data.data_fees_limit.remaining());
+        let data_fees_consumed = runtime.block_on(shared_data.data_fees_limit.consumed());
         let result: Result<genvm::host::FullResult> = Ok(genvm::host::FullResult::new(
             genvm::rt::vm::FullResult::empty_from(genvm::rt::vm::RunOk::VMError(
                 insufficient_err.0,
@@ -201,6 +202,7 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
             Vec::new(),
             None,
             data_fees_remaining,
+            data_fees_consumed,
             primitive_types::U256::zero(),
         ));
 

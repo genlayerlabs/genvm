@@ -133,6 +133,8 @@ struct Bucket {
     delta: genvm_common::expr::Value,
     /// VM error reported when `subtract_on_start` underflows the bucket.
     oom_error: abi::consts::VmError,
+
+    total_consumed: tokio::sync::Mutex<primitive_types::U256>,
 }
 
 impl std::fmt::Debug for Bucket {
@@ -163,6 +165,7 @@ fn build_bucket(
         subtract_on_start,
         delta,
         oom_error,
+        total_consumed: Default::default(),
     })
 }
 
@@ -170,6 +173,15 @@ fn build_bucket(
 pub struct MessageFeeConsumption {
     pub message_fee: primitive_types::U256,
     pub receipt_fee: primitive_types::U256,
+}
+
+#[derive(Debug, Clone, Copy, Default, genlayer_calldata::Encode)]
+pub struct BucketsConsumed {
+    pub storage: primitive_types::U256,
+    pub message_receipt: primitive_types::U256,
+    pub nondet_output: primitive_types::U256,
+    pub message_fee: primitive_types::U256,
+    pub event: primitive_types::U256,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -295,6 +307,9 @@ impl DataLimit {
                 remaining:display = *remaining;
                 "consume_bucket: ok"
             );
+            std::mem::drop(buckets);
+            *bucket.total_consumed.lock().await += cost;
+
             true
         } else {
             log_warn!(
@@ -311,12 +326,21 @@ impl DataLimit {
         self.buckets.lock().await.clone()
     }
 
+    pub async fn consumed(&self) -> BucketsConsumed {
+        BucketsConsumed {
+            storage: *self.storage.total_consumed.lock().await,
+            message_receipt: *self.message_receipt.total_consumed.lock().await,
+            nondet_output: *self.nondet_output.total_consumed.lock().await,
+            message_fee: *self.message_fee.total_consumed.lock().await,
+            event: *self.event.total_consumed.lock().await,
+        }
+    }
+
     /// Charges every bucket's up-front `subtract_on_start`. Must be called once,
     /// before execution. Returns the first bucket's OOM [`rt::errors::VMError`]
     /// whose total cannot cover its initial cost, so the caller can report it to
     /// the host as a receipt; returns `None` when all initials are charged.
     pub async fn consume_initial(&self) -> Option<rt::errors::VMError> {
-        let mut buckets = self.buckets.lock().await;
         for bucket in [
             &self.storage,
             &self.message_receipt,
@@ -324,6 +348,7 @@ impl DataLimit {
             &self.message_fee,
             &self.event,
         ] {
+            let mut buckets = self.buckets.lock().await;
             let Some(remaining) = buckets.get_mut(bucket.bucket_no as usize) else {
                 return Some(rt::errors::VMError(
                     bucket.oom_error.clone(),
@@ -334,7 +359,11 @@ impl DataLimit {
                 ));
             };
             match remaining.checked_sub(bucket.subtract_on_start) {
-                Some(v) => *remaining = v,
+                Some(v) => {
+                    *remaining = v;
+                    std::mem::drop(buckets);
+                    *bucket.total_consumed.lock().await += bucket.subtract_on_start;
+                }
                 None => {
                     return Some(rt::errors::VMError(
                         bucket.oom_error.clone(),
@@ -459,6 +488,10 @@ impl DataLimit {
 
         buckets[self.message_fee.bucket_no as usize] -= cost_fee;
         buckets[self.message_receipt.bucket_no as usize] -= cost_receipt;
+        std::mem::drop(buckets);
+
+        *self.message_fee.total_consumed.lock().await += cost_fee;
+        *self.message_receipt.total_consumed.lock().await += cost_receipt;
 
         log_debug!(
             fee_bucket = self.message_fee.bucket_no,

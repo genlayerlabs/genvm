@@ -163,6 +163,7 @@ pub struct FullResult {
     pub nondet_results: Vec<bytes::Bytes>,
 
     pub data_fees_remaining: Vec<primitive_types::U256>,
+    pub data_fees_consumed: rt::fees::BucketsConsumed,
 
     pub llm_consumption: primitive_types::U256,
 }
@@ -180,6 +181,7 @@ impl FullResult {
             nondet_disagreement: None,
             nondet_results: Vec::new(),
             data_fees_remaining: Vec::new(),
+            data_fees_consumed: rt::fees::BucketsConsumed::default(),
             llm_consumption: primitive_types::U256::zero(),
         }
     }
@@ -191,11 +193,13 @@ impl FullResult {
         nondet_results: Vec<bytes::Bytes>,
         nondet_disagreement: Option<u32>,
         data_fees_remaining: Vec<primitive_types::U256>,
+        data_fees_consumed: rt::fees::BucketsConsumed,
         llm_consumption: primitive_types::U256,
     ) -> Self {
         struct Hashable<'a> {
             backtrace: &'a Option<rt::errors::Backtrace>,
             data: &'a calldata::unparsed::Maybe<calldata::Value>,
+            data_fees_consumed: &'a rt::fees::BucketsConsumed,
             data_fees_remaining: &'a Vec<primitive_types::U256>,
             kind: &'a public_abi::ResultCode,
             wasm_store_hashes: &'a rt::errors::WasmStoreHashes,
@@ -207,13 +211,16 @@ impl FullResult {
             type Error = W::Error;
 
             fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
-                enc.start_map(7)?;
+                enc.start_map(8)?;
 
                 enc.push_map_k("backtrace")?;
                 calldata::codec::Encode::encode(self.backtrace, enc)?;
 
                 enc.push_map_k("data")?;
                 calldata::codec::Encode::encode(self.data, enc)?;
+
+                enc.push_map_k("data_fees_consumed")?;
+                calldata::codec::Encode::encode(self.data_fees_consumed, enc)?;
 
                 enc.push_map_k("data_fees_remaining")?;
                 calldata::codec::Encode::encode(self.data_fees_remaining, enc)?;
@@ -242,6 +249,7 @@ impl FullResult {
             storage_changes: &rt_result.storage_changes,
             subvm_hashes: &rt_result.subvm_hashes,
             data_fees_remaining: &data_fees_remaining,
+            data_fees_consumed: &data_fees_consumed,
         };
 
         let as_value = calldata::to_value(&hashable);
@@ -265,6 +273,7 @@ impl FullResult {
             nondet_results,
             nondet_disagreement,
             data_fees_remaining,
+            data_fees_consumed,
             llm_consumption,
         }
     }
