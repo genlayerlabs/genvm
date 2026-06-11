@@ -205,6 +205,14 @@ impl Supervisor {
             .and_then(|v| v.get(call_no as usize).cloned())
     }
 
+    /// Records a non-deterministic disagreement for `call_no`, keeping the
+    /// earliest disagreeing call. Mirrors the logic in `nondet_vm_processor`.
+    pub fn mark_nondet_disagreement(&self, call_no: u32) {
+        self.queue
+            .nondet_call_disagree
+            .fetch_min(call_no, std::sync::atomic::Ordering::SeqCst);
+    }
+
     pub fn is_leader(&self) -> bool {
         self.leader_nondet_results.is_none()
     }

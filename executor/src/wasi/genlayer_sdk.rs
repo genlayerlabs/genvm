@@ -1572,6 +1572,33 @@ impl ContextVFS<'_> {
                         .into(),
                 )));
             }
+            Some(data) if data.is_empty() => {
+                // A zero-length leader result is malformed: it carries no result
+                // code byte to dispatch on. It is contract-triggerable, so it must
+                // not panic via out-of-bounds indexing. In `sync` mode there are no
+                // validators to disagree, so surface a canonical VMError; otherwise
+                // record a non-deterministic disagreement and return that VMError to
+                // the validator's contract.
+                if !self.context.data.supervisor.shared_data.is_sync {
+                    self.context
+                        .data
+                        .supervisor
+                        .mark_nondet_disagreement(call_no);
+                }
+
+                let result = rt::vm::RunOk::VMError(
+                    abi::consts::VmError::absent_leader_nondet_output(),
+                    None,
+                );
+
+                consume_nondet_output(
+                    &self.context.data.supervisor.shared_data,
+                    result.as_bytes().len() as u64,
+                )
+                .await?;
+
+                return self.set_vm_run_result(result).map(|x| x.0);
+            }
             Some(data) => {
                 use crate::public_abi::ResultCode;
                 let rest = &data[1..];
