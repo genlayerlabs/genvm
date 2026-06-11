@@ -508,6 +508,25 @@ fn file_fd_none() -> generated::types::Fd {
     generated::types::Fd::from(NO_FILE)
 }
 
+/// Returns `true` iff `a + b <= c`, computed without wrapping.
+///
+/// `a + b` is done with checked arithmetic: on overflow the sum cannot fit in a
+/// `U256` and is therefore strictly greater than any real `c`, so the result is
+/// `false`. This avoids the wraparound that would let an oversized `a` (e.g.
+/// `2^256 - 1`) appear to satisfy a balance check.
+#[inline]
+fn checked_sum_le(
+    a: primitive_types::U256,
+    b: primitive_types::U256,
+    c: primitive_types::U256,
+) -> bool {
+    if b >= c {
+        return false;
+    }
+    let c_minus_b = c - b;
+    a <= c_minus_b
+}
+
 #[allow(unused_variables)]
 impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
     async fn gl_call(
@@ -558,8 +577,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         .get_balance_impl(self.context.data.message_data.message.contract_address)
                         .await?;
 
-                    if value + self.context.data.accumulator.messages_value_decremented > my_balance
-                    {
+                    if !checked_sum_le(
+                        value,
+                        self.context.data.accumulator.messages_value_decremented,
+                        my_balance,
+                    ) {
                         return Err(generated::types::Errno::Inbalance.into());
                     }
                 }
@@ -618,7 +640,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         fee_params: matched_params,
                     });
 
-                self.context.data.accumulator.messages_value_decremented += value;
+                self.context.data.accumulator.messages_value_decremented = self
+                    .context
+                    .data
+                    .accumulator
+                    .messages_value_decremented
+                    .saturating_add(value);
                 Ok(file_fd_none())
             }
             gl_call::Message::EthCall { address, calldata } => {
@@ -839,8 +866,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         .get_balance_impl(self.context.data.message_data.message.contract_address)
                         .await?;
 
-                    if value + self.context.data.accumulator.messages_value_decremented > my_balance
-                    {
+                    if !checked_sum_le(
+                        value,
+                        self.context.data.accumulator.messages_value_decremented,
+                        my_balance,
+                    ) {
                         return Err(generated::types::Errno::Inbalance.into());
                     }
                 }
@@ -916,7 +946,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     "PostMessage emission pushed to accumulator"
                 );
 
-                self.context.data.accumulator.messages_value_decremented += value;
+                self.context.data.accumulator.messages_value_decremented = self
+                    .context
+                    .data
+                    .accumulator
+                    .messages_value_decremented
+                    .saturating_add(value);
 
                 Ok(file_fd_none())
             }
@@ -942,8 +977,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         .get_balance_impl(self.context.data.message_data.message.contract_address)
                         .await?;
 
-                    if value + self.context.data.accumulator.messages_value_decremented > my_balance
-                    {
+                    if !checked_sum_le(
+                        value,
+                        self.context.data.accumulator.messages_value_decremented,
+                        my_balance,
+                    ) {
                         return Err(generated::types::Errno::Inbalance.into());
                     }
                 }
@@ -1007,7 +1045,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     },
                 );
 
-                self.context.data.accumulator.messages_value_decremented += value;
+                self.context.data.accumulator.messages_value_decremented = self
+                    .context
+                    .data
+                    .accumulator
+                    .messages_value_decremented
+                    .saturating_add(value);
 
                 Ok(file_fd_none())
             }
