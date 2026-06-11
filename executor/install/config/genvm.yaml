@@ -104,7 +104,9 @@ fees:
       # allocationSubtree the leader carries in the receipt under commitment modes
       # (empty for external messages -> just the 64-byte indirection + length)
       let subtreeBytes = 32 + 32 + ceilDiv a.subtreeLength 32 * 32 in
-      (calldataBytes + subtreeBytes) * node.receiptGasPerByte + 1 * node.gasPerChangedSlot
+      # deployed contract code carried in the receipt (deploys only)
+      let codeBytes = if a.isDeploy then 32 + 32 + ceilDiv a.codeLength 32 * 32 else 0 in
+      (calldataBytes + subtreeBytes + codeBytes) * node.receiptGasPerByte + 1 * node.gasPerChangedSlot
   nondet_output:
     bucket_no: 0
     subtract_on_start_expr: |
