@@ -102,7 +102,7 @@ pub fn decode(
                 ));
             }
             Fields::Named(fields) => {
-                let mut infos = Vec::new();
+                let mut infos: Vec<FieldInfo> = Vec::new();
                 for f in &fields.named {
                     let ident = f.ident.as_ref().unwrap();
                     let attrs = FieldAttrs::from_ast(&f.attrs)?;
@@ -113,6 +113,16 @@ pub fn decode(
                         return Err(syn::Error::new_spanned(
                             ident,
                             "field name collides with the enum tag field",
+                        ));
+                    }
+
+                    // Two fields of the same variant resolving to the same wire
+                    // name would share a `union_idx` and overwrite each other's
+                    // slot; reject it instead of silently miscompiling.
+                    if infos.iter().any(|i| i.wire == fwire) {
+                        return Err(syn::Error::new_spanned(
+                            ident,
+                            format!("duplicate wire name `{fwire}` within the variant"),
                         ));
                     }
 
@@ -262,38 +272,52 @@ pub fn decode(
     let all_names: Vec<&str> = variants.iter().map(|v| v.wire.as_str()).collect();
     let names_joined = all_names.join(", ");
 
+    // Reject any filled slot that does not belong to the selected variant. For a
+    // unit variant `used` is empty, so every union slot is foreign and must be
+    // absent — otherwise `{"radius": 1, "type": "Empty"}` would silently decode
+    // as `Empty`, ignoring the foreign `radius`.
+    let foreign_checks = |used: &std::collections::HashSet<usize>| {
+        union
+            .iter()
+            .zip(&slot_vars)
+            .enumerate()
+            .filter_map(|(i, (u, slot))| {
+                if used.contains(&i) {
+                    return None;
+                }
+                let fwire = &u.wire;
+                Some(quote! {
+                    if #slot.is_some() {
+                        return ::core::result::Result::Err(
+                            genlayer_calldata::codec::DecodeError::UnknownField(
+                                #fwire.to_owned()
+                            )
+                        );
+                    }
+                })
+            })
+            .collect::<Vec<_>>()
+    };
+
     let variant_arms = variants.iter().map(|v| {
         let wire = &v.wire;
         let ident = v.ident;
         match &v.kind {
-            VariantKind::Unit => quote! {
-                #wire => ::core::result::Result::Ok(#name::#ident),
-            },
+            VariantKind::Unit => {
+                let checks = foreign_checks(&std::collections::HashSet::new());
+                quote! {
+                    #wire => {
+                        #(#checks)*
+                        ::core::result::Result::Ok(#name::#ident)
+                    }
+                }
+            }
             VariantKind::Named(fields) => {
                 let used: std::collections::HashSet<usize> =
                     fields.iter().map(|f| f.union_idx).collect();
 
                 // Reject fields belonging to other variants but not this one.
-                let foreign_checks =
-                    union
-                        .iter()
-                        .zip(&slot_vars)
-                        .enumerate()
-                        .filter_map(|(i, (u, slot))| {
-                            if used.contains(&i) {
-                                return None;
-                            }
-                            let fwire = &u.wire;
-                            Some(quote! {
-                                if #slot.is_some() {
-                                    return ::core::result::Result::Err(
-                                        genlayer_calldata::codec::DecodeError::UnknownField(
-                                            #fwire.to_owned()
-                                        )
-                                    );
-                                }
-                            })
-                        });
+                let foreign_checks = foreign_checks(&used);
 
                 let constructions = fields.iter().map(|f| {
                     let fi = f.ident;

@@ -320,6 +320,23 @@ fn field_of_another_variant_is_rejected() {
     assert!(msg.contains("`x_only`"), "should mention field name: {msg}");
 }
 
+// ── Foreign field on a unit variant ──────────────────────────────────
+
+#[test]
+fn field_of_another_variant_on_unit_is_rejected() {
+    // Decoding Empty (a unit variant), but radius belongs only to Circle.
+    // len 2 is within [1, 3], so it passes the length gate and must be
+    // rejected as an unknown field rather than silently decoding as Empty.
+    let val = map([
+        ("radius", Value::from(1u32)),
+        ("type", Value::Str("Empty".into())),
+    ]);
+    let err = try_from_value::<Shape>(val).unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("unknown field"), "unexpected error: {msg}");
+    assert!(msg.contains("`radius`"), "should mention field name: {msg}");
+}
+
 // ── Length range gate ────────────────────────────────────────────────
 
 #[test]

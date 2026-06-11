@@ -520,7 +520,7 @@ fn checked_sum_le(
     b: primitive_types::U256,
     c: primitive_types::U256,
 ) -> bool {
-    if b >= c {
+    if b > c {
         return false;
     }
     let c_minus_b = c - b;

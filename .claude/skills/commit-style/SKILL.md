@@ -7,7 +7,7 @@ description: GenVM commit message conventions. Use when writing a commit message
 
 Format:
 
-```
+```text
 type(scope): short imperative summary <emoji…>
 ```
 
@@ -23,7 +23,7 @@ type(scope): short imperative summary <emoji…>
 
 Examples:
 
-```
+```text
 feat(calldata): add lazy decoding ✨
 perf(calldata): optimize internally tagged enums ⚡
 fix(executor): report entire fees subtree to host 🐛
