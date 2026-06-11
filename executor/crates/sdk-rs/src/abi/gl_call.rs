@@ -3,8 +3,6 @@
 //! This module defines the payload structures for all gl_call operations,
 //! including web requests, LLM prompts, contract calls, and more.
 
-use std::collections::BTreeMap;
-
 use bytes::Bytes;
 use genlayer_calldata::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -233,6 +231,7 @@ pub mod llm_iface {
         #[serde(rename = "text")]
         #[calldata(rename = "text")]
         Text,
+        // FIXME: deprecate in next release (json will adopt json2 behavior)
         #[serde(rename = "json")]
         #[calldata(rename = "json")]
         JSON,
@@ -525,7 +524,7 @@ pub enum Message {
     },
     CallContract {
         address: calldata::Address,
-        calldata: calldata::Value,
+        calldata: calldata::unparsed::Maybe<calldata::Value>,
         #[calldata(
             serialize_with = encode_storage_type,
             deserialize_with = decode_storage_type
@@ -542,13 +541,13 @@ pub enum Message {
     },
     PostMessage {
         address: calldata::Address,
-        calldata: calldata::Value,
+        calldata: calldata::unparsed::Maybe<calldata::Value>,
         #[cfg_attr(feature = "arbitrary", arbitrary(with = crate::abi::arb::arb_u256))]
         value: primitive_types::U256,
         on: On,
     },
     DeployContract {
-        calldata: calldata::Value,
+        calldata: calldata::unparsed::Maybe<calldata::Value>,
         #[cfg_attr(feature = "arbitrary", arbitrary(with = crate::abi::arb::arb_bytes))]
         code: Bytes,
         #[cfg_attr(feature = "arbitrary", arbitrary(with = crate::abi::arb::arb_u256))]
@@ -560,7 +559,7 @@ pub enum Message {
     EmitEvent {
         #[cfg_attr(feature = "arbitrary", arbitrary(with = crate::abi::arb::arb_vec_bytes))]
         topics: Vec<Bytes>,
-        blob: BTreeMap<String, calldata::Value>,
+        blob: calldata::unparsed::Maybe<calldata::Map<calldata::Value>>,
     },
 
     RunNondet {
@@ -582,10 +581,11 @@ pub enum Message {
     ExecPrompt(llm_iface::PromptPayload),
     ExecPromptTemplate(llm_iface::PromptTemplatePayload),
 
+    // FIXME: deprecate in next release
     #[deprecated(note = "Use UserError. Will be removed before 1.0 release")]
-    Rollback(calldata::Value),
-    UserError(calldata::Value),
-    Return(calldata::Value),
+    Rollback(calldata::unparsed::Maybe<calldata::Value>),
+    UserError(calldata::unparsed::Maybe<calldata::Value>),
+    Return(calldata::unparsed::Maybe<calldata::Value>),
 
     Trace(TracePayload),
 }

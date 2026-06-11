@@ -10,8 +10,7 @@ use symbol_table::GlobalSymbol;
 use crate::{
     config, host, public_abi,
     rt::{self, memlimiter, DetNondet},
-    runners,
-    wasi::{self, genlayer_sdk::SingleVMData},
+    runners, wasi,
 };
 
 mod actions;
@@ -206,6 +205,14 @@ impl Supervisor {
             .and_then(|v| v.get(call_no as usize).cloned())
     }
 
+    /// Records a non-deterministic disagreement for `call_no`, keeping the
+    /// earliest disagreeing call. Mirrors the logic in `nondet_vm_processor`.
+    pub fn mark_nondet_disagreement(&self, call_no: u32) {
+        self.queue
+            .nondet_call_disagree
+            .fetch_min(call_no, std::sync::atomic::Ordering::SeqCst);
+    }
+
     pub fn is_leader(&self) -> bool {
         self.leader_nondet_results.is_none()
     }
@@ -302,64 +309,61 @@ pub async fn spawn(
     zelf: &Arc<Supervisor>,
     vm: Box<wasi::genlayer_sdk::SingleVMData>,
     limiter: rt::memlimiter::Limiter,
-) -> std::result::Result<rt::vm::VM<()>, (anyhow::Error, Box<wasi::genlayer_sdk::SingleVMData>)> {
+) -> std::result::Result<rt::vm::VM<()>, rt::SpawnError> {
     if vm.depth >= public_abi::top_limits::VM_RECURSION {
-        return Err((
-            rt::errors::VMError(public_abi::VmError::oom().ram().limit(), None).into(),
-            vm,
-        ));
+        return Err(rt::SpawnError {
+            error: rt::errors::VMError(public_abi::VmError::oom().ram().limit(), None).into(),
+            state: Box::new(rt::SpawnErrorState::Unspawned(vm)),
+        });
     }
 
     let config_copy = vm.conf;
 
     let engine = zelf.engines.get(vm.conf.is_deterministic);
 
-    let should_capture_fp = std::sync::Arc::new(vm.conf.is_deterministic.into());
-
     let mut store = wasmtime::Store::new(
         engine,
         rt::vm::WasmtimeStoreData {
             limits: limiter.clone(),
-            genlayer_ctx: wasi::Context::new(vm, limiter)
-                .map_err(|(a, b)| (anyhow::Error::from(a), b))?,
+            genlayer_ctx: wasi::Context::new(vm, limiter).map_err(|(a, b)| rt::SpawnError {
+                error: anyhow::Error::from(a),
+                state: Box::new(rt::SpawnErrorState::Unspawned(b)),
+            })?,
             supervisor: zelf.clone(),
         },
         wasmtime::GenVMCtx {
-            should_capture_fp,
             should_quit: zelf.shared_data.cancellation.should_quit.clone(),
         },
     );
 
     store.limiter(|ctx| &mut ctx.limits);
 
-    let mut linker = wasmtime::Linker::new(engine);
+    let mut vm_base = rt::vm::VMBase {
+        store,
+        linker: wasmtime::Linker::new(engine),
+        config_copy,
+    };
 
-    linker.allow_unknown_exports(false);
-    linker.allow_shadowing(false);
+    vm_base.linker.allow_unknown_exports(false);
+    vm_base.linker.allow_shadowing(false);
 
-    if let Err(e) = wasi::add_to_linker_sync(&mut linker, |host: &mut rt::vm::WasmtimeStoreData| {
-        host.genlayer_ctx_mut()
-    }) {
-        return Err((
-            e,
-            Box::new(store.into_data().genlayer_ctx.genlayer_sdk.data),
-        ));
+    if let Err(e) = wasi::add_to_linker_sync(
+        &mut vm_base.linker,
+        |host: &mut rt::vm::WasmtimeStoreData| host.genlayer_ctx_mut(),
+    ) {
+        return Err(rt::SpawnError {
+            error: e,
+            state: Box::new(rt::SpawnErrorState::Spawned(vm_base)),
+        });
     }
 
-    Ok(rt::vm::VM {
-        vm_base: rt::vm::VMBase {
-            store,
-            linker,
-            config_copy,
-        },
-        data: (),
-    })
+    Ok(rt::vm::VM { vm_base, data: () })
 }
 
 pub async fn apply_contract_actions(
     zelf: &std::sync::Arc<Supervisor>,
     mut vm: rt::vm::VM<()>,
-) -> std::result::Result<rt::vm::VM<wasmtime::Instance>, (anyhow::Error, Box<SingleVMData>)> {
+) -> std::result::Result<rt::vm::VM<wasmtime::Instance>, rt::SpawnError> {
     let contract_address = vm
         .vm_base
         .store
@@ -382,10 +386,10 @@ pub async fn apply_contract_actions(
             vm_base: vm.vm_base,
             data: inst,
         }),
-        Err(e) => Err((
-            e,
-            Box::new(vm.vm_base.store.into_data().genlayer_ctx.genlayer_sdk.data),
-        )),
+        Err(e) => Err(rt::SpawnError {
+            error: e,
+            state: Box::new(rt::SpawnErrorState::Spawned(vm.vm_base)),
+        }),
     }
 }
 
@@ -460,7 +464,7 @@ async fn run_single_nondet(
 ) -> anyhow::Result<rt::vm::RunOk> {
     match run_single_nondet_inner(zelf, task, limiter).await {
         Ok(v) => Ok(v.run_ok),
-        Err((e, _)) => rt::errors::unwrap_vm_errors(rt::errors::UnwrapDynError::from(e)),
+        Err(e) => rt::errors::unwrap_vm_errors(rt::errors::UnwrapDynError::from(e)),
     }
 }
 
@@ -468,11 +472,12 @@ async fn run_single_nondet_inner(
     zelf: &std::sync::Arc<Supervisor>,
     task: NonDetVMTask,
     limiter: memlimiter::Limiter,
-) -> std::result::Result<rt::vm::RunResult, (anyhow::Error, Box<wasi::genlayer_sdk::SingleVMData>)>
-{
-    let vm = spawn(zelf, task.task, limiter).await?;
-    let vm = apply_contract_actions(zelf, vm).await?;
-    vm.run().await
+) -> anyhow::Result<rt::vm::RunResult> {
+    let vm = spawn(zelf, task.task, limiter).await.map_err(|e| e.error)?;
+    let vm = apply_contract_actions(zelf, vm)
+        .await
+        .map_err(|e| e.error)?;
+    vm.run().await.map_err(|e| e.error)
 }
 
 async fn nondet_vm_processor(
@@ -518,8 +523,15 @@ async fn nondet_vm_processor(
                 let res = run_single_nondet(&zelf, task, limiter.derived()).await;
 
                 let do_disagree = match res {
-                    Ok(rt::vm::RunOk::Return(v)) if v == [16] => false,
-                    Ok(rt::vm::RunOk::Return(v)) if v == [8] => true,
+                    Ok(rt::vm::RunOk::Return(v)) => {
+                        match v.as_bool() {
+                            None => {
+                                log_warn!("nondet block returned non-bool value, setting to disagree");
+                                true
+                            },
+                            Some(b) => !b,
+                        }
+                    },
                     Ok(other) => {
                         log_warn!(result:? = other; "unexpected result in nondet block, setting to disagree");
                         true

@@ -567,6 +567,10 @@ where
 pub struct Timeout(std::time::Duration);
 
 impl Timeout {
+    pub const fn from_secs(secs: u64) -> Self {
+        Timeout(std::time::Duration::from_secs(secs))
+    }
+
     pub fn to_duration(self) -> std::time::Duration {
         self.0
     }

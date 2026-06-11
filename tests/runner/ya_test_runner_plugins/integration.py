@@ -528,6 +528,8 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 						encoded_nondet.append(
 							bytes([public_abi.ResultCode.VM_ERROR]) + res['value'].encode('utf-8')
 						)
+					elif res['kind'] == 'raw':
+						encoded_nondet.append(bytes(res['value']))
 					else:
 						raise ValueError(f'unknown leader_nondet kind: {res["kind"]}')
 				leader_nondet = encoded_nondet
@@ -565,7 +567,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					request_extra['no_modules'] = True
 				dflt_bucket = 2**200
 				bucket_totals: list[int] = single_conf.get(
-					'bucket_totals', [dflt_bucket, dflt_bucket, dflt_bucket]
+					'bucket_totals', [dflt_bucket, dflt_bucket]
 				)
 
 				default_message_fee_allocation = [
@@ -596,6 +598,7 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					code=code,
 					calldata=calldata_bytes,
 					bucket_totals=bucket_totals,
+					gas_data=single_conf.get('gas_data'),
 					leader_nondet_results=leader_nondet,
 					message_fee_allocation=message_fee_allocation,
 					request_extra=request_extra,

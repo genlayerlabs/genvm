@@ -124,17 +124,24 @@ fn eval_with_node(
         .map_err(|e| anyhow::anyhow!("binding `node` in {label} fee expression: {e}"))
 }
 
-/// A fee bucket: total = `subtract_on_start` (charged once, applied above) +
-/// Σ `delta(attrs)`. `delta` is a function closing over `node`/the prelude.
+/// A fee bucket: total = `subtract_on_start` (charged once by
+/// [`DataLimit::consume_initial`]) + Σ `delta(attrs)`. `delta` is a function
+/// closing over `node`/the prelude.
 struct Bucket {
     bucket_no: u8,
+    subtract_on_start: primitive_types::U256,
     delta: genvm_common::expr::Value,
+    /// VM error reported when `subtract_on_start` underflows the bucket.
+    oom_error: abi::consts::VmError,
+
+    total_consumed: tokio::sync::Mutex<primitive_types::U256>,
 }
 
 impl std::fmt::Debug for Bucket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Bucket")
             .field("bucket_no", &self.bucket_no)
+            .field("subtract_on_start", &self.subtract_on_start)
             .finish()
     }
 }
@@ -143,41 +150,22 @@ fn build_bucket(
     prelude: &str,
     cfg: &crate::config::FeesBucketConfig,
     node: &genvm_common::expr::Value,
-    bucket_totals: &mut [primitive_types::U256],
     oom_error: abi::consts::VmError,
 ) -> anyhow::Result<Bucket> {
-    // Up-front cost: a plain number; charge it now.
-    let start = value_to_u256(eval_with_node(
+    let subtract_on_start = value_to_u256(eval_with_node(
         prelude,
         "subtract_on_start",
         &cfg.subtract_on_start_expr,
         node,
     )?)?;
-    let num_buckets = bucket_totals.len();
-    let total = bucket_totals
-        .get_mut(cfg.bucket_no as usize)
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "bucket_no {} is out of range (have {} buckets)",
-                cfg.bucket_no,
-                num_buckets
-            )
-        })?;
-    *total = total.checked_sub(start).ok_or_else(|| {
-        rt::errors::VMError(
-            oom_error.clone(),
-            Some(anyhow::anyhow!(
-                "subtract_on_start exceeds bucket {} total",
-                cfg.bucket_no
-            )),
-        )
-    })?;
 
-    // Per-change cost: a `\attrs = ...` function.
     let delta = eval_with_node(prelude, "delta", &cfg.delta_expr, node)?;
     Ok(Bucket {
         bucket_no: cfg.bucket_no,
+        subtract_on_start,
         delta,
+        oom_error,
+        total_consumed: Default::default(),
     })
 }
 
@@ -187,8 +175,15 @@ pub struct MessageFeeConsumption {
     pub receipt_fee: primitive_types::U256,
 }
 
-/// Inputs to [`DataLimit::calculate_message_receipt`]. Passed as a struct so the
-/// several `bool`/`u64` arguments are named at the call site.
+#[derive(Debug, Clone, Copy, Default, genlayer_calldata::Encode)]
+pub struct BucketsConsumed {
+    pub storage: primitive_types::U256,
+    pub message_receipt: primitive_types::U256,
+    pub nondet_output: primitive_types::U256,
+    pub message_fee: primitive_types::U256,
+    pub event: primitive_types::U256,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct MessageReceiptParams {
     pub is_internal: bool,
@@ -210,7 +205,7 @@ pub struct DataLimit {
 
 impl DataLimit {
     pub fn new(
-        mut bucket_totals: Vec<primitive_types::U256>,
+        bucket_totals: Vec<primitive_types::U256>,
         fees: crate::config::FeesConfig,
         gas_data: std::collections::BTreeMap<String, String>,
     ) -> anyhow::Result<Self> {
@@ -233,35 +228,30 @@ impl DataLimit {
             prelude,
             &fees.storage,
             &node,
-            &mut bucket_totals,
             abi::consts::VmError::oom().storage(),
         )?;
         let message_receipt = build_bucket(
             prelude,
             &fees.message_receipt,
             &node,
-            &mut bucket_totals,
             abi::consts::VmError::oom().receipt().message().internal(),
         )?;
         let nondet_output = build_bucket(
             prelude,
             &fees.nondet_output,
             &node,
-            &mut bucket_totals,
             abi::consts::VmError::oom().receipt().nondet_output(),
         )?;
         let message_fee = build_bucket(
             prelude,
             &fees.message_fee,
             &node,
-            &mut bucket_totals,
             abi::consts::VmError::oom().fees().internal(),
         )?;
         let event = build_bucket(
             prelude,
             &fees.event,
             &node,
-            &mut bucket_totals,
             abi::consts::VmError::oom().storage(),
         )?;
 
@@ -317,6 +307,9 @@ impl DataLimit {
                 remaining:display = *remaining;
                 "consume_bucket: ok"
             );
+            std::mem::drop(buckets);
+            *bucket.total_consumed.lock().await += cost;
+
             true
         } else {
             log_warn!(
@@ -331,6 +324,58 @@ impl DataLimit {
 
     pub async fn remaining(&self) -> Vec<primitive_types::U256> {
         self.buckets.lock().await.clone()
+    }
+
+    pub async fn consumed(&self) -> BucketsConsumed {
+        BucketsConsumed {
+            storage: *self.storage.total_consumed.lock().await,
+            message_receipt: *self.message_receipt.total_consumed.lock().await,
+            nondet_output: *self.nondet_output.total_consumed.lock().await,
+            message_fee: *self.message_fee.total_consumed.lock().await,
+            event: *self.event.total_consumed.lock().await,
+        }
+    }
+
+    /// Charges every bucket's up-front `subtract_on_start`. Must be called once,
+    /// before execution. Returns the first bucket's OOM [`rt::errors::VMError`]
+    /// whose total cannot cover its initial cost, so the caller can report it to
+    /// the host as a receipt; returns `None` when all initials are charged.
+    pub async fn consume_initial(&self) -> Option<rt::errors::VMError> {
+        for bucket in [
+            &self.storage,
+            &self.message_receipt,
+            &self.nondet_output,
+            &self.message_fee,
+            &self.event,
+        ] {
+            let mut buckets = self.buckets.lock().await;
+            let Some(remaining) = buckets.get_mut(bucket.bucket_no as usize) else {
+                return Some(rt::errors::VMError(
+                    bucket.oom_error.clone(),
+                    Some(anyhow::anyhow!(
+                        "consume_initial: bucket {} index out of range",
+                        bucket.bucket_no
+                    )),
+                ));
+            };
+            match remaining.checked_sub(bucket.subtract_on_start) {
+                Some(v) => {
+                    *remaining = v;
+                    std::mem::drop(buckets);
+                    *bucket.total_consumed.lock().await += bucket.subtract_on_start;
+                }
+                None => {
+                    return Some(rt::errors::VMError(
+                        bucket.oom_error.clone(),
+                        Some(anyhow::anyhow!(
+                            "subtract_on_start exceeds bucket {} total",
+                            bucket.bucket_no
+                        )),
+                    ));
+                }
+            }
+        }
+        None
     }
 
     pub async fn consume_storage_pages(&self, pages: u64) -> anyhow::Result<bool> {
@@ -443,6 +488,10 @@ impl DataLimit {
 
         buckets[self.message_fee.bucket_no as usize] -= cost_fee;
         buckets[self.message_receipt.bucket_no as usize] -= cost_receipt;
+        std::mem::drop(buckets);
+
+        *self.message_fee.total_consumed.lock().await += cost_fee;
+        *self.message_receipt.total_consumed.lock().await += cost_receipt;
 
         log_debug!(
             fee_bucket = self.message_fee.bucket_no,

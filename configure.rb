@@ -415,32 +415,26 @@ def generator.register_cargo(rel_path, extra_args: [], build_to: nil)
 		add_implicit_dependency all_files
 	end
 
-	build(:cargo, to.join('clippy.trg')) do
+	build(:cargo, 'target/' + rel_path + '/clippy') do
 		add_dependency files_trg
 		var :subcommand, 'clippy'
 		var :wd, dir
 		var :extra_args, extra_args + ['--', '-A', 'clippy::upper_case_acronyms', '-Dwarnings']
 		var :env, Ninja::RawStr.new('RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE=/dev/null')
-	end
 
-	build(:phony, 'target/' + rel_path + '/clippy') do
-		add_dependency to.join('clippy.trg')
 		description 'Run cargo clippy for ' + rel_path
 	end
-	$all_clippy.push(to.join('clippy.trg'))
+	$all_clippy.push('target/' + rel_path + '/clippy')
 
-	build(:cargo, to.join('clippy.fix.trg')) do
-		add_dependency files_trg
+	build(:cargo, 'target/' + rel_path + '/clippy/fix') do
 		var :subcommand, 'clippy'
 		var :wd, dir
 		var :extra_args, extra_args + ['--fix', '--allow-dirty', '--allow-staged', '--', '-A', 'clippy::upper_case_acronyms', '-Dwarnings']
 		var :env, Ninja::RawStr.new('RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE=/dev/null')
 	end
-	$all_clippy_fix.push(to.join('clippy.fix.trg'))
+	$all_clippy_fix.push('target/' + rel_path + '/clippy/fix')
 
 	build(:CUSTOM_COMMAND, 'target/' + rel_path + '/fmt') do
-		add_dependency files_trg
-
 		var :command, [
 			'cd', dir,
 			Ninja::AND, 'cargo', 'fmt',
@@ -472,6 +466,7 @@ end
 
 generator.register_cargo('executor', extra_args: executor_extra_args, build_to: 'out/executor/vTEST/bin/genvm')
 generator.register_cargo('executor/crates/calldata')
+generator.register_cargo('executor/crates/calldata-derive')
 generator.register_cargo('executor/crates/common')
 generator.register_cargo('executor/crates/sdk-rs')
 generator.register_cargo('modules/implementation', extra_args: ['--features', 'vendored-lua'], build_to: 'out/bin/genvm-modules')

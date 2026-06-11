@@ -6,12 +6,14 @@ use genvm_common::sync::DArc;
 use genvm_common::*;
 
 use genvm_modules_interfaces::GenericValue;
+use sha3::digest::Update;
 use wiggle::GuestError;
 
 use crate::host::{self, SlotID};
 use crate::wasi::json_to_calldata::json_map_to_calldata;
 use crate::{anyhow_to_wasmtime, calldata, public_abi, rt};
 
+use genlayer_calldata::codec::Encode;
 pub use genlayer_sdk::abi::entry::ExtendedMessage;
 use genlayer_sdk::abi::{self, gl_call};
 
@@ -256,8 +258,8 @@ pub struct SingleVMData {
     pub message_data: ExtendedMessage,
     pub supervisor: Arc<rt::supervisor::Supervisor>,
     pub storage: rt::vm::storage::Storage<StorageHostHolder>,
-    pub should_capture_fp: Arc<std::sync::atomic::AtomicBool>,
     pub accumulator: VMDataAccumulator,
+    pub det_subvm_hashes: sha3::Sha3_256,
 }
 
 pub struct Context {
@@ -393,7 +395,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct ContractReturn(pub Vec<u8>);
+pub struct ContractReturn(pub calldata::unparsed::Maybe<calldata::Value>);
 
 impl std::error::Error for ContractReturn {}
 
@@ -506,6 +508,25 @@ fn file_fd_none() -> generated::types::Fd {
     generated::types::Fd::from(NO_FILE)
 }
 
+/// Returns `true` iff `a + b <= c`, computed without wrapping.
+///
+/// `a + b` is done with checked arithmetic: on overflow the sum cannot fit in a
+/// `U256` and is therefore strictly greater than any real `c`, so the result is
+/// `false`. This avoids the wraparound that would let an oversized `a` (e.g.
+/// `2^256 - 1`) appear to satisfy a balance check.
+#[inline]
+fn checked_sum_le(
+    a: primitive_types::U256,
+    b: primitive_types::U256,
+    c: primitive_types::U256,
+) -> bool {
+    if b > c {
+        return false;
+    }
+    let c_minus_b = c - b;
+    a <= c_minus_b
+}
+
 #[allow(unused_variables)]
 impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
     async fn gl_call(
@@ -556,8 +577,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         .get_balance_impl(self.context.data.message_data.message.contract_address)
                         .await?;
 
-                    if value + self.context.data.accumulator.messages_value_decremented > my_balance
-                    {
+                    if !checked_sum_le(
+                        value,
+                        self.context.data.accumulator.messages_value_decremented,
+                        my_balance,
+                    ) {
                         return Err(generated::types::Errno::Inbalance.into());
                     }
                 }
@@ -616,7 +640,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         fee_params: matched_params,
                     });
 
-                self.context.data.accumulator.messages_value_decremented += value;
+                self.context.data.accumulator.messages_value_decremented = self
+                    .context
+                    .data
+                    .accumulator
+                    .messages_value_decremented
+                    .saturating_add(value);
                 Ok(file_fd_none())
             }
             gl_call::Message::EthCall { address, calldata } => {
@@ -664,7 +693,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let my_conf = self.context.data.conf;
 
-                let calldata_encoded = calldata::encode(&calldata);
+                let calldata_encoded = calldata::encode_obj(&calldata);
 
                 let mut my_data = self
                     .context
@@ -673,7 +702,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     .fork(public_abi::EntryKind::Main, calldata_encoded.into());
                 my_data.message.stack.push(my_data.message.contract_address);
 
-                let calldata_encoded = calldata::encode(&calldata);
+                let calldata_encoded = calldata::encode_obj(&calldata);
 
                 let vm_data = Box::new(SingleVMData {
                     depth: self.context.data.depth + 1,
@@ -714,7 +743,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         ),
                     ),
                     supervisor: supervisor.clone(),
-                    should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(true)),
                     accumulator: VMDataAccumulator {
                         data_fees_limit: self.context.data.accumulator.data_fees_limit.clone(),
                         messages_value_decremented: self
@@ -725,11 +753,15 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         emissions: Vec::new(),
                         message_fee_allocation: Vec::new(),
                     },
+                    det_subvm_hashes: Default::default(),
                 });
 
                 let res = rt::spawn_apply_run(&supervisor, vm_data)
                     .await
                     .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
+                let hash = res.small_hash();
+                self.context.data.det_subvm_hashes.update(&hash);
 
                 self.set_vm_run_result(res.run_ok).map(|x| x.0)
             }
@@ -769,17 +801,10 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 }
 
                 let mut enc = calldata::Encoder::new(CountingWriter(0));
-
-                let val = calldata::Value::Map(blob);
-                calldata::encode_to(&mut enc, &val).unwrap_or_else(|e| match e {});
-                let blob = match val {
-                    calldata::Value::Map(m) => m,
-                    _ => unreachable!(),
-                };
+                blob.encode(&mut enc).unwrap_or_else(|e| match e {});
+                let blob_size = enc.into_inner().0 as u64;
 
                 let supervisor = self.context.data.supervisor.clone();
-
-                let blob_size = enc.into_inner().0 as u64;
                 let topics_count = topics.len() as u64;
 
                 let storage_fee = supervisor
@@ -822,8 +847,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let sd = self.context.data.supervisor.shared_data.clone();
 
-                let method_name = calldata
-                    .as_map()
+                // Peek the (possibly deferred) calldata to derive the fee call key.
+                let calldata_materialized = calldata.clone().materialize().ok();
+                let method_name = calldata_materialized
+                    .as_ref()
+                    .and_then(|x| x.as_map())
                     .and_then(|x| x.get("method"))
                     .and_then(|x| x.as_str());
                 let call_key = if let Some(method_name) = method_name {
@@ -838,8 +866,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         .get_balance_impl(self.context.data.message_data.message.contract_address)
                         .await?;
 
-                    if value + self.context.data.accumulator.messages_value_decremented > my_balance
-                    {
+                    if !checked_sum_le(
+                        value,
+                        self.context.data.accumulator.messages_value_decremented,
+                        my_balance,
+                    ) {
                         return Err(generated::types::Errno::Inbalance.into());
                     }
                 }
@@ -873,7 +904,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 );
 
                 let mut enc = calldata::Encoder::new(calldata::CounterWriter(0));
-                calldata::encode_to(&mut enc, &calldata).unwrap_or_else(|e| match e {});
+                calldata::codec::Encode::encode(&calldata, &mut enc).unwrap_or_else(|e| match e {});
                 let calldata_length = enc.into_inner().0;
 
                 let fee_params = (*matched_params).clone();
@@ -915,7 +946,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     "PostMessage emission pushed to accumulator"
                 );
 
-                self.context.data.accumulator.messages_value_decremented += value;
+                self.context.data.accumulator.messages_value_decremented = self
+                    .context
+                    .data
+                    .accumulator
+                    .messages_value_decremented
+                    .saturating_add(value);
 
                 Ok(file_fd_none())
             }
@@ -941,8 +977,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         .get_balance_impl(self.context.data.message_data.message.contract_address)
                         .await?;
 
-                    if value + self.context.data.accumulator.messages_value_decremented > my_balance
-                    {
+                    if !checked_sum_le(
+                        value,
+                        self.context.data.accumulator.messages_value_decremented,
+                        my_balance,
+                    ) {
                         return Err(generated::types::Errno::Inbalance.into());
                     }
                 }
@@ -970,7 +1009,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let code_length = code.len() as u64;
                 let mut enc = calldata::Encoder::new(calldata::CounterWriter(0));
-                calldata::encode_to(&mut enc, &calldata).unwrap_or_else(|e| match e {});
+                calldata::codec::Encode::encode(&calldata, &mut enc).unwrap_or_else(|e| match e {});
                 let calldata_length = enc.into_inner().0;
 
                 let fee_params = (*matched_params).clone();
@@ -1006,7 +1045,12 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                     },
                 );
 
-                self.context.data.accumulator.messages_value_decremented += value;
+                self.context.data.accumulator.messages_value_decremented = self
+                    .context
+                    .data
+                    .accumulator
+                    .messages_value_decremented
+                    .saturating_add(value);
 
                 Ok(file_fd_none())
             }
@@ -1289,19 +1333,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             gl_call::Message::UserError(msg) => Err(generated::types::Error::trap(
                 crate::anyhow_to_wasmtime(rt::errors::UserError(msg).into()),
             )),
-            gl_call::Message::Return(value) => {
-                let ret = calldata::encode(&value);
-
-                // for return we are not interested in it
-                self.context
-                    .data
-                    .should_capture_fp
-                    .store(false, std::sync::atomic::Ordering::Relaxed);
-
-                Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
-                    ContractReturn(ret).into(),
-                )))
-            }
+            gl_call::Message::Return(value) => Err(generated::types::Error::trap(
+                crate::anyhow_to_wasmtime(ContractReturn(value).into()),
+            )),
             gl_call::Message::RunNondet {
                 data_leader,
                 data_validator,
@@ -1581,11 +1615,42 @@ impl ContextVFS<'_> {
                         .into(),
                 )));
             }
+            Some(data) if data.is_empty() => {
+                // A zero-length leader result is malformed: it carries no result
+                // code byte to dispatch on. It is contract-triggerable, so it must
+                // not panic via out-of-bounds indexing. In `sync` mode there are no
+                // validators to disagree, so surface a canonical VMError; otherwise
+                // record a non-deterministic disagreement and return that VMError to
+                // the validator's contract.
+                if !self.context.data.supervisor.shared_data.is_sync {
+                    self.context
+                        .data
+                        .supervisor
+                        .mark_nondet_disagreement(call_no);
+                }
+
+                let result = rt::vm::RunOk::VMError(
+                    abi::consts::VmError::absent_leader_nondet_output(),
+                    None,
+                );
+
+                consume_nondet_output(
+                    &self.context.data.supervisor.shared_data,
+                    result.as_bytes().len() as u64,
+                )
+                .await?;
+
+                return self.set_vm_run_result(result).map(|x| x.0);
+            }
             Some(data) => {
                 use crate::public_abi::ResultCode;
                 let rest = &data[1..];
                 let res = match data[0] {
-                    x if x == ResultCode::Return as u8 => rt::vm::RunOk::Return(rest.into()),
+                    x if x == ResultCode::Return as u8 => {
+                        rt::vm::RunOk::Return(calldata::unparsed::Maybe::Checked(
+                            calldata::unparsed::Raw(bytes::Bytes::copy_from_slice(rest)),
+                        ))
+                    }
                     x if x == ResultCode::UserError as u8 => {
                         let val = if rest.len() >= 4 && rest[..4] == [0u8; 4] {
                             calldata::decode(&rest[4..]).map_err(|e| {
@@ -1594,6 +1659,7 @@ impl ContextVFS<'_> {
                                 ))
                             })?
                         } else {
+                            // FIXME: deprecate in next release (raw-string user error encoding)
                             calldata::Value::Str(String::from(std::str::from_utf8(rest).map_err(
                                 |e| {
                                     generated::types::Error::trap(crate::anyhow_to_wasmtime(
@@ -1602,7 +1668,7 @@ impl ContextVFS<'_> {
                                 },
                             )?))
                         };
-                        rt::vm::RunOk::UserError(val)
+                        rt::vm::RunOk::UserError(calldata::unparsed::Maybe::Materialized(val))
                     }
                     x if x == ResultCode::VmError as u8 => {
                         let code = std::str::from_utf8(rest).map_err(|e| {
@@ -1684,9 +1750,9 @@ impl ContextVFS<'_> {
                 },
                 message_data,
                 supervisor: supervisor.clone(),
-                should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 storage: storage_checkpoint,
                 accumulator: fake_accum,
+                det_subvm_hashes: Default::default(), // won't be used
             });
 
             let task_done = Arc::new(tokio::sync::Notify::new());
@@ -1771,14 +1837,19 @@ impl ContextVFS<'_> {
             },
             message_data,
             supervisor: supervisor.clone(),
-            should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             storage: storage_checkpoint,
             accumulator: stolen_data,
+            det_subvm_hashes: Default::default(),
         });
 
         let my_res = rt::spawn_apply_run(&supervisor, vm_data)
             .await
             .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
+        if self.context.data.conf.is_deterministic {
+            let hash = my_res.small_hash();
+            self.context.data.det_subvm_hashes.update(&hash);
+        }
 
         self.context.data.accumulator = my_res.vm_data.accumulator;
         self.context.data.storage = my_res.vm_data.storage;

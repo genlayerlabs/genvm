@@ -16,6 +16,8 @@ pub struct Inner {
     _ctx: Arc<ctx::CtxPart>,
     ctx_val: mlua::Value,
 
+    max_wait_after_loaded: std::time::Duration,
+
     metrics: sync::DArc<super::Metrics>,
 }
 
@@ -54,7 +56,18 @@ impl common::MessageHandler<web_iface::Message, FullResponse> for Handler {
                     vm.to_value_with(&payload.mode, scripting::DEFAULT_LUA_SER_OPTIONS)?,
                 )?;
                 payload_lua.set("url", payload.url)?;
-                payload_lua.set("wait_after_loaded", payload.wait_after_loaded.as_secs_f64())?;
+
+                let max_wait = self.0.max_wait_after_loaded.as_secs_f64();
+                let mut wait_after_loaded = payload.wait_after_loaded.as_secs_f64();
+                if wait_after_loaded > max_wait {
+                    log_warn!(
+                        requested = wait_after_loaded,
+                        max = max_wait;
+                        "wait_after_loaded clamped to maximum"
+                    );
+                    wait_after_loaded = max_wait;
+                }
+                payload_lua.set("wait_after_loaded", wait_after_loaded)?;
                 payload_lua.set("size_limit", size_limit)?;
 
                 let res: mlua::Value = self
@@ -139,6 +152,7 @@ impl common::MessageHandlerProvider<genvm_modules_interfaces::web::Message, Full
             user_vm,
             _ctx: handler_ctx,
             ctx_val,
+            max_wait_after_loaded: self.config.max_wait_after_loaded.to_duration(),
             metrics: sync::DArc::new(super::Metrics::default()),
         })))
     }

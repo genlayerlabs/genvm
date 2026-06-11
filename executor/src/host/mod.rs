@@ -147,13 +147,14 @@ pub fn all_useful_work_done() {
     std::process::exit(0);
 }
 
-#[derive(Debug, Clone, serde::Serialize, genlayer_calldata::Encode)]
+#[derive(Debug, Clone, genlayer_calldata::Encode)]
 pub struct FullResult {
     pub execution_hash: bytes::Bytes,
 
     pub kind: public_abi::ResultCode,
-    pub data: calldata::Value,
-    pub fingerprint: Option<rt::errors::Fingerprint>,
+    pub data: calldata::unparsed::Maybe<calldata::Value>,
+    pub backtrace: Option<rt::errors::Backtrace>,
+    pub wasm_store_hashes: rt::errors::WasmStoreHashes,
     pub storage_changes: Vec<rt::vm::storage::Delta>,
 
     pub emissions: Vec<domain::ExecutionEmission>,
@@ -162,6 +163,7 @@ pub struct FullResult {
     pub nondet_results: Vec<bytes::Bytes>,
 
     pub data_fees_remaining: Vec<primitive_types::U256>,
+    pub data_fees_consumed: rt::fees::BucketsConsumed,
 
     pub llm_consumption: primitive_types::U256,
 }
@@ -171,26 +173,17 @@ impl FullResult {
         Self {
             execution_hash: bytes::Bytes::new(),
             kind: public_abi::ResultCode::InternalError,
-            data: calldata::Value::Str(msg),
-            fingerprint: None,
+            data: calldata::Value::Str(msg).into(),
+            backtrace: None,
+            wasm_store_hashes: rt::errors::WasmStoreHashes::default(),
             storage_changes: Vec::new(),
             emissions: Vec::new(),
             nondet_disagreement: None,
             nondet_results: Vec::new(),
             data_fees_remaining: Vec::new(),
+            data_fees_consumed: rt::fees::BucketsConsumed::default(),
             llm_consumption: primitive_types::U256::zero(),
         }
-    }
-}
-
-struct Sha3Writer(sha3::Sha3_256);
-
-impl calldata::Writer for Sha3Writer {
-    type Error = std::convert::Infallible;
-
-    fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
-        sha3::Digest::update(&mut self.0, data);
-        Ok(())
     }
 }
 
@@ -200,37 +193,49 @@ impl FullResult {
         nondet_results: Vec<bytes::Bytes>,
         nondet_disagreement: Option<u32>,
         data_fees_remaining: Vec<primitive_types::U256>,
+        data_fees_consumed: rt::fees::BucketsConsumed,
         llm_consumption: primitive_types::U256,
     ) -> Self {
-        #[derive(serde::Serialize)]
         struct Hashable<'a> {
-            kind: &'a public_abi::ResultCode,
-            data: &'a calldata::Value,
-            fingerprint: &'a Option<rt::errors::Fingerprint>,
-            storage_changes: &'a Vec<rt::vm::storage::Delta>,
+            backtrace: &'a Option<rt::errors::Backtrace>,
+            data: &'a calldata::unparsed::Maybe<calldata::Value>,
+            data_fees_consumed: &'a rt::fees::BucketsConsumed,
             data_fees_remaining: &'a Vec<primitive_types::U256>,
+            kind: &'a public_abi::ResultCode,
+            wasm_store_hashes: &'a rt::errors::WasmStoreHashes,
+            storage_changes: &'a Vec<rt::vm::storage::Delta>,
+            subvm_hashes: &'a bytes::Bytes,
         }
 
         impl<W: calldata::Writer> calldata::codec::Encode<W> for Hashable<'_> {
             type Error = W::Error;
 
             fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
-                enc.start_map(5)?;
+                enc.start_map(8)?;
+
+                enc.push_map_k("backtrace")?;
+                calldata::codec::Encode::encode(self.backtrace, enc)?;
 
                 enc.push_map_k("data")?;
                 calldata::codec::Encode::encode(self.data, enc)?;
 
+                enc.push_map_k("data_fees_consumed")?;
+                calldata::codec::Encode::encode(self.data_fees_consumed, enc)?;
+
                 enc.push_map_k("data_fees_remaining")?;
                 calldata::codec::Encode::encode(self.data_fees_remaining, enc)?;
-
-                enc.push_map_k("fingerprint")?;
-                calldata::codec::Encode::encode(self.fingerprint, enc)?;
 
                 enc.push_map_k("kind")?;
                 calldata::codec::Encode::encode(self.kind, enc)?;
 
                 enc.push_map_k("storage_changes")?;
                 calldata::codec::Encode::encode(self.storage_changes, enc)?;
+
+                enc.push_map_k("subvm_hashes")?;
+                enc.push_bytes(self.subvm_hashes)?;
+
+                enc.push_map_k("wasm_store_hashes")?;
+                calldata::codec::Encode::encode(self.wasm_store_hashes, enc)?;
 
                 Ok(())
             }
@@ -239,31 +244,36 @@ impl FullResult {
         let hashable = Hashable {
             kind: &rt_result.kind,
             data: &rt_result.data,
-            fingerprint: &rt_result.fingerprint,
+            backtrace: &rt_result.backtrace,
+            wasm_store_hashes: &rt_result.wasm_store_hashes,
             storage_changes: &rt_result.storage_changes,
+            subvm_hashes: &rt_result.subvm_hashes,
             data_fees_remaining: &data_fees_remaining,
+            data_fees_consumed: &data_fees_consumed,
         };
 
         let as_value = calldata::to_value(&hashable);
-        let mut enc = calldata::Encoder::new(Sha3Writer(sha3::Digest::new()));
+        let mut hasher = rt::vm::Sha3Writer(sha3::Digest::new());
+        let mut enc = calldata::Encoder::new(&mut hasher);
         match calldata::encode_to(&mut enc, &as_value) {
             Ok(()) => {}
             Err(e) => match e {},
         }
-        let execution_hash =
-            bytes::Bytes::from(sha3::Digest::finalize(enc.into_inner().0).to_vec());
+        let execution_hash = bytes::Bytes::from(sha3::Digest::finalize(hasher.0).to_vec());
 
         Self {
             execution_hash,
 
             data: rt_result.data,
-            fingerprint: rt_result.fingerprint,
+            backtrace: rt_result.backtrace,
+            wasm_store_hashes: rt_result.wasm_store_hashes,
             kind: rt_result.kind,
             storage_changes: rt_result.storage_changes,
             emissions: rt_result.emissions,
             nondet_results,
             nondet_disagreement,
             data_fees_remaining,
+            data_fees_consumed,
             llm_consumption,
         }
     }

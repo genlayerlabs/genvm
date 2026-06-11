@@ -135,10 +135,12 @@ Functions
 ``random_get`` Function
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-Deterministic mode: mt19937 that is initialized with ``GenLayer`` as 8 ascii octets.
-The seed is fixed across runs and does **not** mix in the transaction hash, block
-height or message data — two deterministic runs of the same contract see the same
-``random_get`` stream. Non-deterministic randomness MUST be obtained via
+Deterministic mode: mt19937 that is initialized from ``sha3-256`` of the VM's stdin
+(the calldata-encoded message data). The 32-byte digest is consumed as 8
+little-endian ``u32`` words that form the mt19937 slice seed. The seed is fixed at
+VM construction time and is fully determined by the VM inputs, so two deterministic
+runs with identical stdin see the same ``random_get`` stream, while differing inputs
+produce diverging streams. Non-deterministic randomness MUST be obtained via
 :ref:`gvm-def-non-det-mode` calls.
 
 Non-deterministic mode: cryptographically secure random number generator,

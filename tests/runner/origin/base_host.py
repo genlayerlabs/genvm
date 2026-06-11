@@ -454,7 +454,7 @@ async def run_genvm(
 	gas_data: dict[str, str] | None = None,
 	host: str,
 	extra_args: list[str] = [],
-	# default config fee buckets use bucket_no 0, 1 and 2
+	# default config fee buckets use bucket_no 0 and 1
 	bucket_totals: list[int],
 	code: bytes | None = None,
 	calldata: bytes,

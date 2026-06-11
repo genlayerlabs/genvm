@@ -7,6 +7,18 @@ local sqlite3 = require("lsqlite3")
 -- Instead, each genvm creates a session, which has a single `ctx` object,
 -- which is preserved across multiple calls
 
+--- Gas (gen) charged per token for a given provider/model.
+--- TODO: per-model pricing is not configured yet, so this always returns 0.
+--- Once a price table exists, look up the gen-per-token rate here so that token
+--- usage is converted into gen and charged to the host as fuel.
+---@param ctx any execution context
+---@param provider string provider id
+---@param model string model name
+---@return number|Rat gen charged per token
+local function gen_per_token(ctx, provider, model)
+	return rat.zero
+end
+
 local function get_or_create_stats(ctx, provider, model)
 	local key = provider .. "/" .. model
 	local entry = ctx.stats[key]
@@ -136,9 +148,12 @@ local function just_in_backend(ctx, mapped_prompt, remaining_gen)
 			request = request,
 		}
 		local success, result = pcall(exec_update_policy_data, ctx, request, function(res)
-			-- TODO: here we need to convert tokens into
-			-- gen
-			return res.consumed_gen
+			-- convert token usage into gen using the per-model rate, and report it
+			-- back as the gen consumed by this call (charged to the host as fuel)
+			local total_tokens = (res.tokens and res.tokens.total) or 0
+			local consumed_gen = rat.new(total_tokens) * gen_per_token(ctx, request.provider, request.model)
+			res.consumed_gen = consumed_gen
+			return consumed_gen
 		end)
 
 		lib.log {

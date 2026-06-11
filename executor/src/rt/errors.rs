@@ -122,43 +122,42 @@ impl UnwrapDynError {
     }
 }
 
-pub fn unwrap_vm_errors_fingerprint(
-    err: UnwrapDynError,
-) -> anyhow::Result<(rt::vm::RunOk, Fingerprint)> {
-    let err = err;
-
-    let mut fingerprint = Fingerprint {
-        frames: Vec::new(),
-        module_instances: BTreeMap::new(),
+/// Recover the call stack carried by a trapping error, if any. This is
+/// independent of the wasm store and can be done even after it is consumed.
+pub fn extract_backtrace(err: &UnwrapDynError) -> Option<Backtrace> {
+    let Some(bt) = err.downcast_ref::<wasmtime::WasmBacktrace>() else {
+        log_warn!("no backtrace attached");
+        return None;
     };
 
-    if let Some(bt) = err.downcast_ref::<wasmtime::WasmBacktrace>() {
-        let frames = bt
-            .frames()
-            .iter()
-            .map(|f| Frame {
-                module_name: f.module().name().unwrap_or("").to_string(),
-                func: f.func_index(),
-            })
-            .collect();
+    let frames = bt
+        .frames()
+        .iter()
+        .map(|f| Frame {
+            module_name: f.module().name().unwrap_or("").to_string(),
+            func: f.func_index(),
+        })
+        .collect();
 
-        fingerprint.frames = frames;
-    } else {
-        log_warn!("no backtrace attached");
-    }
-    if let Some(fp) = err.downcast_ref::<wasmtime::Fingerprint>() {
-        fingerprint.module_instances = fp.module_instances.clone();
-    } else {
-        log_warn!("no memories attached");
-    }
+    Some(Backtrace { frames })
+}
 
-    log_debug!(fp:serde = fingerprint, frames = fingerprint.frames.len(); "captured fingerprint");
+pub fn unwrap_vm_errors_backtrace(
+    err: UnwrapDynError,
+) -> anyhow::Result<(rt::vm::RunOk, Option<Backtrace>)> {
+    let backtrace = extract_backtrace(&err);
 
-    Ok((unwrap_vm_errors(err)?, fingerprint))
+    log_debug!(
+        bt:serde = backtrace,
+        frames = backtrace.as_ref().map_or(0, |b| b.frames.len());
+        "captured backtrace"
+    );
+
+    Ok((unwrap_vm_errors(err)?, backtrace))
 }
 
 #[derive(Debug)]
-pub struct UserError(pub calldata::Value);
+pub struct UserError(pub calldata::unparsed::Maybe<calldata::Value>);
 
 impl std::error::Error for UserError {}
 
@@ -185,18 +184,36 @@ impl<W: calldata::Writer> calldata::codec::Encode<W> for SingleMemoryFP {
     }
 }
 
+/// The wasm call stack captured at the point of a trap. Carried by the error
+/// itself, so it survives even when the store is gone.
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
-pub struct Fingerprint {
+#[serde(transparent)]
+pub struct Backtrace {
     pub frames: Vec<Frame>,
-
-    pub module_instances: BTreeMap<String, wasmtime::ModuleFingerprint>,
 }
 
-fn encode_memory_fingerprint<W: calldata::Writer>(
-    mf: &wasmtime::MemoryFingerprint,
-    enc: &mut calldata::Encoder<W>,
-) -> Result<(), W::Error> {
-    enc.push_bytes(&mf.0)
+impl<W: calldata::Writer> calldata::codec::Encode<W> for Backtrace {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
+        calldata::codec::Encode::encode(&self.frames, enc)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct WasmStoreHashes(pub BTreeMap<String, wasmtime::ModuleFingerprint>);
+
+impl<W: calldata::Writer> calldata::codec::Encode<W> for WasmStoreHashes {
+    type Error = W::Error;
+
+    fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
+        enc.start_map(self.0.len() as u64)?;
+        for (k, v) in &self.0 {
+            enc.push_map_k(k)?;
+            encode_module_fingerprint(v, enc)?;
+        }
+        Ok(())
+    }
 }
 
 fn encode_module_fingerprint<W: calldata::Writer>(
@@ -208,27 +225,7 @@ fn encode_module_fingerprint<W: calldata::Writer>(
     enc.push_map_k("memories")?;
     enc.start_array(mfp.memories.len() as u64)?;
     for mem in &mfp.memories {
-        encode_memory_fingerprint(mem, enc)?;
+        enc.push_bytes(&mem.0)?;
     }
     Ok(())
-}
-
-impl<W: calldata::Writer> calldata::codec::Encode<W> for Fingerprint {
-    type Error = W::Error;
-
-    fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
-        enc.start_map(2)?;
-
-        enc.push_map_k("frames")?;
-        calldata::codec::Encode::encode(&self.frames, enc)?;
-
-        enc.push_map_k("module_instances")?;
-        enc.start_map(self.module_instances.len() as u64)?;
-        for (k, v) in &self.module_instances {
-            enc.push_map_k(k)?;
-            encode_module_fingerprint(v, enc)?;
-        }
-
-        Ok(())
-    }
 }

@@ -32,6 +32,11 @@ const STATUS_I_AM_A_TEAPOT = 418;
 
 const DEFAULT_MAX_PAGE_HEAP_MB = envInt('GVM_WEBDRIVER_MAX_PAGE_HEAP_MB', 1024);
 
+const MAX_WAIT_AFTER_LOADED_MS = envDurationMs(
+	'GVM_WEBDRIVER_MAX_WAIT_AFTER_LOADED',
+	'60s',
+);
+
 const HEALTHCHECK_CACHE_DURATION_MS = envDurationMs(
 	'GVM_WEBDRIVER_HEALTHCHECK_CACHE_DURATION',
 	'5m',
@@ -251,9 +256,16 @@ async function renderPageWithBrowser(
 			const statusCode = navigationResult.status;
 
 			if (statusIsGood(statusCode) && waitAfterLoaded > 0) {
-				await new Promise((resolve) =>
-					setTimeout(resolve, Math.floor(waitAfterLoaded * 1000)),
-				);
+				let waitMs = Math.floor(waitAfterLoaded * 1000);
+				if (waitMs > MAX_WAIT_AFTER_LOADED_MS) {
+					logger.log('warn', 'waitAfterLoaded clamped to maximum', {
+						url: targetUrl,
+						requested: formatDurationMs(waitMs),
+						max: formatDurationMs(MAX_WAIT_AFTER_LOADED_MS),
+					});
+					waitMs = MAX_WAIT_AFTER_LOADED_MS;
+				}
+				await new Promise((resolve) => setTimeout(resolve, waitMs));
 			}
 
 			let data;

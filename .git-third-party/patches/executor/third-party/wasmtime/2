@@ -1,0 +1,147 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: kp2pml30 <kp2pml30@gmail.com>
+Date: Wed, 10 Jun 2026 10:16:22 +0900
+Subject: [PATCH] =?UTF-8?q?feat(wasm):=20expose=20memory=20fingerprint=20v?=
+ =?UTF-8?q?ia=20Store::fingerprint=20=E2=9C=A8?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Move memory fingerprinting off the error path: instead of hashing all
+linear memories on trap and attaching the result to the error, expose it
+as Store::fingerprint so callers take it on demand from the still-live
+store after execution finishes.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+---
+ crates/wasmtime/src/runtime/func.rs  | 95 +++++++++++++++-------------
+ crates/wasmtime/src/runtime/store.rs |  2 -
+ 2 files changed, 50 insertions(+), 47 deletions(-)
+
+diff --git a/crates/wasmtime/src/runtime/func.rs b/crates/wasmtime/src/runtime/func.rs
+index c19cf62f..c09f17b5 100644
+--- a/crates/wasmtime/src/runtime/func.rs
++++ b/crates/wasmtime/src/runtime/func.rs
+@@ -1418,6 +1418,53 @@ impl std::fmt::Display for Fingerprint {
+     }
+ }
+ 
++impl<T: 'static> crate::Store<T> {
++    /// Computes a [`Fingerprint`] of the current state of all wasm linear
++    /// memories across every instance in this store.
++    ///
++    /// Every unshared linear memory of every instance is hashed (BLAKE3) and
++    /// grouped by module name; shared memories are recorded with an empty hash.
++    pub fn fingerprint(&mut self) -> Fingerprint {
++        self.as_context_mut().fingerprint()
++    }
++}
++
++impl<'a, T: 'static> StoreContextMut<'a, T> {
++    /// See [`Store::fingerprint`].
++    pub fn fingerprint(&mut self) -> Fingerprint {
++        use crate::runtime::vm::VMStore;
++
++        let store = self;
++
++        let mut fp = Fingerprint {
++            module_instances: BTreeMap::new(),
++        };
++
++        for inst in store.0.all_instances().collect::<Vec<_>>() {
++            let mut mod_fp = ModuleFingerprint {
++                memories: Vec::new(),
++            };
++
++            let inst_mod_name = inst.module(&mut store.0).name().unwrap_or("").to_owned();
++
++            for mem in inst.all_memories(store.0.store_opaque_mut()).collect::<Vec<_>>() {
++                let data = match &mem.1 {
++                    crate::runtime::vm::ExportMemory::Unshared(m) => m.data(&store),
++                    crate::runtime::vm::ExportMemory::Shared(_sm, _) => &[],
++                };
++
++                mod_fp
++                    .memories
++                    .push(MemoryFingerprint(blake3::hash(data).into()));
++            }
++
++            fp.module_instances.insert(inst_mod_name, mod_fp);
++        }
++
++        fp
++    }
++}
++
+ /// Prepares for entrance into WebAssembly.
+ ///
+ /// This function will set up context such that `closure` is allowed to call a
+@@ -1451,52 +1498,10 @@ pub(crate) fn invoke_wasm_and_catch_traps<T>(
+     }
+     core::mem::drop(previous_runtime_state);
+     store.0.call_hook(CallHook::ReturningFromWasm)?;
++    // The memory fingerprint is no longer captured here and attached to the
++    // error. Instead it is taken on demand from the store via
++    // [`Store::fingerprint`] once execution has finished.
+     result
+-            .map_err(|e| {
+-                use crate::runtime::vm::VMStore;
+-
+-                if !store.0.engine().config().wasm_backtrace {
+-                    return e;
+-                }
+-
+-                if !store.0.store_opaque().genvm_ctx.should_capture_fp.load(std::sync::atomic::Ordering::Acquire) {
+-                    return e;
+-                }
+-
+-                let mut fp = Fingerprint {
+-                    module_instances: BTreeMap::new(),
+-                };
+-
+-                for inst in store.0.all_instances().collect::<Vec<_>>() {
+-                    let mut mod_fp = ModuleFingerprint {
+-                        memories: Vec::new(),
+-                    };
+-
+-                    let inst_mod_name = inst.module(&mut store.0).name().unwrap_or("").to_owned();
+-
+-                    for mem in inst.all_memories(store.0.store_opaque_mut()).collect::<Vec<_>>() {
+-                        let data = match &mem.1 {
+-                            crate::runtime::vm::ExportMemory::Unshared(m) => {
+-                                m.data(&store)
+-                            }
+-                            crate::runtime::vm::ExportMemory::Shared(_sm, _) => {
+-                                &[]
+-                            }
+-                        };
+-
+-                        mod_fp.memories.push(
+-                            MemoryFingerprint(blake3::hash(data).into())
+-                        );
+-                    }
+-
+-                    fp.module_instances.insert(
+-                        inst_mod_name,
+-                        mod_fp,
+-                    );
+-                }
+-
+-                e.context(fp)
+-            })
+ }
+ 
+ /// This type helps managing the state of the runtime when entering and exiting
+diff --git a/crates/wasmtime/src/runtime/store.rs b/crates/wasmtime/src/runtime/store.rs
+index 16e617d2..3656a449 100644
+--- a/crates/wasmtime/src/runtime/store.rs
++++ b/crates/wasmtime/src/runtime/store.rs
+@@ -725,8 +725,6 @@ enum StoreInstanceKind {
+ pub struct GenVMCtx {
+     /// non-zero if should quit
+     pub should_quit: Arc<std::sync::atomic::AtomicU32>,
+-    /// true if fp should be captured
+-    pub should_capture_fp: Arc<std::sync::atomic::AtomicBool>,
+ }
+ 
+ impl<T> Store<T> {

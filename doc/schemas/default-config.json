@@ -214,6 +214,10 @@
             "items": { "type": "string" },
             "description": "hosts for which all ports are allowed"
           },
+          "max_wait_after_loaded": {
+            "$ref": "#/definitions/timeout",
+            "description": "upper bound for `wait_after_loaded` requested by contracts; larger values are clamped (with a warning). Defaults to 60s"
+          },
           "meta": {
             "type": ["object", "null"],
             "default": null

@@ -196,7 +196,6 @@ pub async fn run_with_impl(
             entry_stage_data: calldata::Value::Null,
         },
         supervisor: supervisor.clone(),
-        should_capture_fp: Arc::new(std::sync::atomic::AtomicBool::new(true)),
 
         storage: topmost_storage,
         accumulator: VMDataAccumulator {
@@ -205,6 +204,7 @@ pub async fn run_with_impl(
             emissions: Vec::new(),
             message_fee_allocation: entry_data.message_fee_allocation,
         },
+        det_subvm_hashes: Default::default(),
     });
 
     let run_result = rt::spawn_apply_run(&supervisor, essential_data).await?;
@@ -216,11 +216,15 @@ pub async fn run_with_impl(
             rt::vm::RunOk::VMError(_, _) => public_abi::ResultCode::VmError,
         },
         data: match run_result.run_ok {
-            rt::vm::RunOk::Return(buf) => calldata::decode(&buf)?,
+            rt::vm::RunOk::Return(buf) => buf,
             rt::vm::RunOk::UserError(val) => val,
-            rt::vm::RunOk::VMError(msg, _) => calldata::Value::Str(msg.0.into()),
+            rt::vm::RunOk::VMError(msg, _) => calldata::Value::Str(msg.0.into()).into(),
         },
-        fingerprint: run_result.fingerprint,
+        backtrace: run_result.backtrace,
+        wasm_store_hashes: run_result.wasm_store_hashes,
+        subvm_hashes: bytes::Bytes::from(
+            sha3::Digest::finalize(run_result.vm_data.det_subvm_hashes).to_vec(),
+        ),
         storage_changes: run_result.vm_data.storage.make_delta(),
         emissions: run_result.vm_data.accumulator.emissions,
     })
@@ -254,7 +258,7 @@ pub async fn run_with(
         match merged_result {
             Ok(mut r) => {
                 if r.0.kind == public_abi::ResultCode::VmError {
-                    r.0.data = calldata::Value::Str(public_abi::VmError::timeout().0.into());
+                    r.0.data = calldata::Value::Str(public_abi::VmError::timeout().0.into()).into();
                 }
                 Ok(r)
             }
@@ -341,6 +345,7 @@ pub async fn run_with(
     log_debug!("sending final result");
 
     let data_fees_remaining = supervisor.shared_data.data_fees_limit.remaining().await;
+    let data_fees_consumed = supervisor.shared_data.data_fees_limit.consumed().await;
     let llm_consumption = *supervisor.shared_data.llm_consumption.lock().await;
 
     let res = match res {
@@ -349,6 +354,7 @@ pub async fn run_with(
             supervisor.take_nondet_results().await,
             b,
             data_fees_remaining,
+            data_fees_consumed,
             llm_consumption,
         )),
         Err(e) => Err(e),

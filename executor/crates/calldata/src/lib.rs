@@ -7,6 +7,11 @@ mod encoder;
 mod error;
 mod types;
 
+pub mod unparsed {
+    //! Deferred (lazy) decoding helpers. See [`crate::codec`].
+    pub use crate::codec::{Maybe, Raw};
+}
+
 pub use encoder::{CounterWriter, Encoder, StdWriter, Writer};
 pub use genlayer_calldata_derive::*;
 

@@ -56,35 +56,79 @@ Arbitrary structure in :ref:`gvm-def-calldata-encoding`
 :ref:`gvm-def-user-error` and :ref:`gvm-def-vm-error`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:ref:`gvm-def-calldata-encoding` encoding of
+The error value (``UserError`` value or ``VMError`` error code string) is reported
+alongside two fingerprint fields, each :ref:`gvm-def-calldata-encoding` encoded:
+
+``backtrace`` — the WASM call stack captured at the failure point:
+
+.. code-block:: json
+
+  [
+    {
+      "module_name": "<module_name>",
+      "func": "<number: function_index>"
+    }
+  ]
+
+``wasm_store_hashes`` — per-module memory fingerprint:
 
 .. code-block:: json
 
   {
-    "message": "<error_message_string>",
-    "fingerprint": {
-      "frames": [
-        {
-          "module_name": "<module_name>",
-          "func": "<number: function_index>"
-        }
-      ],
-      "module_instances": {
-        "<module_name>": {
-          "memories": [
-            "<bytes: 32_byte_blake3_hash>"
-          ]
-        }
-      }
+    "<module_name>": {
+      "memories": [
+        "<bytes: 32_byte_blake3_hash>"
+      ]
     }
   }
 
 For sake of preventing skipping execution for error results, validators are obligated to calculate
-VM fingerprint on error.
+the VM fingerprint on error.
 
-Fingerprint is serialized using :ref:`gvm-def-calldata-encoding` to be deterministic, and has following structure:
+Both fields are serialized using :ref:`gvm-def-calldata-encoding` to be deterministic, and have the following structure:
 
-#. Frames are ordered from most recent to oldest one (most likely, ``_start``)
+#. ``backtrace`` frames are ordered from most recent to oldest one (most likely, ``_start``)
 #. Function index is an index of function in WASM module
 #. Memories are ordered by their index in WASM module
 #. Memories are hashed using BLAKE3 hash function, which is cryptographically secure and provides acceptable performance
+
+Execution Hash
+--------------
+
+.. _gvm-def-execution-hash:
+
+Every run produces an *execution hash*: a SHA3-256 digest over a
+:ref:`gvm-def-calldata-encoding` encoding of the consensus-visible result, as a map
+with the following keys (in this order):
+
+#. ``backtrace``
+#. ``data`` — the contract result value
+#. ``data_fees_remaining``
+#. ``kind`` — the :ref:`gvm-def-vm-result` result code
+#. ``storage_changes``
+#. ``subvm_hashes`` — see :ref:`gvm-def-subvm-hash`
+#. ``wasm_store_hashes``
+
+Two runs that agree on the deterministic result produce the same execution hash, so
+consensus can compare a single 32-byte value instead of the full result.
+
+Sub-VM Result Hash
+------------------
+
+.. _gvm-def-subvm-hash:
+
+A deterministic run accumulates the result of each deterministic :term:`sub-VM` call
+into a rolling SHA3-256 accumulator. The finalized accumulator is the
+``subvm_hashes`` field of the parent's :ref:`gvm-def-execution-hash`.
+
+For each deterministic sub-VM, its *small hash* is folded into the accumulator. The
+small hash is a SHA3-256 digest over a :ref:`gvm-def-calldata-encoding` encoded map:
+
+#. ``kind`` — the exact string ``"Return"``, ``"UserError"``, or ``"VMError"``
+#. ``result`` — for ``Return``/``UserError`` the result value in :ref:`gvm-def-calldata-encoding`; for ``VMError`` the error code string
+#. ``subvm_hashes`` — that sub-VM's own finalized accumulator, making the hash recursive over the whole deterministic call tree
+#. ``wasm_store_hashes``
+
+Non-deterministic sub-calls do not contribute. A run with no deterministic sub-calls
+finalizes its accumulator to a fixed digest, so that error and edge results hash
+uniformly.
