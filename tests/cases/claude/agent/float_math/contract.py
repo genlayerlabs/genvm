@@ -1,10 +1,10 @@
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
 
 import math
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	def __init__(self):
 		pass
 
