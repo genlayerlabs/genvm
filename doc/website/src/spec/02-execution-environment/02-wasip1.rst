@@ -114,6 +114,7 @@ Fail with ``Rofs`` error code:
 - ``path_filestat_set_times``
 - ``path_link``
 - ``path_remove_directory``
+- ``path_rename``
 - ``path_symlink``
 - ``path_unlink_file``
 
