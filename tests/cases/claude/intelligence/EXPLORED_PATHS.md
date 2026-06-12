@@ -40,7 +40,8 @@
 - `agent/set_order/` - set/frozenset iteration order, dict ordering
 - `agent/id_repr/` - id(), repr(), object.__hash__
 - `agent/float_math/` - transcendental float math (sin/cos/exp/sqrt/log/atan2)
-  + repr(); probe written, NOT verified this session (see TODO: harness blockers)
+  + repr(); VERIFIED deterministic via `nix develop .#full` (l==v==s byte-identical,
+  returns `453.77516336575655|3.141592653589793|1.4142135623730951|0.30000000000000004`)
 
 > NOTE: finding 1 above ("hardcoded seed [GenL,ayer]") is STALE. `random_get` is
 > now seeded from `sha3-256(stdin)` (8 LE u32 words) — see preview1.rs Context::new

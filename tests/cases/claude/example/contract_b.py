@@ -1,12 +1,12 @@
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
 
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
 	def __init__(self):
 		pass
 
 	@gl.public.write
-	def read_from(self, addr: Address):
-		result = gl.get_contract_at(addr).view().get_value()
+	def read_from(self, addr: gl.Address):
+		result = gl.contract.get_at(addr).view().get_value()
 		print(result)

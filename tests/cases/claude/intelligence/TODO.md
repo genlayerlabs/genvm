@@ -1,22 +1,16 @@
 # TODO
 
-## Harness blockers (discovered 2026-06-12)
+## Harness notes (discovered 2026-06-12)
 
-- `.direnv/ya-test-runner` is STALE: its `Description` lacks the `depends_on`/`hidden`
-  fields the repo source (`tools/ya-test-runner`) already has, so collection throws
+- RUN VIA `nix develop .#full`, not `run_test.py`. The `.direnv/ya-test-runner` is
+  STALE (its `Description` lacks `depends_on`/`hidden`), so `run_test.py` — which
+  hardcodes that binary — fails collection with
   `TypeError: Description.__new__() got an unexpected keyword argument 'depends_on'`.
-  This breaks ALL integration-test collection. `run_test.py` itself is correct.
-  Proper fix: rebuild the runner via nix/direnv. Workaround used this session:
-  run the inner wrapped python with `PYTHONPATH=tools/ya-test-runner` shadowing the
-  installed package — collection then works, but `--filter-name`/`--filter-tag` do
-  NOT reliably isolate a single test (mixed repo/installed modules), so the suite
-  runs whole.
-- Running the whole suite drags in `cargo-afl` rust fuzz targets that abort at link
-  (`cc … signal 6 SIGABRT`) and web tests with no webdriver, so genvm integration
-  leader steps end up with only `config.json` and no execution.
-- Net: could not get a clean deterministic `lvs` run for `agent/float_math` this
-  session. Re-run after rebuilding `.direnv/ya-test-runner` (manager up on :3999,
-  modules in user_error mode via `run-manager.sh`).
+  The nix `full` shell puts a freshly-built `ya-test-runner` on PATH that works.
+  Invoke `ya-test-runner --filter-name <id> run --no-manager --no-webdriver` directly.
+- `--filter-name`/`--filter-tag` do NOT isolate a single test — the suite runs whole
+  (718 pass / 78 fail; the 78 are LLM/web tests that need real modules, run here in
+  user_error mode). Just read the specific test's `✓`/`✗` lines and its artifacts.
 - Manager dies across tool calls; start it and run the test in the SAME shell call.
   Do NOT `pkill -f genvm-modules` — it matches the shell's own command line and
   suicides; use `pkill -x genvm-modules`.
@@ -30,7 +24,6 @@
 
 ## Medium Priority
 
-- [ ] Explore Python runner (`runners/genlayer-py-std/`) for non-deterministic built-ins
 - [ ] Test exception handling edge cases in contract calls
 - [ ] Test storage read/write ordering under concurrent-like scenarios
 - [ ] Test cross-contract call edge cases (recursion, reentrancy)
