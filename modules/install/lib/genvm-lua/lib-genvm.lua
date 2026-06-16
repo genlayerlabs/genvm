@@ -14,6 +14,8 @@ local value2json = require("value2json")
 ---| fun(ctx, req: { body: nil | string, url: string, headers: table<string, string>, method: string, error_on_status: boolean | nil, json: false | nil, response_body_max_size: integer | nil, timeout: number | nil }): { body: string, status: integer, headers: table<string, string> }
 ---| fun(ctx, req: { body: nil | string, url: string, headers: table<string, string>, method: string, error_on_status: boolean | nil, json: true, response_body_max_size: integer | nil, timeout: number | nil }): { body: any, status: integer, headers: table<string, string> }
 ---@field split_url fun(url: string): nil | { schema: string, port: number | nil, host: string }
+---@field resolve_host fun(ctx, host: string): string[]
+---@field set_host fun(url: string, host: string): string
 ---@field user_error fun(val: ModuleError): nil
 ---@field base64_decode fun(val: string): string
 ---@field base64_encode fun(val: string): string

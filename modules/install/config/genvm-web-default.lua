@@ -60,9 +60,11 @@ function Request(ctx, payload)
 
 	web.check_url(payload.url)
 
+	local url = web.pin_url_to_good_host(ctx, payload.url)
+
 	local success, result = pcall(lib.rs.request, ctx, {
 		method = payload.method,
-		url = payload.url,
+		url = url,
 		headers = payload.headers,
 		body = payload.body,
 		sign = payload.sign,

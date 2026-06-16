@@ -1,7 +1,7 @@
 use base64::Engine;
 use genvm_common::*;
 use genvm_modules_interfaces::GenericValue;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -153,7 +153,10 @@ where
 
 impl std::fmt::Display for ModuleError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{self:?}"))
+        f.write_str("ModuleError")?;
+        let json = serde_json::to_string(self).map_err(|_| std::fmt::Error)?;
+        f.write_str(&json)?;
+        Ok(())
     }
 }
 
@@ -792,7 +795,6 @@ impl genvm_common::logger::ILogger for LoggerWithId {
     }
 }
 
-#[cfg(test)]
 pub mod tests {
     use std::sync::{Arc, Once};
 

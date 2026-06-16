@@ -15,6 +15,12 @@ use super::req::Request;
 use super::CtxPart;
 
 impl CtxPart {
+    async fn resolve_host(&self, vm: &mlua::Lua, host: &str) -> anyhow::Result<mlua::Value> {
+        let res = tokio::net::lookup_host(host).await?;
+        let res = vm.create_sequence_from(res.map(|addr| addr.to_string()))?;
+        Ok(mlua::Value::Table(res))
+    }
+
     async fn request(&self, vm: &mlua::Lua, req: Request) -> anyhow::Result<mlua::Value> {
         log_trace!(request:serde = req; "received request");
 
@@ -169,6 +175,41 @@ pub fn create_global(
     )?;
 
     dflt.set(
+        "resolve_host",
+        vm.create_async_function(
+            |vm: mlua::Lua, (ctx, host): (mlua::Table, String)| async move {
+                let ctx: mlua::AnyUserData = ctx.get("__ctx_dflt")?;
+                let ctx: mlua::UserDataRef<scripting::LuaDArc<CtxPart>> = ctx
+                    .borrow()
+                    .with_context(|| "unboxing userdata")
+                    .map_err(scripting::anyhow_to_lua_error)?;
+
+                ctx.resolve_host(&vm, &host)
+                    .await
+                    .map_err(scripting::anyhow_to_lua_error)
+            },
+        )?,
+    )?;
+
+    dflt.set(
+        "set_host",
+        vm.create_function(|vm: &mlua::Lua, (url, host): (String, String)| {
+            let mut url = match reqwest::Url::parse(&url) {
+                Ok(url) => url,
+                Err(_) => {
+                    return Err(scripting::anyhow_to_lua_error(anyhow::anyhow!(
+                        "invalid url"
+                    )))
+                }
+            };
+
+            url.set_host(Some(&host))
+                .map_err(|e| scripting::anyhow_to_lua_error(e.into()))?;
+            Ok(vm.create_string(url.as_str())?)
+        })?,
+    )?;
+
+    dflt.set(
         "url_encode",
         vm.create_function(|vm: &mlua::Lua, data: mlua::String| {
             let encoded =
@@ -284,142 +325,4 @@ pub fn create_global(
     )?;
 
     Ok(mlua::Value::Table(dflt))
-}
-
-#[cfg(test)]
-mod tests {
-    use genvm_common::*;
-
-    use crate::{
-        common,
-        scripting::{self, Response},
-    };
-
-    use super::*;
-
-    struct TestCtx {
-        scripting: scripting::CtxPart,
-    }
-
-    async fn create_test_vm() -> scripting::UserVM<(), (), TestCtx> {
-        let mut cwd = std::env::current_dir().unwrap();
-        cwd.pop();
-        cwd.push("install");
-        cwd.push("lib");
-        cwd.push("genvm-lua");
-        let cwd = cwd
-            .canonicalize()
-            .with_context(|| format!("canonicalizing {:?}", cwd))
-            .unwrap();
-        let mut extra_path = cwd.to_str().unwrap().to_owned();
-        extra_path.push_str("/?.lua");
-
-        let conf = sync::DArc::new(common::ModuleBaseConfig {
-            bind_address: None,
-            vm_count: 1,
-            lua_script_path: "".to_owned(),
-            lua_path: extra_path,
-            signer_headers: Arc::new(BTreeMap::new()),
-            signer_url: Arc::from(""),
-            data_dir: String::new(),
-        });
-
-        scripting::UserVM::create(
-            &conf.clone(),
-            |_| async { Ok(()) },
-            Box::new(move |vm, table, ctx: &sync::DArc<TestCtx>| {
-                let scripting = ctx.gep(|x| &x.scripting);
-                scripting::setup_lua_default_ctx(scripting, vm, table)?;
-                Ok(())
-            }),
-        )
-        .await
-        .unwrap()
-    }
-
-    fn create_test_ctx() -> sync::DArc<TestCtx> {
-        let hello = common::tests::get_hello();
-        let metrics = sync::DArc::new(super::super::Metrics::default());
-        let conf = sync::DArc::new(common::ModuleBaseConfig {
-            bind_address: None,
-            vm_count: 1,
-            lua_script_path: "".to_owned(),
-            lua_path: "".to_owned(),
-            signer_headers: Arc::new(BTreeMap::new()),
-            signer_url: Arc::from(""),
-            data_dir: String::new(),
-        });
-        let scripting = scripting::create_ctx_part(&hello, &conf, metrics).unwrap();
-        sync::DArc::new(TestCtx { scripting })
-    }
-
-    async fn test_status(status: u16) {
-        common::tests::setup();
-
-        let uvm = create_test_vm().await;
-
-        let mut cwd = std::env::current_dir().unwrap();
-        cwd.push("tests");
-        cwd.push("lua");
-        cwd.push("get_status.lua");
-        let test_script = std::fs::read_to_string(cwd).unwrap();
-
-        let chunk = uvm.vm.load(test_script);
-        chunk.exec().unwrap();
-
-        let f: mlua::Function = uvm.vm.globals().get("Test").unwrap();
-
-        let test_ctx = create_test_ctx();
-
-        let (_, ctx_lua) = uvm.create_ctx(&test_ctx).unwrap();
-
-        let res: mlua::Value = f.call_async((ctx_lua, status.to_string())).await.unwrap();
-
-        let res: Response = uvm.vm.from_value(res).unwrap();
-
-        assert_eq!(res.status, status);
-    }
-
-    #[tokio::test]
-    async fn test_status_200() {
-        test_status(200).await;
-    }
-
-    #[tokio::test]
-    async fn test_status_404() {
-        test_status(404).await;
-    }
-
-    #[tokio::test]
-    async fn test_echo_post() {
-        common::tests::setup();
-
-        let uvm = create_test_vm().await;
-
-        let mut cwd = std::env::current_dir().unwrap();
-        cwd.push("tests");
-        cwd.push("lua");
-        cwd.push("bytes.lua");
-        let test_script = std::fs::read_to_string(cwd).unwrap();
-
-        let chunk = uvm.vm.load(test_script);
-        chunk.exec().unwrap();
-
-        let f: mlua::Function = uvm.vm.globals().get("Test").unwrap();
-
-        let expected = b"\xde\xad\xbe\xef";
-
-        let test_ctx = create_test_ctx();
-
-        let (_, ctx_lua) = uvm.create_ctx(&test_ctx).unwrap();
-
-        let res: mlua::Value = f.call_async((ctx_lua,)).await.unwrap();
-
-        let res: Response = uvm.vm.from_value(res).unwrap();
-
-        log_trace!(response:serde = res; "response");
-
-        assert_eq!(res.status, 200);
-        assert_eq!(res.body, expected);
-    }
 }
