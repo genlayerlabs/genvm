@@ -129,6 +129,10 @@ async fn do_test_text(conf: &str) -> anyhow::Result<()> {
     common::tests::setup();
 
     let backend = parse_backend(conf)?;
+    if backend.key.is_empty() {
+        eprintln!("skipping test: API key is not set");
+        return Ok(());
+    }
     let provider = backend.to_provider();
 
     let ctx = make_test_ctx()?;
@@ -197,6 +201,10 @@ async fn do_test_text_out_of_tokens(conf: &str) -> anyhow::Result<()> {
     common::tests::setup();
 
     let backend = parse_backend(conf)?;
+    if backend.key.is_empty() {
+        eprintln!("skipping test: API key is not set");
+        return Ok(());
+    }
     let provider = backend.to_provider();
 
     let ctx = make_test_ctx()?;
@@ -246,6 +254,10 @@ async fn do_test_json(conf: &str) -> anyhow::Result<()> {
     common::tests::setup();
 
     let backend = parse_backend(conf)?;
+    if backend.key.is_empty() {
+        eprintln!("skipping test: API key is not set");
+        return Ok(());
+    }
 
     if !backend
         .script_config
@@ -329,6 +341,10 @@ async fn do_test_json_out_of_tokens(conf: &str) -> anyhow::Result<()> {
     common::tests::setup();
 
     let backend = parse_backend(conf)?;
+    if backend.key.is_empty() {
+        eprintln!("skipping test: API key is not set");
+        return Ok(());
+    }
 
     if !backend
         .script_config

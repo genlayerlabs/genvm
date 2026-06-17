@@ -129,3 +129,101 @@ async fn test_localhost_direct_is_bad() {
         module_err.causes
     );
 }
+
+#[tokio::test]
+async fn test_ipv6_loopback_literal_is_bad() {
+    common::tests::setup();
+
+    let (user_vm, ctx_part) = make_pin_vm().await;
+    let (_, ctx_value) = user_vm.create_ctx(&ctx_part).unwrap();
+
+    // `split_url` returns a *bracketed* host for IPv6 literals (`[::1]`), so the
+    // `host .. ":" .. port` the Lua builds is a valid socket address
+    // (`[::1]:80`) that resolves. `::1` then classifies as loopback =>
+    // ADDRESS_FORBIDDEN. If the host were unbracketed (`::1:80`) resolution
+    // would error instead, so reaching ADDRESS_FORBIDDEN guards that path.
+    let res: anyhow::Result<String> = user_vm
+        .call_fn(&user_vm.data, (ctx_value, "http://[::1]/".to_owned()))
+        .await;
+
+    let err = res.expect_err("expected ipv6 loopback literal to be rejected");
+    log_info!(error:ah = &err; "pin_url_to_good_host rejected [::1]");
+
+    let module_err = scripting::try_unwrap_any_err(err).unwrap();
+    assert!(
+        module_err.causes.contains(&"ADDRESS_FORBIDDEN".to_owned()),
+        "unexpected causes: {:?}",
+        module_err.causes
+    );
+}
+
+#[tokio::test]
+async fn test_ipv6_global_literal_is_pinned() {
+    common::tests::setup();
+
+    let (user_vm, ctx_part) = make_pin_vm().await;
+    let (_, ctx_value) = user_vm.create_ctx(&ctx_part).unwrap();
+
+    // A globally-routable IPv6 literal resolves to itself (no DNS) and must be
+    // accepted and pinned back into the URL with its brackets intact.
+    let res: anyhow::Result<String> = user_vm
+        .call_fn(
+            &user_vm.data,
+            (ctx_value, "http://[2606:4700:4700::1111]:443/".to_owned()),
+        )
+        .await;
+
+    let pinned = res.expect("expected global ipv6 literal to be accepted");
+    let pinned = reqwest::Url::parse(&pinned).unwrap();
+    assert_eq!(pinned.host_str(), Some("[2606:4700:4700::1111]"));
+    assert_eq!(pinned.port(), Some(443));
+}
+
+#[tokio::test]
+async fn test_ipv4_mapped_loopback_is_bad() {
+    common::tests::setup();
+
+    let (user_vm, ctx_part) = make_pin_vm().await;
+
+    // Both the dotted-quad and hex spellings of the IPv4-mapped loopback
+    // (`::ffff:127.0.0.1` == `::ffff:7f00:1`) must be rejected. `resolve_host`
+    // normalizes via Rust's `SocketAddr`, so whatever spelling is fed in, the
+    // classifier should see the same address and refuse it.
+    for url in ["http://[::ffff:127.0.0.1]/", "http://[::ffff:7f00:1]/"] {
+        let (_, ctx_value) = user_vm.create_ctx(&ctx_part).unwrap();
+        let res: anyhow::Result<String> = user_vm
+            .call_fn(&user_vm.data, (ctx_value, url.to_owned()))
+            .await;
+
+        let err = match res {
+            Err(e) => e,
+            Ok(pinned) => panic!("expected {url} to be rejected, got pinned url {pinned}"),
+        };
+        let module_err = scripting::try_unwrap_any_err(err).unwrap();
+        assert!(
+            module_err.causes.contains(&"ADDRESS_FORBIDDEN".to_owned()),
+            "{url}: unexpected causes: {:?}",
+            module_err.causes
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_ipv4_global_literal_with_explicit_port_is_pinned() {
+    common::tests::setup();
+
+    let (user_vm, ctx_part) = make_pin_vm().await;
+    let (_, ctx_value) = user_vm.create_ctx(&ctx_part).unwrap();
+
+    // Explicit port in the URL: `split_url` must hand the port to the Lua as an
+    // integer, otherwise the `host:port` string becomes `1.1.1.1:443.0` and
+    // resolution fails with "invalid port value".
+    let res: anyhow::Result<String> = user_vm
+        .call_fn(&user_vm.data, (ctx_value, "http://1.1.1.1:443/".to_owned()))
+        .await;
+
+    let pinned = res.expect("expected global ipv4 literal with port to be accepted");
+    let pinned = reqwest::Url::parse(&pinned).unwrap();
+    assert_eq!(pinned.host_str(), Some("1.1.1.1"));
+    assert_eq!(pinned.port(), Some(443));
+}

@@ -155,7 +155,9 @@ pub fn create_global(
                     (
                         "port",
                         if let Some(port) = url.port() {
-                            mlua::Value::Number(port as f64)
+                            // integer, not float: `tostring(443.0)` is `"443.0"`,
+                            // which breaks `host:port` resolution in lib-web.lua
+                            mlua::Value::Integer(port as mlua::Integer)
                         } else {
                             mlua::Value::Nil
                         },

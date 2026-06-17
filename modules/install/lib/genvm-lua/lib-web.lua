@@ -187,6 +187,9 @@ local function ipv6_is_bad(ip)
 		return true -- loopback / unspecified
 	end
 
+	-- only the dotted-quad spelling is matched here; that is fine because callers
+	-- pass addresses normalized by `resolve_host` (Rust `SocketAddr`), which always
+	-- renders IPv4-mapped addresses as `::ffff:a.b.c.d`, never the hex form.
 	local mapped = lower:match("^::ffff:(%d+%.%d+%.%d+%.%d+)$")
 	if mapped ~= nil then
 		return ipv4_is_bad(mapped) == true

@@ -153,10 +153,10 @@ where
 
 impl std::fmt::Display for ModuleError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("ModuleError")?;
-        let json = serde_json::to_string(self).map_err(|_| std::fmt::Error)?;
-        f.write_str(&json)?;
-        Ok(())
+        match serde_json::to_string(self) {
+            Ok(json) => f.write_str(&json),
+            Err(_) => write!(f, "{self:?}"),
+        }
     }
 }
 
