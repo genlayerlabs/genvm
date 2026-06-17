@@ -639,8 +639,8 @@ impl Provider for Gemini {
 
         let request = serde_json::to_vec(&request)?;
         let url = format!(
-            "{}/v1beta/models/{}:generateContent?key={}",
-            self.config.host, model, self.config.key
+            "{}/v1beta/models/{}:generateContent",
+            self.config.host, model,
         );
         log_trace!(request:serde = request, url = url; "final request body");
 
@@ -648,6 +648,7 @@ impl Provider for Gemini {
             .client
             .post(&url)
             .header("Content-Type", "application/json")
+            .header("x-goog-api-key", &self.config.key)
             .body(request.clone());
         let res_json = scripting::send_request_get_lua_compatible_response_json(
             &ctx.metrics,
@@ -700,8 +701,8 @@ impl Provider for Gemini {
         prompt.add_gemini_messages(request.as_object_mut().unwrap())?;
 
         let url = format!(
-            "{}/v1beta/models/{}:generateContent?key={}",
-            self.config.host, model, self.config.key
+            "{}/v1beta/models/{}:generateContent",
+            self.config.host, model,
         );
         log_trace!(request:serde = request, url = url; "final request body after merging extra");
         let request = serde_json::to_vec(&request)?;
@@ -709,6 +710,7 @@ impl Provider for Gemini {
             .client
             .post(&url)
             .header("Content-Type", "application/json")
+            .header("x-goog-api-key", &self.config.key)
             .body(request.clone());
         let res_json = scripting::send_request_get_lua_compatible_response_json(
             &ctx.metrics,
