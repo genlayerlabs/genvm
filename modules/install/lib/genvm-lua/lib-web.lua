@@ -225,9 +225,9 @@ local function addr_is_bad(ip, is_v6)
 end
 
 --- Resolve the host of `url` and pin it to a globally-routable address.
---- - if every resolved address is good, returns `url` unchanged;
---- - if some are bad but at least one is good, returns `url` with its host
----   replaced by a good address;
+--- - if at least one resolved address is good, returns `url` with its host
+---   replaced by that good address (preventing a second, unpinned DNS lookup
+---   at request time);
 --- - if there is no good address, raises a non-fatal `user_error`.
 ---@param ctx any module context
 ---@param url string
@@ -252,12 +252,9 @@ M.pin_url_to_good_host = function(ctx, url)
 
 	local good_ip = nil
 	local good_is_v6 = false
-	local any_bad = false
 	for _, addr in ipairs(addrs) do
 		local ip, is_v6 = strip_port(addr)
-		if addr_is_bad(ip, is_v6) then
-			any_bad = true
-		elseif good_ip == nil then
+		if not addr_is_bad(ip, is_v6) and good_ip == nil then
 			good_ip = ip
 			good_is_v6 = is_v6
 		end
@@ -273,10 +270,6 @@ M.pin_url_to_good_host = function(ctx, url)
 				addresses = addrs,
 			},
 		}
-	end
-
-	if not any_bad then
-		return url
 	end
 
 	local host = good_is_v6 and ("[" .. good_ip .. "]") or good_ip

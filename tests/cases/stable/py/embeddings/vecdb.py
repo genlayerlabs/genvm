@@ -14,7 +14,7 @@ import genlayer_embeddings as gle
 
 
 class Contract(gl.contract.Contract):
-	x: gle.VecDB[np.float32, typing.Literal[5], str, gle.EuclideanDistanceSquared]
+	x: gle.VecDB[np.float32, typing.Literal[5], str, gle.EuclideanDistance]
 
 	def __init__(self):
 		self.x.insert(np.array([1, 2, 3, 4, 5], dtype=np.float32), '123')
