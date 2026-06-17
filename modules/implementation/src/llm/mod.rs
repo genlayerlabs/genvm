@@ -7,19 +7,19 @@ use std::{
 
 use crate::{common, scripting};
 
-pub(crate) mod config;
+pub mod config;
 mod handler;
-pub(crate) mod merge;
-pub(crate) mod prompt;
-pub(crate) mod providers;
+pub mod merge;
+pub mod prompt;
+pub mod providers;
 
 type LlmSubContext = crate::manager::execution_context::LlmSubContext;
 type UserVM = scripting::UserVM<ctx::VMData, sync::DArc<ctx::CtxPart>, LlmSubContext>;
 
 #[derive(serde::Serialize, Debug, Default)]
-pub(crate) struct Metrics {
-    pub(crate) scripting: scripting::Metrics,
-    pub(crate) tokens: stats::metric::TokenMetricsMap,
+pub struct Metrics {
+    pub scripting: scripting::Metrics,
+    pub tokens: stats::metric::TokenMetricsMap,
 }
 
 impl<W: calldata::Writer> calldata::codec::Encode<W> for Metrics {
@@ -47,11 +47,11 @@ pub struct CliArgsRun {
     die_with_parent: bool,
 }
 
-pub(crate) mod ctx;
+pub mod ctx;
 
 pub const TEST_PROMPT_FOR_OK: &str = "I am testing that your API works and you are capable for understanding the simplest request. For it I need you to respond with two letters \"ok\" (without quotes) and nothing else. Lowercase, no repetition or punctuation";
 
-async fn create_vm(config: &sync::DArc<config::Config>) -> anyhow::Result<UserVM> {
+pub async fn create_vm(config: &sync::DArc<config::Config>) -> anyhow::Result<UserVM> {
     let user_vm = crate::scripting::UserVM::create(
         &config.mod_base,
         move |vm: mlua::Lua| async move {
@@ -214,8 +214,3 @@ pub fn entrypoint_run(args: CliArgsRun) -> Result<()> {
 
     handle_run(config, args)
 }
-
-#[cfg(test)]
-mod test_overloaded;
-#[cfg(test)]
-mod test_timeout;
