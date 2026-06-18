@@ -22,6 +22,22 @@ async fn serve_once(body: &'static [u8]) -> std::net::SocketAddr {
     addr
 }
 
+// Serves a single `302 Found` redirect to `location` and exits.
+async fn serve_redirect(location: &'static str) -> std::net::SocketAddr {
+    let server = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = server.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        let (mut client, _) = server.accept().await.unwrap();
+        let response =
+            format!("HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\n\r\n");
+        client.write_all(response.as_bytes()).await.unwrap();
+        client.shutdown().await.unwrap();
+    });
+
+    addr
+}
+
 #[tokio::test]
 async fn test_request_to_localhost_resolving_host() {
     common::tests::setup();
@@ -115,4 +131,47 @@ async fn test_unfiltered_client_allows_loopback() {
 
     assert_eq!(res.status, 200);
     assert_eq!(res.body, body);
+}
+
+#[tokio::test]
+async fn test_redirect_to_private_ip_is_rejected() {
+    common::tests::setup();
+
+    // A redirect target that is a bare IP literal never goes through the DNS
+    // resolver, so the redirect policy is what must reject it. The source server
+    // is reached over loopback with a plain resolver; only the policy is under
+    // test here, and it must turn the loopback `Location` into a non-fatal
+    // ADDRESS_FORBIDDEN.
+    let addr = serve_redirect("http://127.0.0.1:9/").await;
+
+    let client = reqwest::ClientBuilder::new()
+        .user_agent("reqwest")
+        .resolve("genvm.test", addr)
+        .timeout(std::time::Duration::from_secs(40))
+        .redirect(common::redirect_policy())
+        .build()
+        .unwrap();
+
+    let url = format!("http://genvm.test:{}/", addr.port());
+    let metrics = sync::DArc::new(Metrics::default());
+
+    let res = send_request_get_lua_compatible_response_bytes(
+        &metrics,
+        &url,
+        client.get(&url),
+        true,
+        usize::MAX,
+    )
+    .await;
+
+    let err = res.expect_err("expected redirect to a private IP literal to be rejected");
+    log_info!(error:ah = &err; "redirect policy rejected private-IP Location");
+
+    let module_err = scripting::try_unwrap_any_err(err).expect("expected a module error");
+    assert!(
+        module_err.causes.contains(&"ADDRESS_FORBIDDEN".to_owned()),
+        "unexpected causes: {:?}",
+        module_err.causes
+    );
+    assert!(!module_err.fatal, "ADDRESS_FORBIDDEN must be non-fatal");
 }

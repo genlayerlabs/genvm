@@ -661,6 +661,16 @@ fn base_client_builder() -> reqwest::ClientBuilder {
 
 /// Whether an IPv4 address is not safe to connect to (not globally routable).
 fn ipv4_is_bad(ip: std::net::Ipv4Addr) -> bool {
+    if ip.is_unspecified()
+        || ip.is_private()
+        || ip.is_loopback()
+        || ip.is_link_local()
+        || ip.is_documentation()
+        || ip.is_broadcast()
+    {
+        return true;
+    }
+
     let [a, b, _, _] = ip.octets();
     a == 0                                    // "this" network 0.0.0.0/8
         || a == 10                            // private 10.0.0.0/8
@@ -674,13 +684,16 @@ fn ipv4_is_bad(ip: std::net::Ipv4Addr) -> bool {
 
 /// Whether an IPv6 address is not safe to connect to (not globally routable).
 fn ipv6_is_bad(ip: std::net::Ipv6Addr) -> bool {
-    if ip.is_loopback() || ip.is_unspecified() {
-        return true; // ::1 / ::
-    }
     // an IPv4-mapped address (::ffff:a.b.c.d) is only as good as its IPv4 part
     if let Some(v4) = ip.to_ipv4_mapped() {
         return ipv4_is_bad(v4);
     }
+
+    if ip.is_unspecified() || ip.is_loopback() || ip.is_unique_local() || ip.is_unicast_link_local()
+    {
+        return true;
+    }
+
     let group = ip.segments()[0];
     (0xfc00..=0xfdff).contains(&group)        // unique-local fc00::/7
         || (0xfe80..=0xfebf).contains(&group) // link-local fe80::/10
@@ -755,7 +768,13 @@ impl reqwest::dns::Resolve for FilteringResolver {
             // reqwest replaces the port `0` here with the port from the request URL
             let addrs: Vec<std::net::SocketAddr> = lookup
                 .into_iter()
-                .filter(|ip| !ip_is_bad(*ip))
+                .filter(|ip| {
+                    let should_filter = ip_is_bad(*ip);
+                    if should_filter {
+                        log_debug!(ip = ip.to_string(), host = name.as_str(); "filtered non-globally-routable address");
+                    }
+                    !should_filter
+                })
                 .map(|ip| std::net::SocketAddr::new(ip, 0))
                 .collect();
 
@@ -775,11 +794,42 @@ pub fn create_client_unfiltered() -> anyhow::Result<reqwest::Client> {
     base_client_builder().build().map_err(Into::into)
 }
 
+/// Maximum redirect hops, matching reqwest's default policy.
+const MAX_REDIRECTS: usize = 10;
+
+/// Redirect policy for the filtering client. reqwest never sends an IP-literal
+/// target through the DNS resolver, so a `Location:` pointing straight at e.g.
+/// `127.0.0.1` or `169.254.169.254` would bypass the resolver-based SSRF guard.
+/// This policy closes that hole by rejecting redirect hops whose host is a
+/// non-globally-routable IP literal; hostname targets keep being filtered by the
+/// resolver when the next hop connects.
+pub fn redirect_policy() -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(|attempt| {
+        if attempt.previous().len() >= MAX_REDIRECTS {
+            return attempt.error("too many redirects");
+        }
+        let bad = match attempt.url().host() {
+            Some(url::Host::Ipv4(ip)) => ip_is_bad(std::net::IpAddr::V4(ip)),
+            Some(url::Host::Ipv6(ip)) => ip_is_bad(std::net::IpAddr::V6(ip)),
+            // hostnames are resolved (and thus filtered) when the hop connects
+            _ => false,
+        };
+        if bad {
+            log_warn!(url = attempt.url().as_str(); "redirect to non-globally-routable IP-literal rejected");
+            attempt.error(NoRoutableAddress)
+        } else {
+            attempt.follow()
+        }
+    })
+}
+
 /// A client whose resolver drops non-globally-routable addresses (see
-/// [`FilteringResolver`]). For contract-controlled web request URLs.
+/// [`FilteringResolver`]) and whose redirect policy rejects non-routable
+/// IP-literal hops (see [`redirect_policy`]). For contract-controlled web URLs.
 pub fn create_client_filtered() -> anyhow::Result<reqwest::Client> {
     base_client_builder()
         .dns_resolver(Arc::new(FilteringResolver::new()?))
+        .redirect(redirect_policy())
         .build()
         .map_err(Into::into)
 }
