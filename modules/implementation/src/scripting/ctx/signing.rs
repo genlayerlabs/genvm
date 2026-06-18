@@ -53,7 +53,12 @@ impl Request {
             fatal: true,
         })?;
 
-        let mut sign_request = ctx.client.post(sign_url).body(signature_base.clone());
+        // the signer is an operator-trusted endpoint (possibly internal), so it
+        // must not go through the SSRF-filtering client
+        let mut sign_request = ctx
+            .client_unfiltered
+            .post(sign_url)
+            .body(signature_base.clone());
 
         //let signature_base_hashed = ring::digest::digest(&ring::digest::SHA256, signature_base.as_bytes());
         //let signature_base_hashed = Vec::from(signature_base_hashed.as_ref());
@@ -300,6 +305,7 @@ mod tests {
             sign: true,
             response_body_max_size: None,
             timeout: None,
+            unfiltered: false,
         };
 
         req.normalize_headers();
@@ -358,6 +364,7 @@ mod tests {
             sign: true,
             response_body_max_size: None,
             timeout: None,
+            unfiltered: false,
         };
 
         req.normalize_headers();
@@ -418,6 +425,7 @@ mod tests {
             sign: true,
             response_body_max_size: None,
             timeout: None,
+            unfiltered: false,
         };
 
         let part = CtxPart {
@@ -433,6 +441,7 @@ mod tests {
                 initial_time_units_allocation: 0,
             }),
             client: common::tests::create_test_client(),
+            client_unfiltered: common::tests::create_test_client(),
             sign_url: Arc::from("https://test-server.genlayer.com/genvm/sign"),
             sign_headers: Arc::new(BTreeMap::new()),
             sign_vars: BTreeMap::new(),

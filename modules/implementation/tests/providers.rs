@@ -91,7 +91,8 @@ mod conf {
 
 fn make_test_ctx() -> anyhow::Result<scripting::CtxPart> {
     Ok(scripting::CtxPart {
-        client: common::create_client()?,
+        client: common::tests::create_client()?,
+        client_unfiltered: common::tests::create_client()?,
         metrics: sync::DArc::new(scripting::Metrics::default()),
         node_address: "test_node".to_owned(),
         sign_headers: std::sync::Arc::new(BTreeMap::new()),

@@ -58,6 +58,7 @@ impl MessageHandlerProvider<genvm_modules_interfaces::llm::Message, FullResponse
             &hello,
             &self.config.gep(|x| &x.mod_base),
             metrics.gep(|x| &x.scripting),
+            false,
         )?;
         let module = ctx::CtxPart {
             providers: self.providers.clone(),

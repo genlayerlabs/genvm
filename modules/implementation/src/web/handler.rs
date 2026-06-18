@@ -134,6 +134,7 @@ impl common::MessageHandlerProvider<genvm_modules_interfaces::web::Message, Full
             &hello,
             &self.config.gep(|x| &x.mod_base),
             metrics.gep(|x| &x.scripting),
+            true,
         )?;
         Ok(sync::DArc::new(WebSubContext { scripting }))
     }

@@ -15,12 +15,6 @@ use super::req::Request;
 use super::CtxPart;
 
 impl CtxPart {
-    async fn resolve_host(&self, vm: &mlua::Lua, host: &str) -> anyhow::Result<mlua::Value> {
-        let res = tokio::net::lookup_host(host).await?;
-        let res = vm.create_sequence_from(res.map(|addr| addr.to_string()))?;
-        Ok(mlua::Value::Table(res))
-    }
-
     async fn request(&self, vm: &mlua::Lua, req: Request) -> anyhow::Result<mlua::Value> {
         log_trace!(request:serde = req; "received request");
 
@@ -29,7 +23,12 @@ impl CtxPart {
         let url = req.url.as_str().to_owned();
 
         let body_size_limit = req.response_body_max_size.unwrap_or(usize::MAX);
-        let request = req.into_reqwest(&self.client)?;
+        let client = if req.unfiltered {
+            &self.client_unfiltered
+        } else {
+            &self.client
+        };
+        let request = req.into_reqwest(client)?;
 
         if is_json {
             let res = scripting::send_request_get_lua_compatible_response_json(
@@ -174,41 +173,6 @@ pub fn create_global(
                 Ok(mlua::Value::Table(ret))
             },
         )?,
-    )?;
-
-    dflt.set(
-        "resolve_host",
-        vm.create_async_function(
-            |vm: mlua::Lua, (ctx, host): (mlua::Table, String)| async move {
-                let ctx: mlua::AnyUserData = ctx.get("__ctx_dflt")?;
-                let ctx: mlua::UserDataRef<scripting::LuaDArc<CtxPart>> = ctx
-                    .borrow()
-                    .with_context(|| "unboxing userdata")
-                    .map_err(scripting::anyhow_to_lua_error)?;
-
-                ctx.resolve_host(&vm, &host)
-                    .await
-                    .map_err(scripting::anyhow_to_lua_error)
-            },
-        )?,
-    )?;
-
-    dflt.set(
-        "set_host",
-        vm.create_function(|vm: &mlua::Lua, (url, host): (String, String)| {
-            let mut url = match reqwest::Url::parse(&url) {
-                Ok(url) => url,
-                Err(_) => {
-                    return Err(scripting::anyhow_to_lua_error(anyhow::anyhow!(
-                        "invalid url"
-                    )))
-                }
-            };
-
-            url.set_host(Some(&host))
-                .map_err(|e| scripting::anyhow_to_lua_error(e.into()))?;
-            Ok(vm.create_string(url.as_str())?)
-        })?,
     )?;
 
     dflt.set(

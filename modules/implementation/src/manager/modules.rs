@@ -42,6 +42,7 @@ impl ModuleStateLlm {
             hello,
             &self.config.gep(|x| &x.mod_base),
             metrics.gep(|x| &x.scripting),
+            false,
         )?;
         let module = crate::llm::ctx::CtxPart {
             providers: self.providers.clone(),
@@ -61,6 +62,7 @@ impl ModuleStateWeb {
             hello,
             &self.config.gep(|x| &x.mod_base),
             metrics.gep(|x| &x.scripting),
+            true,
         )?;
         Ok(WebSubContext { scripting })
     }

@@ -58,17 +58,21 @@ end
 function Request(ctx, payload)
 	---@cast payload WebRequestPayload
 
-	web.check_url(payload.url)
-
-	local url = web.pin_url_to_good_host(ctx, payload.url)
+	-- `check_url` returns true when the host is in `always_allow_hosts`; such
+	-- hosts are sent through the unfiltered client. Everything else goes through
+	-- the SSRF-guarded client, whose resolver drops non-globally-routable
+	-- addresses. The hostname is kept in the URL either way (rewriting it to an
+	-- IP would break TLS SNI / cert verification and is what broke HTTPS).
+	local allowlisted = web.check_url(payload.url)
 
 	local success, result = pcall(lib.rs.request, ctx, {
 		method = payload.method,
-		url = url,
+		url = payload.url,
 		headers = payload.headers,
 		body = payload.body,
 		sign = payload.sign,
 		response_body_max_size = payload.size_limit,
+		unfiltered = allowlisted,
 	})
 
 	if success then
