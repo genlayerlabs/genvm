@@ -13,6 +13,7 @@ __all__ = (
 )
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 import subprocess
@@ -23,12 +24,35 @@ from ya_test_runner.formatter import Formatter, Sink
 from .util.watchdog import Watchdog
 
 
+_UNSAFE_NAME_RE = re.compile(r'[^A-Za-z0-9._-]+')
+
+
+def _sanitize_rel_path(name: str) -> Path:
+	"""
+	Turn a (path-based) test name into a safe *relative* path, preserving ``/``
+	as sub-directory separators and dropping any traversal components.
+	"""
+	parts: list[str] = []
+	for raw in name.split('/'):
+		part = _UNSAFE_NAME_RE.sub('_', raw).strip('_')
+		if part in ('', '.', '..'):
+			continue
+		parts.append(part)
+	if not parts:
+		parts = ['unnamed']
+	return Path(*parts)
+
+
 @dataclass
 class SharedContext:
 	root_dir: Path
 	logger: Formatter
 	printer: Sink
 	watchdog: Watchdog = field(default_factory=Watchdog.start)
+
+	# When running a test case, this points to that case's per-test artifact
+	# directory. ``None`` outside of a test case.
+	case_dir: Path | None = None
 
 	_git_files: list[Path] | None = None
 	_interrupted: threading.Event = field(default_factory=threading.Event)
@@ -58,6 +82,15 @@ class SharedContext:
 				path = self.root_dir / path
 			return path
 		return self.root_dir / 'build' / 'test-artifacts'
+
+	def case_dir_for(self, name: str) -> Path:
+		"""
+		Per-test artifact directory: ``<artifacts_dir>/cases/<name>``, where
+		``name`` is laid out as nested sub-directories (path-based test names
+		keep their ``/`` structure rather than being flattened). Holds both the
+		runner's own ``log.ytr.log`` and any artifacts the test writes.
+		"""
+		return self.artifacts_dir / 'cases' / _sanitize_rel_path(name)
 
 	@property
 	def git_files(self) -> list[Path]:

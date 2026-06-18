@@ -1,9 +1,15 @@
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import typing
 import ya_test_runner
 from ya_test_runner import SharedContext
-from ya_test_runner.formatter import FORMATTING_MUTEX
+from ya_test_runner import formatter
+from ya_test_runner.formatter import (
+	FORMATTING_MUTEX,
+	DefaultLockableTextIO,
+	JsonFormatter,
+	Level,
+)
 
 from .scheduling import (
 	Env as SchedulingEnv,
@@ -23,6 +29,21 @@ class _Colors:
 	FAIL = '\033[91m'
 	WARNING = '\033[93m'
 	ENDC = '\033[0m'
+
+
+class _MultiFormatter(formatter.Formatter):
+	"""Fan a single log stream out to several formatters (e.g. stderr + file)."""
+
+	def __init__(self, children: typing.Iterable[formatter.Formatter]):
+		self._children = list(children)
+
+	def accepts(self, level: Level) -> bool:
+		return any(c.accepts(level) for c in self._children)
+
+	def dump(self, level: Level, message: str, **kw) -> None:
+		for child in self._children:
+			if child.accepts(level):
+				child.dump(level, message, **kw)
 
 
 class TestRecord(typing.NamedTuple):
@@ -263,6 +284,39 @@ async def _warn_not_finished(
 		)
 
 
+def _open_test_log(
+	ctx: _ExecutionContext, case: ya_test_runner.test.Case
+) -> tuple[SharedContext, JsonFormatter | None, typing.IO[str] | None]:
+	"""
+	Create the per-test artifact folder and a ``SharedContext`` whose logs and
+	command scripts are routed (one JSON object per line) into
+	``<artifacts>/cases/<name>/log.ytr.log`` (in addition to the global stderr
+	logger). Runner-owned files use the ``.ytr.`` infix so they do not clash
+	with the test's own artifacts sharing the directory. Falls back to the
+	global context if the folder cannot be created.
+	"""
+	log_dir = ctx.shared.case_dir_for(case.description.name)
+	try:
+		log_dir.mkdir(parents=True, exist_ok=True)
+		log_file = (log_dir / 'log.ytr.log').open('w', encoding='utf-8')
+	except OSError as e:
+		ctx.shared.logger.error(
+			'Failed to create test log directory',
+			case_name=case.description.name,
+			error=e,
+		)
+		return ctx.shared, None, None
+
+	file_fmt = JsonFormatter(DefaultLockableTextIO(log_file), min_level=Level.TRACE)
+	run_shared = replace(
+		ctx.shared,
+		logger=_MultiFormatter([ctx.shared.logger, file_fmt]),
+		printer=file_fmt,
+		case_dir=log_dir,
+	)
+	return run_shared, file_fmt, log_file
+
+
 async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Case):
 	import time
 
@@ -271,6 +325,8 @@ async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Cas
 	start_time = time.monotonic()
 	elapsed = 0.0
 
+	run_shared, file_fmt, log_file = _open_test_log(ctx, case)
+
 	warn_task: asyncio.Task | None = None
 	if not case.description.console_pool:
 		warn_task = asyncio.create_task(
@@ -278,7 +334,7 @@ async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Cas
 		)
 
 	try:
-		ctx.shared.logger.debug(
+		run_shared.logger.debug(
 			'Running test case',
 			case_name=case.description.name,
 		)
@@ -287,7 +343,7 @@ async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Cas
 		steps = ya_test_runner.exec.step.optimize_steps(steps)
 		context['steps'] = ya_test_runner.exec.step.dump_steps(steps)
 		try:
-			res = await ya_test_runner.exec.step.run_steps(ctx.shared, steps)
+			res = await ya_test_runner.exec.step.run_steps(run_shared, steps)
 			context['all_res'] = res
 			test_case_result = res[-1]
 			del context['all_res']
@@ -307,7 +363,7 @@ async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Cas
 	except Exception as e:
 		elapsed = time.monotonic() - start_time
 		context['exception'] = e
-		ctx.shared.logger.error(
+		run_shared.logger.error(
 			'Internal exception',
 			case_name=case.description.name,
 			error=e,
@@ -319,6 +375,16 @@ async def _run_case_locked(ctx: _ExecutionContext, case: ya_test_runner.test.Cas
 				await warn_task
 			except asyncio.CancelledError:
 				pass
+
+		# Mirror the full result (with context) into the per-test log file
+		if file_fmt is not None:
+			sign = 'PASS' if success else 'FAIL'
+			file_fmt.put(
+				f'{sign} {case.description.name} in {elapsed:.3f}s',
+				**context,
+			)
+		if log_file is not None:
+			log_file.close()
 
 		if not success:
 			ctx.failed.append(case.description.name)

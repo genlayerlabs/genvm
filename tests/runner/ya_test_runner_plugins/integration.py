@@ -246,8 +246,18 @@ class IntegrationSetupStep(ya_test_runner.exec.step.Python):
 		tmp_dir = self._case.tmp_dir
 		top_level_conf = self._case.top_level_conf
 
-		# Set up temp directory
-		shutil.rmtree(tmp_dir, ignore_errors=True)
+		# Set up temp directory. tmp_dir is this test's per-test log root, so we
+		# clear stale step artifacts but keep this prepare step's own (open) log
+		# directory; per-step dirs are (re)created when each step runs.
+		keep = local_ctx.shared.case_dir_for(self._case.description.name)
+		if tmp_dir.exists():
+			for child in tmp_dir.iterdir():
+				if child == keep:
+					continue
+				if child.is_dir():
+					shutil.rmtree(child, ignore_errors=True)
+				else:
+					child.unlink(missing_ok=True)
 		tmp_dir.mkdir(exist_ok=True, parents=True)
 
 		# Run preparation if needed
@@ -886,10 +896,10 @@ def _single_integration_test(
 		needed_services.add(modules_service)
 		needed_services.add(webdriver_service)
 
-	# Compute tmp_dir and unfold config
-	tmp_dir = local_ctx.shared.artifacts_dir.joinpath(
-		'integration', rel_path
-	).with_suffix('')
+	# Compute tmp_dir and unfold config. Each step's artifacts share that step's
+	# per-test case directory (<artifacts>/cases/<test_name>/<tree_path>/), with
+	# shared storage living at the test root (<artifacts>/cases/<test_name>/).
+	tmp_dir = local_ctx.shared.case_dir_for(test_name)
 
 	jsonnet_conf = _unfold_conf(
 		jsonnet_parsed,
