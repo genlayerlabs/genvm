@@ -13,7 +13,7 @@
 #
 # Idempotent: re-running only creates what is missing.
 
-set -euo pipefail
+set -x -euo pipefail
 
 git fetch origin --prune
 
@@ -21,25 +21,53 @@ remote_has() {
 	git show-ref --verify --quiet "refs/remotes/origin/$1"
 }
 
-for V in $(python3 support/ci/branch-versions.py list); do
+versions="$(python3 support/ci/branch-versions.py list)"
+
+# Collect every missing branch as a refspec and create them all in one
+# atomic push, so we never leave a train half-provisioned.
+pushrefs=()
+
+for V in $versions; do
 	VER="v${V}.x"
 	DEV="v${V}-dev"
 
 	if ! remote_has "$VER"; then
-		echo "Creating version branch ${VER} from main"
-		git push origin "origin/main:refs/heads/${VER}"
-		git fetch origin "$VER"
+		echo "Will create version branch ${VER} from main"
+		ver_commit="$(git rev-parse origin/main)"
+		pushrefs+=("origin/main:refs/heads/${VER}")
 	else
 		echo "Version branch ${VER} already exists"
+		ver_commit="$(git rev-parse "origin/${VER}")"
 	fi
 
 	if ! remote_has "$DEV"; then
-		echo "Creating dev branch ${DEV} from ${VER}"
-		git push origin "origin/${VER}:refs/heads/${DEV}"
-		git fetch origin "$DEV"
+		# Seed the dev branch one (empty) commit ahead of the version branch:
+		# a fresh ${DEV} identical to ${VER} has no diff, so the standing
+		# release-gate PR below would fail with "No commits between".
+		echo "Will create dev branch ${DEV} from ${VER} (with seed commit)"
+		seed="$(GIT_AUTHOR_NAME='github-actions[bot]' \
+			GIT_AUTHOR_EMAIL='41898282+github-actions[bot]@users.noreply.github.com' \
+			GIT_COMMITTER_NAME='github-actions[bot]' \
+			GIT_COMMITTER_EMAIL='41898282+github-actions[bot]@users.noreply.github.com' \
+			git commit-tree "${ver_commit}^{tree}" -p "${ver_commit}" \
+			-m "chore(ci): seed ${DEV} release-gate branch 🌱")"
+		pushrefs+=("${seed}:refs/heads/${DEV}")
 	else
 		echo "Dev branch ${DEV} already exists"
 	fi
+done
+
+if [ "${#pushrefs[@]}" -gt 0 ]; then
+	echo "Creating ${#pushrefs[@]} branch(es) in one atomic push"
+	git push --atomic origin "${pushrefs[@]}"
+	git fetch origin --prune
+else
+	echo "All branches already exist; nothing to push"
+fi
+
+for V in $versions; do
+	VER="v${V}.x"
+	DEV="v${V}-dev"
 
 	existing="$(gh pr list --repo "$GITHUB_REPOSITORY" --base "$VER" --head "$DEV" --state open --json number --jq '.[0].number // ""')"
 	if [ -z "$existing" ]; then
