@@ -346,8 +346,20 @@ impl Provider for OpenAICompatible {
         let response = res
             .body
             .pointer("/choices/0/message/content")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
+            .and_then(|v| v.as_str());
+
+        if response.is_none()
+            && res
+                .body
+                .pointer("/choices/0/finish_reason")
+                .and_then(|x| x.as_str())
+                == Some("length")
+        {
+            return Ok(ProviderResponse::new("".into(), tokens));
+        }
+
+        let response =
+            response.ok_or_else(|| anyhow::anyhow!("can't get response field {}", &res.body))?;
 
         Ok(ProviderResponse::new(response.to_owned(), tokens))
     }
