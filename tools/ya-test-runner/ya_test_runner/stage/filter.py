@@ -114,7 +114,13 @@ def _load_continue_file(shared: SharedContext, filepath: str) -> set[str]:
 		raise ValueError(f'Continue file not found: {filepath}')
 
 	content = path.read_text()
-	tests = {line.strip() for line in content.splitlines() if line.strip()}
+	tests: set[str] = set()
+	for line in content.splitlines():
+		line = line.strip()
+		# Skip blank lines and `#` comments
+		if not line or line.startswith('#'):
+			continue
+		tests.add(line)
 	shared.logger.info('Loaded continue file', path=str(path), test_count=len(tests))
 	return tests
 
