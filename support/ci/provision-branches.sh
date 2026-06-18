@@ -74,7 +74,7 @@ for V in $versions; do
 		echo "Opening standing release-gate PR ${DEV} -> ${VER}"
 		gh pr create --repo "$GITHUB_REPOSITORY" --base "$VER" --head "$DEV" \
 			--title "Release gate: ${DEV} → ${VER}" \
-			--body "Standing release-gate PR. \`${DEV}\` accumulates incremental v${V} work; this PR merges into the release-ready \`${VER}\` branch only once the full cross-repo E2E matrix is green. It may stay red while the v${V} train is in progress."
+			--body "Standing release-gate PR. \`${DEV}\` accumulates incremental v${V} work; this PR merges into the release-ready \`${VER}\` branch only once the cross-repo E2E pipeline is green. Comment \`/run-e2e v${V}\` to fire it (genlayerlabs/genlayer-e2e). It may stay red while the v${V} train is in progress."
 	else
 		echo "Standing PR ${DEV} -> ${VER} already open (#${existing})"
 	fi

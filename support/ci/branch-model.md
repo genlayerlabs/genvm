@@ -26,8 +26,13 @@ feature branch ──PR──▶ v<X>-dev ──standing PR (E2E gate)──▶ 
   (`branch_queue_guard.yaml` fails otherwise). Normal GenVM CI
   (`queue.yaml`) runs in the queue as before.
 - **Release gate**: a standing PR `v<X>-dev → v<X>.x` stays open. It is
-  gated by the cross-repo E2E matrix (`branch_e2e.yaml`, currently a
-  stub) and only merges once that matrix is green.
+  gated by the cross-repo E2E pipeline owned by
+  [`genlayerlabs/genlayer-e2e`](https://github.com/genlayerlabs/genlayer-e2e)
+  (synced into this repo as `.github/workflows/e2e.yml`; **not** a
+  `branch_*` workflow — see below). A maintainer comments
+  `/run-e2e <track>` on the standing PR to fire it; the pipeline posts a
+  check-run that branch protection on `v<X>.x` requires, so the PR merges
+  only once E2E is green.
 - **main** is never committed to directly. On every push to the latest
   version branch, `branch_forward.yaml` fast-forwards `main` to it, so
   `main` always equals `v<latest>.x`.
@@ -42,9 +47,17 @@ feature branch ──PR──▶ v<X>-dev ──standing PR (E2E gate)──▶ 
 | `branch_forward.yaml`      | push to `v*.x`                       | fast-forward `main` to the latest `v<X>.x`    |
 | `branch_retarget.yaml`     | PR opened/reopened against `main`    | retarget to `v<latest>-dev` + comment         |
 | `branch_provision.yaml`    | dispatch / `active-versions` change  | create dev/version branches + standing PRs    |
-| `branch_e2e.yaml`          | PR into `v*.x`                       | dev→version E2E gate (**stub**) + head guard  |
 | `branch_queue_guard.yaml`  | `merge_group`                        | fail unless the queue target is `v<X>-dev`    |
 | `branch_new_version.yaml`  | dispatch                             | cut the next train; push `main` + `v<new>.x` + `v<new>-dev` |
+
+The E2E release gate is **not** a `branch_*` workflow. The pipeline
+(`.github/workflows/e2e.yml`) and its cache/artifact housekeeper
+(`.github/workflows/e2e-housekeeper.yml`) are source-of-truth templates
+owned by `genlayerlabs/genlayer-e2e` and synced into this repo
+byte-identically via its sync PRs — GenVM is registered in that repo's
+`repos.yaml` (`component: genvm`, `gate_policy: release-branches`). Don't
+hand-edit them here; changes ship as a sync PR from genlayer-e2e. They run
+on a `/run-e2e` PR comment, not on the branch model's events.
 
 `support/ci/branch-versions.py` reads `active-versions` (`list`/`latest`;
 honors a `MONOREPO_ROOT` env override). `support/ci/provision-branches.sh`
@@ -105,9 +118,10 @@ Required status checks:
 - `v<X>-dev`: normal GenVM CI via the **merge queue** (`queue.yaml`) plus
   `branch / merge-queue target guard`. Enable the merge queue for this
   branch.
-- `v<X>.x`: the `branch / e2e (dev -> version)` checks (the release
-  gate). This PR may stay red while the train is in progress; it merges
-  only when E2E is green.
+- `v<X>.x`: the genlayer-e2e E2E check-run, posted when a maintainer runs
+  `/run-e2e <track>` on the standing PR (select it as a required check
+  once the first run surfaces it in the checks list). This PR may stay red
+  while the train is in progress; it merges only when E2E is green.
 - `main`: protected, fast-forward-only by the deploy key; no required
   checks needed (content already validated upstream).
 
