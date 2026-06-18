@@ -83,8 +83,8 @@ repos:
         files: ^flake-config\.(orig\.)?json$
 
       - id: check-cargo-versions
-        name: check Cargo.toml versions match support/ci/MAJOR_MINOR
+        name: sync Cargo.toml versions to .genvm-monorepo-root major-minor
         entry: ./support/ci/check-versions.py
         language: system
         pass_filenames: false
-        files: ^(executor/Cargo\.toml|modules/implementation/Cargo\.toml|support/ci/MAJOR_MINOR)$
+        files: ^(executor/Cargo\.toml|modules/implementation/Cargo\.toml|\.genvm-monorepo-root)$

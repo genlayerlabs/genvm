@@ -1,0 +1,49 @@
+name: branch / retarget main PRs to dev
+
+# main is an alias of the latest version branch and is never developed
+# on directly. Contributions must target the latest dev branch
+# (v<latest>-dev). When a PR is opened against main we retarget it to the
+# latest dev branch and leave an explanatory comment.
+#
+# pull_request_target is used so the workflow gets a write-scoped token
+# even for PRs from forks. We never check out or run the PR head code;
+# the checkout is of the trusted base branch only (to read
+# active-versions).
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+defaults:
+  run:
+    shell: bash -x {0}
+
+jobs:
+  retarget:
+    # Cheap skip for the common case of PRs already targeting a dev /
+    # version branch.
+    if: github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Retarget PR to latest dev branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST="$(python3 support/ci/branch-versions.py latest)"
+          DEV="v${LATEST}-dev"
+          PR="${{ github.event.pull_request.number }}"
+
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --base "$DEV"
+
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "$(cat <<EOF
+          👋 This PR targeted \`main\`, so I've retargeted it to the latest dev branch \`${DEV}\`.
+
+          \`main\` is protected and is only an alias of the latest release branch (\`v${LATEST}.x\`), kept in lockstep automatically. Active v${LATEST} work lands on \`${DEV}\`, which reaches \`v${LATEST}.x\` through the standing release-gate PR once the cross-repo E2E matrix is green.
+          EOF
+          )"

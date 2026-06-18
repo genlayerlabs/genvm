@@ -1,0 +1,40 @@
+name: branch / provision dev branches and standing PRs
+
+# Materialize the branch model for every active version train listed in
+# .genvm-monorepo-root. For each version X it ensures the version branch
+# v<X>.x, the dev branch v<X>-dev, and a standing release-gate PR
+# v<X>-dev -> v<X>.x all exist (see support/ci/provision-branches.sh).
+#
+# Idempotent — safe to re-run. Fires automatically when active-versions
+# changes, and on demand via the Actions tab.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['v*-dev', main]
+    paths: ['.genvm-monorepo-root']
+
+permissions:
+  contents: read
+  pull-requests: write
+
+defaults:
+  run:
+    shell: bash -x {0}
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Deploy key so branch-creating pushes bypass protection on the
+          # (protected) version / dev branches. Full history so the
+          # source refs for new branches resolve.
+          ssh-key: ${{ secrets.GENVM_CI_PRIVATE_KEY }}
+          fetch-depth: 0
+
+      - name: Provision branches and standing PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: support/ci/provision-branches.sh

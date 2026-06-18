@@ -1,5 +1,7 @@
 {
     "py-std": ["runners", "genlayer-py-std", "src"],
     "py-emb": ["runners", "genlayer-py-std", "src-emb"],
-    "pure-py": ["runners", "py-libs", "pure-py"]
+    "pure-py": ["runners", "py-libs", "pure-py"],
+    "major-minor": "0.3",
+    "active-versions": ["0.3"]
 }

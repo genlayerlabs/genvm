@@ -3,6 +3,7 @@
 !**/.vscode/extensions.json
 !**/.vscode/settings.example.json
 
+.claude/hooks
 .idea
 .envrc
 *.log

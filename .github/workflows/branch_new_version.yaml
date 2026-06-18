@@ -1,0 +1,68 @@
+name: branch / cut next version
+
+# Cut the next version train out of the latest active one:
+#   - bump .genvm-monorepo-root (major-minor + active-versions) and the
+#     Rust crate [package] versions to <new>.0 (support/ci/check-versions.py bump)
+#   - commit on top of main
+#   - push that commit to main, v<new>.x and v<new>-dev
+#
+# main is the latest train's alias, so it advances to the new commit too.
+# The v<new>-dev push (which changes .genvm-monorepo-root) triggers
+# branch_provision, which opens the standing v<new>-dev -> v<new>.x PR.
+#
+# Pushes go over SSH with GENVM_CI_PRIVATE_KEY (the protected-branch
+# bypass deploy key).
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        type: choice
+        required: false
+        description: "Version bump level (ignored if version_override is set)"
+        default: minor
+        options:
+          - minor
+          - major
+      version_override:
+        type: string
+        required: false
+        description: "Explicit major.minor (e.g. 0.6). If set, bump is ignored"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -x {0}
+
+jobs:
+  cut:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          ssh-key: ${{ secrets.GENVM_CI_PRIVATE_KEY }}
+          fetch-depth: 0
+
+      - name: Cut next version
+        run: |
+          git config user.name "genvm-ci"
+          git config user.email "genvm-ci@genlayer.com"
+
+          OVERRIDE="${{ github.event.inputs.version_override }}"
+          if [ -n "$OVERRIDE" ]; then
+            NEW="$(python3 support/ci/check-versions.py bump --set "$OVERRIDE")"
+          else
+            NEW="$(python3 support/ci/check-versions.py bump "${{ github.event.inputs.bump }}")"
+          fi
+          echo "New version train: v${NEW}"
+
+          git add .genvm-monorepo-root executor/Cargo.toml modules/implementation/Cargo.toml
+          git commit -m "chore(build): cut v${NEW} train 🚀"
+
+          SHA="$(git rev-parse HEAD)"
+          git push origin "${SHA}:refs/heads/main"
+          git push origin "${SHA}:refs/heads/v${NEW}.x"
+          git push origin "${SHA}:refs/heads/v${NEW}-dev"
