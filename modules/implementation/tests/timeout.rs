@@ -4,10 +4,10 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 
-use super::config::ScriptBackendConfig;
-use super::*;
-use crate::common;
-use crate::scripting;
+use genvm_modules::common;
+use genvm_modules::llm::config::ScriptBackendConfig;
+use genvm_modules::llm::*;
+use genvm_modules::scripting;
 
 #[tokio::test]
 async fn test_timeout() {
@@ -95,13 +95,14 @@ async fn test_timeout() {
         &hello,
         &config.gep(|x| &x.mod_base),
         metrics.gep(|x| &x.scripting),
+        false,
     )
     .unwrap();
     let llm_ctx = ctx::CtxPart {
         providers: providers.clone(),
         metrics,
     };
-    let sub_ctx = sync::DArc::new(crate::manager::execution_context::LlmSubContext {
+    let sub_ctx = sync::DArc::new(genvm_modules::manager::execution_context::LlmSubContext {
         scripting: scripting_ctx,
         module: llm_ctx,
     });

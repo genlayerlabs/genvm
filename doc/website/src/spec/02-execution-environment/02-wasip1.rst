@@ -114,6 +114,7 @@ Fail with ``Rofs`` error code:
 - ``path_filestat_set_times``
 - ``path_link``
 - ``path_remove_directory``
+- ``path_rename``
 - ``path_symlink``
 - ``path_unlink_file``
 
@@ -186,8 +187,11 @@ Does nothing and always returns success.
 ``fd_prestat_get`` Function
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#. If file descriptor does not exist, returns ``Badf`` error code
-#. Returns ``Notsup`` otherwise
+#. If the descriptor refers to a preopened directory, returns its ``Prestat``
+   (a ``Dir`` whose ``pr_name_len`` is the length of the directory's last path
+   component). This is required for libc preopen discovery.
+#. For any other descriptor (``stdin``/``stdout``/``stderr``, a regular file, or a
+   non-existent descriptor) returns ``Badf``.
 
 ``fd_write`` Function
 ~~~~~~~~~~~~~~~~~~~~~

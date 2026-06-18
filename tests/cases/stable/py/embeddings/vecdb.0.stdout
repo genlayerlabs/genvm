@@ -1,2 +1,2 @@
-[VecDB.Element(id=0, key=array([1., 2., 3., 4., 5.], dtype=float32), value='123', distance=30.0)]
+[VecDB.Element(id=0, key=array([1., 2., 3., 4., 5.], dtype=float32), value='123', distance=5.4772257804870605)]
 executed with `Return(null)`

@@ -44,6 +44,7 @@ end
 --- Raises a non-fatal `user_error` if any check fails (MALFORMED_URL, SCHEMA_FORBIDDEN, PORT_FORBIDDEN, TLD_FORBIDDEN).
 --- URLs whose host is in `config.always_allow_hosts` bypass port and TLD checks.
 ---@param url string the URL to validate
+---@return boolean allowlisted whether the host is in `config.always_allow_hosts`
 M.check_url = function(url)
 	local split_url = lib.rs.split_url(url)
 
@@ -78,7 +79,7 @@ M.check_url = function(url)
 	}
 
 	if table_has_val(M.rs.config.always_allow_hosts, split_url.host) then
-		return
+		return true
 	end
 
 	if split_url.port ~= nil and split_url.port ~= 80 and split_url.port ~= 443 then
@@ -116,6 +117,8 @@ M.check_url = function(url)
 			},
 		}
 	end
+
+	return false
 end
 
 return M

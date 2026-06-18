@@ -4,7 +4,9 @@ __all__ = (
 	'SentenceTransformer',
 	'SentenceTransformerFromPath',
 	'SentenceTransformer',
-	'EuclideanDistanceSquared',
+	'EuclideanDistance',
+	'ManhattanDistance',
+	'ChebyshevDistance',
 	'Distance',
 )
 

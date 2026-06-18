@@ -56,6 +56,9 @@ bytes = "1.10.1"
 libc = "0.2"
 sha3 = "0.10"
 papaya = "0.2.3"
+# kept in sync with the version reqwest depends on, to avoid a duplicate hickory
+# in the tree
+hickory-resolver = { version = "0.25", features = ["tokio"] }
 
 # we do not use anyhow feature because it does not work with boxed downcast_ref
 [dependencies.mlua]

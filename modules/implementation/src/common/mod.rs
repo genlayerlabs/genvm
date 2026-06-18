@@ -1,7 +1,7 @@
 use base64::Engine;
 use genvm_common::*;
 use genvm_modules_interfaces::GenericValue;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -16,6 +16,7 @@ pub enum ErrorKind {
     SENDING_REQUEST,
     DESERIALIZING,
     ABSENT_HEADER,
+    ADDRESS_FORBIDDEN,
     Other(String),
 }
 
@@ -38,6 +39,7 @@ impl ErrorKind {
             ErrorKind::SENDING_REQUEST => "SENDING_REQUEST".to_owned(),
             ErrorKind::DESERIALIZING => "DESERIALIZING".to_owned(),
             ErrorKind::ABSENT_HEADER => "ABSENT_HEADER".to_owned(),
+            ErrorKind::ADDRESS_FORBIDDEN => "ADDRESS_FORBIDDEN".to_owned(),
             ErrorKind::Other(str) => str.clone(),
         }
     }
@@ -153,7 +155,10 @@ where
 
 impl std::fmt::Display for ModuleError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{self:?}"))
+        match serde_json::to_string(self) {
+            Ok(json) => f.write_str(&json),
+            Err(_) => write!(f, "{self:?}"),
+        }
     }
 }
 
@@ -648,10 +653,183 @@ impl<'de> serde::Deserialize<'de> for Timeout {
     }
 }
 
-pub fn create_client() -> anyhow::Result<reqwest::Client> {
+fn base_client_builder() -> reqwest::ClientBuilder {
     reqwest::ClientBuilder::new()
         .user_agent("reqwest")
         .timeout(std::time::Duration::from_secs(300))
+}
+
+/// Whether an IPv4 address is not safe to connect to (not globally routable).
+fn ipv4_is_bad(ip: std::net::Ipv4Addr) -> bool {
+    if ip.is_unspecified()
+        || ip.is_private()
+        || ip.is_loopback()
+        || ip.is_link_local()
+        || ip.is_documentation()
+        || ip.is_broadcast()
+    {
+        return true;
+    }
+
+    let [a, b, _, _] = ip.octets();
+    a == 0                                    // "this" network 0.0.0.0/8
+        || a == 10                            // private 10.0.0.0/8
+        || a == 127                           // loopback 127.0.0.0/8
+        || (a == 169 && b == 254)             // link-local 169.254.0.0/16
+        || (a == 172 && (16..=31).contains(&b)) // private 172.16.0.0/12
+        || (a == 192 && b == 168)             // private 192.168.0.0/16
+        || (a == 100 && (64..=127).contains(&b)) // CGNAT 100.64.0.0/10
+        || a >= 224 // multicast/reserved/broadcast 224.0.0.0/3
+}
+
+/// Whether an IPv6 address is not safe to connect to (not globally routable).
+fn ipv6_is_bad(ip: std::net::Ipv6Addr) -> bool {
+    // an IPv4-mapped address (::ffff:a.b.c.d) is only as good as its IPv4 part
+    if let Some(v4) = ip.to_ipv4_mapped() {
+        return ipv4_is_bad(v4);
+    }
+
+    if ip.is_unspecified() || ip.is_loopback() || ip.is_unique_local() || ip.is_unicast_link_local()
+    {
+        return true;
+    }
+
+    let group = ip.segments()[0];
+    (0xfc00..=0xfdff).contains(&group)        // unique-local fc00::/7
+        || (0xfe80..=0xfebf).contains(&group) // link-local fe80::/10
+        || group >= 0xff00 // multicast ff00::/8
+}
+
+/// Whether a resolved address must not be connected to (SSRF guard).
+fn ip_is_bad(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => ipv4_is_bad(v4),
+        std::net::IpAddr::V6(v6) => ipv6_is_bad(v6),
+    }
+}
+
+/// Error returned by [`FilteringResolver`] when every resolved address was
+/// dropped as non-globally-routable. Detected in the request error chain by
+/// [`is_no_routable_address`] so it can be reported as a non-fatal user error.
+#[derive(Debug)]
+struct NoRoutableAddress;
+
+impl std::fmt::Display for NoRoutableAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("host resolved only to non-globally-routable addresses")
+    }
+}
+
+impl std::error::Error for NoRoutableAddress {}
+
+/// Whether `err`'s source chain contains a [`NoRoutableAddress`], i.e. the
+/// request failed because the filtering resolver rejected every address the
+/// host resolved to.
+pub fn is_no_routable_address(err: &reqwest::Error) -> bool {
+    let mut source: Option<&(dyn std::error::Error + 'static)> = Some(err);
+    while let Some(e) = source {
+        if e.downcast_ref::<NoRoutableAddress>().is_some() {
+            return true;
+        }
+        source = e.source();
+    }
+    false
+}
+
+/// Resolver that resolves via hickory and drops every address that is not
+/// globally routable. This is the SSRF guard for the web module: it prevents a
+/// contract from steering the node into the operator's internal network (e.g.
+/// link-local, loopback, RFC1918) — including via a DNS-rebinding attack, since
+/// the filtering happens in the very resolver reqwest connects through, leaving
+/// no second, unfiltered lookup. The hostname stays in the URL, so TLS SNI,
+/// certificate verification and the `Host` header keep working over HTTPS.
+struct FilteringResolver {
+    inner: Arc<hickory_resolver::TokioResolver>,
+}
+
+impl FilteringResolver {
+    fn new() -> anyhow::Result<Self> {
+        let mut builder = hickory_resolver::TokioResolver::builder_tokio()
+            .map_err(|e| anyhow::anyhow!("building hickory resolver: {e}"))?;
+        // look up A and AAAA so "happy eyeballs" works, matching reqwest's own
+        // hickory integration
+        builder.options_mut().ip_strategy = hickory_resolver::config::LookupIpStrategy::Ipv4AndIpv6;
+        Ok(Self {
+            inner: Arc::new(builder.build()),
+        })
+    }
+}
+
+impl reqwest::dns::Resolve for FilteringResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let inner = self.inner.clone();
+        Box::pin(async move {
+            let lookup = inner.lookup_ip(name.as_str()).await?;
+            // reqwest replaces the port `0` here with the port from the request URL
+            let addrs: Vec<std::net::SocketAddr> = lookup
+                .into_iter()
+                .filter(|ip| {
+                    let should_filter = ip_is_bad(*ip);
+                    if should_filter {
+                        log_debug!(ip = ip.to_string(), host = name.as_str(); "filtered non-globally-routable address");
+                    }
+                    !should_filter
+                })
+                .map(|ip| std::net::SocketAddr::new(ip, 0))
+                .collect();
+
+            if addrs.is_empty() {
+                return Err(Box::new(NoRoutableAddress) as Box<dyn std::error::Error + Send + Sync>);
+            }
+
+            let addrs: reqwest::dns::Addrs = Box::new(addrs.into_iter());
+            Ok(addrs)
+        })
+    }
+}
+
+/// A plain client that connects to whatever DNS returns. For trusted endpoints
+/// (LLM providers, the signer, allowlisted web hosts).
+pub fn create_client_unfiltered() -> anyhow::Result<reqwest::Client> {
+    base_client_builder().build().map_err(Into::into)
+}
+
+/// Maximum redirect hops, matching reqwest's default policy.
+const MAX_REDIRECTS: usize = 10;
+
+/// Redirect policy for the filtering client. reqwest never sends an IP-literal
+/// target through the DNS resolver, so a `Location:` pointing straight at e.g.
+/// `127.0.0.1` or `169.254.169.254` would bypass the resolver-based SSRF guard.
+/// This policy closes that hole by rejecting redirect hops whose host is a
+/// non-globally-routable IP literal; hostname targets keep being filtered by the
+/// resolver when the next hop connects.
+pub fn redirect_policy() -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(|attempt| {
+        if attempt.previous().len() >= MAX_REDIRECTS {
+            return attempt.error("too many redirects");
+        }
+        let bad = match attempt.url().host() {
+            Some(url::Host::Ipv4(ip)) => ip_is_bad(std::net::IpAddr::V4(ip)),
+            Some(url::Host::Ipv6(ip)) => ip_is_bad(std::net::IpAddr::V6(ip)),
+            // hostnames are resolved (and thus filtered) when the hop connects
+            _ => false,
+        };
+        if bad {
+            log_warn!(url = attempt.url().as_str(); "redirect to non-globally-routable IP-literal rejected");
+            attempt.error(NoRoutableAddress)
+        } else {
+            attempt.follow()
+        }
+    })
+}
+
+/// A client whose resolver drops non-globally-routable addresses (see
+/// [`FilteringResolver`]) and whose redirect policy rejects non-routable
+/// IP-literal hops (see [`redirect_policy`]). For contract-controlled web URLs.
+pub fn create_client_filtered() -> anyhow::Result<reqwest::Client> {
+    base_client_builder()
+        .dns_resolver(Arc::new(FilteringResolver::new()?))
+        .redirect(redirect_policy())
         .build()
         .map_err(Into::into)
 }
@@ -792,7 +970,6 @@ impl genvm_common::logger::ILogger for LoggerWithId {
     }
 }
 
-#[cfg(test)]
 pub mod tests {
     use std::sync::{Arc, Once};
 
@@ -820,6 +997,13 @@ pub mod tests {
             .unwrap()
     }
 
+    /// A plain client with no DNS filtering. Production code goes through
+    /// [`super::create_client_filtered`]; this exists for tests that need a
+    /// vanilla client.
+    pub fn create_client() -> anyhow::Result<reqwest::Client> {
+        super::base_client_builder().build().map_err(Into::into)
+    }
+
     pub fn get_hello() -> Arc<genvm_modules_interfaces::GenVMHello> {
         Arc::new(genvm_modules_interfaces::GenVMHello {
             genvm_id: genvm_modules_interfaces::GenVMId(999),
@@ -832,5 +1016,73 @@ pub mod tests {
             gas_data: std::collections::BTreeMap::new(),
             initial_time_units_allocation: 0,
         })
+    }
+}
+
+#[cfg(test)]
+mod ip_filter_tests {
+    use super::ip_is_bad;
+    use std::net::IpAddr;
+
+    fn bad(s: &str) -> bool {
+        ip_is_bad(s.parse::<IpAddr>().unwrap())
+    }
+
+    #[test]
+    fn ipv4_classification() {
+        // not globally routable
+        for ip in [
+            "0.0.0.0",
+            "10.1.2.3",
+            "127.0.0.1",
+            "169.254.1.1",
+            "172.16.0.1",
+            "172.31.255.255",
+            "192.168.1.1",
+            "100.64.0.1",
+            "100.127.255.255",
+            "224.0.0.1",
+            "255.255.255.255",
+        ] {
+            assert!(bad(ip), "{ip} should be filtered");
+        }
+
+        // globally routable
+        for ip in [
+            "1.1.1.1",
+            "8.8.8.8",
+            "172.15.0.1",
+            "172.32.0.1",
+            "100.63.0.1",
+            "93.184.216.34",
+        ] {
+            assert!(!bad(ip), "{ip} should be allowed");
+        }
+    }
+
+    #[test]
+    fn ipv6_classification() {
+        // not globally routable
+        for ip in [
+            "::1",
+            "::",
+            "fc00::1",
+            "fd12:3456::1",
+            "fe80::1",
+            "ff02::1",
+            "::ffff:127.0.0.1",
+            "::ffff:10.0.0.1",
+        ] {
+            assert!(bad(ip), "{ip} should be filtered");
+        }
+
+        // globally routable
+        for ip in [
+            "2606:4700:4700::1111",
+            "2001:4860:4860::8888",
+            "::ffff:8.8.8.8",
+        ] {
+            assert!(!bad(ip), "{ip} should be allowed");
+        }
     }
 }

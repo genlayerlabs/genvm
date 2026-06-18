@@ -39,3 +39,21 @@
 - `agent/environ_args/` - os.environ, sys.argv, sys.path, os.getpid
 - `agent/set_order/` - set/frozenset iteration order, dict ordering
 - `agent/id_repr/` - id(), repr(), object.__hash__
+- `agent/float_math/` - transcendental float math (sin/cos/exp/sqrt/log/atan2)
+  + repr(); VERIFIED deterministic via `nix develop .#full` (l==v==s byte-identical,
+  returns `453.77516336575655|3.141592653589793|1.4142135623730951|0.30000000000000004`)
+
+> NOTE: finding 1 above ("hardcoded seed [GenL,ayer]") is STALE. `random_get` is
+> now seeded from `sha3-256(stdin)` (8 LE u32 words) — see preview1.rs Context::new
+> and spec 02-wasip1.rst. Determinism is preserved; the seed just varies per input.
+
+## Spec audit (doc/website/src/spec vs executor)
+
+Cross-checked the spec against the implementation. Constants in `constants.rst`
+match `sdk-rs/src/abi/consts.rs` (both generated from `codegen/data/public-abi.json`).
+Three mismatches found and fixed (committed):
+1. `vm_error` codes: spec rendered `OOM:RAM`, wire format is space-joined `OOM RAM`
+   (fixed in codegen template `rst.rb`; corroborated by `exit_code 1` in result hashes).
+2. `fd_prestat_get`: spec said "Notsup otherwise"; impl returns `Prestat` for dirs,
+   `Badf` for everything else.
+3. `path_rename` was missing from the WASI Rofs always-erroring list.

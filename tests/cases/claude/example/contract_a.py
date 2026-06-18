@@ -1,9 +1,9 @@
 # { "Depends": "py-genlayer:test" }
-from genlayer import *
+import genlayer as gl
 
 
-class Contract(gl.Contract):
-	value: u256
+class Contract(gl.contract.Contract):
+	value: gl.u256
 
 	def __init__(self):
 		self.value = 42

@@ -25,7 +25,7 @@ def enumerate_trie_paths(entries, prefix = "")
 		next if entry.nil?
 		head = entry["head"]
 		tail = entry["tail"]
-		current = prefix.empty? ? head : "#{prefix}:#{head}"
+		current = prefix.empty? ? head : "#{prefix} #{head}"
 		if tail.is_a?(String) && tail.start_with?('$')
 			result << [current, tail[1..]]
 		elsif tail.is_a?(Array)
@@ -97,7 +97,7 @@ JSON.load_file(Pathname.new(json_path)).each { |t|
 		buf << "Type: str_trie\n\n"
 
 		enumerate_trie_paths(entries).each { |path, param|
-			rst_name = path.gsub('_', '-').gsub(':', '-')
+			rst_name = path.gsub('_', '-').gsub(' ', '-')
 			buf << '.. _gvm-def-str-trie-value-' << t_os.name.gsub('_', '-') << '-' << rst_name << ":\n\n"
 			buf << "``#{path}``\n"
 			buf << '~' * (path.size + 4) << "\n\n"

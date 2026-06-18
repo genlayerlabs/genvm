@@ -34,6 +34,11 @@ pub struct Request {
     pub error_on_status: bool,
     #[serde(default)]
     pub timeout: Option<crate::common::Timeout>,
+
+    /// Send through the plain (non-filtering) client instead of the SSRF-guarded
+    /// one. Set by the web module for hosts in `always_allow_hosts`.
+    #[serde(default = "default_false")]
+    pub unfiltered: bool,
 }
 
 const DROP_HEADERS: &[&str] = &[
@@ -135,6 +140,7 @@ mod tests {
             sign: false,
             response_body_max_size: Some(1024),
             timeout: None,
+            unfiltered: false,
         };
 
         let body_size_limit = req.response_body_max_size.unwrap_or(usize::MAX);
@@ -173,6 +179,7 @@ mod tests {
             sign: false,
             response_body_max_size: Some(1024),
             timeout: None,
+            unfiltered: false,
         };
 
         let body_size_limit = 1024;

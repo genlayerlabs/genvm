@@ -6,10 +6,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 
-use super::config::ScriptBackendConfig;
-use super::*;
-use crate::common;
-use crate::scripting;
+use genvm_modules::common;
+use genvm_modules::llm::*;
+use genvm_modules::scripting;
 
 #[tokio::test]
 async fn test_overloaded() {
@@ -39,7 +38,7 @@ async fn test_overloaded() {
         enabled: true,
         provider: config::Provider::OpenaiCompatible,
         key: "<empty>".to_owned(),
-        script_config: ScriptBackendConfig {
+        script_config: config::ScriptBackendConfig {
             models: BTreeMap::from([(
                 "model".to_owned(),
                 config::ModelConfig {
@@ -67,7 +66,7 @@ async fn test_overloaded() {
                 return;
             }
         },
-        script_config: ScriptBackendConfig {
+        script_config: config::ScriptBackendConfig {
             models: BTreeMap::from([(
                 "openrouter/auto".to_owned(),
                 config::ModelConfig {
@@ -171,13 +170,14 @@ async fn test_overloaded() {
         &hello,
         &config.gep(|x| &x.mod_base),
         metrics.gep(|x| &x.scripting),
+        false,
     )
     .unwrap();
     let llm_ctx = ctx::CtxPart {
         providers: providers.clone(),
         metrics,
     };
-    let sub_ctx = sync::DArc::new(crate::manager::execution_context::LlmSubContext {
+    let sub_ctx = sync::DArc::new(genvm_modules::manager::execution_context::LlmSubContext {
         scripting: scripting_ctx,
         module: llm_ctx,
     });

@@ -351,7 +351,8 @@ async fn check_llm_availability(
     let provider = backend.to_provider();
 
     let ctx = scripting::CtxPart {
-        client: common::create_client()?,
+        client: common::create_client_unfiltered()?,
+        client_unfiltered: common::create_client_unfiltered()?,
         metrics: sync::DArc::new(scripting::Metrics::default()),
         node_address: "test_node".to_owned(),
         sign_headers: Arc::new(BTreeMap::new()),

@@ -29,7 +29,11 @@ pub(super) fn try_unwrap_err(err: &mlua::Error) -> Option<ModuleError> {
 }
 
 pub struct CtxPart {
+    /// Client for the request itself. For the web module this is the filtering
+    /// client (SSRF guard) unless the request opts out via `unfiltered`.
     pub client: reqwest::Client,
+    /// Plain client used when a request sets `unfiltered` (allowlisted hosts).
+    pub client_unfiltered: reqwest::Client,
     pub sign_url: Arc<str>,
     pub sign_headers: Arc<BTreeMap<String, String>>,
     pub sign_vars: BTreeMap<String, String>,

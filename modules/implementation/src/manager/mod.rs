@@ -6,9 +6,9 @@ use warp::Filter;
 
 use crate::common;
 
-pub(crate) mod execution_context;
+pub mod execution_context;
 mod handlers;
-pub(crate) mod modules;
+pub mod modules;
 mod run;
 mod versioning;
 

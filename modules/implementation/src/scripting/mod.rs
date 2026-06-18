@@ -10,7 +10,7 @@ use mlua::LuaSerdeExt;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, future::Future, sync::Arc};
 
-use crate::common::{self, MapUserError, ModuleError};
+use crate::common::{self, ModuleError};
 
 pub use ctx::filters;
 pub use ctx::CtxPart;
@@ -64,10 +64,14 @@ pub fn anyhow_to_lua_error(e: anyhow::Error) -> mlua::Error {
     }
 }
 
+/// `filter_dns`: when true, `client` resolves through the SSRF-filtering
+/// resolver (web module). `client_unfiltered` is always a plain client, used by
+/// requests that opt out (allowlisted hosts).
 pub fn create_ctx_part(
     hello: &Arc<genvm_modules_interfaces::GenVMHello>,
     base_config: &sync::DArc<common::ModuleBaseConfig>,
     metrics: sync::DArc<Metrics>,
+    filter_dns: bool,
 ) -> anyhow::Result<ctx::CtxPart> {
     let mut sign_vars = BTreeMap::new();
 
@@ -82,9 +86,17 @@ pub fn create_ctx_part(
         }
     }
 
+    let client_unfiltered = common::create_client_unfiltered()?;
+    let client = if filter_dns {
+        common::create_client_filtered()?
+    } else {
+        client_unfiltered.clone()
+    };
+
     Ok(ctx::CtxPart {
         hello: hello.clone(),
-        client: common::create_client()?,
+        client,
+        client_unfiltered,
         node_address: hello.host_data.node_address.clone(),
         sign_vars,
         sign_headers: base_config.signer_headers.clone(),
@@ -120,7 +132,7 @@ pub fn create_default_ctx(
     vm: &mlua::Lua,
     table: &mlua::Table,
 ) -> anyhow::Result<sync::DArc<ctx::CtxPart>> {
-    let ctx_part = sync::DArc::new(create_ctx_part(hello, &base_config, metrics)?);
+    let ctx_part = sync::DArc::new(create_ctx_part(hello, &base_config, metrics, false)?);
     setup_lua_default_ctx(ctx_part.clone(), vm, table)?;
     Ok(ctx_part)
 }
@@ -235,6 +247,27 @@ pub struct ResponseJSON {
     pub body: serde_json::Value,
 }
 
+/// Map a failed `send()` to a module error. A request rejected because the
+/// filtering resolver dropped every resolved address (SSRF guard) becomes a
+/// **non-fatal** `ADDRESS_FORBIDDEN`, so the contract can recover; anything else
+/// is a fatal `SENDING_REQUEST`.
+fn map_send_error(url: &str, err: reqwest::Error) -> anyhow::Error {
+    let (causes, fatal) = if common::is_no_routable_address(&err) {
+        (vec![common::ErrorKind::ADDRESS_FORBIDDEN.into()], false)
+    } else {
+        (vec![common::ErrorKind::SENDING_REQUEST.into()], true)
+    };
+    ModuleError {
+        causes,
+        fatal,
+        ctx: BTreeMap::from([
+            ("url".to_owned(), GenericValue::Str(url.to_owned())),
+            ("rust_error".to_owned(), GenericValue::Str(err.to_string())),
+        ]),
+    }
+    .into()
+}
+
 async fn read_response_body_limited(
     mut response: reqwest::Response,
     limit: usize,
@@ -262,10 +295,7 @@ pub async fn send_request_get_lua_compatible_response_bytes(
     metrics.requests_count.increment();
     let lock = stats::tracker::Time::new(metrics.gep(|x| &x.requests_time));
 
-    let response = request
-        .send()
-        .await
-        .map_user_error(common::ErrorKind::SENDING_REQUEST, true)?;
+    let response = request.send().await.map_err(|e| map_send_error(url, e))?;
 
     let status = response.status().as_u16();
     let mut new_headers = BTreeMap::<String, bytes::Bytes>::new();
@@ -343,10 +373,7 @@ pub async fn send_request_get_lua_compatible_response_json(
     metrics.requests_count.increment();
     let lock = stats::tracker::Time::new(metrics.gep(|x| &x.requests_time));
 
-    let response = request
-        .send()
-        .await
-        .map_user_error(common::ErrorKind::SENDING_REQUEST, true)?;
+    let response = request.send().await.map_err(|e| map_send_error(url, e))?;
 
     let status = response.status().as_u16();
     let mut new_headers = BTreeMap::<String, bytes::Bytes>::new();

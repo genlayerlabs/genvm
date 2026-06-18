@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-__all__ = ('VecDB', 'VecDBElement', 'Distance', 'EuclideanDistanceSquared')
+__all__ = (
+	'VecDB',
+	'VecDBElement',
+	'Distance',
+	'EuclideanDistance',
+	'ManhattanDistance',
+	'ChebyshevDistance',
+)
 
 from genlayer.storage import DynArray, TreeMap
 from genlayer.types import u32, i32
@@ -13,16 +20,54 @@ import math
 
 
 class Distance(typing.Protocol):
-	def __call__(self, l, r) -> typing.Any: ...
+	"""
+	Protocol for distance functions used by :py:class:`VecDB`.
+
+	Implementations must be a true metric (non-negative, symmetric, zero iff
+	equal, and satisfying the triangle inequality); otherwise the cover-tree
+	pruning in :py:meth:`VecDB.knn` may skip the true nearest neighbor.
+	"""
+
+	def __call__(self, l, r) -> typing.Any:
+		"""
+		Compute the distance between two vectors.
+
+		:param l: left-hand vector
+		:param r: right-hand vector
+		:returns: distance between ``l`` and ``r``
+		"""
+		...
 
 
 @allow
-class EuclideanDistanceSquared(Distance):
+class EuclideanDistance(Distance):
 	def __call__(self, l, r):
-		return np.sum((l - r) ** 2)
+		return np.sqrt(np.sum((l - r) ** 2))
 
 	def batch(self, l, r):
-		return ((l - r) ** 2).sum(axis=1)
+		return np.sqrt(((l - r) ** 2).sum(axis=1))
+
+
+@allow
+class ManhattanDistance(Distance):
+	"""L1 (taxicab) distance. A true metric, safe for cover-tree pruning."""
+
+	def __call__(self, l, r):
+		return np.sum(np.abs(l - r))
+
+	def batch(self, l, r):
+		return np.abs(l - r).sum(axis=1)
+
+
+@allow
+class ChebyshevDistance(Distance):
+	"""L-infinity (max-coordinate) distance. A true metric, safe for pruning."""
+
+	def __call__(self, l, r):
+		return np.max(np.abs(l - r))
+
+	def batch(self, l, r):
+		return np.abs(l - r).max(axis=1)
 
 
 Id = typing.NewType('Id', int)
@@ -158,6 +203,8 @@ class VecDB[T: np.number, S: int, V, D: Distance]:
 		return res
 
 	def get_by_id_or_none(self, id: Id) -> VecDBElement[T, S, V, None] | None:
+		if id < 0 or id >= len(self._keys):
+			return None
 		if id in self._free_idx:
 			return None
 		return VecDBElement(self, id, None)
@@ -209,7 +256,7 @@ class VecDB[T: np.number, S: int, V, D: Distance]:
 		This ensures the separating invariant: points at level L are > base^L apart.
 		"""
 		if dist <= 0:
-			return -2147483648  # i32 min as sentinel for coincident points
+			return MIN_LEVEL  # coincident points: clamp to deepest level
 		return int(math.ceil(math.log(dist) / math.log(self._base))) - 1
 
 	def _insert_into_tree(self, new_idx: u32) -> None:
