@@ -170,6 +170,7 @@ async fn test_overloaded() {
         &hello,
         &config.gep(|x| &x.mod_base),
         metrics.gep(|x| &x.scripting),
+        false,
     )
     .unwrap();
     let llm_ctx = ctx::CtxPart {
