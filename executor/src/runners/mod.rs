@@ -23,11 +23,125 @@ pub fn append_runner_subpath(id: &str, hash: &str, path: &mut std::path::PathBuf
     path.push(&hash[2..]);
 }
 
-pub fn get_runner_of_contract(address: calldata::Address) -> symbol_table::GlobalSymbol {
-    let mut contract_id = String::from("on_chain:0x");
-    contract_id.push_str(&hex::encode(address.raw()));
+/// A parsed runner id. Runner ids come in the following forms:
+///
+/// - `name:hash` — a packaged runner identified by its human readable name and
+///   content hash (in debug mode `hash` may also be `test`/`latest`).
+/// - `contract` — the runner of the contract that is currently being executed.
+/// - `chain:<address>:<a|f>:<slot>` — read the runner code blob from a storage
+///   slot of an arbitrary contract. `address` is a `0x`-prefixed 20 byte hex
+///   address, `a`/`f` selects accepted (latest non final) / finalized state and
+///   `slot` is a `0x`-prefixed 32 byte hex slot id.
+/// - `custom:<hash>` — a runner registered at runtime, looked up by its hash.
+pub enum RunnerId {
+    NameHash {
+        name: symbol_table::GlobalSymbol,
+        hash: symbol_table::GlobalSymbol,
+    },
+    Contract,
+    Chain {
+        address: calldata::Address,
+        on: crate::public_abi::StorageType,
+        slot: crate::SlotID,
+    },
+    Custom {
+        hash: symbol_table::GlobalSymbol,
+    },
+}
 
-    symbol_table::GlobalSymbol::from(contract_id)
+fn is_hash_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '='
+}
+
+fn parse_hex_fixed<const N: usize>(s: &str) -> Option<[u8; N]> {
+    let s = s.strip_prefix("0x").unwrap_or(s);
+    if s.len() != N * 2 {
+        return None;
+    }
+    let mut out = [0u8; N];
+    hex::decode_to_slice(s, &mut out).ok()?;
+    Some(out)
+}
+
+pub fn parse_runner_id(id: &str) -> Option<RunnerId> {
+    if id == "contract" {
+        return Some(RunnerId::Contract);
+    }
+
+    if let Some(rest) = id.strip_prefix("chain:") {
+        let mut it = rest.split(':');
+        let address = it.next()?;
+        let on = it.next()?;
+        let slot = it.next()?;
+        if it.next().is_some() {
+            return None;
+        }
+
+        let address = calldata::Address::from(parse_hex_fixed::<20>(address)?);
+        let on = match on {
+            "a" => crate::public_abi::StorageType::LatestNonFinal,
+            "f" => crate::public_abi::StorageType::LatestFinal,
+            _ => return None,
+        };
+        let slot = crate::SlotID::from_bytes(parse_hex_fixed::<32>(slot)?);
+
+        return Some(RunnerId::Chain { address, on, slot });
+    }
+
+    if let Some(rest) = id.strip_prefix("custom:") {
+        if rest.is_empty() || !rest.chars().all(is_hash_char) {
+            return None;
+        }
+        return Some(RunnerId::Custom {
+            hash: symbol_table::GlobalSymbol::new(rest),
+        });
+    }
+
+    let (name, hash) = id.split_once(':')?;
+    if name.is_empty() || hash.is_empty() {
+        return None;
+    }
+    for c in name.chars() {
+        if !c.is_ascii_alphanumeric() && c != '-' && c != '_' {
+            log_warn!("character `{c}` is not allowed in runner id");
+            return None;
+        }
+    }
+    if !hash.chars().all(is_hash_char) {
+        return None;
+    }
+    Some(RunnerId::NameHash {
+        name: symbol_table::GlobalSymbol::new(name),
+        hash: symbol_table::GlobalSymbol::new(hash),
+    })
+}
+
+/// Canonical textual form of a [`RunnerId::Chain`]. Used as the cache key so
+/// that an explicit `chain:` reference and the current `contract` resolve to the
+/// same entry when they point at the same address/state/slot.
+pub fn chain_canonical(
+    address: calldata::Address,
+    on: crate::public_abi::StorageType,
+    slot: crate::SlotID,
+) -> String {
+    let on = match on {
+        crate::public_abi::StorageType::LatestFinal => 'f',
+        _ => 'a',
+    };
+    format!(
+        "chain:0x{}:{}:0x{}",
+        hex::encode(address.raw()),
+        on,
+        hex::encode(slot.raw())
+    )
+}
+
+pub fn get_runner_of_contract(
+    address: calldata::Address,
+    state: crate::public_abi::StorageType,
+) -> symbol_table::GlobalSymbol {
+    let slot = crate::SlotID::ZERO.indirection(crate::host::message::root_offsets::CODE);
+    symbol_table::GlobalSymbol::from(chain_canonical(address, state, slot))
 }
 
 pub struct ArchiveCache {
