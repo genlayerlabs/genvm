@@ -34,8 +34,8 @@ pub struct Args {
     sync: bool,
     #[clap(
         long,
-        default_value = "rwscn",
-        help = "r?w?s?c?n?, read/write/send messages/call contracts/spawn nondet"
+        default_value = "rwscnu",
+        help = "r?w?s?c?n?u?, read/write/send messages/call contracts/spawn nondet/register runners"
     )]
     permissions: String,
     #[clap(long, help = "override LLM module address from config")]
@@ -222,7 +222,7 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
     }
 
     let mut perm_size = 0;
-    for perm in ["r", "w", "s", "c", "n"] {
+    for perm in ["r", "w", "s", "c", "n", "u"] {
         if args.permissions.contains(perm) {
             perm_size += 1;
         }

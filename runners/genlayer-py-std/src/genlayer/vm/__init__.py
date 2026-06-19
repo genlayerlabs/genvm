@@ -20,6 +20,7 @@ __all__ = (
 	'Result',
 	'trace',
 	'trace_time_micro',
+	'register_runner',
 	'ABI',
 )
 
@@ -333,4 +334,24 @@ def trace_time_micro() -> int:
 			},
 		},
 		lambda x: typing.cast(int, calldata.decode(x)),
+	).get()
+
+
+def register_runner(code: collections.abc.Buffer) -> str:
+	"""
+	Registers a runner archive at runtime and returns its ``custom:<hash>`` id.
+
+	The returned id can be referenced from ``Depends``/``With`` actions of other
+	runners. Requires deterministic mode and the ``register_runners`` permission.
+
+	:param code: runner archive bytes (ustar/zip or commented text)
+	:return: the ``custom:<hash>`` runner id
+	"""
+	return gl_call.gl_call_generic(
+		{
+			'RegisterRunner': {
+				'code': code,
+			},
+		},
+		lambda x: typing.cast(str, calldata.decode(x)),
 	).get()

@@ -427,7 +427,7 @@ fn default_message_fee_allocation() -> Vec<genvm_common::domain::fees::MessageAl
 }
 
 fn default_permissions() -> String {
-    "rwscn".to_owned()
+    "rwscnu".to_owned()
 }
 
 impl Request {

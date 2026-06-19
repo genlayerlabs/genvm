@@ -714,6 +714,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         can_spawn_nondet: my_conf.can_spawn_nondet,
                         can_call_others: my_conf.can_call_others,
                         can_send_messages: my_conf.can_send_messages,
+                        can_register_runners: my_conf.can_register_runners,
                         state_mode: state,
                     },
                     message_data: ExtendedMessage {
@@ -1344,6 +1345,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 data,
                 allow_write_ops,
             } => self.sandbox(data, allow_write_ops).await,
+            gl_call::Message::RegisterRunner { code } => self.register_runner(code).await,
             gl_call::Message::Trace(message) => self.gl_call_trace(message).await,
         }
     }
@@ -1579,6 +1581,54 @@ impl ContextVFS<'_> {
         }
     }
 
+    async fn register_runner(
+        &mut self,
+        code: bytes::Bytes,
+    ) -> Result<generated::types::Fd, generated::types::Error> {
+        if !self.context.data.conf.is_deterministic {
+            return Err(generated::types::Errno::Forbidden.into());
+        }
+        if !self.context.data.conf.can_register_runners {
+            return Err(generated::types::Errno::Forbidden.into());
+        }
+
+        let hash = crate::runners::custom_runner_hash(&code);
+
+        let archive = crate::runners::parse(code)
+            .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
+        let is_det = self.context.data.conf.is_deterministic;
+        if !self
+            .context
+            .data
+            .supervisor
+            .limiter
+            .get(is_det)
+            .consume(archive.total_size)
+        {
+            return Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
+                rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into(),
+            )));
+        }
+
+        let id = self
+            .context
+            .data
+            .supervisor
+            .register_custom_runner(hash, archive);
+
+        let data = calldata::encode(&calldata::Value::Str(id.as_str().to_owned()));
+        Ok(generated::types::Fd::from(
+            self.vfs
+                .place_content(vfs::FileContents {
+                    contents: bytes::Bytes::from(data),
+                    pos: 0,
+                    release_memory: true,
+                })
+                .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
+        ))
+    }
+
     async fn run_nondet(
         &mut self,
         data_leader: bytes::Bytes,
@@ -1746,6 +1796,7 @@ impl ContextVFS<'_> {
                     can_spawn_nondet: false,
                     can_call_others: false,
                     can_send_messages: false,
+                    can_register_runners: false,
                     state_mode: public_abi::StorageType::Default,
                 },
                 message_data,
@@ -1833,6 +1884,7 @@ impl ContextVFS<'_> {
                 can_spawn_nondet: false,
                 can_call_others: false,
                 can_send_messages: zelf_conf.can_send_messages & allow_write_ops,
+                can_register_runners: false,
                 state_mode: zelf_conf.state_mode,
             },
             message_data,

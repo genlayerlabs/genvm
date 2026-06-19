@@ -576,6 +576,11 @@ pub enum Message {
         allow_write_ops: bool,
     },
 
+    RegisterRunner {
+        #[cfg_attr(feature = "arbitrary", arbitrary(with = crate::abi::arb::arb_bytes))]
+        code: Bytes,
+    },
+
     WebRender(web_iface::RenderPayload),
     WebRequest(web_iface::RequestPayload),
     ExecPrompt(llm_iface::PromptPayload),

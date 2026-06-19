@@ -136,6 +136,14 @@ pub fn chain_canonical(
     )
 }
 
+/// Derives the hash component of a `custom:<hash>` runner id from its code.
+pub fn custom_runner_hash(code: &[u8]) -> symbol_table::GlobalSymbol {
+    use sha3::Digest as _;
+    let mut digest = sha3::Sha3_256::new();
+    digest.update(code);
+    symbol_table::GlobalSymbol::from(hex::encode(digest.finalize()))
+}
+
 pub fn get_runner_of_contract(
     address: calldata::Address,
     state: crate::public_abi::StorageType,
