@@ -21,6 +21,7 @@ __all__ = (
 	'trace',
 	'trace_time_micro',
 	'register_runner',
+	'map_file',
 	'ABI',
 )
 
@@ -368,3 +369,27 @@ def register_runner(code: collections.abc.Buffer) -> str:
 		},
 		lambda x: typing.cast(str, calldata.decode(x)),
 	).get()
+
+
+def map_file(runner: str, path_in_runner: str, path_in_vfs: str) -> None:
+	"""
+	Maps a file from a runner into the VM filesystem at runtime.
+
+	Behaves the same as the ``MapFile`` runner action: if ``path_in_runner`` ends
+	with ``/`` the whole directory subtree is mapped, otherwise a single file.
+
+	:param runner: runner id (e.g. ``name:hash``, ``contract``, ``custom:<hash>``)
+	:param path_in_runner: path within the runner archive
+	:param path_in_vfs: absolute destination path in the VM filesystem
+	"""
+	wasi.gl_call(
+		calldata.encode(
+			{
+				'MapFile': {
+					'runner': runner,
+					'path_in_runner': path_in_runner,
+					'path_in_vfs': path_in_vfs,
+				}
+			}
+		)
+	)

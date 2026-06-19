@@ -583,6 +583,12 @@ pub enum Message {
         code: Bytes,
     },
 
+    MapFile {
+        runner: String,
+        path_in_runner: String,
+        path_in_vfs: String,
+    },
+
     WebRender(web_iface::RenderPayload),
     WebRequest(web_iface::RequestPayload),
     ExecPrompt(llm_iface::PromptPayload),

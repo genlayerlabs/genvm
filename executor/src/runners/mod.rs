@@ -144,6 +144,13 @@ pub fn custom_runner_hash(code: &[u8]) -> symbol_table::GlobalSymbol {
     symbol_table::GlobalSymbol::from(hex::encode(digest.finalize()))
 }
 
+/// Builds the canonical `custom:<hash>` runner id from its hash.
+pub fn custom_runner_id(hash: symbol_table::GlobalSymbol) -> symbol_table::GlobalSymbol {
+    let mut id = String::from("custom:");
+    id.push_str(hash.as_str());
+    symbol_table::GlobalSymbol::from(id)
+}
+
 pub fn get_runner_of_contract(
     address: calldata::Address,
     state: crate::public_abi::StorageType,
