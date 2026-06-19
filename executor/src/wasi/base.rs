@@ -11,6 +11,7 @@ pub struct Config {
     pub can_spawn_nondet: bool,
     pub can_send_messages: bool,
     pub can_call_others: bool,
+    pub can_register_runners: bool,
     pub state_mode: public_abi::StorageType,
 }
 

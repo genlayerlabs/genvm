@@ -186,6 +186,31 @@ Payload
 
 Creates isolated VM instance. See :ref:`gvm-permissions` for permission inheritance details.
 
+``RegisterRunner`` Message
+--------------------------
+
+Registers a runner archive at runtime, making it available under the
+``custom:<hash>`` runner id. The ``<hash>`` is
+derived from the supplied ``code`` and the parsed archive is charged against the
+memory limit. Returns the resulting runner id (calldata-encoded string).
+
+Payload
+~~~~~~~
+
+.. code-block::
+
+   {
+     "RegisterRunner": {
+       "code": Bytes              // runner archive (ustar/zip or commented text)
+     }
+   }
+
+Requirements
+~~~~~~~~~~~~
+
+#. :ref:`gvm-perm-deterministic`
+#. :ref:`gvm-perm-register-runners`
+
 ``WebRender`` Message
 ---------------------
 

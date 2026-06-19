@@ -51,6 +51,14 @@ Requires :ref:`gvm-perm-deterministic` as well.
 
 Allows spawning :ref:`gvm-def-non-det-mode` :term:`sub-VM` instances via ``RunNondet``.
 
+.. _gvm-perm-register-runners:
+
+``register_runners``
+--------------------
+
+Allows registering runner archives at runtime via ``RegisterRunner``, making
+them available under ``custom:<hash>`` runner ids. Requires :ref:`gvm-perm-deterministic` as well.
+
 Permission Changes on Sub-VM Creation
 --------------------------------------
 
