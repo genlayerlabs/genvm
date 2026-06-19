@@ -40,6 +40,13 @@ ya-test-runner run [OPTIONS]
 | `--fail-fast` | Stop execution after first failure |
 | `--coverage` | Enable coverage collection for Rust tests |
 | `--log-level LEVEL` | Set log level (trace/debug/info/warning/error) |
+| `--ignore-hash` | Skip `.hash` (execution-hash) comparison entirely |
+
+**`--ignore-hash`:** integration cases compare both the printed semantics
+(`.N.stdout`) and a deterministic execution hash (`.N.hash`). When adding a new
+case, you usually don't have a correct `.hash` yet — run with `--ignore-hash` so
+only the `.stdout` semantics are checked, or set `stable_hash: false` on the
+entry (then validators compare to the leader's hash instead of a committed file).
 
 ### Show Information
 ```bash
