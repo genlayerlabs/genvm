@@ -5,15 +5,15 @@ description: Reviews the current GenVM branch by fanning out three specialized r
 
 # Reviewing a GenVM branch
 
-Run a three-pass review using the dedicated subagents. Launch all three **in a
-single message** (one Agent tool call each) so they run concurrently — they are
-independent and read-only.
+Run a three-pass review using the dedicated subagents. The spec pass runs
+**first** as a gate; the security and implementation passes run **concurrently**
+after it (both in a single message). All three are read-only.
 
 | Pass | Agent (`subagent_type`) | Owns |
 | --- | --- | --- |
-| Spec | `spec-reviewer` | ADR/proposal quality; spec & schema soundness as documents |
-| Security | `security-reviewer` | permissions, sandbox propagation, limiter/consume-once, parsing, exfiltration |
-| Implementation | `implementation-reviewer` | code-vs-spec drift, AI slop, duplicated logic, doc completeness, useless comments |
+| Spec | `reviewer-spec` | ADR/proposal quality; spec & schema soundness; completeness; edge cases documented/inferrable |
+| Security | `reviewer-security` | permissions, sandbox propagation, limiter/consume-once, parsing, exfiltration (ranked by `SECURITY.md`) |
+| Implementation | `reviewer-implementation` | code-vs-spec drift, AI slop, duplicated logic, edge cases tested, doc completeness, useless comments |
 
 ## Baseline
 
@@ -25,10 +25,11 @@ finding — it is intentional.
 ## Procedure
 
 1. Confirm the base branch (default `v0.3-dev`).
-2. In one message, spawn `spec-reviewer`, `security-reviewer`, and
-   `implementation-reviewer`, each told the base branch and any extra scope the
-   user gave.
-3. Synthesize their three reports into one review: lead with the merge verdict,
+2. Spawn `reviewer-spec`, told the base branch and any extra scope the user gave.
+   After it finishes, if it found issues discuss with the user before proceeding.
+3. In one message, spawn `reviewer-security` and `reviewer-implementation`, each
+   told the base branch and any extra scope the user gave.
+4. Synthesize their three reports into one review: lead with the merge verdict,
    then a **Blocking** section and a **Nits** section, attributing findings to
    their pass. De-duplicate overlaps (e.g. a duplicated-logic issue both security
    and implementation raise) into a single entry.
