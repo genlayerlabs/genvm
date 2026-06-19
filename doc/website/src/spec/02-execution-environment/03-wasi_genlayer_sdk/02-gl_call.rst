@@ -179,8 +179,10 @@ Payload
 
    {
      "Sandbox": {
-       "data": Bytes,             // Code/data for sandbox execution
-       "allow_write_ops": Bool    // Whether to allow write operations
+       "data": Bytes,                  // Code/data for sandbox execution
+       "allow_write_storage": Bool,    // Whether to allow storage writes
+       "allow_send_messages": Bool,    // Whether to allow sending messages
+       "allow_register_runners": Bool  // Whether to allow registering runners
      }
    }
 

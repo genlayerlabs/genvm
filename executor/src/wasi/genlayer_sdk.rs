@@ -1343,8 +1343,18 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             } => self.run_nondet(data_leader, data_validator).await,
             gl_call::Message::Sandbox {
                 data,
-                allow_write_ops,
-            } => self.sandbox(data, allow_write_ops).await,
+                allow_write_storage,
+                allow_send_messages,
+                allow_register_runners,
+            } => {
+                self.sandbox(
+                    data,
+                    allow_write_storage,
+                    allow_send_messages,
+                    allow_register_runners,
+                )
+                .await
+            }
             gl_call::Message::RegisterRunner { code } => self.register_runner(code).await,
             gl_call::Message::Trace(message) => self.gl_call_trace(message).await,
         }
@@ -1849,7 +1859,9 @@ impl ContextVFS<'_> {
     async fn sandbox(
         &mut self,
         data: bytes::Bytes,
-        allow_write_ops: bool,
+        allow_write_storage: bool,
+        allow_send_messages: bool,
+        allow_register_runners: bool,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         let supervisor = self.context.data.supervisor.clone();
 
@@ -1880,11 +1892,11 @@ impl ContextVFS<'_> {
                 needs_error_fingerprint: false,
                 is_deterministic: zelf_conf.is_deterministic,
                 can_read_storage: zelf_conf.can_read_storage,
-                can_write_storage: zelf_conf.can_write_storage & allow_write_ops,
+                can_write_storage: zelf_conf.can_write_storage & allow_write_storage,
                 can_spawn_nondet: false,
                 can_call_others: false,
-                can_send_messages: zelf_conf.can_send_messages & allow_write_ops,
-                can_register_runners: false,
+                can_send_messages: zelf_conf.can_send_messages & allow_send_messages,
+                can_register_runners: zelf_conf.can_register_runners & allow_register_runners,
                 state_mode: zelf_conf.state_mode,
             },
             message_data,

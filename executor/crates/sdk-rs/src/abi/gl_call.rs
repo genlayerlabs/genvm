@@ -573,7 +573,9 @@ pub enum Message {
         #[cfg_attr(feature = "arbitrary", arbitrary(with = crate::abi::arb::arb_bytes))]
         data: Bytes,
 
-        allow_write_ops: bool,
+        allow_write_storage: bool,
+        allow_send_messages: bool,
+        allow_register_runners: bool,
     },
 
     RegisterRunner {

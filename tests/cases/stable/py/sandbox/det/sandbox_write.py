@@ -13,5 +13,5 @@ class Contract(gl.contract.Contract):
 			self.counter += 1
 
 		print(f'counter before: {self.counter}')
-		gl.vm.spawn_sandbox(sb, allow_write_ops=True)
+		gl.vm.spawn_sandbox(sb, allow_write_storage=True)
 		print(f'counter after: {self.counter}')

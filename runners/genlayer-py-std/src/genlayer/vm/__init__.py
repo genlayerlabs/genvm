@@ -158,7 +158,11 @@ def _decode_sub_vm_result(
 
 @_lazy_api
 def spawn_sandbox[T: calldata.Decoded](
-	fn: typing.Callable[[], T], *, allow_write_ops: bool = False
+	fn: typing.Callable[[], T],
+	*,
+	allow_write_storage: bool = False,
+	allow_send_messages: bool = False,
+	allow_register_runners: bool = False,
 ) -> Lazy[Return[T] | VMError | UserError]:
 	"""
 	Runs a function in an isolated sandbox environment.
@@ -167,8 +171,13 @@ def spawn_sandbox[T: calldata.Decoded](
 	This provides isolation and security for potentially unsafe operations.
 	Determinism of spawned VM matches the determinism of the current VM.
 
+	Each ``allow_*`` flag grants the corresponding permission to the sandbox, but
+	only if the current VM holds it as well.
+
 	:param fn: Function to execute in the sandbox (must be serializable with cloudpickle)
-	:param allow_write_ops: Whether to allow write operations in the sandbox. Only effective if current VM has corresponding permission
+	:param allow_write_storage: Whether to allow storage writes in the sandbox
+	:param allow_send_messages: Whether to allow sending messages in the sandbox
+	:param allow_register_runners: Whether to allow registering runners in the sandbox
 
 	Example:
 		>>> result = spawn_sandbox(lambda: risky_computation())
@@ -180,7 +189,9 @@ def spawn_sandbox[T: calldata.Decoded](
 		{
 			'Sandbox': {
 				'data': cloudpickle.dumps(fn),
-				'allow_write_ops': allow_write_ops,
+				'allow_write_storage': allow_write_storage,
+				'allow_send_messages': allow_send_messages,
+				'allow_register_runners': allow_register_runners,
 			}
 		},
 		_decode_sub_vm_result_retn,
@@ -287,7 +298,9 @@ def run_nondet_default[T: calldata.Decoded](
 		import genlayer.vm as vm
 
 		answer = vm.spawn_sandbox(
-			lambda: validator_fn(leaders_result), allow_write_ops=True
+			lambda: validator_fn(leaders_result),
+			allow_write_storage=True,
+			allow_send_messages=True,
 		)
 
 		if type(answer) is not type(leaders_result):
