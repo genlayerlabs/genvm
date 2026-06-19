@@ -12,7 +12,7 @@ class Contract(gl.contract.Contract):
 		balance_after_first = self.balance
 		print(f'balance before={balance_before} after_first_send={balance_after_first}')
 
-		# Now spawn a sandbox with write ops allowed.
+		# Now spawn a sandbox with message sending allowed.
 		# BUG: the sandbox gets a fresh messages_decremented=0,
 		# so it thinks the full balance is still available.
 		def sandbox_fn():
@@ -22,7 +22,7 @@ class Contract(gl.contract.Contract):
 			gl.contract.get_at(target).emit_transfer(value=60)
 			return self.balance
 
-		result = gl.vm.spawn_sandbox(sandbox_fn, allow_write_ops=True)
+		result = gl.vm.spawn_sandbox(sandbox_fn, allow_send_messages=True)
 		print(f'sandbox result={result}')
 		print(f'balance final={self.balance}')
 		# If we reach here with both transfers accepted,

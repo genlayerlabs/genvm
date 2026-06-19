@@ -90,7 +90,8 @@ The sandboxed :term:`sub-VM` has:
 
 - :ref:`gvm-perm-deterministic` is **inherited**
 - :ref:`gvm-perm-read-storage` is **inherited**
-- :ref:`gvm-perm-write-storage` is **inherited** if ``allow_write_ops`` is set, otherwise **disabled**
+- :ref:`gvm-perm-write-storage` is **inherited** if ``allow_write_storage`` is set, otherwise **disabled**
 - :ref:`gvm-perm-spawn-nondet` is **disabled**
 - :ref:`gvm-perm-call-others` is **disabled**
-- :ref:`gvm-perm-send-messages` is **inherited** if ``allow_write_ops`` is set, otherwise **disabled**
+- :ref:`gvm-perm-send-messages` is **inherited** if ``allow_send_messages`` is set, otherwise **disabled**
+- :ref:`gvm-perm-register-runners` is **inherited** if ``allow_register_runners`` is set, otherwise **disabled**

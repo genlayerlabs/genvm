@@ -12,7 +12,7 @@ class Contract(gl.contract.Contract):
 			gl.contract.get_at(target).emit_transfer(value=60)
 			return self.balance
 
-		result = gl.vm.spawn_sandbox(sandbox_fn, allow_write_ops=True)
+		result = gl.vm.spawn_sandbox(sandbox_fn, allow_send_messages=True)
 		print(f'sandbox result={result} balance after sandbox={self.balance}')
 
 		try:
