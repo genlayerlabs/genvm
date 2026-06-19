@@ -1632,6 +1632,13 @@ impl ContextVFS<'_> {
         path_in_runner: String,
         path_in_vfs: String,
     ) -> Result<generated::types::Fd, generated::types::Error> {
+        // Resolving a `chain:` runner reads another contract's storage, so this
+        // is gated on the same permission as `storage_read` to avoid becoming a
+        // read-storage bypass.
+        if !self.context.data.conf.can_read_storage {
+            return Err(generated::types::Errno::Forbidden.into());
+        }
+
         let supervisor = self.context.data.supervisor.clone();
         let is_det = self.context.data.conf.is_deterministic;
         let limiter = supervisor.limiter.get(is_det);

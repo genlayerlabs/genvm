@@ -233,6 +233,14 @@ Payload
      }
    }
 
+Mapping into ``/vm/`` is forbidden. Resolving a ``chain:`` runner reads another
+contract's storage, so this requires :ref:`gvm-perm-read-storage`.
+
+Requirements
+~~~~~~~~~~~~
+
+#. :ref:`gvm-perm-read-storage`
+
 ``WebRender`` Message
 ---------------------
 
