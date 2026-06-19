@@ -252,3 +252,61 @@ pub fn verify_runner(runner_id: &str) -> Option<(&str, &str)> {
     }
     Some((runner_id, runner_hash))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn addr40() -> String {
+        format!("0x{}1", "0".repeat(39))
+    }
+    fn slot64() -> String {
+        format!("0x{}2", "0".repeat(63))
+    }
+
+    #[test]
+    fn parse_runner_id_forms() {
+        assert!(matches!(
+            parse_runner_id("contract"),
+            Some(RunnerId::Contract)
+        ));
+        assert!(matches!(
+            parse_runner_id("py-genlayer:test"),
+            Some(RunnerId::NameHash { .. })
+        ));
+        assert!(matches!(
+            parse_runner_id("custom:deadbeef"),
+            Some(RunnerId::Custom { .. })
+        ));
+
+        match parse_runner_id(&format!("chain:{}:f:{}", addr40(), slot64())) {
+            Some(RunnerId::Chain { on, .. }) => {
+                assert_eq!(on, crate::public_abi::StorageType::LatestFinal)
+            }
+            _ => panic!("expected a chain runner id"),
+        }
+        match parse_runner_id(&format!("chain:{}:a:{}", addr40(), slot64())) {
+            Some(RunnerId::Chain { on, .. }) => {
+                assert_eq!(on, crate::public_abi::StorageType::LatestNonFinal)
+            }
+            _ => panic!("expected a chain runner id"),
+        }
+    }
+
+    #[test]
+    fn parse_runner_id_rejects_malformed() {
+        assert!(parse_runner_id("custom:").is_none()); // empty hash
+        assert!(parse_runner_id("custom:bad/char").is_none()); // invalid char
+        assert!(parse_runner_id(":hash").is_none()); // empty name
+        assert!(parse_runner_id("name:").is_none()); // empty hash
+        assert!(parse_runner_id("with space:hash").is_none()); // invalid name char
+
+        // chain: closed grammar
+        assert!(parse_runner_id(&format!("chain:0x01:f:{}", slot64())).is_none()); // short address
+        assert!(parse_runner_id(&format!("chain:{}:f:0x02", addr40())).is_none()); // short slot
+        assert!(parse_runner_id(&format!("chain:{}:x:{}", addr40(), slot64())).is_none()); // bad a|f
+        assert!(parse_runner_id(&format!("chain:{}:f:{}:extra", addr40(), slot64())).is_none()); // extra segment
+        assert!(parse_runner_id(&format!("chain:0x{}:f:{}", "z".repeat(40), slot64())).is_none());
+        // non-hex address
+    }
+}
