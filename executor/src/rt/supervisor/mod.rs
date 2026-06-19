@@ -229,17 +229,18 @@ impl Supervisor {
         self.custom_runners.get(&hash).map(|r| r.clone())
     }
 
-    /// Registers a runner archive under `custom:<hash>`. Returns the canonical
-    /// runner id it can be referenced by.
+    /// Registers a runner from its `code`, returning the `custom:<hash>` id it can
+    /// be referenced by.
+    ///
+    /// The archive is parsed and charged against `limiter` only the first time a
+    /// given hash is seen — re-registering the same code is a cheap no-op, so a
+    /// contract cannot exhaust the memory limit by registering in a loop.
     pub fn register_custom_runner(
         &self,
-        hash: GlobalSymbol,
-        archive: runners::Archive,
-    ) -> GlobalSymbol {
-        self.custom_runners.insert(hash, archive);
-        let mut id = String::from("custom:");
-        id.push_str(hash.as_str());
-        GlobalSymbol::from(id)
+        code: bytes::Bytes,
+        limiter: &rt::memlimiter::Limiter,
+    ) -> anyhow::Result<GlobalSymbol> {
+        register_custom_runner_into(&self.custom_runners, code, limiter)
     }
 
     pub fn start(config: &config::Config, ctor: Ctor) -> anyhow::Result<Arc<Self>> {
@@ -590,4 +591,54 @@ async fn nondet_vm_processor(
 
     std::mem::drop(read_permit);
     log_debug!(count = count; "nondet worker done");
+}
+
+/// Core of [`Supervisor::register_custom_runner`]; charges the parsed archive
+/// against `limiter` only on the first registration of a given hash.
+fn register_custom_runner_into(
+    custom_runners: &dashmap::DashMap<GlobalSymbol, runners::Archive>,
+    code: bytes::Bytes,
+    limiter: &rt::memlimiter::Limiter,
+) -> anyhow::Result<GlobalSymbol> {
+    let hash = runners::custom_runner_hash(&code);
+
+    if let dashmap::mapref::entry::Entry::Vacant(slot) = custom_runners.entry(hash) {
+        let archive = runners::parse(code).map_err(|e| {
+            rt::errors::VMError::wrap(public_abi::VmError::invalid_contract().val(), e)
+        })?;
+        if !limiter.consume(archive.total_size) {
+            return Err(rt::errors::VMError(public_abi::VmError::oom().ram().val(), None).into());
+        }
+        slot.insert(archive);
+    }
+
+    Ok(runners::custom_runner_id(hash))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn register_custom_runner_consumes_once() {
+        let map = dashmap::DashMap::new();
+        let limiter = rt::memlimiter::Limiter::new("test-register");
+        let code = bytes::Bytes::from_static(b"# { \"Depends\": \"py-genlayer:test\" }\n");
+
+        let id = register_custom_runner_into(&map, code.clone(), &limiter).unwrap();
+        let remaining_after_first = limiter.get_remaining_memory();
+
+        // the first registration must have charged the archive
+        assert!(remaining_after_first < u32::MAX);
+
+        // re-registering the same code must be a cheap no-op: same id, no extra
+        // memory charged and no duplicate map entries
+        for _ in 0..1000 {
+            let again = register_custom_runner_into(&map, code.clone(), &limiter).unwrap();
+            assert_eq!(again, id);
+        }
+
+        assert_eq!(limiter.get_remaining_memory(), remaining_after_first);
+        assert_eq!(map.len(), 1);
+    }
 }

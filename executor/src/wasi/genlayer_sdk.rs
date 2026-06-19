@@ -1608,30 +1608,11 @@ impl ContextVFS<'_> {
             return Err(generated::types::Errno::Forbidden.into());
         }
 
-        let hash = crate::runners::custom_runner_hash(&code);
-
-        let archive = crate::runners::parse(code)
-            .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
-
         let is_det = self.context.data.conf.is_deterministic;
-        if !self
-            .context
-            .data
-            .supervisor
-            .limiter
-            .get(is_det)
-            .consume(archive.total_size)
-        {
-            return Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
-                rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into(),
-            )));
-        }
-
-        let id = self
-            .context
-            .data
-            .supervisor
-            .register_custom_runner(hash, archive);
+        let supervisor = self.context.data.supervisor.clone();
+        let id = supervisor
+            .register_custom_runner(code, supervisor.limiter.get(is_det))
+            .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
         let data = calldata::encode(&calldata::Value::Str(id.as_str().to_owned()));
         Ok(generated::types::Fd::from(
