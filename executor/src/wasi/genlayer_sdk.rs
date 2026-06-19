@@ -271,6 +271,7 @@ pub struct Context {
 
 pub struct ContextVFS<'a> {
     pub(super) vfs: &'a mut vfs::VFS,
+    pub(super) preview1: &'a mut super::preview1::Context,
     pub(super) context: &'a mut Context,
 }
 
@@ -1356,6 +1357,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 .await
             }
             gl_call::Message::RegisterRunner { code } => self.register_runner(code).await,
+            gl_call::Message::MapFile {
+                runner,
+                path_in_runner,
+                path_in_vfs,
+            } => self.map_file(runner, path_in_runner, path_in_vfs).await,
             gl_call::Message::Trace(message) => self.gl_call_trace(message).await,
         }
     }
@@ -1637,6 +1643,45 @@ impl ContextVFS<'_> {
                 })
                 .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
         ))
+    }
+
+    async fn map_file(
+        &mut self,
+        runner: String,
+        path_in_runner: String,
+        path_in_vfs: String,
+    ) -> Result<generated::types::Fd, generated::types::Error> {
+        let supervisor = self.context.data.supervisor.clone();
+        let is_det = self.context.data.conf.is_deterministic;
+        let limiter = supervisor.limiter.get(is_det);
+
+        let contract_address = self.context.data.message_data.message.contract_address;
+        let contract_id = crate::runners::get_runner_of_contract(
+            contract_address,
+            self.context.data.conf.state_mode,
+        );
+
+        let (_id, arch) = crate::rt::supervisor::actions::load_runner(
+            &supervisor,
+            contract_id,
+            limiter,
+            symbol_table::GlobalSymbol::from(runner),
+        )
+        .await
+        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
+        let cancellation = supervisor.shared_data.cancellation.clone();
+        crate::rt::supervisor::actions::map_archive_file(
+            self.preview1,
+            limiter,
+            &cancellation,
+            &arch,
+            &path_in_runner,
+            &path_in_vfs,
+        )
+        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
+        Ok(file_fd_none())
     }
 
     async fn run_nondet(

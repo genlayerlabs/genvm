@@ -54,67 +54,253 @@ struct Resolved {
     kind: ResolvedKind,
 }
 
-impl Ctx<'_, '_> {
-    fn resolve_runner(&self, id: symbol_table::GlobalSymbol) -> anyhow::Result<Resolved> {
-        let Some(parsed) = runners::parse_runner_id(id.as_str()) else {
-            return Err(make_malformed_runner_error(
-                "runner id doesn't match expected format",
-            ));
+/// Resolves a runner id to its canonical cache key and load strategy.
+///
+/// Free-standing so it can be shared between contract initialization
+/// ([`Ctx`]) and runtime `gl_call`s ([`load_runner`]).
+fn resolve_runner(
+    supervisor: &rt::supervisor::Supervisor,
+    contract_id: symbol_table::GlobalSymbol,
+    id: symbol_table::GlobalSymbol,
+) -> anyhow::Result<Resolved> {
+    let Some(parsed) = runners::parse_runner_id(id.as_str()) else {
+        return Err(make_malformed_runner_error(
+            "runner id doesn't match expected format",
+        ));
+    };
+
+    match parsed {
+        runners::RunnerId::Contract => Ok(Resolved {
+            id: contract_id,
+            kind: ResolvedKind::Preloaded,
+        }),
+        runners::RunnerId::NameHash { name, hash } => {
+            let hash = if hash.as_str() == "test" || hash.as_str() == "latest" {
+                if !supervisor.shared_data.debug_mode {
+                    log_warn!(":test/ :latest runner used in non-debug mode, this is not allowed");
+                    return Err(make_malformed_runner_error(
+                        "runner id doesn't match expected format",
+                    ));
+                }
+                let new_latest = supervisor.runner_cache.get_latest(name);
+                log_info!(runner_id = name.as_str(), new_latest:? = new_latest; "resolving :latest runner");
+                let Some(new_latest) = new_latest else {
+                    return Err(make_malformed_runner_error(
+                        "runner id doesn't match expected format",
+                    ));
+                };
+                new_latest
+            } else {
+                hash
+            };
+
+            if !supervisor.runner_cache.has_in_all(name, hash) {
+                anyhow::bail!("runner {}:{} not found", name, hash);
+            }
+
+            let mut canonical = name.as_str().to_owned();
+            canonical.push(':');
+            canonical.push_str(hash.as_str());
+
+            Ok(Resolved {
+                id: GlobalSymbol::new(canonical),
+                kind: ResolvedKind::Disk { name, hash },
+            })
+        }
+        runners::RunnerId::Chain { address, on, slot } => Ok(Resolved {
+            id: GlobalSymbol::from(runners::chain_canonical(address, on, slot)),
+            kind: ResolvedKind::Chain { address, on, slot },
+        }),
+        runners::RunnerId::Custom { hash } => Ok(Resolved {
+            id: runners::custom_runner_id(hash),
+            kind: ResolvedKind::Custom { hash },
+        }),
+    }
+}
+
+/// Loads (and caches) the archive for an already-resolved runner.
+async fn get_arch(
+    supervisor: &rt::supervisor::Supervisor,
+    limiter: &rt::memlimiter::Limiter,
+    resolved: Resolved,
+) -> anyhow::Result<(
+    symbol_table::GlobalSymbol,
+    sync::DArc<runners::ArchiveCache>,
+)> {
+    let Resolved { id, kind } = resolved;
+
+    let cache = &supervisor.runner_cache;
+
+    let new_arch = match kind {
+        ResolvedKind::Disk { name, hash } => {
+            cache
+                .get_or_create(
+                    id,
+                    || async {
+                        let mut path = cache.runners_path().to_owned();
+                        runners::append_runner_subpath(name.as_str(), hash.as_str(), &mut path);
+                        path.set_extension("tar");
+                        if !path.exists() {
+                            anyhow::bail!("runner {} not found", id);
+                        }
+
+                        let data = util::mmap_file(&path)
+                            .with_context(|| format!("memory mapping runner archive for {id}"))?;
+                        let data = bytes::Bytes::copy_from_slice(data.as_ref());
+                        runners::Archive::from_ustar(data)
+                            .with_context(|| format!("parsing ustar archive for {id}"))
+                    },
+                    limiter,
+                )
+                .await?
+        }
+        ResolvedKind::Preloaded => {
+            cache
+                .get_or_create(
+                    id,
+                    || async { anyhow::bail!("runner {} is not preloaded", id) },
+                    limiter,
+                )
+                .await?
+        }
+        ResolvedKind::Chain { address, on, slot } => {
+            cache
+                .get_or_create(
+                    id,
+                    || async {
+                        let mut storage = rt::vm::storage::Storage::new(
+                            address,
+                            supervisor.get_storage_limiter(),
+                            crate::wasi::genlayer_sdk::StorageHostHolder(
+                                supervisor.host.clone(),
+                                crate::wasi::genlayer_sdk::ReadToken {
+                                    account: address,
+                                    mode: on,
+                                },
+                            ),
+                        );
+                        let code = storage
+                            .read_code_at(slot, limiter)
+                            .await
+                            .with_context(|| format!("reading chain runner code for {id}"))?;
+                        runners::parse(bytes::Bytes::from(code))
+                            .with_context(|| format!("parsing chain runner for {id}"))
+                    },
+                    limiter,
+                )
+                .await?
+        }
+        ResolvedKind::Custom { hash } => {
+            cache
+                .get_or_create(
+                    id,
+                    || async {
+                        supervisor
+                            .get_custom_runner(hash)
+                            .ok_or_else(|| anyhow::anyhow!("custom runner {} not found", id))
+                    },
+                    limiter,
+                )
+                .await?
+        }
+    };
+
+    Ok((id, new_arch))
+}
+
+/// Resolves and loads a runner archive by id. Shared entry point used by both
+/// contract initialization and runtime `gl_call`s.
+pub(crate) async fn load_runner(
+    supervisor: &rt::supervisor::Supervisor,
+    contract_id: symbol_table::GlobalSymbol,
+    limiter: &rt::memlimiter::Limiter,
+    id: symbol_table::GlobalSymbol,
+) -> anyhow::Result<(
+    symbol_table::GlobalSymbol,
+    sync::DArc<runners::ArchiveCache>,
+)> {
+    let resolved = resolve_runner(supervisor, contract_id, id)?;
+    get_arch(supervisor, limiter, resolved).await
+}
+
+/// Maps a file (or, when `file` ends with `/`, a directory subtree) from a
+/// runner archive into the VM filesystem at `to`. Mirrors [`InitAction::MapFile`]
+/// so the runtime `MapFile` `gl_call` behaves identically.
+pub(crate) fn map_archive_file(
+    preview1: &mut crate::wasi::preview1::Context,
+    limiter: &rt::memlimiter::Limiter,
+    cancellation: &genvm_common::cancellation::Token,
+    arch: &runners::ArchiveCache,
+    file: &str,
+    to: &str,
+) -> anyhow::Result<()> {
+    if file.ends_with("/") {
+        let is_root = file == "/";
+
+        let range = if is_root {
+            arch.files.data.range::<str, std::ops::RangeFull>(..)
+        } else {
+            arch.files.data.range(String::from(file)..)
         };
 
-        match parsed {
-            runners::RunnerId::Contract => Ok(Resolved {
-                id: self.contract_id,
-                kind: ResolvedKind::Preloaded,
-            }),
-            runners::RunnerId::NameHash { name, hash } => {
-                let hash = if hash.as_str() == "test" || hash.as_str() == "latest" {
-                    if !self.supervisor.shared_data.debug_mode {
-                        log_warn!(
-                            ":test/ :latest runner used in non-debug mode, this is not allowed"
-                        );
-                        return Err(make_malformed_runner_error(
-                            "runner id doesn't match expected format",
-                        ));
-                    }
-                    let new_latest = self.supervisor.runner_cache.get_latest(name);
-                    log_info!(runner_id = name.as_str(), new_latest:? = new_latest; "resolving :latest runner");
-                    let Some(new_latest) = new_latest else {
-                        return Err(make_malformed_runner_error(
-                            "runner id doesn't match expected format",
-                        ));
-                    };
-                    new_latest
-                } else {
-                    hash
-                };
+        let must_start_with: &str = if is_root { "" } else { file };
 
-                if !self.supervisor.runner_cache.has_in_all(name, hash) {
-                    anyhow::bail!("runner {}:{} not found", name, hash);
-                }
-
-                let mut canonical = name.as_str().to_owned();
-                canonical.push(':');
-                canonical.push_str(hash.as_str());
-
-                Ok(Resolved {
-                    id: GlobalSymbol::new(canonical),
-                    kind: ResolvedKind::Disk { name, hash },
-                })
+        for (name, file_contents) in range {
+            if cancellation.is_cancelled() {
+                return Err(rt::errors::VMError(public_abi::VmError::timeout(), None).into());
             }
-            runners::RunnerId::Chain { address, on, slot } => Ok(Resolved {
-                id: GlobalSymbol::from(runners::chain_canonical(address, on, slot)),
-                kind: ResolvedKind::Chain { address, on, slot },
-            }),
-            runners::RunnerId::Custom { hash } => {
-                let mut canonical = String::from("custom:");
-                canonical.push_str(hash.as_str());
-                Ok(Resolved {
-                    id: GlobalSymbol::from(canonical),
-                    kind: ResolvedKind::Custom { hash },
-                })
+
+            if name.ends_with("/") {
+                continue;
             }
+
+            if !name.starts_with(must_start_with) {
+                log_trace!(from = file, to = to, name = name; "aborting file mapping");
+                break;
+            }
+
+            let mut name_in_fs = String::from(to);
+            if !name_in_fs.ends_with("/") {
+                name_in_fs.push('/');
+            }
+            name_in_fs.push_str(&name[must_start_with.len()..]);
+
+            if maps_into_vm(&name_in_fs) {
+                return Err(make_malformed_runner_error(&format!(
+                    "mapping into /vm/ is forbidden: {name_in_fs}"
+                )));
+            }
+
+            if !limiter
+                .consume(public_abi::memory_limiter_consts::FILE_MAPPING + name_in_fs.len() as u32)
+            {
+                return Err(
+                    rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into(),
+                );
+            }
+
+            preview1.map_file(&name_in_fs, file_contents.clone())?;
         }
+    } else {
+        if maps_into_vm(to) {
+            return Err(make_malformed_runner_error(&format!(
+                "mapping into /vm/ is forbidden: {to}"
+            )));
+        }
+
+        if !limiter.consume(public_abi::memory_limiter_consts::FILE_MAPPING + to.len() as u32) {
+            return Err(rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into());
+        }
+
+        preview1.map_file(to, arch.get_file(file)?)?;
+    }
+
+    Ok(())
+}
+
+impl Ctx<'_, '_> {
+    fn resolve_runner(&self, id: symbol_table::GlobalSymbol) -> anyhow::Result<Resolved> {
+        resolve_runner(self.supervisor, self.contract_id, id)
     }
 
     async fn get_arch(
@@ -124,89 +310,8 @@ impl Ctx<'_, '_> {
         symbol_table::GlobalSymbol,
         sync::DArc<runners::ArchiveCache>,
     )> {
-        let Resolved { id, kind } = resolved;
-
         let limiter = self.vm.store.data_mut().limits.clone();
-        let cache = &self.supervisor.runner_cache;
-
-        let new_arch = match kind {
-            ResolvedKind::Disk { name, hash } => {
-                cache
-                    .get_or_create(
-                        id,
-                        || async {
-                            let mut path = cache.runners_path().to_owned();
-                            runners::append_runner_subpath(name.as_str(), hash.as_str(), &mut path);
-                            path.set_extension("tar");
-                            if !path.exists() {
-                                anyhow::bail!("runner {} not found", id);
-                            }
-
-                            let data = util::mmap_file(&path).with_context(|| {
-                                format!("memory mapping runner archive for {id}")
-                            })?;
-                            let data = bytes::Bytes::copy_from_slice(data.as_ref());
-                            runners::Archive::from_ustar(data)
-                                .with_context(|| format!("parsing ustar archive for {id}"))
-                        },
-                        &limiter,
-                    )
-                    .await?
-            }
-            ResolvedKind::Preloaded => {
-                cache
-                    .get_or_create(
-                        id,
-                        || async { anyhow::bail!("runner {} is not preloaded", id) },
-                        &limiter,
-                    )
-                    .await?
-            }
-            ResolvedKind::Chain { address, on, slot } => {
-                let supervisor = self.supervisor;
-                cache
-                    .get_or_create(
-                        id,
-                        || async {
-                            let mut storage = rt::vm::storage::Storage::new(
-                                address,
-                                supervisor.get_storage_limiter(),
-                                crate::wasi::genlayer_sdk::StorageHostHolder(
-                                    supervisor.host.clone(),
-                                    crate::wasi::genlayer_sdk::ReadToken {
-                                        account: address,
-                                        mode: on,
-                                    },
-                                ),
-                            );
-                            let code = storage
-                                .read_code_at(slot, &limiter)
-                                .await
-                                .with_context(|| format!("reading chain runner code for {id}"))?;
-                            runners::parse(bytes::Bytes::from(code))
-                                .with_context(|| format!("parsing chain runner for {id}"))
-                        },
-                        &limiter,
-                    )
-                    .await?
-            }
-            ResolvedKind::Custom { hash } => {
-                let supervisor = self.supervisor;
-                cache
-                    .get_or_create(
-                        id,
-                        || async {
-                            supervisor
-                                .get_custom_runner(hash)
-                                .ok_or_else(|| anyhow::anyhow!("custom runner {} not found", id))
-                        },
-                        &limiter,
-                    )
-                    .await?
-            }
-        };
-
-        Ok((id, new_arch))
+        get_arch(self.supervisor, &limiter, resolved).await
     }
 
     fn load_modules(
@@ -309,97 +414,17 @@ impl Ctx<'_, '_> {
 
         match action {
             InitAction::MapFile { to, file } => {
-                if file.ends_with("/") {
-                    let is_root = file.as_ref() == "/";
-
-                    let file_name_str = String::from(&file[..]);
-
-                    let range = if is_root {
-                        current_runner_arch
-                            .files
-                            .data
-                            .range::<str, std::ops::RangeFull>(..)
-                    } else {
-                        current_runner_arch.files.data.range(file_name_str..)
-                    };
-
-                    let must_start_with: &str = if is_root { "" } else { file.as_ref() };
-
-                    for (name, file_contents) in range {
-                        if self.supervisor.shared_data.cancellation.is_cancelled() {
-                            return Err(
-                                rt::errors::VMError(public_abi::VmError::timeout(), None).into()
-                            );
-                        }
-
-                        if name.ends_with("/") {
-                            continue;
-                        }
-
-                        if !name.starts_with(must_start_with) {
-                            log_trace!(from = file, to = to, name = name; "aborting file mapping");
-
-                            break;
-                        }
-
-                        let mut name_in_fs = String::from(&to[..]);
-                        if !name_in_fs.ends_with("/") {
-                            name_in_fs.push('/');
-                        }
-                        name_in_fs.push_str(&name[must_start_with.len()..]);
-
-                        if maps_into_vm(&name_in_fs) {
-                            return Err(make_malformed_runner_error(&format!(
-                                "mapping into /vm/ is forbidden: {name_in_fs}"
-                            )));
-                        }
-
-                        let limiter = &self.vm.store.data_mut().limits;
-
-                        if !limiter.consume(
-                            public_abi::memory_limiter_consts::FILE_MAPPING
-                                + name_in_fs.len() as u32,
-                        ) {
-                            return Err(rt::errors::VMError(
-                                abi::consts::VmError::oom().ram().val(),
-                                None,
-                            )
-                            .into());
-                        }
-
-                        self.vm
-                            .store
-                            .data_mut()
-                            .genlayer_ctx_mut()
-                            .preview1
-                            .map_file(&name_in_fs, file_contents.clone())?;
-                    }
-                } else {
-                    if maps_into_vm(to) {
-                        return Err(make_malformed_runner_error(&format!(
-                            "mapping into /vm/ is forbidden: {to}"
-                        )));
-                    }
-
-                    let limiter = &self.vm.store.data_mut().limits;
-
-                    if !limiter
-                        .consume(public_abi::memory_limiter_consts::FILE_MAPPING + to.len() as u32)
-                    {
-                        return Err(rt::errors::VMError(
-                            abi::consts::VmError::oom().ram().val(),
-                            None,
-                        )
-                        .into());
-                    }
-
-                    self.vm
-                        .store
-                        .data_mut()
-                        .genlayer_ctx_mut()
-                        .preview1
-                        .map_file(to, current_runner_arch.get_file(file)?)?;
-                }
+                let limiter = self.vm.store.data_mut().limits.clone();
+                let cancellation = self.supervisor.shared_data.cancellation.clone();
+                let preview1 = &mut self.vm.store.data_mut().genlayer_ctx_mut().preview1;
+                map_archive_file(
+                    preview1,
+                    &limiter,
+                    &cancellation,
+                    current_runner_arch,
+                    file,
+                    to,
+                )?;
                 Ok(None)
             }
             InitAction::AddEnv { name, val } => {

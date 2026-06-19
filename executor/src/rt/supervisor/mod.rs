@@ -13,7 +13,7 @@ use crate::{
     runners, wasi,
 };
 
-mod actions;
+pub(crate) mod actions;
 mod compilation;
 
 struct WasmModuleCache {

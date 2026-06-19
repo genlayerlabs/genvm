@@ -213,6 +213,26 @@ Requirements
 #. :ref:`gvm-perm-deterministic`
 #. :ref:`gvm-perm-register-runners`
 
+``MapFile`` Message
+-------------------
+
+Maps a file from a runner into the VM filesystem at runtime, behaving the same as
+the ``MapFile`` runner action (see :doc:`../../../python-sdk` runners). If
+``path_in_runner`` ends with ``/`` the whole directory subtree is mapped.
+
+Payload
+~~~~~~~
+
+.. code-block::
+
+   {
+     "MapFile": {
+       "runner": String,          // runner id (name:hash, contract, chain:..., custom:...)
+       "path_in_runner": String,  // path within the runner archive
+       "path_in_vfs": String      // absolute destination path in the VM filesystem
+     }
+   }
+
 ``WebRender`` Message
 ---------------------
 
