@@ -76,6 +76,10 @@ pub struct Supervisor {
     runner_cache: runners::cache::Reader,
     wasm_mod_cache: WasmModuleCache,
 
+    /// Runners registered at runtime via `gl_call`, looked up by the
+    /// `custom:<hash>` runner id. Empty until a contract registers one.
+    custom_runners: dashmap::DashMap<GlobalSymbol, runners::Archive>,
+
     pub(crate) engines: rt::DetNondet<wasmtime::Engine>,
     pub(crate) host: Arc<host::MultiHost>,
 }
@@ -221,6 +225,23 @@ impl Supervisor {
         rt::vm::storage::Limiter::new(self.shared_data.gep(|x| &x.data_fees_limit))
     }
 
+    pub fn get_custom_runner(&self, hash: GlobalSymbol) -> Option<runners::Archive> {
+        self.custom_runners.get(&hash).map(|r| r.clone())
+    }
+
+    /// Registers a runner archive under `custom:<hash>`. Returns the canonical
+    /// runner id it can be referenced by.
+    pub fn register_custom_runner(
+        &self,
+        hash: GlobalSymbol,
+        archive: runners::Archive,
+    ) -> GlobalSymbol {
+        self.custom_runners.insert(hash, archive);
+        let mut id = String::from("custom:");
+        id.push_str(hash.as_str());
+        GlobalSymbol::from(id)
+    }
+
     pub fn start(config: &config::Config, ctor: Ctor) -> anyhow::Result<Arc<Self>> {
         let my_cache_dir = runners::cache::get_cache_dir(&config.cache_dir).ok();
 
@@ -284,6 +305,7 @@ impl Supervisor {
                 cache_dir: my_cache_dir,
                 wasm_modules_cache: sync::CacheMap::new(),
             },
+            custom_runners: dashmap::DashMap::new(),
             host: Arc::new(ctor.multi_host),
             engines,
         });
@@ -375,7 +397,17 @@ pub async fn apply_contract_actions(
         .message
         .contract_address;
 
-    let contract_id = runners::get_runner_of_contract(contract_address);
+    let contract_state = vm
+        .vm_base
+        .store
+        .data()
+        .genlayer_ctx
+        .genlayer_sdk
+        .data
+        .conf
+        .state_mode;
+
+    let contract_id = runners::get_runner_of_contract(contract_address, contract_state);
 
     let limiter = vm.vm_base.store.data_mut().limits.clone();
 

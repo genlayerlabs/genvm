@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+#[derive(Clone)]
 pub struct Archive {
     pub data: BTreeMap<String, bytes::Bytes>,
     pub total_size: u32,

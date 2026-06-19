@@ -412,7 +412,14 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         limiter: &rt::memlimiter::Limiter,
     ) -> anyhow::Result<Box<[u8]>> {
         let code_slot = SlotID::ZERO.indirection(root_offsets::CODE);
+        self.read_code_at(code_slot, limiter).await
+    }
 
+    pub async fn read_code_at(
+        &mut self,
+        code_slot: SlotID,
+        limiter: &rt::memlimiter::Limiter,
+    ) -> anyhow::Result<Box<[u8]>> {
         let mut len_buf = [0; 4];
         self.read(code_slot, 0, &mut len_buf).await?;
         let code_size = u32::from_le_bytes(len_buf);

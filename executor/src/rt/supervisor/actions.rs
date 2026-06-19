@@ -28,97 +28,185 @@ fn maps_into_vm(to: &str) -> bool {
     to.split('/').find(|component| !component.is_empty()) == Some("vm")
 }
 
+/// How a resolved runner id should be loaded into the archive cache.
+enum ResolvedKind {
+    /// A packaged `name:hash` runner read from the runners directory.
+    Disk {
+        name: symbol_table::GlobalSymbol,
+        hash: symbol_table::GlobalSymbol,
+    },
+    /// The current contract's runner, already preloaded into the cache.
+    Preloaded,
+    /// `chain:<address>:<a|f>:<slot>` — code blob read from a storage slot.
+    Chain {
+        address: calldata::Address,
+        on: public_abi::StorageType,
+        slot: crate::SlotID,
+    },
+    /// `custom:<hash>` — a runner registered at runtime.
+    Custom { hash: symbol_table::GlobalSymbol },
+}
+
+/// A runner id resolved to its canonical cache key together with the way it
+/// should be loaded.
+struct Resolved {
+    id: symbol_table::GlobalSymbol,
+    kind: ResolvedKind,
+}
+
 impl Ctx<'_, '_> {
+    fn resolve_runner(&self, id: symbol_table::GlobalSymbol) -> anyhow::Result<Resolved> {
+        let Some(parsed) = runners::parse_runner_id(id.as_str()) else {
+            return Err(make_malformed_runner_error(
+                "runner id doesn't match expected format",
+            ));
+        };
+
+        match parsed {
+            runners::RunnerId::Contract => Ok(Resolved {
+                id: self.contract_id,
+                kind: ResolvedKind::Preloaded,
+            }),
+            runners::RunnerId::NameHash { name, hash } => {
+                let hash = if hash.as_str() == "test" || hash.as_str() == "latest" {
+                    if !self.supervisor.shared_data.debug_mode {
+                        log_warn!(
+                            ":test/ :latest runner used in non-debug mode, this is not allowed"
+                        );
+                        return Err(make_malformed_runner_error(
+                            "runner id doesn't match expected format",
+                        ));
+                    }
+                    let new_latest = self.supervisor.runner_cache.get_latest(name);
+                    log_info!(runner_id = name.as_str(), new_latest:? = new_latest; "resolving :latest runner");
+                    let Some(new_latest) = new_latest else {
+                        return Err(make_malformed_runner_error(
+                            "runner id doesn't match expected format",
+                        ));
+                    };
+                    new_latest
+                } else {
+                    hash
+                };
+
+                if !self.supervisor.runner_cache.has_in_all(name, hash) {
+                    anyhow::bail!("runner {}:{} not found", name, hash);
+                }
+
+                let mut canonical = name.as_str().to_owned();
+                canonical.push(':');
+                canonical.push_str(hash.as_str());
+
+                Ok(Resolved {
+                    id: GlobalSymbol::new(canonical),
+                    kind: ResolvedKind::Disk { name, hash },
+                })
+            }
+            runners::RunnerId::Chain { address, on, slot } => Ok(Resolved {
+                id: GlobalSymbol::from(runners::chain_canonical(address, on, slot)),
+                kind: ResolvedKind::Chain { address, on, slot },
+            }),
+            runners::RunnerId::Custom { hash } => {
+                let mut canonical = String::from("custom:");
+                canonical.push_str(hash.as_str());
+                Ok(Resolved {
+                    id: GlobalSymbol::from(canonical),
+                    kind: ResolvedKind::Custom { hash },
+                })
+            }
+        }
+    }
+
     async fn get_arch(
         &mut self,
-        uid: symbol_table::GlobalSymbol,
+        resolved: Resolved,
     ) -> anyhow::Result<(
         symbol_table::GlobalSymbol,
         sync::DArc<runners::ArchiveCache>,
     )> {
-        let uid = self.full_check_runner_uid(uid)?;
+        let Resolved { id, kind } = resolved;
 
-        let Some((runner_id, runner_hash)) = runners::verify_runner(uid.as_str()) else {
-            return Err(make_malformed_runner_error(
-                "runner id doesn't match expected format",
-            ));
-        };
+        let limiter = self.vm.store.data_mut().limits.clone();
+        let cache = &self.supervisor.runner_cache;
 
-        let limiter = &self.vm.store.data_mut().limits;
+        let new_arch = match kind {
+            ResolvedKind::Disk { name, hash } => {
+                cache
+                    .get_or_create(
+                        id,
+                        || async {
+                            let mut path = cache.runners_path().to_owned();
+                            runners::append_runner_subpath(name.as_str(), hash.as_str(), &mut path);
+                            path.set_extension("tar");
+                            if !path.exists() {
+                                anyhow::bail!("runner {} not found", id);
+                            }
 
-        let new_arch = self
-            .supervisor
-            .runner_cache
-            .get_or_create(
-                uid,
-                || async {
-                    let mut path = self.supervisor.runner_cache.runners_path().to_owned();
-                    runners::append_runner_subpath(runner_id, runner_hash, &mut path);
-                    path.set_extension("tar");
-                    if !path.exists() {
-                        anyhow::bail!("runner {} not found", uid);
-                    }
-
-                    let data = util::mmap_file(&path)
-                        .with_context(|| format!("memory mapping runner archive for {uid}"))?;
-                    let data = bytes::Bytes::copy_from_slice(data.as_ref());
-                    runners::Archive::from_ustar(data)
-                        .with_context(|| format!("parsing ustar archive for {uid}"))
-                },
-                limiter,
-            )
-            .await?;
-
-        Ok((uid, new_arch))
-    }
-
-    fn full_check_runner_uid(
-        &mut self,
-        id: symbol_table::GlobalSymbol,
-    ) -> anyhow::Result<symbol_table::GlobalSymbol> {
-        if id.as_str() == "<contract>" {
-            return Ok(self.contract_id);
-        }
-        let Some((runner_id, runner_hash)) = runners::verify_runner(id.as_str()) else {
-            return Err(make_malformed_runner_error(
-                "runner id doesn't match expected format",
-            ));
-        };
-
-        let runner_id = GlobalSymbol::new(runner_id);
-
-        let runner_hash = if runner_hash == "test" || runner_hash == "latest" {
-            if !self.supervisor.shared_data.debug_mode {
-                log_warn!(":test/ :latest runner used in non-debug mode, this is not allowed");
-                None
-            } else {
-                let new_latest = self.supervisor.runner_cache.get_latest(runner_id);
-                log_info!(runner_id = runner_id.as_str(), new_latest:? = new_latest; "resolving :latest runner");
-                new_latest
+                            let data = util::mmap_file(&path).with_context(|| {
+                                format!("memory mapping runner archive for {id}")
+                            })?;
+                            let data = bytes::Bytes::copy_from_slice(data.as_ref());
+                            runners::Archive::from_ustar(data)
+                                .with_context(|| format!("parsing ustar archive for {id}"))
+                        },
+                        &limiter,
+                    )
+                    .await?
             }
-        } else {
-            Some(GlobalSymbol::new(runner_hash))
+            ResolvedKind::Preloaded => {
+                cache
+                    .get_or_create(
+                        id,
+                        || async { anyhow::bail!("runner {} is not preloaded", id) },
+                        &limiter,
+                    )
+                    .await?
+            }
+            ResolvedKind::Chain { address, on, slot } => {
+                let supervisor = self.supervisor;
+                cache
+                    .get_or_create(
+                        id,
+                        || async {
+                            let mut storage = rt::vm::storage::Storage::new(
+                                address,
+                                supervisor.get_storage_limiter(),
+                                crate::wasi::genlayer_sdk::StorageHostHolder(
+                                    supervisor.host.clone(),
+                                    crate::wasi::genlayer_sdk::ReadToken {
+                                        account: address,
+                                        mode: on,
+                                    },
+                                ),
+                            );
+                            let code = storage
+                                .read_code_at(slot, &limiter)
+                                .await
+                                .with_context(|| format!("reading chain runner code for {id}"))?;
+                            runners::parse(bytes::Bytes::from(code))
+                                .with_context(|| format!("parsing chain runner for {id}"))
+                        },
+                        &limiter,
+                    )
+                    .await?
+            }
+            ResolvedKind::Custom { hash } => {
+                let supervisor = self.supervisor;
+                cache
+                    .get_or_create(
+                        id,
+                        || async {
+                            supervisor
+                                .get_custom_runner(hash)
+                                .ok_or_else(|| anyhow::anyhow!("custom runner {} not found", id))
+                        },
+                        &limiter,
+                    )
+                    .await?
+            }
         };
 
-        let Some(runner_hash) = runner_hash else {
-            return Err(make_malformed_runner_error(
-                "runner id doesn't match expected format",
-            ));
-        };
-
-        if !self
-            .supervisor
-            .runner_cache
-            .has_in_all(runner_id, runner_hash)
-        {
-            anyhow::bail!("runner {}:{} not found", runner_id, runner_hash);
-        }
-
-        let mut new_id = runner_id.as_str().to_owned();
-        new_id.push(':');
-        new_id.push_str(runner_hash.as_str());
-
-        Ok(symbol_table::GlobalSymbol::new(new_id))
+        Ok((id, new_arch))
     }
 
     fn load_modules(
@@ -431,22 +519,23 @@ impl Ctx<'_, '_> {
                 runner: uid,
                 action,
             } => {
-                let (uid, new_arch) = self.get_arch(*uid).await?;
+                let resolved = self.resolve_runner(*uid)?;
+                let (uid, new_arch) = self.get_arch(resolved).await?;
 
                 Box::pin(self.apply(action, uid, &new_arch))
                     .await
                     .with_context(|| format!("With {uid}"))
             }
             InitAction::Depends(uid) => {
-                let uid = self.full_check_runner_uid(*uid)?;
+                let resolved = self.resolve_runner(*uid)?;
 
-                if !self.visited.insert(uid) {
+                if !self.visited.insert(resolved.id) {
                     return Ok(None);
                 }
 
-                log_trace!(uid = uid; "adding dependency");
+                log_trace!(uid = resolved.id; "adding dependency");
 
-                let (uid, new_arch) = self.get_arch(uid).await?;
+                let (uid, new_arch) = self.get_arch(resolved).await?;
 
                 let new_action = new_arch
                     .get_actions()
