@@ -11,9 +11,19 @@
 Identification and Packaging
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Each :term:`runner` is identified by ``<human-readable-id>:<hash>``.
-``human-readable-id`` is provided for convenience.
-``hash`` is a sha3-256 hash of its contents
+A :term:`runner` is referenced by a runner id, which has one of the following
+forms (see the ``runner-id`` definition in the runner.json schema):
+
+- ``<human-readable-id>:<hash>`` — a packaged runner. ``human-readable-id`` is
+  provided for convenience; ``hash`` is a hash of its contents (see `Hash Format`_).
+- ``contract`` — the runner of the contract currently being executed.
+- ``chain:<address>:<a|f>:<slot>`` — a runner code blob read from a storage slot
+  of an arbitrary contract (``a`` = accepted, ``f`` = finalized).
+- ``custom:<hash>`` — a runner registered at runtime via the ``RegisterRunner``
+  ``gl_call``, looked up by its hash.
+
+``contract``, ``chain`` and ``custom`` are reserved prefixes and cannot be used
+as human-readable ids.
 
 Hash Format
 ~~~~~~~~~~~
