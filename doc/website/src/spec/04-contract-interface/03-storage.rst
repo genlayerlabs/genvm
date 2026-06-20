@@ -60,7 +60,10 @@ the following data:
     the slot it points to (same 4-byte-length-prefixed layout). This lets a contract serve its
     code from an arbitrary slot, including one shared via a ``chain:<address>:<a|f>:<slot>`` runner id.
 
-Offsets at and above ``6`` are reserved for future :term:`GenVM` use and should remain zero:
+Offsets are byte offsets into the root slot, so ``code_slot`` (32 bytes) occupies offsets ``5``
+through ``36``; the next field would start at offset ``37``.
+
+Offsets at and above ``37`` are reserved for future :term:`GenVM` use and should remain zero:
 a contract must not store data in them, otherwise a future :term:`GenVM` version that starts
 reading those offsets may break the contract. Contract runtimes that need scratch space for
 bootstrapping should derive a separate sub-slot instead (see ``Root.get_vacant_slot`` in the
