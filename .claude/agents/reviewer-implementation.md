@@ -40,6 +40,20 @@ Diff against the active dev branch, not `main`:
    doing what the loader already does is a finding — name the function it should
    route through.
 
+   **Responsibilities must be encapsulated in the layer that owns them.** Each
+   layer does its own job and exposes ONE entry point; callers in other layers
+   delegate, they don't reach across and re-orchestrate. Concretely: the
+   wasi/vfs layer (`wasi/genlayer_sdk.rs`, `wasi/preview1.rs`) is a thin syscall
+   shim — it must NOT contain runner-resolution logic (computing a contract's
+   runner id, picking storage slots/state, stitching together
+   `get_runner_of_contract` + `load_runner` + archive mapping). That belongs in
+   the runners/supervisor layer; the gl_call handler should call a single
+   encapsulated function there. A handler that assembles a cross-layer flow
+   inline (even if each piece is "shared") is a finding — name the boundary it
+   violates and the single function it should call instead. Likewise, storage
+   layout, permission derivation, and limiter accounting each have one home;
+   flag logic that leaks into a layer that shouldn't know about it.
+
 4. **Correctness & quality.** Panics on malformed input (`slice`, `unwrap`),
    error handling, idempotency.
 
