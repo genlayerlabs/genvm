@@ -40,12 +40,6 @@ impl AccountAddress {
 #[repr(C)]
 pub struct SlotID(#[serde_as(as = "Base64")] pub [u8; 32]);
 
-pub mod root_offsets {
-    pub const CODE: u32 = 1;
-    pub const LOCKED_SLOTS: u32 = 2;
-    pub const UPGRADERS: u32 = 3;
-}
-
 impl SlotID {
     pub const ZERO: SlotID = SlotID([0; 32]);
     pub const SIZE: u32 = 32;

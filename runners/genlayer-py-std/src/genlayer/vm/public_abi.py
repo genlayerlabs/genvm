@@ -39,6 +39,7 @@ class _RootOffsets(typing.NamedTuple):
 	LOCKED_SLOTS: int = 2
 	UPGRADERS: int = 3
 	MAJOR: int = 4
+	CODE_SLOT: int = 5
 
 root_offsets: typing.Final = _RootOffsets()
 
