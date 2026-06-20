@@ -60,7 +60,10 @@ the following data:
     the slot it points to (same 4-byte-length-prefixed layout). This lets a contract serve its
     code from an arbitrary slot, including one shared via a ``chain:<address>:<a|f>:<slot>`` runner id.
 
-Offsets at and above ``6`` are unused by :term:`GenVM` itself and are available to the contract
-runtime for bootstrapping its own storage (see ``Root.get_vacant_slot`` in the Python SDK).
+Offsets at and above ``6`` are reserved for future :term:`GenVM` use and should remain zero:
+a contract must not store data in them, otherwise a future :term:`GenVM` version that starts
+reading those offsets may break the contract. Contract runtimes that need scratch space for
+bootstrapping should derive a separate sub-slot instead (see ``Root.get_vacant_slot`` in the
+Python SDK).
 
 Upgrade permissions and slot locking are described in :doc:`04-upgradability`.
