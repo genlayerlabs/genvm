@@ -73,12 +73,21 @@ impl Version {
 
 pub static CURRENT: std::sync::LazyLock<Version> = std::sync::LazyLock::new(|| {
     if crate::VERSION.starts_with("vTEST") {
-        // vTEST has no numeric build id, so report the active dev major/minor
-        // (see `.genvm-monorepo-root` "major-minor") with a max patch so it sorts
-        // newer than any real release of that line.
+        // vTEST has no numeric build id, so report this crate's compile-time
+        // version (kept at the active dev major/minor via `.genvm-monorepo-root`)
+        // with a max patch so it sorts newer than any real release of that line.
+        let mut parts = env!("CARGO_PKG_VERSION").split('.');
+        let major = parts
+            .next()
+            .and_then(|x| x.parse().ok())
+            .expect("CARGO_PKG_VERSION must have a numeric major");
+        let minor = parts
+            .next()
+            .and_then(|x| x.parse().ok())
+            .expect("CARGO_PKG_VERSION must have a numeric minor");
         return Version {
-            major: 0,
-            minor: 3,
+            major,
+            minor,
             patch: u16::MAX,
         };
     }

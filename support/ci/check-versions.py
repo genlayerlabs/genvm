@@ -27,7 +27,11 @@ import argparse
 root = pathlib.Path(__file__).resolve().parents[2]
 conf_path = root / '.genvm-monorepo-root'
 
-CARGO_FILES = ['executor/Cargo.toml', 'modules/implementation/Cargo.toml']
+CARGO_FILES = [
+	'executor/Cargo.toml',
+	'executor/crates/common/Cargo.toml',
+	'modules/implementation/Cargo.toml',
+]
 
 
 def load_conf():

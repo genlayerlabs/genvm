@@ -87,4 +87,4 @@ repos:
         entry: ./support/ci/check-versions.py
         language: system
         pass_filenames: false
-        files: ^(executor/Cargo\.toml|modules/implementation/Cargo\.toml|\.genvm-monorepo-root)$
+        files: ^(executor/Cargo\.toml|executor/crates/common/Cargo\.toml|modules/implementation/Cargo\.toml|\.genvm-monorepo-root)$
