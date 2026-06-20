@@ -298,6 +298,34 @@ pub(crate) fn map_archive_file(
     Ok(())
 }
 
+/// Resolves `runner` (relative to the contract at `contract_address`) and maps
+/// one of its files into `preview1` at runtime. This keeps all runner-resolution
+/// knowledge in this module: callers (e.g. the `MapFile` `gl_call`) only supply
+/// VM context and delegate, instead of stitching the resolution together
+/// themselves.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn map_runner_file(
+    supervisor: &rt::supervisor::Supervisor,
+    preview1: &mut crate::wasi::preview1::Context,
+    limiter: &rt::memlimiter::Limiter,
+    contract_address: calldata::Address,
+    state: public_abi::StorageType,
+    runner: symbol_table::GlobalSymbol,
+    path_in_runner: &str,
+    path_in_vfs: &str,
+) -> anyhow::Result<()> {
+    let contract_id = runners::get_runner_of_contract(contract_address, state);
+    let (_id, arch) = load_runner(supervisor, contract_id, limiter, runner).await?;
+    map_archive_file(
+        preview1,
+        limiter,
+        &supervisor.shared_data.cancellation,
+        &arch,
+        path_in_runner,
+        path_in_vfs,
+    )
+}
+
 impl Ctx<'_, '_> {
     fn resolve_runner(&self, id: symbol_table::GlobalSymbol) -> anyhow::Result<Resolved> {
         resolve_runner(self.supervisor, self.contract_id, id)
