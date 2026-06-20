@@ -415,6 +415,15 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         self.read_code_at(code_slot, limiter).await
     }
 
+    /// Reads the GenVM major version the contract was deployed for, from the
+    /// `major` root field (zero if never written).
+    pub async fn read_major(&mut self) -> anyhow::Result<u8> {
+        let mut buf = [0u8; 1];
+        self.read(SlotID::ZERO, root_offsets::MAJOR, &mut buf)
+            .await?;
+        Ok(buf[0])
+    }
+
     /// Resolves the slot the contract code is stored at: the raw `code_slot` root
     /// field if set, otherwise the default `code` slot.
     pub async fn resolve_code_slot(&mut self) -> anyhow::Result<SlotID> {

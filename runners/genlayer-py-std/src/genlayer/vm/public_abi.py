@@ -137,6 +137,9 @@ class _VmErrorInvalidContract:
 	def malformed_runner() -> 'VmError':
 		return VmError('invalid_contract malformed_runner')
 	@staticmethod
+	def major_mismatch() -> 'VmError':
+		return VmError('invalid_contract major_mismatch')
+	@staticmethod
 	def wasm() -> '_VmErrorInvalidContractWasm':
 		return _VmErrorInvalidContractWasm()
 
