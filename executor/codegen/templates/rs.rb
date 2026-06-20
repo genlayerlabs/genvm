@@ -130,9 +130,9 @@ def gen_rust_trie_builder(entries, root_name, buf)
 
 	buf << "#[derive(Debug, Clone, PartialEq, Eq, Serialize)]\n"
 	buf << "pub struct #{root_name}(pub Cow<'static, str>);\n\n"
-	buf << "impl Into<String> for #{root_name} {\n"
-	buf << "    fn into(self) -> String {\n"
-	buf << "        self.0.into()\n"
+	buf << "impl From<#{root_name}> for String {\n"
+	buf << "    fn from(val: #{root_name}) -> String {\n"
+	buf << "        val.0.into()\n"
 	buf << "    }\n"
 	buf << "}\n"
 	buf << "#[rustfmt::skip]\n"

@@ -310,9 +310,9 @@ pub mod __VmError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct VmError(pub Cow<'static, str>);
 
-impl Into<String> for VmError {
-    fn into(self) -> String {
-        self.0.into()
+impl From<VmError> for String {
+    fn from(val: VmError) -> String {
+        val.0.into()
     }
 }
 #[rustfmt::skip]
