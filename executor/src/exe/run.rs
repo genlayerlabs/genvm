@@ -34,7 +34,7 @@ pub struct Args {
     sync: bool,
     #[clap(
         long,
-        default_value = "rwscnu",
+        default_value = "rwscn",
         help = "r?w?s?c?n?u?, read/write/send messages/call contracts/spawn nondet/register runners"
     )]
     permissions: String,
