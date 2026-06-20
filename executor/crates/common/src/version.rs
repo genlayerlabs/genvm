@@ -73,10 +73,13 @@ impl Version {
 
 pub static CURRENT: std::sync::LazyLock<Version> = std::sync::LazyLock::new(|| {
     if crate::VERSION.starts_with("vTEST") {
+        // vTEST has no numeric build id, so report the active dev major/minor
+        // (see `.genvm-monorepo-root` "major-minor") with a max patch so it sorts
+        // newer than any real release of that line.
         return Version {
-            major: 99,
-            minor: 0,
-            patch: 0,
+            major: 0,
+            minor: 3,
+            patch: u16::MAX,
         };
     }
 
