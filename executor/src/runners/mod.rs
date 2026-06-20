@@ -155,6 +155,12 @@ pub fn get_runner_of_contract(
     address: calldata::Address,
     state: crate::public_abi::StorageType,
 ) -> symbol_table::GlobalSymbol {
+    // This builds the cache key only; the canonical points at the default `code`
+    // slot and intentionally ignores a `code_slot` redirect. That is sound only
+    // because this is called exclusively for the *currently executing* contract,
+    // whose actual code is read separately via `Storage::read_code` (which DOES
+    // honor `code_slot`). Resolving another contract's `contract` runner this way
+    // would read the wrong slot — use an explicit `chain:` id for that.
     let slot = crate::SlotID::ZERO.indirection(crate::public_abi::root_offsets::CODE);
     symbol_table::GlobalSymbol::from(chain_canonical(address, state, slot))
 }
