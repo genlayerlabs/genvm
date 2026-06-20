@@ -1642,31 +1642,20 @@ impl ContextVFS<'_> {
         let supervisor = self.context.data.supervisor.clone();
         let is_det = self.context.data.conf.is_deterministic;
         let limiter = supervisor.limiter.get(is_det);
-
         let contract_address = self.context.data.message_data.message.contract_address;
-        let contract_id = crate::runners::get_runner_of_contract(
-            contract_address,
-            self.context.data.conf.state_mode,
-        );
+        let state = self.context.data.conf.state_mode;
 
-        let (_id, arch) = crate::rt::supervisor::actions::load_runner(
+        crate::rt::supervisor::actions::map_runner_file(
             &supervisor,
-            contract_id,
-            limiter,
-            symbol_table::GlobalSymbol::from(runner),
-        )
-        .await
-        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
-
-        let cancellation = supervisor.shared_data.cancellation.clone();
-        crate::rt::supervisor::actions::map_archive_file(
             self.preview1,
             limiter,
-            &cancellation,
-            &arch,
+            contract_address,
+            state,
+            symbol_table::GlobalSymbol::from(runner),
             &path_in_runner,
             &path_in_vfs,
         )
+        .await
         .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
         Ok(file_fd_none())
