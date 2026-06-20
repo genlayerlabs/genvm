@@ -277,6 +277,7 @@ pub mod __VmError {
         pub const fn absent_runner_comment(&self) -> VmError { VmError(Cow::Borrowed("invalid_contract absent_runner_comment")) }
         pub const fn not_utf8_text(&self) -> VmError { VmError(Cow::Borrowed("invalid_contract not_utf8_text")) }
         pub const fn malformed_runner(&self) -> VmError { VmError(Cow::Borrowed("invalid_contract malformed_runner")) }
+        pub const fn major_mismatch(&self) -> VmError { VmError(Cow::Borrowed("invalid_contract major_mismatch")) }
         pub const fn wasm(&self) -> InvalidContractWasm { InvalidContractWasm }
     }
 

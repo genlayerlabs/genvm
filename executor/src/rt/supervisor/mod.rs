@@ -432,6 +432,28 @@ async fn apply_contract_actions_inner(
     contract_id: GlobalSymbol,
     limiter: rt::memlimiter::Limiter,
 ) -> anyhow::Result<wasmtime::Instance> {
+    let contract_major = vm
+        .vm_base
+        .store
+        .data_mut()
+        .genlayer_ctx
+        .genlayer_sdk
+        .data
+        .storage
+        .read_major()
+        .await
+        .with_context(|| format!("reading contract major for {contract_id}"))?;
+    let node_major = genvm_common::version::CURRENT.major;
+    if contract_major as u16 != node_major {
+        return Err(rt::errors::VMError(
+            public_abi::VmError::invalid_contract().major_mismatch(),
+            Some(anyhow::anyhow!(
+                "contract major {contract_major} != node major {node_major}"
+            )),
+        )
+        .into());
+    }
+
     let arch = zelf
         .runner_cache
         .get_or_create(
