@@ -55,8 +55,12 @@ the following data:
     from the contract package — see :doc:`04-upgradability` and the impl-spec for the detection flow)
     and read on every load so :term:`GenVM` can refuse to execute a contract whose public ABI
     major does not match the host's ``CURRENT_MAJOR``.
+- ``code_slot``: (offset 5) A raw 32-byte :term:`SlotID`. If it is all-zero (the default),
+    the contract code is read from the ``code`` slot (offset 1); otherwise the code is read from
+    the slot it points to (same 4-byte-length-prefixed layout). This lets a contract serve its
+    code from an arbitrary slot, including one shared via a ``chain:<address>:<a|f>:<slot>`` runner id.
 
-Offsets at and above ``5`` are unused by :term:`GenVM` itself and are available to the contract
+Offsets at and above ``6`` are unused by :term:`GenVM` itself and are available to the contract
 runtime for bootstrapping its own storage (see ``Root.get_vacant_slot`` in the Python SDK).
 
 Upgrade permissions and slot locking are described in :doc:`04-upgradability`.
