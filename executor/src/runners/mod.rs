@@ -155,7 +155,7 @@ pub fn get_runner_of_contract(
     address: calldata::Address,
     state: crate::public_abi::StorageType,
 ) -> symbol_table::GlobalSymbol {
-    let slot = crate::SlotID::ZERO.indirection(crate::host::message::root_offsets::CODE);
+    let slot = crate::SlotID::ZERO.indirection(crate::public_abi::root_offsets::CODE);
     symbol_table::GlobalSymbol::from(chain_canonical(address, state, slot))
 }
 

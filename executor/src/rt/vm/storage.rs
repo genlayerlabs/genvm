@@ -5,7 +5,7 @@ use const_lru::ConstLru;
 use genlayer_sdk::abi;
 use genvm_common::{calldata, sync};
 
-use crate::{host::message::root_offsets, rt, SlotID};
+use crate::{public_abi::root_offsets, rt, SlotID};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(C)]
@@ -411,8 +411,21 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         &mut self,
         limiter: &rt::memlimiter::Limiter,
     ) -> anyhow::Result<Box<[u8]>> {
-        let code_slot = SlotID::ZERO.indirection(root_offsets::CODE);
+        let code_slot = self.resolve_code_slot().await?;
         self.read_code_at(code_slot, limiter).await
+    }
+
+    /// Resolves the slot the contract code is stored at: the raw `code_slot` root
+    /// field if set, otherwise the default `code` slot.
+    pub async fn resolve_code_slot(&mut self) -> anyhow::Result<SlotID> {
+        let mut raw = [0u8; 32];
+        self.read(SlotID::ZERO, root_offsets::CODE_SLOT, &mut raw)
+            .await?;
+        if raw == [0u8; 32] {
+            Ok(SlotID::ZERO.indirection(root_offsets::CODE))
+        } else {
+            Ok(SlotID::from_bytes(raw))
+        }
     }
 
     pub async fn read_code_at(

@@ -5,10 +5,10 @@ use genlayer_sdk::abi;
 use genvm_common::*;
 
 use crate::public_abi;
+use crate::public_abi::root_offsets;
 use crate::public_abi::{ResultCode, StorageType};
 use genvm_common::calldata::Address;
 use genvm_common::calldata::ADDRESS_SIZE;
-use message::root_offsets;
 
 use core::str;
 use std::os::fd::FromRawFd;

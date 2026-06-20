@@ -163,6 +163,7 @@ pub mod root_offsets {
     pub const LOCKED_SLOTS: u32 = 2;
     pub const UPGRADERS: u32 = 3;
     pub const MAJOR: u32 = 4;
+    pub const CODE_SLOT: u32 = 5;
 }
 
 pub mod top_limits {
@@ -308,9 +309,9 @@ pub mod __VmError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct VmError(pub Cow<'static, str>);
 
-impl From<VmError> for String {
-    fn from(val: VmError) -> Self {
-        val.0.into()
+impl Into<String> for VmError {
+    fn into(self) -> String {
+        self.0.into()
     }
 }
 #[rustfmt::skip]

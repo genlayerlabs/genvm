@@ -44,6 +44,13 @@ class Root:
 	Major version of the GenVM contract expects
 	"""
 
+	code_slot: u256
+	"""
+	Slot id the contract code is stored at, as a raw 32-byte value. If zero (the
+	default), the code is read from the default ``code`` slot; otherwise it is read
+	from the pointed-to slot (see ``chain:`` runner ids).
+	"""
+
 	@staticmethod
 	def get() -> 'Root':
 		"""
