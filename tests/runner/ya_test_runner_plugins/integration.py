@@ -575,6 +575,9 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				request_extra = {}
 				if 'stable' in self._test_case.description.tags:
 					request_extra['no_modules'] = True
+				case_permissions = single_conf.get('permissions')
+				if case_permissions is not None:
+					request_extra['permissions'] = case_permissions
 				dflt_bucket = 2**200
 				bucket_totals: list[int] = single_conf.get(
 					'bucket_totals', [dflt_bucket, dflt_bucket]

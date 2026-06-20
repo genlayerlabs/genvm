@@ -1,3 +1,3 @@
 local simple = import 'templates/simple_deploy.jsonnet';
 local util = import 'templates/util.jsonnet';
-{entry: util.addPaths([simple.run('${jsonnetDir}/map_runner_file.py') {stable_hash: false}])}
+{entry: util.addPaths([simple.run('${jsonnetDir}/map_runner_file.py') {stable_hash: false, permissions: 'rwscnu'}])}
