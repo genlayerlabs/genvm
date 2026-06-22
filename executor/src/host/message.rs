@@ -94,3 +94,9 @@ impl From<&[u8; 32]> for SlotID {
         SlotID(*value)
     }
 }
+
+impl std::fmt::Display for SlotID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&genlayer_sdk::gvm32::encode(&self.0))
+    }
+}
