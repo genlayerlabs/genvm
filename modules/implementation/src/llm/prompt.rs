@@ -36,6 +36,10 @@ impl Internal {
             request
         }
     }
+
+    pub fn response_body_limit(&self) -> usize {
+        4 * 4 * self.max_tokens as usize + 16 * 1024 * 1024
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
