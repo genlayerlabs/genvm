@@ -53,12 +53,6 @@ parser.add_argument(
 	help='Target architecture (amd64/arm64)',
 )
 parser.add_argument(
-	'--interactive',
-	type=str_to_bool,
-	default=False,
-	help='Whether to run in interactive mode',
-)
-parser.add_argument(
 	'--error-on-missing-executor',
 	type=str_to_bool,
 	default=True,
@@ -146,8 +140,6 @@ if args.bin_check is None:
 if args.precompile is None:
 	args.precompile = args.default_steps
 
-INTERACTIVE = args.interactive
-
 log_level_str = args.log_level
 log_levels = {
 	'DEBUG': logging.DEBUG,
@@ -167,7 +159,13 @@ import json
 
 logging.info('Starting actual post-install script')
 
-if args.bin_patch:
+# Interpreter patching rewrites the ELF interpreter (dynamic loader) to the
+# bundled one, whose path is only known at install time. It applies to ELF
+# binaries (Linux) only; on other targets the loader is fixed and rpath/needed
+# entries are already set correctly at build time, so lief is not needed.
+patch_interpreter = args.bin_patch and args.os == 'linux'
+
+if patch_interpreter:
 	import lief
 
 	lief.logging.set_level(lief.logging.LEVEL.ERROR)
@@ -220,8 +218,8 @@ def get_interpreter_path():
 	return interpreter_path
 
 
-def patch_executable(path: Path, *, rpath_dir: list[Path]):
-	logger.info(f'Patching executable for {path}')
+def patch_executable(path: Path):
+	logger.info(f'Patching interpreter for {path}')
 	if not path.exists():
 		logger.warning(f'Path {path} does not exist, skipping patching')
 		return
@@ -231,125 +229,25 @@ def patch_executable(path: Path, *, rpath_dir: list[Path]):
 		logger.error(f'Failed to parse binary at {path}')
 		return
 
-	# Log basic binary information
-	logger.info(f'Binary format: {binary.format}')
-
-	# Handle ELF binaries
-	if binary.format == lief.Binary.FORMATS.ELF:
-		logger.info(f'Processing ELF binary: {path}')
-
-		# Log current interpreter
-		logger.info(f'Current interpreter: {binary.interpreter}')
-
-		# Log current needed libraries
-		needed_libs = [
-			lib if isinstance(lib, str) else lib.name for lib in binary.libraries
-		]
-		logger.info(f'Current needed libraries: {needed_libs}')
-
-		# Log current RPATH/RUNPATH
-		rpath_entries = []
-		if binary.has(lief.ELF.DynamicEntry.TAG.RPATH):
-			rpath_entry = binary.get(lief.ELF.DynamicEntry.TAG.RPATH)
-			rpath_entries.append(f'RPATH: {rpath_entry.value}')
-		if binary.has(lief.ELF.DynamicEntry.TAG.RUNPATH):
-			runpath_entry = binary.get(lief.ELF.DynamicEntry.TAG.RUNPATH)
-			rpath_entries.append(f'RUNPATH: {runpath_entry.value}')
-		logger.info(
-			f'Current RPATH/RUNPATH entries: {rpath_entries if rpath_entries else "None"}'
-		)
-
-		# Patch interpreter only for ELF
-		if Path(binary.interpreter).exists():
-			logger.info(
-				f'Interpreter {binary.interpreter} exists, skipping interpreter patching'
-			)
-		else:
-			old_interpreter = binary.interpreter
-			new_interpreter = str(get_interpreter_path())
-			binary.interpreter = new_interpreter
-			logger.info(f'Updated interpreter from {old_interpreter} to: {new_interpreter}')
-
-		# Update RPATH for ELF
-		logger.info(f'Updating RPATH for ELF binary')
-
-		# Add or update RPATH entry
-		if binary.has(lief.ELF.DynamicEntry.TAG.RPATH):
-			# Update existing RPATH
-			rpath_entry = binary.get(lief.ELF.DynamicEntry.TAG.RPATH)
-			old_rpath = str(rpath_entry.value)
-			rpath_entry.paths = [str(rpath) for rpath in rpath_dir]
-			logger.info(f'Updated RPATH from "{old_rpath}" to: "{rpath_entry.value}"')
-		else:
-			# Add new RPATH entry
-			rpath_entry = lief.ELF.DynamicEntryRpath([str(rpath) for rpath in rpath_dir])
-			binary.add(rpath_entry)
-			logger.info(f'Added new RPATH entry: "{rpath_dir}"')
-
-	# Handle Mach-O binaries
-	elif binary.format == lief.Binary.FORMATS.MACHO:
-		logger.info(f'Processing Mach-O binary: {path}')
-
-		# Log current RPATH commands
-		existing_rpaths = []
-		for cmd in binary.commands:
-			if cmd.command == lief.MachO.LoadCommand.TYPE.RPATH:
-				existing_rpaths.append(cmd.path)
-		logger.info(
-			f'Current RPATH entries: {existing_rpaths if existing_rpaths else "None"}'
-		)
-
-		# Log current needed libraries
-		needed_libs = []
-		for cmd in binary.commands:
-			if cmd.command in [
-				lief.MachO.LoadCommand.TYPE.LOAD_DYLIB,
-				lief.MachO.LoadCommand.TYPE.LOAD_WEAK_DYLIB,
-			]:
-				needed_libs.append(cmd.name)
-		logger.info(f'Current needed libraries: {needed_libs}')
-
-		# Replace specific library references
-		for cmd in binary.commands:
-			if cmd.command in [
-				lief.MachO.LoadCommand.TYPE.LOAD_DYLIB,
-				lief.MachO.LoadCommand.TYPE.LOAD_WEAK_DYLIB,
-			]:
-				if cmd.name == '/usr/local/lib/libiconv.2.dylib':
-					old_name = cmd.name
-					cmd.name = '@rpath/libiconv.dylib'
-					logger.info(f'Replaced library reference: "{old_name}" -> "{cmd.name}"')
-				elif '/' not in cmd.name:
-					old_name = cmd.name
-					cmd.name = '@rpath/' + cmd.name
-					logger.info(f'Replaced library reference: "{old_name}" -> "{cmd.name}"')
-
-		# Set RPATH for Mach-O
-
-		for rpath in rpath_dir:
-			rpath_str = str(rpath)
-			rpath_cmd = lief.MachO.RPathCommand.create(rpath_str)
-			binary.add(rpath_cmd)
-			logger.info(f'Added RPATH to Mach-O binary: "{rpath_str}"')
-
-	else:
-		logger.warning(f'Unsupported binary format for {path}: {binary.format}')
+	# rpath/needed entries are set correctly at build time, so the only install
+	# time fixup left is the ELF interpreter (dynamic loader) path.
+	if binary.format != lief.Binary.FORMATS.ELF:
+		logger.info(f'{path} is not ELF ({binary.format}), nothing to patch')
 		return
 
-	# Write the modified binary
-	binary.write(str(path))
-	logger.info(f'Successfully patched binary: {path}')
+	logger.info(f'Current interpreter: {binary.interpreter}')
+	if Path(binary.interpreter).exists():
+		logger.info(
+			f'Interpreter {binary.interpreter} exists, skipping interpreter patching'
+		)
+		return
 
-	if binary.format == lief.Binary.FORMATS.MACHO:
-		logger.info(f'Trying to code sign Mach-O binary: {path}')
-		try:
-			subprocess.run(['codesign', '--force', '--sign', '-', path], check=True)
-		except Exception as e:
-			logger.error(
-				f'Failed to code sign Mach-O binary {path}: {e}. This may be critical. You can rerun with INTERACTIVE=true environment variable to pause on this error.'
-			)
-			if INTERACTIVE:
-				input('Waiting for user to fix the issue. Press Enter to continue...')
+	old_interpreter = binary.interpreter
+	binary.interpreter = str(get_interpreter_path())
+	logger.info(f'Updated interpreter from {old_interpreter} to: {binary.interpreter}')
+
+	binary.write(str(path))
+	logger.info(f'Successfully patched interpreter: {path}')
 
 
 def run_check_command(command: list[str | Path]):
@@ -363,8 +261,8 @@ def run_check_command(command: list[str | Path]):
 
 
 modules_executable = genvm_root_dir.joinpath('bin', 'genvm-modules')
-if args.bin_patch:
-	patch_executable(modules_executable, rpath_dir=[genvm_root_dir.joinpath('lib')])
+if patch_interpreter:
+	patch_executable(modules_executable)
 
 if args.bin_check:
 	run_check_command([modules_executable, '--version'])
@@ -505,7 +403,7 @@ def process_executor_version(executor_version: str):
 	executor_root_dir = genvm_root_dir.joinpath('executor', executor_version)
 	executor_executable = executor_root_dir.joinpath('bin', 'genvm')
 
-	if args.executor_download or args.bin_patch or args.bin_check:
+	if args.executor_download or patch_interpreter or args.bin_check:
 		if not executor_executable.exists() and args.executor_download:
 			import lzma
 
@@ -549,11 +447,8 @@ def process_executor_version(executor_version: str):
 			else:
 				logger.warning(f'Executor path {executor_executable} does not exist, skipping')
 				return
-	if args.bin_patch:
-		patch_executable(
-			executor_executable,
-			rpath_dir=[genvm_root_dir.joinpath('lib'), executor_root_dir.joinpath('lib')],
-		)
+	if patch_interpreter:
+		patch_executable(executor_executable)
 	if args.bin_check:
 		run_check_command([executor_executable, '--version'])
 
