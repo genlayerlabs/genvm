@@ -52,7 +52,7 @@ pub enum IdUnresolved {
 pub enum Id {
     Builtin {
         name: symbol_table::GlobalSymbol,
-        hash: symbol_table::GlobalSymbol,
+        hash: Bytes32Hash,
     },
     Chain {
         address: calldata::Address,
@@ -97,7 +97,7 @@ impl Id {
             Id::Builtin { name, hash } => {
                 let mut id = name.as_str().to_owned();
                 id.push(':');
-                id.push_str(hash.as_str());
+                id.push_str(&hash.to_gvm32());
                 symbol_table::GlobalSymbol::from(id)
             }
             Id::Chain { address, on, slot } => {
@@ -189,16 +189,24 @@ pub fn parse_runner_id(id: &str) -> Option<IdUnresolved> {
     })
 }
 
-/// Derives the hash component of a `custom:<hash>` runner id from its code.
+/// The dev-mode magic builtin/custom runner hash. Its GVM32 form is the literal
+/// string `test` padded with `0`s to 52 chars (`test0000…`), which is what shows
+/// up on disk and in `all.json`/`latest.json`. The raw bytes below are exactly
+/// `gvm32::decode("test0000…")`. Kept in sync with `hashToIDHash` in
+/// `runners/support/default.nix`.
+pub const TEST_RUNNER_HASH: Bytes32Hash = {
+    let mut bytes = [0u8; 32];
+    bytes[0] = 0xd3;
+    bytes[1] = 0xb3;
+    bytes[2] = 0xa0;
+    Bytes32Hash::from_bytes(bytes)
+};
+
 pub fn custom_runner_hash(code: &[u8]) -> Bytes32Hash {
     use sha3::Digest as _;
     let mut digest = sha3::Sha3_256::new();
     digest.update(code);
-    let arr: [u8; 32] = digest
-        .finalize()
-        .as_slice()
-        .try_into()
-        .expect("sha3-256 is 32 bytes");
+    let arr: [u8; 32] = digest.finalize().into();
     Bytes32Hash::from_bytes(arr)
 }
 
