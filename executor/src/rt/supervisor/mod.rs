@@ -78,7 +78,7 @@ pub struct Supervisor {
 
     /// Runners registered at runtime via `gl_call`, looked up by the
     /// `custom:<hash>` runner id. Empty until a contract registers one.
-    custom_runners: dashmap::DashMap<GlobalSymbol, runners::Archive>,
+    custom_runners: dashmap::DashMap<Bytes32Hash, runners::Archive>,
 
     pub(crate) engines: rt::DetNondet<wasmtime::Engine>,
     pub(crate) host: Arc<host::MultiHost>,
@@ -225,7 +225,7 @@ impl Supervisor {
         rt::vm::storage::Limiter::new(self.shared_data.gep(|x| &x.data_fees_limit))
     }
 
-    pub fn get_custom_runner(&self, hash: GlobalSymbol) -> Option<runners::Archive> {
+    pub fn get_custom_runner(&self, hash: Bytes32Hash) -> Option<runners::Archive> {
         self.custom_runners.get(&hash).map(|r| r.clone())
     }
 
@@ -648,7 +648,7 @@ async fn nondet_vm_processor(
 /// Core of [`Supervisor::register_custom_runner`]; charges the parsed archive
 /// against `limiter` only on the first registration of a given hash.
 fn register_custom_runner_into(
-    custom_runners: &dashmap::DashMap<GlobalSymbol, runners::Archive>,
+    custom_runners: &dashmap::DashMap<Bytes32Hash, runners::Archive>,
     code: bytes::Bytes,
     limiter: &rt::memlimiter::Limiter,
 ) -> anyhow::Result<GlobalSymbol> {
@@ -664,7 +664,7 @@ fn register_custom_runner_into(
         slot.insert(archive);
     }
 
-    Ok(runners::custom_runner_id(hash))
+    Ok(runners::Id::Custom { hash }.canonical())
 }
 
 #[cfg(test)]

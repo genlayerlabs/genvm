@@ -46,7 +46,7 @@ enum ResolvedKind {
         slot: crate::SlotID,
     },
     /// `custom:<hash>` — a runner registered at runtime.
-    Custom { hash: symbol_table::GlobalSymbol },
+    Custom { hash: Bytes32Hash },
 }
 
 /// A runner id resolved to its canonical cache key together with the way it
@@ -73,8 +73,9 @@ fn resolve_runner(
         ));
     };
 
-    match parsed.resolve(contract_address, state, code_slot) {
-        runners::Id::Builtin { name, hash } => {
+    let resolved: runners::Id = match parsed.resolve(contract_address, state, code_slot) {
+        runners::IdUnresolved::Contract => unreachable!("contract is resolved to chain"),
+        runners::IdUnresolved::Builtin { name, hash } => {
             let hash = if hash.as_str() == "test" || hash.as_str() == "latest" {
                 if !supervisor.shared_data.debug_mode {
                     log_warn!(":test/ :latest runner used in non-debug mode, this is not allowed");
@@ -98,20 +99,26 @@ fn resolve_runner(
                 anyhow::bail!("runner {}:{} not found", name, hash);
             }
 
-            Ok(Resolved {
-                id: runners::Id::Builtin { name, hash }.canonical(),
-                kind: ResolvedKind::Disk { name, hash },
-            })
+            runners::Id::Builtin { name, hash }
         }
-        runners::Id::Chain { address, on, slot } => Ok(Resolved {
-            id: runners::Id::Chain { address, on, slot }.canonical(),
-            kind: ResolvedKind::Chain { address, on, slot },
-        }),
-        runners::Id::Custom { hash } => Ok(Resolved {
-            id: runners::Id::Custom { hash }.canonical(),
-            kind: ResolvedKind::Custom { hash },
-        }),
-    }
+        runners::IdUnresolved::Chain { address, on, slot } => {
+            runners::Id::Chain { address, on, slot }
+        }
+        runners::IdUnresolved::Custom { hash } => {
+            let hash = Bytes32Hash::from_gvm32(hash.as_str()).ok_or_else(|| {
+                make_malformed_runner_error("custom runner hash is not valid gvm32")
+            })?;
+            runners::Id::Custom { hash }
+        }
+    };
+
+    let id = resolved.canonical();
+    let kind = match resolved {
+        runners::Id::Builtin { name, hash } => ResolvedKind::Disk { name, hash },
+        runners::Id::Chain { address, on, slot } => ResolvedKind::Chain { address, on, slot },
+        runners::Id::Custom { hash } => ResolvedKind::Custom { hash },
+    };
+    Ok(Resolved { id, kind })
 }
 
 /// Loads (and caches) the archive for an already-resolved runner.

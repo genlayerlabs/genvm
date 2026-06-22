@@ -60,7 +60,7 @@ pub enum Id {
         slot: crate::SlotID,
     },
     Custom {
-        hash: symbol_table::GlobalSymbol,
+        hash: Bytes32Hash,
     },
 }
 
@@ -76,16 +76,14 @@ impl IdUnresolved {
         contract_address: calldata::Address,
         state: crate::public_abi::StorageType,
         code_slot: crate::SlotID,
-    ) -> Id {
+    ) -> IdUnresolved {
         match self {
-            IdUnresolved::Contract => Id::Chain {
+            IdUnresolved::Contract => IdUnresolved::Chain {
                 address: contract_address,
                 on: state,
                 slot: code_slot,
             },
-            IdUnresolved::Builtin { name, hash } => Id::Builtin { name, hash },
-            IdUnresolved::Chain { address, on, slot } => Id::Chain { address, on, slot },
-            IdUnresolved::Custom { hash } => Id::Custom { hash },
+            other => other,
         }
     }
 }
@@ -114,7 +112,11 @@ impl Id {
                     genlayer_sdk::gvm32::encode(&slot.raw())
                 ))
             }
-            Id::Custom { hash } => custom_runner_id(*hash),
+            Id::Custom { hash } => {
+                let mut id = String::from("custom:");
+                id.push_str(&hash.to_gvm32());
+                symbol_table::GlobalSymbol::from(id)
+            }
         }
     }
 }
@@ -188,18 +190,16 @@ pub fn parse_runner_id(id: &str) -> Option<IdUnresolved> {
 }
 
 /// Derives the hash component of a `custom:<hash>` runner id from its code.
-pub fn custom_runner_hash(code: &[u8]) -> symbol_table::GlobalSymbol {
+pub fn custom_runner_hash(code: &[u8]) -> Bytes32Hash {
     use sha3::Digest as _;
     let mut digest = sha3::Sha3_256::new();
     digest.update(code);
-    symbol_table::GlobalSymbol::from(genlayer_sdk::gvm32::encode(digest.finalize().as_slice()))
-}
-
-/// Builds the canonical `custom:<hash>` runner id from its hash.
-pub fn custom_runner_id(hash: symbol_table::GlobalSymbol) -> symbol_table::GlobalSymbol {
-    let mut id = String::from("custom:");
-    id.push_str(hash.as_str());
-    symbol_table::GlobalSymbol::from(id)
+    let arr: [u8; 32] = digest
+        .finalize()
+        .as_slice()
+        .try_into()
+        .expect("sha3-256 is 32 bytes");
+    Bytes32Hash::from_bytes(arr)
 }
 
 pub struct ArchiveCache {
