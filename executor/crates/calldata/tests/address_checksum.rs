@@ -15,9 +15,8 @@ fn eip55_checksum() {
         "dbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
         "D1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb",
     ] {
-        assert_eq!(
-            addr(&expected.to_lowercase()).checksum_hex().as_slice(),
-            expected.as_bytes()
-        );
+        let a = addr(&expected.to_lowercase());
+        assert_eq!(a.checksum_hex().as_slice(), expected.as_bytes());
+        assert_eq!(a.checksum_hex_string(), expected);
     }
 }
