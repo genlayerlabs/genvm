@@ -519,7 +519,29 @@ def process_executor_version(executor_version: str):
 				},
 			)
 			tar_data = lzma.decompress(tar_xz_data)
-			tarfile.TarFile.open(fileobj=io.BytesIO(tar_data)).extractall(path=genvm_root_dir)
+
+			# Integrity check before extraction. The expected hash, when present
+			# in the manifest, is taken over the decompressed `.tar` (matching the
+			# runner convention in runner_check_bytes), not the `.tar.xz`. No
+			# executor hash is published yet, so this currently warns instead of
+			# failing; add a `hash` field to the manifest's executor_versions entry
+			# to enforce it.
+			expected_hash = (
+				manifest.get('executor_versions', {}).get(executor_version, {}).get('hash')
+			)
+			if expected_hash is not None:
+				if not runner_check_bytes(tar_data, expected_hash):
+					raise ValueError(f'hash mismatch for executor {executor_version}')
+			else:
+				logger.warning(
+					f'no integrity hash for executor {executor_version}; skipping verification'
+				)
+
+			# filter='data' rejects absolute / `..` paths and unsafe link and device
+			# members, preventing writes outside genvm_root_dir (tar path-traversal /
+			# link-abuse).
+			with tarfile.TarFile.open(fileobj=io.BytesIO(tar_data)) as tar:
+				tar.extractall(path=genvm_root_dir, filter='data')
 		if not executor_executable.exists():
 			if args.error_on_missing_executor:
 				logger.error(f'Executor path {executor_executable} does not exist')
