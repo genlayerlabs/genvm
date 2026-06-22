@@ -5,7 +5,6 @@ use crate::{caching, public_abi, rt, runners};
 use anyhow::Context as _;
 use genlayer_sdk::abi;
 use genvm_common::*;
-use symbol_table::GlobalSymbol;
 use wiggle::error::Context as _;
 
 pub struct Ctx<'a, 'b> {
@@ -75,7 +74,7 @@ fn resolve_runner(
     };
 
     match parsed.resolve(contract_address, state, code_slot) {
-        runners::RunnerId::Builtin { name, hash } => {
+        runners::Id::Builtin { name, hash } => {
             let hash = if hash.as_str() == "test" || hash.as_str() == "latest" {
                 if !supervisor.shared_data.debug_mode {
                     log_warn!(":test/ :latest runner used in non-debug mode, this is not allowed");
@@ -99,21 +98,17 @@ fn resolve_runner(
                 anyhow::bail!("runner {}:{} not found", name, hash);
             }
 
-            let mut canonical = name.as_str().to_owned();
-            canonical.push(':');
-            canonical.push_str(hash.as_str());
-
             Ok(Resolved {
-                id: GlobalSymbol::new(canonical),
+                id: runners::Id::Builtin { name, hash }.canonical(),
                 kind: ResolvedKind::Disk { name, hash },
             })
         }
-        runners::RunnerId::Chain { address, on, slot } => Ok(Resolved {
-            id: GlobalSymbol::from(runners::chain_canonical(address, on, slot)),
+        runners::Id::Chain { address, on, slot } => Ok(Resolved {
+            id: runners::Id::Chain { address, on, slot }.canonical(),
             kind: ResolvedKind::Chain { address, on, slot },
         }),
-        runners::RunnerId::Custom { hash } => Ok(Resolved {
-            id: runners::custom_runner_id(hash),
+        runners::Id::Custom { hash } => Ok(Resolved {
+            id: runners::Id::Custom { hash }.canonical(),
             kind: ResolvedKind::Custom { hash },
         }),
     }
