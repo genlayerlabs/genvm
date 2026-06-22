@@ -107,9 +107,10 @@ impl Id {
                     crate::public_abi::StorageType::LatestFinal => 'f',
                     _ => 'a',
                 };
+                let address = address.checksum_hex();
                 symbol_table::GlobalSymbol::from(format!(
                     "chain:0x{}:{}:{}",
-                    hex::encode(address.raw()),
+                    std::str::from_utf8(&address).expect("checksum hex is ascii"),
                     on,
                     genlayer_sdk::gvm32::encode(&slot.raw())
                 ))

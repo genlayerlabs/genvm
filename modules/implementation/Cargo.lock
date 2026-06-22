@@ -979,6 +979,7 @@ dependencies = [
  "num-bigint",
  "primitive-types",
  "serde",
+ "sha3",
 ]
 
 [[package]]
