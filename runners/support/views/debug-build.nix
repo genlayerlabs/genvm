@@ -8,10 +8,8 @@ let
 
 	pathOfRunner = runner:
 		let
-			hash32 =
-				if runner.hash == "test"
-				then "test"
-				else builtins.convertHash { hash = runner.hash; toHashFormat = "nix32"; };
+			# the gvm32 hash id (matches `uid` / `hashToIDHash`)
+			hash32 = builtins.head (builtins.tail (builtins.match "([^:]+):(.*)" runner.uid));
 		in "${runner.id}/${builtins.substring 0 2 hash32}/${builtins.substring 2 50 hash32}.tar";
 
 	installLines =

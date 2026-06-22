@@ -35,7 +35,7 @@ enum ResolvedKind {
     /// A packaged `name:hash` runner read from the runners directory.
     Disk {
         name: symbol_table::GlobalSymbol,
-        hash: symbol_table::GlobalSymbol,
+        hash: Bytes32Hash,
     },
     /// `chain:<address>:<a|f>:<slot>` — code blob read from a storage slot. The
     /// current contract (`contract`) also resolves here, pointing at its own
@@ -76,9 +76,17 @@ fn resolve_runner(
     let resolved: runners::Id = match parsed.resolve(contract_address, state, code_slot) {
         runners::IdUnresolved::Contract => unreachable!("contract is resolved to chain"),
         runners::IdUnresolved::Builtin { name, hash } => {
-            let hash = if hash.as_str() == "test" || hash.as_str() == "latest" {
+            let hash: Bytes32Hash = if hash.as_str() == "test" {
                 if !supervisor.shared_data.debug_mode {
-                    log_warn!(":test/ :latest runner used in non-debug mode, this is not allowed");
+                    log_warn!(":test runner used in non-debug mode, this is not allowed");
+                    return Err(make_malformed_runner_error(
+                        "runner id doesn't match expected format",
+                    ));
+                }
+                runners::TEST_RUNNER_HASH
+            } else if hash.as_str() == "latest" {
+                if !supervisor.shared_data.debug_mode {
+                    log_warn!(":latest runner used in non-debug mode, this is not allowed");
                     return Err(make_malformed_runner_error(
                         "runner id doesn't match expected format",
                     ));
@@ -90,13 +98,16 @@ fn resolve_runner(
                         "runner id doesn't match expected format",
                     ));
                 };
-                new_latest
+                Bytes32Hash::from_gvm32(new_latest.as_str())
+                    .ok_or_else(|| make_malformed_runner_error("runner hash is not valid gvm32"))?
             } else {
-                hash
+                Bytes32Hash::from_gvm32(hash.as_str())
+                    .ok_or_else(|| make_malformed_runner_error("runner hash is not valid gvm32"))?
             };
 
-            if !supervisor.runner_cache.has_in_all(name, hash) {
-                anyhow::bail!("runner {}:{} not found", name, hash);
+            let hash_sym = symbol_table::GlobalSymbol::from(hash.to_gvm32());
+            if !supervisor.runner_cache.has_in_all(name, hash_sym) {
+                anyhow::bail!("runner {}:{} not found", name, hash_sym);
             }
 
             runners::Id::Builtin { name, hash }
@@ -141,7 +152,7 @@ async fn get_arch(
                     id,
                     || async {
                         let mut path = cache.runners_path().to_owned();
-                        runners::append_runner_subpath(name.as_str(), hash.as_str(), &mut path);
+                        runners::append_runner_subpath(name.as_str(), &hash.to_gvm32(), &mut path);
                         path.set_extension("tar");
                         if !path.exists() {
                             anyhow::bail!("runner {} not found", id);

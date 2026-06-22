@@ -11,7 +11,7 @@
 			dontBuild = true;
 			dontFixup = true;
 			installPhase = let
-				hash32 = builtins.convertHash { hash = x.hash; toHashFormat = "nix32"; };
+				hash32 = builtins.head (builtins.tail (builtins.match "([^:]+):(.*)" x.uid));
 				result-path = "runners/${x.id}/${builtins.substring 0 2 hash32}/${builtins.substring 2 50 hash32}.tar";
 			in ''
 				mkdir -p $out/$(dirname -- ${result-path})

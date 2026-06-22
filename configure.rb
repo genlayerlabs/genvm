@@ -486,13 +486,13 @@ end
 runners_nix_inputs = $source_dir.join('runners').glob('**/*.nix')
 
 generator.build(:nix_eval, 'out/executor/vTEST/data/latest.json') do
-	var 'expr', 'let drv = import ./runners { host-system = builtins.currentSystem; } ; conv-hash = hash: if hash == "test" then "test" else builtins.convertHash { inherit hash; toHashFormat = "nix32"; } ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = conv-hash x.hash; }) drv)'
+	var 'expr', 'let drv = import ./runners { host-system = builtins.currentSystem; } ; hash-of = x: builtins.head (builtins.tail (builtins.match "([^:]+):(.*)" x.uid)) ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = hash-of x; }) drv)'
 	var 'wd', $source_dir
 	add_implicit_dependency runners_nix_inputs
 end
 
 generator.build(:nix_eval, 'out/executor/vTEST/data/all.json') do
-	var 'expr', 'let drv = import ./runners { host-system = builtins.currentSystem; } ; conv-hash = hash: if hash == "test" then "test" else builtins.convertHash { inherit hash; toHashFormat = "nix32"; } ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = [ (conv-hash x.hash) ]; }) drv)'
+	var 'expr', 'let drv = import ./runners { host-system = builtins.currentSystem; } ; hash-of = x: builtins.head (builtins.tail (builtins.match "([^:]+):(.*)" x.uid)) ; in builtins.listToAttrs (builtins.map (x: { name = x.id; value = [ (hash-of x) ]; }) drv)'
 	var 'wd', $source_dir
 	add_implicit_dependency runners_nix_inputs
 end
