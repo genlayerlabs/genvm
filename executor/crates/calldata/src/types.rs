@@ -7,19 +7,13 @@ pub struct Address(pub(super) [u8; ADDRESS_SIZE]);
 
 impl std::fmt::Debug for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "addr#{}",
-            std::str::from_utf8(&self.checksum_hex()).map_err(|_| std::fmt::Error)?
-        ))
+        f.write_fmt(format_args!("addr#{}", self.checksum_hex_string()))
     }
 }
 
 impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "addr#{}",
-            std::str::from_utf8(&self.checksum_hex()).map_err(|_| std::fmt::Error)?
-        ))
+        f.write_fmt(format_args!("addr#{}", self.checksum_hex_string()))
     }
 }
 
@@ -67,6 +61,11 @@ impl Address {
             }
         }
         out
+    }
+
+    /// Like [`Address::checksum_hex`], but as an owned `String`.
+    pub fn checksum_hex_string(self) -> String {
+        self.checksum_hex().iter().map(|&b| b as char).collect()
     }
 
     pub fn ref_mut(&mut self) -> &mut [u8; ADDRESS_SIZE] {
