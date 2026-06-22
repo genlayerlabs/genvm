@@ -4,6 +4,7 @@ import { Command } from 'commander';
 
 import * as logger from './logging.js';
 import * as chromeBrowser from './browser/chrome.js';
+import * as ssrf from './ssrf.js';
 import { envDurationMs, envInt, formatDurationMs } from './duration.js';
 
 interface NavigationOptions {
@@ -66,6 +67,8 @@ function getNavigationErrorStatus(error: any): number {
 		return 495; // SSL Certificate Error
 	} else if (error.message?.includes('net::ERR_INTERNET_DISCONNECTED')) {
 		return 503; // Service Unavailable
+	} else if (error.message?.includes('net::ERR_BLOCKED_BY_CLIENT')) {
+		return 403; // Forbidden (SSRF guard)
 	}
 	return STATUS_I_AM_A_TEAPOT; // Unknown error
 }
@@ -81,6 +84,8 @@ function getNavigationErrorMessage(error: any): string {
 		return 'SSL certificate error';
 	} else if (error.message?.includes('net::ERR_INTERNET_DISCONNECTED')) {
 		return 'No internet connection';
+	} else if (error.message?.includes('net::ERR_BLOCKED_BY_CLIENT')) {
+		return 'Blocked by SSRF guard: address not allowed';
 	}
 	return `Navigation error: ${error.message || 'Unknown error'}`;
 }
@@ -238,6 +243,7 @@ async function renderPageWithBrowser(
 	const page = await browserInstance.newPage();
 
 	try {
+		await ssrf.installSsrfGuard(page);
 		page.setViewport({ width: 1920 / 2, height: 1080 / 2 });
 
 		return await withHeapMonitor(page, maxPageHeapMB, async () => {
