@@ -15,16 +15,29 @@ To run these tests, see the `/test` skill (`--filter-tag rust`).
 
 ## Where tests go
 
+**Decision rule — default to a separate file.** If the item under test is
+reachable from the crate's public API (a `pub fn`/`pub` type, even via a
+re-export), its test goes in its own `tests/<concern>.rs` file. Use an inline
+`#[cfg(test)] mod tests` **only** when the test must reach a *private* item that
+cannot be exercised through the public API. A public function tested inline is a
+review finding — move it to `tests/`.
+
 Two locations, both in use:
 
 1. **Integration tests** — one file per concern under the crate's `tests/` dir.
-   Preferred for exercising a crate's public API. Each `tests/*.rs` file is its
-   own compilation unit and gets its own runner case.
+   **This is the default** for anything testable through the public API. Each
+   `tests/*.rs` file is its own compilation unit (a separate crate) and gets its
+   own runner case.
    - e.g. `executor/crates/calldata/tests/derive_decode.rs`,
+     `executor/crates/calldata/tests/address_checksum.rs`,
      `executor/crates/common/tests/expr.rs`,
      `modules/implementation/tests/test_rat.rs`
+   - Because each is a separate crate, it sees only the library crate plus
+     `[dev-dependencies]` — **not** the library's regular `[dependencies]`. If a
+     test needs a util the crate already depends on (e.g. `hex`), add it to
+     `[dev-dependencies]` too.
 2. **Inline unit tests** — `#[cfg(test)] mod tests { ... }` at the bottom of a
-   `src/*.rs` file, for testing private items. e.g.
+   `src/*.rs` file, reserved for testing **private** items. e.g.
    `executor/crates/calldata/src/lib.rs`, `executor/crates/common/src/logger/mod.rs`.
 
 ```rust
