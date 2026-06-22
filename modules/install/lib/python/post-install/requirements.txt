@@ -1,2 +1,3 @@
-lief==0.17.0
+# only needed for ELF interpreter patching (see post-install __main__.py)
+lief==0.17.0; platform_system == "Linux"
 pyyaml==6.0.3
