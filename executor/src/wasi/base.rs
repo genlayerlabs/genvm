@@ -13,6 +13,7 @@ pub struct Config {
     pub can_call_others: bool,
     pub can_register_runners: bool,
     pub state_mode: public_abi::StorageType,
+    pub code_slot: crate::SlotID,
 }
 
 impl Config {

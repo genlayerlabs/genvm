@@ -40,6 +40,17 @@ impl AccountAddress {
 #[repr(C)]
 pub struct SlotID(#[serde_as(as = "Base64")] pub [u8; 32]);
 
+impl<W: genvm_common::calldata::Writer> genvm_common::calldata::codec::Encode<W> for SlotID {
+    type Error = W::Error;
+
+    fn encode(
+        &self,
+        enc: &mut genvm_common::calldata::Encoder<W>,
+    ) -> std::result::Result<(), Self::Error> {
+        enc.push_bytes(&self.0)
+    }
+}
+
 impl SlotID {
     pub const ZERO: SlotID = SlotID([0; 32]);
     pub const SIZE: u32 = 32;
