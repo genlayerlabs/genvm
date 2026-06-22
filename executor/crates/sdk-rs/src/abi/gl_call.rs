@@ -595,9 +595,6 @@ pub enum Message {
     ExecPrompt(llm_iface::PromptPayload),
     ExecPromptTemplate(llm_iface::PromptTemplatePayload),
 
-    // FIXME: deprecate in next release
-    #[deprecated(note = "Use UserError. Will be removed before 1.0 release")]
-    Rollback(calldata::unparsed::Maybe<calldata::Value>),
     UserError(calldata::unparsed::Maybe<calldata::Value>),
     Return(calldata::unparsed::Maybe<calldata::Value>),
 

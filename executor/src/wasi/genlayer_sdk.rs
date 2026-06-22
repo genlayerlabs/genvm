@@ -1276,10 +1276,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 self.place_content(vfs::FileContents::from(bytes::Bytes::from(task)))
             }
-            #[allow(deprecated)]
-            gl_call::Message::Rollback(msg) => Err(generated::types::Error::trap(
-                crate::anyhow_to_wasmtime(rt::errors::UserError(msg).into()),
-            )),
             gl_call::Message::UserError(msg) => Err(generated::types::Error::trap(
                 crate::anyhow_to_wasmtime(rt::errors::UserError(msg).into()),
             )),
