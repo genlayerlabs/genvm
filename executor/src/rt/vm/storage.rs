@@ -407,14 +407,6 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         Ok(())
     }
 
-    pub async fn read_code(
-        &mut self,
-        limiter: &rt::memlimiter::Limiter,
-    ) -> anyhow::Result<Box<[u8]>> {
-        let code_slot = self.resolve_code_slot().await?;
-        self.read_code_at(code_slot, limiter).await
-    }
-
     /// Reads the GenVM major version the contract was deployed for, from the
     /// `major` root field (zero if never written).
     pub async fn read_major(&mut self) -> anyhow::Result<u8> {

@@ -721,6 +721,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         can_send_messages: my_conf.can_send_messages,
                         can_register_runners: my_conf.can_register_runners,
                         state_mode: state,
+                        code_slot: crate::SlotID::ZERO,
                     },
                     message_data: ExtendedMessage {
                         message: genlayer_sdk::abi::entry::MessageData {
@@ -1600,6 +1601,7 @@ impl ContextVFS<'_> {
         let limiter = supervisor.limiter.get(is_det);
         let contract_address = self.context.data.message_data.message.contract_address;
         let state = self.context.data.conf.state_mode;
+        let code_slot = self.context.data.conf.code_slot;
 
         rt::supervisor::actions::map_runner_file(
             &supervisor,
@@ -1607,6 +1609,7 @@ impl ContextVFS<'_> {
             limiter,
             contract_address,
             state,
+            code_slot,
             symbol_table::GlobalSymbol::from(runner),
             &path_in_runner,
             &path_in_vfs,
@@ -1786,6 +1789,7 @@ impl ContextVFS<'_> {
                     can_send_messages: false,
                     can_register_runners: false,
                     state_mode: public_abi::StorageType::Default,
+                    code_slot: crate::SlotID::ZERO,
                 },
                 message_data,
                 supervisor: supervisor.clone(),
@@ -1876,6 +1880,7 @@ impl ContextVFS<'_> {
                 can_send_messages: zelf_conf.can_send_messages & allow_send_messages,
                 can_register_runners: zelf_conf.can_register_runners & allow_register_runners,
                 state_mode: zelf_conf.state_mode,
+                code_slot: crate::SlotID::ZERO,
             },
             message_data,
             supervisor: supervisor.clone(),

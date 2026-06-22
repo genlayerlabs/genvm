@@ -408,11 +408,11 @@ pub async fn apply_contract_actions(
         .conf
         .state_mode;
 
-    let contract_id = runners::get_runner_of_contract(contract_address, contract_state);
-
     let limiter = vm.vm_base.store.data_mut().limits.clone();
 
-    let res = apply_contract_actions_inner(zelf, &mut vm, contract_id, limiter).await;
+    let res =
+        apply_contract_actions_inner(zelf, &mut vm, contract_address, contract_state, limiter)
+            .await;
 
     match res {
         Ok(inst) => Ok(rt::vm::VM {
@@ -429,9 +429,32 @@ pub async fn apply_contract_actions(
 async fn apply_contract_actions_inner(
     zelf: &std::sync::Arc<Supervisor>,
     vm: &mut rt::vm::VM<()>,
-    contract_id: GlobalSymbol,
+    contract_address: calldata::Address,
+    state: public_abi::StorageType,
     limiter: rt::memlimiter::Limiter,
 ) -> anyhow::Result<wasmtime::Instance> {
+    let code_slot = vm
+        .vm_base
+        .store
+        .data_mut()
+        .genlayer_ctx
+        .genlayer_sdk
+        .data
+        .storage
+        .resolve_code_slot()
+        .await
+        .with_context(|| "resolving contract code slot")?;
+    vm.vm_base
+        .store
+        .data_mut()
+        .genlayer_ctx
+        .genlayer_sdk
+        .data
+        .conf
+        .code_slot = code_slot;
+    let contract_id =
+        GlobalSymbol::from(runners::chain_canonical(contract_address, state, code_slot));
+
     let contract_major = vm
         .vm_base
         .store
@@ -467,7 +490,7 @@ async fn apply_contract_actions_inner(
                     .genlayer_sdk
                     .data
                     .storage
-                    .read_code(&limiter)
+                    .read_code_at(code_slot, &limiter)
                     .await
                     .with_context(|| format!("reading contract code for {contract_id}"))?;
 
@@ -489,6 +512,9 @@ async fn apply_contract_actions_inner(
         env: BTreeMap::new(),
         visited: HashSet::new(),
         contract_id,
+        contract_address,
+        state,
+        code_slot,
         supervisor: zelf,
         vm: &mut vm.vm_base,
     };

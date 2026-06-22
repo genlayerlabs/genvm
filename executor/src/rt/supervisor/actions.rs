@@ -12,6 +12,9 @@ pub struct Ctx<'a, 'b> {
     pub env: BTreeMap<String, String>,
     pub visited: HashSet<symbol_table::GlobalSymbol>,
     pub contract_id: symbol_table::GlobalSymbol,
+    pub contract_address: calldata::Address,
+    pub state: public_abi::StorageType,
+    pub code_slot: crate::SlotID,
     pub supervisor: &'a rt::supervisor::Supervisor,
     pub vm: &'b mut rt::vm::VMBase,
 }
@@ -35,9 +38,9 @@ enum ResolvedKind {
         name: symbol_table::GlobalSymbol,
         hash: symbol_table::GlobalSymbol,
     },
-    /// The current contract's runner, already preloaded into the cache.
-    Preloaded,
-    /// `chain:<address>:<a|f>:<slot>` — code blob read from a storage slot.
+    /// `chain:<address>:<a|f>:<slot>` — code blob read from a storage slot. The
+    /// current contract (`contract`) also resolves here, pointing at its own
+    /// address/state/`code_slot`.
     Chain {
         address: calldata::Address,
         on: public_abi::StorageType,
@@ -60,7 +63,9 @@ struct Resolved {
 /// ([`Ctx`]) and runtime `gl_call`s ([`load_runner`]).
 fn resolve_runner(
     supervisor: &rt::supervisor::Supervisor,
-    contract_id: symbol_table::GlobalSymbol,
+    contract_address: calldata::Address,
+    state: public_abi::StorageType,
+    code_slot: crate::SlotID,
     id: symbol_table::GlobalSymbol,
 ) -> anyhow::Result<Resolved> {
     let Some(parsed) = runners::parse_runner_id(id.as_str()) else {
@@ -69,12 +74,8 @@ fn resolve_runner(
         ));
     };
 
-    match parsed {
-        runners::RunnerId::Contract => Ok(Resolved {
-            id: contract_id,
-            kind: ResolvedKind::Preloaded,
-        }),
-        runners::RunnerId::NameHash { name, hash } => {
+    match parsed.resolve(contract_address, state, code_slot) {
+        runners::RunnerId::Builtin { name, hash } => {
             let hash = if hash.as_str() == "test" || hash.as_str() == "latest" {
                 if !supervisor.shared_data.debug_mode {
                     log_warn!(":test/ :latest runner used in non-debug mode, this is not allowed");
@@ -154,15 +155,6 @@ async fn get_arch(
                 )
                 .await?
         }
-        ResolvedKind::Preloaded => {
-            cache
-                .get_or_create(
-                    id,
-                    || async { anyhow::bail!("runner {} is not preloaded", id) },
-                    limiter,
-                )
-                .await?
-        }
         ResolvedKind::Chain { address, on, slot } => {
             cache
                 .get_or_create(
@@ -212,14 +204,16 @@ async fn get_arch(
 /// contract initialization and runtime `gl_call`s.
 pub(crate) async fn load_runner(
     supervisor: &rt::supervisor::Supervisor,
-    contract_id: symbol_table::GlobalSymbol,
+    contract_address: calldata::Address,
+    state: public_abi::StorageType,
+    code_slot: crate::SlotID,
     limiter: &rt::memlimiter::Limiter,
     id: symbol_table::GlobalSymbol,
 ) -> anyhow::Result<(
     symbol_table::GlobalSymbol,
     sync::DArc<runners::ArchiveCache>,
 )> {
-    let resolved = resolve_runner(supervisor, contract_id, id)?;
+    let resolved = resolve_runner(supervisor, contract_address, state, code_slot, id)?;
     get_arch(supervisor, limiter, resolved).await
 }
 
@@ -310,12 +304,20 @@ pub(crate) async fn map_runner_file(
     limiter: &rt::memlimiter::Limiter,
     contract_address: calldata::Address,
     state: public_abi::StorageType,
+    code_slot: crate::SlotID,
     runner: symbol_table::GlobalSymbol,
     path_in_runner: &str,
     path_in_vfs: &str,
 ) -> anyhow::Result<()> {
-    let contract_id = runners::get_runner_of_contract(contract_address, state);
-    let (_id, arch) = load_runner(supervisor, contract_id, limiter, runner).await?;
+    let (_id, arch) = load_runner(
+        supervisor,
+        contract_address,
+        state,
+        code_slot,
+        limiter,
+        runner,
+    )
+    .await?;
     map_archive_file(
         preview1,
         limiter,
@@ -328,7 +330,13 @@ pub(crate) async fn map_runner_file(
 
 impl Ctx<'_, '_> {
     fn resolve_runner(&self, id: symbol_table::GlobalSymbol) -> anyhow::Result<Resolved> {
-        resolve_runner(self.supervisor, self.contract_id, id)
+        resolve_runner(
+            self.supervisor,
+            self.contract_address,
+            self.state,
+            self.code_slot,
+            id,
+        )
     }
 
     async fn get_arch(

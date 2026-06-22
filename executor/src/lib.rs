@@ -189,6 +189,7 @@ pub async fn run_with_impl(
             can_spawn_nondet: permissions.contains("n"),
             can_register_runners: permissions.contains("u"),
             state_mode: crate::public_abi::StorageType::Default,
+            code_slot: crate::SlotID::ZERO,
         },
         message_data: ExtendedMessage {
             message: entry_data.message,
