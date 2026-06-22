@@ -31,7 +31,7 @@ pub fn append_runner_subpath(id: &str, hash: &str, path: &mut std::path::PathBuf
 /// - `chain:<address>:<a|f>:<slot>` — read the runner code blob from a storage
 ///   slot of an arbitrary contract. `address` is a `0x`-prefixed 20 byte hex
 ///   address, `a`/`f` selects accepted (latest non final) / finalized state and
-///   `slot` is a `0x`-prefixed 32 byte hex slot id.
+///   `slot` is a 32 byte slot id encoded with GVM32 (Crockford Base32).
 /// - `custom:<hash>` — a runner registered at runtime, looked up by its hash.
 pub enum IdUnresolved {
     Builtin {
@@ -108,10 +108,10 @@ impl Id {
                     _ => 'a',
                 };
                 symbol_table::GlobalSymbol::from(format!(
-                    "chain:0x{}:{}:0x{}",
+                    "chain:0x{}:{}:{}",
                     hex::encode(address.raw()),
                     on,
-                    hex::encode(slot.raw())
+                    genlayer_sdk::gvm32::encode(&slot.raw())
                 ))
             }
             Id::Custom { hash } => custom_runner_id(*hash),
@@ -153,7 +153,8 @@ pub fn parse_runner_id(id: &str) -> Option<IdUnresolved> {
             "f" => crate::public_abi::StorageType::LatestFinal,
             _ => return None,
         };
-        let slot = crate::SlotID::from_bytes(parse_hex_fixed::<32>(slot)?);
+        let slot: [u8; 32] = genlayer_sdk::gvm32::decode(slot)?.try_into().ok()?;
+        let slot = crate::SlotID::from_bytes(slot);
 
         return Some(IdUnresolved::Chain { address, on, slot });
     }
@@ -191,7 +192,7 @@ pub fn custom_runner_hash(code: &[u8]) -> symbol_table::GlobalSymbol {
     use sha3::Digest as _;
     let mut digest = sha3::Sha3_256::new();
     digest.update(code);
-    symbol_table::GlobalSymbol::from(hex::encode(digest.finalize()))
+    symbol_table::GlobalSymbol::from(genlayer_sdk::gvm32::encode(digest.finalize().as_slice()))
 }
 
 /// Builds the canonical `custom:<hash>` runner id from its hash.
@@ -303,7 +304,7 @@ mod tests {
         format!("0x{}1", "0".repeat(39))
     }
     fn slot64() -> String {
-        format!("0x{}2", "0".repeat(63))
+        genlayer_sdk::gvm32::encode(&[0x11u8; 32])
     }
 
     #[test]

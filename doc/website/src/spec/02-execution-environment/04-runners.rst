@@ -18,7 +18,9 @@ forms (see the ``runner-id`` definition in the runner.json schema):
   provided for convenience; ``hash`` is a hash of its contents (see `Hash Format`_).
 - ``contract`` — the runner of the contract currently being executed.
 - ``chain:<address>:<a|f>:<slot>`` — a runner code blob read from a storage slot
-  of an arbitrary contract (``a`` = accepted, ``f`` = finalized).
+  of an arbitrary contract (``a`` = accepted, ``f`` = finalized). ``<address>`` is
+  a ``0x`` 20 byte hex address and ``<slot>`` is a :term:`SlotID` encoded with
+  :doc:`../../04-contract-interface/06-gvm32`.
 - ``custom:<hash>`` — a runner registered at runtime via the ``RegisterRunner``
   ``gl_call``, looked up by its hash.
 
@@ -28,27 +30,10 @@ as human-readable ids.
 Hash Format
 ~~~~~~~~~~~
 
-Hash is SHA3 256-bit hash, converted to a string with following algorithm:
-
-.. code-block:: python
-
-    def digest_to_hash_id(got_hash: bytes) -> str:
-        chars = '0123456789abcdfghijklmnpqrsvwxyz'
-
-        bytes_count = len(got_hash)
-        base32_len = (bytes_count * 8 - 1) // 5 + 1
-
-        my_hash_arr = []
-        for n in range(base32_len - 1, -1, -1):
-            b = n * 5
-            i = b // 8
-            j = b % 8
-            c = (got_hash[i] >> j) | (0 if i >= bytes_count - 1 else got_hash[i + 1] << (8 - j))
-            my_hash_arr.append(chars[c & 0x1F])
-
-        return ''.join(my_hash_arr)
-
-This ensures that it contains no fs-illegal characters and is case insensitive.
+``hash`` is the SHA3 256-bit hash of the runner's contents, encoded with
+:doc:`../../04-contract-interface/06-gvm32` (GVM32, a lowercase Crockford
+Base32). This keeps it free of filesystem-illegal characters and
+case-insensitive.
 
 Runner Layout
 -------------

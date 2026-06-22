@@ -15,7 +15,8 @@ in rec {
 		add-mod-name = import ./tools/genvm-wasm-add-mod-name args;
 	};
 
-	hashToIDHash = hash: if hash == "test" then "test" else builtins.convertHash { inherit hash; toHashFormat = "nix32"; };
+	gvm32 = import ./gvm32.nix { lib = pkgs.lib; };
+	hashToIDHash = hash: if hash == "test" then "test" else gvm32.encodeHex (builtins.convertHash { inherit hash; toHashFormat = "base16"; });
 	package = { id, hash, baseDerivation }: {
 		inherit id hash;
 

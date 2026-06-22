@@ -192,9 +192,10 @@ Creates isolated VM instance. See :ref:`gvm-permissions` for permission inherita
 --------------------------
 
 Registers a runner archive at runtime, making it available under the
-``custom:<hash>`` runner id. The ``<hash>`` is
-derived from the supplied ``code`` and the parsed archive is charged against the
-memory limit. Returns the resulting runner id (calldata-encoded string).
+``custom:<hash>`` runner id. The ``<hash>`` is the SHA3-256 of the supplied
+``code`` encoded with :doc:`../../04-contract-interface/06-gvm32`, and the parsed
+archive is charged against the memory limit. Returns the resulting runner id
+(calldata-encoded string).
 
 Payload
 ~~~~~~~
