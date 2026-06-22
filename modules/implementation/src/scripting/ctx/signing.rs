@@ -7,6 +7,11 @@ use genvm_modules_interfaces::GenericValue;
 
 const SIGN_ALGORITHM: &str = "ES256K";
 
+/// Per-request timeout for the signer preflight POST. Without it the request
+/// falls back to the reqwest client default (~5 min), so a slow or stalled
+/// signer would tie up a web-module task for minutes.
+const SIGN_PREFLIGHT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
 const ALWAYS_SIGN: &[&str] = &[
     "@method",
     "@scheme",
@@ -59,6 +64,7 @@ impl Request {
         let mut sign_request = ctx
             .client_unfiltered
             .post(sign_url)
+            .timeout(SIGN_PREFLIGHT_TIMEOUT)
             .body(signature_base.clone());
 
         //let signature_base_hashed = ring::digest::digest(&ring::digest::SHA256, signature_base.as_bytes());
