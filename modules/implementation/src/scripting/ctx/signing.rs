@@ -9,6 +9,7 @@ const SIGN_ALGORITHM: &str = "ES256K";
 
 const ALWAYS_SIGN: &[&str] = &[
     "@method",
+    "@scheme",
     "@authority",
     "@path",
     "genlayer-node-address",
@@ -110,6 +111,7 @@ impl Request {
     fn rfc9421_get_component_value(&self, component: &str) -> Result<String, ModuleError> {
         match component {
             "@method" => Ok(format!("{:?}", self.method)),
+            "@scheme" => Ok(self.url.scheme().to_lowercase()),
             "@authority" => Ok(self.url.authority().to_lowercase()),
             "@path" => Ok(self.url.path().to_owned()),
             "@query" => self
@@ -334,17 +336,18 @@ mod tests {
 
         assert_eq!(
             signature_params,
-            r#"("@method" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "@query");created=1750171014;alg="ES256K""#
+            r#"("@method" "@scheme" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "@query");created=1750171014;alg="ES256K""#
         );
         let base = r#"
 "@method": GET
+"@scheme": https
 "@authority": example.com
 "@path": /foo
 "genlayer-node-address": test_address
 "genlayer-tx-id": test_tx_id
 "genlayer-salt": <replaced>
 "@query": ?a=b
-"@signature-params": ("@method" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "@query");created=1750171014;alg="ES256K"
+"@signature-params": ("@method" "@scheme" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "@query");created=1750171014;alg="ES256K"
         "#;
         let base = base.trim();
         assert_eq!(signature_base.trim(), base);
@@ -393,17 +396,18 @@ mod tests {
 
         assert_eq!(
             signature_params,
-            r#"("@method" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "content-digest");created=1750171014;alg="ES256K""#
+            r#"("@method" "@scheme" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "content-digest");created=1750171014;alg="ES256K""#
         );
         let base = r#"
 "@method": POST
+"@scheme": https
 "@authority": example.com
 "@path": /pst
 "genlayer-node-address": test_address
 "genlayer-tx-id": test_tx_id
 "genlayer-salt": <replaced>
 "content-digest": sha-256=:Y++zFe1xzH5aH8ICQ0uzrsIJHng4cH4UigF/rrt0ZP4=:
-"@signature-params": ("@method" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "content-digest");created=1750171014;alg="ES256K"
+"@signature-params": ("@method" "@scheme" "@authority" "@path" "genlayer-node-address" "genlayer-tx-id" "genlayer-salt" "content-digest");created=1750171014;alg="ES256K"
         "#;
         let base = base.trim();
         assert_eq!(signature_base.trim(), base);
