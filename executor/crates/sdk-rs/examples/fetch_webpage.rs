@@ -167,7 +167,11 @@ fn run_nondet(entry_data: &[u8]) -> Result<Value, ContractError> {
 
     match result {
         LeaderResult::Return(value) => Ok(value),
-        LeaderResult::UserError(msg) => {
+        LeaderResult::UserError(value) => {
+            let msg = match value {
+                Value::Str(s) => s,
+                other => format!("{other:?}"),
+            };
             genlayer_sdk::abi::entry::user_error_immediately(msg);
         }
         LeaderResult::VmError(msg) => {

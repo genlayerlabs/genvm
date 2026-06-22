@@ -1693,22 +1693,18 @@ impl ContextVFS<'_> {
                         ))
                     }
                     x if x == ResultCode::UserError as u8 => {
-                        let val = if rest.len() >= 4 && rest[..4] == [0u8; 4] {
-                            calldata::decode(&rest[4..]).map_err(|e| {
-                                generated::types::Error::trap(crate::anyhow_to_wasmtime(
-                                    anyhow::anyhow!(e),
-                                ))
-                            })?
-                        } else {
-                            // FIXME: deprecate in next release (raw-string user error encoding)
-                            calldata::Value::Str(String::from(std::str::from_utf8(rest).map_err(
-                                |e| {
-                                    generated::types::Error::trap(crate::anyhow_to_wasmtime(
-                                        anyhow::anyhow!(e),
-                                    ))
-                                },
-                            )?))
-                        };
+                        if rest.len() < 4 || rest[..4] != [0u8; 4] {
+                            return Err(generated::types::Error::trap(crate::anyhow_to_wasmtime(
+                                anyhow::anyhow!(
+                                    "invalid user error encoding: missing tagged calldata prefix"
+                                ),
+                            )));
+                        }
+                        let val = calldata::decode(&rest[4..]).map_err(|e| {
+                            generated::types::Error::trap(crate::anyhow_to_wasmtime(
+                                anyhow::anyhow!(e),
+                            ))
+                        })?;
                         rt::vm::RunOk::UserError(calldata::unparsed::Maybe::Materialized(val))
                     }
                     x if x == ResultCode::VmError as u8 => {
