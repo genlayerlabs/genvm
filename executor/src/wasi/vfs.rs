@@ -12,6 +12,16 @@ pub struct FileContents {
     pub release_memory: bool,
 }
 
+impl From<bytes::Bytes> for FileContents {
+    fn from(value: bytes::Bytes) -> Self {
+        Self {
+            contents: value,
+            pos: 0,
+            release_memory: true,
+        }
+    }
+}
+
 pub enum FileDescriptor {
     Stdin,
     Stdout,
@@ -24,11 +34,30 @@ pub enum FileDescriptor {
 const _: FileDescriptor = FileDescriptor::Stdin;
 
 pub(crate) struct VFS {
-    pub fds: BTreeMap<u32, FileDescriptor>,
-    pub free_descriptors: Vec<u32>,
-    pub next_free_descriptor: u32,
+    pub fds: BTreeMap<Fd, FileDescriptor>,
+    pub free_descriptors: Vec<Fd>,
+    pub next_free_descriptor: Fd,
 
     pub limiter: rt::memlimiter::Limiter,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Fd(u32);
+
+impl From<Fd> for u32 {
+    fn from(value: Fd) -> Self {
+        value.0
+    }
+}
+
+impl Fd {
+    pub fn new(fd: u32) -> Self {
+        Self(fd)
+    }
+
+    pub fn as_u32(&self) -> u32 {
+        self.0
+    }
 }
 
 impl VFS {
@@ -49,18 +78,18 @@ impl VFS {
 
         let fds = BTreeMap::from([
             (
-                0,
+                Fd::new(0),
                 FileDescriptor::File(FileContents {
                     contents: stdin_data,
                     pos: 0,
                     release_memory: true,
                 }),
             ),
-            (1, FileDescriptor::Stdout),
-            (2, FileDescriptor::Stderr),
-            (3, FileDescriptor::Dir { path: Vec::new() }),
+            (Fd::new(1), FileDescriptor::Stdout),
+            (Fd::new(2), FileDescriptor::Stderr),
+            (Fd::new(3), FileDescriptor::Dir { path: Vec::new() }),
         ]);
-        let next_free_descriptor = fds.last_key_value().map(|x| *x.0).unwrap_or(0);
+        let next_free_descriptor = fds.last_key_value().map(|x| *x.0).unwrap_or(Fd::default());
         Ok(Self {
             fds,
             next_free_descriptor,
@@ -70,7 +99,7 @@ impl VFS {
     }
 
     /// gives vacant fd
-    pub fn alloc_fd(&mut self) -> anyhow::Result<u32> {
+    pub fn alloc_fd(&mut self) -> anyhow::Result<Fd> {
         if self.fds.len() >= public_abi::top_limits::MAX_FDS as usize {
             return Err(
                 rt::errors::VMError(abi::consts::VmError::oom().ram().limit(), None).into(),
@@ -87,18 +116,18 @@ impl VFS {
                         rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into(),
                     );
                 }
-                self.next_free_descriptor += 1;
+                self.next_free_descriptor.0 += 1;
                 Ok(self.next_free_descriptor)
             }
         }
     }
 
     /// it must be removed from fds beforehand
-    pub fn free_fd(&mut self, fd: u32) {
+    pub fn free_fd(&mut self, fd: Fd) {
         self.free_descriptors.push(fd);
     }
 
-    pub fn pop_fd(&mut self, fd: u32) -> Option<FileDescriptor> {
+    pub fn pop_fd(&mut self, fd: Fd) -> Option<FileDescriptor> {
         match self.fds.remove(&fd) {
             Some(v) => {
                 if let FileDescriptor::File(v) = &v {
@@ -115,7 +144,7 @@ impl VFS {
         }
     }
 
-    pub fn place_content(&mut self, value: FileContents) -> anyhow::Result<u32> {
+    pub fn place_content(&mut self, value: FileContents) -> anyhow::Result<Fd> {
         if value.release_memory && !self.limiter.consume(value.contents.len() as u32) {
             return Err(rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into());
         }

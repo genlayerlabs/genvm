@@ -11,7 +11,7 @@ use wiggle::GuestError;
 
 use crate::host::{self, SlotID};
 use crate::wasi::json_to_calldata::json_map_to_calldata;
-use crate::{anyhow_to_wasmtime, calldata, public_abi, rt};
+use crate::{anyhow_to_wasmtime, calldata, public_abi, rt, wasi};
 
 use genlayer_calldata::codec::Encode;
 pub use genlayer_sdk::abi::entry::ExtendedMessage;
@@ -308,6 +308,18 @@ pub(crate) mod generated {
     });
 }
 
+impl From<wasi::vfs::Fd> for generated::types::Fd {
+    fn from(fd: wasi::vfs::Fd) -> Self {
+        fd.as_u32().into()
+    }
+}
+
+impl From<generated::types::Fd> for wasi::vfs::Fd {
+    fn from(fd: generated::types::Fd) -> Self {
+        wasi::vfs::Fd::new(fd.into())
+    }
+}
+
 fn read_addr_from_mem(
     mem: &mut wiggle::GuestMemory<'_>,
     addr: wiggle::GuestPtr<u8>,
@@ -449,6 +461,16 @@ impl From<serde_json::Error> for generated::types::Error {
 }
 
 impl ContextVFS<'_> {
+    fn place_content(
+        &mut self,
+        content: vfs::FileContents,
+    ) -> Result<generated::types::Fd, generated::types::Error> {
+        self.vfs
+            .place_content(content)
+            .map(generated::types::Fd::from)
+            .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))
+    }
+
     fn set_vm_run_result(
         &mut self,
         data: rt::vm::RunOk,
@@ -463,18 +485,8 @@ impl ContextVFS<'_> {
         };
         let data: Vec<u8> = data.as_bytes();
         let len = data.len();
-        Ok((
-            generated::types::Fd::from(
-                self.vfs
-                    .place_content(vfs::FileContents {
-                        contents: bytes::Bytes::from(data),
-                        pos: 0,
-                        release_memory: true,
-                    })
-                    .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-            ),
-            len,
-        ))
+        self.place_content(vfs::FileContents::from(bytes::Bytes::from(data)))
+            .map(|fd| (fd, len))
     }
 }
 
@@ -658,21 +670,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 }
 
                 let supervisor = self.context.data.supervisor.clone();
-                let res = supervisor
+                let data = supervisor
                     .host
                     .lock_for(host::host_fns::Methods::EthCall)
                     .await
                     .eth_call(address, &calldata)
                     .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
-                Ok(generated::types::Fd::from(
-                    self.vfs
-                        .place_content(vfs::FileContents {
-                            contents: bytes::Bytes::from(res),
-                            pos: 0,
-                            release_memory: true,
-                        })
-                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-                ))
+                self.place_content(vfs::FileContents::from(bytes::Bytes::from(data)))
             }
             gl_call::Message::CallContract {
                 address,
@@ -1092,15 +1096,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 .await
                 .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
-                Ok(generated::types::Fd::from(
-                    self.vfs
-                        .place_content(vfs::FileContents {
-                            contents: bytes::Bytes::from(task),
-                            pos: 0,
-                            release_memory: true,
-                        })
-                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-                ))
+                self.place_content(vfs::FileContents::from(bytes::Bytes::from(task)))
             }
             gl_call::Message::WebRequest(request_payload) => {
                 let is_det = self.context.data.conf.is_deterministic;
@@ -1138,15 +1134,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 .await
                 .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
-                Ok(generated::types::Fd::from(
-                    self.vfs
-                        .place_content(vfs::FileContents {
-                            contents: bytes::Bytes::from(task),
-                            pos: 0,
-                            release_memory: true,
-                        })
-                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-                ))
+                self.place_content(vfs::FileContents::from(bytes::Bytes::from(task)))
             }
             gl_call::Message::ExecPrompt(prompt_payload) => {
                 if self.context.data.conf.is_deterministic {
@@ -1234,15 +1222,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 .await
                 .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
-                Ok(generated::types::Fd::from(
-                    self.vfs
-                        .place_content(vfs::FileContents {
-                            contents: bytes::Bytes::from(task),
-                            pos: 0,
-                            release_memory: true,
-                        })
-                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-                ))
+                self.place_content(vfs::FileContents::from(bytes::Bytes::from(task)))
             }
             gl_call::Message::ExecPromptTemplate(prompt_template_payload) => {
                 if self.context.data.conf.is_deterministic {
@@ -1318,15 +1298,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 .await
                 .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
-                Ok(generated::types::Fd::from(
-                    self.vfs
-                        .place_content(vfs::FileContents {
-                            contents: bytes::Bytes::from(task),
-                            pos: 0,
-                            release_memory: true,
-                        })
-                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-                ))
+                self.place_content(vfs::FileContents::from(bytes::Bytes::from(task)))
             }
             #[allow(deprecated)]
             gl_call::Message::Rollback(msg) => Err(generated::types::Error::trap(
@@ -1584,15 +1556,7 @@ impl ContextVFS<'_> {
                 let data = calldata::encode(&calldata::Value::Number(num_bigint::BigInt::from(
                     elapsed_micros,
                 )));
-                Ok(generated::types::Fd::from(
-                    self.vfs
-                        .place_content(vfs::FileContents {
-                            contents: bytes::Bytes::from(data),
-                            pos: 0,
-                            release_memory: true,
-                        })
-                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-                ))
+                self.place_content(vfs::FileContents::from(bytes::Bytes::from(data)))
             }
         }
     }
@@ -1615,15 +1579,7 @@ impl ContextVFS<'_> {
             .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
         let data = calldata::encode(&calldata::Value::Str(id.as_str().to_owned()));
-        Ok(generated::types::Fd::from(
-            self.vfs
-                .place_content(vfs::FileContents {
-                    contents: bytes::Bytes::from(data),
-                    pos: 0,
-                    release_memory: true,
-                })
-                .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-        ))
+        self.place_content(vfs::FileContents::from(bytes::Bytes::from(data)))
     }
 
     async fn map_file(
@@ -1645,7 +1601,7 @@ impl ContextVFS<'_> {
         let contract_address = self.context.data.message_data.message.contract_address;
         let state = self.context.data.conf.state_mode;
 
-        crate::rt::supervisor::actions::map_runner_file(
+        rt::supervisor::actions::map_runner_file(
             &supervisor,
             self.preview1,
             limiter,
@@ -1941,14 +1897,6 @@ impl ContextVFS<'_> {
         self.context.data.storage = my_res.vm_data.storage;
 
         let data: Vec<u8> = my_res.run_ok.as_bytes();
-        Ok(generated::types::Fd::from(
-            self.vfs
-                .place_content(vfs::FileContents {
-                    contents: bytes::Bytes::from(data),
-                    pos: 0,
-                    release_memory: true,
-                })
-                .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-        ))
+        self.place_content(vfs::FileContents::from(bytes::Bytes::from(data)))
     }
 }
