@@ -1256,6 +1256,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
             // Non-deterministic mode: cryptographically secure random number generator
             if let Err(e) = getrandom::fill(&mut mem) {
                 log_error!(error:err = e; "random failed");
+                return Err(generated::types::Errno::Io.into());
             }
         }
 

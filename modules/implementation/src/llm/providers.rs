@@ -516,7 +516,7 @@ impl Provider for OLlama {
             log_warn!(extra:serde = prompt.extra; "ollama provider ignores extra body fields");
         }
         let request = prompt.to_ollama_no_format(model);
-        let url = format!("{}/api/ generate", self.config.host);
+        let url = format!("{}/api/generate", self.config.host);
         log_trace!(request:serde = request, url = url; "final request body after merging extra");
         let request = serde_json::to_vec(&request)?;
         let request = ctx.client.post(&url).body(request.clone());

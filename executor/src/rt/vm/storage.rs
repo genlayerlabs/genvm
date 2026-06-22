@@ -257,8 +257,13 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
                 let mut page_data = [0u8; 32];
                 page_data.copy_from_slice(&buf[src_offset..src_offset + 32]);
 
-                put_to_cache[put_to_cache_count].write((page_id, page_data));
-                put_to_cache_count = (put_to_cache_count + 1) % put_to_cache.len();
+                if put_to_cache_count < put_to_cache.len() {
+                    put_to_cache[put_to_cache_count].write((page_id, page_data));
+                    put_to_cache_count += 1;
+                } else {
+                    // staging buffer full: insert directly so no read page is dropped
+                    self.cache.insert(page_id, page_data);
+                }
             }
         }
 
