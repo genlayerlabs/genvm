@@ -37,6 +37,29 @@ impl Address {
         self.0
     }
 
+    /// Returns the address as an [EIP-55](https://eips.ethereum.org/EIPS/eip-55)
+    /// mixed-case checksummed hex string (40 chars, no `0x` prefix).
+    pub fn checksum_hex(self) -> String {
+        use sha3::Digest as _;
+
+        let lower = hex::encode(self.0);
+        let hash = sha3::Keccak256::digest(lower.as_bytes());
+
+        lower
+            .char_indices()
+            .map(|(i, c)| {
+                // digits stay as-is; letters are upper-cased when the matching
+                // hex nibble of the hash is >= 8
+                let nibble = hash[i / 2] >> (if i % 2 == 0 { 4 } else { 0 }) & 0x0f;
+                if c.is_ascii_alphabetic() && nibble >= 8 {
+                    c.to_ascii_uppercase()
+                } else {
+                    c
+                }
+            })
+            .collect()
+    }
+
     pub fn ref_mut(&mut self) -> &mut [u8; ADDRESS_SIZE] {
         &mut self.0
     }
