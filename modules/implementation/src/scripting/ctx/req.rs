@@ -39,6 +39,13 @@ pub struct Request {
     /// one. Set by the web module for hosts in `always_allow_hosts`.
     #[serde(default = "default_false")]
     pub unfiltered: bool,
+
+    /// Set once `normalize_headers` has run. Lets `into_reqwest` normalize every
+    /// request exactly once without re-stripping the `genlayer-*` headers the
+    /// signing path legitimately adds after normalizing. Not part of the wire
+    /// format.
+    #[serde(skip)]
+    pub headers_normalized: bool,
 }
 
 const DROP_HEADERS: &[&str] = &[
@@ -67,12 +74,22 @@ impl Request {
 
             self.headers.insert(lower_k, v);
         }
+
+        self.headers_normalized = true;
     }
 
     pub fn into_reqwest(
-        self,
+        mut self,
         client: &reqwest::Client,
     ) -> Result<reqwest::RequestBuilder, ModuleError> {
+        // Drop forbidden/forged headers (host, content-length, genlayer-*, @*)
+        // on every request. The signing path normalizes earlier (before adding
+        // the legitimate genlayer-* headers), so the flag keeps us from
+        // stripping those back out here.
+        if !self.headers_normalized {
+            self.normalize_headers();
+        }
+
         let method = match self.method {
             web_iface::RequestMethod::GET => reqwest::Method::GET,
             web_iface::RequestMethod::POST => reqwest::Method::POST,
@@ -141,6 +158,7 @@ mod tests {
             response_body_max_size: Some(1024),
             timeout: None,
             unfiltered: false,
+            headers_normalized: false,
         };
 
         let body_size_limit = req.response_body_max_size.unwrap_or(usize::MAX);
@@ -180,6 +198,7 @@ mod tests {
             response_body_max_size: Some(1024),
             timeout: None,
             unfiltered: false,
+            headers_normalized: false,
         };
 
         let body_size_limit = 1024;
