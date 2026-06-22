@@ -9,7 +9,7 @@ use genvm_common::*;
 use super::vfs;
 use crate::{
     rt,
-    wasi::{base, common::align_slice},
+    wasi::{self, base, common::align_slice},
 };
 use std::collections::BTreeMap;
 
@@ -91,6 +91,18 @@ pub(crate) mod generated {
             },
         },
     });
+}
+
+impl From<wasi::vfs::Fd> for generated::types::Fd {
+    fn from(fd: wasi::vfs::Fd) -> Self {
+        fd.as_u32().into()
+    }
+}
+
+impl From<generated::types::Fd> for wasi::vfs::Fd {
+    fn from(fd: generated::types::Fd) -> Self {
+        wasi::vfs::Fd::new(fd.into())
+    }
 }
 
 impl wiggle::GuestErrorType for generated::types::Errno {
@@ -434,7 +446,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         _memory: &mut GuestMemory<'_>,
         fd: generated::types::Fd,
     ) -> impl std::future::Future<Output = Result<(), generated::types::Error>> + Send {
-        let fdi: u32 = fd.into();
+        let fdi = fd.into();
         let res = if self.vfs.pop_fd(fdi).is_none() {
             Err(generated::types::Errno::Badf.into())
         } else {
@@ -1005,7 +1017,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         flags: generated::types::Lookupflags,
         path: GuestPtr<str>,
     ) -> Result<generated::types::Filestat, generated::types::Error> {
-        let fdi: u32 = dirfd.into();
+        let fdi = dirfd.into();
         let path = super::common::read_string(memory, path)?;
         let Some(vfs::FileDescriptor::Dir { path: dir_path }) = self.vfs.fds.get(&fdi) else {
             return Err(generated::types::Errno::Badf.into());
@@ -1086,8 +1098,7 @@ impl generated::wasi_snapshot_preview1::WasiSnapshotPreview1 for ContextVFS<'_> 
         fdflags: generated::types::Fdflags,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         let file_path = super::common::read_string(memory, path)?;
-        let fdi: u32 = dirfd.into();
-        let fdi: u32 = dirfd.into();
+        let fdi = dirfd.into();
         let new_fd = self
             .vfs
             .alloc_fd()
@@ -1345,7 +1356,7 @@ impl ContextVFS<'_> {
         &self,
         fd: generated::types::Fd,
     ) -> Result<&vfs::FileDescriptor, generated::types::Error> {
-        let fdi: u32 = fd.into();
+        let fdi = fd.into();
         match self.vfs.fds.get(&fdi) {
             Some(x) => Ok(x),
             None => Err(generated::types::Errno::Badf.into()),
@@ -1356,7 +1367,7 @@ impl ContextVFS<'_> {
         &mut self,
         fd: generated::types::Fd,
     ) -> Result<&mut vfs::FileDescriptor, generated::types::Error> {
-        let fdi: u32 = fd.into();
+        let fdi = fd.into();
         match self.vfs.fds.get_mut(&fdi) {
             Some(x) => Ok(x),
             None => Err(generated::types::Errno::Badf.into()),
