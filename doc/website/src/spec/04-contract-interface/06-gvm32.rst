@@ -1,0 +1,68 @@
+GVM32 (Base32)
+==============
+
+:term:`GenVM` encodes hash-like binary values — runner content hashes,
+``custom:<hash>`` ids and :term:`SlotID`\s — as text using **GVM32**, a variant
+of `Crockford's Base32 <https://www.crockford.com/base32.html>`_.
+
+Alphabet
+--------
+
+The 32-symbol alphabet is::
+
+    0123456789abcdefghjkmnpqrstvwxyz
+
+That is, the digits ``0`` -- ``9`` followed by the lowercase letters ``a`` -- ``z`` with
+``i``, ``l``, ``o`` and ``u`` removed. The symbol at index ``v`` (``0 <= v < 32``)
+encodes the 5-bit value ``v``.
+
+Encoding
+--------
+
+The input is treated as a big-endian bit stream (the most significant bit of the
+first octet first). It is split into groups of 5 bits, each group emitted as the
+alphabet symbol for its value. If the final group has fewer than 5 bits it is
+padded on the **low** side with zero bits. There is **no** ``=`` padding.
+
+An input of ``N`` octets therefore produces ``ceil(N * 8 / 5)`` symbols. The
+canonical (and default) encoding is **lowercase**.
+
+.. code-block:: python
+
+    ALPHABET = '0123456789abcdefghjkmnpqrstvwxyz'
+
+    def encode(data: bytes) -> str:
+        out = []
+        value = bits = 0
+        for byte in data:
+            value = (value << 8) | byte
+            bits += 8
+            while bits >= 5:
+                bits -= 5
+                out.append(ALPHABET[(value >> bits) & 0x1F])
+        if bits > 0:
+            out.append(ALPHABET[(value << (5 - bits)) & 0x1F])
+        return ''.join(out)
+
+Decoding
+--------
+
+Decoding is **case-insensitive**. Following Crockford's rules, the letters ``i``
+and ``l`` (and ``I``, ``L``) are read as ``1`` and ``o`` (and ``O``) as ``0``.
+Hyphens (``-``) may appear for readability and are ignored. Any other character
+makes the string invalid.
+
+The 5-bit values are concatenated big-endian; every full group of 8 bits is one
+output octet. A well-formed string has its trailing (sub-octet) bits all zero —
+a decoder must reject a string whose leftover bits are non-zero.
+
+Usage
+-----
+
+- **Runner content hashes** — the ``hash`` component of a ``name:hash`` runner id
+  (see :doc:`../02-execution-environment/04-runners`) is the GVM32 encoding of the
+  runner archive's hash.
+- **Custom runner ids** — ``custom:<hash>`` where ``<hash>`` is the GVM32 encoding
+  of the SHA3-256 of the registered code.
+- **Slot ids** — a :term:`SlotID` is rendered in GVM32, including the ``<slot>``
+  component of a ``chain:<address>:<a|f>:<slot>`` runner id.

@@ -11,3 +11,4 @@ Interfaces and protocols for contract interaction and data management.
    03-storage
    04-upgradability
    05-execution-flow
+   06-gvm32
