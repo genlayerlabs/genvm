@@ -308,6 +308,7 @@ mod tests {
             response_body_max_size: None,
             timeout: None,
             unfiltered: false,
+            headers_normalized: false,
         };
 
         req.normalize_headers();
@@ -368,6 +369,7 @@ mod tests {
             response_body_max_size: None,
             timeout: None,
             unfiltered: false,
+            headers_normalized: false,
         };
 
         req.normalize_headers();
@@ -430,6 +432,7 @@ mod tests {
             response_body_max_size: None,
             timeout: None,
             unfiltered: false,
+            headers_normalized: false,
         };
 
         let part = CtxPart {
