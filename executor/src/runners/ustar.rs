@@ -95,7 +95,11 @@ impl Archive {
             begin += file_size;
             begin += (BLOCK_SIZE - (begin % BLOCK_SIZE)) % BLOCK_SIZE;
 
-            let file_contents = data.slice(BLOCK_SIZE..BLOCK_SIZE + file_size);
+            let file_end = BLOCK_SIZE
+                .checked_add(file_size)
+                .filter(|end| *end <= data.len())
+                .ok_or_else(|| anyhow::anyhow!("tar file size exceeds archive bounds"))?;
+            let file_contents = data.slice(BLOCK_SIZE..file_end);
 
             map_try_insert(&mut res, name, file_contents)?;
         }
@@ -120,13 +124,24 @@ impl Archive {
             }
 
             let start_index = file.data_start();
-            let end_index = file.data_start() + file.compressed_size();
-            if end_index > bytes.len() as u64 || start_index > bytes.len() as u64 {
+            let compressed_size = file.compressed_size();
+            let end_index = start_index.checked_add(compressed_size).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "file {} data_start={} compressed_size={} overflow",
+                    file.name(),
+                    start_index,
+                    compressed_size
+                )
+            })?;
+            if end_index > bytes.len() as u64
+                || start_index > bytes.len() as u64
+                || end_index < start_index
+            {
                 anyhow::bail!(
                     "file {} data_start={} compressed_size={} end_index={} bytes_len={}",
                     file.name(),
-                    file.data_start(),
-                    file.compressed_size(),
+                    start_index,
+                    compressed_size,
                     end_index,
                     bytes.len()
                 );

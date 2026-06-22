@@ -24,6 +24,9 @@ pub async fn new<T, C, E: 'static, F>(
 where
     F: std::future::Future<Output = anyhow::Result<super::UserVM<T, C, E>>>,
 {
+    if cnt == 0 {
+        anyhow::bail!("vm pool size must be >= 1");
+    }
     let mut vms = Vec::new();
     for _i in 0..cnt {
         vms.push(Arc::new(vm_supplier().await?));
