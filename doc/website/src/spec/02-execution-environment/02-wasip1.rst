@@ -144,8 +144,10 @@ runs with identical stdin see the same ``random_get`` stream, while differing in
 produce diverging streams. Non-deterministic randomness MUST be obtained via
 :ref:`gvm-def-non-det-mode` calls.
 
-Non-deterministic mode: cryptographically secure random number generator,
-with optional fallback to pseudo-random numbers, if secure source is exhausted or unavailable.
+Non-deterministic mode: a cryptographically secure random number generator. If the
+secure source is unavailable or fails, ``random_get`` MUST fail with ``errno::io``
+instead of falling back to a predictable stream (pseudo-random or zeroed output). A
+caller that wants a graceful fallback must handle that error explicitly.
 
 ``proc_exit`` Function
 ~~~~~~~~~~~~~~~~~~~~~~
