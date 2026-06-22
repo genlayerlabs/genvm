@@ -91,18 +91,13 @@ impl RunOk {
             }
             RunOk::UserError(val) => {
                 let mut res = vec![ResultCode::UserError as u8];
+                res.extend_from_slice(&0u32.to_le_bytes());
                 match val {
-                    // FIXME: deprecate in next release (always use the tagged calldata form below)
-                    calldata::unparsed::Maybe::Materialized(calldata::Value::Str(s)) => {
-                        res.extend_from_slice(s.as_bytes());
+                    calldata::unparsed::Maybe::Materialized(value) => {
+                        res.extend_from_slice(&calldata::encode(value));
                     }
-                    calldata::unparsed::Maybe::Materialized(other) => {
-                        res.extend_from_slice(&0u32.to_le_bytes());
-                        res.extend_from_slice(&calldata::encode(other));
-                    }
-                    // Already-encoded calldata bytes; emit them in the tagged form.
+                    // Already-encoded calldata bytes.
                     calldata::unparsed::Maybe::Checked(raw) => {
-                        res.extend_from_slice(&0u32.to_le_bytes());
                         res.extend_from_slice(&raw.0);
                     }
                 }
