@@ -337,7 +337,7 @@ impl Provider for OpenAICompatible {
             &url,
             prompt.apply_timeout(request),
             true,
-            usize::MAX,
+            prompt.response_body_limit(),
         )
         .await?;
 
@@ -418,7 +418,7 @@ impl Provider for OpenAICompatible {
             &url,
             prompt.apply_timeout(request),
             true,
-            usize::MAX,
+            prompt.response_body_limit(),
         )
         .await?;
 
@@ -525,7 +525,7 @@ impl Provider for OLlama {
             &url,
             prompt.apply_timeout(request),
             true,
-            usize::MAX,
+            prompt.response_body_limit(),
         )
         .await?;
 
@@ -584,7 +584,7 @@ impl Provider for OLlama {
             &url,
             prompt.apply_timeout(request),
             true,
-            usize::MAX,
+            prompt.response_body_limit(),
         )
         .await?;
 
@@ -667,7 +667,7 @@ impl Provider for Gemini {
             &url,
             prompt.apply_timeout(request),
             true,
-            usize::MAX,
+            prompt.response_body_limit(),
         )
         .await?;
 
@@ -729,7 +729,7 @@ impl Provider for Gemini {
             &url,
             prompt.apply_timeout(request),
             true,
-            usize::MAX,
+            prompt.response_body_limit(),
         )
         .await?;
 
@@ -851,7 +851,7 @@ impl Provider for Anthropic {
             &url,
             prompt.apply_timeout(request),
             true,
-            usize::MAX,
+            prompt.response_body_limit(),
         )
         .await?;
 
@@ -924,7 +924,7 @@ impl Provider for Anthropic {
             &url,
             prompt.apply_timeout(request),
             true,
-            usize::MAX,
+            prompt.response_body_limit(),
         )
         .await?;
 
@@ -994,7 +994,7 @@ impl Provider for Anthropic {
             &url,
             prompt.apply_timeout(request),
             true,
-            usize::MAX,
+            prompt.response_body_limit(),
         )
         .await?;
 
