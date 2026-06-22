@@ -2,7 +2,14 @@ import puppeteer, * as pup from 'puppeteer-core';
 import * as logger from '../logging.js';
 import * as util from 'util';
 import * as child_process from 'child_process';
-import { envDurationMs, envInt, formatDurationMs } from '../duration.js';
+import {
+	envBool,
+	envDurationMs,
+	envInt,
+	envStr,
+	envStrList,
+	formatDurationMs,
+} from '../duration.js';
 import type * as browser from './index.js';
 
 class BrowserHolder {
@@ -59,21 +66,31 @@ const RENDERER_PROCESS_LIMIT = envInt(
 	4,
 );
 
+const CHROME_EXECUTABLE = envStr(
+	'GVM_WEBDRIVER_CHROME_EXECUTABLE',
+	'/usr/bin/chromium',
+);
+const CHROME_HEADLESS = envBool('GVM_WEBDRIVER_CHROME_HEADLESS', true);
+// Extra flags appended to the defaults below. See `envStrList` for the format.
+const CHROME_EXTRA_ARGS = envStrList('GVM_WEBDRIVER_CHROME_ARGS', []);
+
 async function newBrowser(): Promise<BrowserHolder> {
+	const args = [
+		'--no-sandbox',
+		'--disable-dev-shm-usage',
+		'--disable-accelerated-2d-canvas',
+		'--no-first-run',
+		'--no-zygote',
+		'--disable-gpu',
+		'--enable-precise-memory-info',
+		`--js-flags=--max-old-space-size=${RENDERER_MAX_OLD_SPACE_MB}`,
+		`--renderer-process-limit=${RENDERER_PROCESS_LIMIT}`,
+		...CHROME_EXTRA_ARGS,
+	];
 	const realBrowser = await puppeteer.launch({
-		headless: true,
-		args: [
-			'--no-sandbox',
-			'--disable-dev-shm-usage',
-			'--disable-accelerated-2d-canvas',
-			'--no-first-run',
-			'--no-zygote',
-			'--disable-gpu',
-			'--enable-precise-memory-info',
-			`--js-flags=--max-old-space-size=${RENDERER_MAX_OLD_SPACE_MB}`,
-			`--renderer-process-limit=${RENDERER_PROCESS_LIMIT}`,
-		],
-		executablePath: '/usr/bin/chromium',
+		headless: CHROME_HEADLESS,
+		args,
+		executablePath: CHROME_EXECUTABLE,
 	});
 
 	logger.log('info', 'created new raw browser', {
