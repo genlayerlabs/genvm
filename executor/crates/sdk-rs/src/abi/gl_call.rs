@@ -231,7 +231,8 @@ pub mod llm_iface {
         #[serde(rename = "text")]
         #[calldata(rename = "text")]
         Text,
-        // FIXME: deprecate in next release (json will adopt json2 behavior)
+        // `json` and `json2` are accepted aliases with identical behavior: the raw
+        // model text is returned as-is and the contract parses it.
         #[serde(rename = "json")]
         #[calldata(rename = "json")]
         JSON,

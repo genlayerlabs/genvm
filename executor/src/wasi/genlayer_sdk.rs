@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use genlayer_sdk::abi::gl_call::llm_iface;
 use genvm_common::sync::DArc;
 use genvm_common::*;
 
@@ -10,7 +9,6 @@ use sha3::digest::Update;
 use wiggle::GuestError;
 
 use crate::host::{self, SlotID};
-use crate::wasi::json_to_calldata::json_map_to_calldata;
 use crate::{anyhow_to_wasmtime, calldata, public_abi, rt, wasi};
 
 use genlayer_calldata::codec::Encode;
@@ -1159,7 +1157,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let sup = self.context.data.supervisor.clone();
 
                 let task = taskify(async move {
-                    let format = prompt_payload.response_format;
                     let result = sup
                         .modules
                         .llm
@@ -1185,7 +1182,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                     if result.consumed_gen == primitive_types::U256::MAX {
                         return Err(
-                            rt::errors::VMError(abi::consts::VmError::timeout(), None).into(),
+                            rt::errors::VMError(abi::consts::VmError::timeout(), None).into()
                         );
                     }
 
@@ -1194,29 +1191,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         *acc = acc.saturating_add(result.consumed_gen);
                     }
 
-                    let mut result = result.data;
-
-                    if format == llm_iface::OutputFormat::JSON {
-                        let genvm_modules_interfaces::llm::PromptAnswerData::Text(t) = result
-                        else {
-                            return Err(anyhow::anyhow!("expected text response for json format"));
-                        };
-
-                        let val: serde_json::Map<String, serde_json::Value> =
-                            serde_json::from_str(&t).map_err(|e| {
-                                generated::types::Error::trap(crate::anyhow_to_wasmtime(e.into()))
-                            })?;
-
-                        log_debug!(text = t; "for backwards compatibility we convert text to object for JSON 1");
-
-                        std::mem::drop(t);
-
-                        let val = json_map_to_calldata(val);
-
-                        log_debug!(converted:serde = val; "for backwards compatibility we convert text to object for JSON 1");
-
-                        result = genvm_modules_interfaces::llm::PromptAnswerData::Object(val);
-                    }
+                    let result = result.data;
 
                     Ok(Ok(result))
                 })
