@@ -452,8 +452,12 @@ async fn apply_contract_actions_inner(
         .data
         .conf
         .code_slot = code_slot;
-    let contract_id =
-        GlobalSymbol::from(runners::chain_canonical(contract_address, state, code_slot));
+    let contract_id = runners::Id::Chain {
+        address: contract_address,
+        on: state,
+        slot: code_slot,
+    }
+    .canonical();
 
     let contract_major = vm
         .vm_base

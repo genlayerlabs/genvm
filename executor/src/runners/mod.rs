@@ -33,7 +33,7 @@ pub fn append_runner_subpath(id: &str, hash: &str, path: &mut std::path::PathBuf
 ///   address, `a`/`f` selects accepted (latest non final) / finalized state and
 ///   `slot` is a `0x`-prefixed 32 byte hex slot id.
 /// - `custom:<hash>` — a runner registered at runtime, looked up by its hash.
-pub enum RunnerIdUnresolved {
+pub enum IdUnresolved {
     Builtin {
         name: symbol_table::GlobalSymbol,
         hash: symbol_table::GlobalSymbol,
@@ -49,7 +49,7 @@ pub enum RunnerIdUnresolved {
     },
 }
 
-pub enum RunnerId {
+pub enum Id {
     Builtin {
         name: symbol_table::GlobalSymbol,
         hash: symbol_table::GlobalSymbol,
@@ -64,7 +64,7 @@ pub enum RunnerId {
     },
 }
 
-impl RunnerIdUnresolved {
+impl IdUnresolved {
     /// Resolves a parsed runner id against the currently executing contract.
     ///
     /// The only resolution step is `contract` → the `chain:` id pointing at this
@@ -76,18 +76,45 @@ impl RunnerIdUnresolved {
         contract_address: calldata::Address,
         state: crate::public_abi::StorageType,
         code_slot: crate::SlotID,
-    ) -> RunnerId {
+    ) -> Id {
         match self {
-            RunnerIdUnresolved::Contract => RunnerId::Chain {
+            IdUnresolved::Contract => Id::Chain {
                 address: contract_address,
                 on: state,
                 slot: code_slot,
             },
-            RunnerIdUnresolved::Builtin { name, hash } => RunnerId::Builtin { name, hash },
-            RunnerIdUnresolved::Chain { address, on, slot } => {
-                RunnerId::Chain { address, on, slot }
+            IdUnresolved::Builtin { name, hash } => Id::Builtin { name, hash },
+            IdUnresolved::Chain { address, on, slot } => Id::Chain { address, on, slot },
+            IdUnresolved::Custom { hash } => Id::Custom { hash },
+        }
+    }
+}
+
+impl Id {
+    /// The canonical textual runner id, used as the archive cache key. Two ids
+    /// that resolve to the same `(name, hash)` / `(address, state, slot)` / hash
+    /// produce the same symbol (e.g. `contract` and an explicit self `chain:`).
+    pub fn canonical(&self) -> symbol_table::GlobalSymbol {
+        match self {
+            Id::Builtin { name, hash } => {
+                let mut id = name.as_str().to_owned();
+                id.push(':');
+                id.push_str(hash.as_str());
+                symbol_table::GlobalSymbol::from(id)
             }
-            RunnerIdUnresolved::Custom { hash } => RunnerId::Custom { hash },
+            Id::Chain { address, on, slot } => {
+                let on = match *on {
+                    crate::public_abi::StorageType::LatestFinal => 'f',
+                    _ => 'a',
+                };
+                symbol_table::GlobalSymbol::from(format!(
+                    "chain:0x{}:{}:0x{}",
+                    hex::encode(address.raw()),
+                    on,
+                    hex::encode(slot.raw())
+                ))
+            }
+            Id::Custom { hash } => custom_runner_id(*hash),
         }
     }
 }
@@ -106,9 +133,9 @@ fn parse_hex_fixed<const N: usize>(s: &str) -> Option<[u8; N]> {
     Some(out)
 }
 
-pub fn parse_runner_id(id: &str) -> Option<RunnerIdUnresolved> {
+pub fn parse_runner_id(id: &str) -> Option<IdUnresolved> {
     if id == "contract" {
-        return Some(RunnerIdUnresolved::Contract);
+        return Some(IdUnresolved::Contract);
     }
 
     if let Some(rest) = id.strip_prefix("chain:") {
@@ -128,14 +155,14 @@ pub fn parse_runner_id(id: &str) -> Option<RunnerIdUnresolved> {
         };
         let slot = crate::SlotID::from_bytes(parse_hex_fixed::<32>(slot)?);
 
-        return Some(RunnerIdUnresolved::Chain { address, on, slot });
+        return Some(IdUnresolved::Chain { address, on, slot });
     }
 
     if let Some(rest) = id.strip_prefix("custom:") {
         if rest.is_empty() || !rest.chars().all(is_hash_char) {
             return None;
         }
-        return Some(RunnerIdUnresolved::Custom {
+        return Some(IdUnresolved::Custom {
             hash: symbol_table::GlobalSymbol::new(rest),
         });
     }
@@ -153,30 +180,10 @@ pub fn parse_runner_id(id: &str) -> Option<RunnerIdUnresolved> {
     if !hash.chars().all(is_hash_char) {
         return None;
     }
-    Some(RunnerIdUnresolved::Builtin {
+    Some(IdUnresolved::Builtin {
         name: symbol_table::GlobalSymbol::new(name),
         hash: symbol_table::GlobalSymbol::new(hash),
     })
-}
-
-/// Canonical textual form of a [`RunnerId::Chain`]. Used as the cache key so
-/// that an explicit `chain:` reference and the current `contract` resolve to the
-/// same entry when they point at the same address/state/slot.
-pub fn chain_canonical(
-    address: calldata::Address,
-    on: crate::public_abi::StorageType,
-    slot: crate::SlotID,
-) -> String {
-    let on = match on {
-        crate::public_abi::StorageType::LatestFinal => 'f',
-        _ => 'a',
-    };
-    format!(
-        "chain:0x{}:{}:0x{}",
-        hex::encode(address.raw()),
-        on,
-        hex::encode(slot.raw())
-    )
 }
 
 /// Derives the hash component of a `custom:<hash>` runner id from its code.
@@ -303,25 +310,25 @@ mod tests {
     fn parse_runner_id_forms() {
         assert!(matches!(
             parse_runner_id("contract"),
-            Some(RunnerIdUnresolved::Contract)
+            Some(IdUnresolved::Contract)
         ));
         assert!(matches!(
             parse_runner_id("py-genlayer:test"),
-            Some(RunnerIdUnresolved::Builtin { .. })
+            Some(IdUnresolved::Builtin { .. })
         ));
         assert!(matches!(
             parse_runner_id("custom:deadbeef"),
-            Some(RunnerIdUnresolved::Custom { .. })
+            Some(IdUnresolved::Custom { .. })
         ));
 
         match parse_runner_id(&format!("chain:{}:f:{}", addr40(), slot64())) {
-            Some(RunnerIdUnresolved::Chain { on, .. }) => {
+            Some(IdUnresolved::Chain { on, .. }) => {
                 assert_eq!(on, crate::public_abi::StorageType::LatestFinal)
             }
             _ => panic!("expected a chain runner id"),
         }
         match parse_runner_id(&format!("chain:{}:a:{}", addr40(), slot64())) {
-            Some(RunnerIdUnresolved::Chain { on, .. }) => {
+            Some(IdUnresolved::Chain { on, .. }) => {
                 assert_eq!(on, crate::public_abi::StorageType::LatestNonFinal)
             }
             _ => panic!("expected a chain runner id"),
