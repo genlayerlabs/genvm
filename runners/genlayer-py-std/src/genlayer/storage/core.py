@@ -105,6 +105,18 @@ class Slot:
 		"""
 		return int.from_bytes(self.id, 'little', signed=False)
 
+	def cast[T](self, t: typing.Type[T], offset: int, /) -> T:
+		"""
+		Unsafely casts a storage slot to the given type. Use with caution.
+		"""
+		from ._internal.generate import _BuilderCtx, _storage_build
+
+		td = _storage_build(_BuilderCtx.empty(), t)
+
+		instance = td.get(self, offset)
+
+		return instance
+
 	def __eq__(self, r: object) -> bool:
 		if not isinstance(r, Slot):
 			return False
