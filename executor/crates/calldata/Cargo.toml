@@ -30,6 +30,7 @@ arbitrary = ["dep:arbitrary"]
 genlayer_calldata_derive = { path = "../calldata-derive" }
 hex = "0.4.3"
 num-bigint = {version = "0.4.6", features = ["serde"] }
+sha3 = { version = "0.10" }
 serde = { version = "1.0", features = ["derive"] }
 arbitrary = { version = "1.0", optional = true }
 primitive-types = { version = "0.13", features = ["impl-serde"] }
@@ -38,3 +39,4 @@ chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
 afl = { version = "0.15.18", features = ["no_cfg_fuzzing"] }
+hex = "0.4.3"
