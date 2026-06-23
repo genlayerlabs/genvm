@@ -91,12 +91,10 @@ impl RunOk {
             }
             RunOk::UserError(val) => {
                 let mut res = vec![ResultCode::UserError as u8];
-                res.extend_from_slice(&0u32.to_le_bytes());
                 match val {
                     calldata::unparsed::Maybe::Materialized(value) => {
                         res.extend_from_slice(&calldata::encode(value));
                     }
-                    // Already-encoded calldata bytes.
                     calldata::unparsed::Maybe::Checked(raw) => {
                         res.extend_from_slice(&raw.0);
                     }
