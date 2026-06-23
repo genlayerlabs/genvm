@@ -1539,6 +1539,12 @@ impl ContextVFS<'_> {
     ) -> Result<generated::types::Fd, generated::types::Error> {
         match msg {
             gl_call::TracePayload::Message(text) => {
+                // Tracing is a debug-only aid; skip the timing and logging work
+                // entirely when not in debug mode.
+                if !self.context.data.supervisor.shared_data.debug_mode {
+                    return Ok(file_fd_none());
+                }
+
                 let now = std::time::Instant::now();
                 let since_prev = now.duration_since(self.context.prev_time);
                 self.context.prev_time = now;
