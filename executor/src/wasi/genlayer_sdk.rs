@@ -47,10 +47,11 @@ async fn consume_message_fee_internal(
         .calculate_message_fee_internal(on, &fee_params)
         .map_err(|x| generated::types::Error::trap(anyhow_to_wasmtime(x)))?;
 
-    if fee_cost > node.budget {
+    let fee_total = fee_cost.sum();
+    if fee_total > node.budget {
         log_warn!(
             node:cd = *node,
-            fee_cost:cd = fee_cost,
+            fee_cost:cd = fee_total,
             budget: cd = node.budget;
             "message fee cost exceeds node budget"
         );
@@ -74,20 +75,19 @@ async fn consume_message_fee_internal(
 
     if !shared_data
         .data_fees_limit
-        .consume_message_fee(fee_cost, receipt_cost)
+        .consume_message_fee(&fee_cost, &receipt_cost)
         .await
     {
         log_warn!(
             node:cd = *node,
-            fee_cost:cd = fee_cost,
-            receipt_cost: cd = receipt_cost,
+            fee_cost:cd = fee_total,
             buckets:? = shared_data.data_fees_limit;
             "not enough remaining fee limit to consume message fee"
         );
         return Err(oom_trap(abi::consts::VmError::oom().fees().internal()));
     }
 
-    node.budget -= fee_cost;
+    node.budget -= fee_total;
 
     Ok(rt::fees::MessageFeeConsumption {
         message_fee: fee_cost,
@@ -115,7 +115,8 @@ async fn consume_message_fee_external(
         .calculate_message_fee_external(&params)
         .map_err(|x| generated::types::Error::trap(anyhow_to_wasmtime(x)))?;
 
-    if fee_cost > node.budget {
+    let fee_total = fee_cost.sum();
+    if fee_total > node.budget {
         return Err(oom_trap(abi::consts::VmError::oom().fees().external()));
     }
 
@@ -132,13 +133,13 @@ async fn consume_message_fee_external(
 
     if !shared_data
         .data_fees_limit
-        .consume_message_fee(fee_cost, receipt_cost)
+        .consume_message_fee(&fee_cost, &receipt_cost)
         .await
     {
         return Err(oom_trap(abi::consts::VmError::oom().fees().external()));
     }
 
-    node.budget -= fee_cost;
+    node.budget -= fee_total;
 
     Ok(rt::fees::MessageFeeConsumption {
         message_fee: fee_cost,
@@ -666,8 +667,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         address,
                         calldata,
                         value,
-                        message_fee: fees.message_fee,
-                        receipt_fee: fees.receipt_fee,
+                        message_fee: fees.message_fee.sum(),
+                        receipt_fee: fees.receipt_fee.sum(),
                         fee_params: matched_params,
                     });
 
@@ -982,8 +983,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         calldata,
                         value,
                         on,
-                        message_fee: fees.message_fee,
-                        receipt_fee: fees.receipt_fee,
+                        message_fee: fees.message_fee.sum(),
+                        receipt_fee: fees.receipt_fee.sum(),
                         fee_params,
                         subtree,
                     },
@@ -1087,8 +1088,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         value,
                         on,
                         salt_nonce,
-                        message_fee: fees.message_fee,
-                        receipt_fee: fees.receipt_fee,
+                        message_fee: fees.message_fee.sum(),
+                        receipt_fee: fees.receipt_fee.sum(),
                         fee_params,
                         subtree,
                     },

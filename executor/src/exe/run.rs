@@ -126,13 +126,14 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
 
     let max_bucket_no = [
-        config.fees.storage.bucket_no,
-        config.fees.message_receipt.bucket_no,
-        config.fees.nondet_output.bucket_no,
-        config.fees.message_fee.bucket_no,
-        config.fees.event.bucket_no,
+        &config.fees.storage.bucket_no,
+        &config.fees.message_receipt.bucket_no,
+        &config.fees.nondet_output.bucket_no,
+        &config.fees.message_fee.bucket_no,
+        &config.fees.event.bucket_no,
     ]
     .into_iter()
+    .flat_map(|v| v.iter().copied())
     .max()
     .unwrap_or(0);
 

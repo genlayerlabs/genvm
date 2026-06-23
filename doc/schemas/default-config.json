@@ -324,9 +324,22 @@
       "type": "object",
       "properties": {
         "bucket_no": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 255
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "minItems": 1
+            }
+          ]
         },
         "subtract_on_start_expr": {
           "type": "string",
