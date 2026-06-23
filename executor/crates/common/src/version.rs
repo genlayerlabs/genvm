@@ -134,9 +134,12 @@ const fn current_version() -> Version {
     if !ok_minor || i >= id.len() || id[i] != b'.' {
         panic!("invalid VERSION: missing minor");
     }
-    let (patch, _, ok_patch) = parse_u16(id, i + 1); // skip '.'
+    let (patch, i, ok_patch) = parse_u16(id, i + 1); // skip '.'
     if !ok_patch {
         panic!("invalid VERSION: missing patch");
+    }
+    if i < id.len() && id[i] != b'-' && id[i] != b'\n' {
+        panic!("invalid VERSION: unexpected character after patch");
     }
     Version {
         major,
