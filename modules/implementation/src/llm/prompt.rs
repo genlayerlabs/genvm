@@ -37,8 +37,18 @@ impl Internal {
         }
     }
 
+    /// Upper bound on the provider response body we buffer in memory. Budgets
+    /// ~16 bytes per requested output token (~4 bytes/char * ~4 chars/token)
+    /// plus a 16 MiB base, hard-capped so a large `max_tokens` cannot blow up
+    /// the limit (`u32::MAX` would otherwise allow ~64 GiB).
     pub fn response_body_limit(&self) -> usize {
-        4 * 4 * self.max_tokens as usize + 16 * 1024 * 1024
+        const BASE_LIMIT: usize = 16 * 1024 * 1024;
+        const MAX_LIMIT: usize = 32 * 1024 * 1024;
+
+        (self.max_tokens as usize)
+            .saturating_mul(16)
+            .saturating_add(BASE_LIMIT)
+            .min(MAX_LIMIT)
     }
 }
 
