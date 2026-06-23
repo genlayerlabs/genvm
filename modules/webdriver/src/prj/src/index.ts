@@ -240,7 +240,11 @@ async function renderPageWithBrowser(
 		maxPageHeapMB = DEFAULT_MAX_PAGE_HEAP_MB,
 	} = options;
 
-	const page = await browserInstance.newPage();
+	// Each render runs in its own browser context so cookies, localStorage,
+	// IndexedDB, service workers and HSTS state never leak between tenants
+	// sharing this long-lived browser.
+	const context = await browserInstance.createBrowserContext();
+	const page = await context.newPage();
 
 	try {
 		await ssrf.installSsrfGuard(page);
@@ -301,7 +305,9 @@ async function renderPageWithBrowser(
 		}
 		throw e;
 	} finally {
-		await page.close();
+		// Close the page and its context together; the context teardown is what
+		// actually discards the per-request browsing state.
+		await Promise.allSettled([page.close(), context.close()]);
 	}
 }
 
