@@ -47,7 +47,7 @@ Sub-VMs created by ``Sandbox`` and ``RunNondet`` cannot reach storage at all
 Contract Major Version
 ----------------------
 
-The ``major`` field of :ref:`genvm-def-root-slot` (offset 4) stores the public-ABI major version
+The ``major`` field of :ref:`genvm-def-root-slot` (offset 0) stores the public-ABI major version
 that the contract was built against. On every load :term:`GenVM` compares this byte to its own
 ``CURRENT_MAJOR`` constant and refuses to execute a contract whose major differs.
 
