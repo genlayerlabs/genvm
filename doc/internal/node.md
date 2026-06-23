@@ -152,7 +152,7 @@ There are following codes:
 
 #### Nondet blocks and sandbox encoding
 - 1 byte of result code
-- result as-is (calldata for `Return`, string for `VMError|UserError`)
+- result as-is (calldata for `Return`, tagged calldata for `UserError`, string for `VMError`)
 
 #### Parent VM result
 - 1 byte of result code
@@ -170,9 +170,9 @@ There are following codes:
 
 ### Read result
 It has code followed by bytes, codes are:
-- return, it is followed by calldata
-- rollback and contract error, followed by a string; from host point of view there is no distinction between them
-- just error, which is internal error, like llm's modules being absent
+- return, followed by calldata
+- user error, followed by tagged calldata
+- vm/internal error, followed by a string
 
 ### Storage format
 Storage can be seen as a mapping from account address to slot address to linear memory. It supports two operations: `read` and `write`. Reading undefined memory **must** return zeroes
