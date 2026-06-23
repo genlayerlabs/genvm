@@ -11,7 +11,7 @@ use tokio::io::AsyncBufReadExt;
 
 pub use genvm_modules_interfaces::GenVMId;
 
-use crate::common::{LogSink, LogSinkElement, LoggerWithId, GENVM_BY_ID_LOGGER};
+use crate::common::{LogSink, LogSinkElement, LogSinkInner, LoggerWithId, GENVM_BY_ID_LOGGER};
 
 /// Spawn relay that passes the stream to the module handler
 async fn spawn_module_relay(
@@ -911,7 +911,10 @@ pub async fn start_genvm(
         ctx.permits.clone().acquire_owned().await?
     };
 
-    let log_sink: LogSink = Arc::new(Default::default());
+    // Debug executions (passing `--debug-mode` to the executor) keep all logs;
+    // otherwise the sink is bounded to avoid unbounded per-execution growth.
+    let debug_mode = req.extra_args.iter().any(|a| a == "--debug-mode");
+    let log_sink: LogSink = Arc::new(LogSinkInner::new(debug_mode));
     GENVM_BY_ID_LOGGER.pin().insert(genvm_id, log_sink.clone());
     let log_sink_guard = sync::DropGuard::new(|| {
         GENVM_BY_ID_LOGGER.pin().remove(&genvm_id);
