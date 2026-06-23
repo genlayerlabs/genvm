@@ -943,7 +943,41 @@ impl LogSinkElement {
     }
 }
 
-pub type LogSink = Arc<crossbeam::queue::SegQueue<LogSinkElement>>;
+/// Maximum number of buffered log entries kept per execution when not in debug
+/// mode; older entries are evicted to bound memory usage.
+pub const LOG_SINK_LIMIT: usize = 128;
+
+#[derive(Default)]
+pub struct LogSinkInner {
+    queue: crossbeam::queue::SegQueue<LogSinkElement>,
+    debug: bool,
+}
+
+impl LogSinkInner {
+    pub fn new(debug: bool) -> Self {
+        Self {
+            queue: crossbeam::queue::SegQueue::new(),
+            debug,
+        }
+    }
+
+    /// Appends an entry. In debug mode the sink is unbounded; otherwise the
+    /// oldest entries are dropped to keep at most [`LOG_SINK_LIMIT`] buffered.
+    pub fn push(&self, elem: LogSinkElement) {
+        if !self.debug {
+            while self.queue.len() >= LOG_SINK_LIMIT {
+                self.queue.pop();
+            }
+        }
+        self.queue.push(elem);
+    }
+
+    pub fn pop(&self) -> Option<LogSinkElement> {
+        self.queue.pop()
+    }
+}
+
+pub type LogSink = Arc<LogSinkInner>;
 
 pub static GENVM_BY_ID_LOGGER: std::sync::LazyLock<
     papaya::HashMap<genvm_modules_interfaces::GenVMId, LogSink>,
