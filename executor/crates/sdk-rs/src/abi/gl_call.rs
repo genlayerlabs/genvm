@@ -231,14 +231,9 @@ pub mod llm_iface {
         #[serde(rename = "text")]
         #[calldata(rename = "text")]
         Text,
-        // `json` and `json2` are accepted aliases with identical behavior: the raw
-        // model text is returned as-is and the contract parses it.
         #[serde(rename = "json")]
         #[calldata(rename = "json")]
         JSON,
-        #[serde(rename = "json2")]
-        #[calldata(rename = "json2")]
-        JSON2,
     }
 
     fn default_text() -> OutputFormat {
