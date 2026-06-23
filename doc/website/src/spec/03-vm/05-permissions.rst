@@ -87,6 +87,7 @@ The non-deterministic :term:`sub-VM` has:
 - :ref:`gvm-perm-spawn-nondet` is **disabled**
 - :ref:`gvm-perm-call-others` is **disabled**
 - :ref:`gvm-perm-send-messages` is **disabled**
+- :ref:`gvm-perm-register-runners` is **disabled**
 
 ``Sandbox``
 ~~~~~~~~~~~

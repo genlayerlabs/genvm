@@ -149,6 +149,10 @@ pub async fn await_nondet_vms(zelf: &Arc<Supervisor>) -> anyhow::Result<Option<u
             .clone()
             .try_read_owned()
             .expect("tasks_loop_done already held by writer");
+        // Secondary nondet validator queue runs after the deterministic VM has
+        // finished, so it reuses the memory that VM freed.
+        // FIXME: custom runners registered during deterministic execution are not
+        // counted against this limiter.
         let limiter = memlimiter::Limiter::new("nondet-secondary");
         nondet_vm_processor(zelf.clone(), read_permit, limiter).await;
     }
