@@ -19,9 +19,7 @@ pub enum InitAction {
         val: String,
     },
     SetArgs(Vec<String>),
-    Depends(
-        #[serde(deserialize_with = "util::global_symbol_deserialize")] symbol_table::GlobalSymbol,
-    ),
+    Depends(String),
     LinkWasm(Arc<str>),
     StartWasm(Arc<str>),
 
@@ -32,8 +30,7 @@ pub enum InitAction {
     Seq(Vec<InitAction>),
 
     With {
-        #[serde(deserialize_with = "util::global_symbol_deserialize")]
-        runner: symbol_table::GlobalSymbol,
+        runner: String,
         action: Box<InitAction>,
     },
 }
