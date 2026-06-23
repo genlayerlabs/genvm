@@ -18,7 +18,7 @@ _ALPHABET = '0123456789abcdefghjkmnpqrstvwxyz'
 
 def encode(data: collections.abc.Buffer) -> str:
 	"""
-	Encode a byte buffer to its Crockford Base32 string (uppercase, no padding).
+	Encode a byte buffer to its Crockford Base32 string (lowercase, no padding).
 
 	:param data: bytes to encode
 	:returns: the base32-encoded string
