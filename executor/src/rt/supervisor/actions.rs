@@ -30,6 +30,24 @@ fn maps_into_vm(to: &str) -> bool {
     to.split('/').find(|component| !component.is_empty()) == Some("vm")
 }
 
+/// Rejects mapping targets that are forbidden or could escape their intended
+/// location. `maps_into_vm` only inspects the first component, so a `..`
+/// component (e.g. from an archive entry name like `../vm/secrets`) would slip
+/// past it and resolve into `/vm/` once the VFS normalizes the path.
+fn check_mapping_target(to: &str) -> anyhow::Result<()> {
+    if maps_into_vm(to) {
+        return Err(make_malformed_runner_error(&format!(
+            "mapping into /vm/ is forbidden: {to}"
+        )));
+    }
+    if to.split('/').any(|component| component == "..") {
+        return Err(make_malformed_runner_error(&format!(
+            "mapping path with a '..' component is forbidden: {to}"
+        )));
+    }
+    Ok(())
+}
+
 /// How a resolved runner id should be loaded into the archive cache.
 enum ResolvedKind {
     /// A packaged `name:hash` runner read from the runners directory.
@@ -272,11 +290,7 @@ pub(crate) fn map_archive_file(
             }
             name_in_fs.push_str(&name[must_start_with.len()..]);
 
-            if maps_into_vm(&name_in_fs) {
-                return Err(make_malformed_runner_error(&format!(
-                    "mapping into /vm/ is forbidden: {name_in_fs}"
-                )));
-            }
+            check_mapping_target(&name_in_fs)?;
 
             if !limiter
                 .consume(public_abi::memory_limiter_consts::FILE_MAPPING + name_in_fs.len() as u32)
@@ -289,11 +303,7 @@ pub(crate) fn map_archive_file(
             preview1.map_file(&name_in_fs, file_contents.clone())?;
         }
     } else {
-        if maps_into_vm(to) {
-            return Err(make_malformed_runner_error(&format!(
-                "mapping into /vm/ is forbidden: {to}"
-            )));
-        }
+        check_mapping_target(to)?;
 
         if !limiter.consume(public_abi::memory_limiter_consts::FILE_MAPPING + to.len() as u32) {
             return Err(rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into());
