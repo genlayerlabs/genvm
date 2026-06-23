@@ -248,6 +248,10 @@ pub struct VMDataAccumulator {
     pub messages_value_decremented: primitive_types::U256,
     pub emissions: Vec<domain::ExecutionEmission>,
     pub message_fee_allocation: Vec<domain::fees::MessageAllocationNode>,
+    /// Custom runner hashes registered in (and inherited into) this execution
+    /// scope. Only these may be resolved via `custom:<hash>`. A nondet sub-VM
+    /// starts empty, so it cannot see runners the deterministic scope registered.
+    pub custom_runners: rpds::HashTrieSet<Bytes32Hash, archery::ArcTK>,
 }
 
 impl VMDataAccumulator {
@@ -778,6 +782,9 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                             .messages_value_decremented,
                         emissions: Vec::new(),
                         message_fee_allocation: Vec::new(),
+                        // CallContract is a deterministic sub-call: inherit the
+                        // runners registered so far.
+                        custom_runners: self.context.data.accumulator.custom_runners.clone(),
                     },
                     det_subvm_hashes: Default::default(),
                 });
@@ -1602,9 +1609,15 @@ impl ContextVFS<'_> {
 
         let is_det = self.context.data.conf.is_deterministic;
         let supervisor = self.context.data.supervisor.clone();
+        let hash = crate::runners::custom_runner_hash(&code);
         let id = supervisor
             .register_custom_runner(code, supervisor.limiter.get(is_det))
             .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
+        // Scope the runner to this execution (and its deterministic children) so
+        // it cannot be resolved from an unrelated scope (e.g. a nondet sub-VM).
+        self.context.data.accumulator.custom_runners =
+            self.context.data.accumulator.custom_runners.insert(hash);
 
         let data = calldata::encode(&calldata::Value::Str(id.as_str().to_owned()));
         self.place_content(vfs::FileContents::from(bytes::Bytes::from(data)))
@@ -1629,6 +1642,7 @@ impl ContextVFS<'_> {
         let contract_address = self.context.data.message_data.message.contract_address;
         let state = self.context.data.conf.state_mode;
         let code_slot = self.context.data.conf.code_slot;
+        let available_custom = self.context.data.accumulator.custom_runners.clone();
 
         rt::supervisor::actions::map_runner_file(
             &supervisor,
@@ -1637,9 +1651,10 @@ impl ContextVFS<'_> {
             contract_address,
             state,
             code_slot,
-            symbol_table::GlobalSymbol::from(runner),
+            &runner,
             &path_in_runner,
             &path_in_vfs,
+            &available_custom,
         )
         .await
         .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
@@ -1798,6 +1813,9 @@ impl ContextVFS<'_> {
                     .messages_value_decremented,
                 emissions: Vec::new(),
                 message_fee_allocation: Vec::new(),
+                // Nondet is an isolated execution scope: it must NOT see custom
+                // runners registered by the deterministic scope.
+                custom_runners: Default::default(),
             };
 
             let vm_data = Box::new(SingleVMData {
@@ -1886,6 +1904,8 @@ impl ContextVFS<'_> {
             messages_value_decremented: primitive_types::U256::max_value(),
             emissions: Vec::new(),
             message_fee_allocation: Vec::new(),
+            // Sandbox is a deterministic sub-VM: inherit the registered runners.
+            custom_runners: self.context.data.accumulator.custom_runners.clone(),
         };
 
         std::mem::swap(&mut self.context.data.accumulator, &mut fake_my_data);

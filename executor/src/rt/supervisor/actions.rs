@@ -83,9 +83,9 @@ fn resolve_runner(
     contract_address: calldata::Address,
     state: public_abi::StorageType,
     code_slot: crate::SlotID,
-    id: symbol_table::GlobalSymbol,
+    id: &str,
 ) -> anyhow::Result<Resolved> {
-    let Some(parsed) = runners::parse_runner_id(id.as_str()) else {
+    let Some(parsed) = runners::parse_runner_id(id) else {
         return Err(make_malformed_runner_error(
             "runner id doesn't match expected format",
         ));
@@ -233,18 +233,31 @@ async fn get_arch(
 
 /// Resolves and loads a runner archive by id. Shared entry point used by both
 /// contract initialization and runtime `gl_call`s.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn load_runner(
     supervisor: &rt::supervisor::Supervisor,
     contract_address: calldata::Address,
     state: public_abi::StorageType,
     code_slot: crate::SlotID,
     limiter: &rt::memlimiter::Limiter,
-    id: symbol_table::GlobalSymbol,
+    id: &str,
+    available_custom: &rpds::HashTrieSet<Bytes32Hash, archery::ArcTK>,
 ) -> anyhow::Result<(
     symbol_table::GlobalSymbol,
     sync::DArc<runners::ArchiveCache>,
 )> {
     let resolved = resolve_runner(supervisor, contract_address, state, code_slot, id)?;
+    // Custom runners are execution-scoped: a `custom:<hash>` is only resolvable
+    // by a scope that registered it (or inherited it from a det parent), so the
+    // shared registry cannot leak a runner across unrelated scopes (e.g. nondet).
+    if let ResolvedKind::Custom { hash } = &resolved.kind {
+        if !available_custom.contains(hash) {
+            return Err(make_malformed_runner_error(&format!(
+                "custom runner {} is not registered in this execution scope",
+                resolved.id
+            )));
+        }
+    }
     get_arch(supervisor, limiter, resolved).await
 }
 
@@ -323,9 +336,10 @@ pub(crate) async fn map_runner_file(
     contract_address: calldata::Address,
     state: public_abi::StorageType,
     code_slot: crate::SlotID,
-    runner: symbol_table::GlobalSymbol,
+    runner: &str,
     path_in_runner: &str,
     path_in_vfs: &str,
+    available_custom: &rpds::HashTrieSet<Bytes32Hash, archery::ArcTK>,
 ) -> anyhow::Result<()> {
     let (_id, arch) = load_runner(
         supervisor,
@@ -334,13 +348,14 @@ pub(crate) async fn map_runner_file(
         code_slot,
         limiter,
         runner,
+        available_custom,
     )
     .await?;
     map_archive_file(preview1, limiter, &arch, path_in_runner, path_in_vfs)
 }
 
 impl Ctx<'_, '_> {
-    fn resolve_runner(&self, id: symbol_table::GlobalSymbol) -> anyhow::Result<Resolved> {
+    fn resolve_runner(&self, id: &str) -> anyhow::Result<Resolved> {
         resolve_runner(
             self.supervisor,
             self.contract_address,
@@ -573,7 +588,7 @@ impl Ctx<'_, '_> {
                 runner: uid,
                 action,
             } => {
-                let resolved = self.resolve_runner(*uid)?;
+                let resolved = self.resolve_runner(uid)?;
                 let (uid, new_arch) = self.get_arch(resolved).await?;
 
                 Box::pin(self.apply(action, uid, &new_arch))
@@ -581,7 +596,7 @@ impl Ctx<'_, '_> {
                     .with_context(|| format!("With {uid}"))
             }
             InitAction::Depends(uid) => {
-                let resolved = self.resolve_runner(*uid)?;
+                let resolved = self.resolve_runner(uid)?;
 
                 if !self.visited.insert(resolved.id) {
                     return Ok(None);
