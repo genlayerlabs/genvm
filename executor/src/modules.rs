@@ -17,7 +17,6 @@ struct ModuleImpl {
 
 pub struct Module {
     name: String,
-    cancellation: Arc<genvm_common::cancellation::Token>,
     imp: tokio::sync::Mutex<ModuleImpl>,
     genvm_id: genvm_modules_interfaces::GenVMId,
     role: genvm_modules_interfaces::Role,
@@ -100,7 +99,6 @@ pub struct ModuleNamedArgs {
 impl Module {
     pub fn new(
         named: ModuleNamedArgs,
-        cancellation: Arc<genvm_common::cancellation::Token>,
         genvm_id: genvm_modules_interfaces::GenVMId,
         role: genvm_modules_interfaces::Role,
         host_data: genvm_modules_interfaces::HostData,
@@ -111,7 +109,6 @@ impl Module {
                 url: named.url,
                 stream: None,
             }),
-            cancellation,
             genvm_id,
             role,
             name: named.name,
@@ -222,14 +219,9 @@ impl Module {
         V: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible>,
         R: calldata::codec::Decode,
     {
-        tokio::select! {
-            _ = self.cancellation.chan.closed() => {
-                anyhow::bail!("timeout") // it will be replaced later
-            }
-            res = self.send_impl(val) => {
-                res.with_context(|| "sending request to module")
-            }
-        }
+        self.send_impl(val)
+            .await
+            .with_context(|| "sending request to module")
     }
 }
 

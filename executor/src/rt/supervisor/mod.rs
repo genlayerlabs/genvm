@@ -352,10 +352,12 @@ pub async fn spawn(
                 error: anyhow::Error::from(a),
                 state: Box::new(rt::SpawnErrorState::Unspawned(b)),
             })?,
-            supervisor: zelf.clone(),
         },
         wasmtime::GenVMCtx {
-            should_quit: zelf.shared_data.cancellation.should_quit.clone(),
+            // The executor has no cooperative cancellation; the manager kills the
+            // process on timeout. wasmtime still requires this flag, so feed it a
+            // never-set atomic.
+            should_quit: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
         },
     );
 
@@ -573,11 +575,6 @@ async fn nondet_vm_processor(
     let mut count = 0;
     loop {
         tokio::select! {
-            _ = zelf.shared_data.cancellation.chan.closed() => {
-                log_debug!("cancellation requested, stopping nondet validator queue");
-                break;
-            }
-
             _ = zelf.queue.vm_countdown.wait() => {
                 log_debug!("vm countdown reached zero, stopping nondet validator queue");
                 break;
