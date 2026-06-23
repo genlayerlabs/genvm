@@ -388,9 +388,9 @@ pub struct Request {
     pub major: u32,
     pub message: genvm_common::domain::MessageData,
     pub is_sync: bool,
-    /// Executor debug level. Controls runner `:latest`/`:test` resolution,
-    /// tracing, captured-output bounding, and (under `full-unsafe`) exposing
-    /// non-deterministic data. See `genvm_common::DebugMode`.
+    /// Executor debug level. Controls captured-output bounding, tracing, runner
+    /// `:latest`/`:test` resolution (under `unsafe`), and (under `unsafe-tracing`)
+    /// exposing non-deterministic data. See `genvm_common::DebugMode`.
     #[serde(default)]
     #[calldata(default = default_debug_mode)]
     pub debug_mode: genvm_common::DebugMode,

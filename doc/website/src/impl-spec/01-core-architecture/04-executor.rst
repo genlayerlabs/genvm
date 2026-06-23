@@ -73,7 +73,7 @@ The levels are ordered; each *adds* to the previous one:
      - The ``:latest`` / ``:test`` runner ids may be resolved. **Unsafe across machines**: different nodes may resolve different code and diverge consensus, though a single node stays deterministic.
    * - ``unsafe-tracing``
      - ``unbounded``
-     - Real wall-clock time is exposed to the contract (``RuntimeMicroSec`` returns actual elapsed time instead of ``0``). **Can break determinism on a single machine.** Local debugging only.
+     - Real wall-clock time is exposed to the contract in deterministic mode (``RuntimeMicroSec`` returns actual elapsed time instead of ``0``; non-deterministic mode already returns real time regardless of debug level). **Can break determinism on a single machine.** Local debugging only.
 
 Only ``unsafe`` and ``unsafe-tracing`` can affect determinism (across machines
 and on a single machine respectively); ``safe`` and ``safe-unbounded`` are fully

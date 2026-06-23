@@ -19,7 +19,7 @@ pub struct Args {
         long,
         value_enum,
         default_value = "disabled",
-        help = "debug level: disabled|safe|full|full-unsafe. safe+ allows `:latest`/`:test` runners and tracing; full-unsafe additionally exposes non-deterministic data such as real time metering"
+        help = "debug level: disabled|safe|safe-unbounded|unsafe|unsafe-tracing. safe captures (bounded); safe-unbounded adds unbounded capture and tracing; unsafe adds `:latest`/`:test` resolution (diverges across machines); unsafe-tracing adds real time metering (non-deterministic)"
     )]
     debug_mode: genvm_common::DebugMode,
 
