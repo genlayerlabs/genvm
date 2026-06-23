@@ -8,7 +8,7 @@
 
 const ALPHABET: &[u8] = b"0123456789abcdefghjkmnpqrstvwxyz";
 
-/// Encodes a byte slice as a Crockford Base32 string (uppercase, no padding).
+/// Encodes a byte slice as a Crockford Base32 string (lowercase, no padding).
 pub fn encode(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len() * 8 / 5 + 1);
     let mut value: u32 = 0;
