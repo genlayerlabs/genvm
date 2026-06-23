@@ -478,7 +478,7 @@ Requirements
 -------------------------------------
 
 In :ref:`gvm-def-non-det-mode` returns the elapsed execution time in microseconds since VM start.
-In :ref:`gvm-def-det-mode`, it always returns ``0``.
+In :ref:`gvm-def-det-mode`, it returns ``0`` — exposing real elapsed time there would break determinism. The sole exception is the ``unsafe-tracing`` debug level (see the executor "Debug modes" section), which returns real elapsed time even in deterministic mode; that level is for local debugging only and must never be used on a consensus network.
 
 Payload
 ~~~~~~~
