@@ -22,7 +22,13 @@ let
 	hexToBytes = hex:
 		let
 			chars = lib.stringToCharacters hex;
-			n = (builtins.length chars) / 2;
+			charsLen = builtins.length chars;
+			# integer division truncates, so reject odd lengths instead of
+			# silently dropping the final nibble (which would corrupt the hash).
+			n =
+				if charsLen / 2 * 2 != charsLen
+				then throw "gvm32.hexToBytes: hex string length must be even"
+				else charsLen / 2;
 		in
 		builtins.genList
 			(i: hexValues.${builtins.elemAt chars (i * 2)} * 16

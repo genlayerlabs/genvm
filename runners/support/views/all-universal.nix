@@ -11,7 +11,11 @@
 			dontBuild = true;
 			dontFixup = true;
 			installPhase = let
-				hash32 = builtins.head (builtins.tail (builtins.match "([^:]+):(.*)" x.uid));
+				uidMatch = builtins.match "([^:]+):(.+)" x.uid;
+				hash32 =
+					if uidMatch == null
+					then throw "invalid runner uid `${x.uid}`; expected `<prefix>:<hash32>`"
+					else builtins.elemAt uidMatch 1;
 				result-path = "runners/${x.id}/${builtins.substring 0 2 hash32}/${builtins.substring 2 50 hash32}.tar";
 			in ''
 				mkdir -p $out/$(dirname -- ${result-path})

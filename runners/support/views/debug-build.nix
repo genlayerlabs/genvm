@@ -9,7 +9,11 @@ let
 	pathOfRunner = runner:
 		let
 			# the gvm32 hash id (matches `uid` / `hashToIDHash`)
-			hash32 = builtins.head (builtins.tail (builtins.match "([^:]+):(.*)" runner.uid));
+			uidMatch = builtins.match "([^:]+):(.+)" runner.uid;
+			hash32 =
+				if uidMatch == null
+				then throw "invalid runner uid `${runner.uid}`; expected `<prefix>:<hash32>`"
+				else builtins.elemAt uidMatch 1;
 		in "${runner.id}/${builtins.substring 0 2 hash32}/${builtins.substring 2 50 hash32}.tar";
 
 	installLines =
