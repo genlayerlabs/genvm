@@ -26,6 +26,11 @@ class Root:
 	It is set to an actual storage manager in the runtime, but can be overridden for testing purposes.
 	"""
 
+	major: u8
+	"""
+	Major version of the GenVM contract expects
+	"""
+
 	contract_instance: Indirection[None]
 
 	code: Indirection[VLA[u8]]
@@ -38,11 +43,6 @@ class Root:
 	By default it will be populated by ``code``, ``frozen_slots``
 	"""
 	upgraders: Indirection[VLA[Address]]
-
-	major: u8
-	"""
-	Major version of the GenVM contract expects
-	"""
 
 	code_slot: u256
 	"""
@@ -74,7 +74,7 @@ class Root:
 		This slot can be used to store data without worrying about overwriting contract data.
 		Useful for bootstrapping contract storage
 		"""
-		return self.slot().indirect(public_abi.root_offsets.MAJOR)
+		return self.slot().indirect(public_abi.root_offsets.CODE_SLOT)
 
 	def get_contract_instance[T](self, typ: typing.Type[T], /) -> T:
 		"""

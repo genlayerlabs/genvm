@@ -158,11 +158,11 @@ pub mod memory_limiter_consts {
 }
 
 pub mod root_offsets {
-    pub const CONTRACT: u32 = 0;
-    pub const CODE: u32 = 1;
-    pub const LOCKED_SLOTS: u32 = 2;
-    pub const UPGRADERS: u32 = 3;
-    pub const MAJOR: u32 = 4;
+    pub const MAJOR: u32 = 0;
+    pub const CONTRACT: u32 = 1;
+    pub const CODE: u32 = 2;
+    pub const LOCKED_SLOTS: u32 = 3;
+    pub const UPGRADERS: u32 = 4;
     pub const CODE_SLOT: u32 = 5;
 }
 
