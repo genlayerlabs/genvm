@@ -430,9 +430,13 @@ def process_executor_version(executor_version: str):
 			if expected_hash is not None:
 				if not runner_check_bytes(tar_data, expected_hash):
 					raise ValueError(f'hash mismatch for executor {executor_version}')
-			else:
+			elif executor_version == 'vTEST':
 				logger.warning(
 					f'no integrity hash for executor {executor_version}; skipping verification'
+				)
+			else:
+				raise ValueError(
+					f'no integrity hash for executor {executor_version}; refusing to extract'
 				)
 
 			# filter='data' rejects absolute / `..` paths and unsafe link and device
