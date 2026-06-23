@@ -6,5 +6,5 @@ try:
 	register_runner(b'# { "Depends": "py-genlayer:test" }\nx\n')
 	print('registered')
 except Exception as e:
-	print(f'forbidden: {type(e).__name__}')
+	print(e)
 exit(0)
