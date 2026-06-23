@@ -1067,8 +1067,9 @@ pub async fn start_genvm(
         id: genvm_id,
         process_handle: tokio::sync::Mutex::new(child),
         started_at: chrono::Utc::now(),
+        // Cap at 24h so a huge value can't overflow the i64 cast / Duration.
         strict_deadline: chrono::Utc::now()
-            + chrono::Duration::minutes(req.max_execution_minutes as i64),
+            + chrono::Duration::minutes(req.max_execution_minutes.min(24 * 60) as i64),
 
         stdout_stderr_sem,
         stdout: tokio::sync::OnceCell::new(),
