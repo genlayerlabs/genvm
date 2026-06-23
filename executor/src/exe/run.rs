@@ -168,6 +168,16 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
 
     let method_hosts = execution_data.method_hosts.clone();
 
+    // Validate every method->host mapping up front, once, so all later host
+    // selection (here and inside the VM) can index `hosts` safely instead of
+    // panicking on a misconfigured index.
+    if let Some(&bad) = method_hosts.iter().find(|&&h| h as usize >= hosts.len()) {
+        anyhow::bail!(
+            "method_hosts references host index {bad} but only {} host(s) are configured",
+            hosts.len()
+        );
+    }
+
     // Charge the per-bucket up-front fees now that the hosts are connected. If a
     // bucket cannot cover its `subtract_on_start`, report the resulting VM error
     // to the host as a normal receipt instead of crashing during setup.
