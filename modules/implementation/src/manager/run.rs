@@ -465,6 +465,9 @@ trait LogAppender {
 /// manager's own log instead of buffering them into the result.
 struct LogAppenderToLog(GenVMId);
 
+// `read_log_pipe` takes `impl DerefMut<Target = LA>`. The value-capturing
+// appender is wrapped in `Arc<Mutex<..>>` (which derefs to it), but this
+// forwarding appender holds no shared state, so it derefs to itself.
 impl std::ops::Deref for LogAppenderToLog {
     type Target = Self;
 
@@ -955,7 +958,12 @@ pub async fn start_genvm(
     use genvm_common::debug_mode::Capture;
     let capture = req.debug_mode.capture();
     let log_sink: LogSink = Arc::new(LogSinkInner::new(capture == Capture::Unbounded));
-    GENVM_BY_ID_LOGGER.pin().insert(genvm_id, log_sink.clone());
+    // Only route per-id logs into the result sink when we actually capture; under
+    // `disabled` the sink stays unregistered so manager-internal logs (and the
+    // forwarded executor logs) go to the manager log, leaving `genvm_log` empty.
+    if capture != Capture::Disabled {
+        GENVM_BY_ID_LOGGER.pin().insert(genvm_id, log_sink.clone());
+    }
     let log_sink_guard = sync::DropGuard::new(|| {
         GENVM_BY_ID_LOGGER.pin().remove(&genvm_id);
     });
@@ -1108,4 +1116,35 @@ pub async fn start_genvm(
     log_sink_guard.forget();
 
     Ok((genvm_id, rx))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::keep_tail;
+
+    #[test]
+    fn under_or_at_limit_is_unchanged() {
+        let mut s = String::from("hello");
+        keep_tail(&mut s, 10);
+        assert_eq!(s, "hello");
+        keep_tail(&mut s, 5);
+        assert_eq!(s, "hello");
+    }
+
+    #[test]
+    fn keeps_the_tail() {
+        let mut s = String::from("0123456789");
+        keep_tail(&mut s, 4);
+        assert_eq!(s, "6789");
+    }
+
+    #[test]
+    fn never_cuts_mid_char() {
+        // "aéb" = a(1) é(2) b(1) = 4 bytes; cutting at byte 2 is mid-'é', so the
+        // cut advances to the next boundary, dropping the partial char.
+        let mut s = String::from("aéb");
+        keep_tail(&mut s, 2);
+        assert_eq!(s, "b");
+        assert!(std::str::from_utf8(s.as_bytes()).is_ok());
+    }
 }
