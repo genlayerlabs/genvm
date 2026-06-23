@@ -95,7 +95,7 @@ fn resolve_runner(
         runners::IdUnresolved::Contract => unreachable!("contract is resolved to chain"),
         runners::IdUnresolved::Builtin { name, hash } => {
             let hash: Bytes32Hash = if hash.as_str() == "test" {
-                if !supervisor.shared_data.debug_mode {
+                if !supervisor.shared_data.debug_mode.allows_latest_resolution() {
                     log_warn!(":test runner used in non-debug mode, this is not allowed");
                     return Err(make_malformed_runner_error(
                         "runner id doesn't match expected format",
@@ -103,7 +103,7 @@ fn resolve_runner(
                 }
                 runners::TEST_RUNNER_HASH
             } else if hash.as_str() == "latest" {
-                if !supervisor.shared_data.debug_mode {
+                if !supervisor.shared_data.debug_mode.allows_latest_resolution() {
                     log_warn!(":latest runner used in non-debug mode, this is not allowed");
                     return Err(make_malformed_runner_error(
                         "runner id doesn't match expected format",

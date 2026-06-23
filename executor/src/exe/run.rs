@@ -17,9 +17,11 @@ const EXECUTION_DATA_HELP: &str = "path to file containing encoded execution dat
 pub struct Args {
     #[arg(
         long,
-        help = "whenever to allow `:latest` and `:test` as runners version, tracing, etc."
+        value_enum,
+        default_value = "disabled",
+        help = "debug level: disabled|safe|full|full-unsafe. safe+ allows `:latest`/`:test` runners and tracing; full-unsafe additionally exposes non-deterministic data such as real time metering"
     )]
-    debug_mode: bool,
+    debug_mode: genvm_common::DebugMode,
 
     #[arg(long, default_value = "-", help = EXECUTION_DATA_HELP)]
     execution_data: String,

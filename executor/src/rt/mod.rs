@@ -50,7 +50,7 @@ impl<T> DetNondet<T> {
 pub struct SharedData {
     pub is_sync: bool,
     pub genvm_id: genvm_modules_interfaces::GenVMId,
-    pub debug_mode: bool,
+    pub debug_mode: genvm_common::DebugMode,
     pub metrics: crate::Metrics,
     pub data_fees_limit: fees::DataLimit,
     pub llm_consumption: tokio::sync::Mutex<primitive_types::U256>,

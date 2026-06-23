@@ -303,7 +303,7 @@ impl Supervisor {
             runner_cache: runners::cache::Reader::new(
                 std::path::Path::new(&config.runners_dir),
                 std::path::Path::new(&config.registry_dir),
-                debug_mode,
+                debug_mode.allows_latest_resolution(),
             )
             .context("creating runner cache reader")?,
             wasm_mod_cache: WasmModuleCache {

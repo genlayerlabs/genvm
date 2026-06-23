@@ -149,7 +149,7 @@ async def compile_py(src: Path, out: Path, manager_url: str) -> None:
 				host='unix://' + sock_path,
 				code=COMPILER_CONTRACT.encode('utf-8'),
 				calldata=calldata,
-				extra_args=['--debug-mode'],
+				debug_mode='unsafe',
 			)
 
 	if res.result_kind != public_abi.ResultCode.RETURN:
