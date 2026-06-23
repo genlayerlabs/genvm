@@ -8,7 +8,7 @@ class Contract(gl.contract.Contract):
 	write_answer: gl.DynArray[u32]
 
 	def __init__(self):
-		self.x = u32(1)
+		self.x = 1
 
 	@gl.public.view
 	def do_read(self) -> u32:
@@ -24,7 +24,7 @@ class Contract(gl.contract.Contract):
 		)  # 1 (committed)
 		self.write_answer.append(self.do_read())  # 1
 
-		self.x = u32(30)
+		self.x = 30
 
 		self.write_answer.append(self.do_read())  # 30 (delta)
 		self.write_answer.append(
