@@ -54,7 +54,7 @@ impl TokenUsage {
         Self {
             input: Some(input),
             output: Some(output),
-            total: Some(input + output),
+            total: Some(input.saturating_add(output)),
             ..Default::default()
         }
     }
@@ -74,7 +74,7 @@ impl TokenUsage {
         }
         let input = self.input.unwrap_or_default();
         let output = self.output.unwrap_or_default();
-        if total < input + output {
+        if total < input.saturating_add(output) {
             return Err(TokensSanityError::TotalLessThanParts {
                 total,
                 input,
@@ -83,6 +83,17 @@ impl TokenUsage {
         }
         Ok(())
     }
+}
+
+/// Narrows a provider-reported token count (a `u64` from response JSON) to
+/// `u32`, saturating instead of wrapping. A value that does not fit `u32` is not
+/// plausible real usage and most likely a misreporting or compromised provider;
+/// clamping and logging avoids the silent wrap that could otherwise under-bill.
+fn narrow_token_count(v: u64) -> u32 {
+    u32::try_from(v).unwrap_or_else(|_| {
+        log_error!(value = v; "provider reported token count exceeding u32; saturating to u32::MAX");
+        u32::MAX
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -254,23 +265,23 @@ fn extract_openai_tokens(body: &serde_json::Value) -> TokenUsage {
     let input = usage
         .and_then(|v| v.get("prompt_tokens"))
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .map(narrow_token_count);
     let output = usage
         .and_then(|v| v.get("completion_tokens"))
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .map(narrow_token_count);
     let total = usage
         .and_then(|v| v.get("total_tokens"))
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .map(narrow_token_count);
     let cache_read_tokens = usage
         .and_then(|v| v.pointer("/prompt_tokens_details/cached_tokens"))
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .map(narrow_token_count);
     let cache_write_tokens = usage
         .and_then(|v| v.pointer("/prompt_tokens_details/cache_write_tokens"))
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .map(narrow_token_count);
     TokenUsage {
         input,
         output,
@@ -479,13 +490,13 @@ fn extract_ollama_tokens(body: &serde_json::Value) -> TokenUsage {
     let input = body
         .get("prompt_eval_count")
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .map(narrow_token_count);
     let output = body
         .get("eval_count")
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .map(narrow_token_count);
     let total = match (input, output) {
-        (Some(i), Some(o)) => Some(i + o),
+        (Some(i), Some(o)) => Some(i.saturating_add(o)),
         _ => None,
     };
     let mut raw = serde_json::Map::new();
@@ -605,19 +616,19 @@ fn extract_gemini_tokens(body: &serde_json::Value) -> TokenUsage {
     let input = usage
         .and_then(|v| v.get("promptTokenCount"))
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .map(narrow_token_count);
     let output = usage
         .and_then(|v| v.get("candidatesTokenCount"))
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .map(narrow_token_count);
     let total = usage
         .and_then(|v| v.get("totalTokenCount"))
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .map(narrow_token_count);
     let cache_read_tokens = usage
         .and_then(|v| v.get("cachedContentTokenCount"))
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .map(narrow_token_count);
     TokenUsage {
         input,
         output,
@@ -796,23 +807,23 @@ fn extract_anthropic_tokens(body: &serde_json::Value) -> TokenUsage {
     let input = usage
         .and_then(|v| v.get("input_tokens"))
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .map(narrow_token_count);
     let output = usage
         .and_then(|v| v.get("output_tokens"))
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .map(narrow_token_count);
     let total = match (input, output) {
-        (Some(i), Some(o)) => Some(i + o),
+        (Some(i), Some(o)) => Some(i.saturating_add(o)),
         _ => None,
     };
     let cache_read_tokens = usage
         .and_then(|v| v.get("cache_read_input_tokens"))
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .map(narrow_token_count);
     let cache_write_tokens = usage
         .and_then(|v| v.get("cache_creation_input_tokens"))
         .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .map(narrow_token_count);
     TokenUsage {
         input,
         output,
