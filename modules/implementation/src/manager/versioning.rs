@@ -146,13 +146,18 @@ impl Ctx {
             .map(|(ver, _)| *ver)
             .max()?;
 
+        // Walk forward to the newest contiguous patch, but only adopt a patch
+        // whose time gate has already opened. Skipping `available_after` here
+        // would activate a future (or rc) patch prematurely, which during a
+        // rolling update with staged manifests causes consensus divergence.
         loop {
             let mut next = ver;
             next.patch += 1;
-            if lock.executor_versions.contains_key(&next) {
-                ver = next;
-            } else {
-                break;
+            match lock.executor_versions.get(&next) {
+                Some(ev) if ev.available_after <= timestamp => {
+                    ver = next;
+                }
+                _ => break,
             }
         }
 
