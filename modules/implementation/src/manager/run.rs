@@ -1,5 +1,5 @@
 use std::{
-    ops::{Deref, DerefMut},
+    ops::DerefMut,
     os::fd::{AsRawFd, FromRawFd},
     str::FromStr,
     sync::Arc,
@@ -372,6 +372,10 @@ fn default_extra_args() -> Vec<String> {
     Vec::new()
 }
 
+fn default_debug_mode() -> genvm_common::DebugMode {
+    genvm_common::DebugMode::Disabled
+}
+
 fn default_no_modules() -> bool {
     false
 }
@@ -384,7 +388,12 @@ pub struct Request {
     pub major: u32,
     pub message: genvm_common::domain::MessageData,
     pub is_sync: bool,
-    pub capture_output: bool,
+    /// Executor debug level. Controls runner `:latest`/`:test` resolution,
+    /// tracing, captured-output bounding, and (under `full-unsafe`) exposing
+    /// non-deterministic data. See `genvm_common::DebugMode`.
+    #[serde(default)]
+    #[calldata(default = default_debug_mode)]
+    pub debug_mode: genvm_common::DebugMode,
     #[serde(default = "default_max_execution_minutes")]
     #[calldata(default = default_max_execution_minutes)]
     pub max_execution_minutes: u64,
@@ -452,9 +461,11 @@ trait LogAppender {
     async fn append_text(&mut self, serde_err: serde_json::Error, text: &str);
 }
 
+/// Used when capture is `disabled`: forwards the executor's logs to the
+/// manager's own log instead of buffering them into the result.
 struct LogAppenderToLog(GenVMId);
 
-impl Deref for LogAppenderToLog {
+impl std::ops::Deref for LogAppenderToLog {
     type Target = Self;
 
     fn deref(&self) -> &Self::Target {
@@ -546,10 +557,28 @@ async fn read_log_pipe<LA: LogAppender>(
     Ok(())
 }
 
+/// Maximum bytes of stdout/stderr kept (as a tail) per execution when not in
+/// debug mode, to bound manager memory.
+const OUTPUT_TAIL_LIMIT: usize = 4 * 1024 * 1024;
+
+/// Keeps only the last `limit` bytes of `s`, trimming whole UTF-8 chars from the
+/// front (so the most recent output survives).
+fn keep_tail(s: &mut String, limit: usize) {
+    if s.len() <= limit {
+        return;
+    }
+    let mut cut = s.len() - limit;
+    while cut < s.len() && !s.is_char_boundary(cut) {
+        cut += 1;
+    }
+    s.drain(..cut);
+}
+
 async fn pipe_read<P: tokio::io::AsyncReadExt + Unpin>(
     mut reader: P,
     to: sync::DArc<tokio::sync::OnceCell<std::string::String>>,
     permit: tokio::sync::OwnedSemaphorePermit,
+    max_bytes: Option<usize>,
 ) {
     let mut result = String::new();
     let mut buf = vec![0u8; 8192];
@@ -574,6 +603,13 @@ async fn pipe_read<P: tokio::io::AsyncReadExt + Unpin>(
                 let s = String::from_utf8_lossy(&buf[..n]);
                 log_trace!(data = s; "read from genvm stdout/stderr");
                 result.push_str(&s);
+            }
+        }
+
+        // Bound memory while reading: keep only the tail when not in debug mode.
+        if let Some(limit) = max_bytes {
+            if result.len() > limit {
+                keep_tail(&mut result, limit);
             }
         }
     }
@@ -750,12 +786,15 @@ fn build_genvm_command(
 
     proc.arg(format!("--genvm-id={}", genvm_id.0));
 
-    if req.capture_output {
-        proc.stdout(std::process::Stdio::piped());
-        proc.stderr(std::process::Stdio::piped());
-    } else {
+    proc.arg("--debug-mode");
+    proc.arg(req.debug_mode.as_arg());
+
+    if req.debug_mode.capture() == genvm_common::debug_mode::Capture::Disabled {
         proc.stdout(std::process::Stdio::null());
         proc.stderr(std::process::Stdio::null());
+    } else {
+        proc.stdout(std::process::Stdio::piped());
+        proc.stderr(std::process::Stdio::piped());
     }
 
     proc
@@ -911,10 +950,11 @@ pub async fn start_genvm(
         ctx.permits.clone().acquire_owned().await?
     };
 
-    // Debug executions (passing `--debug-mode` to the executor) keep all logs;
-    // otherwise the sink is bounded to avoid unbounded per-execution growth.
-    let debug_mode = req.extra_args.iter().any(|a| a == "--debug-mode");
-    let log_sink: LogSink = Arc::new(LogSinkInner::new(debug_mode));
+    // Capture controls how logs and stdout/stderr are kept: disabled (forwarded
+    // to the manager log only), bounded, or unbounded.
+    use genvm_common::debug_mode::Capture;
+    let capture = req.debug_mode.capture();
+    let log_sink: LogSink = Arc::new(LogSinkInner::new(capture == Capture::Unbounded));
     GENVM_BY_ID_LOGGER.pin().insert(genvm_id, log_sink.clone());
     let log_sink_guard = sync::DropGuard::new(|| {
         GENVM_BY_ID_LOGGER.pin().remove(&genvm_id);
@@ -975,17 +1015,18 @@ pub async fn start_genvm(
 
     let execution_data_bytes = bytes::Bytes::from(execution_data_bytes);
 
-    // Spawn log reader
-    if req.capture_output {
+    // Spawn log reader: capture into the sink, or (when capture is disabled)
+    // forward to the manager log instead of buffering into the result.
+    if capture == Capture::Disabled {
+        tokio::spawn(read_log_pipe(read_fd, LogAppenderToLog(genvm_id)));
+    } else {
         let logger = Arc::new(tokio::sync::Mutex::new(LogAppenderToValue(
             log_sink.clone(),
             genvm_id,
         )));
         let l = logger.clone().lock_owned().await;
         tokio::spawn(read_log_pipe(read_fd, l));
-    } else {
-        tokio::spawn(read_log_pipe(read_fd, LogAppenderToLog(genvm_id)));
-    };
+    }
 
     // Spawn child process, then drop child-side FDs
     let mut child = proc.spawn()?;
@@ -1043,11 +1084,22 @@ pub async fn start_genvm(
         spawn_stdin_monitor(stdin_task, exec_ctx.clone(), genvm_id);
     }
 
+    let out_limit = (capture == Capture::Bounded).then_some(OUTPUT_TAIL_LIMIT);
     if let Some(stdout) = stdout {
-        tokio::spawn(pipe_read(stdout, exec_ctx.gep(|x| &x.stdout), stdout_perm));
+        tokio::spawn(pipe_read(
+            stdout,
+            exec_ctx.gep(|x| &x.stdout),
+            stdout_perm,
+            out_limit,
+        ));
     }
     if let Some(stderr) = stderr {
-        tokio::spawn(pipe_read(stderr, exec_ctx.gep(|x| &x.stderr), stderr_perm));
+        tokio::spawn(pipe_read(
+            stderr,
+            exec_ctx.gep(|x| &x.stderr),
+            stderr_perm,
+            out_limit,
+        ));
     }
 
     ctx.known_executions

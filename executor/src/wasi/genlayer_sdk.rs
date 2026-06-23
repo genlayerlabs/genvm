@@ -1541,7 +1541,14 @@ impl ContextVFS<'_> {
             gl_call::TracePayload::Message(text) => {
                 // Tracing is a debug-only aid; skip the timing and logging work
                 // entirely when not in debug mode.
-                if !self.context.data.supervisor.shared_data.debug_mode {
+                if !self
+                    .context
+                    .data
+                    .supervisor
+                    .shared_data
+                    .debug_mode
+                    .allows_tracing()
+                {
                     return Ok(file_fd_none());
                 }
 
@@ -1560,7 +1567,13 @@ impl ContextVFS<'_> {
             }
             gl_call::TracePayload::RuntimeMicroSec => {
                 let elapsed_micros = if self.context.data.conf.is_deterministic
-                    && !self.context.data.supervisor.shared_data.debug_mode
+                    && !self
+                        .context
+                        .data
+                        .supervisor
+                        .shared_data
+                        .debug_mode
+                        .allows_nondeterminism()
                 {
                     0u64
                 } else {
