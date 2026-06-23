@@ -78,7 +78,7 @@ struct Resolved {
 ///
 /// Free-standing so it can be shared between contract initialization
 /// ([`Ctx`]) and runtime `gl_call`s ([`load_runner`]).
-fn resolve_runner(
+async fn resolve_runner(
     supervisor: &rt::supervisor::Supervisor,
     contract_address: calldata::Address,
     state: public_abi::StorageType,
@@ -94,7 +94,7 @@ fn resolve_runner(
     let resolved: runners::Id = match parsed.resolve(contract_address, state, code_slot) {
         runners::IdUnresolved::Contract => unreachable!("contract is resolved to chain"),
         runners::IdUnresolved::Builtin { name, hash } => {
-            let hash: Bytes32Hash = if hash.as_str() == "test" {
+            let hash: Bytes32Hash = if hash == "test" {
                 if !supervisor.shared_data.debug_mode.allows_latest_resolution() {
                     log_warn!(":test runner used in non-debug mode, this is not allowed");
                     return Err(make_malformed_runner_error(
@@ -102,39 +102,65 @@ fn resolve_runner(
                     ));
                 }
                 runners::TEST_RUNNER_HASH
-            } else if hash.as_str() == "latest" {
+            } else if hash == "latest" {
                 if !supervisor.shared_data.debug_mode.allows_latest_resolution() {
                     log_warn!(":latest runner used in non-debug mode, this is not allowed");
                     return Err(make_malformed_runner_error(
                         "runner id doesn't match expected format",
                     ));
                 }
-                let new_latest = supervisor.runner_cache.get_latest(name);
-                log_info!(runner_id = name.as_str(), new_latest:? = new_latest; "resolving :latest runner");
+                let new_latest = supervisor.runner_cache.get_latest(&name);
+                log_info!(runner_id = name.as_str(); "resolving :latest runner");
                 let Some(new_latest) = new_latest else {
                     return Err(make_malformed_runner_error(
                         "runner id doesn't match expected format",
                     ));
                 };
-                Bytes32Hash::from_gvm32(new_latest.as_str())
+                Bytes32Hash::from_gvm32(new_latest)
                     .ok_or_else(|| make_malformed_runner_error("runner hash is not valid gvm32"))?
             } else {
-                Bytes32Hash::from_gvm32(hash.as_str())
+                Bytes32Hash::from_gvm32(&hash)
                     .ok_or_else(|| make_malformed_runner_error("runner hash is not valid gvm32"))?
             };
 
-            let hash_sym = symbol_table::GlobalSymbol::from(hash.to_gvm32());
-            if !supervisor.runner_cache.has_in_all(name, hash_sym) {
-                anyhow::bail!("runner {}:{} not found", name, hash_sym);
+            let hash_gvm32 = hash.to_gvm32();
+            if !supervisor.runner_cache.has_in_all(&name, &hash_gvm32) {
+                anyhow::bail!("runner {}:{} not found", name, hash_gvm32);
             }
 
-            runners::Id::Builtin { name, hash }
+            runners::Id::Builtin {
+                name: symbol_table::GlobalSymbol::new(&name),
+                hash,
+            }
         }
         runners::IdUnresolved::Chain { address, on, slot } => {
+            let on = on.unwrap_or(public_abi::StorageType::LatestNonFinal);
+            let slot = match slot {
+                Some(s) => s,
+                None => {
+                    let mut storage = rt::vm::storage::Storage::new(
+                        address,
+                        supervisor.get_storage_limiter(),
+                        crate::wasi::genlayer_sdk::StorageHostHolder(
+                            supervisor.host.clone(),
+                            crate::wasi::genlayer_sdk::ReadToken {
+                                account: address,
+                                mode: on,
+                            },
+                        ),
+                    );
+                    storage.resolve_code_slot().await.with_context(|| {
+                        format!(
+                            "resolving code slot for chain runner 0x{}",
+                            address.checksum_hex_string()
+                        )
+                    })?
+                }
+            };
             runners::Id::Chain { address, on, slot }
         }
         runners::IdUnresolved::Custom { hash } => {
-            let hash = Bytes32Hash::from_gvm32(hash.as_str()).ok_or_else(|| {
+            let hash = Bytes32Hash::from_gvm32(&hash).ok_or_else(|| {
                 make_malformed_runner_error("custom runner hash is not valid gvm32")
             })?;
             runners::Id::Custom { hash }
@@ -202,6 +228,22 @@ async fn get_arch(
                                 },
                             ),
                         );
+
+                        let dep_major = storage
+                            .read_major()
+                            .await
+                            .with_context(|| format!("reading major for chain runner {id}"))?;
+                        let node_major = genvm_common::version::CURRENT.major;
+                        if dep_major as u16 != node_major {
+                            return Err(rt::errors::VMError(
+                                public_abi::VmError::invalid_contract().major_mismatch(),
+                                Some(anyhow::anyhow!(
+                                    "chain runner {id} major {dep_major} != node major {node_major}"
+                                )),
+                            )
+                            .into());
+                        }
+
                         let code = storage
                             .read_code_at(slot, limiter)
                             .await
@@ -246,7 +288,7 @@ pub(crate) async fn load_runner(
     symbol_table::GlobalSymbol,
     sync::DArc<runners::ArchiveCache>,
 )> {
-    let resolved = resolve_runner(supervisor, contract_address, state, code_slot, id)?;
+    let resolved = resolve_runner(supervisor, contract_address, state, code_slot, id).await?;
     // Custom runners are execution-scoped: a `custom:<hash>` is only resolvable
     // by a scope that registered it (or inherited it from a det parent), so the
     // shared registry cannot leak a runner across unrelated scopes (e.g. nondet).
@@ -355,7 +397,7 @@ pub(crate) async fn map_runner_file(
 }
 
 impl Ctx<'_, '_> {
-    fn resolve_runner(&self, id: &str) -> anyhow::Result<Resolved> {
+    async fn resolve_runner(&self, id: &str) -> anyhow::Result<Resolved> {
         resolve_runner(
             self.supervisor,
             self.contract_address,
@@ -363,6 +405,7 @@ impl Ctx<'_, '_> {
             self.code_slot,
             id,
         )
+        .await
     }
 
     async fn get_arch(
@@ -588,7 +631,7 @@ impl Ctx<'_, '_> {
                 runner: uid,
                 action,
             } => {
-                let resolved = self.resolve_runner(uid)?;
+                let resolved = self.resolve_runner(uid).await?;
                 let (uid, new_arch) = self.get_arch(resolved).await?;
 
                 Box::pin(self.apply(action, uid, &new_arch))
@@ -596,7 +639,7 @@ impl Ctx<'_, '_> {
                     .with_context(|| format!("With {uid}"))
             }
             InitAction::Depends(uid) => {
-                let resolved = self.resolve_runner(uid)?;
+                let resolved = self.resolve_runner(uid).await?;
 
                 if !self.visited.insert(resolved.id) {
                     return Ok(None);

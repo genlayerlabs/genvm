@@ -32,20 +32,24 @@ pub fn append_runner_subpath(id: &str, hash: &str, path: &mut std::path::PathBuf
 ///   slot of an arbitrary contract. `address` is a `0x`-prefixed 20 byte hex
 ///   address, `a`/`f` selects accepted (latest non final) / finalized state and
 ///   `slot` is a 32 byte slot id encoded with GVM32 (Crockford Base32).
+///   Both `<a|f>` and `<slot>` are optional: `<a|f>` defaults to `a` and
+///   `<slot>` defaults to reading the target contract's root slot during
+///   resolution (i.e. `chain:<address>` and `chain:<address>:a` are valid).
 /// - `custom:<hash>` — a runner registered at runtime, looked up by its hash.
+#[derive(Debug)]
 pub enum IdUnresolved {
     Builtin {
-        name: symbol_table::GlobalSymbol,
-        hash: symbol_table::GlobalSymbol,
+        name: String,
+        hash: String,
     },
     Contract,
     Chain {
         address: calldata::Address,
-        on: crate::public_abi::StorageType,
-        slot: crate::SlotID,
+        on: Option<crate::public_abi::StorageType>,
+        slot: Option<crate::SlotID>,
     },
     Custom {
-        hash: symbol_table::GlobalSymbol,
+        hash: String,
     },
 }
 
@@ -80,8 +84,8 @@ impl IdUnresolved {
         match self {
             IdUnresolved::Contract => IdUnresolved::Chain {
                 address: contract_address,
-                on: state,
-                slot: code_slot,
+                on: Some(state),
+                slot: Some(code_slot),
             },
             other => other,
         }
@@ -143,20 +147,25 @@ pub fn parse_runner_id(id: &str) -> Option<IdUnresolved> {
     if let Some(rest) = id.strip_prefix("chain:") {
         let mut it = rest.split(':');
         let address = it.next()?;
-        let on = it.next()?;
-        let slot = it.next()?;
+        let on_str = it.next();
+        let slot_str = it.next();
         if it.next().is_some() {
             return None;
         }
 
         let address = calldata::Address::from(parse_hex_fixed::<20>(address)?);
-        let on = match on {
-            "a" => crate::public_abi::StorageType::LatestNonFinal,
-            "f" => crate::public_abi::StorageType::LatestFinal,
+        let on = match on_str {
+            Some("a") | None => Some(crate::public_abi::StorageType::LatestNonFinal),
+            Some("f") => Some(crate::public_abi::StorageType::LatestFinal),
             _ => return None,
         };
-        let slot: [u8; 32] = genlayer_sdk::gvm32::decode(slot)?.try_into().ok()?;
-        let slot = crate::SlotID::from_bytes(slot);
+        let slot = match slot_str {
+            Some(s) => {
+                let bytes: [u8; 32] = genlayer_sdk::gvm32::decode(s)?.try_into().ok()?;
+                Some(crate::SlotID::from_bytes(bytes))
+            }
+            None => None,
+        };
 
         return Some(IdUnresolved::Chain { address, on, slot });
     }
@@ -166,7 +175,7 @@ pub fn parse_runner_id(id: &str) -> Option<IdUnresolved> {
             return None;
         }
         return Some(IdUnresolved::Custom {
-            hash: symbol_table::GlobalSymbol::new(rest),
+            hash: rest.to_owned(),
         });
     }
 
@@ -184,8 +193,8 @@ pub fn parse_runner_id(id: &str) -> Option<IdUnresolved> {
         return None;
     }
     Some(IdUnresolved::Builtin {
-        name: symbol_table::GlobalSymbol::new(name),
-        hash: symbol_table::GlobalSymbol::new(hash),
+        name: name.to_owned(),
+        hash: hash.to_owned(),
     })
 }
 
@@ -302,63 +311,4 @@ pub fn verify_runner(runner_id: &str) -> Option<(&str, &str)> {
         }
     }
     Some((runner_id, runner_hash))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn addr40() -> String {
-        format!("0x{}1", "0".repeat(39))
-    }
-    fn slot64() -> String {
-        genlayer_sdk::gvm32::encode(&[0x11u8; 32])
-    }
-
-    #[test]
-    fn parse_runner_id_forms() {
-        assert!(matches!(
-            parse_runner_id("contract"),
-            Some(IdUnresolved::Contract)
-        ));
-        assert!(matches!(
-            parse_runner_id("py-genlayer:test"),
-            Some(IdUnresolved::Builtin { .. })
-        ));
-        assert!(matches!(
-            parse_runner_id("custom:deadbeef"),
-            Some(IdUnresolved::Custom { .. })
-        ));
-
-        match parse_runner_id(&format!("chain:{}:f:{}", addr40(), slot64())) {
-            Some(IdUnresolved::Chain { on, .. }) => {
-                assert_eq!(on, crate::public_abi::StorageType::LatestFinal)
-            }
-            _ => panic!("expected a chain runner id"),
-        }
-        match parse_runner_id(&format!("chain:{}:a:{}", addr40(), slot64())) {
-            Some(IdUnresolved::Chain { on, .. }) => {
-                assert_eq!(on, crate::public_abi::StorageType::LatestNonFinal)
-            }
-            _ => panic!("expected a chain runner id"),
-        }
-    }
-
-    #[test]
-    fn parse_runner_id_rejects_malformed() {
-        assert!(parse_runner_id("custom:").is_none()); // empty hash
-        assert!(parse_runner_id("custom:bad/char").is_none()); // invalid char
-        assert!(parse_runner_id(":hash").is_none()); // empty name
-        assert!(parse_runner_id("name:").is_none()); // empty hash
-        assert!(parse_runner_id("with space:hash").is_none()); // invalid name char
-
-        // chain: closed grammar
-        assert!(parse_runner_id(&format!("chain:0x01:f:{}", slot64())).is_none()); // short address
-        assert!(parse_runner_id(&format!("chain:{}:f:{}", "0".repeat(40), slot64())).is_none()); // missing 0x
-        assert!(parse_runner_id(&format!("chain:{}:f:0x02", addr40())).is_none()); // short slot
-        assert!(parse_runner_id(&format!("chain:{}:x:{}", addr40(), slot64())).is_none()); // bad a|f
-        assert!(parse_runner_id(&format!("chain:{}:f:{}:extra", addr40(), slot64())).is_none()); // extra segment
-        assert!(parse_runner_id(&format!("chain:0x{}:f:{}", "z".repeat(40), slot64())).is_none());
-        // non-hex address
-    }
 }

@@ -1,4 +1,3 @@
-use genvm_common::*;
 use std::sync::Arc;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Debug)]
