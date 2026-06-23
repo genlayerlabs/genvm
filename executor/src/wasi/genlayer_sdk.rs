@@ -716,7 +716,11 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         can_write_storage: false,
                         can_spawn_nondet: my_conf.can_spawn_nondet,
                         can_call_others: my_conf.can_call_others,
-                        can_send_messages: my_conf.can_send_messages,
+                        // A `CallContract` child is read-only (static): it cannot
+                        // write storage, send messages, or emit events. Emissions
+                        // from the child are discarded, so allowing them would
+                        // charge fees for effects that never surface.
+                        can_send_messages: false,
                         can_register_runners: my_conf.can_register_runners,
                         state_mode: state,
                         code_slot: crate::SlotID::ZERO,
@@ -773,6 +777,15 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             gl_call::Message::EmitEvent { topics, blob } => {
                 if !self.context.data.conf.is_deterministic {
                     log_warn!("EmitEvent requires deterministic mode");
+
+                    return Err(generated::types::Errno::Forbidden.into());
+                }
+                // Events are state-mutating log emissions, so they require the
+                // same write capability as storage. A read-only sub-VM (e.g. a
+                // `CallContract` child) must not emit events; otherwise the
+                // emission is charged but later discarded with the child.
+                if !self.context.data.conf.can_write_storage {
+                    log_warn!("EmitEvent requires write_storage permission");
 
                     return Err(generated::types::Errno::Forbidden.into());
                 }
