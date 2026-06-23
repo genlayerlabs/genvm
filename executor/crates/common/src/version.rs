@@ -73,13 +73,15 @@ impl Version {
 
 /// Parses a `u16` starting at `i`, returning the value and the index past the
 /// last digit consumed.
-const fn parse_u16(s: &[u8], mut i: usize) -> (u16, usize) {
+const fn parse_u16(s: &[u8], mut i: usize) -> (u16, usize, bool) {
     let mut n: u16 = 0;
+    let mut consumed = false;
     while i < s.len() && s[i] >= b'0' && s[i] <= b'9' {
         n = n * 10 + (s[i] - b'0') as u16;
         i += 1;
+        consumed = true;
     }
-    (n, i)
+    (n, i, consumed)
 }
 
 const fn const_starts_with(s: &[u8], prefix: &[u8]) -> bool {
@@ -102,8 +104,14 @@ const fn current_version() -> Version {
         // version (kept at the active dev major/minor via `.genvm-monorepo-root`)
         // with a max patch so it sorts newer than any real release of that line.
         let pkg = env!("CARGO_PKG_VERSION").as_bytes();
-        let (major, i) = parse_u16(pkg, 0);
-        let (minor, _) = parse_u16(pkg, i + 1); // skip the '.'
+        let (major, i, ok_major) = parse_u16(pkg, 0);
+        if !ok_major || i >= pkg.len() || pkg[i] != b'.' {
+            panic!("invalid CARGO_PKG_VERSION: missing major");
+        }
+        let (minor, _, ok_minor) = parse_u16(pkg, i + 1); // skip the '.'
+        if !ok_minor {
+            panic!("invalid CARGO_PKG_VERSION: missing minor");
+        }
         return Version {
             major,
             minor,
@@ -118,9 +126,18 @@ const fn current_version() -> Version {
     } else {
         0
     };
-    let (major, i) = parse_u16(id, start);
-    let (minor, i) = parse_u16(id, i + 1); // skip '.'
-    let (patch, _) = parse_u16(id, i + 1); // skip '.'
+    let (major, i, ok_major) = parse_u16(id, start);
+    if !ok_major || i >= id.len() || id[i] != b'.' {
+        panic!("invalid VERSION: missing major");
+    }
+    let (minor, i, ok_minor) = parse_u16(id, i + 1); // skip '.'
+    if !ok_minor || i >= id.len() || id[i] != b'.' {
+        panic!("invalid VERSION: missing minor");
+    }
+    let (patch, _, ok_patch) = parse_u16(id, i + 1); // skip '.'
+    if !ok_patch {
+        panic!("invalid VERSION: missing patch");
+    }
     Version {
         major,
         minor,
