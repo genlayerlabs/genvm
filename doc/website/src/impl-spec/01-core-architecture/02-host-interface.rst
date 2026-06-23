@@ -55,7 +55,7 @@ Result Encoding
 **Non-deterministic Blocks and Sandbox Encoding**:
 
 - 1 byte of result code
-- Result data: calldata for ``Return``, tagged calldata for ``UserError``, string for ``VMError``
+- Result data: calldata for ``Return``, calldata for ``UserError``, string for ``VMError``
 
 **Parent VM Result Encoding**:
 

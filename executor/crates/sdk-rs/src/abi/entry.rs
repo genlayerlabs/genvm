@@ -428,12 +428,7 @@ pub mod contract_def {
                     Ok(LeaderResult::Return(value))
                 }
                 ResultCode::UserError => {
-                    if rest.len() < 4 || rest[..4] != [0u8; 4] {
-                        return Err(ConsensusStageParseError::DecodeError(
-                            "missing tagged calldata prefix in user error".to_owned(),
-                        ));
-                    }
-                    let value = calldata::decode(&rest[4..])
+                    let value = calldata::decode(rest)
                         .map_err(|e| ConsensusStageParseError::DecodeError(e.to_string()))?;
                     Ok(LeaderResult::UserError(value))
                 }
