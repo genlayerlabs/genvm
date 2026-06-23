@@ -1,4 +1,4 @@
-use super::{ctx, prompt, scripting, UserVM};
+use super::{ctx, prompt, scripting};
 use crate::common::{MessageHandler, MessageHandlerProvider, ModuleError, ModuleResult};
 use anyhow::Context as _;
 use genvm_common::*;
@@ -9,8 +9,10 @@ use mlua::LuaSerdeExt;
 
 use std::{collections::BTreeMap, sync::Arc};
 
+type VmGuard = scripting::pool::PoolGuard<ctx::VMData, sync::DArc<ctx::CtxPart>, LlmSubContext>;
+
 pub struct Inner {
-    user_vm: Arc<UserVM>,
+    user_vm: VmGuard,
 
     _ctx: sync::DArc<ctx::CtxPart>,
     ctx_val: mlua::Value,
@@ -57,7 +59,7 @@ impl MessageHandlerProvider<genvm_modules_interfaces::llm::Message, llm_iface::P
         impl MessageHandler<genvm_modules_interfaces::llm::Message, llm_iface::PromptAnswer>,
     > {
         let genvm_id = ctx.scripting.hello.genvm_id;
-        let user_vm = self.vm_pool.get();
+        let user_vm = self.vm_pool.get().await;
 
         let (handler_ctx, ctx_val) = user_vm.create_ctx(&ctx)?;
 

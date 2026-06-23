@@ -8,10 +8,10 @@ use mlua::LuaSerdeExt;
 use std::sync::Arc;
 
 type WebSubContext = crate::manager::execution_context::WebSubContext;
-type UserVM = scripting::UserVM<ctx::VMData, Arc<ctx::CtxPart>, WebSubContext>;
+type VmGuard = scripting::pool::PoolGuard<ctx::VMData, Arc<ctx::CtxPart>, WebSubContext>;
 
 pub struct Inner {
-    user_vm: Arc<UserVM>,
+    user_vm: VmGuard,
 
     _ctx: Arc<ctx::CtxPart>,
     ctx_val: mlua::Value,
@@ -120,7 +120,7 @@ impl common::MessageHandlerProvider<genvm_modules_interfaces::web::Message, Rend
     ) -> anyhow::Result<
         impl common::MessageHandler<genvm_modules_interfaces::web::Message, RenderAnswer>,
     > {
-        let user_vm = self.vm_pool.get();
+        let user_vm = self.vm_pool.get().await;
 
         let (handler_ctx, ctx_val) = user_vm.create_ctx(&ctx)?;
 

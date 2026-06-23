@@ -1,19 +1,76 @@
 use std::sync::Arc;
 
 struct Inner<T, C, E: 'static> {
-    vms: Vec<Arc<super::UserVM<T, C, E>>>,
+    free: crossbeam::queue::ArrayQueue<Arc<super::UserVM<T, C, E>>>,
 }
 
-#[derive(Clone)]
-pub struct Pool<T, C, E: 'static>(Arc<Inner<T, C, E>>);
+/// A fixed-size pool of Lua VMs. A VM is checked out exclusively via [`Pool::get`]
+/// and returned to the pool when the [`PoolGuard`] is dropped, so a single
+/// `lua_State` is never driven by two executions concurrently.
+pub struct Pool<T, C, E: 'static> {
+    inner: Arc<Inner<T, C, E>>,
+    // `available` counts the VMs currently in `free`; acquiring a permit
+    // guarantees a subsequent `pop` succeeds.
+    available: Arc<tokio::sync::Semaphore>,
+}
+
+impl<T, C, E: 'static> Clone for Pool<T, C, E> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            available: self.available.clone(),
+        }
+    }
+}
+
+/// Exclusive checkout of one VM. Dereferences to the underlying [`super::UserVM`]
+/// and returns it to the pool on drop.
+pub struct PoolGuard<T, C, E: 'static> {
+    vm: Option<Arc<super::UserVM<T, C, E>>>,
+    inner: Arc<Inner<T, C, E>>,
+    // Released only after the VM has been returned to `free` (see `Drop`).
+    _permit: tokio::sync::OwnedSemaphorePermit,
+}
+
+impl<T, C, E: 'static> std::ops::Deref for PoolGuard<T, C, E> {
+    type Target = super::UserVM<T, C, E>;
+
+    fn deref(&self) -> &Self::Target {
+        self.vm
+            .as_ref()
+            .expect("vm is present until the guard is dropped")
+    }
+}
+
+impl<T, C, E: 'static> Drop for PoolGuard<T, C, E> {
+    fn drop(&mut self) {
+        if let Some(vm) = self.vm.take() {
+            // Return the VM before `_permit` is released so the next waiter that
+            // wakes on the freed permit is guaranteed to find a VM in `free`.
+            let _ = self.inner.free.push(vm);
+        }
+    }
+}
 
 impl<T, C, E: 'static> Pool<T, C, E> {
-    pub fn get(&self) -> Arc<super::UserVM<T, C, E>> {
-        let mut key: [u8; 1] = [0; 1];
-
-        rand::fill(&mut key);
-
-        self.0.vms[key[0] as usize % self.0.vms.len()].clone()
+    /// Atomically checks out a VM, waiting if all VMs are currently in use.
+    pub async fn get(&self) -> PoolGuard<T, C, E> {
+        let permit = self
+            .available
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("vm pool semaphore is never closed");
+        let vm = self
+            .inner
+            .free
+            .pop()
+            .expect("holding a permit guarantees a free vm");
+        PoolGuard {
+            vm: Some(vm),
+            inner: self.inner.clone(),
+            _permit: permit,
+        }
     }
 }
 
@@ -27,12 +84,15 @@ where
     if cnt == 0 {
         anyhow::bail!("vm pool size must be >= 1");
     }
-    let mut vms = Vec::new();
+    let free = crossbeam::queue::ArrayQueue::new(cnt);
     for _i in 0..cnt {
-        vms.push(Arc::new(vm_supplier().await?));
+        free.push(Arc::new(vm_supplier().await?))
+            .ok()
+            .expect("queue capacity matches the number of VMs");
     }
 
-    let inner = Inner { vms };
-
-    Ok(Pool(Arc::new(inner)))
+    Ok(Pool {
+        inner: Arc::new(Inner { free }),
+        available: Arc::new(tokio::sync::Semaphore::new(cnt)),
+    })
 }
