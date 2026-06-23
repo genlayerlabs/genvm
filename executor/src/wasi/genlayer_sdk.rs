@@ -709,6 +709,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let vm_data = Box::new(SingleVMData {
                     depth: self.context.data.depth + 1,
+                    // Permission model: doc/website/src/spec/03-vm/05-permissions.rst
                     conf: base::Config {
                         needs_error_fingerprint: true,
                         is_deterministic: true,
@@ -1759,6 +1760,7 @@ impl ContextVFS<'_> {
 
             let vm_data = Box::new(SingleVMData {
                 depth: self.context.data.depth + 1,
+                // Permission model: doc/website/src/spec/03-vm/05-permissions.rst
                 conf: base::Config {
                     needs_error_fingerprint: false,
                     is_deterministic: false,
@@ -1850,6 +1852,7 @@ impl ContextVFS<'_> {
 
         let vm_data = Box::new(SingleVMData {
             depth: self.context.data.depth + 1,
+            // Permission model: doc/website/src/spec/03-vm/05-permissions.rst
             conf: base::Config {
                 needs_error_fingerprint: false,
                 is_deterministic: zelf_conf.is_deterministic,

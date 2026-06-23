@@ -177,6 +177,7 @@ pub async fn run_with_impl(
 
     let essential_data = Box::new(wasi::genlayer_sdk::SingleVMData {
         depth: 0,
+        // Permission model: doc/website/src/spec/03-vm/05-permissions.rst
         conf: wasi::base::Config {
             needs_error_fingerprint: true,
             is_deterministic: true,
