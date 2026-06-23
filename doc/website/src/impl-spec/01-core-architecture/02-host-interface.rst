@@ -22,9 +22,8 @@ GenVM Execution
 
 **Process Control**:
 
-- **Graceful Shutdown**: Send ``SIGTERM`` signal
-- **Force Termination**: Send ``SIGKILL`` if not responding
-- **Crash Detection**: Process exit before sending result indicates crash (should be reported as bug)
+- **Termination**: The executor has no internal timeout or graceful-shutdown path and may be killed at any moment with ``SIGKILL`` (see :doc:`04-executor`). Timeouts are enforced by the :term:`Manager`.
+- **Crash Detection**: Process exit before sending result indicates a kill/timeout or a crash (a crash should be reported as a bug)
 
 **Node Responsibilities**: Node decides how to receive code and messages from users. GenVM only knows about calldata and message data.
 
