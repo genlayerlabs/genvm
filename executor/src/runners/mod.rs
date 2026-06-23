@@ -126,7 +126,7 @@ fn is_hash_char(c: char) -> bool {
 }
 
 fn parse_hex_fixed<const N: usize>(s: &str) -> Option<[u8; N]> {
-    let s = s.strip_prefix("0x").unwrap_or(s);
+    let s = s.strip_prefix("0x")?;
     if s.len() != N * 2 {
         return None;
     }
@@ -354,6 +354,7 @@ mod tests {
 
         // chain: closed grammar
         assert!(parse_runner_id(&format!("chain:0x01:f:{}", slot64())).is_none()); // short address
+        assert!(parse_runner_id(&format!("chain:{}:f:{}", "0".repeat(40), slot64())).is_none()); // missing 0x
         assert!(parse_runner_id(&format!("chain:{}:f:0x02", addr40())).is_none()); // short slot
         assert!(parse_runner_id(&format!("chain:{}:x:{}", addr40(), slot64())).is_none()); // bad a|f
         assert!(parse_runner_id(&format!("chain:{}:f:{}:extra", addr40(), slot64())).is_none()); // extra segment
