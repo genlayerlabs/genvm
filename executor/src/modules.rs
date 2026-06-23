@@ -59,10 +59,21 @@ const FD_PREFIX: &str = "fd://";
 
 /// Connect to a module endpoint
 /// Supports:
-/// - TCP: "host:port" or "ws://host:port" or "wss://host:port"
+/// - TCP: "host:port" or "ws://host:port" (the latter is a plaintext alias)
 /// - Unix socket: "unix:///path/to/socket"
 /// - File descriptor: "fd://fd" (for bidirectional fd like socketpair)
 async fn connect(url: &str) -> anyhow::Result<BoxedStream> {
+    // `wss://` implies TLS, but this connector only speaks the plaintext
+    // length-prefixed protocol. Reject it rather than silently downgrading to
+    // an unencrypted link an operator believes is secure. Terminate TLS in a
+    // proxy and point the executor at the proxy's plain `host:port` instead.
+    if url.starts_with("wss://") {
+        anyhow::bail!(
+            "module scheme 'wss://' is not supported (no TLS is performed); \
+             use 'host:port', 'ws://host:port', 'unix://', or 'fd://', and \
+             terminate TLS in a proxy"
+        );
+    }
     if let Some(socket_path) = url.strip_prefix(UNIX_PREFIX) {
         let stream = tokio::net::UnixStream::connect(socket_path)
             .await
@@ -76,11 +87,8 @@ async fn connect(url: &str) -> anyhow::Result<BoxedStream> {
         let stream = unsafe { genvm_common::io::AsyncCustomFD::from_raw_fd(fd)? };
         Ok(Box::new(stream))
     } else {
-        // Strip ws:// or wss:// prefix if present for TCP connection
-        let addr = url
-            .strip_prefix("ws://")
-            .or_else(|| url.strip_prefix("wss://"))
-            .unwrap_or(url);
+        // `ws://` is a plaintext alias for a raw TCP connection.
+        let addr = url.strip_prefix("ws://").unwrap_or(url);
 
         let stream = tokio::net::TcpStream::connect(addr)
             .await
