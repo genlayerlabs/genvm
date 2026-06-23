@@ -93,7 +93,6 @@ pub fn create_supervisor(
                 gas_data: named.gas_data.clone(),
                 initial_time_units_allocation: named.initial_time_units_allocation,
             },
-            shared_data.cancellation.clone(),
             shared_data.genvm_id,
             role,
             host_data.clone(),
@@ -106,7 +105,6 @@ pub fn create_supervisor(
                 gas_data: named.gas_data,
                 initial_time_units_allocation: named.initial_time_units_allocation,
             },
-            shared_data.cancellation.clone(),
             shared_data.genvm_id,
             role,
             host_data,
@@ -256,21 +254,7 @@ pub async fn run_with(
         (Ok(res), Ok(c)) => Ok((res, c)),
     };
 
-    let res = if supervisor.shared_data.cancellation.is_cancelled() {
-        match merged_result {
-            Ok(mut r) => {
-                if r.0.kind == public_abi::ResultCode::VmError {
-                    r.0.data = calldata::Value::Str(public_abi::VmError::timeout().0.into()).into();
-                }
-                Ok(r)
-            }
-            Err(_e) => Ok((rt::vm::FullResult::timeout(), None)),
-        }
-    } else {
-        merged_result
-    };
-
-    let res = res.inspect_err(|e| {
+    let res = merged_result.inspect_err(|e| {
         log_error!(error:ah = &e; "internal error");
     });
 
@@ -285,28 +269,18 @@ pub async fn run_with(
 
     log_debug!("all executions done, collecting stats");
 
-    let is_timeout = supervisor.shared_data.cancellation.is_cancelled();
-
-    let web_metrics = if is_timeout {
-        None
-    } else {
-        supervisor
-            .modules
-            .web
-            .get_stats(genvm_modules_interfaces::web::Message::GetStats)
-            .await
-            .ok()
-    };
-    let llm_metrics = if is_timeout {
-        None
-    } else {
-        supervisor
-            .modules
-            .llm
-            .get_stats(genvm_modules_interfaces::llm::Message::GetStats)
-            .await
-            .ok()
-    };
+    let web_metrics = supervisor
+        .modules
+        .web
+        .get_stats(genvm_modules_interfaces::web::Message::GetStats)
+        .await
+        .ok();
+    let llm_metrics = supervisor
+        .modules
+        .llm
+        .get_stats(genvm_modules_interfaces::llm::Message::GetStats)
+        .await
+        .ok();
 
     #[derive(serde::Serialize)]
     struct AllMetrics<'a> {

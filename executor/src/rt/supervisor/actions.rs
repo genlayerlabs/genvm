@@ -254,7 +254,6 @@ pub(crate) async fn load_runner(
 pub(crate) fn map_archive_file(
     preview1: &mut crate::wasi::preview1::Context,
     limiter: &rt::memlimiter::Limiter,
-    cancellation: &genvm_common::cancellation::Token,
     arch: &runners::ArchiveCache,
     file: &str,
     to: &str,
@@ -271,10 +270,6 @@ pub(crate) fn map_archive_file(
         let must_start_with: &str = if is_root { "" } else { file };
 
         for (name, file_contents) in range {
-            if cancellation.is_cancelled() {
-                return Err(rt::errors::VMError(public_abi::VmError::timeout(), None).into());
-            }
-
             if name.ends_with("/") {
                 continue;
             }
@@ -341,14 +336,7 @@ pub(crate) async fn map_runner_file(
         runner,
     )
     .await?;
-    map_archive_file(
-        preview1,
-        limiter,
-        &supervisor.shared_data.cancellation,
-        &arch,
-        path_in_runner,
-        path_in_vfs,
-    )
+    map_archive_file(preview1, limiter, &arch, path_in_runner, path_in_vfs)
 }
 
 impl Ctx<'_, '_> {
@@ -467,23 +455,11 @@ impl Ctx<'_, '_> {
     ) -> anyhow::Result<Option<wasmtime::Instance>> {
         use runners::InitAction;
 
-        if self.supervisor.shared_data.cancellation.is_cancelled() {
-            return Err(rt::errors::VMError(public_abi::VmError::timeout(), None).into());
-        }
-
         match action {
             InitAction::MapFile { to, file } => {
                 let limiter = self.vm.store.data_mut().limits.clone();
-                let cancellation = self.supervisor.shared_data.cancellation.clone();
                 let preview1 = &mut self.vm.store.data_mut().genlayer_ctx_mut().preview1;
-                map_archive_file(
-                    preview1,
-                    &limiter,
-                    &cancellation,
-                    current_runner_arch,
-                    file,
-                    to,
-                )?;
+                map_archive_file(preview1, &limiter, current_runner_arch, file, to)?;
                 Ok(None)
             }
             InitAction::AddEnv { name, val } => {
@@ -586,12 +562,6 @@ impl Ctx<'_, '_> {
             }
             InitAction::Seq(vec) => {
                 for act in vec {
-                    if self.supervisor.shared_data.cancellation.is_cancelled() {
-                        return Err(
-                            rt::errors::VMError(public_abi::VmError::timeout(), None).into()
-                        );
-                    }
-
                     if let Some(x) = Box::pin(self.apply(act, current, current_runner_arch)).await?
                     {
                         return Ok(Some(x));

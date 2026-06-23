@@ -48,7 +48,6 @@ impl<T> DetNondet<T> {
 
 /// basic data that is shared across all VMs
 pub struct SharedData {
-    pub cancellation: Arc<genvm_common::cancellation::Token>,
     pub is_sync: bool,
     pub genvm_id: genvm_modules_interfaces::GenVMId,
     pub debug_mode: bool,
