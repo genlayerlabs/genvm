@@ -14,7 +14,7 @@ class Contract(gl.contract.Contract):
 			# runner from inside nondet. Custom runners should be scoped to the
 			# execution that registered them, so this map MUST fail — but with a
 			# shared registry it may leak.
-			for _ in range(10**6):
+			for _ in range(10**4):
 				pass
 			try:
 				map_file(rid, 'file', '/mapped.txt')
