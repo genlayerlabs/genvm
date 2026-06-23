@@ -169,6 +169,11 @@ pub async fn run_with_impl(
         log_debug!("using provided code for execution");
 
         topmost_storage.write_code(code).await?;
+        // Record the major this contract is deployed for, so later runs can
+        // verify major compatibility (see `read_major` / major_mismatch check).
+        topmost_storage
+            .write_major(genvm_common::version::CURRENT.major as u8)
+            .await?;
     } else {
         log_debug!("code is null");
     }

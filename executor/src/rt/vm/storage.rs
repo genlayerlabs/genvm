@@ -421,6 +421,14 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         Ok(buf[0])
     }
 
+    /// Writes the GenVM major version the contract is deployed for into the
+    /// `major` root field, so later runs can verify major compatibility (see
+    /// [`read_major`]). Written on deploy alongside the code.
+    pub async fn write_major(&mut self, major: u8) -> anyhow::Result<()> {
+        self.write(SlotID::ZERO, root_offsets::MAJOR, &[major])
+            .await
+    }
+
     /// Resolves the slot the contract code is stored at: the raw `code_slot` root
     /// field if set, otherwise the default `code` slot.
     pub async fn resolve_code_slot(&mut self) -> anyhow::Result<SlotID> {
