@@ -17,14 +17,12 @@ pub struct Inner {
     ctx_val: mlua::Value,
 
     max_wait_after_loaded: std::time::Duration,
-
-    metrics: sync::DArc<super::Metrics>,
 }
 
 struct Handler(Arc<Inner>);
 
-impl common::MessageHandler<web_iface::Message, FullResponse> for Handler {
-    async fn handle(&self, message: web_iface::Message) -> common::ModuleResult<FullResponse> {
+impl common::MessageHandler<web_iface::Message, RenderAnswer> for Handler {
+    async fn handle(&self, message: web_iface::Message) -> common::ModuleResult<RenderAnswer> {
         match message {
             web_iface::Message::Request(payload, size_limit) => {
                 let vm = &self.0.user_vm.vm;
@@ -45,7 +43,7 @@ impl common::MessageHandler<web_iface::Message, FullResponse> for Handler {
 
                 let res = self.0.user_vm.vm.from_value(res)?;
 
-                Ok(FullResponse::Answer(RenderAnswer::Response(res)))
+                Ok(RenderAnswer::Response(res))
             }
             web_iface::Message::Render(payload, size_limit) => {
                 let vm = &self.0.user_vm.vm;
@@ -81,12 +79,7 @@ impl common::MessageHandler<web_iface::Message, FullResponse> for Handler {
 
                 let res = self.0.user_vm.vm.from_value(res)?;
 
-                Ok(FullResponse::Answer(res))
-            }
-
-            web_iface::Message::GetStats => {
-                let res = calldata::to_value(&self.0.metrics);
-                Ok(FullResponse::GetStats(res))
+                Ok(res)
             }
         }
     }
@@ -96,30 +89,12 @@ impl common::MessageHandler<web_iface::Message, FullResponse> for Handler {
     }
 }
 
-#[derive(serde::Serialize)]
-#[serde(untagged)]
-pub enum FullResponse {
-    Answer(web_iface::RenderAnswer),
-    GetStats(calldata::Value),
-}
-
-impl<W: calldata::Writer> calldata::codec::Encode<W> for FullResponse {
-    type Error = W::Error;
-
-    fn encode(&self, enc: &mut calldata::Encoder<W>) -> std::result::Result<(), Self::Error> {
-        match self {
-            FullResponse::Answer(v) => calldata::codec::Encode::encode(v, enc),
-            FullResponse::GetStats(v) => calldata::codec::Encode::encode(v, enc),
-        }
-    }
-}
-
 pub struct HandlerProvider {
     pub vm_pool: scripting::pool::Pool<ctx::VMData, Arc<ctx::CtxPart>, WebSubContext>,
     pub config: sync::DArc<super::config::Config>,
 }
 
-impl common::MessageHandlerProvider<genvm_modules_interfaces::web::Message, FullResponse>
+impl common::MessageHandlerProvider<genvm_modules_interfaces::web::Message, RenderAnswer>
     for HandlerProvider
 {
     type Ctx = WebSubContext;
@@ -143,7 +118,7 @@ impl common::MessageHandlerProvider<genvm_modules_interfaces::web::Message, Full
         &self,
         ctx: sync::DArc<WebSubContext>,
     ) -> anyhow::Result<
-        impl common::MessageHandler<genvm_modules_interfaces::web::Message, FullResponse>,
+        impl common::MessageHandler<genvm_modules_interfaces::web::Message, RenderAnswer>,
     > {
         let user_vm = self.vm_pool.get();
 
@@ -154,7 +129,6 @@ impl common::MessageHandlerProvider<genvm_modules_interfaces::web::Message, Full
             _ctx: handler_ctx,
             ctx_val,
             max_wait_after_loaded: self.config.max_wait_after_loaded.to_duration(),
-            metrics: sync::DArc::new(super::Metrics::default()),
         })))
     }
 }

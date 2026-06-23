@@ -15,7 +15,6 @@ pub struct Inner {
     _ctx: sync::DArc<ctx::CtxPart>,
     ctx_val: mlua::Value,
 
-    metrics: sync::DArc<super::Metrics>,
     genvm_id: genvm_modules_interfaces::GenVMId,
 }
 
@@ -27,25 +26,9 @@ pub struct Provider {
     pub providers: Arc<BTreeMap<String, Box<dyn super::providers::Provider + Send + Sync>>>,
 }
 
-#[derive(serde::Serialize)]
-#[serde(untagged)]
-pub enum FullResponse {
-    Answer(llm_iface::PromptAnswer),
-    GetStats(calldata::Value),
-}
-
-impl<W: calldata::Writer> calldata::codec::Encode<W> for FullResponse {
-    type Error = W::Error;
-
-    fn encode(&self, enc: &mut calldata::Encoder<W>) -> std::result::Result<(), Self::Error> {
-        match self {
-            FullResponse::Answer(v) => calldata::codec::Encode::encode(v, enc),
-            FullResponse::GetStats(v) => calldata::codec::Encode::encode(v, enc),
-        }
-    }
-}
-
-impl MessageHandlerProvider<genvm_modules_interfaces::llm::Message, FullResponse> for Provider {
+impl MessageHandlerProvider<genvm_modules_interfaces::llm::Message, llm_iface::PromptAnswer>
+    for Provider
+{
     type Ctx = LlmSubContext;
 
     fn create_execution_context(
@@ -70,8 +53,9 @@ impl MessageHandlerProvider<genvm_modules_interfaces::llm::Message, FullResponse
     async fn new_handler(
         &self,
         ctx: sync::DArc<LlmSubContext>,
-    ) -> anyhow::Result<impl MessageHandler<genvm_modules_interfaces::llm::Message, FullResponse>>
-    {
+    ) -> anyhow::Result<
+        impl MessageHandler<genvm_modules_interfaces::llm::Message, llm_iface::PromptAnswer>,
+    > {
         let genvm_id = ctx.scripting.hello.genvm_id;
         let user_vm = self.vm_pool.get();
 
@@ -85,7 +69,6 @@ impl MessageHandlerProvider<genvm_modules_interfaces::llm::Message, FullResponse
         }
 
         Ok(Handler(Arc::new(Inner {
-            metrics: handler_ctx.metrics.clone(),
             user_vm,
             _ctx: handler_ctx,
             ctx_val,
@@ -96,11 +79,11 @@ impl MessageHandlerProvider<genvm_modules_interfaces::llm::Message, FullResponse
 
 struct Handler(Arc<Inner>);
 
-impl crate::common::MessageHandler<llm_iface::Message, FullResponse> for Handler {
+impl crate::common::MessageHandler<llm_iface::Message, llm_iface::PromptAnswer> for Handler {
     async fn handle(
         &self,
         message: llm_iface::Message,
-    ) -> crate::common::ModuleResult<FullResponse> {
+    ) -> crate::common::ModuleResult<llm_iface::PromptAnswer> {
         match message {
             llm_iface::Message::Prompt {
                 payload,
@@ -138,20 +121,14 @@ impl crate::common::MessageHandler<llm_iface::Message, FullResponse> for Handler
                 self.0
                     .exec_prompt(self.0.clone(), payload, remaining_fuel_as_gen)
                     .await
-                    .map(FullResponse::Answer)
             }
             llm_iface::Message::PromptTemplate {
                 payload,
                 remaining_fuel_as_gen,
-            } => self
-                .0
-                .exec_prompt_template(self.0.clone(), payload, remaining_fuel_as_gen)
-                .await
-                .map(FullResponse::Answer),
-
-            llm_iface::Message::GetStats => {
-                let res = calldata::to_value(&self.0.metrics);
-                Ok(FullResponse::GetStats(res))
+            } => {
+                self.0
+                    .exec_prompt_template(self.0.clone(), payload, remaining_fuel_as_gen)
+                    .await
             }
         }
     }

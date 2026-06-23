@@ -274,56 +274,11 @@ pub async fn run_with(
             .context("notify non-deterministic disagreement")?;
     }
 
-    log_debug!("all executions done, collecting stats");
+    // Module (llm/web) metrics are collected by the manager from its own
+    // execution context; the executor only reports its own counters here.
+    let gvm_metrics = calldata::to_value(&supervisor.shared_data.metrics);
 
-    let web_metrics = supervisor
-        .modules
-        .web
-        .get_stats(genvm_modules_interfaces::web::Message::GetStats)
-        .await
-        .ok();
-    let llm_metrics = supervisor
-        .modules
-        .llm
-        .get_stats(genvm_modules_interfaces::llm::Message::GetStats)
-        .await
-        .ok();
-
-    #[derive(serde::Serialize)]
-    struct AllMetrics<'a> {
-        web: Option<calldata::Value>,
-        llm: Option<calldata::Value>,
-        gvm: &'a crate::Metrics,
-    }
-
-    impl<W: calldata::Writer> calldata::codec::Encode<W> for AllMetrics<'_> {
-        type Error = W::Error;
-
-        fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
-            enc.start_map(3)?;
-
-            enc.push_map_k("gvm")?;
-            calldata::codec::Encode::encode(self.gvm, enc)?;
-
-            enc.push_map_k("llm")?;
-            calldata::codec::Encode::encode(&self.llm, enc)?;
-
-            enc.push_map_k("web")?;
-            calldata::codec::Encode::encode(&self.web, enc)?;
-
-            Ok(())
-        }
-    }
-
-    let all_metrics = AllMetrics {
-        web: web_metrics,
-        llm: llm_metrics,
-        gvm: &supervisor.shared_data.metrics,
-    };
-
-    let all_metrics = calldata::to_value(&all_metrics);
-
-    log_info!(metrics:serde = all_metrics; "metrics");
+    log_info!(metrics:serde = gvm_metrics; "metrics");
 
     log_debug!("sending final result");
 

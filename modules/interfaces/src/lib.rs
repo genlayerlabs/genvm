@@ -311,8 +311,6 @@ pub mod llm {
             payload: PromptTemplatePayload,
             remaining_fuel_as_gen: primitive_types::U256,
         },
-
-        GetStats,
     }
 
     #[derive(
@@ -366,7 +364,6 @@ pub mod web {
     pub enum Message {
         Render(RenderPayload, u32),
         Request(RequestPayload, u32),
-        GetStats,
     }
 
     #[derive(Serialize, Deserialize, genlayer_calldata::Encode, genlayer_calldata::Decode)]

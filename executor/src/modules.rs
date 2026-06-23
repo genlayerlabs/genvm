@@ -194,26 +194,6 @@ impl Module {
         }
     }
 
-    pub async fn get_stats<V>(&self, val: V) -> anyhow::Result<calldata::Value>
-    where
-        V: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible>,
-    {
-        let zelf = self.imp.lock().await;
-        let mut zelf = sync::Lock::new(zelf, self.metrics.gep(|x| &x.time));
-
-        match &mut zelf.stream {
-            None => Ok(calldata::Value::Null),
-            Some(stream) => {
-                write_message(stream, &calldata::encode_obj(&val)).await?;
-                let response = read_message(stream).await?;
-
-                let response = calldata::decode(&response)?;
-
-                Ok(response)
-            }
-        }
-    }
-
     pub async fn send<R, V>(&self, val: V) -> anyhow::Result<std::result::Result<R, GenericValue>>
     where
         V: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible>,
