@@ -56,6 +56,7 @@ function ipv4IsBad(ip: string): boolean {
 		(a === 192 && b === 168) || // 192.168.0.0/16 private
 		(a === 100 && b >= 64 && b <= 127) || // 100.64.0.0/10 CGNAT
 		(a === 192 && b === 0 && c === 2) || // 192.0.2.0/24 documentation
+		(a === 198 && b >= 18 && b <= 19) || // 198.18.0.0/15 benchmarking
 		(a === 198 && b === 51 && c === 100) || // 198.51.100.0/24 documentation
 		(a === 203 && b === 0 && c === 113) || // 203.0.113.0/24 documentation
 		a >= 224 // 224.0.0.0/3 multicast + reserved + broadcast
@@ -152,6 +153,7 @@ function ipv6IsBad(ip: string): boolean {
 	return (
 		(first & 0xfe00) === 0xfc00 || // fc00::/7 unique-local
 		(first & 0xffc0) === 0xfe80 || // fe80::/10 link-local
+		(first & 0xffc0) === 0xfec0 || // fec0::/10 deprecated site-local
 		(first & 0xff00) === 0xff00 // ff00::/8 multicast
 	);
 }

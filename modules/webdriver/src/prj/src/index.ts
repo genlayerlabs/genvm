@@ -248,6 +248,12 @@ async function renderPageWithBrowser(
 
 	try {
 		await ssrf.installSsrfGuard(page);
+		context.on('targetcreated', async (target) => {
+			const p = await target.page();
+			if (p && p !== page) {
+				await ssrf.installSsrfGuard(p);
+			}
+		});
 		page.setViewport({ width: 1920 / 2, height: 1080 / 2 });
 
 		return await withHeapMonitor(page, maxPageHeapMB, async () => {
