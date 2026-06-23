@@ -125,9 +125,6 @@ def exec_prompt(
 
 	format = config.get('response_format', 'text')
 
-	if format == 'json':
-		format = 'json2'
-
 	return gl_call.gl_call_generic(
 		{
 			'ExecPrompt': {
@@ -136,7 +133,7 @@ def exec_prompt(
 				'images': images,
 			}
 		},
-		_decode_nondet_json if format == 'json2' else _decode_nondet,
+		_decode_nondet_json if format == 'json' else _decode_nondet,
 	)
 
 
