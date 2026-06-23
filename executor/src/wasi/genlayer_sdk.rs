@@ -250,6 +250,22 @@ pub struct VMDataAccumulator {
     pub message_fee_allocation: Vec<domain::fees::MessageAllocationNode>,
 }
 
+impl VMDataAccumulator {
+    /// Asserts the accumulator carries no surfaced effects (events,
+    /// message-fee allocations). Call it after running a sub-VM whose
+    /// accumulator is discarded (e.g. a `CallContract` child) to guarantee no
+    /// effect was charged but silently dropped. Returns a fatal error otherwise.
+    pub fn check_empty(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.emissions.is_empty() && self.message_fee_allocation.is_empty(),
+            "internal error: discarded sub-VM accumulator is not empty ({} emission(s), {} message-fee allocation(s))",
+            self.emissions.len(),
+            self.message_fee_allocation.len(),
+        );
+        Ok(())
+    }
+}
+
 pub struct SingleVMData {
     pub conf: base::Config,
     pub depth: u32,
@@ -768,6 +784,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let res = rt::spawn_apply_run(&supervisor, vm_data)
                     .await
+                    .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
+                // The child is read-only (static), so its accumulator must be
+                // empty — otherwise an effect was charged but discarded here.
+                res.vm_data
+                    .accumulator
+                    .check_empty()
                     .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
                 let hash = res.small_hash();
