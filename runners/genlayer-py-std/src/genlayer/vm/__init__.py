@@ -20,6 +20,8 @@ __all__ = (
 	'Result',
 	'trace',
 	'trace_time_micro',
+	'yield_',
+	'get_timestamp',
 	'register_runner',
 	'map_file',
 	'ABI',
@@ -35,6 +37,7 @@ IS_INSIDE = IS_IN_VM
 
 import typing
 import dataclasses
+import datetime
 import collections.abc
 
 from genlayer.types import Lazy
@@ -344,6 +347,30 @@ def trace_time_micro() -> int:
 			},
 		},
 		lambda x: typing.cast(int, calldata.decode(x)),
+	).get()
+
+
+def yield_() -> None:
+	"""
+	Cooperative yield. Currently a no-op, reserved for future use in waiting loops.
+	"""
+	wasi.gl_call(calldata.encode({'Yield': None}))
+
+
+def get_timestamp() -> datetime.datetime:
+	"""
+	Returns the current timestamp as a timezone-aware ``datetime``.
+
+	In deterministic mode it is the transaction timestamp; in
+	non-deterministic mode it is the real wall-clock time.
+	"""
+	return gl_call.gl_call_generic(
+		{
+			'GetTimestamp': None,
+		},
+		lambda x: datetime.datetime.fromtimestamp(
+			typing.cast(int, calldata.decode(x)), datetime.timezone.utc
+		),
 	).get()
 
 
