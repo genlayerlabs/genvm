@@ -95,7 +95,7 @@ impl Reader {
 
     pub fn has_in_all(&self, id: &str, hash: &str) -> bool {
         match self.all.get(id) {
-            Some(hashes) => hashes.iter().any(|h| h.as_str() == hash),
+            Some(hashes) => hashes.binary_search_by(|h| h.as_str().cmp(hash)).is_ok(),
             None => false,
         }
     }
