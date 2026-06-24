@@ -149,7 +149,15 @@ impl VFS {
             return Err(rt::errors::VMError(abi::consts::VmError::oom().ram().val(), None).into());
         }
 
-        let fd = self.alloc_fd()?;
+        let fd = match self.alloc_fd() {
+            Ok(fd) => fd,
+            Err(e) => {
+                if value.release_memory {
+                    self.limiter.release(value.contents.len() as u32);
+                }
+                return Err(e);
+            }
+        };
         self.fds.insert(fd, FileDescriptor::File(value));
         Ok(fd)
     }
