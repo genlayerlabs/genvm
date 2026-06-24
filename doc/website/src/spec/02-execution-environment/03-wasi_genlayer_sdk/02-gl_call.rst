@@ -498,3 +498,53 @@ Requirements
 
 #. GenVM version 0.1.10 or higher
 #. :term:`GenVM` implementation is allowed ignore this message
+
+``Yield`` Message
+-----------------
+
+Cooperative yield. Currently a no-op and returns no value; it is reserved for future use in waiting loops.
+
+Payload
+~~~~~~~
+
+.. code-block::
+
+   {
+     "Yield": null
+   }
+
+.. note::
+
+   Implementations may choose to ignore this message.
+
+Requirements
+~~~~~~~~~~~~
+
+#. GenVM version 0.3.0 or higher
+#. :term:`GenVM` implementation is allowed ignore this message
+
+.. _get-timestamp:
+
+``GetTimestamp`` Message
+------------------------
+
+Returns the current timestamp as the number of seconds since the Unix epoch.
+
+In :ref:`gvm-def-det-mode` it returns the transaction timestamp, keeping the value deterministic across validators.
+In :ref:`gvm-def-non-det-mode` it returns the real wall-clock time.
+
+Payload
+~~~~~~~
+
+.. code-block::
+
+   {
+     "GetTimestamp": null
+   }
+
+Returns the timestamp encoded as a :ref:`Calldata Encoded <gvm-def-calldata-encoding>` number.
+
+Requirements
+~~~~~~~~~~~~
+
+#. GenVM version 0.3.0 or higher

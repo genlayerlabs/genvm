@@ -1352,6 +1352,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 path_in_vfs,
             } => self.map_file(runner, path_in_runner, path_in_vfs).await,
             gl_call::Message::Trace(message) => self.gl_call_trace(message).await,
+            gl_call::Message::Yield => Ok(file_fd_none()),
+            gl_call::Message::GetTimestamp => self.gl_call_get_timestamp().await,
         }
     }
 
@@ -1595,6 +1597,21 @@ impl ContextVFS<'_> {
                 self.place_content(vfs::FileContents::from(bytes::Bytes::from(data)))
             }
         }
+    }
+
+    async fn gl_call_get_timestamp(
+        &mut self,
+    ) -> Result<generated::types::Fd, generated::types::Error> {
+        let timestamp = if self.context.data.conf.is_deterministic {
+            self.context.data.message_data.message.datetime.timestamp()
+        } else {
+            chrono::Utc::now().timestamp()
+        };
+
+        let data = calldata::encode(&calldata::Value::Number(num_bigint::BigInt::from(
+            timestamp,
+        )));
+        self.place_content(vfs::FileContents::from(bytes::Bytes::from(data)))
     }
 
     async fn register_runner(

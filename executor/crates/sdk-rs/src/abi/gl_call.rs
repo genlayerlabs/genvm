@@ -594,4 +594,14 @@ pub enum Message {
     Return(calldata::unparsed::Maybe<calldata::Value>),
 
     Trace(TracePayload),
+
+    /// Cooperative yield. Currently a no-op; reserved for future use in
+    /// waiting loops.
+    Yield,
+
+    /// Get the current timestamp as seconds since the Unix epoch.
+    ///
+    /// In [deterministic mode](super) returns the transaction timestamp; in
+    /// non-deterministic mode returns the real wall-clock time.
+    GetTimestamp,
 }
