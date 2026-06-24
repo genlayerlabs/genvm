@@ -405,11 +405,6 @@ Requirements
 
 Topics must be exactly 32 bytes each.
 
-``Rollback`` Message
---------------------
-
-Deprecated. Use ``UserError`` instead.
-
 ``UserError`` Message
 ---------------------
 
