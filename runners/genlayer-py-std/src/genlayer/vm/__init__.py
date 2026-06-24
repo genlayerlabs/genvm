@@ -160,6 +160,7 @@ def _decode_sub_vm_result(
 def spawn_sandbox[T: calldata.Decoded](
 	fn: typing.Callable[[], T],
 	*,
+	runner: str = 'contract',
 	allow_write_storage: bool = False,
 	allow_send_messages: bool = False,
 	allow_register_runners: bool = False,
@@ -175,6 +176,7 @@ def spawn_sandbox[T: calldata.Decoded](
 	only if the current VM holds it as well.
 
 	:param fn: Function to execute in the sandbox (must be serializable with cloudpickle)
+	:param runner: runner id the sandbox loads instead of this contract's code; ``contract`` (default) reuses this contract's runner, a ``custom:<hash>``/``name:hash``/``chain:`` id runs that runner
 	:param allow_write_storage: Whether to allow storage writes in the sandbox
 	:param allow_send_messages: Whether to allow sending messages in the sandbox
 	:param allow_register_runners: Whether to allow registering runners in the sandbox
@@ -189,6 +191,7 @@ def spawn_sandbox[T: calldata.Decoded](
 		{
 			'Sandbox': {
 				'data': cloudpickle.dumps(fn),
+				'runner': runner,
 				'allow_write_storage': allow_write_storage,
 				'allow_send_messages': allow_send_messages,
 				'allow_register_runners': allow_register_runners,
