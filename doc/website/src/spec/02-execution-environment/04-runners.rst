@@ -17,10 +17,12 @@ forms (see the ``runner-id`` definition in the runner.json schema):
 - ``<human-readable-id>:<hash>`` — a packaged runner. ``human-readable-id`` is
   provided for convenience; ``hash`` is a hash of its contents (see `Hash Format`_).
 - ``contract`` — the runner of the contract currently being executed.
-- ``chain:<address>:<a|f>:<slot>`` — a runner code blob read from a storage slot
-  of an arbitrary contract (``a`` = accepted, ``f`` = finalized). ``<address>`` is
-  a ``0x`` 20 byte hex address and ``<slot>`` is a :term:`SlotID` encoded with
-  :doc:`../../04-contract-interface/06-gvm32`.
+- ``chain:<address>[:<a|f>[:<slot>]]`` — a runner code blob read from a storage
+  slot of an arbitrary contract (``a`` = accepted, ``f`` = finalized). ``<address>``
+  is a ``0x`` 20 byte hex address and ``<slot>`` is a :term:`SlotID` encoded with
+  :doc:`../../04-contract-interface/06-gvm32`. Both ``<a|f>`` and ``<slot>`` are
+  optional: ``<a|f>`` defaults to ``a`` and ``<slot>`` to the target contract's
+  root code slot.
 - ``custom:<hash>`` — a runner registered at runtime via the ``RegisterRunner``
   ``gl_call``, looked up by its hash.
 
