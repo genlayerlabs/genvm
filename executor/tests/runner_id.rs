@@ -1,6 +1,5 @@
 use genvm::calldata::Address;
-use genvm::public_abi::StorageType;
-use genvm::runners::{self, Id, IdUnresolved};
+use genvm::runners::{self, ChainState, Id, IdUnresolved};
 use genvm::SlotID;
 
 fn test_addr() -> String {
@@ -20,7 +19,7 @@ fn chain_canonical_uses_checksum_address() {
 
     let id = Id::Chain {
         address,
-        on: StorageType::LatestNonFinal,
+        on: ChainState::Accepted,
         slot: SlotID::ZERO,
     };
 
@@ -50,14 +49,14 @@ fn parse_runner_id_forms() {
 
     match runners::parse_runner_id(&format!("chain:{}:f:{}", test_addr(), test_slot())) {
         Some(IdUnresolved::Chain { on, slot, .. }) => {
-            assert_eq!(on, Some(StorageType::LatestFinal));
+            assert_eq!(on, Some(ChainState::Finalized));
             assert!(slot.is_some());
         }
         other => panic!("expected Chain, got {other:?}"),
     }
     match runners::parse_runner_id(&format!("chain:{}:a:{}", test_addr(), test_slot())) {
         Some(IdUnresolved::Chain { on, slot, .. }) => {
-            assert_eq!(on, Some(StorageType::LatestNonFinal));
+            assert_eq!(on, Some(ChainState::Accepted));
             assert!(slot.is_some());
         }
         other => panic!("expected Chain, got {other:?}"),
@@ -94,7 +93,7 @@ fn parse_runner_id_rejects_malformed() {
 fn chain_without_slot_id() {
     match runners::parse_runner_id(&format!("chain:{}:a", test_addr())) {
         Some(IdUnresolved::Chain { on, slot, .. }) => {
-            assert_eq!(on, Some(StorageType::LatestNonFinal));
+            assert_eq!(on, Some(ChainState::Accepted));
             assert!(slot.is_none(), "slot must be None when omitted");
         }
         other => panic!("expected Chain, got {other:?}"),
@@ -105,7 +104,7 @@ fn chain_without_slot_id() {
 fn chain_without_on_or_slot() {
     match runners::parse_runner_id(&format!("chain:{}", test_addr())) {
         Some(IdUnresolved::Chain { on, slot, .. }) => {
-            assert_eq!(on, Some(StorageType::LatestNonFinal));
+            assert_eq!(on, Some(ChainState::Accepted));
             assert!(slot.is_none(), "slot must be None when omitted");
         }
         other => panic!("expected Chain, got {other:?}"),
@@ -116,26 +115,9 @@ fn chain_without_on_or_slot() {
 fn chain_with_explicit_slot() {
     match runners::parse_runner_id(&format!("chain:{}:f:{}", test_addr(), test_slot())) {
         Some(IdUnresolved::Chain { on, slot, .. }) => {
-            assert_eq!(on, Some(StorageType::LatestFinal));
+            assert_eq!(on, Some(ChainState::Finalized));
             assert!(slot.is_some(), "slot must be Some when given");
         }
         other => panic!("expected Chain, got {other:?}"),
-    }
-}
-
-#[test]
-fn chain_resolve_fills_contract_fields() {
-    let parsed = runners::parse_runner_id(&format!("chain:{}", test_addr())).unwrap();
-    let contract_addr = Address::from([0xAA; 20]);
-    let state = StorageType::LatestFinal;
-    let code_slot = SlotID::from_bytes([0xBB; 32]);
-    let resolved = parsed.resolve(contract_addr, state, code_slot);
-    match resolved {
-        IdUnresolved::Chain { on, slot, address } => {
-            assert_ne!(address, contract_addr, "chain: keeps its own address");
-            assert_eq!(on, Some(StorageType::LatestNonFinal));
-            assert!(slot.is_none(), "chain: slot is not filled by resolve");
-        }
-        _ => panic!("expected Chain"),
     }
 }

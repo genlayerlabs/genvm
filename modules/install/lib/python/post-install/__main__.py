@@ -170,24 +170,26 @@ if patch_interpreter:
 
 	lief.logging.set_level(lief.logging.LEVEL.ERROR)
 
-HASH_VALID_CHARS = '0123456789abcdfghijklmnpqrsvwxyz'
+# gvm32 (Crockford's Base32, big-endian, no padding) — the encoding the executor
+# uses for runner hashes / on-disk paths. MUST match support/runner-script.py,
+# executor/crates/sdk-rs/src/gvm32.rs and runners/genlayer-py-std/.../gvm32.py.
+# NOT Nix base32 (which uses a different alphabet AND little-endian bit order).
+HASH_VALID_CHARS = '0123456789abcdefghjkmnpqrstvwxyz'
 
 
 def digest_to_hash_id(got_hash: bytes) -> str:
-	chars = '0123456789abcdfghijklmnpqrsvwxyz'
-
-	bytes_count = len(got_hash)
-	base32_len = (bytes_count * 8 - 1) // 5 + 1
-
-	my_hash_arr = []
-	for n in range(base32_len - 1, -1, -1):
-		b = n * 5
-		i = b // 8
-		j = b % 8
-		c = (got_hash[i] >> j) | (0 if i >= bytes_count - 1 else got_hash[i + 1] << (8 - j))
-		my_hash_arr.append(chars[c & 0x1F])
-
-	return ''.join(my_hash_arr)
+	out = []
+	value = 0
+	bits = 0
+	for byte in got_hash:
+		value = (value << 8) | byte
+		bits += 8
+		while bits >= 5:
+			bits -= 5
+			out.append(HASH_VALID_CHARS[(value >> bits) & 0x1F])
+	if bits > 0:
+		out.append(HASH_VALID_CHARS[(value << (5 - bits)) & 0x1F])
+	return ''.join(out)
 
 
 def runner_check_bytes(data: bytes, hash: str) -> bool:
