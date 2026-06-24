@@ -1344,12 +1344,14 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             } => self.run_nondet(data_leader, data_validator).await,
             gl_call::Message::Sandbox {
                 data,
+                runner,
                 allow_write_storage,
                 allow_send_messages,
                 allow_register_runners,
             } => {
                 self.sandbox(
                     data,
+                    runner,
                     allow_write_storage,
                     allow_send_messages,
                     allow_register_runners,
@@ -1905,11 +1907,18 @@ impl ContextVFS<'_> {
     async fn sandbox(
         &mut self,
         data: bytes::Bytes,
+        runner: String,
         allow_write_storage: bool,
         allow_send_messages: bool,
         allow_register_runners: bool,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         let supervisor = self.context.data.supervisor.clone();
+
+        let parent_runner_id = self.context.data.conf.topmost_runner_id.clone();
+        let topmost_runner_id =
+            rt::supervisor::actions::resolve_runner_id(&supervisor, &parent_runner_id, &runner)
+                .await
+                .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
         let message_data = self
             .context
@@ -1947,7 +1956,7 @@ impl ContextVFS<'_> {
                 can_send_messages: zelf_conf.can_send_messages & allow_send_messages,
                 can_register_runners: zelf_conf.can_register_runners & allow_register_runners,
                 state_mode: zelf_conf.state_mode,
-                topmost_runner_id: self.context.data.conf.topmost_runner_id.clone(),
+                topmost_runner_id,
             },
             message_data,
             supervisor: supervisor.clone(),
