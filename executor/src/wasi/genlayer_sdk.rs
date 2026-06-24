@@ -1658,7 +1658,10 @@ impl ContextVFS<'_> {
         let is_det = self.context.data.conf.is_deterministic;
         let limiter = supervisor.limiter.get(is_det);
         let contract_address = self.context.data.message_data.message.contract_address;
-        let state = self.context.data.conf.state_mode;
+        let state = crate::runners::ChainState::for_vm(
+            self.context.data.message_data.message.is_init,
+            self.context.data.conf.state_mode,
+        );
         let code_slot = self.context.data.conf.code_slot;
         let available_custom = self.context.data.accumulator.custom_runners.clone();
 

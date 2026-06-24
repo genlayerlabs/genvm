@@ -174,6 +174,16 @@ pub async fn run_with_impl(
         topmost_storage
             .write_major(genvm_common::version::CURRENT.major as u8)
             .await?;
+
+        let code_slot = rt::vm::storage::default_code_slot();
+        let archive = runners::parse(code.clone()).map_err(|e| {
+            rt::errors::VMError::wrap(public_abi::VmError::invalid_contract().val(), e)
+        })?;
+        supervisor.prepopulate_deploy_runner(
+            entry_data.message.contract_address,
+            code_slot,
+            archive,
+        );
     } else {
         log_debug!("code is null");
     }

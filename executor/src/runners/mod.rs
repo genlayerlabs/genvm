@@ -23,6 +23,42 @@ pub fn append_runner_subpath(id: &str, hash: &str, path: &mut std::path::PathBuf
     path.push(&hash[2..]);
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChainState {
+    Accepted,
+    Finalized,
+    Deploy,
+}
+
+impl ChainState {
+    pub fn for_vm(is_init: bool, state: crate::public_abi::StorageType) -> Self {
+        if is_init {
+            ChainState::Deploy
+        } else {
+            match state {
+                crate::public_abi::StorageType::LatestFinal => ChainState::Finalized,
+                _ => ChainState::Accepted,
+            }
+        }
+    }
+
+    pub fn host_storage_type(self) -> Option<crate::public_abi::StorageType> {
+        match self {
+            ChainState::Accepted => Some(crate::public_abi::StorageType::LatestNonFinal),
+            ChainState::Finalized => Some(crate::public_abi::StorageType::LatestFinal),
+            ChainState::Deploy => None,
+        }
+    }
+
+    fn canonical_char(self) -> char {
+        match self {
+            ChainState::Accepted => 'a',
+            ChainState::Finalized => 'f',
+            ChainState::Deploy => 'd',
+        }
+    }
+}
+
 /// A parsed runner id. Runner ids come in the following forms:
 ///
 /// - `name:hash` — a packaged runner identified by its human readable name and
@@ -45,7 +81,7 @@ pub enum IdUnresolved {
     Contract,
     Chain {
         address: calldata::Address,
-        on: Option<crate::public_abi::StorageType>,
+        on: Option<ChainState>,
         slot: Option<crate::SlotID>,
     },
     Custom {
@@ -60,7 +96,7 @@ pub enum Id {
     },
     Chain {
         address: calldata::Address,
-        on: crate::public_abi::StorageType,
+        on: ChainState,
         slot: crate::SlotID,
     },
     Custom {
@@ -78,7 +114,7 @@ impl IdUnresolved {
     pub fn resolve(
         self,
         contract_address: calldata::Address,
-        state: crate::public_abi::StorageType,
+        state: ChainState,
         code_slot: crate::SlotID,
     ) -> IdUnresolved {
         match self {
@@ -104,18 +140,12 @@ impl Id {
                 id.push_str(&hash.to_gvm32());
                 symbol_table::GlobalSymbol::from(id)
             }
-            Id::Chain { address, on, slot } => {
-                let on = match *on {
-                    crate::public_abi::StorageType::LatestFinal => 'f',
-                    _ => 'a',
-                };
-                symbol_table::GlobalSymbol::from(format!(
-                    "chain:0x{}:{}:{}",
-                    address.checksum_hex_string(),
-                    on,
-                    genlayer_sdk::gvm32::encode(&slot.raw())
-                ))
-            }
+            Id::Chain { address, on, slot } => symbol_table::GlobalSymbol::from(format!(
+                "chain:0x{}:{}:{}",
+                address.checksum_hex_string(),
+                on.canonical_char(),
+                genlayer_sdk::gvm32::encode(&slot.raw())
+            )),
             Id::Custom { hash } => {
                 let mut id = String::from("custom:");
                 id.push_str(&hash.to_gvm32());
@@ -155,8 +185,8 @@ pub fn parse_runner_id(id: &str) -> Option<IdUnresolved> {
 
         let address = calldata::Address::from(parse_hex_fixed::<20>(address)?);
         let on = match on_str {
-            Some("a") | None => Some(crate::public_abi::StorageType::LatestNonFinal),
-            Some("f") => Some(crate::public_abi::StorageType::LatestFinal),
+            Some("a") | None => Some(ChainState::Accepted),
+            Some("f") => Some(ChainState::Finalized),
             _ => return None,
         };
         let slot = match slot_str {

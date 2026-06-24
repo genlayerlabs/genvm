@@ -12,7 +12,7 @@ pub struct Ctx<'a, 'b> {
     pub visited: HashSet<symbol_table::GlobalSymbol>,
     pub contract_id: symbol_table::GlobalSymbol,
     pub contract_address: calldata::Address,
-    pub state: public_abi::StorageType,
+    pub state: runners::ChainState,
     pub code_slot: crate::SlotID,
     pub supervisor: &'a rt::supervisor::Supervisor,
     pub vm: &'b mut rt::vm::VMBase,
@@ -60,7 +60,7 @@ enum ResolvedKind {
     /// address/state/`code_slot`.
     Chain {
         address: calldata::Address,
-        on: public_abi::StorageType,
+        on: runners::ChainState,
         slot: crate::SlotID,
     },
     /// `custom:<hash>` — a runner registered at runtime.
@@ -81,7 +81,7 @@ struct Resolved {
 async fn resolve_runner(
     supervisor: &rt::supervisor::Supervisor,
     contract_address: calldata::Address,
-    state: public_abi::StorageType,
+    state: runners::ChainState,
     code_slot: crate::SlotID,
     id: &str,
 ) -> anyhow::Result<Resolved> {
@@ -132,10 +132,15 @@ async fn resolve_runner(
             }
         }
         runners::IdUnresolved::Chain { address, on, slot } => {
-            let on = on.unwrap_or(public_abi::StorageType::LatestNonFinal);
+            let on = on.unwrap_or(runners::ChainState::Accepted);
             let slot = match slot {
                 Some(s) => s,
                 None => {
+                    let mode = on.host_storage_type().ok_or_else(|| {
+                        make_malformed_runner_error(
+                            "deploy-state chain runner cannot resolve its code slot from chain",
+                        )
+                    })?;
                     let mut storage = rt::vm::storage::Storage::new(
                         address,
                         supervisor.get_storage_limiter(),
@@ -143,7 +148,7 @@ async fn resolve_runner(
                             supervisor.host.clone(),
                             crate::wasi::genlayer_sdk::ReadToken {
                                 account: address,
-                                mode: on,
+                                mode,
                             },
                         ),
                     );
@@ -217,6 +222,11 @@ async fn get_arch(
                 .get_or_create(
                     id,
                     || async {
+                        let mode = on.host_storage_type().ok_or_else(|| {
+                            make_malformed_runner_error(
+                                "deploy-state chain runner is not available on chain",
+                            )
+                        })?;
                         let mut storage = rt::vm::storage::Storage::new(
                             address,
                             supervisor.get_storage_limiter(),
@@ -224,7 +234,7 @@ async fn get_arch(
                                 supervisor.host.clone(),
                                 crate::wasi::genlayer_sdk::ReadToken {
                                     account: address,
-                                    mode: on,
+                                    mode,
                                 },
                             ),
                         );
@@ -279,7 +289,7 @@ async fn get_arch(
 pub(crate) async fn load_runner(
     supervisor: &rt::supervisor::Supervisor,
     contract_address: calldata::Address,
-    state: public_abi::StorageType,
+    state: runners::ChainState,
     code_slot: crate::SlotID,
     limiter: &rt::memlimiter::Limiter,
     id: &str,
@@ -382,7 +392,7 @@ pub(crate) async fn map_runner_file(
     preview1: &mut crate::wasi::preview1::Context,
     limiter: &rt::memlimiter::Limiter,
     contract_address: calldata::Address,
-    state: public_abi::StorageType,
+    state: runners::ChainState,
     code_slot: crate::SlotID,
     runner: &str,
     path_in_runner: &str,
