@@ -233,6 +233,21 @@ impl Supervisor {
         self.custom_runners.get(&hash).map(|r| r.clone())
     }
 
+    pub fn prepopulate_deploy_runner(
+        &self,
+        address: calldata::Address,
+        code_slot: crate::SlotID,
+        archive: runners::Archive,
+    ) {
+        let id = runners::Id::Chain {
+            address,
+            on: runners::ChainState::Deploy,
+            slot: code_slot,
+        }
+        .canonical();
+        self.runner_cache.put(id, archive);
+    }
+
     /// Registers a runner from its `code`, returning the `custom:<hash>` id it can
     /// be referenced by.
     ///
@@ -458,9 +473,20 @@ async fn apply_contract_actions_inner(
         .data
         .conf
         .code_slot = code_slot;
+    let is_init = vm
+        .vm_base
+        .store
+        .data()
+        .genlayer_ctx
+        .genlayer_sdk
+        .data
+        .message_data
+        .message
+        .is_init;
+    let runner_state = runners::ChainState::for_vm(is_init, state);
     let contract_id = runners::Id::Chain {
         address: contract_address,
-        on: state,
+        on: runner_state,
         slot: code_slot,
     }
     .canonical();
@@ -523,7 +549,7 @@ async fn apply_contract_actions_inner(
         visited: HashSet::new(),
         contract_id,
         contract_address,
-        state,
+        state: runner_state,
         code_slot,
         supervisor: zelf,
         vm: &mut vm.vm_base,

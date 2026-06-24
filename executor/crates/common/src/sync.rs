@@ -444,6 +444,11 @@ impl<T> CacheMap<T> {
         Self(dashmap::DashMap::new())
     }
 
+    pub fn insert(&self, key: symbol_table::GlobalSymbol, value: T) {
+        self.0
+            .insert(key, DArc::new(tokio::sync::OnceCell::new_with(Some(value))));
+    }
+
     pub async fn get_or_create<Err, F>(
         &self,
         key: symbol_table::GlobalSymbol,

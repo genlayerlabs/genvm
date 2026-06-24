@@ -104,6 +104,10 @@ impl Reader {
         &self.runners_data_path
     }
 
+    pub fn put(&self, id: symbol_table::GlobalSymbol, archive: Archive) {
+        self.cache.insert(id, ArchiveCache::new(id, archive));
+    }
+
     pub async fn get_or_create<F>(
         &self,
         name: symbol_table::GlobalSymbol,
