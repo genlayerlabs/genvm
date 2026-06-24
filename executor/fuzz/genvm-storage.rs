@@ -155,27 +155,27 @@ async fn run_storage_fuzz(input: FuzzInput) -> anyhow::Result<()> {
                 genvm::config::FeesConfig {
                     expr_prelude: String::new(),
                     storage: genvm::config::FeesBucketConfig {
-                        bucket_no: 0,
+                        bucket_no: vec![0],
                         subtract_on_start_expr: "0".into(),
                         delta_expr: r"\attrs = 0".into(),
                     },
                     message_receipt: genvm::config::FeesBucketConfig {
-                        bucket_no: 0,
+                        bucket_no: vec![0],
                         subtract_on_start_expr: "0".into(),
                         delta_expr: r"\attrs = 0".into(),
                     },
                     nondet_output: genvm::config::FeesBucketConfig {
-                        bucket_no: 0,
+                        bucket_no: vec![0],
                         subtract_on_start_expr: "0".into(),
                         delta_expr: r"\attrs = 0".into(),
                     },
                     message_fee: genvm::config::FeesBucketConfig {
-                        bucket_no: 0,
+                        bucket_no: vec![0],
                         subtract_on_start_expr: "0".into(),
                         delta_expr: r"\attrs = 0".into(),
                     },
                     event: genvm::config::FeesBucketConfig {
-                        bucket_no: 0,
+                        bucket_no: vec![0],
                         subtract_on_start_expr: "0".into(),
                         delta_expr: r"\attrs = 0".into(),
                     },
