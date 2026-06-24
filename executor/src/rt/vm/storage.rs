@@ -5,7 +5,7 @@ use const_lru::ConstLru;
 use genlayer_sdk::abi;
 use genvm_common::{calldata, sync};
 
-use crate::{public_abi::root_offsets, rt, SlotID};
+use crate::{public_abi::root_offsets, rt, runners, SlotID};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(C)]
@@ -444,6 +444,25 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         } else {
             Ok(SlotID::from_bytes(raw))
         }
+    }
+
+    /// Verifies the contract's major version matches this node's, then resolves
+    /// its code slot. The major is checked *first*, before trusting the
+    /// host-read code-slot pointer; on mismatch a `major_mismatch` [`VMError`]
+    /// is returned so the caller surfaces it as a contract error.
+    pub async fn check_major_and_resolve_code_slot(&mut self) -> anyhow::Result<SlotID> {
+        let contract_major = self.read_major().await?;
+        let node_major = genvm_common::version::CURRENT.major;
+        if contract_major as u16 != node_major {
+            return Err(rt::errors::VMError(
+                abi::consts::VmError::invalid_contract().major_mismatch(),
+                Some(anyhow::anyhow!(
+                    "contract major {contract_major} != node major {node_major}"
+                )),
+            )
+            .into());
+        }
+        self.resolve_code_slot().await
     }
 
     pub async fn read_code_at(

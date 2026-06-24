@@ -1,8 +1,8 @@
 use serde::Serialize;
 
-use crate::public_abi;
+use crate::{public_abi, runners};
 
-#[derive(Clone, Copy, Serialize, genlayer_calldata::Encode)]
+#[derive(Clone, Serialize, genlayer_calldata::Encode)]
 pub struct Config {
     pub needs_error_fingerprint: bool,
     pub is_deterministic: bool,
@@ -13,7 +13,7 @@ pub struct Config {
     pub can_call_others: bool,
     pub can_register_runners: bool,
     pub state_mode: public_abi::StorageType,
-    pub code_slot: crate::SlotID,
+    pub topmost_runner_id: runners::Id,
 }
 
 impl Config {

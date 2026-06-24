@@ -9,7 +9,7 @@ use sha3::digest::Update;
 use wiggle::GuestError;
 
 use crate::host::{self, SlotID};
-use crate::{anyhow_to_wasmtime, calldata, public_abi, rt, wasi};
+use crate::{anyhow_to_wasmtime, calldata, public_abi, rt, runners, wasi};
 
 use genlayer_calldata::codec::Encode;
 pub use genlayer_sdk::abi::entry::ExtendedMessage;
@@ -715,7 +715,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let supervisor = self.context.data.supervisor.clone();
 
-                let my_conf = self.context.data.conf;
+                let my_conf = self.context.data.conf.clone();
 
                 let calldata_encoded = calldata::encode_obj(&calldata);
 
@@ -728,6 +728,23 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let calldata_encoded = calldata::encode_obj(&calldata);
 
+                let mut child_storage = rt::vm::storage::Storage::new(
+                    address,
+                    supervisor.get_storage_limiter(),
+                    StorageHostHolder(
+                        supervisor.host.clone(),
+                        ReadToken {
+                            account: address,
+                            mode: state,
+                        },
+                    ),
+                );
+
+                let code_slot = child_storage
+                    .check_major_and_resolve_code_slot()
+                    .await
+                    .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
                 let vm_data = Box::new(SingleVMData {
                     depth: self.context.data.depth + 1,
                     // Permission model: doc/website/src/spec/03-vm/05-permissions.rst
@@ -738,14 +755,18 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         can_write_storage: false,
                         can_spawn_nondet: my_conf.can_spawn_nondet,
                         can_call_others: my_conf.can_call_others,
-                        // A `CallContract` child is read-only (static): it cannot
-                        // write storage, send messages, or emit events. Emissions
-                        // from the child are discarded, so allowing them would
-                        // charge fees for effects that never surface.
                         can_send_messages: false,
                         can_register_runners: my_conf.can_register_runners,
                         state_mode: state,
-                        code_slot: crate::SlotID::ZERO,
+                        topmost_runner_id: runners::Id::Chain {
+                            address,
+                            on: if state == public_abi::StorageType::LatestFinal {
+                                runners::ChainState::Finalized
+                            } else {
+                                runners::ChainState::Accepted
+                            },
+                            slot: code_slot,
+                        },
                     },
                     message_data: ExtendedMessage {
                         message: genlayer_sdk::abi::entry::MessageData {
@@ -762,17 +783,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         entry_data: my_data.entry_data,
                         entry_stage_data: default_entry_stage_data(),
                     },
-                    storage: rt::vm::storage::Storage::new(
-                        address,
-                        supervisor.get_storage_limiter(),
-                        StorageHostHolder(
-                            supervisor.host.clone(),
-                            ReadToken {
-                                account: address,
-                                mode: state,
-                            },
-                        ),
-                    ),
+                    storage: child_storage,
                     supervisor: supervisor.clone(),
                     accumulator: VMDataAccumulator {
                         data_fees_limit: self.context.data.accumulator.data_fees_limit.clone(),
@@ -1657,22 +1668,19 @@ impl ContextVFS<'_> {
         let supervisor = self.context.data.supervisor.clone();
         let is_det = self.context.data.conf.is_deterministic;
         let limiter = supervisor.limiter.get(is_det);
-        let contract_address = self.context.data.message_data.message.contract_address;
-        let state = crate::runners::ChainState::for_vm(
-            self.context.data.message_data.message.is_init,
-            self.context.data.conf.state_mode,
-        );
-        let code_slot = self.context.data.conf.code_slot;
+        let topmost_runner_id = self.context.data.conf.topmost_runner_id.clone();
         let available_custom = self.context.data.accumulator.custom_runners.clone();
+
+        let runner =
+            rt::supervisor::actions::resolve_runner_id(&supervisor, &topmost_runner_id, &runner)
+                .await
+                .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
         rt::supervisor::actions::map_runner_file(
             &supervisor,
             self.preview1,
             limiter,
-            contract_address,
-            state,
-            code_slot,
-            &runner,
+            runner,
             &path_in_runner,
             &path_in_vfs,
             &available_custom,
@@ -1845,7 +1853,7 @@ impl ContextVFS<'_> {
                     can_send_messages: false,
                     can_register_runners: false,
                     state_mode: public_abi::StorageType::Default,
-                    code_slot: crate::SlotID::ZERO,
+                    topmost_runner_id: self.context.data.conf.topmost_runner_id.clone(),
                 },
                 message_data,
                 supervisor: supervisor.clone(),
@@ -1939,7 +1947,7 @@ impl ContextVFS<'_> {
                 can_send_messages: zelf_conf.can_send_messages & allow_send_messages,
                 can_register_runners: zelf_conf.can_register_runners & allow_register_runners,
                 state_mode: zelf_conf.state_mode,
-                code_slot: crate::SlotID::ZERO,
+                topmost_runner_id: self.context.data.conf.topmost_runner_id.clone(),
             },
             message_data,
             supervisor: supervisor.clone(),

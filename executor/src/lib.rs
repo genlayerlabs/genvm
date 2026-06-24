@@ -165,28 +165,57 @@ pub async fn run_with_impl(
         ),
     );
 
-    if let Some(code) = &entry_data.code {
-        log_debug!("using provided code for execution");
+    let topmost_runner_id = match async {
+        anyhow::Ok(if let Some(code) = &entry_data.code {
+            log_debug!("using provided code for execution");
 
-        topmost_storage.write_code(code).await?;
-        // Record the major this contract is deployed for, so later runs can
-        // verify major compatibility (see `read_major` / major_mismatch check).
-        topmost_storage
-            .write_major(genvm_common::version::CURRENT.major as u8)
-            .await?;
+            topmost_storage.write_code(code).await?;
+            // Record the major this contract is deployed for, so later runs can
+            // verify major compatibility (see `read_major` / major_mismatch check).
+            topmost_storage
+                .write_major(genvm_common::version::CURRENT.major as u8)
+                .await?;
 
-        let code_slot = rt::vm::storage::default_code_slot();
-        let archive = runners::parse(code.clone()).map_err(|e| {
-            rt::errors::VMError::wrap(public_abi::VmError::invalid_contract().val(), e)
-        })?;
-        supervisor.prepopulate_deploy_runner(
-            entry_data.message.contract_address,
-            code_slot,
-            archive,
-        );
-    } else {
-        log_debug!("code is null");
+            let code_slot = rt::vm::storage::default_code_slot();
+            let archive = runners::parse(code.clone()).map_err(|e| {
+                rt::errors::VMError::wrap(public_abi::VmError::invalid_contract().val(), e)
+            })?;
+            supervisor.prepopulate_deploy_runner(
+                entry_data.message.contract_address,
+                code_slot,
+                archive,
+            );
+
+            runners::Id::Chain {
+                address: entry_data.message.contract_address,
+                on: runners::ChainState::Deploy,
+                slot: code_slot,
+            }
+        } else {
+            log_debug!("code is null");
+
+            let code_slot = topmost_storage.check_major_and_resolve_code_slot().await?;
+
+            runners::Id::Chain {
+                address: entry_data.message.contract_address,
+                on: runners::ChainState::Accepted,
+                slot: code_slot,
+            }
+        })
     }
+    .await
+    {
+        Ok(id) => id,
+        // A VMError raised while preparing the contract (bad code, major
+        // mismatch, missing code slot) is a contract error, not an internal
+        // failure: surface it as a VMError result. Genuine internal errors still
+        // propagate via `?`.
+        Err(e) => {
+            return Ok(rt::vm::FullResult::empty_from(
+                rt::errors::unwrap_vm_errors(e.into())?,
+            ));
+        }
+    };
 
     let data_fees_limit = supervisor.shared_data.gep(|x| &x.data_fees_limit);
 
@@ -203,7 +232,7 @@ pub async fn run_with_impl(
             can_spawn_nondet: permissions.contains("n"),
             can_register_runners: permissions.contains("u"),
             state_mode: crate::public_abi::StorageType::Default,
-            code_slot: crate::SlotID::ZERO,
+            topmost_runner_id,
         },
         message_data: ExtendedMessage {
             message: entry_data.message,
