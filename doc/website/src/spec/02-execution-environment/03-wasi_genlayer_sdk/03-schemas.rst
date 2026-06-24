@@ -19,13 +19,13 @@ results through a file descriptor with the following binary format:
 Where ``result_code`` is a :ref:`gvm-def-enum-result-code`:
 
 - :ref:`gvm-def-enum-value-result-code-return` (``0``): Successful execution
-- :ref:`gvm-def-enum-value-result-code-user-error` (``1``): Contract-initiated error via ``Rollback``
+- :ref:`gvm-def-enum-value-result-code-user-error` (``1``): Contract-initiated error
 - :ref:`gvm-def-enum-value-result-code-vm-error` (``2``): VM-level error
 
 The ``data`` portion depends on the result code:
 
 - **return**: :ref:`Calldata Encoded <gvm-def-calldata-encoding>` return value
-- **user_error**: UTF-8 encoded error message string (from ``Rollback`` message)
+- **user_error**: :ref:`Calldata Encoded <gvm-def-calldata-encoding>` error value
 - **vm_error**: UTF-8 encoded :ref:`gvm-def-str-trie-vm-error` string
 
 .. _gvm-def-module-result-encoding:
