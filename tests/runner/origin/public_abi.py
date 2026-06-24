@@ -34,11 +34,11 @@ memory_limiter_consts: typing.Final = _MemoryLimiterConsts()
 
 
 class _RootOffsets(typing.NamedTuple):
-	CONTRACT: int = 0
-	CODE: int = 1
-	LOCKED_SLOTS: int = 2
-	UPGRADERS: int = 3
-	MAJOR: int = 4
+	MAJOR: int = 0
+	CONTRACT: int = 1
+	CODE: int = 2
+	LOCKED_SLOTS: int = 3
+	UPGRADERS: int = 4
 	CODE_SLOT: int = 5
 
 root_offsets: typing.Final = _RootOffsets()
