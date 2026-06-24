@@ -17,7 +17,8 @@
         "anyOf": [
           {
             "pattern": "^[a-zA-Z0-9_-]+:[a-zA-Z0-9_=-]+$",
-            "description": "`name:hash` — packaged runner by human readable name and archive hash (in debug mode hash may be `test`/`latest`)"
+            "not": { "pattern": "^(contract|chain|custom):" },
+            "description": "`name:hash` — packaged runner by human readable name and archive hash (in debug mode hash may be `test`/`latest`). `contract`/`chain`/`custom` are reserved and cannot be used as a name"
           },
           {
             "const": "contract",
