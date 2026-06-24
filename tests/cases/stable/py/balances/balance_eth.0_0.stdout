@@ -1,0 +1,10 @@
+main self 10
+main At(self) 10
+=== transfer ===
+main self 5
+main At(self) 10
+=== call .view() ===
+nested self 10
+nested At(self) 10
+executed with `Return(null)`
+{"address":addr#0200000000000000000000000000000000000000,"calldata":b#,"fee_params":{"gas_limit":1606938044258990275541962092341162602522202993782792835301376,"max_gas_price":0},"message_fee":0,"receipt_fee":129,"type":"EthSend","value":5}

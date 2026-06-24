@@ -5,6 +5,10 @@ from genlayer.types import *
 
 class Contract(gl.contract.Contract):
 	def __init__(self):
+		pass
+
+	@gl.public.write
+	def main(self):
 		print('main self', self.balance)
 		print('main At(self)', gl.contract.get_at(gl.message.contract_address).balance)
 		print('=== transfer ===')
