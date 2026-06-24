@@ -1,6 +1,6 @@
 __all__ = ('STORAGE_MAN', 'ROOT_SLOT_ID')
 
-from genlayer.storage.core import Manager, Slot, ROOT_SLOT_ID
+from genlayer.storage.core import Manager, Slot, ROOT_SLOT_ID, slot_id_to_bytes
 from genlayer.types import u256
 
 import _genlayer_wasi as wasi
@@ -15,7 +15,8 @@ class _ActualStorageMan(Manager):
 	def __init__(self):
 		self._slots = {}
 
-	def get_store_slot(self, addr: bytes) -> Slot:
+	def get_store_slot(self, addr: bytes | u256) -> Slot:
+		addr = slot_id_to_bytes(addr)
 		ret = self._slots.get(addr, None)
 		if ret is None:
 			ret = Slot(addr, self)

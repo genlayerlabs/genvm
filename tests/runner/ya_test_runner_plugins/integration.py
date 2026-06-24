@@ -524,16 +524,10 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 							bytes([public_abi.ResultCode.RETURN]) + gvm_calldata.encode(res['value'])
 						)
 					elif res['kind'] == 'user_error':
-						if isinstance(res['value'], str):
-							encoded_nondet.append(
-								bytes([public_abi.ResultCode.USER_ERROR]) + res['value'].encode('utf-8')
-							)
-						else:
-							encoded_nondet.append(
-								bytes([public_abi.ResultCode.USER_ERROR])
-								+ b'\x00\x00\x00\x00'
-								+ gvm_calldata.encode(res['value'])
-							)
+						encoded_nondet.append(
+							bytes([public_abi.ResultCode.USER_ERROR])
+							+ gvm_calldata.encode(res['value'])
+						)
 					elif res['kind'] == 'vm_error':
 						encoded_nondet.append(
 							bytes([public_abi.ResultCode.VM_ERROR]) + res['value'].encode('utf-8')

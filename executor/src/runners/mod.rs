@@ -161,7 +161,7 @@ pub fn parse_runner_id(id: &str) -> Option<IdUnresolved> {
         };
         let slot = match slot_str {
             Some(s) => {
-                let bytes: [u8; 32] = genlayer_sdk::gvm32::decode(s)?.try_into().ok()?;
+                let bytes: [u8; 32] = genlayer_sdk::gvm32::decode(s).ok()?.try_into().ok()?;
                 Some(crate::SlotID::from_bytes(bytes))
             }
             None => None,

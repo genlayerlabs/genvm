@@ -69,6 +69,17 @@ class Root:
 		"""
 		return self._storage_slot  # type: ignore
 
+	def get_resolved_code(self) -> VLA[u8]:
+		"""
+		Return the storage slot where the contract code is stored.
+
+		:returns: code storage slot
+		"""
+		if self.code_slot == 0:
+			return self.code.get()
+		else:
+			return Root.MANAGER.get_store_slot(self.code_slot).cast(VLA[u8], 0)
+
 	def get_vacant_slot(self) -> Slot:
 		"""
 		This slot can be used to store data without worrying about overwriting contract data.

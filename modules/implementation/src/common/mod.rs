@@ -1,7 +1,7 @@
 use base64::Engine;
 use genvm_common::*;
 use genvm_modules_interfaces::GenericValue;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 

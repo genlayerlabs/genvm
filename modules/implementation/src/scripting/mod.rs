@@ -13,6 +13,7 @@ use std::{collections::BTreeMap, future::Future, sync::Arc};
 use crate::common::{self, ModuleError};
 
 pub use ctx::filters;
+pub use ctx::req::Request;
 pub use ctx::CtxPart;
 pub use ctx::Metrics;
 

@@ -15,7 +15,7 @@ in rec {
 		add-mod-name = import ./tools/genvm-wasm-add-mod-name args;
 	};
 
-	gvm32 = import ./gvm32.nix { lib = pkgs.lib; };
+	gvm32 = import ./gvm32.nix;
 	# dev-mode magic hash: the literal gvm32 string "test" padded with "0"s to 52 chars
 	testRunnerHash = "test" + (builtins.concatStringsSep "" (builtins.genList (_: "0") 48));
 	hashToIDHash = hash: if hash == "test" then testRunnerHash else gvm32.encodeHex (builtins.convertHash { inherit hash; toHashFormat = "base16"; });

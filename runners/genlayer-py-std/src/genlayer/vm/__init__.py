@@ -119,11 +119,7 @@ def _decode_sub_vm_result_retn(
 ) -> Result:
 	mem = memoryview(data)
 	if mem[0] == ResultCode.USER_ERROR:
-		payload = mem[1:]
-		if len(payload) >= 4 and bytes(payload[:4]) == b'\x00\x00\x00\x00':
-			return UserError(calldata.decode(payload[4:]))
-		else:
-			return UserError(str(payload, encoding='utf8'))
+		return UserError(calldata.decode(mem[1:]))
 	if mem[0] == ResultCode.RETURN:
 		return Return(calldata.decode(mem[1:]))
 	if mem[0] == ResultCode.VM_ERROR:

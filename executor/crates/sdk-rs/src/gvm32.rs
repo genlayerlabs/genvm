@@ -37,10 +37,38 @@ fn decode_char(c: u8) -> Option<u8> {
     ALPHABET.iter().position(|&b| b == c).map(|p| p as u8)
 }
 
+/// Reason a [`decode`] call failed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DecodeError {
+    /// A character outside the Crockford Base32 alphabet (after the `i`/`l`/`o`
+    /// aliases and `-` handling).
+    InvalidChar(char),
+    /// The final group carried non-zero padding bits, so the input is not a
+    /// canonical encoding of any byte sequence. Carries the number of leftover
+    /// `bits` and their non-zero `value` to aid debugging.
+    NonZeroPadding { bits: u32, value: u32 },
+}
+
+impl core::fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            DecodeError::InvalidChar(c) => write!(f, "invalid gvm32 character `{c}`"),
+            DecodeError::NonZeroPadding { bits, value } => write!(
+                f,
+                "non-zero gvm32 trailing padding: {bits} bit(s) = {value:#x}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for DecodeError {}
+
 /// Decodes a Crockford Base32 string. Case-insensitive; `i`/`l` are read as `1`,
-/// `o` as `0` and `-` is ignored. Returns `None` on an invalid character or
-/// non-zero trailing padding bits.
-pub fn decode(s: &str) -> Option<Vec<u8>> {
+/// `o` as `0` and `-` is ignored.
+///
+/// Fails with [`DecodeError::InvalidChar`] on a character outside the alphabet
+/// or [`DecodeError::NonZeroPadding`] on non-zero trailing padding bits.
+pub fn decode(s: &str) -> Result<Vec<u8>, DecodeError> {
     let mut out = Vec::with_capacity(s.len() * 5 / 8);
     let mut value: u32 = 0;
     let mut bits: u32 = 0;
@@ -48,7 +76,8 @@ pub fn decode(s: &str) -> Option<Vec<u8>> {
         if c == b'-' {
             continue;
         }
-        value = (value << 5) | decode_char(c)? as u32;
+        let digit = decode_char(c).ok_or(DecodeError::InvalidChar(c as char))?;
+        value = (value << 5) | digit as u32;
         bits += 5;
         if bits >= 8 {
             bits -= 8;
@@ -57,7 +86,7 @@ pub fn decode(s: &str) -> Option<Vec<u8>> {
         }
     }
     if value != 0 {
-        return None;
+        return Err(DecodeError::NonZeroPadding { bits, value });
     }
-    Some(out)
+    Ok(out)
 }

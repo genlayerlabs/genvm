@@ -27,10 +27,47 @@ impl Bytes32Hash {
         genlayer_sdk::gvm32::encode(&self.0)
     }
 
-    /// Parses a hash from its GVM32 form. Returns `None` for an invalid encoding
-    /// or one that does not decode to exactly 32 bytes.
-    pub fn from_gvm32(s: &str) -> Option<Self> {
-        genlayer_sdk::gvm32::decode(s)?.try_into().ok().map(Self)
+    /// Parses a hash from its GVM32 form.
+    ///
+    /// Fails with [`FromGvm32Error::InvalidEncoding`] for a malformed encoding or
+    /// [`FromGvm32Error::WrongLength`] for one that does not decode to exactly 32
+    /// bytes.
+    pub fn from_gvm32(s: &str) -> Result<Self, FromGvm32Error> {
+        let bytes = genlayer_sdk::gvm32::decode(s).map_err(FromGvm32Error::InvalidEncoding)?;
+        let got = bytes.len();
+        let bytes: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| FromGvm32Error::WrongLength { got })?;
+        Ok(Self(bytes))
+    }
+}
+
+/// Error returned by [`Bytes32Hash::from_gvm32`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FromGvm32Error {
+    /// The string is not valid GVM32.
+    InvalidEncoding(genlayer_sdk::gvm32::DecodeError),
+    /// Decoded successfully, but not to exactly 32 bytes.
+    WrongLength { got: usize },
+}
+
+impl std::fmt::Display for FromGvm32Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FromGvm32Error::InvalidEncoding(e) => write!(f, "invalid gvm32 encoding: {e}"),
+            FromGvm32Error::WrongLength { got } => {
+                write!(f, "expected 32 bytes, got {got}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for FromGvm32Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            FromGvm32Error::InvalidEncoding(e) => Some(e),
+            FromGvm32Error::WrongLength { .. } => None,
+        }
     }
 }
 
