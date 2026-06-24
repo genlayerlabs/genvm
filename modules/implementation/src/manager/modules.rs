@@ -92,6 +92,18 @@ pub struct StartRequest {
     pub user_error: bool,
 }
 
+struct StartRealArgs<F>
+where
+    F: Fn() + Send + Sync + 'static,
+{
+    config: serde_json::Value,
+    allow_empty_backends: bool,
+    nested_cancel: Arc<cancellation::Token>,
+    cancel_token: Arc<cancellation::Token>,
+    canceller: F,
+    replace: bool,
+}
+
 /// Creates a stream handler that always responds with `Result::UserError` for every request.
 /// Maintains the wire protocol (reads hello, then loops reading messages and writing error responses).
 fn create_user_error_stream_handler() -> StreamHandler {
@@ -223,12 +235,14 @@ impl Ctx {
         } else {
             self.start_real(
                 req.module_type,
-                config,
-                req.allow_empty_backends,
-                nested_cancel,
-                module_cancel,
-                canceller,
-                replace,
+                StartRealArgs {
+                    config,
+                    allow_empty_backends: req.allow_empty_backends,
+                    nested_cancel,
+                    cancel_token: module_cancel,
+                    canceller,
+                    replace,
+                },
             )
             .await
         }
@@ -299,16 +313,19 @@ impl Ctx {
         Ok(())
     }
 
-    async fn start_real(
-        &self,
-        module_type: Type,
-        config: serde_json::Value,
-        allow_empty_backends: bool,
-        nested_cancel: Arc<cancellation::Token>,
-        cancel_token: Arc<cancellation::Token>,
-        canceller: impl Fn() + Send + Sync + 'static,
-        replace: bool,
-    ) -> anyhow::Result<()> {
+    async fn start_real<F>(&self, module_type: Type, args: StartRealArgs<F>) -> anyhow::Result<()>
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let StartRealArgs {
+            config,
+            allow_empty_backends,
+            nested_cancel,
+            cancel_token,
+            canceller,
+            replace,
+        } = args;
+
         match module_type {
             Type::Llm => {
                 let mut module_lock = self.llm_module.write().await;

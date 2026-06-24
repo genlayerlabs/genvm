@@ -60,8 +60,12 @@ fn case_insensitive_and_aliases() {
 
 #[test]
 fn rejects_invalid() {
+    use gvm32::DecodeError;
     // `u` is not in the alphabet and is not an alias
-    assert_eq!(gvm32::decode("u"), None);
+    assert_eq!(gvm32::decode("u"), Err(DecodeError::InvalidChar('u')));
     // non-zero trailing padding bits
-    assert_eq!(gvm32::decode("01"), None);
+    assert_eq!(
+        gvm32::decode("01"),
+        Err(DecodeError::NonZeroPadding { bits: 2, value: 1 })
+    );
 }

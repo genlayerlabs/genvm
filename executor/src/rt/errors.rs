@@ -11,14 +11,29 @@ impl std::error::Error for VMError {}
 
 impl std::fmt::Display for VMError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "VMError({})", self.0 .0)
+        if f.alternate() {
+            f.write_fmt(format_args!("VMError({},", self.0 .0))?;
+            if let Some(cause) = &self.1 {
+                f.write_fmt(format_args!("{})", cause))?;
+            } else {
+                f.write_str("None)")?;
+                return Ok(());
+            };
+        } else {
+            f.write_fmt(format_args!("VMError({})", self.0 .0))?;
+        }
+
+        Ok(())
     }
 }
 
 impl VMError {
     pub fn wrap<E: Into<anyhow::Error>>(message: abi::consts::VmError, cause: E) -> Self {
         match cause.into().downcast::<VMError>() {
-            Err(cause) => Self(message, Some(cause)),
+            Err(cause) => {
+                log_debug!(vm_error = message.0, cause:ah = cause; "wrapping VMError");
+                Self(message, Some(cause))
+            }
             Ok(v) => v,
         }
     }

@@ -77,6 +77,9 @@ pub async fn spawn_apply_run(
                 ),
                 SpawnErrorState::Unspawned(vm_data) => (Default::default(), vm_data),
             };
+
+            log_debug!(error:ah = error; "spawn_apply_run failed");
+
             match errors::unwrap_vm_errors_backtrace(errors::UnwrapDynError::from(error)) {
                 Ok((run_ok, backtrace)) => Ok(vm::RunResult {
                     run_ok,
@@ -104,5 +107,6 @@ async fn spawn_apply_run_inner(
 }
 
 use anyhow::Context;
+use genvm_common::log_debug;
 
 use crate::wasi;

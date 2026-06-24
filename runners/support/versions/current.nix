@@ -1,6 +1,11 @@
 let
 	dev-mode = import ./dev-mode.nix;
 
+	# gvm32 (Crockford Base32) — the encoding the executor uses for runner hash
+	# ids. The embedded `uid` (consumed by `Depends`) MUST use this, matching the
+	# on-disk runner paths and `hashToIDHash` in ../default.nix.
+	gvm32 = import ../gvm32.nix;
+
 	src = rec {
 		__prefix = "";
 
@@ -8,7 +13,7 @@ let
 			__prefix = "models-";
 
 			all-MiniLM-L6-v2 = {
-				hash = "test";
+				hash = "sha256-OlZQmCyKA+ct9hV4G12vSRUYUYB2S1CdDjIG2ueaOjQ=";
 			};
 		};
 
@@ -16,22 +21,22 @@ let
 			__prefix = "py-lib-";
 
 			cloudpickle = {
-				hash = "test";
+				hash = "sha256-X/SQxZDU/Ep9D5ptzccqMiewgUh6mtt3vMyA+ZnqrHA=";
 			};
 			protobuf = {
-				hash = "test";
+				hash = "sha256-i0mGEqZ5XvoYCK5EZLZe48BltX8UYDxsiBQ8wJDratE=";
 			};
 
 			word_piece_tokenizer = {
-				hash = "test";
+				hash = "sha256-3T57N4bs1eSBaudAg0Dwi87d7kbu+anEYlGFH4Q3ujA=";
 			};
 
 			genlayer-std = {
-				hash = "test";
+				hash = "sha256-S4iSRVAS2wiavW9WmBriJ+svcJi6V67ybR/uSmYK+a0=";
 			};
 
 			genlayer-embeddings = {
-				hash = "test";
+				hash = "sha256-Lw2tC5IdLPhw4M+Zfp2igB9NUI9m3PgNyUmb9GMSQWQ=";
 
 				depends = [
 					models.all-MiniLM-L6-v2
@@ -42,20 +47,20 @@ let
 		};
 
 		cpython = {
-			hash = "test";
+			hash = "sha256-LqsYHYqiAYnwDoXMpHOQHqvQCa+Dh9562J5ClfEggxI=";
 			depends = [
 				softfloat
 			];
 		};
 
 		softfloat = {
-			hash = "test";
+			hash = "sha256-aR7i/mGXm+x7ofoL7iJ1zUHsVyqkAsZG0mQ/Lj1+l4c=";
 		};
 
 		wrappers = {
 			__prefix = "";
 			py-genlayer = {
-				hash = "test";
+				hash = "sha256-8Z0LeUX7ApxuBoi+Q/esPRLFO9i7ozaC2iEUb0idy8k=";
 				depends = [
 					cpython
 					pyLibs.cloudpickle
@@ -63,7 +68,7 @@ let
 				];
 			};
 			py-genlayer-multi = {
-				hash = "test";
+				hash = "sha256-Vhwo4+ksqqRSp9BGDcHz461UiDXfb3g8rdLrqIAkLB0=";
 				depends = [
 					cpython
 					pyLibs.cloudpickle
@@ -132,7 +137,7 @@ let
 					if deducedHash == null
 					then fakeHash
 					else deducedHash;
-				hash32 = if deducedHash == "test" then "test" else builtins.convertHash { hash = hashSRI; toHashFormat = "nix32"; };
+				hash32 = if deducedHash == "test" then "test" else gvm32.encodeHex (builtins.convertHash { hash = hashSRI; toHashFormat = "base16"; });
 			in rec {
 				id = pref + name;
 

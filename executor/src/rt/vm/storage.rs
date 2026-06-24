@@ -165,6 +165,10 @@ impl<HS: Send + Sync> Storage<HS> {
     }
 }
 
+pub fn default_code_slot() -> SlotID {
+    SlotID::ZERO.indirection(root_offsets::CODE)
+}
+
 impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
     pub async fn read(
         &mut self,
@@ -397,7 +401,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
     }
 
     pub async fn write_code(&mut self, code: &[u8]) -> anyhow::Result<()> {
-        let code_slot = SlotID::ZERO.indirection(root_offsets::CODE);
+        let code_slot = default_code_slot();
 
         if code.len() > (u32::MAX - 4) as usize {
             return Err(rt::errors::VMError(abi::consts::VmError::oom().storage(), None).into());
@@ -436,7 +440,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         self.read(SlotID::ZERO, root_offsets::CODE_SLOT, &mut raw)
             .await?;
         if raw == [0u8; 32] {
-            Ok(SlotID::ZERO.indirection(root_offsets::CODE))
+            Ok(default_code_slot())
         } else {
             Ok(SlotID::from_bytes(raw))
         }

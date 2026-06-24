@@ -94,33 +94,31 @@ async fn resolve_runner(
     let resolved: runners::Id = match parsed.resolve(contract_address, state, code_slot) {
         runners::IdUnresolved::Contract => unreachable!("contract is resolved to chain"),
         runners::IdUnresolved::Builtin { name, hash } => {
-            let hash: Bytes32Hash = if hash == "test" {
+            let hash: Bytes32Hash = if hash == "test" || hash == "latest" {
                 if !supervisor.shared_data.debug_mode.allows_latest_resolution() {
-                    log_warn!(":test runner used in non-debug mode, this is not allowed");
-                    return Err(make_malformed_runner_error(
-                        "runner id doesn't match expected format",
-                    ));
-                }
-                runners::TEST_RUNNER_HASH
-            } else if hash == "latest" {
-                if !supervisor.shared_data.debug_mode.allows_latest_resolution() {
-                    log_warn!(":latest runner used in non-debug mode, this is not allowed");
+                    log_warn!(":{hash} runner used in non-debug mode, this is not allowed");
                     return Err(make_malformed_runner_error(
                         "runner id doesn't match expected format",
                     ));
                 }
                 let new_latest = supervisor.runner_cache.get_latest(&name);
-                log_info!(runner_id = name.as_str(); "resolving :latest runner");
+                log_info!(runner_id = name.as_str(), tag = hash.as_str(); "resolving :test/:latest runner");
                 let Some(new_latest) = new_latest else {
                     return Err(make_malformed_runner_error(
                         "runner id doesn't match expected format",
                     ));
                 };
-                Bytes32Hash::from_gvm32(new_latest)
-                    .ok_or_else(|| make_malformed_runner_error("runner hash is not valid gvm32"))?
+                Bytes32Hash::from_gvm32(new_latest).map_err(|e| {
+                    make_malformed_runner_error(&format!(
+                        "runner hash `{new_latest}` is not valid gvm32: {e}"
+                    ))
+                })?
             } else {
-                Bytes32Hash::from_gvm32(&hash)
-                    .ok_or_else(|| make_malformed_runner_error("runner hash is not valid gvm32"))?
+                Bytes32Hash::from_gvm32(&hash).map_err(|e| {
+                    make_malformed_runner_error(&format!(
+                        "runner hash `{hash}` is not valid gvm32: {e}"
+                    ))
+                })?
             };
 
             let hash_gvm32 = hash.to_gvm32();
@@ -160,8 +158,10 @@ async fn resolve_runner(
             runners::Id::Chain { address, on, slot }
         }
         runners::IdUnresolved::Custom { hash } => {
-            let hash = Bytes32Hash::from_gvm32(&hash).ok_or_else(|| {
-                make_malformed_runner_error("custom runner hash is not valid gvm32")
+            let hash = Bytes32Hash::from_gvm32(&hash).map_err(|e| {
+                make_malformed_runner_error(&format!(
+                    "custom runner hash `{hash}` is not valid gvm32: {e}"
+                ))
             })?;
             runners::Id::Custom { hash }
         }
@@ -330,7 +330,13 @@ pub(crate) fn map_archive_file(
             }
 
             if !name.starts_with(must_start_with) {
-                log_trace!(from = file, to = to, name = name; "aborting file mapping");
+                log_trace!(
+                    from = file,
+                    to = to,
+                    name = name,
+                    must_start_with = must_start_with;
+                    "aborting file mapping"
+                );
                 break;
             }
 
@@ -645,9 +651,13 @@ impl Ctx<'_, '_> {
                     return Ok(None);
                 }
 
-                log_trace!(uid = resolved.id; "adding dependency");
+                let uid = resolved.id.clone();
+                log_trace!(uid = uid; "adding dependency");
 
-                let (uid, new_arch) = self.get_arch(resolved).await?;
+                let (uid, new_arch) = self
+                    .get_arch(resolved)
+                    .await
+                    .with_context(|| format!("getting archive for {uid}"))?;
 
                 let new_action = new_arch
                     .get_actions()
@@ -656,7 +666,7 @@ impl Ctx<'_, '_> {
 
                 Box::pin(self.apply(&new_action, uid, &new_arch))
                     .await
-                    .with_context(|| format!("Depends {uid}"))
+                    .with_context(|| format!("applying Depends {uid}"))
             }
         }
     }

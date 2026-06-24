@@ -7,20 +7,33 @@ import hashlib
 from genlayer.types import u256
 
 
+def slot_id_to_bytes(slot_id: u256 | bytes) -> bytes:
+	if isinstance(slot_id, int):
+		return slot_id.to_bytes(32, 'little', signed=False)
+	elif isinstance(slot_id, bytes):
+		if len(slot_id) != 32:
+			raise ValueError(f'slot_id must be 32 bytes, got {len(slot_id)}')
+		return slot_id
+	else:
+		raise TypeError(f'slot_id must be u256 or bytes, got {type(slot_id)}')
+
+
 class Manager(metaclass=abc.ABCMeta):
 	"""
 	Abstract interface for storage backends.
 	"""
 
-	def get_store_slot(self, slot_id: bytes, /) -> 'Slot':
+	@abc.abstractmethod
+	def get_store_slot(self, slot_id: bytes | u256, /) -> 'Slot':
 		"""
 		Return a slot for the given address, creating one if necessary.
 
-		:param slot_id: 32-byte slot address
+		:param slot_id: 32-byte slot address or 256-bit slot address
 		:returns: storage slot
 		"""
 		...
 
+	@abc.abstractmethod
 	def do_read(self, slot_id: bytes, off: int, len: int, /) -> bytes:
 		"""
 		Read raw bytes from storage.
@@ -32,6 +45,7 @@ class Manager(metaclass=abc.ABCMeta):
 		"""
 		...
 
+	@abc.abstractmethod
 	def do_write(self, slot_id: bytes, off: int, what: collections.abc.Buffer, /):
 		"""
 		Write raw bytes to storage.
@@ -496,7 +510,8 @@ class InmemManager(Manager):
 	def __init__(self):
 		self._parts = {}
 
-	def get_store_slot(self, id: bytes) -> Slot:
+	def get_store_slot(self, id: bytes | u256) -> Slot:
+		id = slot_id_to_bytes(id)
 		res = self._parts.get(id, None)
 		if res is None:
 			slt = Slot(id, self)

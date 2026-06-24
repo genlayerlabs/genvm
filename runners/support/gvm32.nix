@@ -4,13 +4,20 @@
 # runners/genlayer-py-std/src/genlayer/gvm32.py. Used to derive runner content
 # hash ids. Implemented per output symbol (not by accumulating the whole value)
 # so it never overflows Nix's 64-bit integers, even for long hashes.
-{ lib }:
+#
+# Pure: depends only on `builtins`, so it can be imported from contexts that do
+# not have nixpkgs `lib` (e.g. versions/current.nix).
 let
-	alphabet = lib.stringToCharacters "0123456789abcdefghjkmnpqrstvwxyz";
+	# string -> list of single-character strings (like lib.stringToCharacters)
+	stringToChars = s:
+		builtins.genList (i: builtins.substring i 1 s) (builtins.stringLength s);
+
+	alphabet = stringToChars "0123456789abcdefghjkmnpqrstvwxyz";
 
 	# Nix `/` is integer division for ints; there is no `%` operator.
 	mod = a: b: a - b * (a / b);
-	pow2 = n: builtins.foldl' (acc: _: acc * 2) 1 (lib.range 1 n);
+	# 2^n; the generated list's elements are irrelevant, only its length matters.
+	pow2 = n: builtins.foldl' (acc: _: acc * 2) 1 (builtins.genList (x: x) n);
 
 	hexValues = {
 		"0" = 0; "1" = 1; "2" = 2; "3" = 3; "4" = 4; "5" = 5; "6" = 6; "7" = 7;
@@ -21,7 +28,7 @@ let
 	# hex string -> list of byte integers
 	hexToBytes = hex:
 		let
-			chars = lib.stringToCharacters hex;
+			chars = stringToChars hex;
 			charsLen = builtins.length chars;
 			# integer division truncates, so reject odd lengths instead of
 			# silently dropping the final nibble (which would corrupt the hash).
@@ -52,7 +59,7 @@ let
 				in
 				builtins.elemAt alphabet v;
 		in
-		lib.concatStrings (builtins.genList symAt nsym);
+		builtins.concatStringsSep "" (builtins.genList symAt nsym);
 
 	encodeHex = hex: encode (hexToBytes hex);
 in
