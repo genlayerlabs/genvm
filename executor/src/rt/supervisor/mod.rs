@@ -359,7 +359,7 @@ pub async fn spawn(
         });
     }
 
-    let config_copy = vm.conf;
+    let config_copy = vm.conf.clone();
 
     let engine = zelf.engines.get(vm.conf.is_deterministic);
 
@@ -408,32 +408,9 @@ pub async fn apply_contract_actions(
     zelf: &std::sync::Arc<Supervisor>,
     mut vm: rt::vm::VM<()>,
 ) -> std::result::Result<rt::vm::VM<wasmtime::Instance>, rt::SpawnError> {
-    let contract_address = vm
-        .vm_base
-        .store
-        .data()
-        .genlayer_ctx
-        .genlayer_sdk
-        .data
-        .message_data
-        .message
-        .contract_address;
-
-    let contract_state = vm
-        .vm_base
-        .store
-        .data()
-        .genlayer_ctx
-        .genlayer_sdk
-        .data
-        .conf
-        .state_mode;
-
     let limiter = vm.vm_base.store.data_mut().limits.clone();
 
-    let res =
-        apply_contract_actions_inner(zelf, &mut vm, contract_address, contract_state, limiter)
-            .await;
+    let res = apply_contract_actions_inner(zelf, &mut vm, limiter).await;
 
     match res {
         Ok(inst) => Ok(rt::vm::VM {
@@ -450,58 +427,16 @@ pub async fn apply_contract_actions(
 async fn apply_contract_actions_inner(
     zelf: &std::sync::Arc<Supervisor>,
     vm: &mut rt::vm::VM<()>,
-    contract_address: calldata::Address,
-    state: public_abi::StorageType,
     limiter: rt::memlimiter::Limiter,
 ) -> anyhow::Result<wasmtime::Instance> {
-    let code_slot = vm
-        .vm_base
-        .store
-        .data_mut()
-        .genlayer_ctx
-        .genlayer_sdk
-        .data
-        .storage
-        .resolve_code_slot()
-        .await
-        .with_context(|| "resolving contract code slot")?;
-    vm.vm_base
-        .store
-        .data_mut()
-        .genlayer_ctx
-        .genlayer_sdk
-        .data
-        .conf
-        .code_slot = code_slot;
-    let is_init = vm
-        .vm_base
-        .store
-        .data()
-        .genlayer_ctx
-        .genlayer_sdk
-        .data
-        .message_data
-        .message
-        .is_init;
-    let runner_state = runners::ChainState::for_vm(is_init, state);
-    let contract_id = runners::Id::Chain {
-        address: contract_address,
-        on: runner_state,
-        slot: code_slot,
-    }
-    .canonical();
+    let data = &mut vm.vm_base.store.data_mut().genlayer_ctx.genlayer_sdk.data;
 
-    let contract_major = vm
-        .vm_base
-        .store
-        .data_mut()
-        .genlayer_ctx
-        .genlayer_sdk
-        .data
+    let topmost_runner_id = data.conf.topmost_runner_id.clone();
+    let contract_major = data
         .storage
         .read_major()
         .await
-        .with_context(|| format!("reading contract major for {contract_id}"))?;
+        .with_context(|| format!("reading contract major for {topmost_runner_id}"))?;
     let node_major = genvm_common::version::CURRENT.major;
     if contract_major as u16 != node_major {
         return Err(rt::errors::VMError(
@@ -513,49 +448,36 @@ async fn apply_contract_actions_inner(
         .into());
     }
 
-    let arch = zelf
-        .runner_cache
-        .get_or_create(
-            contract_id,
-            || async {
-                let code = vm
-                    .vm_base
-                    .store
-                    .data_mut()
-                    .genlayer_ctx
-                    .genlayer_sdk
-                    .data
-                    .storage
-                    .read_code_at(code_slot, &limiter)
-                    .await
-                    .with_context(|| format!("reading contract code for {contract_id}"))?;
+    let topmost_runner_id = data.conf.topmost_runner_id.clone();
 
-                runners::parse(bytes::Bytes::from(code))
-                    .with_context(|| format!("parsing contract runner for {contract_id}"))
-            },
-            &limiter,
-        )
-        .await
-        .map_err(|e| rt::errors::VMError::wrap(public_abi::VmError::invalid_contract().val(), e))?;
+    let arch = actions::load_runner(
+        zelf,
+        &limiter,
+        topmost_runner_id.clone(),
+        &data.accumulator.custom_runners,
+    )
+    .await
+    .with_context(|| format!("getting runner for {topmost_runner_id}"))?
+    .1;
 
     let actions = arch
         .get_actions()
         .await
-        .with_context(|| format!("loading init actions for contract {contract_id}"))
+        .with_context(|| format!("loading init actions for contract {topmost_runner_id}"))
         .map_err(|e| rt::errors::VMError::wrap(public_abi::VmError::invalid_contract().val(), e))?;
 
     let mut ctx = actions::Ctx {
         env: BTreeMap::new(),
         visited: HashSet::new(),
-        contract_id,
-        contract_address,
-        state: runner_state,
-        code_slot,
+        topmost_runner_id: topmost_runner_id.clone(),
         supervisor: zelf,
         vm: &mut vm.vm_base,
     };
 
-    let inst = match ctx.apply(&actions, contract_id, &arch).await {
+    let inst = match ctx
+        .apply(&actions, topmost_runner_id.canonical(), &arch)
+        .await
+    {
         Ok(Some(inst)) => inst,
         Ok(None) => {
             return Err(anyhow::anyhow!(

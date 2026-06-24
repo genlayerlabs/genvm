@@ -23,7 +23,7 @@ pub fn append_runner_subpath(id: &str, hash: &str, path: &mut std::path::PathBuf
     path.push(&hash[2..]);
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, genlayer_calldata::Encode)]
 pub enum ChainState {
     Accepted,
     Finalized,
@@ -89,6 +89,7 @@ pub enum IdUnresolved {
     },
 }
 
+#[derive(Debug, Clone)]
 pub enum Id {
     Builtin {
         name: symbol_table::GlobalSymbol,
@@ -104,27 +105,21 @@ pub enum Id {
     },
 }
 
-impl IdUnresolved {
-    /// Resolves a parsed runner id against the currently executing contract.
-    ///
-    /// The only resolution step is `contract` → the `chain:` id pointing at this
-    /// contract's own code (its address, state and resolved `code_slot`), so the
-    /// current contract is loaded through the exact same path as any other
-    /// `chain:` runner.
-    pub fn resolve(
-        self,
-        contract_address: calldata::Address,
-        state: ChainState,
-        code_slot: crate::SlotID,
-    ) -> IdUnresolved {
-        match self {
-            IdUnresolved::Contract => IdUnresolved::Chain {
-                address: contract_address,
-                on: Some(state),
-                slot: Some(code_slot),
-            },
-            other => other,
-        }
+impl serde::Serialize for Id {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.canonical().as_str())
+    }
+}
+
+impl<W: calldata::Writer> calldata::codec::Encode<W> for Id {
+    type Error = <W as calldata::Writer>::Error;
+
+    fn encode(&self, encoder: &mut genlayer_calldata::Encoder<W>) -> Result<(), Self::Error> {
+        let canonical = self.canonical();
+        encoder.push_str(canonical.as_str())
     }
 }
 
@@ -152,6 +147,12 @@ impl Id {
                 symbol_table::GlobalSymbol::from(id)
             }
         }
+    }
+}
+
+impl std::fmt::Display for Id {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.canonical().as_str())
     }
 }
 

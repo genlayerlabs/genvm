@@ -10,10 +10,7 @@ use wiggle::error::Context as _;
 pub struct Ctx<'a, 'b> {
     pub env: BTreeMap<String, String>,
     pub visited: HashSet<symbol_table::GlobalSymbol>,
-    pub contract_id: symbol_table::GlobalSymbol,
-    pub contract_address: calldata::Address,
-    pub state: runners::ChainState,
-    pub code_slot: crate::SlotID,
+    pub topmost_runner_id: runners::Id,
     pub supervisor: &'a rt::supervisor::Supervisor,
     pub vm: &'b mut rt::vm::VMBase,
 }
@@ -74,25 +71,44 @@ struct Resolved {
     kind: ResolvedKind,
 }
 
+impl From<runners::Id> for Resolved {
+    fn from(id: runners::Id) -> Self {
+        let kind = match &id {
+            runners::Id::Builtin { name, hash } => ResolvedKind::Disk {
+                name: name.clone(),
+                hash: hash.clone(),
+            },
+            runners::Id::Chain { address, on, slot } => ResolvedKind::Chain {
+                address: *address,
+                on: *on,
+                slot: *slot,
+            },
+            runners::Id::Custom { hash } => ResolvedKind::Custom { hash: *hash },
+        };
+        Self {
+            id: id.canonical(),
+            kind,
+        }
+    }
+}
+
 /// Resolves a runner id to its canonical cache key and load strategy.
 ///
 /// Free-standing so it can be shared between contract initialization
 /// ([`Ctx`]) and runtime `gl_call`s ([`load_runner`]).
-async fn resolve_runner(
+pub(crate) async fn resolve_runner_id(
     supervisor: &rt::supervisor::Supervisor,
-    contract_address: calldata::Address,
-    state: runners::ChainState,
-    code_slot: crate::SlotID,
+    topmost_runner_id: &runners::Id,
     id: &str,
-) -> anyhow::Result<Resolved> {
+) -> anyhow::Result<runners::Id> {
     let Some(parsed) = runners::parse_runner_id(id) else {
         return Err(make_malformed_runner_error(
             "runner id doesn't match expected format",
         ));
     };
 
-    let resolved: runners::Id = match parsed.resolve(contract_address, state, code_slot) {
-        runners::IdUnresolved::Contract => unreachable!("contract is resolved to chain"),
+    let resolved: runners::Id = match parsed {
+        runners::IdUnresolved::Contract => topmost_runner_id.clone(),
         runners::IdUnresolved::Builtin { name, hash } => {
             let hash: Bytes32Hash = if hash == "test" || hash == "latest" {
                 if !supervisor.shared_data.debug_mode.allows_latest_resolution() {
@@ -172,13 +188,17 @@ async fn resolve_runner(
         }
     };
 
-    let id = resolved.canonical();
-    let kind = match resolved {
-        runners::Id::Builtin { name, hash } => ResolvedKind::Disk { name, hash },
-        runners::Id::Chain { address, on, slot } => ResolvedKind::Chain { address, on, slot },
-        runners::Id::Custom { hash } => ResolvedKind::Custom { hash },
-    };
-    Ok(Resolved { id, kind })
+    Ok(resolved)
+}
+
+async fn resolve_runner(
+    supervisor: &rt::supervisor::Supervisor,
+    topmost_runner_id: &runners::Id,
+    id: &str,
+) -> anyhow::Result<Resolved> {
+    Ok(resolve_runner_id(supervisor, topmost_runner_id, id)
+        .await?
+        .into())
 }
 
 /// Loads (and caches) the archive for an already-resolved runner.
@@ -288,17 +308,15 @@ async fn get_arch(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn load_runner(
     supervisor: &rt::supervisor::Supervisor,
-    contract_address: calldata::Address,
-    state: runners::ChainState,
-    code_slot: crate::SlotID,
     limiter: &rt::memlimiter::Limiter,
-    id: &str,
+    id: runners::Id,
     available_custom: &rpds::HashTrieSet<Bytes32Hash, archery::ArcTK>,
 ) -> anyhow::Result<(
     symbol_table::GlobalSymbol,
     sync::DArc<runners::ArchiveCache>,
 )> {
-    let resolved = resolve_runner(supervisor, contract_address, state, code_slot, id).await?;
+    let resolved: Resolved = id.into();
+
     // Custom runners are execution-scoped: a `custom:<hash>` is only resolvable
     // by a scope that registered it (or inherited it from a det parent), so the
     // shared registry cannot leak a runner across unrelated scopes (e.g. nondet).
@@ -381,47 +399,27 @@ pub(crate) fn map_archive_file(
     Ok(())
 }
 
-/// Resolves `runner` (relative to the contract at `contract_address`) and maps
-/// one of its files into `preview1` at runtime. This keeps all runner-resolution
-/// knowledge in this module: callers (e.g. the `MapFile` `gl_call`) only supply
-/// VM context and delegate, instead of stitching the resolution together
-/// themselves.
+/// Maps one of an already-resolved `runner`'s files into `preview1` at runtime.
+/// This keeps all runner-loading knowledge in this module: callers (e.g. the
+/// `MapFile` `gl_call`) resolve the id and delegate, instead of stitching the
+/// archive loading together themselves.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn map_runner_file(
     supervisor: &rt::supervisor::Supervisor,
     preview1: &mut crate::wasi::preview1::Context,
     limiter: &rt::memlimiter::Limiter,
-    contract_address: calldata::Address,
-    state: runners::ChainState,
-    code_slot: crate::SlotID,
-    runner: &str,
+    runner: runners::Id,
     path_in_runner: &str,
     path_in_vfs: &str,
     available_custom: &rpds::HashTrieSet<Bytes32Hash, archery::ArcTK>,
 ) -> anyhow::Result<()> {
-    let (_id, arch) = load_runner(
-        supervisor,
-        contract_address,
-        state,
-        code_slot,
-        limiter,
-        runner,
-        available_custom,
-    )
-    .await?;
+    let (_id, arch) = load_runner(supervisor, limiter, runner, available_custom).await?;
     map_archive_file(preview1, limiter, &arch, path_in_runner, path_in_vfs)
 }
 
 impl Ctx<'_, '_> {
     async fn resolve_runner(&self, id: &str) -> anyhow::Result<Resolved> {
-        resolve_runner(
-            self.supervisor,
-            self.contract_address,
-            self.state,
-            self.code_slot,
-            id,
-        )
-        .await
+        resolve_runner(self.supervisor, &self.topmost_runner_id, id).await
     }
 
     async fn get_arch(
@@ -514,7 +512,7 @@ impl Ctx<'_, '_> {
                 self.supervisor
                     .compile_wasm(contents.as_ref(), wasm_key.as_str())
                     .await
-                    .with_context(|| format!("compiling wasm {path:?} of {}", self.contract_id))
+                    .with_context(|| format!("compiling wasm {path:?} of {}", current))
             })
             .await?;
 

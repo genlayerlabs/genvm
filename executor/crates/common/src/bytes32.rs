@@ -3,9 +3,28 @@
 /// A 32-byte hash value. Formats (and parses) as GVM32 / Crockford Base32 (see
 /// [`genlayer_sdk::gvm32`]).
 #[derive(
-    Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+    genlayer_calldata::Encode,
+    genlayer_calldata::Decode,
+    arbitrary::Arbitrary,
 )]
-pub struct Bytes32Hash(pub [u8; 32]);
+#[repr(transparent)]
+pub struct Bytes32Hash(
+    #[serde(with = "serde_bytes")]
+    #[calldata(
+        serialize_with = genlayer_calldata::codec::as_bytes::serialize,
+        deserialize_with = genlayer_calldata::codec::as_bytes::deserialize,
+    )]
+    pub [u8; 32],
+);
 
 impl Bytes32Hash {
     pub const ZERO: Self = Self([0; 32]);
