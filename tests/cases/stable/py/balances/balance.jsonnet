@@ -1,7 +1,9 @@
-local simple_deploy = import 'templates/simple_deploy.jsonnet';
+local deploy_then = import 'templates/simple_deploy_then_write.jsonnet';
 local util = import 'templates/util.jsonnet';
-{entry: util.addPaths([simple_deploy.run('${jsonnetDir}/${fileBaseName}.py') {
+local bal = {
 	"balances": {
 		"AQAAAAAAAAAAAAAAAAAAAAAAAAA=": 10,
 	},
-}])}
+};
+local base = deploy_then.run('${jsonnetDir}/${fileBaseName}.py', 'main');
+{entry: util.addPaths([base + bal + {next: [base.next[0] + bal]}])}
