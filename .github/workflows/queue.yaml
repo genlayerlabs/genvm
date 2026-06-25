@@ -1,6 +1,13 @@
 name: GenVM full
+
+# Full GenVM CI. The repo has NO GitHub merge queue: this runs directly on
+# every PR targeting a dev branch (v<X>-dev) and is the authoritative
+# "genvm CI" gate the /merge comment (branch_merge_into_dev.yaml) requires to be green on
+# the exact head commit it fast-forwards.
 on:
-  merge_group:
+  pull_request:
+    branches: ['v*-dev']
+    types: [opened, synchronize, reopened, ready_for_review]
 defaults:
   run:
     shell: bash -x {0}
