@@ -9,14 +9,23 @@ marker). Steps:
 2. do nothing unless the PR carries the `ci-safe` label (the gate that lets
 any of these actions run; auto-added for write-access authors);
 3. parse which boxes are ticked and act:
-- "Force run full tests" is a STICKY toggle: when ticked we just ensure the
-`run-full-tests` label is set (so queue.yaml runs on every push). We neither
-untick it nor trigger a one-off run — its checked state mirrors the label.
-- "Rerun full tests" is a momentary button: re-apply `run-full-tests`
-(remove+add) to force a fresh queue.yaml run on the current head, then untick.
+- "Force run full tests" is a STICKY toggle: on the edit that newly ticks it
+we set the `run-full-tests` label (so queue.yaml runs on every future push)
+AND dispatch one run now. We do not untick it — its checked state mirrors the
+label, and an already-set label means no re-dispatch on unrelated edits.
+- "Rerun full tests" is a momentary button: dispatch a fresh queue.yaml run on
+the current head, then untick.
 - "Merge" is a momentary button: expose `merge=true` so the caller runs the
 reusable merge workflow, then untick.
 4. untick the momentary boxes (not the sticky Force one).
+
+Runs are started with `gh workflow run queue.yaml --ref <PR head branch>` (a
+`workflow_dispatch`), NOT by toggling a label: a label applied by the bot's
+GITHUB_TOKEN does not emit a `labeled` event (GitHub blocks recursive runs),
+whereas a `workflow_dispatch` from the same token does run. Dispatching on the
+PR head branch makes the run's head_sha equal the PR head, so the Merge gate
+counts it. (Fork PRs have no head branch in this repo, so the panel can only
+dispatch for same-repo branches — the common GenVM flow.)
 
 Resetting the panel re-fires issue_comment:edited, but that event is sent by
 the bot, so it is ignored — no loop.
@@ -66,10 +75,22 @@ def add_label(name):
 	)
 
 
-def remove_label(name):
-	gh(
-		'api', '--method', 'DELETE', f'repos/{REPO}/issues/{PR}/labels/{name}', check=False
-	)
+def head_branch():
+	return gh(
+		'pr', 'view', PR, '--repo', REPO, '--json', 'headRefName', '--jq', '.headRefName'
+	).stdout.strip()
+
+
+def dispatch_full_tests():
+	# Start queue.yaml on the PR head branch so the run's head_sha matches the
+	# PR head (the Merge gate keys off head_sha). A workflow_dispatch fired with
+	# GITHUB_TOKEN does create a run, unlike a bot-applied `labeled` event.
+	branch = head_branch()
+	if not branch:
+		print('could not resolve PR head branch; cannot dispatch full tests')
+		return
+	gh('workflow', 'run', 'queue.yaml', '--repo', REPO, '--ref', branch, '-f', f'pr={PR}')
+	print(f'dispatched queue.yaml on `{branch}`')
 
 
 def ticked_boxes(body):
@@ -119,15 +140,17 @@ def main():
 		print('no ticked boxes; nothing to do')
 		return
 
-	# Force: sticky enable of the run-full-tests marker (no untick, no one-off).
+	# Force: sticky enable of the run-full-tests marker so every future push
+	# runs full tests. Only on the edit that newly sets it do we also dispatch
+	# a run now (an already-set label means this is an unrelated edit -> no
+	# duplicate run).
 	if any('force' in b for b in boxes) and RUN_FULL_TESTS_LABEL not in current:
 		add_label(RUN_FULL_TESTS_LABEL)
+		dispatch_full_tests()
 
-	# Rerun: force a fresh queue run on the current head even if the marker is
-	# already set (remove+add re-emits the `labeled` event).
+	# Rerun: momentary -> always dispatch a fresh run on the current head.
 	if any('rerun' in b for b in boxes):
-		remove_label(RUN_FULL_TESTS_LABEL)
-		add_label(RUN_FULL_TESTS_LABEL)
+		dispatch_full_tests()
 
 	if any('merge' in b for b in boxes):
 		set_output('merge', 'true')

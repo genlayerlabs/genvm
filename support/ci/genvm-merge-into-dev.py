@@ -86,15 +86,16 @@ def check_gates(pr):
 
 	head_sha = pr['headRefOid']
 
-	# 3. full GenVM CI (queue.yaml) green on the head commit. queue.yaml runs
-	# on the `rtm` label, so the same head may have skipped runs (from
-	# unrelated labels) alongside the real one — require ANY completed run on
-	# this exact commit to have succeeded, not just the most recent.
+	# 3. full GenVM CI (queue.yaml) green on the head commit. The same head may
+	# carry skipped runs (label events that didn't run full tests) alongside the
+	# real one, and the run may have been started by either a push
+	# (event=pull_request) or the action panel (event=workflow_dispatch) — so we
+	# query all events and require ANY completed run on this exact commit to have
+	# succeeded, not just the most recent.
 	runs = json.loads(
 		gh(
 			'api',
-			f'repos/{REPO}/actions/workflows/queue.yaml/runs'
-			f'?head_sha={head_sha}&event=pull_request',
+			f'repos/{REPO}/actions/workflows/queue.yaml/runs?head_sha={head_sha}',
 		)
 	)['workflow_runs']
 	if not any(r['status'] == 'completed' and r['conclusion'] == 'success' for r in runs):
