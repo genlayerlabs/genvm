@@ -44,6 +44,6 @@ jobs:
           gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "$(cat <<EOF
           👋 This PR targeted \`main\`, so I've retargeted it to the latest dev branch \`${DEV}\`.
 
-          \`main\` is protected and is only an alias of the latest release branch (\`v${LATEST}.x\`), kept in lockstep automatically. Active v${LATEST} work lands on \`${DEV}\`, which reaches \`v${LATEST}.x\` through the standing release-gate PR once the cross-repo E2E matrix is green.
+          \`main\` is protected and is only an alias of the latest release branch (\`v${LATEST}-dev\`), kept in lockstep automatically. Active v${LATEST} work lands on \`${DEV}\`, which reaches \`v${LATEST}.x\` through the standing release-gate PR once the cross-repo E2E matrix is green.
           EOF
           )"

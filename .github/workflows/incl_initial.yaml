@@ -21,10 +21,10 @@ jobs:
         with:
           extra_args: --all-files --show-diff-on-failure
 
-  # The /merge comment only fast-forwards, so the PR head must already
-  # contain the base tip (0 commits behind). We assert it here too so the
-  # required "genvm CI" gate goes red the moment the branch falls behind,
-  # instead of surfacing only at merge time.
+  # The Merge action only fast-forwards, so the PR head must already
+  # contain the base tip (0 commits behind). We assert it here too (as part
+  # of the always-on `initial` checks) so the gate goes red the moment the
+  # branch falls behind, instead of surfacing only at merge time.
   behind-check:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

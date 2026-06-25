@@ -1,13 +1,21 @@
 name: GenVM full
 
-# Full GenVM CI. The repo has NO GitHub merge queue: this runs directly on
-# every PR targeting a dev branch (v<X>-dev) and is the authoritative
-# "genvm CI" gate the /merge comment (branch_merge_into_dev.yaml) requires to be green on
-# the exact head commit it fast-forwards.
+# Full GenVM CI. The repo has NO GitHub merge queue: this is the
+# authoritative "genvm CI" gate the Merge action
+# (branch_merge_into_dev.yaml) requires to be green on the exact head it
+# fast-forwards.
+#
+# For every push to a PR targeting a dev branch (v<X>-dev):
+#   - `initial` (cheap pre-commit + 0-behind check) ALWAYS runs;
+#   - the heavy test jobs run only when a run-full-tests marker is set —
+#     the `rtm` (ready-to-merge) label or the `run-full-tests` label (the
+#     "Force run full tests" checkbox sets the latter);
+#   - without a marker `validate-end` fails, so the CI check stays red
+#     until a full run has happened.
 on:
   pull_request:
     branches: ['v*-dev']
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
 defaults:
   run:
     shell: bash -x {0}
@@ -21,6 +29,7 @@ jobs:
     secrets: inherit
 
   module-test-python:
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'rtm') || contains(github.event.pull_request.labels.*.name, 'run-full-tests') }}
     needs: [initial]
     runs-on: ubuntu-latest
     steps:
@@ -36,6 +45,7 @@ jobs:
       - run: ./support/ci/pipelines/test-python.sh
 
   module-test-rust-fuzz:
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'rtm') || contains(github.event.pull_request.labels.*.name, 'run-full-tests') }}
     needs: [initial]
     runs-on: ubuntu-latest
     steps:
@@ -66,6 +76,7 @@ jobs:
           GEMINIKEY: ${{ secrets.GEMINIKEY }}
 
   module-test-rust:
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'rtm') || contains(github.event.pull_request.labels.*.name, 'run-full-tests') }}
     needs: [initial]
     runs-on: ubuntu-latest
     steps:
@@ -108,12 +119,25 @@ jobs:
       - module-test-python
       - module-test-rust
       - module-test-rust-fuzz
+    env:
+      HAS_MARKER: ${{ contains(github.event.pull_request.labels.*.name, 'rtm') || contains(github.event.pull_request.labels.*.name, 'run-full-tests') }}
     steps:
       - name: check
         run: |
-          results="${{ join(needs.*.result, ' ') }}"
+          # initial (pre-commit + 0-behind) must always pass.
+          if [ "${{ needs.initial.result }}" != "success" ]; then
+            echo "::error::initial checks failed"
+            exit 1
+          fi
+          # No run-full-tests marker -> heavy tests were skipped; keep the
+          # gate red so the PR is not mergeable until they run.
+          if [ "$HAS_MARKER" != "true" ]; then
+            echo "::error::full tests have not run — add the 'rtm' label or check 'Force run full tests' on the action panel"
+            exit 1
+          fi
+          results="${{ needs.module-test-python.result }} ${{ needs.module-test-rust.result }} ${{ needs.module-test-rust-fuzz.result }}"
           echo "$results"
-          if echo "$results" | grep -qiE '(failure|cancelled)'; then
-            echo "One or more jobs failed/cancelled"
+          if echo "$results" | grep -qiE '(failure|cancelled|skipped)'; then
+            echo "::error::one or more full-test jobs failed/cancelled/skipped"
             exit 1
           fi

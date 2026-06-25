@@ -1,10 +1,11 @@
 name: branch / merge PR into dev
 
-# The repo has NO GitHub merge queue. A maintainer merges a PR into a dev
-# branch (v<X>-dev) by commenting `/merge`. This workflow re-checks every
-# gate against the EXACT head commit and then advances the dev branch by a
-# plain (fast-forward-only) push, so what lands is byte-identical to what
-# CI and E2E validated.
+# The repo has NO GitHub merge queue. A PR lands on a dev branch (v<X>-dev)
+# when a maintainer ticks the "Merge" box on the PR action panel
+# (branch_pr_actions.yaml), which calls this reusable workflow. It
+# re-checks every gate against the EXACT head commit and then advances the
+# dev branch by a plain (fast-forward-only) push, so what lands is
+# byte-identical to what CI and E2E validated.
 #
 # Gates (all required):
 #   1. base branch is a v<X>-dev branch
@@ -23,13 +24,16 @@ name: branch / merge PR into dev
 # them. We push over SSH with the GENVM_CI_PRIVATE_KEY deploy key (on the
 # dev-branch ruleset bypass list). Pushes are non-force, so a base that
 # advanced between the checks and the push is safely rejected. This job
-# never runs PR code — only git plumbing and API reads — so the SSH key is
-# not exposed to untrusted code, and the author_association gate further
-# limits who can fire it.
+# never runs PR code — only git plumbing and API reads. The caller is
+# responsible for restricting who can trigger a merge (maintainers only).
 
 on:
-  issue_comment:
-    types: [created]
+  workflow_call:
+    inputs:
+      pr_number:
+        description: number of the PR to merge
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -49,12 +53,6 @@ env:
 
 jobs:
   merge:
-    # Only on PR comments that start with /merge, from a maintainer
-    # (write access ~ OWNER/MEMBER/COLLABORATOR).
-    if: >
-      github.event.issue.pull_request &&
-      startsWith(github.event.comment.body, '/merge') &&
-      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
     steps:
       # Checkout with the deploy key so the (protected) dev branch push in
@@ -67,6 +65,5 @@ jobs:
       - name: Validate gates, fast-forward / squash, close
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.issue.number }}
-          COMMENT_ID: ${{ github.event.comment.id }}
-        run: python3 support/ci/merge-into-dev.py
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: python3 support/ci/genvm-merge-into-dev.py
