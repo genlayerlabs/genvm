@@ -1,10 +1,10 @@
 name: branch / forward version to main
 
 # main is the default branch but is only an ALIAS of the latest active
-# version branch (v<latest>.x): it always points at that branch's tip and
-# is never committed to directly. On every push to a version branch we
+# dev branch (v<latest>-dev): it always points at that branch's tip and
+# is never committed to directly. On every push to a dev branch we
 # fast-forward main to it — but only for the LATEST active version, so
-# parallel trains (e.g. v0.3.x and v0.6.x) don't fight over main.
+# parallel trains (e.g. v0.3-dev and v0.6-dev) don't fight over main.
 #
 # main is protected, so the default GITHUB_TOKEN cannot push to it. We
 # push over SSH with a write deploy key (GENVM_CI_PRIVATE_KEY), which must
@@ -14,7 +14,7 @@ name: branch / forward version to main
 
 on:
   push:
-    branches: ['v*.x']
+    branches: ['v*-dev']
 
 permissions:
   contents: read
@@ -35,17 +35,17 @@ jobs:
           # fast-forward and the server rejects it ("fetch first").
           fetch-depth: 0
 
-      - name: Fast-forward main to latest version branch
+      - name: Fast-forward main to latest dev branch
         run: |
           BRANCH="${GITHUB_REF_NAME}"
           # Decide "latest" from main's active-versions (the authoritative
-          # alias), NOT the pushed branch's own copy — an older version
+          # alias), NOT the pushed branch's own copy — an older dev
           # branch carries a stale active-versions and would otherwise try
           # to drag main backwards once a newer train exists.
           git show origin/main:.genvm-monorepo-root > /tmp/main-monorepo-root.json
           LATEST="$(MONOREPO_ROOT=/tmp/main-monorepo-root.json python3 support/ci/branch-versions.py latest)"
-          if [ "$BRANCH" != "v${LATEST}.x" ]; then
-            echo "Pushed branch ${BRANCH} is not the latest version branch (v${LATEST}.x); nothing to do"
+          if [ "$BRANCH" != "v${LATEST}-dev" ]; then
+            echo "Pushed branch ${BRANCH} is not the latest dev branch (v${LATEST}-dev); nothing to do"
             exit 0
           fi
           echo "Fast-forwarding main to ${GITHUB_SHA} (from ${BRANCH})"
