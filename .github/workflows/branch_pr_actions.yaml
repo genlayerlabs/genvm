@@ -1,0 +1,59 @@
+name: branch / PR action panel handler
+
+# Reacts to a maintainer ticking a box on the GenVM PR action panel (posted
+# by branch_pr_checklist.yaml). The `dispatch` job authenticates the editor,
+# parses the ticked boxes, performs label-based actions (run / rerun full
+# tests), unticks the boxes, and reports whether Merge was requested. If so
+# the `merge` job calls the reusable merge workflow.
+#
+# Resetting the panel re-fires issue_comment:edited, but that re-run finds
+# no ticked box (and is sent by the bot), so it is a no-op — no loop.
+
+on:
+  issue_comment:
+    types: [edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  actions: write
+  checks: read
+
+concurrency:
+  group: pr-actions-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash -x {0}
+
+jobs:
+  dispatch:
+    # Only the panel comment, only on a PR.
+    if: >
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '<!-- genvm-actions -->')
+    runs-on: ubuntu-latest
+    outputs:
+      merge: ${{ steps.act.outputs.merge }}
+    steps:
+      # Checkout of the default branch only — to run the handler script. No
+      # PR code is executed.
+      - uses: actions/checkout@v4
+      - name: Handle ticked boxes
+        id: act
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          SENDER: ${{ github.event.sender.login }}
+        run: python3 support/ci/pr-action-panel.py
+
+  merge:
+    needs: dispatch
+    if: needs.dispatch.outputs.merge == 'true'
+    uses: ./.github/workflows/branch_merge_into_dev.yaml
+    with:
+      pr_number: ${{ github.event.issue.number }}
+    secrets: inherit

@@ -1,0 +1,67 @@
+name: branch / post PR action panel
+
+# When a PR is opened against a dev branch (v<X>-dev) we:
+#   - make sure the action labels exist;
+#   - post the action panel (checklist comment) that replaces the old
+#     /genvm-* slash commands;
+#   - auto-add `ci-safe` if the PR author has write access, so their PR can
+#     immediately use the panel. For everyone else a write-role maintainer
+#     adds `ci-safe` by hand once the PR is vetted.
+#
+# pull_request_target gives a write-scoped token even for fork PRs; we only
+# call label/comment APIs and never check out or run PR code. The HTML
+# marker lets branch_pr_actions.yaml recognise the panel later.
+
+on:
+  pull_request_target:
+    branches: ['v*-dev']
+    types: [opened]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+defaults:
+  run:
+    shell: bash -x {0}
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR: ${{ github.event.pull_request.number }}
+      AUTHOR: ${{ github.event.pull_request.user.login }}
+    steps:
+      - name: Ensure action labels exist
+        run: |
+          gh label create rtm -R "$GITHUB_REPOSITORY" --color 0e8a16 --description "ready to merge" 2>/dev/null || true
+          gh label create run-full-tests -R "$GITHUB_REPOSITORY" --color fbca04 --description "run full GenVM CI on every push" 2>/dev/null || true
+          gh label create ci-safe -R "$GITHUB_REPOSITORY" --color 5319e7 --description "PR cleared to run CI / panel actions" 2>/dev/null || true
+
+      - name: Post action panel
+        run: |
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "$(cat <<'EOF'
+          <!-- genvm-actions -->
+          ### GenVM PR actions
+
+          Tick a box to run it (the box unticks itself when handled). Actions only run while the PR has the **`ci-safe`** label.
+
+          - [ ] Force run full tests
+          - [ ] Rerun full tests
+          - [ ] Merge into dev
+
+          <sub>Full GenVM CI runs only when **`rtm`** or **`run-full-tests`** is set — "Force run full tests" is a sticky toggle for `run-full-tests`. Adding **`rtm`** marks the PR ready-to-merge and also runs full tests. **Merge** requires: `rtm`, green full tests, green E2E, and the branch 0 commits behind.</sub>
+          EOF
+          )"
+
+      - name: Auto-mark ci-safe for write-access authors
+        run: |
+          perm="$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$AUTHOR/permission" --jq '.permission' 2>/dev/null || echo none)"
+          case "$perm" in
+            admin|write|maintain)
+              echo "author $AUTHOR has '$perm' access; marking ci-safe"
+              gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR/labels" -f 'labels[]=ci-safe' ;;
+            *)
+              echo "author $AUTHOR has '$perm' access; leaving unmarked (a write-role maintainer must add ci-safe)" ;;
+          esac

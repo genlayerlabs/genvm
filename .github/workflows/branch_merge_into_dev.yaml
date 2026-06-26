@@ -1,0 +1,69 @@
+name: branch / merge PR into dev
+
+# The repo has NO GitHub merge queue. A PR lands on a dev branch (v<X>-dev)
+# when a maintainer ticks the "Merge" box on the PR action panel
+# (branch_pr_actions.yaml), which calls this reusable workflow. It
+# re-checks every gate against the EXACT head commit and then advances the
+# dev branch by a plain (fast-forward-only) push, so what lands is
+# byte-identical to what CI and E2E validated.
+#
+# Gates (all required):
+#   1. base branch is a v<X>-dev branch
+#   2. PR carries the `rtm` (ready-to-merge) label
+#   3. full GenVM CI (queue.yaml) concluded success on the head commit
+#   4. the cross-repo E2E check concluded success on the head commit
+#   5. the PR is 0 commits behind base (head already contains base tip)
+#
+# Merge strategy:
+#   - 1 commit            -> fast-forward the original commit (SHA preserved)
+#   - more than 1 commit  -> squash into a single commit on top of base,
+#                            then fast-forward
+# Either way the PR is closed afterwards.
+#
+# The dev branches are protected; the default GITHUB_TOKEN cannot push to
+# them. We push over SSH with the GENVM_CI_PRIVATE_KEY deploy key (on the
+# dev-branch ruleset bypass list). Pushes are non-force, so a base that
+# advanced between the checks and the push is safely rejected. This job
+# never runs PR code — only git plumbing and API reads. The caller is
+# responsible for restricting who can trigger a merge (maintainers only).
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: number of the PR to merge
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  checks: read
+  actions: read
+
+defaults:
+  run:
+    shell: bash -x {0}
+
+env:
+  # check-run name (case-insensitive substring) the genlayer-e2e pipeline
+  # posts on the head commit. Adjust if that pipeline renames its check.
+  E2E_CHECK_PATTERN: "e2e"
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout with the deploy key so the (protected) dev branch push in
+      # the merge script succeeds. The script never runs PR code.
+      - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.GENVM_CI_PRIVATE_KEY }}
+          fetch-depth: 0
+
+      - name: Validate gates, fast-forward / squash, close
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: python3 support/ci/genvm-merge-into-dev.py

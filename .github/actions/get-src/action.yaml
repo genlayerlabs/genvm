@@ -22,7 +22,7 @@ runs:
     - name: checkout submodules
       run: |
         cd "$GITHUB_WORKSPACE"
-        git config --global user.email "worker@ci.ci"
+        git config --global user.email "ci@genlayerlabs.com"
         git config --global user.name "CI worker"
         if [ "${{ inputs.load_submodules }}" == "true" ]
         then
