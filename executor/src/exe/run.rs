@@ -17,9 +17,11 @@ const EXECUTION_DATA_HELP: &str = "path to file containing encoded execution dat
 pub struct Args {
     #[arg(
         long,
-        help = "whenever to allow `:latest` and `:test` as runners version, tracing, etc."
+        value_enum,
+        default_value = "disabled",
+        help = "debug level: disabled|safe|safe-unbounded|unsafe|unsafe-tracing. safe captures (bounded); safe-unbounded adds unbounded capture and tracing; unsafe adds `:latest`/`:test` resolution (diverges across machines); unsafe-tracing adds real time metering (non-deterministic)"
     )]
-    debug_mode: bool,
+    debug_mode: genvm_common::DebugMode,
 
     #[arg(long, default_value = "-", help = EXECUTION_DATA_HELP)]
     execution_data: String,
@@ -35,7 +37,7 @@ pub struct Args {
     #[clap(
         long,
         default_value = "rwscn",
-        help = "r?w?s?c?n?, read/write/send messages/call contracts/spawn nondet"
+        help = "r?w?s?c?n?u?, read/write/send messages/call contracts/spawn nondet/register runners"
     )]
     permissions: String,
     #[clap(long, help = "override LLM module address from config")]
@@ -85,17 +87,6 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         .create_rt()
         .with_context(|| "creating tokio runtime")?;
 
-    let (token, canceller) = genvm_common::cancellation::make();
-
-    let handle_sigterm = move || {
-        log_warn!("sigterm received");
-        canceller();
-    };
-    unsafe {
-        signal_hook::low_level::register(signal_hook::consts::SIGTERM, handle_sigterm.clone())?;
-        signal_hook::low_level::register(signal_hook::consts::SIGINT, handle_sigterm)?;
-    }
-
     let genvm_id = match &args.genvm_id {
         None => {
             let mut random_bytes = [0; 8];
@@ -135,13 +126,14 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
 
     let max_bucket_no = [
-        config.fees.storage.bucket_no,
-        config.fees.message_receipt.bucket_no,
-        config.fees.nondet_output.bucket_no,
-        config.fees.message_fee.bucket_no,
-        config.fees.event.bucket_no,
+        &config.fees.storage.bucket_no,
+        &config.fees.message_receipt.bucket_no,
+        &config.fees.nondet_output.bucket_no,
+        &config.fees.message_fee.bucket_no,
+        &config.fees.event.bucket_no,
     ]
     .into_iter()
+    .flat_map(|v| v.iter().copied())
     .max()
     .unwrap_or(0);
 
@@ -152,7 +144,6 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
     );
 
     let shared_data = sync::DArc::new(genvm::rt::SharedData {
-        cancellation: token,
         is_sync: args.sync,
         genvm_id: genvm_modules_interfaces::GenVMId(genvm_id),
         debug_mode: args.debug_mode,
@@ -177,6 +168,16 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
         .collect::<Result<_>>()?;
 
     let method_hosts = execution_data.method_hosts.clone();
+
+    // Validate every method->host mapping up front, once, so all later host
+    // selection (here and inside the VM) can index `hosts` safely instead of
+    // panicking on a misconfigured index.
+    if let Some(&bad) = method_hosts.iter().find(|&&h| h as usize >= hosts.len()) {
+        anyhow::bail!(
+            "method_hosts references host index {bad} but only {} host(s) are configured",
+            hosts.len()
+        );
+    }
 
     // Charge the per-bucket up-front fees now that the hosts are connected. If a
     // bucket cannot cover its `subtract_on_start`, report the resulting VM error
@@ -222,7 +223,7 @@ pub fn handle(args: Args, mut config: config::Config) -> Result<()> {
     }
 
     let mut perm_size = 0;
-    for perm in ["r", "w", "s", "c", "n"] {
+    for perm in ["r", "w", "s", "c", "n", "u"] {
         if args.permissions.contains(perm) {
             perm_size += 1;
         }

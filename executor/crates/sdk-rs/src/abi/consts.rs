@@ -158,11 +158,12 @@ pub mod memory_limiter_consts {
 }
 
 pub mod root_offsets {
-    pub const CONTRACT: u32 = 0;
-    pub const CODE: u32 = 1;
-    pub const LOCKED_SLOTS: u32 = 2;
-    pub const UPGRADERS: u32 = 3;
-    pub const MAJOR: u32 = 4;
+    pub const MAJOR: u32 = 0;
+    pub const CONTRACT: u32 = 1;
+    pub const CODE: u32 = 2;
+    pub const LOCKED_SLOTS: u32 = 3;
+    pub const UPGRADERS: u32 = 4;
+    pub const CODE_SLOT: u32 = 5;
 }
 
 pub mod top_limits {
@@ -276,6 +277,7 @@ pub mod __VmError {
         pub const fn absent_runner_comment(&self) -> VmError { VmError(Cow::Borrowed("invalid_contract absent_runner_comment")) }
         pub const fn not_utf8_text(&self) -> VmError { VmError(Cow::Borrowed("invalid_contract not_utf8_text")) }
         pub const fn malformed_runner(&self) -> VmError { VmError(Cow::Borrowed("invalid_contract malformed_runner")) }
+        pub const fn major_mismatch(&self) -> VmError { VmError(Cow::Borrowed("invalid_contract major_mismatch")) }
         pub const fn wasm(&self) -> InvalidContractWasm { InvalidContractWasm }
     }
 
@@ -309,7 +311,7 @@ pub mod __VmError {
 pub struct VmError(pub Cow<'static, str>);
 
 impl From<VmError> for String {
-    fn from(val: VmError) -> Self {
+    fn from(val: VmError) -> String {
         val.0.into()
     }
 }

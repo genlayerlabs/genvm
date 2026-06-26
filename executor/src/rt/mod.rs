@@ -48,10 +48,9 @@ impl<T> DetNondet<T> {
 
 /// basic data that is shared across all VMs
 pub struct SharedData {
-    pub cancellation: Arc<genvm_common::cancellation::Token>,
     pub is_sync: bool,
     pub genvm_id: genvm_modules_interfaces::GenVMId,
-    pub debug_mode: bool,
+    pub debug_mode: genvm_common::DebugMode,
     pub metrics: crate::Metrics,
     pub data_fees_limit: fees::DataLimit,
     pub llm_consumption: tokio::sync::Mutex<primitive_types::U256>,
@@ -78,6 +77,9 @@ pub async fn spawn_apply_run(
                 ),
                 SpawnErrorState::Unspawned(vm_data) => (Default::default(), vm_data),
             };
+
+            log_debug!(error:ah = error; "spawn_apply_run failed");
+
             match errors::unwrap_vm_errors_backtrace(errors::UnwrapDynError::from(error)) {
                 Ok((run_ok, backtrace)) => Ok(vm::RunResult {
                     run_ok,
@@ -105,5 +107,6 @@ async fn spawn_apply_run_inner(
 }
 
 use anyhow::Context;
+use genvm_common::log_debug;
 
 use crate::wasi;

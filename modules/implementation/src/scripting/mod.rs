@@ -13,6 +13,7 @@ use std::{collections::BTreeMap, future::Future, sync::Arc};
 use crate::common::{self, ModuleError};
 
 pub use ctx::filters;
+pub use ctx::req::Request;
 pub use ctx::CtxPart;
 pub use ctx::Metrics;
 
@@ -156,9 +157,6 @@ impl<T, R, E> UserVM<T, R, E> {
     {
         use mlua::StdLib;
 
-        std::env::set_var("LUA_PATH", &mod_config.lua_path);
-        std::env::set_var("LUA_CPATH", mod_config.lua_path.replace(".lua", ".so"));
-
         let lua_libs = StdLib::COROUTINE
             | StdLib::TABLE
             | StdLib::IO
@@ -169,6 +167,15 @@ impl<T, R, E> UserVM<T, R, E> {
         let vm = mlua::Lua::new_with(lua_libs, mlua::LuaOptions::default())?;
 
         vm.load_std_libs(lua_libs).context("loading stdlib")?;
+
+        // Set the module search paths on this Lua state directly. Lua 5.3's
+        // `require` reads `package.path`/`package.cpath` (there is no in-Lua
+        // `LUA_PATH` global as in Lua 5.0). Doing it per-state avoids mutating
+        // the process-global LUA_PATH/LUA_CPATH env vars, which raced across the
+        // Web and LLM VM pools initializing concurrently in the same process.
+        let package: mlua::Table = vm.globals().get("package")?;
+        package.set("path", mod_config.lua_path.as_str())?;
+        package.set("cpath", mod_config.lua_path.replace(".lua", ".so"))?;
 
         preload_lsqlite3(&vm).context("preloading lsqlite3")?;
 

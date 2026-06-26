@@ -16,7 +16,7 @@ fn main() -> std::io::Result<()> {
     let profile = std::env::var("PROFILE").unwrap();
     println!("cargo::rustc-env=PROFILE={profile}");
 
-    let tag = tag.replace("-", "_");
+    // tag can have `-`, parse from the right
     let arch = arch.replace("-", "_");
     let os = os.replace("-", "_");
     let profile = profile.replace("-", "_");

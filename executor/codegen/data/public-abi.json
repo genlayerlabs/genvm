@@ -45,11 +45,12 @@
     "name": "root_offsets",
     "repr": "u32",
     "values": {
-      "contract": 0,
-      "code": 1,
-      "locked_slots": 2,
-      "upgraders": 3,
-      "major": 4
+      "major": 0,
+      "contract": 1,
+      "code": 2,
+      "locked_slots": 3,
+      "upgraders": 4,
+      "code_slot": 5
     }
   },
   {
@@ -122,6 +123,7 @@
           "absent_runner_comment",
           "not_utf8_text",
           "malformed_runner",
+          "major_mismatch",
           {
             "head": "wasm",
             "tail": ["validating", "linking", "entrypoint"]

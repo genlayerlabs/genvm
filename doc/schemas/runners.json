@@ -11,6 +11,29 @@
       "WasmMode": {
         "enum": ["det", "nondet"]
       },
+      "runner-id": {
+        "type": "string",
+        "description": "Identifier of a runner to load",
+        "anyOf": [
+          {
+            "pattern": "^[a-zA-Z0-9_-]+:[a-zA-Z0-9_=-]+$",
+            "not": { "pattern": "^(contract|chain|custom):" },
+            "description": "`name:hash` — packaged runner by human readable name and archive hash (in debug mode hash may be `test`/`latest`). `contract`/`chain`/`custom` are reserved and cannot be used as a name"
+          },
+          {
+            "const": "contract",
+            "description": "the runner of the contract that is currently being executed"
+          },
+          {
+            "pattern": "^chain:0x[0-9a-fA-F]{40}(:[af](:[0-9abcdefghjkmnpqrstvwxyz]{52})?)?$",
+            "description": "`chain:<address>[:<a|f>[:<slot>]]` — code blob read from a `0x` 20 byte address at a GVM32-encoded 32 byte slot, `a`=accepted / `f`=finalized. `<a|f>` and `<slot>` are optional: `<a|f>` defaults to `a` and `<slot>` to the target contract's root code slot"
+          },
+          {
+            "pattern": "^custom:[a-zA-Z0-9_=-]+$",
+            "description": "`custom:<hash>` — runner registered at runtime"
+          }
+        ]
+      },
       "InitAction": {
         "description": "A single rule for loading.",
         "type": "object",
@@ -116,8 +139,8 @@
             "type": "string"
           },
           "Depends": {
-            "description": "Depend on other runner by id:hash",
-            "type": "string"
+            "description": "Depend on another runner",
+            "$ref": "#/definitions/runner-id"
           },
           "Seq": {
             "description": "Execute sequence",
@@ -138,7 +161,10 @@
             "description": "Makes given runner current without executing it's action. It means that MapFile will fork with files from this archive. Useful for creating lock files",
             "type": "object",
             "properties": {
-              "runner": { "type": "string" },
+              "runner": {
+                "description": "runner id to make current",
+                "$ref": "#/definitions/runner-id"
+              },
               "action": { "$ref": "#/definitions/InitAction" }
             }
           }

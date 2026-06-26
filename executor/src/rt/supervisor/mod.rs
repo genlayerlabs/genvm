@@ -13,7 +13,7 @@ use crate::{
     runners, wasi,
 };
 
-mod actions;
+pub(crate) mod actions;
 mod compilation;
 
 struct WasmModuleCache {
@@ -75,6 +75,10 @@ pub struct Supervisor {
     queue: NondetQueue,
     runner_cache: runners::cache::Reader,
     wasm_mod_cache: WasmModuleCache,
+
+    /// Runners registered at runtime via `gl_call`, looked up by the
+    /// `custom:<hash>` runner id. Empty until a contract registers one.
+    custom_runners: dashmap::DashMap<Bytes32Hash, runners::Archive>,
 
     pub(crate) engines: rt::DetNondet<wasmtime::Engine>,
     pub(crate) host: Arc<host::MultiHost>,
@@ -145,6 +149,10 @@ pub async fn await_nondet_vms(zelf: &Arc<Supervisor>) -> anyhow::Result<Option<u
             .clone()
             .try_read_owned()
             .expect("tasks_loop_done already held by writer");
+        // Secondary nondet validator queue runs after the deterministic VM has
+        // finished, so it reuses the memory that VM freed.
+        // FIXME: custom runners registered during deterministic execution are not
+        // counted against this limiter.
         let limiter = memlimiter::Limiter::new("nondet-secondary");
         nondet_vm_processor(zelf.clone(), read_permit, limiter).await;
     }
@@ -221,6 +229,39 @@ impl Supervisor {
         rt::vm::storage::Limiter::new(self.shared_data.gep(|x| &x.data_fees_limit))
     }
 
+    pub fn get_custom_runner(&self, hash: Bytes32Hash) -> Option<runners::Archive> {
+        self.custom_runners.get(&hash).map(|r| r.clone())
+    }
+
+    pub fn prepopulate_deploy_runner(
+        &self,
+        address: calldata::Address,
+        code_slot: crate::SlotID,
+        archive: runners::Archive,
+    ) {
+        let id = runners::Id::Chain {
+            address,
+            on: runners::ChainState::Deploy,
+            slot: code_slot,
+        }
+        .canonical();
+        self.runner_cache.put(id, archive);
+    }
+
+    /// Registers a runner from its `code`, returning the `custom:<hash>` id it can
+    /// be referenced by.
+    ///
+    /// The archive is parsed and charged against `limiter` only the first time a
+    /// given hash is seen — re-registering the same code is a cheap no-op, so a
+    /// contract cannot exhaust the memory limit by registering in a loop.
+    pub fn register_custom_runner(
+        &self,
+        code: bytes::Bytes,
+        limiter: &rt::memlimiter::Limiter,
+    ) -> anyhow::Result<GlobalSymbol> {
+        register_custom_runner_into(&self.custom_runners, code, limiter)
+    }
+
     pub fn start(config: &config::Config, ctor: Ctor) -> anyhow::Result<Arc<Self>> {
         let my_cache_dir = runners::cache::get_cache_dir(&config.cache_dir).ok();
 
@@ -277,13 +318,14 @@ impl Supervisor {
             runner_cache: runners::cache::Reader::new(
                 std::path::Path::new(&config.runners_dir),
                 std::path::Path::new(&config.registry_dir),
-                debug_mode,
+                debug_mode.allows_latest_resolution(),
             )
             .context("creating runner cache reader")?,
             wasm_mod_cache: WasmModuleCache {
                 cache_dir: my_cache_dir,
                 wasm_modules_cache: sync::CacheMap::new(),
             },
+            custom_runners: dashmap::DashMap::new(),
             host: Arc::new(ctor.multi_host),
             engines,
         });
@@ -317,7 +359,7 @@ pub async fn spawn(
         });
     }
 
-    let config_copy = vm.conf;
+    let config_copy = vm.conf.clone();
 
     let engine = zelf.engines.get(vm.conf.is_deterministic);
 
@@ -329,10 +371,12 @@ pub async fn spawn(
                 error: anyhow::Error::from(a),
                 state: Box::new(rt::SpawnErrorState::Unspawned(b)),
             })?,
-            supervisor: zelf.clone(),
         },
         wasmtime::GenVMCtx {
-            should_quit: zelf.shared_data.cancellation.should_quit.clone(),
+            // The executor has no cooperative cancellation; the manager kills the
+            // process on timeout. wasmtime still requires this flag, so feed it a
+            // never-set atomic.
+            should_quit: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
         },
     );
 
@@ -364,22 +408,9 @@ pub async fn apply_contract_actions(
     zelf: &std::sync::Arc<Supervisor>,
     mut vm: rt::vm::VM<()>,
 ) -> std::result::Result<rt::vm::VM<wasmtime::Instance>, rt::SpawnError> {
-    let contract_address = vm
-        .vm_base
-        .store
-        .data()
-        .genlayer_ctx
-        .genlayer_sdk
-        .data
-        .message_data
-        .message
-        .contract_address;
-
-    let contract_id = runners::get_runner_of_contract(contract_address);
-
     let limiter = vm.vm_base.store.data_mut().limits.clone();
 
-    let res = apply_contract_actions_inner(zelf, &mut vm, contract_id, limiter).await;
+    let res = apply_contract_actions_inner(zelf, &mut vm, limiter).await;
 
     match res {
         Ok(inst) => Ok(rt::vm::VM {
@@ -396,49 +427,57 @@ pub async fn apply_contract_actions(
 async fn apply_contract_actions_inner(
     zelf: &std::sync::Arc<Supervisor>,
     vm: &mut rt::vm::VM<()>,
-    contract_id: GlobalSymbol,
     limiter: rt::memlimiter::Limiter,
 ) -> anyhow::Result<wasmtime::Instance> {
-    let arch = zelf
-        .runner_cache
-        .get_or_create(
-            contract_id,
-            || async {
-                let code = vm
-                    .vm_base
-                    .store
-                    .data_mut()
-                    .genlayer_ctx
-                    .genlayer_sdk
-                    .data
-                    .storage
-                    .read_code(&limiter)
-                    .await
-                    .with_context(|| format!("reading contract code for {contract_id}"))?;
+    let data = &mut vm.vm_base.store.data_mut().genlayer_ctx.genlayer_sdk.data;
 
-                runners::parse(bytes::Bytes::from(code))
-                    .with_context(|| format!("parsing contract runner for {contract_id}"))
-            },
-            &limiter,
-        )
+    let topmost_runner_id = data.conf.topmost_runner_id.clone();
+    let contract_major = data
+        .storage
+        .read_major()
         .await
-        .map_err(|e| rt::errors::VMError::wrap(public_abi::VmError::invalid_contract().val(), e))?;
+        .with_context(|| format!("reading contract major for {topmost_runner_id}"))?;
+    let node_major = genvm_common::version::CURRENT.major;
+    if contract_major as u16 != node_major {
+        return Err(rt::errors::VMError(
+            public_abi::VmError::invalid_contract().major_mismatch(),
+            Some(anyhow::anyhow!(
+                "contract major {contract_major} != node major {node_major}"
+            )),
+        )
+        .into());
+    }
+
+    let topmost_runner_id = data.conf.topmost_runner_id.clone();
+
+    let arch = actions::load_runner(
+        zelf,
+        &limiter,
+        topmost_runner_id.clone(),
+        &data.accumulator.custom_runners,
+    )
+    .await
+    .with_context(|| format!("getting runner for {topmost_runner_id}"))?
+    .1;
 
     let actions = arch
         .get_actions()
         .await
-        .with_context(|| format!("loading init actions for contract {contract_id}"))
+        .with_context(|| format!("loading init actions for contract {topmost_runner_id}"))
         .map_err(|e| rt::errors::VMError::wrap(public_abi::VmError::invalid_contract().val(), e))?;
 
     let mut ctx = actions::Ctx {
         env: BTreeMap::new(),
         visited: HashSet::new(),
-        contract_id,
+        topmost_runner_id: topmost_runner_id.clone(),
         supervisor: zelf,
         vm: &mut vm.vm_base,
     };
 
-    let inst = match ctx.apply(&actions, contract_id, &arch).await {
+    let inst = match ctx
+        .apply(&actions, topmost_runner_id.canonical(), &arch)
+        .await
+    {
         Ok(Some(inst)) => inst,
         Ok(None) => {
             return Err(anyhow::anyhow!(
@@ -488,11 +527,6 @@ async fn nondet_vm_processor(
     let mut count = 0;
     loop {
         tokio::select! {
-            _ = zelf.shared_data.cancellation.chan.closed() => {
-                log_debug!("cancellation requested, stopping nondet validator queue");
-                break;
-            }
-
             _ = zelf.queue.vm_countdown.wait() => {
                 log_debug!("vm countdown reached zero, stopping nondet validator queue");
                 break;
@@ -558,4 +592,54 @@ async fn nondet_vm_processor(
 
     std::mem::drop(read_permit);
     log_debug!(count = count; "nondet worker done");
+}
+
+/// Core of [`Supervisor::register_custom_runner`]; charges the parsed archive
+/// against `limiter` only on the first registration of a given hash.
+fn register_custom_runner_into(
+    custom_runners: &dashmap::DashMap<Bytes32Hash, runners::Archive>,
+    code: bytes::Bytes,
+    limiter: &rt::memlimiter::Limiter,
+) -> anyhow::Result<GlobalSymbol> {
+    let hash = runners::custom_runner_hash(&code);
+
+    if let dashmap::mapref::entry::Entry::Vacant(slot) = custom_runners.entry(hash) {
+        let archive = runners::parse(code).map_err(|e| {
+            rt::errors::VMError::wrap(public_abi::VmError::invalid_contract().val(), e)
+        })?;
+        if !limiter.consume(archive.total_size) {
+            return Err(rt::errors::VMError(public_abi::VmError::oom().ram().val(), None).into());
+        }
+        slot.insert(archive);
+    }
+
+    Ok(runners::Id::Custom { hash }.canonical())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn register_custom_runner_consumes_once() {
+        let map = dashmap::DashMap::new();
+        let limiter = rt::memlimiter::Limiter::new("test-register");
+        let code = bytes::Bytes::from_static(b"# { \"Depends\": \"py-genlayer:test\" }\n");
+
+        let id = register_custom_runner_into(&map, code.clone(), &limiter).unwrap();
+        let remaining_after_first = limiter.get_remaining_memory();
+
+        // the first registration must have charged the archive
+        assert!(remaining_after_first < u32::MAX);
+
+        // re-registering the same code must be a cheap no-op: same id, no extra
+        // memory charged and no duplicate map entries
+        for _ in 0..1000 {
+            let again = register_custom_runner_into(&map, code.clone(), &limiter).unwrap();
+            assert_eq!(again, id);
+        }
+
+        assert_eq!(limiter.get_remaining_memory(), remaining_after_first);
+        assert_eq!(map.len(), 1);
+    }
 }

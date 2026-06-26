@@ -23,6 +23,10 @@ impl<T: StorageType, const N: usize> StorageArray<T, N> {
         N
     }
 
+    pub const fn is_empty(&self) -> bool {
+        N == 0
+    }
+
     pub fn index(&self, idx: usize) -> T::Handle {
         assert!(idx < N, "index {idx} out of bounds for array of length {N}");
         T::handle_at(self.slot, self.offset + idx as u32 * T::SIZE)

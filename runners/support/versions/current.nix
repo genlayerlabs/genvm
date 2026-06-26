@@ -1,6 +1,11 @@
 let
 	dev-mode = import ./dev-mode.nix;
 
+	# gvm32 (Crockford Base32) — the encoding the executor uses for runner hash
+	# ids. The embedded `uid` (consumed by `Depends`) MUST use this, matching the
+	# on-disk runner paths and `hashToIDHash` in ../default.nix.
+	gvm32 = import ../gvm32.nix;
+
 	src = rec {
 		__prefix = "";
 
@@ -27,11 +32,11 @@ let
 			};
 
 			genlayer-std = {
-				hash = "sha256-cN/I/NE1rffwlrhd3o6Xso45hB7I3yLeRRwpMnfy+II=";
+				hash = "sha256-/pdXFMD6CtosS0LH2fJbZkJg5E3sMFnpWrC3yXVONgQ=";
 			};
 
 			genlayer-embeddings = {
-				hash = "sha256-y86+lwso1yaosRcyj4wI92YQfj2JNvn0BRBYLG2IpNU=";
+				hash = "sha256-Lw2tC5IdLPhw4M+Zfp2igB9NUI9m3PgNyUmb9GMSQWQ=";
 
 				depends = [
 					models.all-MiniLM-L6-v2
@@ -42,7 +47,7 @@ let
 		};
 
 		cpython = {
-			hash = "sha256-qYd0fAfKBdFwG9qR+AsXjS8gJFm11Z47vsnMEyf0SzM=";
+			hash = "sha256-LqsYHYqiAYnwDoXMpHOQHqvQCa+Dh9562J5ClfEggxI=";
 			depends = [
 				softfloat
 			];
@@ -55,7 +60,7 @@ let
 		wrappers = {
 			__prefix = "";
 			py-genlayer = {
-				hash = "sha256-kG+3MeXEXyVV9vbJL8AuffoMoQav+wbePKmdVCa2Jv8=";
+				hash = "sha256-u9lPFVpXuye3z8SsOfjIwRzAKfRAPy4tmTUnA+um6K0=";
 				depends = [
 					cpython
 					pyLibs.cloudpickle
@@ -63,7 +68,7 @@ let
 				];
 			};
 			py-genlayer-multi = {
-				hash = "sha256-5C1f9KTf4MXZL3cZflwsy2fhJq7icS4yfHjZxxEyhks=";
+				hash = "sha256-woB2R5aziFLNpKCjEquWAsorIPH4/EpaRdVVYJYSy3w=";
 				depends = [
 					cpython
 					pyLibs.cloudpickle
@@ -132,7 +137,7 @@ let
 					if deducedHash == null
 					then fakeHash
 					else deducedHash;
-				hash32 = if deducedHash == "test" then "test" else builtins.convertHash { hash = hashSRI; toHashFormat = "nix32"; };
+				hash32 = if deducedHash == "test" then "test" else gvm32.encodeHex (builtins.convertHash { hash = hashSRI; toHashFormat = "base16"; });
 			in rec {
 				id = pref + name;
 

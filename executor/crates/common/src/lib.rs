@@ -5,7 +5,12 @@ use serde::{Deserialize, Serialize};
 
 pub use genlayer_sdk::calldata;
 
+pub mod bytes32;
+pub use bytes32::Bytes32Hash;
+
 pub mod cancellation;
+pub mod debug_mode;
+pub use debug_mode::DebugMode;
 pub mod io;
 pub mod logger;
 pub mod stats;

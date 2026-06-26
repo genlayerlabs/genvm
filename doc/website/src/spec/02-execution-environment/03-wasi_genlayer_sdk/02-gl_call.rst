@@ -179,12 +179,68 @@ Payload
 
    {
      "Sandbox": {
-       "data": Bytes,             // Code/data for sandbox execution
-       "allow_write_ops": Bool    // Whether to allow write operations
+       "data": Bytes,                  // Code/data for sandbox execution
+       "allow_write_storage": Bool,    // Whether to allow storage writes
+       "allow_send_messages": Bool,    // Whether to allow sending messages
+       "allow_register_runners": Bool  // Whether to allow registering runners
      }
    }
 
 Creates isolated VM instance. See :ref:`gvm-permissions` for permission inheritance details.
+
+``RegisterRunner`` Message
+--------------------------
+
+Registers a runner archive at runtime, making it available under the
+``custom:<hash>`` runner id. The ``<hash>`` is the SHA3-256 of the supplied
+``code`` encoded with :doc:`../../04-contract-interface/06-gvm32`, and the parsed
+archive is charged against the memory limit. Returns the resulting runner id
+(calldata-encoded string).
+
+Payload
+~~~~~~~
+
+.. code-block::
+
+   {
+     "RegisterRunner": {
+       "code": Bytes              // runner archive (ustar/zip or commented text)
+     }
+   }
+
+Requirements
+~~~~~~~~~~~~
+
+#. :ref:`gvm-perm-deterministic`
+#. :ref:`gvm-perm-register-runners`
+
+``MapFile`` Message
+-------------------
+
+Maps a file from a runner into the VM filesystem at runtime, behaving the same as
+the ``MapFile`` runner action (see :doc:`../../../python-sdk` runners). If
+``path_in_runner`` ends with ``/`` the whole directory subtree is mapped.
+
+Payload
+~~~~~~~
+
+.. code-block::
+
+   {
+     "MapFile": {
+       "runner": String,          // runner id (name:hash, contract, chain:..., custom:...)
+       "path_in_runner": String,  // path within the runner archive
+       "path_in_vfs": String      // absolute destination path in the VM filesystem
+     }
+   }
+
+Mapping into ``/vm/`` is forbidden. Resolving a ``chain:`` runner reads another
+contract's storage, so this requires :ref:`gvm-perm-read-storage`.
+
+Requirements
+~~~~~~~~~~~~
+
+#. :ref:`gvm-perm-read-storage`
 
 ``WebRender`` Message
 ---------------------
@@ -349,11 +405,6 @@ Requirements
 
 Topics must be exactly 32 bytes each.
 
-``Rollback`` Message
---------------------
-
-Deprecated. Use ``UserError`` instead.
-
 ``UserError`` Message
 ---------------------
 
@@ -422,7 +473,7 @@ Requirements
 -------------------------------------
 
 In :ref:`gvm-def-non-det-mode` returns the elapsed execution time in microseconds since VM start.
-In :ref:`gvm-def-det-mode`, it always returns ``0``.
+In :ref:`gvm-def-det-mode`, it returns ``0`` — exposing real elapsed time there would break determinism. The sole exception is the ``unsafe-tracing`` debug level (see the executor "Debug modes" section), which returns real elapsed time even in deterministic mode; that level is for local debugging only and must never be used on a consensus network.
 
 Payload
 ~~~~~~~
@@ -442,3 +493,53 @@ Requirements
 
 #. GenVM version 0.1.10 or higher
 #. :term:`GenVM` implementation is allowed ignore this message
+
+``Yield`` Message
+-----------------
+
+Cooperative yield. Currently a no-op and returns no value; it is reserved for future use in waiting loops.
+
+Payload
+~~~~~~~
+
+.. code-block::
+
+   {
+     "Yield": null
+   }
+
+.. note::
+
+   Implementations may choose to ignore this message.
+
+Requirements
+~~~~~~~~~~~~
+
+#. GenVM version 0.3.0 or higher
+#. :term:`GenVM` implementation is allowed ignore this message
+
+.. _get-timestamp:
+
+``GetTimestamp`` Message
+------------------------
+
+Returns the current timestamp as the number of seconds since the Unix epoch.
+
+In :ref:`gvm-def-det-mode` it returns the transaction timestamp, keeping the value deterministic across validators.
+In :ref:`gvm-def-non-det-mode` it returns the real wall-clock time.
+
+Payload
+~~~~~~~
+
+.. code-block::
+
+   {
+     "GetTimestamp": null
+   }
+
+Returns the timestamp encoded as a :ref:`Calldata Encoded <gvm-def-calldata-encoding>` number.
+
+Requirements
+~~~~~~~~~~~~
+
+#. GenVM version 0.3.0 or higher

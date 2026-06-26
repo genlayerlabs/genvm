@@ -4,12 +4,53 @@ use super::*;
 use genlayer_sdk::abi;
 use genvm_common::*;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[repr(transparent)]
+pub struct StrSymbol(symbol_table::GlobalSymbol);
+
+impl StrSymbol {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl std::borrow::Borrow<str> for StrSymbol {
+    fn borrow(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl Ord for StrSymbol {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_str().cmp(other.as_str())
+    }
+}
+
+impl PartialOrd for StrSymbol {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl serde::Serialize for StrSymbol {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.as_str().serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for StrSymbol {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(Self(symbol_table::GlobalSymbol::from(s)))
+    }
+}
+
 pub struct Reader {
     cache: sync::CacheMap<ArchiveCache>,
     runners_data_path: std::path::PathBuf,
 
-    all: BTreeMap<symbol_table::GlobalSymbol, Vec<symbol_table::GlobalSymbol>>,
-    latest: BTreeMap<symbol_table::GlobalSymbol, symbol_table::GlobalSymbol>,
+    all: BTreeMap<StrSymbol, Vec<StrSymbol>>,
+    latest: BTreeMap<StrSymbol, StrSymbol>,
 }
 
 impl Reader {
@@ -48,23 +89,23 @@ impl Reader {
         })
     }
 
-    pub fn get_latest(&self, id: symbol_table::GlobalSymbol) -> Option<symbol_table::GlobalSymbol> {
-        self.latest.get(&id).cloned()
+    pub fn get_latest(&self, id: &str) -> Option<&str> {
+        self.latest.get(id).map(|s| s.as_str())
     }
 
-    pub fn has_in_all(
-        &self,
-        id: symbol_table::GlobalSymbol,
-        hash: symbol_table::GlobalSymbol,
-    ) -> bool {
-        match self.all.get(&id) {
-            Some(hashes) => hashes.binary_search(&hash).is_ok(),
+    pub fn has_in_all(&self, id: &str, hash: &str) -> bool {
+        match self.all.get(id) {
+            Some(hashes) => hashes.binary_search_by(|h| h.as_str().cmp(hash)).is_ok(),
             None => false,
         }
     }
 
     pub fn runners_path(&self) -> &std::path::Path {
         &self.runners_data_path
+    }
+
+    pub fn put(&self, id: symbol_table::GlobalSymbol, archive: Archive) {
+        self.cache.insert(id, ArchiveCache::new(id, archive));
     }
 
     pub async fn get_or_create<F>(

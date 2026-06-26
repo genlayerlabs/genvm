@@ -26,6 +26,11 @@ class Root:
 	It is set to an actual storage manager in the runtime, but can be overridden for testing purposes.
 	"""
 
+	major: u8
+	"""
+	Major version of the GenVM contract expects
+	"""
+
 	contract_instance: Indirection[None]
 
 	code: Indirection[VLA[u8]]
@@ -39,9 +44,11 @@ class Root:
 	"""
 	upgraders: Indirection[VLA[Address]]
 
-	major: u8
+	code_slot: u256
 	"""
-	Major version of the GenVM contract expects
+	Slot id the contract code is stored at, as a raw 32-byte value. If zero (the
+	default), the code is read from the default ``code`` slot; otherwise it is read
+	from the pointed-to slot (see ``chain:`` runner ids).
 	"""
 
 	@staticmethod
@@ -62,12 +69,23 @@ class Root:
 		"""
 		return self._storage_slot  # type: ignore
 
+	def get_resolved_code(self) -> VLA[u8]:
+		"""
+		Return the storage slot where the contract code is stored.
+
+		:returns: code storage slot
+		"""
+		if self.code_slot == 0:
+			return self.code.get()
+		else:
+			return Root.MANAGER.get_store_slot(self.code_slot).cast(VLA[u8], 0)
+
 	def get_vacant_slot(self) -> Slot:
 		"""
 		This slot can be used to store data without worrying about overwriting contract data.
 		Useful for bootstrapping contract storage
 		"""
-		return self.slot().indirect(public_abi.root_offsets.MAJOR)
+		return self.slot().indirect(public_abi.root_offsets.CODE_SLOT)
 
 	def get_contract_instance[T](self, typ: typing.Type[T], /) -> T:
 		"""

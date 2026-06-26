@@ -1,11 +1,41 @@
 #!/usr/bin/env python3
 """Generate categorized release notes from conventional commits."""
 
+import argparse
 import subprocess
 import sys
 import re
+import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass
+
+
+def strip_trailing_emoji(text: str) -> str:
+	"""Drop the trailing gitmoji suffix (and its variation selectors/ZWJ).
+
+	Commit subjects follow ``type(scope): summary <emoji>``; the category
+	heading already conveys the type, so the emoji is redundant noise here.
+	"""
+	chars = list(text)
+	while chars:
+		c = chars[-1]
+		if c.isspace() or c in '\ufe0f\u200d' or unicodedata.category(c) in ('So', 'Sk'):
+			chars.pop()
+		else:
+			break
+	return ''.join(chars).rstrip()
+
+
+NOREPLY_RE = re.compile(
+	r'(?:\d+\+)?(?P<handle>[\w.\[\]-]+)@users\.noreply\.github\.com'
+)
+
+
+def format_author(email: str) -> str:
+	"""Collapse GitHub noreply addresses to ``@handle``; keep real emails as-is."""
+	m = NOREPLY_RE.fullmatch(email)
+	return f'@{m.group("handle")}' if m else email
+
 
 CATEGORY_LABELS = {
 	'feat': 'Features',
@@ -31,9 +61,11 @@ class CommitEntry:
 def parse_git_log(rev_range: str) -> list[CommitEntry]:
 	"""Run git log and return parsed commit entries.
 
-	Each commit's subject line is included directly.  Body lines that look
-	like ``* type: description`` are promoted to top-level entries so they
-	get categorised on their own (inheriting the commit's author).
+	Body lines that look like ``* type: description`` are promoted to top-level
+	entries so they get categorised on their own (inheriting the commit's
+	author).  When a commit has such promoted lines its subject is treated as a
+	squash/PR umbrella title and dropped — the bullets already carry the real
+	changes, so keeping the subject would double-count them.
 	"""
 	result = subprocess.run(
 		['git', 'log', '--pretty=format:%ae%x01%B%x00', rev_range],
@@ -50,29 +82,35 @@ def parse_git_log(rev_range: str) -> list[CommitEntry]:
 		lines = [l.strip() for l in body.strip().splitlines() if l.strip()]
 		if not lines:
 			continue
-		# first line is the subject
-		entries.append(CommitEntry(lines[0], email))
 		# body lines starting with * may carry their own conventional prefix
-		for line in lines[1:]:
-			cleaned = re.sub(r'^\*\s*', '', line)
-			if COMMIT_RE.match(cleaned):
-				entries.append(CommitEntry(cleaned, email))
+		promoted = [
+			CommitEntry(cleaned, email)
+			for line in lines[1:]
+			if COMMIT_RE.match(cleaned := re.sub(r'^\*\s*', '', line))
+		]
+		if promoted:
+			entries.extend(promoted)
+		else:
+			# no bullets: the subject is the change itself
+			entries.append(CommitEntry(lines[0], email))
 	return entries
 
 
-def categorise(entries: list[CommitEntry]) -> dict[str, list[str]]:
+def categorize(entries: list[CommitEntry]) -> dict[str, list[str]]:
 	categories: dict[str, list[str]] = defaultdict(list)
 	for entry in entries:
 		m = COMMIT_RE.match(entry.message)
 		if m:
 			ctype = m.group('type')
 			scope = m.group('scope')
-			desc = m.group('desc').strip()
+			desc = strip_trailing_emoji(m.group('desc').strip())
 			text = f'**{scope}**: {desc}' if scope else desc
-			text += f' ({entry.email})'
+			text += f' ({format_author(entry.email)})'
 			categories[ctype].append(text)
 		else:
-			categories['other'].append(f'{entry.message} ({entry.email})')
+			categories['other'].append(
+				f'{strip_trailing_emoji(entry.message)} ({format_author(entry.email)})'
+			)
 	return categories
 
 
@@ -105,19 +143,23 @@ def format_notes(categories: dict[str, list[str]], rev_range: str) -> str:
 
 
 def main() -> None:
-	if len(sys.argv) < 2:
-		print(f'Usage: {sys.argv[0]} <rev-range>', file=sys.stderr)
-		print(f'  e.g. {sys.argv[0]} v0.2.7..v0.2.8', file=sys.stderr)
-		sys.exit(1)
+	parser = argparse.ArgumentParser(
+		description='Generate categorized release notes from conventional commits.',
+	)
+	parser.add_argument(
+		'rev_range',
+		metavar='rev-range',
+		help='git revision range, e.g. v0.2.7..v0.2.8',
+	)
+	args = parser.parse_args()
 
-	rev_range = sys.argv[1]
-	entries = parse_git_log(rev_range)
+	entries = parse_git_log(args.rev_range)
 	if not entries:
 		print('No commits found.', file=sys.stderr)
 		sys.exit(1)
 
-	categories = categorise(entries)
-	print(format_notes(categories, rev_range))
+	categories = categorize(entries)
+	print(format_notes(categories, args.rev_range))
 
 
 if __name__ == '__main__':

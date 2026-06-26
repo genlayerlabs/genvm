@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use genlayer_sdk::abi::gl_call::llm_iface;
 use genvm_common::sync::DArc;
 use genvm_common::*;
 
@@ -10,8 +9,7 @@ use sha3::digest::Update;
 use wiggle::GuestError;
 
 use crate::host::{self, SlotID};
-use crate::wasi::json_to_calldata::json_map_to_calldata;
-use crate::{anyhow_to_wasmtime, calldata, public_abi, rt};
+use crate::{anyhow_to_wasmtime, calldata, public_abi, rt, runners, wasi};
 
 use genlayer_calldata::codec::Encode;
 pub use genlayer_sdk::abi::entry::ExtendedMessage;
@@ -49,10 +47,11 @@ async fn consume_message_fee_internal(
         .calculate_message_fee_internal(on, &fee_params)
         .map_err(|x| generated::types::Error::trap(anyhow_to_wasmtime(x)))?;
 
-    if fee_cost > node.budget {
+    let fee_total = fee_cost.sum();
+    if fee_total > node.budget {
         log_warn!(
             node:cd = *node,
-            fee_cost:cd = fee_cost,
+            fee_cost:cd = fee_total,
             budget: cd = node.budget;
             "message fee cost exceeds node budget"
         );
@@ -76,20 +75,19 @@ async fn consume_message_fee_internal(
 
     if !shared_data
         .data_fees_limit
-        .consume_message_fee(fee_cost, receipt_cost)
+        .consume_message_fee(&fee_cost, &receipt_cost)
         .await
     {
         log_warn!(
             node:cd = *node,
-            fee_cost:cd = fee_cost,
-            receipt_cost: cd = receipt_cost,
+            fee_cost:cd = fee_total,
             buckets:? = shared_data.data_fees_limit;
             "not enough remaining fee limit to consume message fee"
         );
         return Err(oom_trap(abi::consts::VmError::oom().fees().internal()));
     }
 
-    node.budget -= fee_cost;
+    node.budget -= fee_total;
 
     Ok(rt::fees::MessageFeeConsumption {
         message_fee: fee_cost,
@@ -117,7 +115,8 @@ async fn consume_message_fee_external(
         .calculate_message_fee_external(&params)
         .map_err(|x| generated::types::Error::trap(anyhow_to_wasmtime(x)))?;
 
-    if fee_cost > node.budget {
+    let fee_total = fee_cost.sum();
+    if fee_total > node.budget {
         return Err(oom_trap(abi::consts::VmError::oom().fees().external()));
     }
 
@@ -134,13 +133,13 @@ async fn consume_message_fee_external(
 
     if !shared_data
         .data_fees_limit
-        .consume_message_fee(fee_cost, receipt_cost)
+        .consume_message_fee(&fee_cost, &receipt_cost)
         .await
     {
         return Err(oom_trap(abi::consts::VmError::oom().fees().external()));
     }
 
-    node.budget -= fee_cost;
+    node.budget -= fee_total;
 
     Ok(rt::fees::MessageFeeConsumption {
         message_fee: fee_cost,
@@ -250,6 +249,26 @@ pub struct VMDataAccumulator {
     pub messages_value_decremented: primitive_types::U256,
     pub emissions: Vec<domain::ExecutionEmission>,
     pub message_fee_allocation: Vec<domain::fees::MessageAllocationNode>,
+    /// Custom runner hashes registered in (and inherited into) this execution
+    /// scope. Only these may be resolved via `custom:<hash>`. A nondet sub-VM
+    /// starts empty, so it cannot see runners the deterministic scope registered.
+    pub custom_runners: rpds::HashTrieSet<Bytes32Hash, archery::ArcTK>,
+}
+
+impl VMDataAccumulator {
+    /// Asserts the accumulator carries no surfaced effects (events,
+    /// message-fee allocations). Call it after running a sub-VM whose
+    /// accumulator is discarded (e.g. a `CallContract` child) to guarantee no
+    /// effect was charged but silently dropped. Returns a fatal error otherwise.
+    pub fn check_empty(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.emissions.is_empty() && self.message_fee_allocation.is_empty(),
+            "internal error: discarded sub-VM accumulator is not empty ({} emission(s), {} message-fee allocation(s))",
+            self.emissions.len(),
+            self.message_fee_allocation.len(),
+        );
+        Ok(())
+    }
 }
 
 pub struct SingleVMData {
@@ -271,6 +290,7 @@ pub struct Context {
 
 pub struct ContextVFS<'a> {
     pub(super) vfs: &'a mut vfs::VFS,
+    pub(super) preview1: &'a mut super::preview1::Context,
     pub(super) context: &'a mut Context,
 }
 
@@ -305,6 +325,18 @@ pub(crate) mod generated {
             }
         },
     });
+}
+
+impl From<wasi::vfs::Fd> for generated::types::Fd {
+    fn from(fd: wasi::vfs::Fd) -> Self {
+        fd.as_u32().into()
+    }
+}
+
+impl From<generated::types::Fd> for wasi::vfs::Fd {
+    fn from(fd: generated::types::Fd) -> Self {
+        wasi::vfs::Fd::new(fd.into())
+    }
 }
 
 fn read_addr_from_mem(
@@ -448,6 +480,16 @@ impl From<serde_json::Error> for generated::types::Error {
 }
 
 impl ContextVFS<'_> {
+    fn place_content(
+        &mut self,
+        content: vfs::FileContents,
+    ) -> Result<generated::types::Fd, generated::types::Error> {
+        self.vfs
+            .place_content(content)
+            .map(generated::types::Fd::from)
+            .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))
+    }
+
     fn set_vm_run_result(
         &mut self,
         data: rt::vm::RunOk,
@@ -462,18 +504,8 @@ impl ContextVFS<'_> {
         };
         let data: Vec<u8> = data.as_bytes();
         let len = data.len();
-        Ok((
-            generated::types::Fd::from(
-                self.vfs
-                    .place_content(vfs::FileContents {
-                        contents: bytes::Bytes::from(data),
-                        pos: 0,
-                        release_memory: true,
-                    })
-                    .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-            ),
-            len,
-        ))
+        self.place_content(vfs::FileContents::from(bytes::Bytes::from(data)))
+            .map(|fd| (fd, len))
     }
 }
 
@@ -635,8 +667,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         address,
                         calldata,
                         value,
-                        message_fee: fees.message_fee,
-                        receipt_fee: fees.receipt_fee,
+                        message_fee: fees.message_fee.sum(),
+                        receipt_fee: fees.receipt_fee.sum(),
                         fee_params: matched_params,
                     });
 
@@ -657,21 +689,13 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 }
 
                 let supervisor = self.context.data.supervisor.clone();
-                let res = supervisor
+                let data = supervisor
                     .host
                     .lock_for(host::host_fns::Methods::EthCall)
                     .await
                     .eth_call(address, &calldata)
                     .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
-                Ok(generated::types::Fd::from(
-                    self.vfs
-                        .place_content(vfs::FileContents {
-                            contents: bytes::Bytes::from(res),
-                            pos: 0,
-                            release_memory: true,
-                        })
-                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-                ))
+                self.place_content(vfs::FileContents::from(bytes::Bytes::from(data)))
             }
             gl_call::Message::CallContract {
                 address,
@@ -691,7 +715,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let supervisor = self.context.data.supervisor.clone();
 
-                let my_conf = self.context.data.conf;
+                let my_conf = self.context.data.conf.clone();
 
                 let calldata_encoded = calldata::encode_obj(&calldata);
 
@@ -704,8 +728,26 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                 let calldata_encoded = calldata::encode_obj(&calldata);
 
+                let mut child_storage = rt::vm::storage::Storage::new(
+                    address,
+                    supervisor.get_storage_limiter(),
+                    StorageHostHolder(
+                        supervisor.host.clone(),
+                        ReadToken {
+                            account: address,
+                            mode: state,
+                        },
+                    ),
+                );
+
+                let code_slot = child_storage
+                    .check_major_and_resolve_code_slot()
+                    .await
+                    .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
                 let vm_data = Box::new(SingleVMData {
                     depth: self.context.data.depth + 1,
+                    // Permission model: doc/website/src/spec/03-vm/05-permissions.rst
                     conf: base::Config {
                         needs_error_fingerprint: true,
                         is_deterministic: true,
@@ -713,8 +755,18 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         can_write_storage: false,
                         can_spawn_nondet: my_conf.can_spawn_nondet,
                         can_call_others: my_conf.can_call_others,
-                        can_send_messages: my_conf.can_send_messages,
+                        can_send_messages: false,
+                        can_register_runners: my_conf.can_register_runners,
                         state_mode: state,
+                        topmost_runner_id: runners::Id::Chain {
+                            address,
+                            on: if state == public_abi::StorageType::LatestFinal {
+                                runners::ChainState::Finalized
+                            } else {
+                                runners::ChainState::Accepted
+                            },
+                            slot: code_slot,
+                        },
                     },
                     message_data: ExtendedMessage {
                         message: genlayer_sdk::abi::entry::MessageData {
@@ -731,17 +783,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         entry_data: my_data.entry_data,
                         entry_stage_data: default_entry_stage_data(),
                     },
-                    storage: rt::vm::storage::Storage::new(
-                        address,
-                        supervisor.get_storage_limiter(),
-                        StorageHostHolder(
-                            supervisor.host.clone(),
-                            ReadToken {
-                                account: address,
-                                mode: state,
-                            },
-                        ),
-                    ),
+                    storage: child_storage,
                     supervisor: supervisor.clone(),
                     accumulator: VMDataAccumulator {
                         data_fees_limit: self.context.data.accumulator.data_fees_limit.clone(),
@@ -752,12 +794,22 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                             .messages_value_decremented,
                         emissions: Vec::new(),
                         message_fee_allocation: Vec::new(),
+                        // CallContract is a deterministic sub-call: inherit the
+                        // runners registered so far.
+                        custom_runners: self.context.data.accumulator.custom_runners.clone(),
                     },
                     det_subvm_hashes: Default::default(),
                 });
 
                 let res = rt::spawn_apply_run(&supervisor, vm_data)
                     .await
+                    .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
+                // The child is read-only (static), so its accumulator must be
+                // empty — otherwise an effect was charged but discarded here.
+                res.vm_data
+                    .accumulator
+                    .check_empty()
                     .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
                 let hash = res.small_hash();
@@ -768,6 +820,15 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             gl_call::Message::EmitEvent { topics, blob } => {
                 if !self.context.data.conf.is_deterministic {
                     log_warn!("EmitEvent requires deterministic mode");
+
+                    return Err(generated::types::Errno::Forbidden.into());
+                }
+                // Events are state-mutating log emissions, so they require the
+                // same write capability as storage. A read-only sub-VM (e.g. a
+                // `CallContract` child) must not emit events; otherwise the
+                // emission is charged but later discarded with the child.
+                if !self.context.data.conf.can_write_storage {
+                    log_warn!("EmitEvent requires write_storage permission");
 
                     return Err(generated::types::Errno::Forbidden.into());
                 }
@@ -933,8 +994,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         calldata,
                         value,
                         on,
-                        message_fee: fees.message_fee,
-                        receipt_fee: fees.receipt_fee,
+                        message_fee: fees.message_fee.sum(),
+                        receipt_fee: fees.receipt_fee.sum(),
                         fee_params,
                         subtree,
                     },
@@ -1038,8 +1099,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         value,
                         on,
                         salt_nonce,
-                        message_fee: fees.message_fee,
-                        receipt_fee: fees.receipt_fee,
+                        message_fee: fees.message_fee.sum(),
+                        receipt_fee: fees.receipt_fee.sum(),
                         fee_params,
                         subtree,
                     },
@@ -1090,15 +1151,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 .await
                 .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
-                Ok(generated::types::Fd::from(
-                    self.vfs
-                        .place_content(vfs::FileContents {
-                            contents: bytes::Bytes::from(task),
-                            pos: 0,
-                            release_memory: true,
-                        })
-                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-                ))
+                self.place_content(vfs::FileContents::from(bytes::Bytes::from(task)))
             }
             gl_call::Message::WebRequest(request_payload) => {
                 let is_det = self.context.data.conf.is_deterministic;
@@ -1136,15 +1189,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 .await
                 .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
-                Ok(generated::types::Fd::from(
-                    self.vfs
-                        .place_content(vfs::FileContents {
-                            contents: bytes::Bytes::from(task),
-                            pos: 0,
-                            release_memory: true,
-                        })
-                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-                ))
+                self.place_content(vfs::FileContents::from(bytes::Bytes::from(task)))
             }
             gl_call::Message::ExecPrompt(prompt_payload) => {
                 if self.context.data.conf.is_deterministic {
@@ -1168,7 +1213,6 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 let sup = self.context.data.supervisor.clone();
 
                 let task = taskify(async move {
-                    let format = prompt_payload.response_format;
                     let result = sup
                         .modules
                         .llm
@@ -1194,7 +1238,7 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
 
                     if result.consumed_gen == primitive_types::U256::MAX {
                         return Err(
-                            rt::errors::VMError(abi::consts::VmError::timeout(), None).into(),
+                            rt::errors::VMError(abi::consts::VmError::timeout(), None).into()
                         );
                     }
 
@@ -1203,44 +1247,14 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                         *acc = acc.saturating_add(result.consumed_gen);
                     }
 
-                    let mut result = result.data;
-
-                    if format == llm_iface::OutputFormat::JSON {
-                        let genvm_modules_interfaces::llm::PromptAnswerData::Text(t) = result
-                        else {
-                            return Err(anyhow::anyhow!("expected text response for json format"));
-                        };
-
-                        let val: serde_json::Map<String, serde_json::Value> =
-                            serde_json::from_str(&t).map_err(|e| {
-                                generated::types::Error::trap(crate::anyhow_to_wasmtime(e.into()))
-                            })?;
-
-                        log_debug!(text = t; "for backwards compatibility we convert text to object for JSON 1");
-
-                        std::mem::drop(t);
-
-                        let val = json_map_to_calldata(val);
-
-                        log_debug!(converted:serde = val; "for backwards compatibility we convert text to object for JSON 1");
-
-                        result = genvm_modules_interfaces::llm::PromptAnswerData::Object(val);
-                    }
+                    let result = result.data;
 
                     Ok(Ok(result))
                 })
                 .await
                 .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
-                Ok(generated::types::Fd::from(
-                    self.vfs
-                        .place_content(vfs::FileContents {
-                            contents: bytes::Bytes::from(task),
-                            pos: 0,
-                            release_memory: true,
-                        })
-                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-                ))
+                self.place_content(vfs::FileContents::from(bytes::Bytes::from(task)))
             }
             gl_call::Message::ExecPromptTemplate(prompt_template_payload) => {
                 if self.context.data.conf.is_deterministic {
@@ -1316,20 +1330,8 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
                 .await
                 .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
-                Ok(generated::types::Fd::from(
-                    self.vfs
-                        .place_content(vfs::FileContents {
-                            contents: bytes::Bytes::from(task),
-                            pos: 0,
-                            release_memory: true,
-                        })
-                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-                ))
+                self.place_content(vfs::FileContents::from(bytes::Bytes::from(task)))
             }
-            #[allow(deprecated)]
-            gl_call::Message::Rollback(msg) => Err(generated::types::Error::trap(
-                crate::anyhow_to_wasmtime(rt::errors::UserError(msg).into()),
-            )),
             gl_call::Message::UserError(msg) => Err(generated::types::Error::trap(
                 crate::anyhow_to_wasmtime(rt::errors::UserError(msg).into()),
             )),
@@ -1342,9 +1344,29 @@ impl generated::genlayer_sdk::GenlayerSdk for ContextVFS<'_> {
             } => self.run_nondet(data_leader, data_validator).await,
             gl_call::Message::Sandbox {
                 data,
-                allow_write_ops,
-            } => self.sandbox(data, allow_write_ops).await,
+                runner,
+                allow_write_storage,
+                allow_send_messages,
+                allow_register_runners,
+            } => {
+                self.sandbox(
+                    data,
+                    runner,
+                    allow_write_storage,
+                    allow_send_messages,
+                    allow_register_runners,
+                )
+                .await
+            }
+            gl_call::Message::RegisterRunner { code } => self.register_runner(code).await,
+            gl_call::Message::MapFile {
+                runner,
+                path_in_runner,
+                path_in_vfs,
+            } => self.map_file(runner, path_in_runner, path_in_vfs).await,
             gl_call::Message::Trace(message) => self.gl_call_trace(message).await,
+            gl_call::Message::Yield => Ok(file_fd_none()),
+            gl_call::Message::GetTimestamp => self.gl_call_get_timestamp().await,
         }
     }
 
@@ -1540,6 +1562,19 @@ impl ContextVFS<'_> {
     ) -> Result<generated::types::Fd, generated::types::Error> {
         match msg {
             gl_call::TracePayload::Message(text) => {
+                // Tracing is a debug-only aid; skip the timing and logging work
+                // entirely when not in debug mode.
+                if !self
+                    .context
+                    .data
+                    .supervisor
+                    .shared_data
+                    .debug_mode
+                    .allows_tracing()
+                {
+                    return Ok(file_fd_none());
+                }
+
                 let now = std::time::Instant::now();
                 let since_prev = now.duration_since(self.context.prev_time);
                 self.context.prev_time = now;
@@ -1555,7 +1590,13 @@ impl ContextVFS<'_> {
             }
             gl_call::TracePayload::RuntimeMicroSec => {
                 let elapsed_micros = if self.context.data.conf.is_deterministic
-                    && !self.context.data.supervisor.shared_data.debug_mode
+                    && !self
+                        .context
+                        .data
+                        .supervisor
+                        .shared_data
+                        .debug_mode
+                        .allows_nondeterminism()
                 {
                     0u64
                 } else {
@@ -1566,17 +1607,90 @@ impl ContextVFS<'_> {
                 let data = calldata::encode(&calldata::Value::Number(num_bigint::BigInt::from(
                     elapsed_micros,
                 )));
-                Ok(generated::types::Fd::from(
-                    self.vfs
-                        .place_content(vfs::FileContents {
-                            contents: bytes::Bytes::from(data),
-                            pos: 0,
-                            release_memory: true,
-                        })
-                        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-                ))
+                self.place_content(vfs::FileContents::from(bytes::Bytes::from(data)))
             }
         }
+    }
+
+    async fn gl_call_get_timestamp(
+        &mut self,
+    ) -> Result<generated::types::Fd, generated::types::Error> {
+        let timestamp = if self.context.data.conf.is_deterministic {
+            self.context.data.message_data.message.datetime.timestamp()
+        } else {
+            chrono::Utc::now().timestamp()
+        };
+
+        let data = calldata::encode(&calldata::Value::Number(num_bigint::BigInt::from(
+            timestamp,
+        )));
+        self.place_content(vfs::FileContents::from(bytes::Bytes::from(data)))
+    }
+
+    async fn register_runner(
+        &mut self,
+        code: bytes::Bytes,
+    ) -> Result<generated::types::Fd, generated::types::Error> {
+        if !self.context.data.conf.is_deterministic {
+            return Err(generated::types::Errno::Forbidden.into());
+        }
+        if !self.context.data.conf.can_register_runners {
+            return Err(generated::types::Errno::Forbidden.into());
+        }
+
+        let is_det = self.context.data.conf.is_deterministic;
+        let supervisor = self.context.data.supervisor.clone();
+        let hash = crate::runners::custom_runner_hash(&code);
+        let id = supervisor
+            .register_custom_runner(code, supervisor.limiter.get(is_det))
+            .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
+        // Scope the runner to this execution (and its deterministic children) so
+        // it cannot be resolved from an unrelated scope (e.g. a nondet sub-VM).
+        self.context.data.accumulator.custom_runners =
+            self.context.data.accumulator.custom_runners.insert(hash);
+
+        let data = calldata::encode(&calldata::Value::Str(id.as_str().to_owned()));
+        self.place_content(vfs::FileContents::from(bytes::Bytes::from(data)))
+    }
+
+    async fn map_file(
+        &mut self,
+        runner: String,
+        path_in_runner: String,
+        path_in_vfs: String,
+    ) -> Result<generated::types::Fd, generated::types::Error> {
+        // Resolving a `chain:` runner reads another contract's storage, so this
+        // is gated on the same permission as `storage_read` to avoid becoming a
+        // read-storage bypass.
+        if !self.context.data.conf.can_read_storage {
+            return Err(generated::types::Errno::Forbidden.into());
+        }
+
+        let supervisor = self.context.data.supervisor.clone();
+        let is_det = self.context.data.conf.is_deterministic;
+        let limiter = supervisor.limiter.get(is_det);
+        let topmost_runner_id = self.context.data.conf.topmost_runner_id.clone();
+        let available_custom = self.context.data.accumulator.custom_runners.clone();
+
+        let runner =
+            rt::supervisor::actions::resolve_runner_id(&supervisor, &topmost_runner_id, &runner)
+                .await
+                .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
+        rt::supervisor::actions::map_runner_file(
+            &supervisor,
+            self.preview1,
+            limiter,
+            runner,
+            &path_in_runner,
+            &path_in_vfs,
+            &available_custom,
+        )
+        .await
+        .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
+
+        Ok(file_fd_none())
     }
 
     async fn run_nondet(
@@ -1652,22 +1766,11 @@ impl ContextVFS<'_> {
                         ))
                     }
                     x if x == ResultCode::UserError as u8 => {
-                        let val = if rest.len() >= 4 && rest[..4] == [0u8; 4] {
-                            calldata::decode(&rest[4..]).map_err(|e| {
-                                generated::types::Error::trap(crate::anyhow_to_wasmtime(
-                                    anyhow::anyhow!(e),
-                                ))
-                            })?
-                        } else {
-                            // FIXME: deprecate in next release (raw-string user error encoding)
-                            calldata::Value::Str(String::from(std::str::from_utf8(rest).map_err(
-                                |e| {
-                                    generated::types::Error::trap(crate::anyhow_to_wasmtime(
-                                        anyhow::anyhow!(e),
-                                    ))
-                                },
-                            )?))
-                        };
+                        let val = calldata::decode(rest).map_err(|e| {
+                            generated::types::Error::trap(crate::anyhow_to_wasmtime(
+                                anyhow::anyhow!(e),
+                            ))
+                        })?;
                         rt::vm::RunOk::UserError(calldata::unparsed::Maybe::Materialized(val))
                     }
                     x if x == ResultCode::VmError as u8 => {
@@ -1734,10 +1837,14 @@ impl ContextVFS<'_> {
                     .messages_value_decremented,
                 emissions: Vec::new(),
                 message_fee_allocation: Vec::new(),
+                // Nondet is an isolated execution scope: it must NOT see custom
+                // runners registered by the deterministic scope.
+                custom_runners: Default::default(),
             };
 
             let vm_data = Box::new(SingleVMData {
                 depth: self.context.data.depth + 1,
+                // Permission model: doc/website/src/spec/03-vm/05-permissions.rst
                 conf: base::Config {
                     needs_error_fingerprint: false,
                     is_deterministic: false,
@@ -1746,7 +1853,9 @@ impl ContextVFS<'_> {
                     can_spawn_nondet: false,
                     can_call_others: false,
                     can_send_messages: false,
+                    can_register_runners: false,
                     state_mode: public_abi::StorageType::Default,
+                    topmost_runner_id: self.context.data.conf.topmost_runner_id.clone(),
                 },
                 message_data,
                 supervisor: supervisor.clone(),
@@ -1798,9 +1907,18 @@ impl ContextVFS<'_> {
     async fn sandbox(
         &mut self,
         data: bytes::Bytes,
-        allow_write_ops: bool,
+        runner: String,
+        allow_write_storage: bool,
+        allow_send_messages: bool,
+        allow_register_runners: bool,
     ) -> Result<generated::types::Fd, generated::types::Error> {
         let supervisor = self.context.data.supervisor.clone();
+
+        let parent_runner_id = self.context.data.conf.topmost_runner_id.clone();
+        let topmost_runner_id =
+            rt::supervisor::actions::resolve_runner_id(&supervisor, &parent_runner_id, &runner)
+                .await
+                .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?;
 
         let message_data = self
             .context
@@ -1817,6 +1935,8 @@ impl ContextVFS<'_> {
             messages_value_decremented: primitive_types::U256::max_value(),
             emissions: Vec::new(),
             message_fee_allocation: Vec::new(),
+            // Sandbox is a deterministic sub-VM: inherit the registered runners.
+            custom_runners: self.context.data.accumulator.custom_runners.clone(),
         };
 
         std::mem::swap(&mut self.context.data.accumulator, &mut fake_my_data);
@@ -1825,15 +1945,18 @@ impl ContextVFS<'_> {
 
         let vm_data = Box::new(SingleVMData {
             depth: self.context.data.depth + 1,
+            // Permission model: doc/website/src/spec/03-vm/05-permissions.rst
             conf: base::Config {
                 needs_error_fingerprint: false,
                 is_deterministic: zelf_conf.is_deterministic,
                 can_read_storage: zelf_conf.can_read_storage,
-                can_write_storage: zelf_conf.can_write_storage & allow_write_ops,
+                can_write_storage: zelf_conf.can_write_storage & allow_write_storage,
                 can_spawn_nondet: false,
                 can_call_others: false,
-                can_send_messages: zelf_conf.can_send_messages & allow_write_ops,
+                can_send_messages: zelf_conf.can_send_messages & allow_send_messages,
+                can_register_runners: zelf_conf.can_register_runners & allow_register_runners,
                 state_mode: zelf_conf.state_mode,
+                topmost_runner_id,
             },
             message_data,
             supervisor: supervisor.clone(),
@@ -1855,14 +1978,6 @@ impl ContextVFS<'_> {
         self.context.data.storage = my_res.vm_data.storage;
 
         let data: Vec<u8> = my_res.run_ok.as_bytes();
-        Ok(generated::types::Fd::from(
-            self.vfs
-                .place_content(vfs::FileContents {
-                    contents: bytes::Bytes::from(data),
-                    pos: 0,
-                    release_memory: true,
-                })
-                .map_err(|e| generated::types::Error::trap(crate::anyhow_to_wasmtime(e)))?,
-        ))
+        self.place_content(vfs::FileContents::from(bytes::Bytes::from(data)))
     }
 }

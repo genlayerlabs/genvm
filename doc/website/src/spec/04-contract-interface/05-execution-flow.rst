@@ -79,3 +79,19 @@ Extended-Message Format
 
       pub entry_stage_data: calldata::Value,
    }
+
+``CallContract`` semantics
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``CallContract`` performs a read-only (view) call into another contract. It **preserves** ``sender_address`` and ``origin_address``: the callee observes the *same* ``sender_address`` as the caller did, **not** the address of the immediate caller.
+
+The immediate caller — the contract that issued the ``CallContract`` — is pushed onto ``stack`` instead, so the callee always sees it as ``stack[-1]`` (the last element). For the top-level entrypoint ``stack`` is empty (refer to ``contract_address``); each nested ``CallContract`` appends one entry.
+
+Therefore a callee that needs to authorize its *immediate* caller MUST inspect ``stack[-1]`` rather than ``sender_address`` — the latter identifies the original transaction sender shared across the whole view-call chain.
+
+State visibility
+""""""""""""""""
+
+A ``CallContract`` child reads **committed** on-chain storage (the latest accepted / non-final state); it does **not** see the calling transaction's uncommitted writes. Consequently a contract does not observe its own in-transaction storage delta through a ``CallContract`` — including a self-call ``get_at(self.address)`` — even though a *direct* read does.
+
+This is intentional: it preserves causality and avoids exposing stale-then-fresh reads within one call. It is also a footgun: relying on a self-``CallContract`` to read state written earlier in the same transaction returns the old value. Use direct reads for in-transaction data, and treat ``get_at(self.address)`` as a read of the committed snapshot only.

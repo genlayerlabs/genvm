@@ -448,7 +448,7 @@ async def run_genvm(
 	manager_uri: str = 'http://127.0.0.1:3999',
 	ctx: Context,
 	is_sync: bool,
-	capture_output: bool = True,
+	debug_mode: str = 'disabled',
 	message: Message,
 	host_data: str = '',
 	gas_data: dict[str, str] | None = None,
@@ -493,7 +493,7 @@ async def run_genvm(
 					'major': 0,  # FIXME
 					'message': message,
 					'is_sync': is_sync,
-					'capture_output': capture_output,
+					'debug_mode': debug_mode,
 					'host_data': host_data,
 					'max_execution_minutes': max_exec_mins,  # this parameter is needed to prevent zombie genvms
 					'timestamp': timestamp,

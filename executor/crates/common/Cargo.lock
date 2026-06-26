@@ -485,6 +485,7 @@ dependencies = [
  "num-bigint",
  "primitive-types",
  "serde",
+ "sha3",
 ]
 
 [[package]]
@@ -514,7 +515,7 @@ dependencies = [
 
 [[package]]
 name = "genvm-common"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "arbitrary",

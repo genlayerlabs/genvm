@@ -40,10 +40,15 @@ impl AccountAddress {
 #[repr(C)]
 pub struct SlotID(#[serde_as(as = "Base64")] pub [u8; 32]);
 
-pub mod root_offsets {
-    pub const CODE: u32 = 1;
-    pub const LOCKED_SLOTS: u32 = 2;
-    pub const UPGRADERS: u32 = 3;
+impl<W: genvm_common::calldata::Writer> genvm_common::calldata::codec::Encode<W> for SlotID {
+    type Error = W::Error;
+
+    fn encode(
+        &self,
+        enc: &mut genvm_common::calldata::Encoder<W>,
+    ) -> std::result::Result<(), Self::Error> {
+        enc.push_bytes(&self.0)
+    }
 }
 
 impl SlotID {
@@ -87,5 +92,11 @@ impl From<[u8; 32]> for SlotID {
 impl From<&[u8; 32]> for SlotID {
     fn from(value: &[u8; 32]) -> Self {
         SlotID(*value)
+    }
+}
+
+impl std::fmt::Display for SlotID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&genlayer_sdk::gvm32::encode(&self.0))
     }
 }

@@ -39,6 +39,13 @@ pub struct Request {
     /// one. Set by the web module for hosts in `always_allow_hosts`.
     #[serde(default = "default_false")]
     pub unfiltered: bool,
+
+    /// Set once `normalize_headers` has run. Lets `into_reqwest` normalize every
+    /// request exactly once without re-stripping the `genlayer-*` headers the
+    /// signing path legitimately adds after normalizing. Not part of the wire
+    /// format.
+    #[serde(skip)]
+    pub headers_normalized: bool,
 }
 
 const DROP_HEADERS: &[&str] = &[
@@ -67,12 +74,22 @@ impl Request {
 
             self.headers.insert(lower_k, v);
         }
+
+        self.headers_normalized = true;
     }
 
     pub fn into_reqwest(
-        self,
+        mut self,
         client: &reqwest::Client,
     ) -> Result<reqwest::RequestBuilder, ModuleError> {
+        // Drop forbidden/forged headers (host, content-length, genlayer-*, @*)
+        // on every request. The signing path normalizes earlier (before adding
+        // the legitimate genlayer-* headers), so the flag keeps us from
+        // stripping those back out here.
+        if !self.headers_normalized {
+            self.normalize_headers();
+        }
+
         let method = match self.method {
             web_iface::RequestMethod::GET => reqwest::Method::GET,
             web_iface::RequestMethod::POST => reqwest::Method::POST,
@@ -110,94 +127,5 @@ impl Request {
         } else {
             request
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::common;
-    use genvm_common::*;
-    use genvm_modules_interfaces::web as web_iface;
-
-    #[tokio::test]
-    async fn test_response_body_max_size_ok() {
-        common::tests::setup();
-
-        let client = common::tests::create_test_client();
-        let metrics = sync::DArc::new(crate::scripting::ctx::Metrics::default());
-        let url = "https://test-server.genlayer.com/body/echo";
-
-        // body within limit (500 bytes < 1024 limit) => success
-        let body = vec![b'a'; 500];
-        let req = crate::scripting::ctx::req::Request {
-            url: url::Url::parse(url).unwrap(),
-            method: web_iface::RequestMethod::POST,
-            headers: BTreeMap::new(),
-            body: Some(body.clone()),
-            json: false,
-            error_on_status: false,
-            sign: false,
-            response_body_max_size: Some(1024),
-            timeout: None,
-            unfiltered: false,
-        };
-
-        let body_size_limit = req.response_body_max_size.unwrap_or(usize::MAX);
-        let reqwst = req.into_reqwest(&client).unwrap();
-
-        let res = crate::scripting::send_request_get_lua_compatible_response_bytes(
-            &metrics,
-            url,
-            reqwst,
-            false,
-            body_size_limit,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(res.status, 200);
-        assert_eq!(res.body, body);
-    }
-
-    #[tokio::test]
-    async fn test_response_body_max_size_exceeded() {
-        common::tests::setup();
-
-        let client = common::tests::create_test_client();
-        let metrics = sync::DArc::new(crate::scripting::ctx::Metrics::default());
-        let url = "https://test-server.genlayer.com/body/echo";
-
-        let body = vec![b'b'; 2000];
-        let req = crate::scripting::ctx::req::Request {
-            url: url::Url::parse(url).unwrap(),
-            method: web_iface::RequestMethod::POST,
-            headers: BTreeMap::new(),
-            body: Some(body),
-            json: false,
-            error_on_status: false,
-            sign: false,
-            response_body_max_size: Some(1024),
-            timeout: None,
-            unfiltered: false,
-        };
-
-        let body_size_limit = 1024;
-        let reqwst = req.into_reqwest(&client).unwrap();
-
-        let err = crate::scripting::send_request_get_lua_compatible_response_bytes(
-            &metrics,
-            url,
-            reqwst,
-            false,
-            body_size_limit,
-        )
-        .await
-        .unwrap_err();
-
-        log_info!(error:ah = &err; "Received expected error for exceeding body size limit");
-
-        let module_err = err.downcast::<crate::common::ModuleError>().unwrap();
-        assert!(module_err.causes.contains(&"READING_BODY".to_owned()));
     }
 }

@@ -1,7 +1,7 @@
 use base64::Engine;
 use genvm_common::*;
 use genvm_modules_interfaces::GenericValue;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -803,6 +803,11 @@ const MAX_REDIRECTS: usize = 10;
 /// This policy closes that hole by rejecting redirect hops whose host is a
 /// non-globally-routable IP literal; hostname targets keep being filtered by the
 /// resolver when the next hop connects.
+///
+/// It also rejects HTTPS->HTTP downgrade redirects: following one would carry
+/// any request signature (which does not bind the scheme tightly enough at all
+/// receivers) onto a plaintext hop observable and replayable by on-path
+/// attackers.
 pub fn redirect_policy() -> reqwest::redirect::Policy {
     reqwest::redirect::Policy::custom(|attempt| {
         if attempt.previous().len() >= MAX_REDIRECTS {
@@ -816,12 +821,32 @@ pub fn redirect_policy() -> reqwest::redirect::Policy {
         };
         if bad {
             log_warn!(url = attempt.url().as_str(); "redirect to non-globally-routable IP-literal rejected");
-            attempt.error(NoRoutableAddress)
-        } else {
-            attempt.follow()
+            return attempt.error(NoRoutableAddress);
         }
+        let downgrade = attempt
+            .previous()
+            .last()
+            .is_some_and(|prev| prev.scheme() == "https" && attempt.url().scheme() == "http");
+        if downgrade {
+            log_warn!(url = attempt.url().as_str(); "HTTPS->HTTP downgrade redirect rejected");
+            return attempt.error(SchemeDowngrade);
+        }
+        attempt.follow()
     })
 }
+
+/// Error returned by [`redirect_policy`] when a redirect would downgrade an
+/// HTTPS hop to plaintext HTTP.
+#[derive(Debug)]
+struct SchemeDowngrade;
+
+impl std::fmt::Display for SchemeDowngrade {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("refusing to follow HTTPS->HTTP downgrade redirect")
+    }
+}
+
+impl std::error::Error for SchemeDowngrade {}
 
 /// A client whose resolver drops non-globally-routable addresses (see
 /// [`FilteringResolver`]) and whose redirect policy rejects non-routable
@@ -918,7 +943,41 @@ impl LogSinkElement {
     }
 }
 
-pub type LogSink = Arc<crossbeam::queue::SegQueue<LogSinkElement>>;
+/// Maximum number of buffered log entries kept per execution when not in debug
+/// mode; older entries are evicted to bound memory usage.
+pub const LOG_SINK_LIMIT: usize = 128;
+
+#[derive(Default)]
+pub struct LogSinkInner {
+    queue: crossbeam::queue::SegQueue<LogSinkElement>,
+    debug: bool,
+}
+
+impl LogSinkInner {
+    pub fn new(debug: bool) -> Self {
+        Self {
+            queue: crossbeam::queue::SegQueue::new(),
+            debug,
+        }
+    }
+
+    /// Appends an entry. In debug mode the sink is unbounded; otherwise the
+    /// oldest entries are dropped to keep at most [`LOG_SINK_LIMIT`] buffered.
+    pub fn push(&self, elem: LogSinkElement) {
+        if !self.debug {
+            while self.queue.len() >= LOG_SINK_LIMIT {
+                self.queue.pop();
+            }
+        }
+        self.queue.push(elem);
+    }
+
+    pub fn pop(&self) -> Option<LogSinkElement> {
+        self.queue.pop()
+    }
+}
+
+pub type LogSink = Arc<LogSinkInner>;
 
 pub static GENVM_BY_ID_LOGGER: std::sync::LazyLock<
     papaya::HashMap<genvm_modules_interfaces::GenVMId, LogSink>,

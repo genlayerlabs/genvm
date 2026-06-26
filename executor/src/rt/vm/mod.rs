@@ -92,17 +92,10 @@ impl RunOk {
             RunOk::UserError(val) => {
                 let mut res = vec![ResultCode::UserError as u8];
                 match val {
-                    // FIXME: deprecate in next release (always use the tagged calldata form below)
-                    calldata::unparsed::Maybe::Materialized(calldata::Value::Str(s)) => {
-                        res.extend_from_slice(s.as_bytes());
+                    calldata::unparsed::Maybe::Materialized(value) => {
+                        res.extend_from_slice(&calldata::encode(value));
                     }
-                    calldata::unparsed::Maybe::Materialized(other) => {
-                        res.extend_from_slice(&0u32.to_le_bytes());
-                        res.extend_from_slice(&calldata::encode(other));
-                    }
-                    // Already-encoded calldata bytes; emit them in the tagged form.
                     calldata::unparsed::Maybe::Checked(raw) => {
-                        res.extend_from_slice(&0u32.to_le_bytes());
                         res.extend_from_slice(&raw.0);
                     }
                 }
@@ -149,7 +142,6 @@ impl std::fmt::Display for RunOk {
 pub struct WasmtimeStoreData {
     pub(super) genlayer_ctx: wasi::Context,
     pub(super) limits: rt::memlimiter::Limiter,
-    pub(super) supervisor: std::sync::Arc<rt::supervisor::Supervisor>,
 }
 
 impl WasmtimeStoreData {
@@ -226,32 +218,6 @@ impl VM<wasmtime::Instance> {
 
         let wasm_store_hashes = self.vm_base.wasm_store_hashes();
 
-        let res = if self
-            .vm_base
-            .store
-            .data()
-            .supervisor
-            .shared_data
-            .cancellation
-            .is_cancelled()
-        {
-            match res {
-                Ok((rt::vm::RunOk::VMError(msg, cause), backtrace)) => Ok((
-                    rt::vm::RunOk::VMError(
-                        public_abi::VmError::timeout(),
-                        cause.map(|v| v.context(msg.0)),
-                    ),
-                    backtrace,
-                )),
-                Ok(r) => Ok(r),
-                Err(e) => Ok((
-                    rt::vm::RunOk::VMError(public_abi::VmError::timeout(), Some(e)),
-                    None,
-                )),
-            }
-        } else {
-            res
-        };
         match &res {
             Ok((rt::vm::RunOk::Return(_), _)) => {
                 log_debug!(result = "Return"; "execution result unwrapped")

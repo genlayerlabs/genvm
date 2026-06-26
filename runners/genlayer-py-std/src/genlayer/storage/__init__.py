@@ -41,8 +41,6 @@ from ._internal.generate import allow
 
 from ._internal.generate import (
 	ORIGINAL_INIT_ATTR,
-	generate_storage,
-	_known_descs,
 	_storage_build,
 	_BuilderCtx,
 )
@@ -79,11 +77,8 @@ def cast_slot[T](t: typing.Type[T], manager: Manager, slot: bytes, offset: int, 
 	"""
 	Unsafely casts a storage slot to the given type. Use with caution.
 	"""
-	td = _storage_build(_BuilderCtx.empty(), t)
-
-	instance = td.get(manager.get_store_slot(slot), offset)
-
-	return instance
+	slt = manager.get_store_slot(slot)
+	return slt.cast(t, offset)
 
 
 def copy_to_memory[T](val: T, /) -> T:

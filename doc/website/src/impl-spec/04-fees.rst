@@ -37,11 +37,14 @@ The ``fees`` block of the GenVM config (see ``doc/schemas/default-config.json``,
    per-bucket expressions can reference.
 
 ``bucket_no``
-   Index into the ``Vec<U256>`` of bucket totals the host passes to
-   ``DataLimit::new``. Two bucket configs MAY share the same ``bucket_no``; in that
-   case both charge against the same reservoir. The ``message_fee`` /
-   ``message_receipt`` pair has special atomic-debit behaviour when they share a
-   bucket (``consume_message_fee`` in ``fees.rs:332``).
+   Either a single index, or an array of indices, into the ``Vec<U256>`` of bucket
+   totals the host passes to ``DataLimit::new``. With an array, a scalar ``delta_expr``
+   result is charged against every listed bucket, while an array result is charged
+   element-wise (lengths must match); all debits in one charge are atomic
+   (all-or-nothing). Two bucket configs MAY share the same index; in that case both
+   charge against the same reservoir. The ``message_fee`` / ``message_receipt`` pair
+   has special atomic-debit behaviour when they share a bucket (``consume_message_fee``
+   in ``fees.rs:332``).
 
 ``subtract_on_start_expr``
    A bare numeric expression. Evaluated once at startup with ``node`` bound to the

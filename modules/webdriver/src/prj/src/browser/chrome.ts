@@ -2,7 +2,14 @@ import puppeteer, * as pup from 'puppeteer-core';
 import * as logger from '../logging.js';
 import * as util from 'util';
 import * as child_process from 'child_process';
-import { envDurationMs, envInt, formatDurationMs } from '../duration.js';
+import {
+	envBool,
+	envDurationMs,
+	envInt,
+	envStr,
+	envStrList,
+	formatDurationMs,
+} from '../duration.js';
 import type * as browser from './index.js';
 
 class BrowserHolder {
@@ -59,21 +66,31 @@ const RENDERER_PROCESS_LIMIT = envInt(
 	4,
 );
 
+const CHROME_EXECUTABLE = envStr(
+	'GVM_WEBDRIVER_CHROME_EXECUTABLE',
+	'/usr/bin/chromium',
+);
+const CHROME_HEADLESS = envBool('GVM_WEBDRIVER_CHROME_HEADLESS', true);
+// Extra flags appended to the defaults below. See `envStrList` for the format.
+const CHROME_EXTRA_ARGS = envStrList('GVM_WEBDRIVER_CHROME_ARGS', []);
+
 async function newBrowser(): Promise<BrowserHolder> {
+	const args = [
+		'--no-sandbox',
+		'--disable-dev-shm-usage',
+		'--disable-accelerated-2d-canvas',
+		'--no-first-run',
+		'--no-zygote',
+		'--disable-gpu',
+		'--enable-precise-memory-info',
+		`--js-flags=--max-old-space-size=${RENDERER_MAX_OLD_SPACE_MB}`,
+		`--renderer-process-limit=${RENDERER_PROCESS_LIMIT}`,
+		...CHROME_EXTRA_ARGS,
+	];
 	const realBrowser = await puppeteer.launch({
-		headless: true,
-		args: [
-			'--no-sandbox',
-			'--disable-dev-shm-usage',
-			'--disable-accelerated-2d-canvas',
-			'--no-first-run',
-			'--no-zygote',
-			'--disable-gpu',
-			'--enable-precise-memory-info',
-			`--js-flags=--max-old-space-size=${RENDERER_MAX_OLD_SPACE_MB}`,
-			`--renderer-process-limit=${RENDERER_PROCESS_LIMIT}`,
-		],
-		executablePath: '/usr/bin/chromium',
+		headless: CHROME_HEADLESS,
+		args,
+		executablePath: CHROME_EXECUTABLE,
 	});
 
 	logger.log('info', 'created new raw browser', {
@@ -129,64 +146,86 @@ class ChromeBrowserManager implements browser.Manager {
 	private constructor(holder: BrowserHolder) {
 		this.holder = holder;
 		this.used = false;
-		setInterval(async () => {
-			const used = this.used;
-			const lastMemoryMB = this.lastMemoryMB;
-			const old = this.holder;
-			const proc = old.browser.process();
-			const pid = proc?.pid;
-			let usedRAMMB = pid ? await getTotalRssMB(pid) : await getSelfRssMB();
-			this.lastMemoryMB = usedRAMMB;
+		this.scheduleRotationCheck();
+	}
 
-			let memoryDeltaMB = lastMemoryMB !== null ? usedRAMMB - lastMemoryMB : 0;
-
-			const reasons: string[] = [];
-
-			if (
-				initialMemoryMB &&
-				usedRAMMB > initialMemoryMB + ROTATION_ABSOLUTE_THRESHOLD_MB
-			) {
-				reasons.push(
-					`absolute memory ${usedRAMMB.toFixed(0)}MB exceeds initial ${initialMemoryMB.toFixed(0)}MB + ${ROTATION_ABSOLUTE_THRESHOLD_MB}MB`,
-				);
-			}
-
-			if (!used && memoryDeltaMB > ROTATION_IDLE_DELTA_MB) {
-				reasons.push(
-					`idle memory grew by ${memoryDeltaMB.toFixed(0)}MB (threshold ${ROTATION_IDLE_DELTA_MB}MB)`,
-				);
-			}
-
-			if (
-				ROTATION_AT_LEAST_MS > 0 &&
-				Date.now() - this.lastRotationTime >= ROTATION_AT_LEAST_MS
-			) {
-				reasons.push(
-					`age ${formatDurationMs(Date.now() - this.lastRotationTime)} exceeds max ${formatDurationMs(ROTATION_AT_LEAST_MS)}`,
-				);
-			}
-
-			logger.log('info', 'browser rotation check', {
-				shouldRotate: reasons.length > 0,
-				reasons,
-				used,
-				usedRAMMB,
-				memoryDeltaMB,
-				initialMemoryMB,
-				lastRotationAgo: formatDurationMs(Date.now() - this.lastRotationTime),
-			});
-
-			if (reasons.length === 0) {
-				return;
-			}
-
-			const newB = await newBrowser();
-			this.holder = newB;
-			this.lastMemoryMB = null;
-			this.used = false;
-			this.lastRotationTime = Date.now();
-			await old.close();
+	/**
+	 * Arm the next rotation check. Uses a self-rescheduling timeout instead of
+	 * setInterval so the next check is only scheduled once the current one has
+	 * fully settled (in `finally`). This structurally prevents overlapping
+	 * rotations from interleaving holder swaps / closes — which could otherwise
+	 * orphan a freshly launched browser (process leak) or close one still
+	 * serving a render — and avoids interval backlog under sustained load.
+	 */
+	private scheduleRotationCheck(): void {
+		setTimeout(() => {
+			void this.rotationCheck()
+				.catch((error) => {
+					logger.log('error', 'browser rotation check failed', { error });
+				})
+				.finally(() => {
+					this.scheduleRotationCheck();
+				});
 		}, ROTATION_CHECK_INTERVAL_MS);
+	}
+
+	private async rotationCheck(): Promise<void> {
+		const used = this.used;
+		const lastMemoryMB = this.lastMemoryMB;
+		const old = this.holder;
+		const proc = old.browser.process();
+		const pid = proc?.pid;
+		let usedRAMMB = pid ? await getTotalRssMB(pid) : await getSelfRssMB();
+		this.lastMemoryMB = usedRAMMB;
+
+		let memoryDeltaMB = lastMemoryMB !== null ? usedRAMMB - lastMemoryMB : 0;
+
+		const reasons: string[] = [];
+
+		if (
+			initialMemoryMB &&
+			usedRAMMB > initialMemoryMB + ROTATION_ABSOLUTE_THRESHOLD_MB
+		) {
+			reasons.push(
+				`absolute memory ${usedRAMMB.toFixed(0)}MB exceeds initial ${initialMemoryMB.toFixed(0)}MB + ${ROTATION_ABSOLUTE_THRESHOLD_MB}MB`,
+			);
+		}
+
+		if (!used && memoryDeltaMB > ROTATION_IDLE_DELTA_MB) {
+			reasons.push(
+				`idle memory grew by ${memoryDeltaMB.toFixed(0)}MB (threshold ${ROTATION_IDLE_DELTA_MB}MB)`,
+			);
+		}
+
+		if (
+			ROTATION_AT_LEAST_MS > 0 &&
+			Date.now() - this.lastRotationTime >= ROTATION_AT_LEAST_MS
+		) {
+			reasons.push(
+				`age ${formatDurationMs(Date.now() - this.lastRotationTime)} exceeds max ${formatDurationMs(ROTATION_AT_LEAST_MS)}`,
+			);
+		}
+
+		logger.log('info', 'browser rotation check', {
+			shouldRotate: reasons.length > 0,
+			reasons,
+			used,
+			usedRAMMB,
+			memoryDeltaMB,
+			initialMemoryMB,
+			lastRotationAgo: formatDurationMs(Date.now() - this.lastRotationTime),
+		});
+
+		if (reasons.length === 0) {
+			return;
+		}
+
+		const newB = await newBrowser();
+		this.holder = newB;
+		this.lastMemoryMB = null;
+		this.used = false;
+		this.lastRotationTime = Date.now();
+		await old.close();
 	}
 
 	getBrowser(): browser.Handle {

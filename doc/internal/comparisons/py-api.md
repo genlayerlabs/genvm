@@ -80,7 +80,7 @@ So, unless leader gets some score for agreeing or disagreeing with validators it
 
 Basis function:
 ```rust
-fn eq_principle(leader_fn: () -> bytes|rollback, validator_fn: (leaders_result: bytes|rollback) -> bool) -> bytes|rollback
+fn eq_principle(leader_fn: () -> bytes|user_error, validator_fn: (leaders_result: bytes|user_error) -> bool) -> bytes|user_error
 ```
 On top of it all sorts of API can be built, including `eq_principle(prompt_template, result_producer)`
 

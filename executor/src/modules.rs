@@ -17,7 +17,6 @@ struct ModuleImpl {
 
 pub struct Module {
     name: String,
-    cancellation: Arc<genvm_common::cancellation::Token>,
     imp: tokio::sync::Mutex<ModuleImpl>,
     genvm_id: genvm_modules_interfaces::GenVMId,
     role: genvm_modules_interfaces::Role,
@@ -60,10 +59,21 @@ const FD_PREFIX: &str = "fd://";
 
 /// Connect to a module endpoint
 /// Supports:
-/// - TCP: "host:port" or "ws://host:port" or "wss://host:port"
+/// - TCP: "host:port" or "ws://host:port" (the latter is a plaintext alias)
 /// - Unix socket: "unix:///path/to/socket"
 /// - File descriptor: "fd://fd" (for bidirectional fd like socketpair)
 async fn connect(url: &str) -> anyhow::Result<BoxedStream> {
+    // `wss://` implies TLS, but this connector only speaks the plaintext
+    // length-prefixed protocol. Reject it rather than silently downgrading to
+    // an unencrypted link an operator believes is secure. Terminate TLS in a
+    // proxy and point the executor at the proxy's plain `host:port` instead.
+    if url.starts_with("wss://") {
+        anyhow::bail!(
+            "module scheme 'wss://' is not supported (no TLS is performed); \
+             use 'host:port', 'ws://host:port', 'unix://', or 'fd://', and \
+             terminate TLS in a proxy"
+        );
+    }
     if let Some(socket_path) = url.strip_prefix(UNIX_PREFIX) {
         let stream = tokio::net::UnixStream::connect(socket_path)
             .await
@@ -77,11 +87,8 @@ async fn connect(url: &str) -> anyhow::Result<BoxedStream> {
         let stream = unsafe { genvm_common::io::AsyncCustomFD::from_raw_fd(fd)? };
         Ok(Box::new(stream))
     } else {
-        // Strip ws:// or wss:// prefix if present for TCP connection
-        let addr = url
-            .strip_prefix("ws://")
-            .or_else(|| url.strip_prefix("wss://"))
-            .unwrap_or(url);
+        // `ws://` is a plaintext alias for a raw TCP connection.
+        let addr = url.strip_prefix("ws://").unwrap_or(url);
 
         let stream = tokio::net::TcpStream::connect(addr)
             .await
@@ -100,7 +107,6 @@ pub struct ModuleNamedArgs {
 impl Module {
     pub fn new(
         named: ModuleNamedArgs,
-        cancellation: Arc<genvm_common::cancellation::Token>,
         genvm_id: genvm_modules_interfaces::GenVMId,
         role: genvm_modules_interfaces::Role,
         host_data: genvm_modules_interfaces::HostData,
@@ -111,7 +117,6 @@ impl Module {
                 url: named.url,
                 stream: None,
             }),
-            cancellation,
             genvm_id,
             role,
             name: named.name,
@@ -197,39 +202,14 @@ impl Module {
         }
     }
 
-    pub async fn get_stats<V>(&self, val: V) -> anyhow::Result<calldata::Value>
-    where
-        V: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible>,
-    {
-        let zelf = self.imp.lock().await;
-        let mut zelf = sync::Lock::new(zelf, self.metrics.gep(|x| &x.time));
-
-        match &mut zelf.stream {
-            None => Ok(calldata::Value::Null),
-            Some(stream) => {
-                write_message(stream, &calldata::encode_obj(&val)).await?;
-                let response = read_message(stream).await?;
-
-                let response = calldata::decode(&response)?;
-
-                Ok(response)
-            }
-        }
-    }
-
     pub async fn send<R, V>(&self, val: V) -> anyhow::Result<std::result::Result<R, GenericValue>>
     where
         V: calldata::codec::Encode<Vec<u8>, Error = std::convert::Infallible>,
         R: calldata::codec::Decode,
     {
-        tokio::select! {
-            _ = self.cancellation.chan.closed() => {
-                anyhow::bail!("timeout") // it will be replaced later
-            }
-            res = self.send_impl(val) => {
-                res.with_context(|| "sending request to module")
-            }
-        }
+        self.send_impl(val)
+            .await
+            .with_context(|| "sending request to module")
     }
 }
 

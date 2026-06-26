@@ -7,13 +7,13 @@ pub struct Address(pub(super) [u8; ADDRESS_SIZE]);
 
 impl std::fmt::Debug for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("addr#{}", hex::encode(self.0)))
+        f.write_fmt(format_args!("addr#{}", self.checksum_hex_string()))
     }
 }
 
 impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "addr#{}", hex::encode(self.0))
+        f.write_fmt(format_args!("addr#{}", self.checksum_hex_string()))
     }
 }
 
@@ -35,6 +35,37 @@ impl Address {
 
     pub fn raw(self) -> [u8; ADDRESS_SIZE] {
         self.0
+    }
+
+    /// Returns the address as an [EIP-55](https://eips.ethereum.org/EIPS/eip-55)
+    /// mixed-case checksummed hex, as 40 ASCII bytes (no `0x` prefix).
+    pub fn checksum_hex(self) -> [u8; 40] {
+        use sha3::Digest as _;
+
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        let mut out = [0u8; 40];
+        for (i, &b) in self.0.iter().enumerate() {
+            out[i * 2] = HEX[(b >> 4) as usize];
+            out[i * 2 + 1] = HEX[(b & 0x0f) as usize];
+        }
+
+        // hash of the lowercase hex; a hex letter is upper-cased when the
+        // matching hash nibble is >= 8
+        let hash = sha3::Keccak256::digest(out);
+        for i in 0..out.len() {
+            if out[i].is_ascii_alphabetic() {
+                let nibble = hash[i / 2] >> (if i % 2 == 0 { 4 } else { 0 }) & 0x0f;
+                if nibble >= 8 {
+                    out[i] = out[i].to_ascii_uppercase();
+                }
+            }
+        }
+        out
+    }
+
+    /// Like [`Address::checksum_hex`], but as an owned `String`.
+    pub fn checksum_hex_string(self) -> String {
+        self.checksum_hex().iter().map(|&b| b as char).collect()
     }
 
     pub fn ref_mut(&mut self) -> &mut [u8; ADDRESS_SIZE] {

@@ -20,6 +20,10 @@ __all__ = (
 	'Result',
 	'trace',
 	'trace_time_micro',
+	'yield_',
+	'get_timestamp',
+	'register_runner',
+	'map_file',
 	'ABI',
 )
 
@@ -33,6 +37,7 @@ IS_INSIDE = IS_IN_VM
 
 import typing
 import dataclasses
+import datetime
 import collections.abc
 
 from genlayer.types import Lazy
@@ -117,11 +122,7 @@ def _decode_sub_vm_result_retn(
 ) -> Result:
 	mem = memoryview(data)
 	if mem[0] == ResultCode.USER_ERROR:
-		payload = mem[1:]
-		if len(payload) >= 4 and bytes(payload[:4]) == b'\x00\x00\x00\x00':
-			return UserError(calldata.decode(payload[4:]))
-		else:
-			return UserError(str(payload, encoding='utf8'))
+		return UserError(calldata.decode(mem[1:]))
 	if mem[0] == ResultCode.RETURN:
 		return Return(calldata.decode(mem[1:]))
 	if mem[0] == ResultCode.VM_ERROR:
@@ -157,7 +158,12 @@ def _decode_sub_vm_result(
 
 @_lazy_api
 def spawn_sandbox[T: calldata.Decoded](
-	fn: typing.Callable[[], T], *, allow_write_ops: bool = False
+	fn: typing.Callable[[], T],
+	*,
+	runner: str = 'contract',
+	allow_write_storage: bool = False,
+	allow_send_messages: bool = False,
+	allow_register_runners: bool = False,
 ) -> Lazy[Return[T] | VMError | UserError]:
 	"""
 	Runs a function in an isolated sandbox environment.
@@ -166,8 +172,14 @@ def spawn_sandbox[T: calldata.Decoded](
 	This provides isolation and security for potentially unsafe operations.
 	Determinism of spawned VM matches the determinism of the current VM.
 
+	Each ``allow_*`` flag grants the corresponding permission to the sandbox, but
+	only if the current VM holds it as well.
+
 	:param fn: Function to execute in the sandbox (must be serializable with cloudpickle)
-	:param allow_write_ops: Whether to allow write operations in the sandbox. Only effective if current VM has corresponding permission
+	:param runner: runner id the sandbox loads instead of this contract's code; ``contract`` (default) reuses this contract's runner, a ``custom:<hash>``/``name:hash``/``chain:`` id runs that runner
+	:param allow_write_storage: Whether to allow storage writes in the sandbox
+	:param allow_send_messages: Whether to allow sending messages in the sandbox
+	:param allow_register_runners: Whether to allow registering runners in the sandbox
 
 	Example:
 		>>> result = spawn_sandbox(lambda: risky_computation())
@@ -179,7 +191,10 @@ def spawn_sandbox[T: calldata.Decoded](
 		{
 			'Sandbox': {
 				'data': cloudpickle.dumps(fn),
-				'allow_write_ops': allow_write_ops,
+				'runner': runner,
+				'allow_write_storage': allow_write_storage,
+				'allow_send_messages': allow_send_messages,
+				'allow_register_runners': allow_register_runners,
 			}
 		},
 		_decode_sub_vm_result_retn,
@@ -286,7 +301,9 @@ def run_nondet_default[T: calldata.Decoded](
 		import genlayer.vm as vm
 
 		answer = vm.spawn_sandbox(
-			lambda: validator_fn(leaders_result), allow_write_ops=True
+			lambda: validator_fn(leaders_result),
+			allow_write_storage=True,
+			allow_send_messages=True,
 		)
 
 		if type(answer) is not type(leaders_result):
@@ -334,3 +351,74 @@ def trace_time_micro() -> int:
 		},
 		lambda x: typing.cast(int, calldata.decode(x)),
 	).get()
+
+
+def yield_() -> None:
+	"""
+	Cooperative yield. Currently a no-op, reserved for future use in waiting loops.
+	"""
+	wasi.gl_call(calldata.encode({'Yield': None}))
+
+
+def get_timestamp() -> datetime.datetime:
+	"""
+	Returns the current timestamp as a timezone-aware ``datetime``.
+
+	In deterministic mode it is the transaction timestamp; in
+	non-deterministic mode it is the real wall-clock time.
+	"""
+	return gl_call.gl_call_generic(
+		{
+			'GetTimestamp': None,
+		},
+		lambda x: datetime.datetime.fromtimestamp(
+			typing.cast(int, calldata.decode(x)), datetime.timezone.utc
+		),
+	).get()
+
+
+def register_runner(code: collections.abc.Buffer) -> str:
+	"""
+	Registers a runner archive at runtime and returns its ``custom:<hash>`` id.
+
+	The returned id can be referenced from ``Depends``/``With`` actions of other
+	runners. Requires deterministic mode and the ``register_runners`` permission.
+
+	:param code: runner archive bytes (ustar/zip or commented text)
+	:return: the ``custom:<hash>`` runner id
+	"""
+	return gl_call.gl_call_generic(
+		{
+			'RegisterRunner': {
+				'code': code,
+			},
+		},
+		lambda x: typing.cast(str, calldata.decode(x)),
+	).get()
+
+
+def map_file(runner: str, path_in_runner: str, path_in_vfs: str) -> None:
+	"""
+	Maps a file from a runner into the VM filesystem at runtime.
+
+	Behaves the same as the ``MapFile`` runner action: if ``path_in_runner`` ends
+	with ``/`` the whole directory subtree is mapped, otherwise a single file.
+
+	Requires the ``read_storage`` permission (a ``chain:`` runner reads another
+	contract's storage). Mapping into ``/vm/`` is forbidden.
+
+	:param runner: runner id (e.g. ``name:hash``, ``contract``, ``custom:<hash>``)
+	:param path_in_runner: path within the runner archive
+	:param path_in_vfs: absolute destination path in the VM filesystem
+	"""
+	wasi.gl_call(
+		calldata.encode(
+			{
+				'MapFile': {
+					'runner': runner,
+					'path_in_runner': path_in_runner,
+					'path_in_vfs': path_in_vfs,
+				}
+			}
+		)
+	)

@@ -406,7 +406,7 @@ pub mod contract_def {
     #[derive(Debug, Clone)]
     pub enum LeaderResult {
         Return(Value),
-        UserError(String),
+        UserError(Value),
         VmError(String),
     }
 
@@ -428,11 +428,9 @@ pub mod contract_def {
                     Ok(LeaderResult::Return(value))
                 }
                 ResultCode::UserError => {
-                    // FIXME: deprecate in next release (raw-string user error encoding;
-                    // switch to the tagged calldata form)
-                    let msg = String::from_utf8(rest.to_vec())
-                        .map_err(|e| ConsensusStageParseError::InvalidUtf8(e.to_string()))?;
-                    Ok(LeaderResult::UserError(msg))
+                    let value = calldata::decode(rest)
+                        .map_err(|e| ConsensusStageParseError::DecodeError(e.to_string()))?;
+                    Ok(LeaderResult::UserError(value))
                 }
                 ResultCode::VmError | ResultCode::InternalError => {
                     let msg = String::from_utf8(rest.to_vec())

@@ -93,7 +93,6 @@ pub fn create_supervisor(
                 gas_data: named.gas_data.clone(),
                 initial_time_units_allocation: named.initial_time_units_allocation,
             },
-            shared_data.cancellation.clone(),
             shared_data.genvm_id,
             role,
             host_data.clone(),
@@ -106,7 +105,6 @@ pub fn create_supervisor(
                 gas_data: named.gas_data,
                 initial_time_units_allocation: named.initial_time_units_allocation,
             },
-            shared_data.cancellation.clone(),
             shared_data.genvm_id,
             role,
             host_data,
@@ -167,18 +165,63 @@ pub async fn run_with_impl(
         ),
     );
 
-    if let Some(code) = &entry_data.code {
-        log_debug!("using provided code for execution");
+    let topmost_runner_id = match async {
+        anyhow::Ok(if let Some(code) = &entry_data.code {
+            log_debug!("using provided code for execution");
 
-        topmost_storage.write_code(code).await?;
-    } else {
-        log_debug!("code is null");
+            topmost_storage.write_code(code).await?;
+            // Record the major this contract is deployed for, so later runs can
+            // verify major compatibility (see `read_major` / major_mismatch check).
+            topmost_storage
+                .write_major(genvm_common::version::CURRENT.major as u8)
+                .await?;
+
+            let code_slot = rt::vm::storage::default_code_slot();
+            let archive = runners::parse(code.clone()).map_err(|e| {
+                rt::errors::VMError::wrap(public_abi::VmError::invalid_contract().val(), e)
+            })?;
+            supervisor.prepopulate_deploy_runner(
+                entry_data.message.contract_address,
+                code_slot,
+                archive,
+            );
+
+            runners::Id::Chain {
+                address: entry_data.message.contract_address,
+                on: runners::ChainState::Deploy,
+                slot: code_slot,
+            }
+        } else {
+            log_debug!("code is null");
+
+            let code_slot = topmost_storage.check_major_and_resolve_code_slot().await?;
+
+            runners::Id::Chain {
+                address: entry_data.message.contract_address,
+                on: runners::ChainState::Accepted,
+                slot: code_slot,
+            }
+        })
     }
+    .await
+    {
+        Ok(id) => id,
+        // A VMError raised while preparing the contract (bad code, major
+        // mismatch, missing code slot) is a contract error, not an internal
+        // failure: surface it as a VMError result. Genuine internal errors still
+        // propagate via `?`.
+        Err(e) => {
+            return Ok(rt::vm::FullResult::empty_from(
+                rt::errors::unwrap_vm_errors(e.into())?,
+            ));
+        }
+    };
 
     let data_fees_limit = supervisor.shared_data.gep(|x| &x.data_fees_limit);
 
     let essential_data = Box::new(wasi::genlayer_sdk::SingleVMData {
         depth: 0,
+        // Permission model: doc/website/src/spec/03-vm/05-permissions.rst
         conf: wasi::base::Config {
             needs_error_fingerprint: true,
             is_deterministic: true,
@@ -187,7 +230,9 @@ pub async fn run_with_impl(
             can_send_messages: permissions.contains("s"),
             can_call_others: permissions.contains("c"),
             can_spawn_nondet: permissions.contains("n"),
+            can_register_runners: permissions.contains("u"),
             state_mode: crate::public_abi::StorageType::Default,
+            topmost_runner_id,
         },
         message_data: ExtendedMessage {
             message: entry_data.message,
@@ -203,6 +248,7 @@ pub async fn run_with_impl(
             messages_value_decremented: primitive_types::U256::zero(),
             emissions: Vec::new(),
             message_fee_allocation: entry_data.message_fee_allocation,
+            custom_runners: Default::default(),
         },
         det_subvm_hashes: Default::default(),
     });
@@ -254,21 +300,7 @@ pub async fn run_with(
         (Ok(res), Ok(c)) => Ok((res, c)),
     };
 
-    let res = if supervisor.shared_data.cancellation.is_cancelled() {
-        match merged_result {
-            Ok(mut r) => {
-                if r.0.kind == public_abi::ResultCode::VmError {
-                    r.0.data = calldata::Value::Str(public_abi::VmError::timeout().0.into()).into();
-                }
-                Ok(r)
-            }
-            Err(_e) => Ok((rt::vm::FullResult::timeout(), None)),
-        }
-    } else {
-        merged_result
-    };
-
-    let res = res.inspect_err(|e| {
+    let res = merged_result.inspect_err(|e| {
         log_error!(error:ah = &e; "internal error");
     });
 
@@ -281,66 +313,11 @@ pub async fn run_with(
             .context("notify non-deterministic disagreement")?;
     }
 
-    log_debug!("all executions done, collecting stats");
+    // Module (llm/web) metrics are collected by the manager from its own
+    // execution context; the executor only reports its own counters here.
+    let gvm_metrics = calldata::to_value(&supervisor.shared_data.metrics);
 
-    let is_timeout = supervisor.shared_data.cancellation.is_cancelled();
-
-    let web_metrics = if is_timeout {
-        None
-    } else {
-        supervisor
-            .modules
-            .web
-            .get_stats(genvm_modules_interfaces::web::Message::GetStats)
-            .await
-            .ok()
-    };
-    let llm_metrics = if is_timeout {
-        None
-    } else {
-        supervisor
-            .modules
-            .llm
-            .get_stats(genvm_modules_interfaces::llm::Message::GetStats)
-            .await
-            .ok()
-    };
-
-    #[derive(serde::Serialize)]
-    struct AllMetrics<'a> {
-        web: Option<calldata::Value>,
-        llm: Option<calldata::Value>,
-        gvm: &'a crate::Metrics,
-    }
-
-    impl<W: calldata::Writer> calldata::codec::Encode<W> for AllMetrics<'_> {
-        type Error = W::Error;
-
-        fn encode(&self, enc: &mut calldata::Encoder<W>) -> Result<(), Self::Error> {
-            enc.start_map(3)?;
-
-            enc.push_map_k("gvm")?;
-            calldata::codec::Encode::encode(self.gvm, enc)?;
-
-            enc.push_map_k("llm")?;
-            calldata::codec::Encode::encode(&self.llm, enc)?;
-
-            enc.push_map_k("web")?;
-            calldata::codec::Encode::encode(&self.web, enc)?;
-
-            Ok(())
-        }
-    }
-
-    let all_metrics = AllMetrics {
-        web: web_metrics,
-        llm: llm_metrics,
-        gvm: &supervisor.shared_data.metrics,
-    };
-
-    let all_metrics = calldata::to_value(&all_metrics);
-
-    log_info!(metrics:serde = all_metrics; "metrics");
+    log_info!(metrics:serde = gvm_metrics; "metrics");
 
     log_debug!("sending final result");
 

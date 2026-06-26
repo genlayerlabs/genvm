@@ -66,3 +66,69 @@ export function envInt(envName: string, defaultValue: number): number {
 	});
 	return result;
 }
+
+export function envStr(envName: string, defaultValue: string): string {
+	const raw = process.env[envName];
+	const value = raw !== undefined && raw !== '' ? raw : defaultValue;
+	logger.log('info', 'env', {
+		name: envName,
+		raw: raw ?? null,
+		value,
+		default: defaultValue,
+	});
+	return value;
+}
+
+const ENV_BOOL_TRUE = ['1', 'true', 'yes', 'on'];
+const ENV_BOOL_FALSE = ['0', 'false', 'no', 'off'];
+
+export function envBool(envName: string, defaultValue: boolean): boolean {
+	const raw = process.env[envName];
+	let value = defaultValue;
+	if (raw !== undefined && raw !== '') {
+		const norm = raw.trim().toLowerCase();
+		if (ENV_BOOL_TRUE.includes(norm)) {
+			value = true;
+		} else if (ENV_BOOL_FALSE.includes(norm)) {
+			value = false;
+		} else {
+			throw new Error(`invalid boolean for env ${envName}: "${raw}"`);
+		}
+	}
+	logger.log('info', 'env', {
+		name: envName,
+		raw: raw ?? null,
+		value,
+		default: defaultValue,
+	});
+	return value;
+}
+
+/**
+ * Parse a list of strings from an env var. A value starting with `[` is parsed
+ * as a JSON array (use this when arguments contain spaces); otherwise the value
+ * is split on whitespace.
+ */
+export function envStrList(envName: string, defaultValue: string[]): string[] {
+	const raw = process.env[envName];
+	let value = defaultValue;
+	const trimmed = raw?.trim() ?? '';
+	if (trimmed !== '') {
+		if (trimmed.startsWith('[')) {
+			const parsed: unknown = JSON.parse(trimmed);
+			if (!Array.isArray(parsed) || parsed.some((x) => typeof x !== 'string')) {
+				throw new Error(`invalid string list for env ${envName}: "${raw}"`);
+			}
+			value = parsed as string[];
+		} else {
+			value = trimmed.split(/\s+/);
+		}
+	}
+	logger.log('info', 'env', {
+		name: envName,
+		raw: raw ?? null,
+		value,
+		default: defaultValue,
+	});
+	return value;
+}

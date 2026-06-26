@@ -231,13 +231,9 @@ pub mod llm_iface {
         #[serde(rename = "text")]
         #[calldata(rename = "text")]
         Text,
-        // FIXME: deprecate in next release (json will adopt json2 behavior)
         #[serde(rename = "json")]
         #[calldata(rename = "json")]
         JSON,
-        #[serde(rename = "json2")]
-        #[calldata(rename = "json2")]
-        JSON2,
     }
 
     fn default_text() -> OutputFormat {
@@ -573,7 +569,22 @@ pub enum Message {
         #[cfg_attr(feature = "arbitrary", arbitrary(with = crate::abi::arb::arb_bytes))]
         data: Bytes,
 
-        allow_write_ops: bool,
+        runner: String,
+
+        allow_write_storage: bool,
+        allow_send_messages: bool,
+        allow_register_runners: bool,
+    },
+
+    RegisterRunner {
+        #[cfg_attr(feature = "arbitrary", arbitrary(with = crate::abi::arb::arb_bytes))]
+        code: Bytes,
+    },
+
+    MapFile {
+        runner: String,
+        path_in_runner: String,
+        path_in_vfs: String,
     },
 
     WebRender(web_iface::RenderPayload),
@@ -581,11 +592,18 @@ pub enum Message {
     ExecPrompt(llm_iface::PromptPayload),
     ExecPromptTemplate(llm_iface::PromptTemplatePayload),
 
-    // FIXME: deprecate in next release
-    #[deprecated(note = "Use UserError. Will be removed before 1.0 release")]
-    Rollback(calldata::unparsed::Maybe<calldata::Value>),
     UserError(calldata::unparsed::Maybe<calldata::Value>),
     Return(calldata::unparsed::Maybe<calldata::Value>),
 
     Trace(TracePayload),
+
+    /// Cooperative yield. Currently a no-op; reserved for future use in
+    /// waiting loops.
+    Yield,
+
+    /// Get the current timestamp as seconds since the Unix epoch.
+    ///
+    /// In [deterministic mode](super) returns the transaction timestamp; in
+    /// non-deterministic mode returns the real wall-clock time.
+    GetTimestamp,
 }

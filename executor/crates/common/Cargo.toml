@@ -1,6 +1,6 @@
 [package]
 name = "genvm-common"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 
 [profile.release]
@@ -16,6 +16,7 @@ regex = "1.11.1"
 serde = { version = "1.0.219", features = ["derive", "rc"] }
 serde_json = "1.0.140"
 serde_yaml = "0.9.34"
+serde_bytes = "0.11.17"
 tokio = { version = "1.44.1", features = ["rt", "rt-multi-thread", "net", "time", "macros", "sync"], default-features = false}
 num-bigint = { version = "0.4.6", features = ["serde"] }
 num-rational = { version = "0.4", default-features = false, features = ["num-bigint"] }

@@ -39,7 +39,11 @@ impl Context {
         };
         Ok(Self {
             vfs,
-            preview1: preview1::Context::new(data.message_data.message.datetime, data.conf, seed),
+            preview1: preview1::Context::new(
+                data.message_data.message.datetime,
+                data.conf.clone(),
+                seed,
+            ),
             genlayer_sdk: genlayer_sdk::Context::new(data),
         })
     }
@@ -153,6 +157,7 @@ pub(super) fn add_to_linker_sync<T: Send + 'static>(
             let r = self.0(arg);
             genlayer_sdk::ContextVFS {
                 vfs: &mut r.vfs,
+                preview1: &mut r.preview1,
                 context: &mut r.genlayer_sdk,
             }
         }

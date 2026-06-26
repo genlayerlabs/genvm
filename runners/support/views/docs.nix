@@ -11,7 +11,9 @@ let
 			old_l_elem = if builtins.hasAttr rev_id l then l.${rev_id} else {};
 			old_l_id = if builtins.hasAttr r.id old_l_elem then old_l_elem.${r.id} else {};
 
-			r_hash = if r.hash == "test" then "vTEST" else builtins.convertHash { hash = r.hash; toHashFormat = "nix32"; };
+			# gvm32 (Crockford Base32) — the encoding the executor uses for runner
+			# paths. Extract it from `uid` (`id:gvm32hash`); NOT Nix base32.
+			r_hash = if r.hash == "test" then "vTEST" else builtins.head (builtins.match "[^:]+:(.*)" r.uid);
 
 			new_l_id = old_l_id // { ${r_hash} = true; };
 			new_l_elem = old_l_elem // { ${r.id} = new_l_id; };

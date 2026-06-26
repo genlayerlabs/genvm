@@ -12,7 +12,7 @@ import hashlib
 
 import hashlib
 
-HASH_VALID_CHARS = '0123456789abcdfghijklmnpqrsvwxyz'
+HASH_VALID_CHARS = '0123456789abcdefghjkmnpqrstvwxyz'
 
 ORIGINAL_ENV = os.environ.copy()
 if 'ORIGINAL_PATH' in ORIGINAL_ENV:
@@ -22,20 +22,20 @@ if 'ORIGINAL_LD_LIBRARY_PATH' in ORIGINAL_ENV:
 
 
 def digest_to_hash_id(got_hash: bytes) -> str:
-	chars = '0123456789abcdfghijklmnpqrsvwxyz'
-
-	bytes_count = len(got_hash)
-	base32_len = (bytes_count * 8 - 1) // 5 + 1
-
-	my_hash_arr = []
-	for n in range(base32_len - 1, -1, -1):
-		b = n * 5
-		i = b // 8
-		j = b % 8
-		c = (got_hash[i] >> j) | (0 if i >= bytes_count - 1 else got_hash[i + 1] << (8 - j))
-		my_hash_arr.append(chars[c & 0x1F])
-
-	return ''.join(my_hash_arr)
+	# Crockford's Base32 (see runners/genlayer-py-std/src/genlayer/gvm32.py and
+	# executor/crates/sdk-rs/src/gvm32.rs): big-endian, no padding.
+	out = []
+	value = 0
+	bits = 0
+	for byte in got_hash:
+		value = (value << 8) | byte
+		bits += 8
+		while bits >= 5:
+			bits -= 5
+			out.append(HASH_VALID_CHARS[(value >> bits) & 0x1F])
+	if bits > 0:
+		out.append(HASH_VALID_CHARS[(value << (5 - bits)) & 0x1F])
+	return ''.join(out)
 
 
 def check_bytes(data: bytes, hash: str) -> bool:

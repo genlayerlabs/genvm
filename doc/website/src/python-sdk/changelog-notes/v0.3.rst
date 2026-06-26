@@ -7,7 +7,7 @@ Migration Guide
 v0.3.0 introduces a major restructuring of the standard library. The ``genlayer.gl`` and ``genlayer.py`` intermediate packages are removed. All public API is now accessible directly under the ``genlayer`` namespace.
 
 Import Pattern
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 The recommended import pattern has changed:
 
@@ -23,7 +23,7 @@ The recommended import pattern has changed:
 The ``from genlayer import *`` star-import previously brought ``gl`` (a lazy proxy to ``genlayer.gl``), all types, and storage names into scope. Now ``import genlayer as gl`` gives you direct access to submodules (``gl.contract``, ``gl.vm``, ``gl.message``, ``gl.chain``, etc.), decorators (``gl.public``, ``gl.private``), and storage types (``gl.TreeMap``, ``gl.DynArray``, ``gl.Array``). The ``from genlayer.types import *`` import brings the type aliases (``u8``..``u256``, ``i8``..``i256``, ``Address``, ``bigint``, etc.) into local scope.
 
 Module Path Changes
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 All ``genlayer.py.*`` and ``genlayer.gl.*`` paths are removed. Here is the mapping:
 
@@ -35,6 +35,8 @@ All ``genlayer.py.*`` and ``genlayer.gl.*`` paths are removed. Here is the mappi
      - v0.3.0
    * - ``genlayer.py.types``
      - ``genlayer.types``
+   * - ``genlayer.py.keccak``
+     - ``genlayer.types.keccak``
    * - ``genlayer.py.calldata``
      - ``genlayer.calldata``
    * - ``genlayer.py.storage``
@@ -54,8 +56,19 @@ All ``genlayer.py.*`` and ``genlayer.gl.*`` paths are removed. Here is the mappi
    * - ``genlayer.gl.advanced``
      - removed (see below)
 
+.. note::
+    Type aliases (``u8``..``u256``, ``i8``..``i256``) are no longer ``typing.NewType`` instances; they are now ``typing.Annotated[int, ...]``. They still work as type annotations, but they are no longer callable, so the ``u256(0)`` wrapping is gone — pass a plain ``int`` instead:
+
+    .. code-block:: python
+
+        # v0.2.x
+        gl.contract.deploy(code=source, value=u256(1000), salt_nonce=u256(42))
+
+        # v0.3.0
+        gl.contract.deploy(code=source, value=1000, salt_nonce=42)
+
 Contract Declaration
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 ``gl.Contract`` is now ``gl.contract.Contract``:
 
@@ -70,7 +83,7 @@ Contract Declaration
         ...
 
 Contract Interaction
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 Functions for interacting with other contracts have been renamed and moved into ``gl.contract``:
 
@@ -99,7 +112,7 @@ The ``ContractProxy`` type is renamed to ``gl.contract.Proxy``.
 Contract proxies, ``Contract`` itself, and the new ``gl.chain.Account`` all implement the ``gl.chain.IAccount`` protocol, exposing ``address``, ``balance``, and ``emit_transfer(value, *, on=...)``.
 
 Value Transfers and ``on=`` Parameter
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Write-call and deploy APIs now take an ``on`` keyword controlling when the message is applied, with values ``'accepted'`` or ``'finalized'`` (default ``'finalized'``):
 
@@ -160,7 +173,7 @@ The ``Event`` class has moved from ``genlayer.gl`` to ``genlayer.chain``:
 ``gl.advanced.emit_raw_event(topics, blob)`` is now ``gl.chain.Event.emit_raw(topics, blob)``.
 
 Advanced / Error Handling
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The ``genlayer.gl.advanced`` module is removed. Its functionality has been relocated:
 
@@ -202,6 +215,45 @@ Trace functions have moved from ``genlayer.gl`` to ``genlayer.vm``:
     gl.vm.trace("debug message")
     gl.vm.trace_time_micro()
 
+Non-deterministic Execution (``gl.vm``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. warning::
+    ``gl.vm.run_nondet`` **changed meaning**. The two ``run_nondet`` functions were renamed:
+
+    * the old ``run_nondet_unsafe`` (no validator sandbox) is now ``run_nondet``;
+    * the old ``run_nondet`` (safe, validator runs in a sandbox) is now ``run_nondet_default``.
+
+    Code that called ``gl.vm.run_nondet`` still compiles but now silently uses the
+    *unsafe* variant. To keep the previous behavior, switch to ``gl.vm.run_nondet_default``:
+
+    .. code-block:: python
+
+        # v0.2.x (safe)            # v0.3.0 (same behavior)
+        gl.vm.run_nondet(...)      gl.vm.run_nondet_default(...)
+
+        # v0.2.x (unsafe)          # v0.3.0 (same behavior)
+        gl.vm.run_nondet_unsafe(...)   gl.vm.run_nondet(...)
+
+The high-level equivalence principles (``gl.eq_principle.*``) are unaffected — they were updated internally.
+
+``gl.vm.spawn_sandbox`` replaced the single ``allow_write_ops`` flag with three granular permissions, each effective only if the current VM holds it:
+
+.. code-block:: python
+
+    # v0.2.x
+    gl.vm.spawn_sandbox(fn, allow_write_ops=True)
+
+    # v0.3.0
+    gl.vm.spawn_sandbox(
+        fn,
+        allow_write_storage=True,
+        allow_send_messages=True,
+        allow_register_runners=True,
+    )
+
+Two runtime helpers were added: ``gl.vm.register_runner(code)`` registers a runner archive and returns its ``custom:<hash>`` id, and ``gl.vm.map_file(runner, path_in_runner, path_in_vfs)`` maps a file from a runner into the VM filesystem.
+
 Storage
 ~~~~~~~
 
@@ -236,17 +288,17 @@ Decorators
     def balance_of(self, owner: Address) -> u256: ...
 
 Non-deterministic Operations
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``gl.nondet`` now raises a dedicated ``gl.nondet.NondetException`` (with ``causes`` and ``ctx``) on errors instead of a bare exception. Web request helpers (``gl.nondet.web.get``/``post``/``put``/...) accept a ``sign: bool`` keyword to sign outbound requests with the contract's identity.
 
 Environment Detection
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
-A new top-level ``gl.IS_IN_VM`` boolean indicates whether code is running inside the GenVM, which is useful for code that is shared between contracts and off-chain tooling. The raw WASI module is available as ``gl.wasi``.
+A new top-level ``gl.IS_IN_VM`` boolean indicates whether code is running inside the GenVM, which is useful for code that is shared between contracts and off-chain tooling. The raw WASI module is available as ``gl.wasi``. A ``gl.gvm32`` module provides Crockford Base32 ``encode``/``decode`` helpers (mirroring the Rust ``genlayer_sdk::gvm32`` implementation).
 
 Summary of Renames
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 .. list-table::
    :header-rows: 1
@@ -274,6 +326,10 @@ Summary of Renames
      - ``gl.vm.trace(...)``
    * - ``gl.trace_time_micro()``
      - ``gl.vm.trace_time_micro()``
+   * - ``gl.vm.run_nondet_unsafe(...)``
+     - ``gl.vm.run_nondet(...)``
+   * - ``gl.vm.run_nondet(...)``
+     - ``gl.vm.run_nondet_default(...)``
    * - ``gl.message_raw``
      - ``gl.message.raw``
    * - ``gl.storage.allow_storage``

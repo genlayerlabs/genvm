@@ -5,7 +5,7 @@ use const_lru::ConstLru;
 use genlayer_sdk::abi;
 use genvm_common::{calldata, sync};
 
-use crate::{host::message::root_offsets, rt, SlotID};
+use crate::{public_abi::root_offsets, rt, runners, SlotID};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(C)]
@@ -165,6 +165,10 @@ impl<HS: Send + Sync> Storage<HS> {
     }
 }
 
+pub fn default_code_slot() -> SlotID {
+    SlotID::ZERO.indirection(root_offsets::CODE)
+}
+
 impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
     pub async fn read(
         &mut self,
@@ -257,8 +261,13 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
                 let mut page_data = [0u8; 32];
                 page_data.copy_from_slice(&buf[src_offset..src_offset + 32]);
 
-                put_to_cache[put_to_cache_count].write((page_id, page_data));
-                put_to_cache_count = (put_to_cache_count + 1) % put_to_cache.len();
+                if put_to_cache_count < put_to_cache.len() {
+                    put_to_cache[put_to_cache_count].write((page_id, page_data));
+                    put_to_cache_count += 1;
+                } else {
+                    // staging buffer full: insert directly so no read page is dropped
+                    self.cache.insert(page_id, page_data);
+                }
             }
         }
 
@@ -392,7 +401,7 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
     }
 
     pub async fn write_code(&mut self, code: &[u8]) -> anyhow::Result<()> {
-        let code_slot = SlotID::ZERO.indirection(root_offsets::CODE);
+        let code_slot = default_code_slot();
 
         if code.len() > (u32::MAX - 4) as usize {
             return Err(rt::errors::VMError(abi::consts::VmError::oom().storage(), None).into());
@@ -407,12 +416,60 @@ impl<HS: HostStorageLocking + Send + Sync> Storage<HS> {
         Ok(())
     }
 
-    pub async fn read_code(
+    /// Reads the GenVM major version the contract was deployed for, from the
+    /// `major` root field (zero if never written).
+    pub async fn read_major(&mut self) -> anyhow::Result<u8> {
+        let mut buf = [0u8; 1];
+        self.read(SlotID::ZERO, root_offsets::MAJOR, &mut buf)
+            .await?;
+        Ok(buf[0])
+    }
+
+    /// Writes the GenVM major version the contract is deployed for into the
+    /// `major` root field, so later runs can verify major compatibility (see
+    /// [`read_major`]). Written on deploy alongside the code.
+    pub async fn write_major(&mut self, major: u8) -> anyhow::Result<()> {
+        self.write(SlotID::ZERO, root_offsets::MAJOR, &[major])
+            .await
+    }
+
+    /// Resolves the slot the contract code is stored at: the raw `code_slot` root
+    /// field if set, otherwise the default `code` slot.
+    pub async fn resolve_code_slot(&mut self) -> anyhow::Result<SlotID> {
+        let mut raw = [0u8; 32];
+        self.read(SlotID::ZERO, root_offsets::CODE_SLOT, &mut raw)
+            .await?;
+        if raw == [0u8; 32] {
+            Ok(default_code_slot())
+        } else {
+            Ok(SlotID::from_bytes(raw))
+        }
+    }
+
+    /// Verifies the contract's major version matches this node's, then resolves
+    /// its code slot. The major is checked *first*, before trusting the
+    /// host-read code-slot pointer; on mismatch a `major_mismatch` [`VMError`]
+    /// is returned so the caller surfaces it as a contract error.
+    pub async fn check_major_and_resolve_code_slot(&mut self) -> anyhow::Result<SlotID> {
+        let contract_major = self.read_major().await?;
+        let node_major = genvm_common::version::CURRENT.major;
+        if contract_major as u16 != node_major {
+            return Err(rt::errors::VMError(
+                abi::consts::VmError::invalid_contract().major_mismatch(),
+                Some(anyhow::anyhow!(
+                    "contract major {contract_major} != node major {node_major}"
+                )),
+            )
+            .into());
+        }
+        self.resolve_code_slot().await
+    }
+
+    pub async fn read_code_at(
         &mut self,
+        code_slot: SlotID,
         limiter: &rt::memlimiter::Limiter,
     ) -> anyhow::Result<Box<[u8]>> {
-        let code_slot = SlotID::ZERO.indirection(root_offsets::CODE);
-
         let mut len_buf = [0; 4];
         self.read(code_slot, 0, &mut len_buf).await?;
         let code_size = u32::from_le_bytes(len_buf);

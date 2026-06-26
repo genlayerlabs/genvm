@@ -524,16 +524,10 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 							bytes([public_abi.ResultCode.RETURN]) + gvm_calldata.encode(res['value'])
 						)
 					elif res['kind'] == 'user_error':
-						if isinstance(res['value'], str):
-							encoded_nondet.append(
-								bytes([public_abi.ResultCode.USER_ERROR]) + res['value'].encode('utf-8')
-							)
-						else:
-							encoded_nondet.append(
-								bytes([public_abi.ResultCode.USER_ERROR])
-								+ b'\x00\x00\x00\x00'
-								+ gvm_calldata.encode(res['value'])
-							)
+						encoded_nondet.append(
+							bytes([public_abi.ResultCode.USER_ERROR])
+							+ gvm_calldata.encode(res['value'])
+						)
 					elif res['kind'] == 'vm_error':
 						encoded_nondet.append(
 							bytes([public_abi.ResultCode.VM_ERROR]) + res['value'].encode('utf-8')
@@ -575,6 +569,9 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 				request_extra = {}
 				if 'stable' in self._test_case.description.tags:
 					request_extra['no_modules'] = True
+				case_permissions = single_conf.get('permissions')
+				if case_permissions is not None:
+					request_extra['permissions'] = case_permissions
 				dflt_bucket = 2**200
 				bucket_totals: list[int] = single_conf.get(
 					'bucket_totals', [dflt_bucket, dflt_bucket]
@@ -599,12 +596,11 @@ class IntegrationSingleStep(ya_test_runner.exec.step.Python):
 					manager_uri=manager_uri,
 					message=single_conf['message'],
 					timeout=single_conf.get('deadline', 10 * 60),
-					capture_output=True,
 					is_sync=(mode == 's'),
 					host_data=host_data,
 					ctx=ctx,
 					host='unix://' + mock_host.path,
-					extra_args=['--debug-mode'],
+					debug_mode='unsafe',
 					code=code,
 					calldata=calldata_bytes,
 					bucket_totals=bucket_totals,

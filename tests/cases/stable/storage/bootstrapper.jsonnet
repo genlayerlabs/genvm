@@ -3,8 +3,8 @@ local s = simple.run('${jsonnetDir}/${fileBaseName}.py');
 local util = import 'templates/util.jsonnet';
 local target_code = importstr './bootstrapper_target.py';
 
-// contract instance slot = sha3_256(ROOT_SLOT_ID(32 zero bytes) + CONTRACT_OFFSET(0 as u32 le))
-local contract_instance_slot = '372d46c3ada9f897c74d349bbfe0e450c798167c9f580f8daf85def57e96c3ea';
+// contract instance slot = sha3_256(ROOT_SLOT_ID(32 zero bytes) + CONTRACT_OFFSET(1 as u32 le))
+local contract_instance_slot = 'e1ae23412792df6b6a98fb7c9839701fb8b02b6fc7ed022810f78346494685e7';
 
 {entry: util.addPaths([util.chain([
 	// deploy bootstrapper

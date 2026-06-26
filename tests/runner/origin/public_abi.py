@@ -34,11 +34,12 @@ memory_limiter_consts: typing.Final = _MemoryLimiterConsts()
 
 
 class _RootOffsets(typing.NamedTuple):
-	CONTRACT: int = 0
-	CODE: int = 1
-	LOCKED_SLOTS: int = 2
-	UPGRADERS: int = 3
-	MAJOR: int = 4
+	MAJOR: int = 0
+	CONTRACT: int = 1
+	CODE: int = 2
+	LOCKED_SLOTS: int = 3
+	UPGRADERS: int = 4
+	CODE_SLOT: int = 5
 
 root_offsets: typing.Final = _RootOffsets()
 
@@ -135,6 +136,9 @@ class _VmErrorInvalidContract:
 	@staticmethod
 	def malformed_runner() -> 'VmError':
 		return VmError('invalid_contract malformed_runner')
+	@staticmethod
+	def major_mismatch() -> 'VmError':
+		return VmError('invalid_contract major_mismatch')
 	@staticmethod
 	def wasm() -> '_VmErrorInvalidContractWasm':
 		return _VmErrorInvalidContractWasm()

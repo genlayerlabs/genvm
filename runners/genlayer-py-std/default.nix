@@ -58,7 +58,7 @@ in
 
 		expr = {
 			Seq = [
-				{ With = { runner = "<contract>"; action = { MapFile = { file = "file"; to = "/contract.py"; }; }; }; }
+				{ With = { runner = "contract"; action = { MapFile = { file = "file"; to = "/contract.py"; }; }; }; }
 			] ++ middle_runner_seq;
 		};
 	})) ++
@@ -68,7 +68,7 @@ in
 
 		expr = {
 			Seq = [
-				{ With = { runner = "<contract>"; action = { MapFile = { file = "contract/"; to = "/contract/"; }; }; }; }
+				{ With = { runner = "contract"; action = { MapFile = { file = "contract/"; to = "/contract/"; }; }; }; }
 			] ++ middle_runner_seq;
 		};
 	})) ++
