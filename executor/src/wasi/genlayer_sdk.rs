@@ -1644,6 +1644,11 @@ impl ContextVFS<'_> {
             }
             Some(data) => {
                 use crate::public_abi::ResultCode;
+                if data.is_empty() {
+                    return Err(generated::types::Error::trap(
+                        crate::anyhow_to_wasmtime(anyhow::anyhow!("leader nondet result is empty"))
+                    ));
+                }
                 let rest = &data[1..];
                 let res = match data[0] {
                     x if x == ResultCode::Return as u8 => {
