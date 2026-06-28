@@ -210,6 +210,10 @@ impl Parser<'_> {
                     if full_size == 0 {
                         Value::Array(Vec::new())
                     } else {
+                        const MAX_ARRAY_CAPACITY: usize = 1024 * 1024; // 1M elements max
+                        if full_size > MAX_ARRAY_CAPACITY {
+                            return Err(anyhow::anyhow!("array capacity too large: {}", full_size));
+                        }
                         stack.push(Frame::Array {
                             collected: Vec::with_capacity(full_size),
                             remaining: full_size,
