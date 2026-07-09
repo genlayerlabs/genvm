@@ -528,7 +528,7 @@ def process_executor_version(executor_version: str):
 		major, minor, patch = parse_executor_version(executor_version)
 		if (major, minor, patch + 1) in all_executor_version_tuples:
 			logger.info(
-				f'Skipping executor version {executor_version} because a newer version {next_version} exists'
+				f'Skipping executor version {executor_version} because a newer version v{major}.{minor}.{patch + 1} exists'
 			)
 			return
 
