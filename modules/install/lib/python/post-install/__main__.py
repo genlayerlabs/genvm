@@ -3,6 +3,8 @@ import os
 import shlex
 import argparse
 import platform
+import shutil
+import struct
 import tarfile
 import io
 import traceback
@@ -491,6 +493,34 @@ for v in all_executor_versions:
 		all_executor_version_tuples.add(parse_executor_version(v))
 
 
+_ELF_MACHINE_TO_ARCH = {0x3E: 'amd64', 0xB7: 'arm64'}
+_MACHO_CPUTYPE_TO_ARCH = {0x01000007: 'amd64', 0x0100000C: 'arm64'}
+
+
+def detect_executable_platform(path: Path) -> tuple[str, str] | None:
+	"""Detect (os, arch) of an executable from magic bytes, e.g. ('linux', 'amd64').
+
+	Returns None if the file is not a recognized ELF or 64-bit Mach-O binary,
+	or its architecture is not one we distribute (amd64/arm64).
+	"""
+	with open(path, 'rb') as f:
+		header = f.read(20)
+	if len(header) < 20:
+		return None
+	if header[:4] == b'\x7fELF':
+		endian = '>' if header[5] == 2 else '<'
+		(e_machine,) = struct.unpack_from(endian + 'H', header, 18)
+		arch = _ELF_MACHINE_TO_ARCH.get(e_machine)
+		return ('linux', arch) if arch else None
+	(magic,) = struct.unpack_from('<I', header, 0)
+	if magic in (0xFEEDFACF, 0xCFFAEDFE):
+		endian = '<' if magic == 0xFEEDFACF else '>'
+		(cputype,) = struct.unpack_from(endian + 'I', header, 4)
+		arch = _MACHO_CPUTYPE_TO_ARCH.get(cputype)
+		return ('macos', arch) if arch else None
+	return None
+
+
 def process_executor_version(executor_version: str):
 	logger.info(f'Examining executor version {executor_version}')
 
@@ -506,6 +536,27 @@ def process_executor_version(executor_version: str):
 	executor_executable = executor_root_dir.joinpath('bin', 'genvm')
 
 	if args.executor_download or args.bin_patch or args.bin_check:
+		if executor_executable.exists():
+			found = detect_executable_platform(executor_executable)
+			expected = (args.os, args.arch)
+			if found != expected:
+				found_str = f'{found[0]}/{found[1]}' if found else 'unrecognized binary format'
+				mismatch_msg = (
+					f'Existing executor {executor_executable} does not match the target platform: '
+					f'found {found_str}, expected {expected[0]}/{expected[1]}'
+				)
+				if args.executor_download:
+					logger.warning(
+						f'{mismatch_msg}; removing {executor_root_dir} and re-downloading'
+					)
+					shutil.rmtree(executor_root_dir)
+				else:
+					logger.error(mismatch_msg)
+					raise RuntimeError(
+						mismatch_msg
+						+ ' (enable the executor-download step to replace it, or remove '
+						+ f'{executor_root_dir} manually)'
+					)
 		if not executor_executable.exists() and args.executor_download:
 			import lzma
 
