@@ -16,12 +16,18 @@ function Render(ctx, payload)
 		.. "&waitAfterLoaded="
 		.. tostring(payload.wait_after_loaded or 0)
 
+	-- The webdriver is operator-configured infrastructure, commonly on a
+	-- private address (docker compose networks resolve it to RFC1918), so this
+	-- transport hop must not go through the SSRF-filtered client. The
+	-- contract-controlled input is the target URL, validated by `check_url`
+	-- above; the webdriver host is trusted the same way LLM backends are.
 	local result = lib.rs.request(ctx, {
 		method = "GET",
 		url = web.rs.config.webdriver_host .. "/render" .. url_params,
 		headers = {},
 		error_on_status = true,
 		response_body_max_size = payload.size_limit,
+		unfiltered = true,
 	})
 
 	lib.log {
