@@ -3,6 +3,7 @@ import os
 import shlex
 import argparse
 import platform
+import shutil
 import tarfile
 import io
 import traceback
@@ -167,11 +168,6 @@ import json
 
 logging.info('Starting actual post-install script')
 
-if args.bin_patch:
-	import lief
-
-	lief.logging.set_level(lief.logging.LEVEL.ERROR)
-
 HASH_VALID_CHARS = '0123456789abcdfghijklmnpqrsvwxyz'
 
 
@@ -220,16 +216,101 @@ def get_interpreter_path():
 	return interpreter_path
 
 
+def executable_runs_unpatched(path: Path) -> bool:
+	"""Whether the binary already executes on this machine.
+
+	If it does, the loader resolved its interpreter and every needed library, so
+	there is nothing to patch. Skipping in that case avoids rewriting a ~300MB
+	ELF (a multi-GB memory spike in lief) and keeps re-runs idempotent: a binary
+	patched by a previous run stays untouched, which matters because lief cannot
+	re-parse its own output.
+	"""
+	env = os.environ.copy()
+	env['LLVM_PROFILE_FILE'] = '/dev/null'
+	try:
+		res = subprocess.run(
+			[path, '--version'],
+			capture_output=True,
+			timeout=60,
+			env=env,
+		)
+	except Exception as e:
+		logger.info(f'{path} does not run unpatched ({e})')
+		return False
+	if res.returncode != 0:
+		logger.info(f'{path} exited with {res.returncode} unpatched')
+		return False
+	return True
+
+
+def patch_executable_patchelf(path: Path, *, rpath_dir: list[Path]) -> None:
+	"""Apply the same interpreter/rpath changes as the lief path via patchelf.
+
+	patchelf edits in place: no full-file rewrite (lief needs a working set many
+	times the binary size) and no section-header corruption (lief output is
+	rejected by readelf/patchelf).
+	"""
+	interp = subprocess.run(
+		['patchelf', '--print-interpreter', path],
+		capture_output=True,
+		text=True,
+		check=True,
+	).stdout.strip()
+	logger.info(f'Current interpreter: {interp}')
+
+	if Path(interp).exists():
+		logger.info(f'Interpreter {interp} exists, skipping interpreter patching')
+	else:
+		new_interpreter = str(get_interpreter_path())
+		subprocess.run(
+			['patchelf', '--set-interpreter', new_interpreter, path], check=True
+		)
+		logger.info(f'Updated interpreter from {interp} to: {new_interpreter}')
+
+	# --force-rpath sets DT_RPATH, matching what the lief path writes
+	rpath_str = ':'.join(str(rpath) for rpath in rpath_dir)
+	subprocess.run(
+		['patchelf', '--force-rpath', '--set-rpath', rpath_str, path], check=True
+	)
+	logger.info(f'Set RPATH via patchelf: "{rpath_str}"')
+
+
 def patch_executable(path: Path, *, rpath_dir: list[Path]):
 	logger.info(f'Patching executable for {path}')
 	if not path.exists():
 		logger.warning(f'Path {path} does not exist, skipping patching')
 		return
 
+	if (args.os, args.arch) == (target_os, target_arch):
+		if executable_runs_unpatched(path):
+			logger.info(f'{path} already runs unpatched, skipping patching')
+			return
+
+	with open(path, 'rb') as f:
+		is_elf = f.read(4) == b'\x7fELF'
+
+	if is_elf and shutil.which('patchelf'):
+		try:
+			patch_executable_patchelf(path, rpath_dir=rpath_dir)
+			return
+		except subprocess.CalledProcessError as e:
+			logger.warning(
+				f'patchelf failed on {path} ({e}), falling back to lief; '
+				f'note the lief writer needs memory several times the binary size'
+			)
+
+	# deferred: lief is only needed when a rewrite is actually performed
+	import lief
+
+	lief.logging.set_level(lief.logging.LEVEL.ERROR)
+
 	binary = lief.parse(path)
 	if not binary:
-		logger.error(f'Failed to parse binary at {path}')
-		return
+		raise RuntimeError(
+			f'Failed to parse binary at {path}. If it was patched by a previous '
+			f'run, lief cannot re-parse its own output: delete the tree and '
+			f're-run with the executor-download step, or install patchelf'
+		)
 
 	# Log basic binary information
 	logger.info(f'Binary format: {binary.format}')
